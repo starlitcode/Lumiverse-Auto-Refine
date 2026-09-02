@@ -992,6 +992,57 @@ console.log("\nsettings that follow the account");
   });
 }
 
+console.log("\nloading a preset from where you were reading");
+{
+  // The drawer scrolls, not the panel, so the container is an ancestor of the
+  // root Lumiverse hands us. That is the thing whose position has to survive a
+  // repaint.
+  const SCROLLER =
+    "#scroller{height:400px;overflow-y:auto}" +
+    "#drawer{background:rgb(35,30,48);width:380px;max-width:100%;padding:12px;box-sizing:border-box}";
+
+  await inTab(browser, { css: SCROLLER }, async (page) => {
+    // Put the drawer inside something that scrolls, the way the host does.
+    await page.evaluate(() => {
+      const d = document.getElementById("drawer");
+      const s = document.createElement("div");
+      s.id = "scroller";
+      d.parentNode.insertBefore(s, d);
+      s.appendChild(d);
+    });
+    await goTab(page, "Prompt");
+    await settle(page);
+
+    const scrolled = await page.evaluate(async () => {
+      const s = document.getElementById("scroller");
+      s.scrollTop = s.scrollHeight;
+      await new Promise((r) => requestAnimationFrame(r));
+      return s.scrollTop;
+    });
+    ok("there is somewhere to scroll to", scrolled > 0, String(scrolled));
+
+    // Load the longest preset that ships, which is the one that moves the
+    // content height the most.
+    const after = await page.evaluate(async () => {
+      const s = document.getElementById("scroller");
+      const was = s.scrollTop;
+      const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const detailed = Array.from(pick.options).find((o) => /Detailed/.test(o.textContent));
+      pick.value = detailed.value;
+      pick.dispatchEvent(new Event("change", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="load"]').click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => setTimeout(r, 60));
+      return { was: was, now: s.scrollTop, name: detailed.textContent };
+    });
+    ok(
+      "loading a preset leaves you where you were reading",
+      after.now > 0 && Math.abs(after.now - after.was) < 40,
+      JSON.stringify(after),
+    );
+  });
+}
+
 console.log("\na temporary chat");
 {
   // A chat with no card on it is the temporary chat: a scratch conversation

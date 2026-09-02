@@ -1272,3 +1272,98 @@ describe("when something else edits the reply mid-refine", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 });
+
+// The panel's button and the floating button both mean "the latest reply", and
+// both send no message id whenever nothing has rendered since the page loaded,
+// which on a chat you opened and did not add to is every time. That used to
+// come back as "that message is not in this chat any more": the button did
+// nothing and said something untrue about why.
+describe("refining the latest reply with no message id in hand", () => {
+  test("the latest reply is found and refined", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: null });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "refine_result" && m.requestId === "r1");
+    expect(got.ok).toBe(true);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and it is the last reply, not the first thing in the chat", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: null });
+    await wait(50);
+    // m0 is the greeting and m1 is the player's line; neither is touched.
+    expect(h.writes.map((w: any) => w.id)).toEqual(["m2"]);
+  });
+
+  // A chat holding nothing but a greeting has no reply to refine. Offering the
+  // greeting would offer the one message that is always refused.
+  test("a chat with only a greeting says so plainly", async () => {
+    const h = await armed(
+      ["<refined>x</refined>"],
+      {},
+      [{ id: "m0", role: "assistant", content: "The gate stands open." }],
+    );
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: null });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "refine_result" && m.requestId === "r1");
+    expect(got.ok).toBe(false);
+    expect(got.why).toMatch(/no reply in this chat to refine yet/);
+    expect(h.writes.length).toBe(0);
+  });
+
+  // A named message that has since gone still says the right thing: the two
+  // cases are different and used to share one wrong sentence.
+  test("a message id that is gone still says that, not the other thing", async () => {
+    const h = await armed(["<refined>x</refined>"]);
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "gone" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "refine_result" && m.requestId === "r1");
+    expect(got.why).toMatch(/not in this chat any more/);
+  });
+});
+
+// A reasoning model is asked for its working in a tag of its own, before the
+// rewrite. The tag sits outside <REFINED>, so none of it can reach the chat,
+// and it comes back to the panel to be shown beside the refine.
+describe("the working a reasoning prompt asks for", () => {
+  const answer =
+    "<REFINE_NOTES>\n" +
+    "The second sentence restates the first. Cutting the held breath.\n" +
+    "Leaving the dialogue alone: the clipped voice is deliberate.\n" +
+    "</REFINE_NOTES>\n" +
+    "<REFINED>She stepped through and the cold hit her.</REFINED>";
+
+  test("only the rewrite is saved", async () => {
+    const h = await armed([answer]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and none of the working leaks into the message", async () => {
+    const h = await armed([answer]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).not.toContain("REFINE_NOTES");
+    expect(h.body("m2")).not.toContain("restates the first");
+  });
+
+  test("but it is carried back so the panel can show it", async () => {
+    const h = await armed([answer]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const carried = h.sent.filter((m: any) => m && typeof m.notes === "string" && m.notes);
+    expect(carried.length).toBeGreaterThan(0);
+    expect(carried[0].notes).toContain("Leaving the dialogue alone");
+  });
+
+  // The tags are shouted now. A prompt written before that still works, because
+  // the answer is read case-insensitively.
+  test("a prompt still asking in lower case is not broken by the change", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+});

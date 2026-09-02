@@ -199,7 +199,7 @@ const CONFIG = {
     // somebody's reply, and they only notice three messages later.
     protectOn: true,
     protectThinking: true,
-    // Asking for the rewrite inside <refined> tags rather than on its own. A
+    // Asking for the rewrite inside <REFINED> tags rather than on its own. A
     // model that cannot help adding a sentence of its own still puts the rewrite
     // between the tags, and taking what is between them is exact.
     wrapOutput: true,
@@ -250,7 +250,6 @@ const MACROS = [
     { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
     { tag: "{{whose}}", what: "A line saying whether the character or the player wrote it.", ours: true },
-    { tag: "{{refine_notes}}", what: "Where to keep its reasoning. Empty unless thinking is on.", ours: true },
     { tag: "{{protect_notes}}", what: "Tells it to leave the protection tokens alone. Only appears when there are some.", ours: true },
     { tag: "{{description}}", what: "The character card's description.", ours: false },
     { tag: "{{personality}}", what: "The card's personality.", ours: false },
@@ -309,18 +308,49 @@ const TURN_BLOCK = {
     role: "user",
     text: "{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>",
 };
+// The tags are shouted. A model skimming a long prompt for the shape of the
+// answer finds a run of capitals before it finds a word, and these two are the
+// only things in the prompt that have to be got exactly right.
 const HOW_TO_ANSWER = {
     id: "answer",
     name: "How to answer",
     on: true,
     role: "system",
     text: "<how_to_answer>\n" +
-        "Put the rewritten message between <refined> and </refined>. Only what is " +
+        "Put the rewritten message between <REFINED> and </REFINED>. Only what is " +
         "between those two tags is saved, so the tags are not optional.\n\n" +
         "Inside the tags, write the message and nothing else. No preamble, no " +
         "heading, no note about what you changed.\n\n" +
         "Anything you write outside the tags is shown to me and never saved into " +
         "the chat. Leave it empty unless something above asked you for it.\n" +
+        "</how_to_answer>\n\n" +
+        "{{protect_notes}}",
+};
+// The thinking version. It asks for the working in a tag of its own, before the
+// rewrite, and that tag is outside <REFINED> so none of it can reach the chat.
+// It is shown in the panel beside the refine instead, which is what makes
+// asking for it worth the tokens: reasoning nobody ever reads is only a bill.
+//
+// Only the reasoning prompts carry this. A model that does not reason given a
+// thinking tag fills it with a summary of what it is about to do and then does
+// something else, which costs output and buys a paragraph nobody wanted.
+const THINKS_ANSWER = {
+    id: "answer",
+    name: "How to answer",
+    on: true,
+    role: "system",
+    text: "<how_to_answer>\n" +
+        "Answer in two parts, in this order.\n\n" +
+        "First, your working, between <REFINE_NOTES> and </REFINE_NOTES>. Name what " +
+        "is weak in the message as it stands, say what you intend to change and " +
+        "why, and say what you are deliberately leaving alone. Be specific: quote " +
+        "the phrases you mean. This is for me to read, not for the story.\n\n" +
+        "Then the rewritten message, between <REFINED> and </REFINED>. Only what is " +
+        "between those two tags is saved, so the tags are not optional. Inside " +
+        "them, write the message and nothing else: no preamble, no heading, and no " +
+        "note about what you changed, because that is what the first part was for.\n\n" +
+        "Nothing outside <REFINED> is ever saved into the chat, so your notes cost " +
+        "the story nothing.\n" +
         "</how_to_answer>\n\n" +
         "{{protect_notes}}",
 };
@@ -574,13 +604,6 @@ const THINKS_JOB = {
         "arrives, nothing new happens, and the scene ends where it ended.\n" +
         "</your_job>",
 };
-const THINKS_NOTES = {
-    id: "notes",
-    name: "Where your thinking goes",
-    on: true,
-    role: "system",
-    text: "{{refine_notes}}",
-};
 const THE_STANDARD = {
     id: "standard",
     name: "The standard",
@@ -663,19 +686,17 @@ const YOURS_DEFAULT = [
 // ---- a model that reasons, short ----
 const THINKS_SHORT = [
     THINKS_JOB,
-    THINKS_NOTES,
     ...CONTEXT_BLOCKS,
     THE_STANDARD,
     RESTRAINT,
     DO_NOT_TOUCH,
-    HOW_TO_ANSWER,
+    THINKS_ANSWER,
     TURN_BLOCK,
 ];
 // ---- a model that reasons, in full ----
 // The same standard, plus where to point it and a pass over its own answer.
 const THINKS_LONG = [
     THINKS_JOB,
-    THINKS_NOTES,
     ...CONTEXT_BLOCKS,
     THE_STANDARD,
     {
@@ -728,7 +749,7 @@ const THINKS_LONG = [
             "place. It usually does not.\n" +
             "</before_you_answer>",
     },
-    HOW_TO_ANSWER,
+    THINKS_ANSWER,
     TURN_BLOCK,
 ];
 // What a fresh install starts on. The short plain one, because it is the prompt
@@ -1558,6 +1579,9 @@ export function setup(ctx, overrides) {
     // anything asking how wide the screen is. Sizes are pinned in px: the host's
     // font scale is the reader's story text, and chrome that inherits it grows
     // until a section stops fitting on a phone.
+    // The cross the browser puts inside a search field, as a shape rather than a
+    // glyph, so it can be given a colour.
+    const SEARCH_X = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'/%3E%3C/svg%3E\")";
     const CSS = ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf *{box-sizing:border-box}" +
@@ -1586,6 +1610,34 @@ export function setup(ctx, overrides) {
         // this dense it reads as damage rather than as focus.
         "input.arf-field:focus,textarea.arf-field:focus{outline:none;" +
         "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        // The search box gets nothing on focus, not even that border change. It is
+        // the first thing on the panel and it is focused the moment anybody uses
+        // it, so a mark on it is lit most of the time it is on screen.
+        ".arf-field[type=search]:focus,.arf-field[type=search]:focus-visible{outline:none;" +
+        "box-shadow:none;border-color:var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
+        // The browser draws its own clear button inside a search field and takes
+        // its colour from the page's colour scheme rather than from any CSS, so on
+        // a dark panel it arrives as a white cross: the one thing here that does
+        // not follow the theme, because it is the browser's element and not ours.
+        // Replacing the glyph with a masked shape lets it take a colour like
+        // everything else.
+        //
+        // The fill is currentColor, the field's own text colour, rather than a
+        // theme variable. Naming a variable means naming a fallback, every fallback
+        // here is a dark one, and a light theme that set the common colours and not
+        // that one would paint a near-white cross on a near-white field. The
+        // field's text colour is whatever the theme asked for and the readability
+        // sweep has already corrected it if it did not read, so whatever the cross
+        // inherits is legible by the time it is used, with nothing to keep in step.
+        //
+        // Chrome and Safari only. Firefox draws no clear button in a search field,
+        // so there is nothing there to restyle and nothing to break.
+        ".arf-field[type=search]::-webkit-search-cancel-button{" +
+        "-webkit-appearance:none;appearance:none;width:14px;height:14px;cursor:pointer;" +
+        "background-color:currentColor;opacity:.6;" +
+        "-webkit-mask:" + SEARCH_X + " center/contain no-repeat;" +
+        "mask:" + SEARCH_X + " center/contain no-repeat}" +
+        ".arf-field[type=search]::-webkit-search-cancel-button:hover{opacity:1}" +
         // A menu you pick from is not a box you type in. It gets nothing: no ring,
         // no glow, and not even a border change, because the menu opening is
         // already the whole of the feedback.
@@ -2073,15 +2125,11 @@ export function setup(ctx, overrides) {
             hunt = box.value;
             paint();
         });
+        // No Clear button beside it. A search field already carries one, drawn by
+        // the browser, and the rule above gives it a colour that follows the theme
+        // instead of the white cross it came with. A second one is a button that
+        // appears and disappears next to a control that never moved.
         row.appendChild(box);
-        if (hunt) {
-            const clear = button("Clear", false);
-            clear.addEventListener("click", () => {
-                hunt = "";
-                paint();
-            });
-            row.appendChild(clear);
-        }
         wrap.appendChild(row);
         const hits = el("div", "arf-note", searchSays());
         hits.setAttribute("data-arf-hits", "1");
@@ -3085,7 +3133,7 @@ export function setup(ctx, overrides) {
             key: "wrapOutput",
             label: "Take the answer from between the tags",
             type: "bool",
-            hint: "On by default. This is the reading rule, not the asking: when the answer carries <refined> and </refined>, only what is between them is saved, and an opening tag with nothing closing it means the rewrite was cut off and is dropped rather than saved half written. Asking for the tags is your prompt's job. The one that ships with it asks in the How to answer block, in plain words you can reword, move or delete. Off, the whole answer is taken as the rewrite.",
+            hint: "On by default. This is the reading rule, not the asking: when the answer carries <REFINED> and </REFINED>, only what is between them is saved, and an opening tag with nothing closing it means the rewrite was cut off and is dropped rather than saved half written. Asking for the tags is your prompt's job. The one that ships with it asks in the How to answer block, in plain words you can reword, move or delete. Off, the whole answer is taken as the rewrite.",
         }));
         wrap.appendChild(fieldRow({
             key: "streamProgress",
@@ -3116,7 +3164,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     // ---- Log ----
-    // What the model wrote around the <refined> tags on the last pass. Nothing
+    // What the model wrote around the <REFINED> tags on the last pass. Nothing
     // outside those tags is ever saved into a chat, which is what makes it a safe
     // place for a prompt to ask for a report: what was cut, what was added, what
     // was deliberately left alone. Kept here so the report has somewhere to be
@@ -3174,7 +3222,7 @@ export function setup(ctx, overrides) {
     function buildNotesCard() {
         if (!lastNotes)
             return null;
-        const wrap = card("What it said about the edit", "Whatever the model wrote outside the <refined> tags on the last pass. None of it was saved into your chat. This is empty unless your prompt asks for it: add the tags you want to the How to answer block and the answer lands here.", new Date(lastNotesAt).toTimeString().slice(0, 5));
+        const wrap = card("What it said about the edit", "Whatever the model wrote outside the <REFINED> tags on the last pass. None of it was saved into your chat. The two reasoning prompts ask for working here, between <REFINE_NOTES> tags; on the other two this stays empty until you ask for something in the How to answer block.", new Date(lastNotesAt).toTimeString().slice(0, 5));
         const box = el("div", "arf-well arf-mono", lastNotes);
         wrap.appendChild(box);
         const row = el("div", "arf-row");

@@ -190,7 +190,7 @@ const TURN_MACRO = '{{message}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'whose', 'refine_notes', 'protect_notes'];
+const OURS = ['message', 'history', 'lore', 'whose', 'protect_notes'];
 
 interface Scene {
   character: string;
@@ -312,7 +312,7 @@ const DEFAULT_BLOCKS: Block[] = [
     role: 'system',
     text:
       '<how_to_answer>\n' +
-      'Put the rewritten message between <refined> and </refined>. Only what is ' +
+      'Put the rewritten message between <REFINED> and </REFINED>. Only what is ' +
       'between those two tags is saved, so the tags are not optional.\n\n' +
       'Inside the tags, write the message and nothing else. No preamble, no ' +
       'heading, no note about what you changed.\n\n' +
@@ -340,7 +340,11 @@ let wrapOutput = true;
 // Whether to stream the refine so the panel can show it arriving. The answer is
 // the same either way; this only decides whether anybody can watch it.
 let streamProgress = true;
-const OUT_TAG = 'refined';
+// Shouted, and matched case-insensitively below so a prompt written before this
+// still works. A model skimming a long prompt for the shape of the answer finds
+// a run of capitals before it finds a word, and this is the one thing in the
+// prompt that has to be got exactly right.
+const OUT_TAG = 'REFINED';
 
 // Greedy on purpose. A rewrite can legitimately contain the closing tag as
 // text, and the last one is the end of the answer.
@@ -365,10 +369,6 @@ function unwrapOutput(answer: string): { text: string; tagged: boolean; outside:
   if (OUT_OPEN.test(answer)) return { text: '', tagged: true, outside: '' };
   return { text: answer, tagged: false, outside: '' };
 }
-
-const REASONING_NOTE =
-  'Think about the edit before you write it, then give only the rewritten ' +
-  'message as your answer. Your reasoning must not appear in the answer.';
 
 // Your own messages get their own prompt. Refining what a character wrote and
 // refining what you wrote are different jobs: one is polishing somebody else's
@@ -538,7 +538,6 @@ function fillOurs(
         ? 'This message was written by the player, in their own voice. Keep ' +
           'their voice. Do not rewrite it as the narrator or as the character.'
         : 'This message was written by the character or the narrator.';
-    if (id === 'refine_notes') return thinkingMode !== 'off' ? REASONING_NOTE : '';
     if (id === 'protect_notes') return p.shieldNote || '';
     return '';
   });
@@ -1035,6 +1034,21 @@ function greetingIdOf(msgs: any[]): any {
   return msgs && msgs.length && msgs[0] && msgs[0].role === 'assistant' ? msgs[0].id : null;
 }
 
+// The last thing the character said, which is what "the latest reply" means.
+// The greeting is skipped because it is never refined, so a chat holding only a
+// greeting answers no rather than offering the one message that will always be
+// refused.
+function latestReply(msgs: any[], greetingId: any): any {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (!m || m.role !== 'assistant') continue;
+    if (greetingId != null && m.id === greetingId) continue;
+    if (!String(m.content == null ? '' : m.content).trim()) continue;
+    return m;
+  }
+  return null;
+}
+
 async function refineMessage(
   chatId: string,
   messageId: any,
@@ -1053,8 +1067,27 @@ async function refineMessage(
   if (!Array.isArray(msgs) || !msgs.length) return { ok: false, why: 'the chat came back empty' };
 
   const greetingId = greetingIdOf(msgs);
-  const m = msgs.find((x: any) => x && x.id === messageId) || null;
-  if (!m) return { ok: false, why: 'that message is not in this chat any more' };
+  // No id means "the latest reply", which is what the panel's button and the
+  // floating button are both named. They send no id whenever nothing has
+  // rendered since the page loaded, which on a chat you opened and did not add
+  // to is every time. That used to fall through the lookup below and come back
+  // as "that message is not in this chat any more", so the button did nothing
+  // and said something untrue about why.
+  //
+  // Resolved here rather than in the panel because this is the side holding the
+  // messages. The panel only knows what it happened to watch arrive.
+  const m =
+    messageId == null || messageId === ''
+      ? latestReply(msgs, greetingId)
+      : msgs.find((x: any) => x && x.id === messageId) || null;
+  if (!m)
+    return {
+      ok: false,
+      why:
+        messageId == null || messageId === ''
+          ? 'there is no reply in this chat to refine yet'
+          : 'that message is not in this chat any more',
+    };
   if (m.id === greetingId)
     return { ok: false, why: 'the greeting is written by a person, so it is never refined' };
   if (m.role !== 'assistant' && m.role !== 'user')

@@ -48,7 +48,7 @@ System is right for almost everything. Two cases where changing it helps:
 
 ## The answer it asks for
 
-The rewrite comes back between `<refined>` and `</refined>`, and only what is between them is saved.
+The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is between them is saved.
 
 This is worth more than it sounds. Without it, a model that opens with "Sure! Here is the rewritten message:" has its whole answer dropped, because saving that line into your chat is worse than saving nothing. With it, the sentence outside the tags is simply ignored and the rewrite lands. It also catches an answer that ran out of room: an opening tag with nothing closing it means the rewrite was cut off, and a half-written message is never saved.
 
@@ -56,9 +56,28 @@ This is worth more than it sounds. Without it, a model that opens with "Sure! He
 
 **Take the answer from between the tags**, under Limits, is the reading half and is on by default. It decides what is done with an answer, never what is asked for. Off, the whole answer is taken as the rewrite and the older checks catch a preamble instead.
 
+## What a reasoning prompt asks for
+
+The two reasoning prompts ask for the answer in two parts:
+
+```
+<REFINE_NOTES>
+what is weak, what you intend to change and why, what you are leaving alone
+</REFINE_NOTES>
+<REFINED>
+the rewritten message
+</REFINED>
+```
+
+`<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat. It appears on the **Log** tab under **What it said about the edit**, beside the refine it belongs to. That is what makes asking for it worth the tokens: reasoning nobody ever reads is only a bill.
+
+**The two plain prompts do not ask for this**, and that is deliberate rather than an omission. A model that does not reason, given a thinking tag, fills it with a summary of what it is about to do and then does something else: output spent on a paragraph nobody wanted.
+
+Both tags are shouted. A model skimming a long prompt for the shape of the answer finds a run of capitals before it finds a word, and these are the only two things in the prompt that have to be got exactly right. The answer is read case-insensitively, so a prompt you wrote in lower case still works.
+
 ## Asking it what it changed
 
-Nothing outside the `<refined>` tags is ever saved into your chat. That makes the space around them somewhere a prompt can safely ask for anything it likes, and the obvious thing to ask for is a report: what was cut, what was added, what was deliberately left alone.
+Nothing outside the `<REFINED>` tags is ever saved into your chat. That makes the space around them somewhere a prompt can safely ask for anything it likes, and the obvious thing to ask for is a report: what was cut, what was added, what was deliberately left alone.
 
 Add the tags you want to the **How to answer** block, in your own words. For example:
 
@@ -69,12 +88,12 @@ Before the rewrite, list what you changed:
 <added>anything you added, one per line</added>
 <kept>anything you were tempted to change and left alone, and why</kept>
 
-Then give the rewrite between <refined> and </refined>.
+Then give the rewrite between <REFINED> and </REFINED>.
 ```
 
 What comes back outside the tags appears on the **Log** tab under **What it said about the edit**, with the time it arrived, and can be copied or read at full size. It is never written into the message. The card is not there at all until something arrives in it, so a prompt that never asks for a report never carries an empty card about one.
 
-The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<refined>` and `</refined>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
+The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<REFINED>` and `</REFINED>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 
 ## The four prompts that ship with it
 
@@ -84,8 +103,8 @@ Two questions have different answers: does your model reason, and do you want th
 | --- | --- |
 | **Short** | Everything Detailed says, in three rule blocks instead of nine. |
 | **Detailed** | The same rules, one to a block, each said at length: phrases, words, repetition, rhythm, speech, bodies, endings. |
-| **Short, for a thinking model** | The standard, and let it work out the rest. |
-| **Detailed, for a thinking model** | The standard, the five places to point it, keeping the writer's voice, and a pass over its own answer. |
+| **Short, for a thinking model** | The standard, and let it work out the rest. Asks for its working in `<REFINE_NOTES>`. |
+| **Detailed, for a thinking model** | The standard, the five places to point it, keeping the writer's voice, and a pass over its own answer. Asks for its working in `<REFINE_NOTES>`. |
 
 **Short and Detailed cover the same ground.** Pick by how much prompt you want to pay for on every refine, not by what it catches. Detailed is followed more closely because it says each rule at length and gives it a heading of its own; Short costs a fraction as much per reply.
 
