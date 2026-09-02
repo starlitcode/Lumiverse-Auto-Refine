@@ -19,11 +19,21 @@ interface Msg {
   content: string;
 }
 
+// A prompt small enough to assert against, in the shape the panel writes.
+const PROMPT = [
+  { id: "system", name: "The job", on: true, role: "system", text: "<your_task>\nRewrite it.\n</your_task>" },
+  { id: "character", name: "Character", on: true, role: "system", text: "<character>\n{{description}}\n</character>" },
+  { id: "lore", name: "World", on: true, role: "system", text: "<world>\n{{lore}}\n</world>" },
+  { id: "history", name: "Scene", on: true, role: "system", text: "<recent_scene>\n{{history}}\n</recent_scene>" },
+  { id: "cliches", name: "Cliches", on: true, role: "system", text: "<cliches>\nCut filler words.\n</cliches>" },
+  { id: "answer", name: "How to answer", on: true, role: "system", text: "{{output_format}}\n\n{{protect_notes}}" },
+  { id: "turn", name: "The turn", on: true, role: "user", text: "{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+];
+
 const RULES = {
   enabled: true,
   refineOn: true,
-  rules: "Cut filler words.",
-  structureRules: "",
+  blocks: PROMPT,
   refineUserMessages: false,
   connectionId: "",
   thinkingMode: "off",
@@ -57,6 +67,7 @@ function host(
     noCard?: boolean;
     loreFail?: string;
     noLore?: boolean;
+    macroFail?: string;
   } = {},
 ) {
   const handlers: Record<string, Array<(p: any) => any>> = {};
@@ -90,6 +101,23 @@ function host(
         { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
         { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
       ],
+    },
+    macros: {
+      // Stands in for Lumiverse's own resolver: the character fields and the
+      // persona, and anything it does not know left as it was.
+      resolve: async (text: string, opt: any) => {
+        if (opts.macroFail) throw new Error(opts.macroFail);
+        // The host resolves a card macro against a real chat. With no chat, or
+        // with the characters permission refused, it comes back empty, which is
+        // what the real one does and what the extension has to cope with.
+        const known = !!(opt && opt.chatId) && !opts.cardFail && !opts.noCard;
+        return String(text)
+          .replace(/\{\{description\}\}/g, known ? CARD.description : "")
+          .replace(/\{\{personality\}\}/g, known ? CARD.personality : "")
+          .replace(/\{\{scenario\}\}/g, known ? CARD.scenario : "")
+          .replace(/\{\{persona\}\}/g, known ? "A traveller who arrived at night." : "")
+          .replace(/\{\{char\}\}/g, known ? CARD.name : "");
+      },
     },
     world_books: {
       getActivated: async () => {
@@ -225,12 +253,14 @@ describe("refining a reply", () => {
     expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
   });
 
-  test("with no rules written, nothing is sent to a model at all", async () => {
-    const h = await armed(["anything"], { rules: "", structureRules: "" });
+  test("a prompt that cannot work is refused before a model is called", async () => {
+    const h = await armed(["anything"], {
+      blocks: [{ id: "a", name: "Rules only", on: true, role: "system", text: "cut filler" }],
+    });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.asked.length).toBe(0);
-    expect(h.skipped()[0]).toMatch(/no rules/i);
+    expect(h.skipped()[0]).toMatch(/\{\{message\}\}/);
   });
 });
 
@@ -422,7 +452,6 @@ describe("what the model is told about the scene", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(said(h)).toContain("A ferry pilot who has crossed the same water");
-    expect(said(h)).toContain("Blunt, and slow to trust");
   });
 
   test("the card's own writing samples are not, so they cannot be copied in", async () => {
@@ -455,7 +484,7 @@ describe("what the model is told about the scene", () => {
     expect(said(h)).not.toContain("i walk through it");
   });
 
-  test("a refused characters permission refines anyway, without the card", async () => {
+  test("a chat the card could not be read for refines anyway, without it", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {}, chat(), {
       cardFail: "PERMISSION_DENIED: characters",
     });
@@ -474,7 +503,7 @@ describe("what the model is told about the scene", () => {
     expect(said(h)).toContain("Character: The gate stands open");
   });
 
-  test("trying the rules on pasted text sends no chat and no card", async () => {
+  test("trying the rules on pasted text belongs to no chat, so no card is sent", async () => {
     const h = await armed(["A tighter version of the line."]);
     await h.front({ type: "try_refine", requestId: "t", text: "A line with, suddenly, filler in it." });
     await wait(50);
@@ -512,9 +541,9 @@ describe("the lorebook", () => {
   test("switching the lore block off leaves it out", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {
       blocks: [
-        { id: "guard", on: true, role: "system" },
-        { id: "lore", on: false, role: "system" },
-        { id: "message", on: true, role: "user" },
+        { id: "a", name: "Job", on: true, role: "system", text: "Rewrite it." },
+        { id: "lore", name: "World", on: false, role: "system", text: "<world>{{lore}}</world>" },
+        { id: "t", name: "Turn", on: true, role: "user", text: "{{message}}" },
       ],
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -601,71 +630,247 @@ describe("seeing what gets sent", () => {
 });
 
 describe("how the prompt is put together", () => {
-  test("blocks are sent in the order the reader set them", async () => {
+  test("blocks are sent in the order they are listed", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {
       blocks: [
-        { id: "guard", on: true, role: "system" },
-        { id: "rules", on: true, role: "system" },
-        { id: "character", on: true, role: "system" },
-        { id: "message", on: true, role: "user" },
+        { id: "a", name: "First", on: true, role: "system", text: "<one>alpha</one>" },
+        { id: "b", name: "Second", on: true, role: "system", text: "<two>beta</two>" },
+        { id: "t", name: "Turn", on: true, role: "user", text: "{{message}}" },
       ],
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     const whole = h.asked[0].messages[0].content;
-    expect(whole.indexOf("Cut filler words")).toBeLessThan(whole.indexOf("ferry pilot"));
+    expect(whole.indexOf("alpha")).toBeLessThan(whole.indexOf("beta"));
   });
 
   test("a block switched off is left out", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {
       blocks: [
-        { id: "guard", on: true, role: "system" },
-        { id: "character", on: false, role: "system" },
-        { id: "message", on: true, role: "user" },
+        { id: "a", name: "Off", on: false, role: "system", text: "<one>alpha</one>" },
+        { id: "t", name: "Turn", on: true, role: "user", text: "{{message}}" },
       ],
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).not.toContain("ferry pilot");
+    expect(said(h)).not.toContain("alpha");
+  });
+
+  test("adjacent blocks with the same role become one message", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [
+        { id: "a", name: "One", on: true, role: "system", text: "alpha" },
+        { id: "b", name: "Two", on: true, role: "system", text: "beta" },
+        { id: "t", name: "Turn", on: true, role: "user", text: "{{message}}" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].messages.map((m: any) => m.role)).toEqual(["system", "user"]);
+    expect(h.asked[0].messages[0].content).toBe("alpha\n\nbeta");
   });
 
   test("a block sent as a different role arrives as that role", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {
       blocks: [
-        { id: "guard", on: true, role: "system" },
-        { id: "rules", on: true, role: "user" },
-        { id: "message", on: true, role: "user" },
+        { id: "a", name: "One", on: true, role: "system", text: "alpha" },
+        { id: "b", name: "Two", on: true, role: "assistant", text: "beta" },
+        { id: "t", name: "Turn", on: true, role: "user", text: "{{message}}" },
       ],
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    const roles = h.asked[0].messages.map((m: any) => m.role);
-    expect(roles).toEqual(["system", "user"]);
-    expect(h.asked[0].messages[1].content).toContain("Cut filler words");
+    expect(h.asked[0].messages.map((m: any) => m.role)).toEqual(["system", "assistant", "user"]);
   });
 
-  test("a block the reader wrote themselves is sent as they wrote it", async () => {
+  test("a prompt with no turn macro is refused before a model is called", async () => {
+    const h = await armed(["anything"], {
+      blocks: [{ id: "a", name: "One", on: true, role: "system", text: "just rules, no turn" }],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.skipped()[0]).toMatch(/\{\{message\}\}/);
+  });
+
+  test("a block whose macros all came back empty is left out, tags and all", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noLore: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    // The lore block is <world>{{lore}}</world> and this chat has no lore, so
+    // the model must not be told the world is empty.
+    expect(said(h)).not.toContain("<world>");
+  });
+});
+
+describe("macros", () => {
+  test("the host answers the ones it owns", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A ferry pilot who has crossed the same water");
+  });
+
+  test("ours are filled after the host has run, so a reply cannot inject one", async () => {
+    // A reply that contains a macro. If ours were filled before the host pass,
+    // the resolver would expand this into the prompt.
+    const evil = chat();
+    evil[2].content = "She stepped through, and {{description}} was written on the wall in full.";
+    const h = await armed(["She stepped through, and {{description}} was on the wall."], {}, evil);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const turn = h.asked[0].messages[h.asked[0].messages.length - 1].content;
+    expect(turn).toContain("{{description}}");
+    expect(turn).not.toContain("A ferry pilot who has crossed");
+  });
+
+  test("a macro nobody can answer is left as it was typed", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {
       blocks: [
-        { id: "guard", on: true, role: "system" },
-        { id: "mine", on: true, role: "system", text: "Write in British spelling." },
-        { id: "message", on: true, role: "user" },
+        { id: "a", name: "One", on: true, role: "system", text: "keep {{not_a_macro}} as it is" },
+        { id: "t", name: "Turn", on: true, role: "user", text: "{{message}}" },
       ],
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).toContain("Write in British spelling.");
+    expect(said(h)).toContain("{{not_a_macro}}");
   });
 
-  test("the guard and the message go back in if a saved layout has lost them", async () => {
-    const h = await armed(["She stepped through and the cold hit her."], {
-      blocks: [{ id: "rules", on: true, role: "system" }],
+  test("a host that refuses to resolve does not stop the refine", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), {
+      macroFail: "PERMISSION_DENIED: macros",
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).toContain("You are editing one message");
-    expect(said(h)).toContain("She stepped through and, suddenly");
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+});
+
+describe("protecting what is not prose", () => {
+  const marked = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    {
+      id: "m2",
+      role: "assistant",
+      content:
+        'She stepped through and, suddenly, <font color="#ffff00">the cold</font> just hit her, all at once.',
+    },
+  ];
+
+  test("markup is never shown to the model", async () => {
+    const h = await armed(["ok"], {}, marked());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const turn = h.asked[0].messages[h.asked[0].messages.length - 1].content;
+    expect(turn).not.toContain("<font");
+    expect(turn).toContain("[[AR1]]");
+  });
+
+  test("and comes back exactly as it was", async () => {
+    const h = await armed(
+      ["She stepped through and [[AR1]]the cold[[AR2]] hit her, all at once."],
+      {},
+      marked(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(
+      'She stepped through and <font color="#ffff00">the cold</font> hit her, all at once.',
+    );
+  });
+
+  test("a rewrite that dropped the markup is refused rather than saved", async () => {
+    const h = await armed(["She stepped through and the cold hit her, all at once."], {}, marked());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/formatting/i);
+  });
+
+  test("switched off, the markup goes to the model as it is", async () => {
+    const h = await armed(["ok"], { protectOn: false }, marked());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const turn = h.asked[0].messages[h.asked[0].messages.length - 1].content;
+    expect(turn).toContain("<font");
+  });
+
+  test("a code fence is protected too", async () => {
+    const fenced = marked();
+    fenced[2].content = "She read it aloud.\n\n```\nkeep me exactly\n```\n\nThen she stopped.";
+    const h = await armed(["She read it out.\n\n[[AR1]]\n\nThen she stopped, slowly."], {}, fenced);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toContain("```\nkeep me exactly\n```");
+  });
+
+  test("the model's own thinking is never sent and comes back untouched", async () => {
+    const thought = marked();
+    thought[2].content =
+      "<think>She is cold. Lead with that.</think>She stepped through and, suddenly, the cold just hit her.";
+    const h = await armed(["She stepped through and the cold hit her."], {}, thought);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const turn = h.asked[0].messages[h.asked[0].messages.length - 1].content;
+    expect(turn).not.toContain("Lead with that");
+    expect(h.body("m2")).toBe(
+      "<think>She is cold. Lead with that.</think>She stepped through and the cold hit her.",
+    );
+  });
+});
+
+describe("the answer it asks for", () => {
+  const original = "She stepped through and, suddenly, the cold just hit her.";
+
+  test("the prompt asks for the rewrite in tags", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("<refined>");
+  });
+
+  test("only what is between the tags is saved", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a model that talks around the tags is no longer a lost refine", async () => {
+    // Word for word the answer that used to be dropped for its preamble.
+    const h = await armed([
+      "Sure! Here is the rewritten message:\n\n<refined>She stepped through and the cold hit her.</refined>\n\nI cut the filler.",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a rewrite cut off before the closing tag is refused", async () => {
+    const h = await armed(["<refined>She stepped through and the cold"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(original);
+    expect(h.skipped().join(" ")).toMatch(/cut off/i);
+  });
+
+  test("with the tags switched off, the checks still catch a preamble", async () => {
+    const h = await armed(
+      ["Here is the rewritten message:\n\nShe stepped through and the cold hit her."],
+      { wrapOutput: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(original);
+    expect(h.skipped().join(" ")).toMatch(/wrote about the edit/i);
+  });
+
+  test("and the prompt stops asking for them", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { wrapOutput: false });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("<refined>");
   });
 });
 

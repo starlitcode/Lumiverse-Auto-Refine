@@ -39,7 +39,7 @@ let timeoutSecs = 90;
 // How the request is put together: which blocks go in, in what order, and what
 // role each one is sent as. The reader owns this, which is the point of it
 // being a list rather than a hardcoded prompt.
-let blocks: Array<{ id: string; on: boolean; role: string; text?: string }> = [];
+let blocks: Block[] = [];
 // How much of the chat to show the model as context, in messages. The refine
 // sees the message it is rewriting either way; this is what came before it.
 let contextMessages = 4;
@@ -97,125 +97,404 @@ function say(level: 'info' | 'warn', text: string) {
 }
 
 // ---- putting the request together ----
-// The reader decides what goes into the refine and in what order, because a
-// prompt that cannot be rearranged is a prompt that only suits whoever wrote
-// it. Each block is a piece of the request with a role of its own, and the
-// order is the order they are sent in.
+// The whole prompt is a list of blocks the reader wrote. Not a fixed prompt
+// with a rules box bolted on: a prompt is the thing that decides what a refine
+// does, so it is the thing to be able to edit, reorder and switch off.
 //
-// Two of them are not the reader's to remove. The guard says what a refine is
-// and is not, and the message is the thing being refined; without either there
-// is no job to do. Everything else can be turned off, moved, or re-roled.
-const GUARD_ID = 'guard';
-const MESSAGE_ID = 'message';
-const REQUIRED = [GUARD_ID, MESSAGE_ID];
+// A block is a name, a role, and text. What makes the text worth anything is
+// the macros in it, which are filled in at the moment of the refine.
+//
+// Two passes, because there are two kinds of macro:
+//
+//   1. Ours. The turn being refined, the run-up, the lorebook, whose message it
+//      is. Nobody else knows these: they are about this refine, not this chat.
+//   2. The host's, through spindle.macros.resolve. Character fields, the
+//      persona, variables, the date. Lumiverse already resolves these for every
+//      other prompt it builds, and a second implementation here would drift
+//      from the one the chat itself uses.
+//
+// A block whose text comes out empty is left out rather than sent blank, so a
+// chat with no lorebook does not send an empty <world> tag.
 
-// The line that separates a refine from another turn of roleplay. Not editable,
-// because every guardrail further down assumes the model was told this.
-const GUARD_TEXT =
-  'You are editing one message from an ongoing roleplay. Rewrite it so it ' +
-  'follows the instructions you have been given.\n\n' +
-  'Keep the same events, the same speech, and the same meaning. You are ' +
-  'polishing how it is written, not changing what happens. Do not add new ' +
-  'actions, new dialogue, or new characters. Do not continue the scene past ' +
-  'where it ends. Do not resolve anything the message leaves open.\n\n' +
-  'Reply with the rewritten message and nothing else. No preamble, no ' +
-  'explanation of what you changed, no quotation marks around the whole ' +
-  'thing, no notes at the end.';
+const ROLES = ['system', 'user', 'assistant'];
 
-const REASONING_NOTE =
-  'Think about the edit before you write it, then give only the rewritten ' +
-  'message as your answer. Your reasoning must not appear in the answer.';
+// The macro every prompt needs. Without it somewhere in the list, the model is
+// never shown the thing it is meant to be rewriting, so the refine is refused
+// rather than sent and quietly wasted.
+const TURN_MACRO = '{{message}}';
 
-// What a fresh install sends, in this order. Chosen so the model reads who the
-// character is, then what has been happening, then what to do, then the thing
-// to do it to, which is the order a person would want it.
-const DEFAULT_BLOCKS = [
-  { id: GUARD_ID, on: true, role: 'system' },
-  { id: 'character', on: true, role: 'system' },
-  { id: 'context', on: true, role: 'system' },
-  { id: 'lore', on: true, role: 'system' },
-  { id: 'rules', on: true, role: 'system' },
-  { id: 'structure', on: true, role: 'system' },
-  { id: 'whose', on: true, role: 'system' },
-  { id: 'thinking', on: true, role: 'system' },
-  { id: MESSAGE_ID, on: true, role: 'user' },
-];
+// Ours, and what each one says when there is nothing to put there. Empty means
+// the block holding it collapses, which is what makes an unused block harmless
+// rather than a stray heading in the prompt.
+const OURS = ['message', 'history', 'lore', 'whose', 'refine_notes', 'protect_notes', 'output_format'];
 
-interface Piece {
-  character: string;
-  context: string;
-  lore: string;
-  message: string;
-  isUser: boolean;
-}
-
-// What a refine knows about the scene, gathered once per run. Every field is
-// optional: a chat with no card, no lorebook and no history still refines, with
-// those blocks left out.
-const NO_SCENE: Scene = { character: '', context: '', lore: '', name: '' };
 interface Scene {
   character: string;
   context: string;
   lore: string;
   name: string;
+  chatId?: string;
+  characterId?: string;
+  // Only set when something was actually shielded, so a message with no markup
+  // in it does not carry an instruction about tokens that are not there.
+  shieldNote?: string;
+}
+const NO_SCENE: Scene = { character: '', context: '', lore: '', name: '' };
+
+interface Block {
+  id: string;
+  name?: string;
+  on: boolean;
+  role: string;
+  text?: string;
 }
 
-// The text one block carries, or empty when it has nothing to say. A block with
-// nothing in it is left out rather than sent as a blank line.
-function blockText(id: string, custom: string | undefined, p: Piece): string {
-  if (id === GUARD_ID) return GUARD_TEXT;
-  if (id === MESSAGE_ID) return p.message;
-  if (id === 'character') return p.character ? 'Who this is about:\n\n' + p.character : '';
-  if (id === 'context') return p.context ? 'What has been happening:\n\n' + p.context : '';
-  if (id === 'lore') return p.lore ? 'What is true in this world:\n\n' + p.lore : '';
-  if (id === 'rules') {
-    const own = String(rules || '').trim();
-    return own ? 'The instructions to follow:\n\n' + own : '';
-  }
-  if (id === 'structure') {
-    const shape = String(structureRules || '').trim();
-    return shape ? 'Structure and formatting:\n\n' + shape : '';
-  }
-  if (id === 'whose')
-    return p.isUser
-      ? 'The message is written by the human player, in their own voice. Keep ' +
-        'their voice. Do not make it sound like the narrator or the character.'
-      : 'The message is written by the character or narrator.';
-  // Only worth sending when the reader has left thinking on. A model with no
-  // thinking to do does not need telling where not to put it.
-  if (id === 'thinking') return thinkingMode !== 'off' ? REASONING_NOTE : '';
-  // Anything else is the reader's own block, and it carries whatever they typed.
-  return String(custom == null ? '' : custom).trim();
+// The prompt a fresh install ships with, and the one people copy to write their
+// own. Second person throughout, because that is who the model is being spoken
+// to as, and XML tags as headings with a closing tag at the end, because a
+// model reads a tagged block as one instruction rather than as a paragraph that
+// blurs into the next one.
+const DEFAULT_BLOCKS: Block[] = [
+  {
+    id: 'system',
+    name: 'The job',
+    on: true,
+    role: 'system',
+    text:
+      '<your_task>\n' +
+      'You are editing one message from an ongoing story. Rewrite it so that it ' +
+      'follows every rule you are given below.\n\n' +
+      'Keep the same events, the same speech, and the same meaning. You are ' +
+      'changing how it is written, not what happens in it. Do not add new ' +
+      'actions, new dialogue, or new characters. Do not continue the scene past ' +
+      'where it ends. Do not resolve anything the message leaves open.\n\n' +
+      'Reply with the rewritten message and nothing else. No preamble, no ' +
+      'explanation of what you changed, no notes at the end.\n' +
+      '</your_task>',
+  },
+  {
+    id: 'character',
+    name: 'Who the character is',
+    on: true,
+    role: 'system',
+    text: '<character>\n{{description}}\n</character>',
+  },
+  {
+    id: 'persona',
+    name: 'Who the player is',
+    on: true,
+    role: 'system',
+    text: '<player>\n{{persona}}\n</player>',
+  },
+  {
+    id: 'lore',
+    name: 'What is true in this world',
+    on: true,
+    role: 'system',
+    text: '<world>\n{{lore}}\n</world>',
+  },
+  {
+    id: 'history',
+    name: 'What has been happening',
+    on: true,
+    role: 'system',
+    text: '<recent_scene>\n{{history}}\n</recent_scene>',
+  },
+  {
+    id: 'cliches',
+    name: 'Cliches',
+    on: true,
+    role: 'system',
+    text:
+      '<cliches>\n' +
+      'Cut phrases that turn up in every story rather than in this one. You know ' +
+      'the ones: a breath you did not know you were holding, a voice barely above ' +
+      'a whisper, a heart hammering against ribs, something unspoken hanging in ' +
+      'the air.\n\n' +
+      'Replace each with what is actually happening to this person in this room. ' +
+      'If nothing is actually happening, cut the line rather than replacing it.\n' +
+      '</cliches>',
+  },
+  {
+    id: 'sentences',
+    name: 'Sentence rhythm',
+    on: true,
+    role: 'system',
+    text:
+      '<sentence_rhythm>\n' +
+      'Vary your sentence lengths. Three medium sentences in a row is a rhythm a ' +
+      'reader stops hearing.\n\n' +
+      'Cut the sentence that restates the one before it in different words. Cut ' +
+      'adverbs that only repeat what the verb already said.\n' +
+      '</sentence_rhythm>',
+  },
+  {
+    id: 'dialogue',
+    name: 'Dialogue',
+    on: true,
+    role: 'system',
+    text:
+      '<dialogue>\n' +
+      'Keep every line of speech saying what it said. You may change how it is ' +
+      'said if the wording is stiff, but never what is meant.\n\n' +
+      'Cut speech tags that explain the line: she said angrily, he asked ' +
+      'curiously. If the line does not carry it, the line is the problem.\n' +
+      '</dialogue>',
+  },
+  {
+    id: 'answer',
+    name: 'How to answer',
+    on: true,
+    role: 'system',
+    text: '{{output_format}}\n\n{{protect_notes}}',
+  },
+  {
+    id: 'turn',
+    name: 'The turn to refine',
+    on: true,
+    role: 'user',
+    text: '{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>',
+  },
+];
+
+// Reasoning models are told where to put their working. Sent as its own block
+// so somebody who never turns thinking on never carries the instruction.
+// Asking for the answer inside a tag, rather than asking for the answer on its
+// own. A model that cannot help adding "Here is the rewritten message" still
+// puts the rewrite between the tags, and taking what is between them is exact
+// where reading around a preamble is guesswork.
+let wrapOutput = true;
+const OUT_TAG = 'refined';
+const OUTPUT_NOTE =
+  'Put the rewritten message between <' + OUT_TAG + '> and </' + OUT_TAG + '>. ' +
+  'Write nothing outside those tags: no preamble, no notes on what you changed.';
+
+// Greedy on purpose. A rewrite can legitimately contain the closing tag as
+// text, and the last one is the end of the answer.
+const OUT_RE = new RegExp('<' + OUT_TAG + '[^>]*>([\\s\\S]*)<\\/' + OUT_TAG + '>', 'i');
+const OUT_OPEN = new RegExp('<' + OUT_TAG + '[^>]*>', 'i');
+
+// What the model actually meant to hand back. When the tags are there this is
+// exact, and every check downstream then runs on the rewrite rather than on the
+// rewrite plus whatever was said around it.
+function unwrapOutput(answer: string): { text: string; tagged: boolean } {
+  const hit = OUT_RE.exec(answer);
+  if (hit && typeof hit[1] === 'string') return { text: hit[1].trim(), tagged: true };
+  // An opening tag with nothing closing it: the answer was cut off mid-write.
+  if (OUT_OPEN.test(answer)) return { text: '', tagged: true };
+  return { text: answer, tagged: false };
 }
 
-const ROLES = ['system', 'user', 'assistant'];
+const REASONING_NOTE =
+  'Think about the edit before you write it, then give only the rewritten ' +
+  'message as your answer. Your reasoning must not appear in the answer.';
 
 // The blocks as they will actually be sent: the reader's list when it has one,
-// the default otherwise, with the two required blocks put back if a stored list
-// has lost them.
-function activeBlocks(): Array<{ id: string; on: boolean; role: string; text?: string }> {
-  const list = Array.isArray(blocks) && blocks.length ? blocks.slice() : DEFAULT_BLOCKS.slice();
-  for (const id of REQUIRED) {
-    const at = list.findIndex((b) => b && b.id === id);
-    if (at < 0) list.push({ id: id, on: true, role: id === MESSAGE_ID ? 'user' : 'system' });
-    else list[at] = { ...list[at], on: true };
-  }
-  return list;
+// the default otherwise.
+function activeBlocks(): Block[] {
+  return Array.isArray(blocks) && blocks.length ? blocks.slice() : DEFAULT_BLOCKS.slice();
 }
 
-function buildPrompt(text: string, isUser: boolean, scene: Scene): any[] {
-  const piece: Piece = {
-    character: scene.character,
-    context: scene.context,
-    lore: scene.lore,
+// Whether the prompt shows the model the thing it is meant to rewrite. Asked
+// before any model is called, so a prompt that could not possibly work is
+// refused rather than paid for.
+function promptHasTurn(): boolean {
+  for (const b of activeBlocks()) {
+    if (!b || b.on === false) continue;
+    if (String(b.text || '').indexOf(TURN_MACRO) >= 0) return true;
+  }
+  return false;
+}
+
+// ---- protecting what is not prose ----
+// A rewrite is far more destructive than a word swap. Ask a model to improve a
+// paragraph and it will happily drop a <font color> tag, reflow a code block,
+// or decide an image link was a typo. None of that is prose and none of it is
+// the model's to touch.
+//
+// So it never sees it. Each run of markup is lifted out and replaced with a
+// short token, the model is told the tokens must come back untouched, and the
+// real text is put back afterwards. What makes this worth having rather than
+// hopeful is the last step: if a token did not come back, the rewrite is
+// dropped. Asking a model to preserve something and checking that it did are
+// different things, and only the second one is a guarantee.
+let protectOn = true;
+let protectThinking = true;
+
+// Short, ASCII, and shaped like nothing in prose, so a model treats it as an
+// opaque handle rather than as something to correct. Numbered rather than
+// hashed: a reader looking at the preview should be able to count them.
+const TOKEN = (n: number) => '[[AR' + n + ']]';
+const TOKEN_ANY = /\[\[AR(\d+)\]\]/g;
+
+// What gets lifted out, in the order it is looked for. Longest and most
+// structural first, or an HTML tag inside a code fence would be taken on its
+// own and the fence left broken around it.
+const GUARDED: RegExp[] = [
+  /```[\s\S]*?```/g,          // fenced code
+  /`[^`\n]+`/g,                // inline code
+  /!\[[^\]]*\]\([^)]*\)/g,      // an image
+  /<\/?[a-zA-Z][^<>]*>/g,      // any HTML tag, opening or closing
+];
+
+interface Shield {
+  text: string;
+  parts: string[];
+}
+
+function shield(text: string): Shield {
+  if (!protectOn) return { text: text, parts: [] };
+  const parts: string[] = [];
+  let out = text;
+  for (const rule of GUARDED) {
+    out = out.replace(rule, (hit) => {
+      // A cap, so a message that is mostly markup does not turn into a wall of
+      // tokens the model cannot read around.
+      if (parts.length >= 60) return hit;
+      parts.push(hit);
+      return TOKEN(parts.length);
+    });
+  }
+  return { text: out, parts: parts };
+}
+
+// Puts the real text back, and says which tokens never came home. A missing one
+// means the model deleted or rewrote something it was told to leave alone, and
+// that rewrite is not safe to save.
+function unshield(text: string, parts: string[]): { text: string; lost: number[] } {
+  if (!parts.length) return { text: text, lost: [] };
+  const seen = new Set<number>();
+  const out = text.replace(TOKEN_ANY, (whole, n) => {
+    const at = Number(n);
+    if (!(at >= 1 && at <= parts.length)) return whole;
+    seen.add(at);
+    return parts[at - 1];
+  });
+  const lost: number[] = [];
+  for (let i = 1; i <= parts.length; i++) if (!seen.has(i)) lost.push(i);
+  return { text: out, lost: lost };
+}
+
+const SHIELD_NOTE =
+  'Some parts of the message have been replaced with tokens that look like ' +
+  '[[AR1]], [[AR2]] and so on. They stand for formatting that must survive ' +
+  'exactly as it is. Copy every one of them into your answer unchanged, in the ' +
+  'same place. Do not edit them, translate them, split them across lines, or ' +
+  'remove them.';
+
+// The model's own working, which is not prose and is not the reader's writing.
+// It is cut off before the refine and put back afterwards, so a rewrite can
+// never quietly edit what a model worked out in a place nobody would check.
+const THINK_WRAPS: RegExp[] = [
+  /^\s*<(think|thinking|reasoning|thought)>[\s\S]*?<\/\1>\s*/i,
+  /^\s*\[(?:thinking|thought)\][\s\S]*?\[\/(?:thinking|thought)\]\s*/i,
+  /^\s*<\|(?:begin_of_thought|thinking)\|>[\s\S]*?<\|(?:end_of_thought|\/thinking)\|>\s*/i,
+];
+
+function splitThinking(text: string): { head: string; body: string } {
+  if (!protectThinking) return { head: '', body: text };
+  for (const rule of THINK_WRAPS) {
+    const hit = rule.exec(text);
+    if (hit && hit.index === 0) return { head: hit[0], body: text.slice(hit[0].length) };
+  }
+  return { head: '', body: text };
+}
+
+// Ours, turned into something the host's resolver will not touch and nothing in
+// a chat message could collide with. Case is ignored and inner spaces are
+// allowed, because {{ Message }} is what somebody types.
+function maskOurs(text: string): { text: string } {
+  return {
+    text: String(text).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (whole, name) => {
+      const id = String(name).toLowerCase();
+      return OURS.indexOf(id) >= 0 ? '\u0000ARF:' + id + '\u0000' : whole;
+    }),
+  };
+}
+
+// Pass three: our masks, filled in with content that is never scanned again.
+function fillOurs(
+  text: string,
+  p: { message: string; history: string; lore: string; isUser: boolean; shieldNote?: string },
+): string {
+  return String(text).replace(/\u0000ARF:([a-z_]+)\u0000/g, (whole, name) => {
+    const id = String(name).toLowerCase();
+    if (OURS.indexOf(id) < 0) return whole;
+    if (id === 'message') return p.message;
+    if (id === 'history') return p.history;
+    if (id === 'lore') return p.lore;
+    if (id === 'whose')
+      return p.isUser
+        ? 'This message was written by the player, in their own voice. Keep ' +
+          'their voice. Do not rewrite it as the narrator or as the character.'
+        : 'This message was written by the character or the narrator.';
+    if (id === 'refine_notes') return thinkingMode !== 'off' ? REASONING_NOTE : '';
+    if (id === 'protect_notes') return p.shieldNote || '';
+    if (id === 'output_format') return wrapOutput ? OUTPUT_NOTE : '';
+    return '';
+  });
+}
+
+// Pass two: everything left, handed to Lumiverse. It knows the card, the
+// persona, the variables and the date, and it is already the thing that
+// resolves them for the chat itself.
+async function fillHost(text: string, scene: Scene, userId?: string): Promise<string> {
+  if (text.indexOf('{{') < 0) return text;
+  try {
+    if (!spindle.macros || typeof spindle.macros.resolve !== 'function') return text;
+    const out = await spindle.macros.resolve(text, {
+      chatId: scene.chatId,
+      characterId: scene.characterId,
+      userId: userId,
+    });
+    // Some builds answer with the string, some with an object carrying it.
+    if (typeof out === 'string') return out;
+    if (out && typeof out.content === 'string') return out.content;
+    if (out && typeof out.text === 'string') return out.text;
+    return text;
+  } catch (_) {
+    // No macros API, or it refused. The block goes as written rather than the
+    // refine failing over a macro nobody may have used.
+    return text;
+  }
+}
+
+// A block that is nothing but empty tags once its macros came back empty. A
+// chat with no lorebook should not send <world></world>, which reads to a model
+// as "this world is empty" rather than as "nothing was said about the world".
+function isHollow(text: string): boolean {
+  const bare = text
+    .replace(/<\/?[a-z0-9_\-]+\s*\/?>/gi, '')
+    .replace(/\s+/g, '');
+  return bare.length === 0;
+}
+
+async function buildPrompt(
+  text: string,
+  isUser: boolean,
+  scene: Scene,
+  userId?: string,
+): Promise<any[]> {
+  const piece = {
     message: text,
+    history: scene.context,
+    lore: scene.lore,
     isUser: isUser,
+    shieldNote: scene.shieldNote,
   };
   const out: any[] = [];
   for (const b of activeBlocks()) {
     if (!b || !b.on) continue;
-    const body = blockText(String(b.id), b.text, piece);
-    if (!body.trim()) continue;
+    // Ours are masked, not filled, so the host pass runs over the block's own
+    // wording and never over the reply. Filling first would hand the reply's
+    // text to the macro resolver, and a message that happens to contain
+    // {{persona}} would quietly expand into somebody's prompt. Masked, then
+    // resolved, then filled: the reply goes in last and is never scanned.
+    const masked = maskOurs(String(b.text || ''));
+    const resolved = await fillHost(masked.text, scene, userId);
+    const body = fillOurs(resolved, piece).trim();
+    // Empty, or nothing but the tags somebody wrapped a macro in.
+    if (!body || isHollow(body)) continue;
     const role = ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system';
     // Blocks that land next to each other with the same role are joined rather
     // than sent as separate messages. Providers differ on how they treat two
@@ -271,7 +550,18 @@ interface Verdict {
 // The one place that decides whether an answer is safe to save. Every reason
 // is named, because "it did nothing" with no reason is the complaint this
 // feature would otherwise generate.
+// The whole read of an answer: unwrap it first, then judge what was inside. A
+// model that wrapped its rewrite correctly is never failed for the sentence it
+// wrote around the tags, and one cut off mid-rewrite is caught by the opening
+// tag with nothing closing it rather than saved half-written.
 function judge(answer: any, original: string): Verdict {
+  const got = unwrapOutput(String(answer == null ? '' : answer));
+  if (wrapOutput && got.tagged && !got.text)
+    return { ok: false, text: '', why: 'the rewrite was cut off before it finished' };
+  return judgeInner(got.text, original);
+}
+
+function judgeInner(answer: any, original: string): Verdict {
   const raw = String(answer == null ? '' : answer);
   const text = unwrapQuotes(unfence(raw)).trim();
   const orig = original.trim();
@@ -334,8 +624,8 @@ function clip(s: any, max: number): string {
 async function gatherCard(
   chatId: string,
   userId?: string,
-): Promise<{ text: string; name: string }> {
-  const empty = { text: '', name: '' };
+): Promise<{ text: string; name: string; id: string }> {
+  const empty = { text: '', name: '', id: '' };
   try {
     if (!spindle.chats || typeof spindle.chats.get !== 'function') return empty;
     const chat = await spindle.chats.get(chatId, userId);
@@ -351,7 +641,7 @@ async function gatherCard(
       const v = clip(card[pair[0]], CARD_MAX);
       if (v) lines.push(pair[1] + ': ' + v);
     }
-    return { text: lines.join('\n\n'), name: String(card.name || '').trim() };
+    return { text: lines.join('\n\n'), name: String(card.name || '').trim(), id: String(cardId) };
   } catch (_) {
     // No permission, no such chat, or the host said no. The refine goes ahead
     // without a card rather than failing over one.
@@ -480,6 +770,7 @@ async function askModel(
   text: string,
   isUser: boolean,
   scene: Scene,
+  userId?: string,
 ): Promise<{ content: string; error: string }> {
   const controller: any = typeof (globalThis as any).AbortController === 'function'
     ? new (globalThis as any).AbortController()
@@ -489,7 +780,7 @@ async function askModel(
   let timer: any = null;
   if (controller) timer = setTimeout(() => { try { controller.abort(); } catch (_) {} }, ms);
   try {
-    const req: any = { messages: buildPrompt(text, isUser, scene) };
+    const req: any = { messages: await buildPrompt(text, isUser, scene, userId) };
     // Only the values the reader actually changed. An empty object is left out
     // so the connection's own preset stays in charge, which is what somebody
     // who never opened the sampler section expects.
@@ -536,8 +827,11 @@ async function refineMessage(
   if (!masterOn) return { ok: false, why: 'Auto Refine is switched off' };
   if (chatsOff.has(String(chatId)))
     return { ok: false, why: 'Auto Refine is switched off in this chat' };
-  if (!String(rules || '').trim() && !String(structureRules || '').trim())
-    return { ok: false, why: 'there are no rules to follow yet' };
+  if (!promptHasTurn())
+    return {
+      ok: false,
+      why: 'no block in your prompt contains {{message}}, so the model would never see the reply',
+    };
 
   let msgs: any[] = [];
   try {
@@ -571,18 +865,43 @@ async function refineMessage(
   // with the blocks left out rather than not refining at all.
   const card = await gatherCard(chatId, userId);
   const at = msgs.findIndex((x: any) => x && x.id === m.id);
-  const scene: Scene = {
+  let scene: Scene = {
     character: card.text,
     context: gatherHistory(msgs, at, card.name),
     lore: await gatherLore(chatId, userId),
     name: card.name,
+    chatId: chatId,
+    characterId: card.id,
   };
 
-  const answer = await askModel(original, m.role === 'user', scene);
+  // The model's own working is cut off rather than sent. It is not prose, and a
+  // rewrite of it would be invisible in the place people look.
+  const split = splitThinking(original);
+  // Markup is lifted out and stood in for, so the model cannot mangle what it
+  // was never meant to touch.
+  const armed = shield(split.body);
+  if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
+
+  const answer = await askModel(armed.text, m.role === 'user', scene, userId);
   if (answer.error) return { ok: false, why: answer.error };
 
-  const verdict = judge(answer.content, original);
+  // Judged against the text that was actually sent, so a message that is half
+  // markup is not called "too short" for the tokens standing in for it.
+  const verdict = judge(answer.content, armed.text);
   if (!verdict.ok) return { ok: false, why: verdict.why };
+
+  const back = unshield(verdict.text, armed.parts);
+  if (back.lost.length)
+    return {
+      ok: false,
+      why:
+        'the rewrite dropped ' +
+        back.lost.length +
+        (back.lost.length === 1 ? ' piece' : ' pieces') +
+        ' of formatting it was told to keep',
+    };
+  // The thinking goes back exactly as it was, in front of the rewrite.
+  const whole = split.head + back.text;
 
   if (confirmBeforeSave) {
     replyTo(userId, {
@@ -590,12 +909,12 @@ async function refineMessage(
       chatId: chatId,
       messageId: messageId,
       before: original,
-      after: verdict.text,
+      after: whole,
     });
     return { ok: false, why: 'waiting for you to say yes' };
   }
 
-  return saveRefined(chatId, m, original, verdict.text, userId);
+  return saveRefined(chatId, m, original, whole, userId);
 }
 
 async function saveRefined(
@@ -717,14 +1036,18 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
             .slice(0, 40)
             .map((b: any) => ({
               id: String(b.id),
+              name: b.name == null ? undefined : String(b.name),
               on: b.on !== false,
               role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
-              text: b.text == null ? undefined : String(b.text),
+              text: b.text == null ? '' : String(b.text),
             }))
         : [];
       contextMessages = Number(s.contextMessages);
       contextMessages = Number.isFinite(contextMessages) ? contextMessages : 4;
       samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
+      protectOn = s.protectOn !== false;
+      protectThinking = s.protectThinking !== false;
+      wrapOutput = s.wrapOutput !== false;
       return;
     }
 
@@ -845,10 +1168,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
               context: at > 0 ? gatherHistory(msgs, at, card.name) : '',
               lore: await gatherLore(payload.chatId, userId),
               name: card.name,
+              chatId: payload.chatId,
+              characterId: card.id,
             };
           }
         }
-        const messages = buildPrompt(text, isUser, scene);
+        const messages = await buildPrompt(text, isUser, scene, userId);
         replyTo(userId, {
           type: 'prompt_preview',
           requestId: payload.requestId,
@@ -856,6 +1181,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
           real: real,
           messages: messages,
           parameters: cleanSamplers(),
+          wrapOutput: wrapOutput,
           connectionId: connectionId || '',
           reasoning: reasoningFor(),
         });
@@ -867,6 +1193,50 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
           why: (e && e.message) || 'the preview could not be built',
         });
       }
+      return;
+    }
+
+    // Which chat is open, asked rather than assumed. The panel cannot see this
+    // for itself: it knows the last chat a reply arrived in, which is not the
+    // same as the chat somebody is looking at now.
+    if (payload.type === 'active_chat') {
+      let chatId: any = payload.chatId || null;
+      let resolved = false;
+      let character: string | null = null;
+      let hasCharacter = false;
+      try {
+        let chat: any = null;
+        if (chatId && spindle.chats && typeof spindle.chats.get === 'function') {
+          chat = await spindle.chats.get(chatId, userId);
+          resolved = true;
+        } else if (spindle.chats && typeof spindle.chats.getActive === 'function') {
+          chat = await spindle.chats.getActive(userId);
+          chatId = (chat && chat.id) || null;
+          resolved = true;
+        }
+        const cardId = chat && chat.character_id;
+        // Whether the chat has a card at all, which is a different question
+        // from what it is called: the name needs the characters permission and
+        // the lookup below comes back empty without it.
+        const cards = chat && chat.metadata && chat.metadata.character_ids;
+        hasCharacter = !!cardId || (Array.isArray(cards) && cards.length > 0);
+        if (cardId && spindle.characters && typeof spindle.characters.get === 'function') {
+          const card = await spindle.characters.get(cardId, userId);
+          const name = card && card.name;
+          character = name ? String(name) : null;
+        }
+      } catch (_) {
+        // No chats or characters permission. Answer with what is known, so the
+        // panel can tell "nobody is in a chat" from "I was not allowed to look".
+      }
+      replyTo(userId, {
+        type: 'active_chat',
+        requestId: payload.requestId,
+        chatId: chatId,
+        character: character,
+        hasCharacter: hasCharacter,
+        resolved: resolved,
+      });
       return;
     }
 
@@ -882,7 +1252,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       // Pasted text belongs to no chat, so there is no card and no history to
       // send. That is the honest version of a rehearsal: it shows what the
       // rules do on their own, which is the thing being tried out.
-      const answer = await askModel(text, !!payload.asUser, NO_SCENE);
+      const answer = await askModel(text, !!payload.asUser, NO_SCENE, userId);
       if (answer.error) {
         replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: answer.error });
         return;

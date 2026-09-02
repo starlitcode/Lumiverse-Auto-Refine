@@ -14,11 +14,11 @@ In Lumiverse, open Extensions and install from the repository URL:
 https://github.com/starlitcode/Lumiverse-Auto-Refine
 ```
 
-Then open the sidebar drawer and pick the **Auto Refine** tab. `Ctrl+K` finds it too. Write a rule or two and it is ready; everything else is optional.
+Then open the sidebar drawer and pick the **Auto Refine** tab. `Ctrl+K` finds it too. It works as it stands: a prompt ships with it, so switch it on and go. Everything else is optional.
 
 ## What it does
 
-You write rules in plain sentences. Cut filler words. Keep paragraphs under four lines. Never open on the weather. Each reply is sent to a model with those rules attached, and what comes back is saved into the chat, so the wording sticks and the model reads it as context on later turns.
+Each finished reply is sent to a model along with the prompt you wrote, and what comes back is saved into the chat, so the wording sticks and the model reads it as context on later turns.
 
 Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, and one that refines what you are still typing.
 
@@ -38,22 +38,24 @@ Handing your writing to a model and saving whatever it says is a risky thing to 
 - **A rewrite that talks about the edit is dropped.** "Here is the rewritten message" is the model answering the wrong question, and saving it would put that line in your chat.
 - **A rewrite where the model declined is dropped.** So is an empty one, and one that changed nothing.
 - **A rewrite that grew or shrank too much is dropped.** A refine that makes a reply half again as long has written new scene rather than polished what was there. Both limits are yours to set.
+- **A rewrite that lost your formatting is dropped.** Tags, code and image links are hidden from the model behind tokens and checked on the way back. If one did not come back, the rewrite does not get saved.
+- **The model's own thinking is never sent**, so a rewrite cannot quietly edit it.
 - **The original is kept** so you can put it back, for as long as the page is open.
 
 Every one of those says why, in the Log tab, rather than quietly doing nothing.
 
 ## The panel
 
-Six tabs, and everything belongs to exactly one of them. The switch, the refine button and the last refine sit above the tabs, because those are what you came for.
+Six tabs, and everything belongs to exactly one of them. The switch, the refine button and the refines you can still put back sit above the tabs, because those are what you came for.
 
 | Tab | What is on it |
 | --- | --- |
-| **Rules** | What to change, structure and formatting, a place to try them on some text, and your saved presets |
-| **Prompt** | The blocks that make up the request, how much of the chat goes in, and a preview of exactly what gets sent |
+| **Prompt** | The request itself, block by block, the macros a block can carry, and your presets |
+| **Context** | How much of the chat goes in, a preview of exactly what gets sent, and a place to try it on some text |
 | **Model** | Which connection refines, how much thinking it does, the timeout, and the samplers |
-| **Limits** | What it refuses to save, and what it does before it writes |
+| **Limits** | What it protects, what it refuses to save, and what it does before it writes |
 | **Log** | What is happening right now, what it has been doing, and one button that copies a bug report |
-| **Setup** | This chat, how you are told a refine landed, the floating button and the input bar row, import and export, and starting again |
+| **Setup** | This chat, how you are told a refine landed, the three optional buttons, import and export, and starting again |
 
 ## What it costs, and how to spend less
 
@@ -63,14 +65,20 @@ A refine is a second model call on every reply, so three settings decide what th
 - **Let it think first.** Off by default. Rewriting a paragraph is not a reasoning problem. You can also leave it at whatever your connection is already set to, or pick an effort level yourself.
 - **Messages of run-up to send.** How much of the chat goes in the prompt. More context makes a better rewrite and costs more on every one.
 
+## Your prompt is the settings
+
+There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
+
+Four prompts ship with it and work as they stand: a short one and a detailed one, each in a version for a plain model and a version for a model that reasons. Load one, change what you like, save it under your own name.
+
 ## Seeing what gets sent
 
-Under **Prompt**, **Show me the request** builds the real request for the reply you are looking at and shows it message by message, with roles and sizes, without calling a model or charging anything. It is built by the same code a real refine uses, so it cannot drift into being a nice description of something else.
+Under **Context**, **Show me the request** builds the real request for the reply you are looking at and shows it message by message, with roles and sizes, without calling a model or charging anything. It is built by the same code a real refine uses, so it cannot drift into being a nice description of something else.
 
 ## Documentation
 
-- [Writing rules](docs/rules.md) - what to put in the rules box, and what not to
-- [How the prompt is built](docs/prompt.md) - the blocks, their order, the roles, the samplers, and the preview
+- [How the prompt is built](docs/prompt.md) - the blocks, the macros, the roles, the four prompts that ship with it, and the preview
+- [Writing rules](docs/rules.md) - what to ask a refine for, and what not to
 - [What it refuses to save](docs/guardrails.md) - the checks on what comes back
 - [Settings](docs/settings.md) - every tab, with what is on it and why
 - [Presets](docs/prompt.md#presets) - saving a setup and moving between setups
@@ -85,7 +93,7 @@ The refining runs in a backend module, because editing a saved message is a back
 
 It declares six permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` and `characters` to know whose chat it is, `world_books` to read the lore the chat has active, and `ui_panels` for the floating button. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
 
-One part of the extension reaches into the page rather than going through an API: **Refine what I am typing** has to read and write the chat input box, and Lumiverse offers no API for that. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box.
+Two parts reach into the page rather than going through an API, because Lumiverse does not offer one for either: **A button on every message** finds each message's row of actions, and **Refine what I am typing** reads and writes the chat input box. Both are off by default, and they are the only things that would stop working if a Lumiverse update moved either.
 
 Auditing it, or pointing a scanner at it? The two files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`, named in `spindle.json`. They are committed as plain readable JavaScript, not minified or bundled.
 

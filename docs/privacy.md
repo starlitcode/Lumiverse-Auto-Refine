@@ -11,6 +11,7 @@ What it carries is the list of blocks you can see under **How the prompt is buil
 - the character card for this chat, if the block is on and the permission is granted
 - the last few messages of the chat, if the block is on, trimmed to a ceiling
 - the lorebook entries this chat has active, if the block is on, trimmed to a ceiling
+- anything you wrote in a block of your own
 - the fixed instruction that makes it an edit rather than another turn
 - any block of your own text that you added
 
@@ -20,7 +21,9 @@ Your settings themselves are never sent. Neither is anything from a chat you are
 
 The extension has no networking of its own. It never opens a connection and never contacts a server of mine or anyone else's, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing.
 
-**Show me the request**, under Prompt, is the check on all of this. It builds the real request and shows it to you, message by message, without sending it anywhere.
+Two things are taken out of a message before it is sent, rather than added. The model's own thinking never goes, and neither does your markup: tags, code and image links are replaced with tokens and put back afterwards, so a rewrite cannot change what it never saw.
+
+**Show me the request**, under Context, is the check on all of this. It builds the real request and shows it to you, message by message, without sending it anywhere.
 
 ## The six permissions
 
@@ -34,9 +37,13 @@ The extension has no networking of its own. It never opens a connection and neve
 
 The three that read rather than write are why a rewrite sounds like the character rather than like generic prose. Refusing any of them costs you quality, not the feature.
 
-## The one part that touches the page
+## The two parts that touch the page
 
-**Refine what I am typing** reads and writes the chat input box directly, because Lumiverse has no API for it. It is off until you turn it on, it only ever reads the box you are typing in, and the text goes to the same place a refine goes: your provider, on your connection. It is not sent anywhere else and it is not saved to your chat, since you have not sent it yet.
+Lumiverse has no API for either of these, so they read the page directly. Both are off until you turn them on.
+
+**A button on every message** finds each message's row of actions and puts a button in it. It reads nothing but the message's own id.
+
+**Refine what I am typing** reads and writes the chat input box. It only ever reads the box you are typing in, and the text goes to the same place a refine goes: your provider, on your connection. It is not sent anywhere else and it is not saved to your chat, since you have not sent it yet.
 
 The tab it lives in costs nothing. Drawer tabs are open to every extension, so there is no permission behind the whole of the interface.
 

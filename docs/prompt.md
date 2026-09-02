@@ -2,54 +2,73 @@
 
 A refine is one model call. This page is about what goes in it.
 
-Most extensions of this kind hand you a rules box and keep the rest to themselves, so when a rewrite comes out wrong there is no way to tell whether the model ignored your rule or never saw the thing your rule was about. Here the whole request is a list of blocks under the **Prompt** tab, and you can move any of them, switch most of them off, and change the role each one is sent as.
+Most extensions of this kind hand you a rules box and keep the rest to themselves, so when a rewrite comes out wrong there is no way to tell whether the model ignored your rule or never saw the thing your rule was about. Here the prompt **is** the settings. Under the **Prompt** tab it is a list of blocks you wrote, in the order they are sent, each with a role of its own.
 
-## The blocks
+## A block
 
-In the order a fresh install sends them:
+A block is a name, a role, and text. The name is only for you. The role is System, User or Assistant. The text is what gets sent, and what makes it worth anything is the macros in it.
 
-| Block | What it carries |
+Blocks are sent top to bottom. Two next to each other with the same role are joined into one message, because providers disagree about what two system messages in a row mean and putting them together is what you meant by putting them together.
+
+A block whose text comes out empty is left out rather than sent blank, and so is one that is nothing but empty tags: a chat with no lorebook does not send `<world></world>`, which reads to a model as "this world is empty" rather than as "nothing was said about the world".
+
+## Macros
+
+Anything in double braces is filled in at the moment of the refine. There are two kinds, and the difference matters.
+
+**Ours**, which only this extension can answer:
+
+| Macro | What it becomes |
 | --- | --- |
-| What the job is | Rewrite this message, keep what happens, answer with the message and nothing else. Locked on. |
-| Who the character is | Name, description, personality and scenario from the card in this chat. |
-| What has been happening | The messages leading up to the one being rewritten. |
-| What is true in this world | The lorebook entries this chat has active, as the host works them out. |
-| Your rules | The **What to change** box. |
-| Your structure rules | The **Structure and formatting** box. |
-| Whose message it is | One line saying whether the character wrote it or you did. |
-| Where the thinking goes | Only sent when you have let it think first. Keeps its working out of the answer. |
-| The message to rewrite | The text itself. Locked on. |
+| `{{message}}` | The turn being refined. |
+| `{{history}}` | The messages leading up to it, as many as **Context** says. |
+| `{{lore}}` | The lorebook entries this chat has active. |
+| `{{whose}}` | A line saying whether the character or the player wrote it. |
+| `{{refine_notes}}` | Where to keep its reasoning. Empty unless thinking is on. |
+| `{{output_format}}` | The instruction to answer in tags. Empty if you switched that off. |
+| `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
-A block with nothing to say is left out rather than sent empty, so a chat with no card, no lorebook and a run-up set to none simply does not appear in the request.
+**Lumiverse's**, which the host resolves: `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{user}}`, and anything else that works in a character card or a preset.
 
-The lore block asks the host which entries are active rather than matching keywords itself. Lumiverse already decides which of a chat's entries are switched on and which the recent messages triggered, and a second opinion on that would quietly disagree with the one the chat itself is using.
+They are resolved in that order for a reason. Ours go in **last**, after the host has run, so nothing in your chat is ever handed to a macro resolver. A reply that happens to contain the text `{{persona}}` stays as those nine characters instead of quietly expanding into somebody's prompt.
 
-**Two are locked on.** The job and the message cannot be switched off, because everything that checks the answer afterwards assumes the model was given both. They can still be moved and re-roled.
+**Every prompt needs `{{message}}` somewhere.** Without it the model is never shown the thing it is meant to rewrite, so the refine is refused before anything is spent, and the Prompt tab says so in the danger colour.
 
 ## Order matters more than it looks
 
-The message is last by default, and that is worth keeping. Anything after the message reads as an instruction about it, so a rule placed below the message is more likely to be followed than the same rule placed above it, and a block of narration placed below the message is more likely to be treated as something to act on. If you add a block of your own, it goes in above the message unless you move it.
+The turn is last by default, and that is worth keeping. Anything after the message reads as an instruction about it, so a rule placed below it is more likely to be followed, and a block of narration placed below it is more likely to be treated as something to act on. A new block goes in above the turn unless you move it.
 
-The other reason order matters is caching. If your provider caches prompts, the reuse runs up to the first thing that changed, so blocks that never change belong at the top and blocks that change every turn belong at the bottom. The default order is already that way round.
+The other reason order matters is caching. If your provider caches prompts, the reuse runs up to the first thing that changed, so blocks that never change belong at the top and blocks that change every turn belong at the bottom. The prompts that ship with it are already that way round.
 
 ## Roles
-
-Each block is sent as **System**, **User** or **Assistant**.
-
-Blocks that end up next to each other with the same role are joined into one message, because providers disagree about what two system messages in a row mean and putting them together is what you meant by putting them together.
 
 System is right for almost everything. Two cases where changing it helps:
 
 - A model that ignores system instructions. Some providers weight the last user message far more heavily than anything in the system prompt, and moving your rules to **User** is the fix.
-- A model that treats the message as something to continue rather than edit. Sending the message as **Assistant** makes it read as the thing already written, which sometimes stops a model appending a new paragraph to it.
+- A model that treats the message as something to continue rather than edit. Sending the turn as **Assistant** makes it read as the thing already written, which sometimes stops a model appending a new paragraph to it.
 
-## Blocks of your own
+## The answer it asks for
 
-**Add a block of your own** puts an empty one in above the message. It has a name, which is only for you, and its text, which is sent as written. It behaves like every other block: it moves, it switches off, it has a role.
+**Ask for the answer in tags**, under Limits, is on by default. The prompt asks for the rewrite between `<refined>` and `</refined>`, and only what is between them is used.
 
-This is where a house style lives, or a list of words you never want to see, or a note about the setting the card does not carry. It is separate from **What to change** so a preset you were given and a note that is only about this chat do not have to share a box.
+This is worth more than it sounds. Without it, a model that opens with "Sure! Here is the rewritten message:" has its whole answer dropped, because saving that line into your chat is worse than saving nothing. With it, the sentence outside the tags is simply ignored and the rewrite lands. It also catches an answer that ran out of room: an opening tag with nothing closing it means the rewrite was cut off, and a half-written message is never saved.
 
-**Put the order back** returns everything to the table above and drops your own blocks.
+Switching it off empties the `{{output_format}}` macro and puts the older checks back in charge.
+
+## The four prompts that ship with it
+
+Two questions have different answers: does your model reason, and do you want the short version or the whole thing.
+
+| Prompt | For |
+| --- | --- |
+| **Short** | The one to start with. Seven blocks, the common faults named outright. |
+| **Detailed** | The same idea taken further: rhythm, speech, bodies and endings each get a block. |
+| **Short, for a thinking model** | Gives your model the standard and lets it work out the rest. |
+| **Detailed, for a thinking model** | The standard, where to look for trouble, keeping the writer's voice, and a pass over its own answer. |
+
+A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will pattern-match a list and will not derive one from a principle. That is why the thinking prompts are the shorter pair rather than the longer one.
+
+All four work as they stand. Load one, change whatever you like, and save it under a name of your own.
 
 ## How much of the chat it sends
 
@@ -58,6 +77,18 @@ This is where a house style lives, or a list of words you never want to see, or 
 More context costs more on every refine, and it is the setting most likely to make a refine expensive without looking like it. Long messages are trimmed and the block as a whole has a ceiling, so one wall of text cannot fill the request on its own.
 
 Zero sends none. That is the cheap setting, and it is fine for rules about wording. It is the wrong setting for rules about continuity, because a model that cannot see the run-up will smooth a scene into general prose and take the thread out with it.
+
+## Protecting what is not prose
+
+Ask a model to improve a paragraph and it will happily drop a `<font color>` tag, reflow a code block, or decide an image link was a typo. None of that is writing, and none of it is the model's to touch.
+
+**Hide markup from the model**, under Limits, is on by default. Before the refine, each run of markup is lifted out and replaced with a short token like `[[AR1]]`. The model is told the tokens must come back untouched. Afterwards the real text goes back.
+
+What makes this worth having rather than hopeful is the last step. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
+
+What gets protected: fenced code, inline code, images, and every HTML tag.
+
+**Never send the model's thinking** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was.
 
 ## Sampler settings
 
@@ -89,12 +120,11 @@ If no reply can be found it still builds, with a stand-in where your message wou
 
 ## Presets
 
-At the bottom of the **Rules** tab, presets save your refining setup under a name and switch between them without copying anything by hand.
+At the bottom of the **Prompt** tab, presets save a whole setup under a name and switch between them without copying anything by hand. The four that ship with it are always in the list and cannot be renamed or deleted, so there is always something to go back to.
 
 What a preset carries is everything that decides how a refine reads:
 
-- your rules and your structure rules
-- the prompt layout, blocks and roles and order, including blocks of your own
+- every block: its name, its text, its role and its place in the order
 - how many messages of run-up go in
 - your sampler values
 - how much thinking it does

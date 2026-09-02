@@ -1,44 +1,62 @@
 # Writing rules
 
-The rules are the whole of what the model is told to do. Everything else in the extension is about deciding whether to keep what comes back.
+A rule is a block in your prompt. This page is about what to put in one, and what not to. [How the prompt is built](prompt.md) covers the blocks themselves.
 
-## Write them as sentences
+## One subject per block
 
-Plain instructions, one per line, the way you would tell a person:
-
-```
-Cut filler words: suddenly, just, really, very.
-Keep paragraphs to four lines or under.
-Never open a reply with the weather.
-Do not start consecutive sentences with the same word.
-```
-
-The model is also told, before your rules, to keep the same events, the same speech and the same meaning, and not to continue the scene. That part is not yours to write and cannot be switched off: it is what separates a refine from another turn of roleplay.
-
-## Structure rules are separate on purpose
-
-**Structure and formatting rules** is a second box, and it holds a different kind of instruction: layout rather than wording.
+Give each block one job and a tag that names it:
 
 ```
-Actions in asterisks, speech in double quotes.
-One blank line between paragraphs, never two.
-No headers, no bullet lists.
+<speech>
+Every line keeps its meaning. You can fix phrasing that is stiff. You cannot
+change what was said, and you cannot add a line nobody said.
+
+Cut the tag that explains the line: she said angrily, he asked, curious. If the
+tone is not already in the words, fix the words.
+</speech>
 ```
 
-Keeping them apart matters more than it looks. Wording rules and layout rules pull against each other when they are mixed in one list, and a model handed a single pile obeys whichever it read last. Split, each one gets its own sentence in the prompt.
+The tag is not decoration. A model reads a tagged block as one instruction; the same words run together with the block above them read as a paragraph, and paragraphs blur.
 
-## Rules for a model that reasons
+Second person throughout. You are talking to the model, so write like it: "cut the sentence that repeats the one before it", not "sentences that repeat should be cut".
 
-If you have turned **Let the model think first** on, the prompt gains one more line telling the model to think before it writes and to keep that thinking out of the answer. That happens on its own; you do not need a rule for it.
+## Say what to do, not only what to avoid
 
-Whether to turn it on at all is a question about your rules. A rule like "cut filler words" needs no thought. A rule like "make the pacing match the tension of the scene" does. Most rule sets do not, which is why it is off by default.
+A rule that only forbids leaves a hole, and a model fills a hole with whatever is nearest. Pair the two:
 
-## Trying them before turning anything on
+```
+Cut a heartbeat used to stand in for a feeling. Put in its place what the
+character actually does with their hands.
+```
 
-**Try it on some text** in the panel runs one refine on whatever you paste, using the rules as they stand in the boxes rather than as they were last saved, and shows what comes back. Nothing goes near your chat.
+## Be specific enough to check
 
-This is worth doing before you switch automatic refining on. The alternative is finding out what a rule means by watching it rewrite a scene you liked.
+"Make it better" and "improve the flow" give a model nothing to act on, and you will not be able to tell whether it followed them. "Cut adverbs on speech tags" is a rule with an answer.
 
-## Rules that will not work
+The most useful rules name the exact thing you are tired of reading. If you have noticed a phrase three times this week, put the phrase in.
 
-Anything that asks the model to write more. **Continue this scene**, **add a line of dialogue**, **describe the room in more detail**: these are asking for new writing, and the length limit will drop the result. That is not a bug in the limit. A refine that adds a paragraph is another turn of roleplay wearing a different name, and if that is what you want, ask for a reply rather than a refine.
+## Do not ask for more writing
+
+Every rule that asks for expansion is asking for a reply rather than a refine: add sensory detail, deepen the emotion, expand the description. A refine that grows a reply by half has written new scene, and the length limit will drop it anyway.
+
+If you want more, ask your roleplay model for more. This is the pass that tightens what is already there.
+
+## Leave room for the message to be fine
+
+Somewhere in your prompt, say that a passage which is already good comes back untouched. Without that, a model asked to improve something will find something to improve, and you will lose lines you liked without noticing which ones.
+
+## Where a rule goes
+
+Order changes how strongly a rule lands. Anything below the turn reads as an instruction about it, so a rule you cannot get a model to follow is worth moving down, closer to the message.
+
+Blocks that never change belong at the top. If your provider caches prompts, everything up to the first change is reused, and a rule you edit every day at the top of the prompt costs you that reuse on every refine.
+
+## Trying one
+
+**Try it**, under Context, runs one refine on pasted text and shows what comes back without touching your chat. It is the cheap way to find out whether a new block does anything before you turn it loose on a scene.
+
+If a rule does nothing, the usual causes are these, in order: it is too vague to act on, it is too far from the turn, or it is buried in a block with four other rules and the model took the first one.
+
+---
+
+[Back to the README](../README.md)

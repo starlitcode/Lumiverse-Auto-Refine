@@ -27,8 +27,6 @@ const PRESETS_KEY = "lv-auto-refine:presets:v1";
 // else's account names nothing on yours, so a shared preset that carried one
 // would quietly point at nothing.
 const PRESET_KEYS = [
-    "rules",
-    "structureRules",
     "blocks",
     "contextMessages",
     "samplers",
@@ -42,8 +40,6 @@ const CONFIG = {
     // with a model, which is not something to start doing to somebody's chat
     // because they installed an extension.
     refineOn: false,
-    rules: "",
-    structureRules: "",
     refineUserMessages: false,
     connectionId: "",
     thinkingMode: "off",
@@ -65,6 +61,20 @@ const CONFIG = {
     // The floating button: one tap to refine the latest reply without opening the
     // drawer. Needs the ui_panels permission, and says so if it is missing.
     widgetOn: false,
+    // Markup, code and the model's own thinking are lifted out of a message
+    // before it is sent and put back afterwards. On by default: a rewrite that
+    // eats a colour tag is the most common way this kind of extension ruins
+    // somebody's reply, and they only notice three messages later.
+    protectOn: true,
+    protectThinking: true,
+    // Asking for the rewrite inside <refined> tags rather than on its own. A
+    // model that cannot help adding a sentence of its own still puts the rewrite
+    // between the tags, and taking what is between them is exact.
+    wrapOutput: true,
+    // A button on every message, and one in the input bar. Both off until asked
+    // for: they reach into the page, and an extension that redecorates somebody's
+    // chat on install is one they uninstall.
+    msgButton: false,
     // Refining what you are about to send, from the input bar, before it is sent.
     // Off by default: it edits the box you are typing in, which is not something
     // to start doing unasked.
@@ -74,7 +84,7 @@ const CONFIG = {
     // failure people blame on the model.
     contextMessages: 4,
     // Which tab the panel opens on, remembered so it comes back where you left it.
-    tab: "rules",
+    tab: "prompt",
     // The prompt layout. Empty means the default order below, so a fresh install
     // does not carry a copy of it around and a later change to the default
     // reaches anybody who never edited theirs.
@@ -84,55 +94,339 @@ const CONFIG = {
     // have it quietly overridden by an extension.
     samplers: {},
 };
-// The blocks the extension knows how to fill in, and what each one is for. The
-// reader reorders them, switches them off, and changes the role each is sent
-// as; these two are locked on because everything the pass does downstream
-// assumes the model was given the instruction and the message.
-const BLOCK_KINDS = {
-    guard: {
-        label: "What the job is",
-        hint: "Rewrite this message, keep what happens, answer with the message and nothing else. Locked on: every check on the answer assumes the model was told this.",
-        locked: true,
-    },
-    character: {
-        label: "Who the character is",
-        hint: "Name, description, personality and scenario from the card. Needs the characters permission; without it this block is simply left out.",
-    },
-    context: {
-        label: "What has been happening",
-        hint: "The messages leading up to this one, so a rewrite keeps the thread of the scene instead of polishing a paragraph in isolation.",
-    },
-    lore: {
-        label: "What is true in this world",
-        hint: "The lorebook entries this chat has active, as the host works them out. Needs the world books permission; without it the block is left out.",
-    },
-    rules: { label: "Your rules", hint: "The What to change box, above." },
-    structure: { label: "Your structure rules", hint: "The Structure and formatting box, above." },
-    whose: {
-        label: "Whose message it is",
-        hint: "One line saying whether the character wrote it or you did, so your own messages are not rewritten in the narrator's voice.",
-    },
-    thinking: {
-        label: "Where the thinking goes",
-        hint: "Only sent when you have let it think first. Tells it to keep its working out of the answer.",
-    },
-    message: {
-        label: "The message to rewrite",
-        hint: "The text itself. Locked on, and usually last: what comes after it reads as an instruction about it.",
-        locked: true,
-    },
-};
-const DEFAULT_BLOCKS = [
-    { id: "guard", on: true, role: "system" },
-    { id: "character", on: true, role: "system" },
-    { id: "context", on: true, role: "system" },
-    { id: "lore", on: true, role: "system" },
-    { id: "rules", on: true, role: "system" },
-    { id: "structure", on: true, role: "system" },
-    { id: "whose", on: true, role: "system" },
-    { id: "thinking", on: true, role: "system" },
-    { id: "message", on: true, role: "user" },
+// The macros a block can carry. Ours are answered here; the rest are handed to
+// Lumiverse, which already resolves them for every other prompt it builds.
+const MACROS = [
+    { tag: "{{message}}", what: "The turn being refined. Every prompt needs this one.", ours: true },
+    { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
+    { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
+    { tag: "{{whose}}", what: "A line saying whether the character or the player wrote it.", ours: true },
+    { tag: "{{refine_notes}}", what: "Where to keep its reasoning. Empty unless thinking is on.", ours: true },
+    { tag: "{{output_format}}", what: "Tells it to wrap the answer in <refined> tags. Empty if you switched that off.", ours: true },
+    { tag: "{{protect_notes}}", what: "Tells it to leave the protection tokens alone. Only appears when there are some.", ours: true },
+    { tag: "{{description}}", what: "The character card's description.", ours: false },
+    { tag: "{{personality}}", what: "The card's personality.", ours: false },
+    { tag: "{{scenario}}", what: "The card's scenario.", ours: false },
+    { tag: "{{persona}}", what: "Your persona for this chat.", ours: false },
+    { tag: "{{char}}", what: "The character's name.", ours: false },
+    { tag: "{{user}}", what: "Your name.", ours: false },
 ];
+const TURN_MACRO = "{{message}}";
+// ---- the prompts that ship with it ----
+// Four, because two questions have different answers: does your model reason,
+// and do you want the short version or the whole thing.
+//
+// A model that reasons is given the standard and left to apply it. A model that
+// does not is given the list, because it will pattern-match a list and will not
+// derive one from a principle. That is the difference between the two columns,
+// and it is why the reasoning prompts are shorter rather than longer.
+//
+// All four are written second person, and use XML tags as headings with a
+// closing tag at the end, because a model reads a tagged block as one
+// instruction instead of a paragraph running into the next one.
+const CONTEXT_BLOCKS = [
+    {
+        id: "character",
+        name: "Who the character is",
+        on: true,
+        role: "system",
+        text: "<character>\n{{description}}\n</character>",
+    },
+    {
+        id: "persona",
+        name: "Who the player is",
+        on: true,
+        role: "system",
+        text: "<player>\n{{persona}}\n</player>",
+    },
+    {
+        id: "lore",
+        name: "What is true in this world",
+        on: true,
+        role: "system",
+        text: "<world>\n{{lore}}\n</world>",
+    },
+    {
+        id: "history",
+        name: "What has been happening",
+        on: true,
+        role: "system",
+        text: "<recent_scene>\n{{history}}\n</recent_scene>",
+    },
+];
+const TURN_BLOCK = {
+    id: "turn",
+    name: "The turn to refine",
+    on: true,
+    role: "user",
+    text: "{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>",
+};
+const HOW_TO_ANSWER = {
+    id: "answer",
+    name: "How to answer",
+    on: true,
+    role: "system",
+    text: "{{output_format}}\n\n{{protect_notes}}",
+};
+const JOB_BLOCK = {
+    id: "job",
+    name: "The job",
+    on: true,
+    role: "system",
+    text: "<your_job>\n" +
+        "You are editing one message from a story two people are writing together. " +
+        "Someone wrote this message and you are fixing how it reads. You are not " +
+        "writing the next one.\n\n" +
+        "The events stay. The speech stays. What anyone means stays. Nobody new " +
+        "walks in, nothing new happens, and the scene ends exactly where it ended.\n" +
+        "</your_job>",
+};
+// ---- the plain model, short ----
+const PLAIN_SHORT = [
+    JOB_BLOCK,
+    ...CONTEXT_BLOCKS,
+    {
+        id: "cut",
+        name: "Cut these",
+        on: true,
+        role: "system",
+        text: "<cut_these>\n" +
+            "These turn up in every machine-written scene and almost never in a book. " +
+            "Cut them wherever you find them:\n\n" +
+            "- a breath someone did not know they were holding\n" +
+            "- a heart hammering, pounding or thundering against ribs\n" +
+            "- a voice barely above a whisper\n" +
+            "- eyes that darken, or trace, or flick\n" +
+            "- something unspoken hanging in the air\n" +
+            "- an emotion described as a mixture of two other emotions\n" +
+            "- not knowing whether to do one thing or another\n\n" +
+            "Cut these words unless the sentence stops working without them: " +
+            "suddenly, slowly, slightly, just, really, very, almost, seemed to, " +
+            "began to, found himself, found herself.\n\n" +
+            "When you cut a line, do not write another line doing the same job. The " +
+            "message is usually better one sentence shorter.\n" +
+            "</cut_these>",
+    },
+    {
+        id: "leave",
+        name: "What to leave alone",
+        on: true,
+        role: "system",
+        text: "<leave_it_alone>\n" +
+            "A passage that is already good comes back exactly as it was. Rewriting " +
+            "something that did not need it is the worst thing you can do here: it " +
+            "takes away a line the writer chose, and they cannot always see what you " +
+            "changed.\n\n" +
+            "Your rewrite should not be longer than what you were given. If it is, " +
+            "you added instead of fixing.\n" +
+            "</leave_it_alone>",
+    },
+    HOW_TO_ANSWER,
+    TURN_BLOCK,
+];
+// ---- the plain model, in full ----
+const PLAIN_LONG = [
+    JOB_BLOCK,
+    ...CONTEXT_BLOCKS,
+    PLAIN_SHORT[5], // cut these
+    {
+        id: "rhythm",
+        name: "Rhythm",
+        on: true,
+        role: "system",
+        text: "<rhythm>\n" +
+            "Read the message for length before you read it for sense. If three " +
+            "sentences in a row run about the same length, change one of them.\n\n" +
+            "A fragment lands once. Three in a row is a tic.\n\n" +
+            "Cut the sentence that says what the sentence before it already said in " +
+            "different words. This is the single most common thing wrong with these " +
+            "messages, and it is worth reading the whole message twice to catch.\n" +
+            "</rhythm>",
+    },
+    {
+        id: "dialogue",
+        name: "Speech",
+        on: true,
+        role: "system",
+        text: "<speech>\n" +
+            "Every line keeps its meaning. You can fix phrasing that is stiff or " +
+            "unnatural. You cannot change what was said, and you cannot add a line " +
+            "nobody said.\n\n" +
+            "Cut the tag that explains the line: she said angrily, he asked, curious. " +
+            "If the tone is not already in the words, fix the words.\n\n" +
+            "Cut speech that repeats back what the other person just did before " +
+            "answering it.\n" +
+            "</speech>",
+    },
+    {
+        id: "bodies",
+        name: "Bodies and feeling",
+        on: true,
+        role: "system",
+        text: "<bodies_and_feeling>\n" +
+            "Hands, eyes and breath do not act on their own. If the message says her " +
+            "hand found his, write that she took his hand.\n\n" +
+            "Feeling belongs in what someone does. Do not name the feeling as well: " +
+            "if she is already pulling her coat closed, you do not need to say she " +
+            "felt exposed.\n\n" +
+            "One physical detail per beat is plenty. Three stacked together is a list, " +
+            "and a reader skims a list.\n" +
+            "</bodies_and_feeling>",
+    },
+    {
+        id: "endings",
+        name: "How it ends",
+        on: true,
+        role: "system",
+        text: "<how_it_ends>\n" +
+            "The message ends where it ends. Do not add a closing line that gestures " +
+            "at what happens next, and do not turn the last line into a question " +
+            "aimed at the other person.\n\n" +
+            "If it already ends on a hook, keep the hook. The shape of the turn is not " +
+            "yours to change.\n" +
+            "</how_it_ends>",
+    },
+    PLAIN_SHORT[6], // leave it alone
+    HOW_TO_ANSWER,
+    TURN_BLOCK,
+];
+// ---- a model that reasons, short ----
+const THINKS_SHORT = [
+    {
+        id: "job",
+        name: "The job",
+        on: true,
+        role: "system",
+        text: "<your_job>\n" +
+            "You are editing one message from a story two people are writing together. " +
+            "Work out what is weak about how it is written, then fix that.\n\n" +
+            "The events stay. The speech stays. What anyone means stays. Nobody new " +
+            "walks in, nothing new happens, and the scene ends exactly where it ended.\n" +
+            "</your_job>",
+    },
+    {
+        id: "notes",
+        name: "Where your thinking goes",
+        on: true,
+        role: "system",
+        text: "{{refine_notes}}",
+    },
+    ...CONTEXT_BLOCKS,
+    {
+        id: "standard",
+        name: "The standard",
+        on: true,
+        role: "system",
+        text: "<the_standard>\n" +
+            "One question decides every line: could this sentence sit in any story, or " +
+            "only in this one?\n\n" +
+            "A sentence that could sit anywhere is the sentence to fix. Put in its " +
+            "place what is true of this person, in this room, right now. If nothing is " +
+            "true there, cut the line and do not replace it.\n\n" +
+            "Ask the same question of speech, of gesture, and of description. Ask it " +
+            "of your own rewrite before you answer.\n" +
+            "</the_standard>",
+    },
+    {
+        id: "restraint",
+        name: "Restraint",
+        on: true,
+        role: "system",
+        text: "<restraint>\n" +
+            "A passage that is already good comes back exactly as it was.\n\n" +
+            "Do not make the message longer to make it better. Shorter with nothing " +
+            "wasted is almost always the right answer.\n" +
+            "</restraint>",
+    },
+    HOW_TO_ANSWER,
+    TURN_BLOCK,
+];
+// ---- a model that reasons, in full ----
+const THINKS_LONG = [
+    THINKS_SHORT[0], // job
+    THINKS_SHORT[1], // notes
+    ...CONTEXT_BLOCKS,
+    THINKS_SHORT[6], // the standard
+    {
+        id: "where",
+        name: "Where to look",
+        on: true,
+        role: "system",
+        text: "<where_to_look>\n" +
+            "Four places account for most of what goes wrong in a message like this. " +
+            "Check each one before you decide the message is fine.\n\n" +
+            "The second sentence. It often restates the first in different words. One " +
+            "of the two is doing the work; keep that one.\n\n" +
+            "The body. Hands and eyes that act on their own, a heartbeat standing in " +
+            "for a feeling, three physical details stacked where one would land.\n\n" +
+            "The speech tag. If it explains the tone, the line underneath it is not " +
+            "carrying its weight.\n\n" +
+            "The last line. A turn that ends by gesturing at what comes next is asking " +
+            "the other writer to do the work.\n" +
+            "</where_to_look>",
+    },
+    {
+        id: "voice",
+        name: "Voice",
+        on: true,
+        role: "system",
+        text: "<voice>\n" +
+            "The message has a voice already. Yours is not it. Fix what is weak in the " +
+            "voice that is there rather than replacing it with a cleaner one.\n\n" +
+            "This matters most with a character who speaks badly on purpose: clipped, " +
+            "rambling, plain, crude. Smoothing that out is not an improvement, it is a " +
+            "different character.\n" +
+            "</voice>",
+    },
+    THINKS_SHORT[7], // restraint
+    {
+        id: "check",
+        name: "Before you answer",
+        on: true,
+        role: "system",
+        text: "<before_you_answer>\n" +
+            "Read your rewrite against the original once more and answer two " +
+            "questions.\n\n" +
+            "Did anything happen in your version that did not happen in theirs? If so, " +
+            "take it out.\n\n" +
+            "Is your version longer? If so, find what you added and decide honestly " +
+            "whether it earns its place. Usually it does not.\n" +
+            "</before_you_answer>",
+    },
+    HOW_TO_ANSWER,
+    TURN_BLOCK,
+];
+// What a fresh install starts on. The short plain one, because it is the prompt
+// that works on the widest set of models and is the easiest to read before you
+// start editing it.
+const DEFAULT_BLOCKS = PLAIN_SHORT;
+const BUILT_IN_PROMPTS = [
+    {
+        name: "Short",
+        blocks: PLAIN_SHORT,
+        thinking: "off",
+        what: "The one to start with. Seven blocks, the common faults named outright, and nothing your model has to work out for itself.",
+    },
+    {
+        name: "Detailed",
+        blocks: PLAIN_LONG,
+        thinking: "off",
+        what: "The same idea, taken further: rhythm, speech, bodies and endings each get a block. Costs more per refine and catches more.",
+    },
+    {
+        name: "Short, for a thinking model",
+        blocks: THINKS_SHORT,
+        thinking: "inherit",
+        what: "Gives your model the standard and lets it work out the rest. Shorter than the plain one on purpose: a model that reasons does not need the list.",
+    },
+    {
+        name: "Detailed, for a thinking model",
+        blocks: THINKS_LONG,
+        thinking: "inherit",
+        what: "The standard, where to look for trouble, keeping the writer's voice, and a pass over its own answer before it hands it back.",
+    },
+];
+const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
 const ROLE_OPTIONS = [
     { value: "system", label: "System" },
     { value: "user", label: "User" },
@@ -357,6 +651,21 @@ function backdropOf(el) {
 // at the same weight as the host's own icons, and readable at the size a tab
 // gives it: three lines of text, the last one short so it reads as a paragraph
 // rather than a list, and a spark for the pass that goes over it.
+function undoIcon() {
+    return ('<svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+        'stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M3 8h11a5 5 0 0 1 0 10H8" />' +
+        '<path d="M6.5 4.5 3 8l3.5 3.5" />' +
+        "</svg>");
+}
+// A ring with a gap, turned by the stylesheet rather than by a timer.
+function spinIcon() {
+    return ('<svg class="arf-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+        '<path d="M21 12a9 9 0 1 1-6.2-8.6" />' +
+        "</svg>");
+}
 function refineIcon() {
     return ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
         'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
@@ -451,10 +760,136 @@ export function setup(ctx, overrides) {
     }
     let lastChatId = null;
     let lastMessageId = null;
+    // Whether something that could actually look has said no chat is open. Not
+    // knowing and knowing there is nothing are different states: one is the home
+    // screen, the other is the panel waiting to be told where it is.
+    let noChatOpen = false;
+    let character = null;
+    // Read through here rather than off the flag. The chat id is set in several
+    // places, and a flag cleared in all but one of them would go stale; pairing
+    // the two at the point of reading means "no chat" cannot be believed while a
+    // chat is known, whoever forgot to clear it.
+    const outsideAnyChat = () => noChatOpen && lastChatId == null;
+    // ---- knowing when the chat has been left ----
+    // Walking out to the home screen, or onto a character page, is the move
+    // nothing reliably announces. Some builds send CHAT_SWITCHED with a null id
+    // and some say nothing at all, and asking the backend does not settle it
+    // either: getActive answers with the account's most recent chat, which on the
+    // home screen is the chat you just left.
+    //
+    // The address bar is the one thing in reach that knows. It is read rather
+    // than parsed: no assumption about the shape of a Lumiverse URL, only whether
+    // the id being held still appears in it. A build whose addresses never carry
+    // the id leaves urlNamesChats false and none of this does anything.
+    const URL_TICK_MS = 700;
+    // An id short enough to appear inside an unrelated address by accident is not
+    // evidence of anything, and being wrong here throws away the chat somebody is
+    // sitting in.
+    const URL_ID_MIN = 8;
+    let urlNamesChats = false;
+    let urlTimer = null;
+    const hereUrl = () => {
+        try {
+            return String(location.href || "");
+        }
+        catch (_) {
+            return "";
+        }
+    };
+    const urlHolds = (id) => {
+        const t = id == null ? "" : String(id);
+        if (t.length < URL_ID_MIN)
+            return false;
+        return hereUrl().indexOf(t) >= 0;
+    };
+    // Everything that describes the chat you are in, told you are not in one.
+    function leftTheChat() {
+        noChatOpen = true;
+        lastChatId = null;
+        lastMessageId = null;
+        character = null;
+        preview = null;
+        stopUrlWatch();
+        paint();
+    }
+    function startUrlWatch() {
+        // Read now and not only on the tick. This runs the moment the browser says
+        // which chat is open, which is the one moment the address is certain to
+        // agree; a first tick landing after somebody has moved on would read an
+        // address without the id and prove nothing.
+        if (urlHolds(lastChatId))
+            urlNamesChats = true;
+        if (urlTimer)
+            return;
+        urlTimer = setInterval(() => {
+            if (lastChatId == null) {
+                stopUrlWatch();
+                return;
+            }
+            if (urlHolds(lastChatId)) {
+                urlNamesChats = true;
+                return;
+            }
+            if (!urlNamesChats)
+                return;
+            leftTheChat();
+            // Moving from one chat straight into another looks the same from here as
+            // walking out, so this asks where we ended up.
+            askActiveChat();
+        }, URL_TICK_MS);
+    }
+    function stopUrlWatch() {
+        if (!urlTimer)
+            return;
+        clearInterval(urlTimer);
+        urlTimer = null;
+    }
+    disposers.push(stopUrlWatch);
+    let chatAsk = null;
+    function askActiveChat() {
+        const id = newId();
+        chatAsk = id;
+        send({ type: "active_chat", requestId: id, chatId: null });
+    }
+    // The one place a chat id arrives, whichever event carried it, so the flag,
+    // the watch and the panel cannot end up disagreeing.
+    function sawChat(id, messageId) {
+        if (id == null)
+            return;
+        const changed = String(id) !== String(lastChatId);
+        lastChatId = id;
+        noChatOpen = false;
+        if (messageId != null)
+            lastMessageId = messageId;
+        if (changed) {
+            lastMessageId = messageId != null ? messageId : null;
+            character = null;
+            preview = null;
+            askActiveChat();
+        }
+        startUrlWatch();
+    }
     let busy = false;
     // The refine that can still be undone, per chat. What the tab is really for:
     // seeing what happened to your prose and disagreeing with it.
+    // Every refine that can still be put back, newest last, keyed by the chat and
+    // the message together. It was one per chat, which meant a second refine in
+    // the same chat quietly took away the way back from the first. The backend
+    // keeps the text for thirty of them, so the panel keeps the same number.
     const undoable = new Map();
+    const UNDO_MAX = 30;
+    const undoKey = (c, m) => String(c) + ":" + String(m);
+    // The ones in the chat you are looking at, newest first.
+    function undoHere() {
+        if (lastChatId == null)
+            return [];
+        const out = [];
+        undoable.forEach((v) => {
+            if (String(v.chatId) === String(lastChatId))
+                out.push(v);
+        });
+        return out.sort((a, b) => b.at - a.at);
+    }
     let connections = [];
     let tryResult = null;
     let tryBusy = false;
@@ -479,6 +914,7 @@ export function setup(ctx, overrides) {
     let previewBusy = false;
     let previewWaiting = null;
     let soundSaid = null;
+    let nameWithheld = false;
     let widgetFailed = false;
     const SOUND_MAX = 512 * 1024;
     // The clock under the status line. Runs only while something is in flight,
@@ -570,7 +1006,21 @@ export function setup(ctx, overrides) {
         "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui)}" +
-        ".arf-field:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:1px}" +
+        // The mark on a field reached by keyboard. A soft ring in the accent at low
+        // alpha, sitting on the field's own edge: a solid 2px outline with an
+        // offset draws a second rounded rectangle around every box, which is a halo
+        // rather than a focus mark.
+        ".arf-field:focus-visible,.arf-field:focus{outline:none;" +
+        "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
+        "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+        // The browser's own up and down arrows on a number box are drawn by the
+        // browser rather than the theme, so on a dark panel they arrive as grey
+        // chevrons belonging to no design here. The value is typed, and a focused
+        // box still steps with the arrow keys.
+        ".arf-field[type=number]::-webkit-outer-spin-button," +
+        ".arf-field[type=number]::-webkit-inner-spin-button" +
+        "{-webkit-appearance:none;appearance:none;margin:0}" +
+        ".arf-field[type=number]{-moz-appearance:textfield;appearance:textfield}" +
         "textarea.arf-field{resize:vertical;min-height:64px}" +
         // One transparent pixel of border always present, so giving a button an
         // edge when its fill is too quiet costs no layout.
@@ -583,7 +1033,9 @@ export function setup(ctx, overrides) {
         ".arf-btn.arf-primary{background:var(--lumiverse-primary,rgba(147,112,219,.9));color:#fff}" +
         ".arf-btn.arf-primary:hover:not(:disabled){background:var(--lumiverse-primary-hover,rgba(167,132,239,.95))}" +
         ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
-        ".arf-btn:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:1px}" +
+        ".arf-btn:focus-visible{outline:none;" +
+        "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
+        "0 0 8px 0 var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
         ".arf-box{width:17px;height:17px;flex:none;cursor:pointer;accent-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
         ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
         "border-radius:var(--lumiverse-radius,8px);" +
@@ -611,7 +1063,8 @@ export function setup(ctx, overrides) {
         "font:12.5px var(--lumiverse-font-family,system-ui);" +
         "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
         ".arf-fold:hover{background:var(--lumiverse-secondary,rgba(128,128,128,.15))}" +
-        ".arf-fold:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:2px}" +
+        ".arf-fold:focus-visible{outline:none;" +
+        "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
         ".arf-caret{flex:none;font-size:9px;width:9px;" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-foldbody{display:flex;flex-direction:column;gap:11px;padding:2px 2px 4px 10px;" +
@@ -643,7 +1096,8 @@ export function setup(ctx, overrides) {
         ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf-tab[aria-selected=true]{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "border-bottom-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
-        ".arf-tab:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:-2px}" +
+        ".arf-tab:focus-visible{outline:none;" +
+        "box-shadow:inset 0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
         ".arf-body{display:flex;flex-direction:column;gap:12px}" +
         // A pill for a count or a state, next to a card title.
         ".arf-pill{flex:none;font-size:11px;padding:2px 7px;border-radius:999px;" +
@@ -657,6 +1111,59 @@ export function setup(ctx, overrides) {
         "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
         ".arf-block.arf-hushed{opacity:.55}" +
         ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
+        // The button this extension puts on a message and in the input bar. Styled
+        // to sit with the host's own icon buttons rather than to stand out: it is
+        // one more action in a row of them, not a badge.
+        ".arf-msgbtn{display:inline-flex;align-items:center;justify-content:center;" +
+        "background:none;border:0;padding:4px;cursor:pointer;border-radius:var(--lumiverse-radius-sm,5px);" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
+        "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
+        ".arf-msgbtn:hover:not(:disabled){color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-msgbtn:disabled{cursor:default}" +
+        ".arf-msgbtn:focus-visible{outline:none;" +
+        "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+        "@keyframes arf-turn{to{transform:rotate(360deg)}}" +
+        ".arf-spin{animation:arf-turn 900ms linear infinite;transform-origin:50% 50%}" +
+        // A reader who has asked for less movement gets a still icon rather than a
+        // spinner, and the button's title still says it is working.
+        "@media (prefers-reduced-motion: reduce){.arf-spin{animation:none}}" +
+        // ---- saying something is wrong, in the theme's own colours ----
+        // Lumiverse has a danger and a success colour and this had been using
+        // neither, so a warning read as another muted paragraph. Tinted background,
+        // matching edge, text left at full strength so the colour is the signal and
+        // not the thing you have to read through.
+        ".arf-warn,.arf-bad,.arf-good{display:flex;gap:8px;align-items:flex-start;" +
+        "font-size:12px;line-height:1.45;padding:8px 10px;" +
+        "border-radius:var(--lumiverse-radius-sm,5px);border:1px solid;" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-warn{border-color:var(--lumiverse-warning,#f59e0b);" +
+        "background:color-mix(in srgb,var(--lumiverse-warning,#f59e0b) 12%,transparent)}" +
+        ".arf-bad{border-color:var(--lumiverse-danger,#ef4444);" +
+        "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 12%,transparent)}" +
+        ".arf-good{border-color:var(--lumiverse-success,#22c55e);" +
+        "background:color-mix(in srgb,var(--lumiverse-success,#22c55e) 12%,transparent)}" +
+        // The mark at the front of one. A glyph rather than a coloured dot alone,
+        // so the line still says which kind it is to somebody who cannot tell the
+        // three colours apart.
+        ".arf-sign{flex:none;font-weight:700;line-height:1.45}" +
+        ".arf-warn .arf-sign{color:var(--lumiverse-warning,#f59e0b)}" +
+        ".arf-bad .arf-sign{color:var(--lumiverse-danger,#ef4444)}" +
+        ".arf-good .arf-sign{color:var(--lumiverse-success,#22c55e)}" +
+        ".arf-bad-ink{color:var(--lumiverse-danger,#ef4444)}" +
+        // A button that throws something away. Edged in the danger colour rather
+        // than filled with it: filled, it draws the eye to the one control on the
+        // panel that should not be pressed by accident.
+        ".arf-btn.arf-danger{border-color:var(--lumiverse-danger,#ef4444);" +
+        "color:var(--lumiverse-danger,#ef4444);background:transparent}" +
+        ".arf-btn.arf-danger:hover:not(:disabled){" +
+        "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 14%,transparent)}" +
+        // ---- anything that is a log, a count or a piece of a prompt ----
+        // The host's own monospace, so a timestamp column lines up, a character
+        // count reads as a number, and the text of a prompt looks like the thing
+        // that gets sent rather than like prose about it.
+        ".arf-mono{font-family:var(--lumiverse-font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);" +
+        "font-variant-numeric:tabular-nums}" +
+        ".arf-well.arf-mono{font-size:12px}" +
         ".arf-grow{flex:1;min-width:0}" +
         // ---- a checkbox comfortable under a mouse is too small for a finger ----
         // The width of the screen does not say which is in use. This asks directly.
@@ -705,6 +1212,17 @@ export function setup(ctx, overrides) {
         return b;
     }
     const rule = () => el("div", "arf-rule");
+    // A line that says something is wrong, or is about to be, or went right.
+    // Each carries a glyph as well as a colour, so the three are told apart
+    // without relying on being able to tell the three colours apart.
+    function notice(kind, text) {
+        const box = el("div", "arf-" + kind);
+        box.appendChild(el("span", "arf-sign", kind === "good" ? "\u2713" : "!"));
+        box.appendChild(el("span", "arf-grow", text));
+        return box;
+    }
+    const warn = (t) => notice("warn", t);
+    const bad = (t) => notice("bad", t);
     // ---- the tab ----
     let tab = null;
     let badge = null;
@@ -725,18 +1243,42 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // A prompt that never shows the model the message is a prompt that cannot do
+    // anything, and it is the one mistake the block editor makes possible.
+    const noTurn = () => !blockList().some((b) => b.on && String(b.text || "").indexOf(TURN_MACRO) >= 0);
     function statusLine() {
         if (!cfg.enabled)
             return { text: "Off", tone: "off" };
-        if (chatIsOff(lastChatId))
-            return { text: "Off in this chat", tone: "off" };
         if (busy)
             return { text: "Refining a reply", tone: "busy" };
-        if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim())
-            return { text: "Waiting for some rules to follow", tone: "off" };
+        // Said before the rules, because on the home screen a missing rule is not
+        // what is stopping anything.
+        if (outsideAnyChat())
+            return { text: "No chat open", tone: "off" };
+        if (chatIsOff(lastChatId))
+            return { text: "Off in this chat", tone: "off" };
+        if (noTurn())
+            return { text: "The prompt is missing {{message}}", tone: "off" };
+        if (lastChatId == null)
+            return { text: "Waiting for a chat", tone: "off" };
         if (cfg.refineOn)
-            return { text: "Refining every reply as it arrives", tone: "idle" };
-        return { text: "Waiting for you to press Refine", tone: "idle" };
+            return { text: "On, refining every reply", tone: "idle" };
+        return { text: "On, waiting for you to press Refine", tone: "idle" };
+    }
+    // Why the refine button cannot be pressed, or empty when it can. One answer
+    // in one place, so the button, its tooltip and the line under it agree.
+    function whyNot() {
+        if (!cfg.enabled)
+            return "Auto Refine is switched off.";
+        if (outsideAnyChat())
+            return "No chat is open. Open one and this comes back.";
+        if (lastChatId == null)
+            return "Waiting to be told which chat you are in.";
+        if (chatIsOff(lastChatId))
+            return "Auto Refine is switched off in this chat.";
+        if (noTurn())
+            return "No block in your prompt has {{message}} in it, so the model would never see the reply. Add it under Prompt.";
+        return "";
     }
     // Browser-drawn controls are painted from the page's colour scheme, and with
     // none set the browser assumes light, which is why a checkbox comes out as a
@@ -766,7 +1308,11 @@ export function setup(ctx, overrides) {
                 const fg = parseColor(cs.color);
                 if (!fg)
                     continue;
-                const back = backdropOf(n.parentElement || root);
+                // From the element itself, not its parent. A filled button's label sits
+                // on the button's own colour, and measuring it against the card behind
+                // instead is how white-on-lavender passed a contrast check and shipped
+                // as an unreadable button.
+                const back = backdropOf(n);
                 const shown = blendColor(fg, back);
                 if (contrastRatio(shown, back) < TEXT_FLOOR) {
                     const ink = betterInk(back);
@@ -810,14 +1356,14 @@ export function setup(ctx, overrides) {
     // column with every setting in it, which reads as a wall however carefully
     // each row is written: nothing tells the eye where one subject ends.
     const TABS = [
-        { id: "rules", label: "Rules" },
         { id: "prompt", label: "Prompt" },
+        { id: "context", label: "Context" },
         { id: "model", label: "Model" },
         { id: "limits", label: "Limits" },
         { id: "log", label: "Log" },
         { id: "setup", label: "Setup" },
     ];
-    const tabNow = () => (TABS.some((t) => t.id === cfg.tab) ? String(cfg.tab) : "rules");
+    const tabNow = () => (TABS.some((t) => t.id === cfg.tab) ? String(cfg.tab) : "prompt");
     // A box with a title. Everything on a tab goes in one of these, so a group of
     // settings has an edge around it rather than being told apart by spacing.
     function card(title, hint, pill) {
@@ -883,6 +1429,10 @@ export function setup(ctx, overrides) {
         return strip;
     }
     function paint() {
+        // The buttons on the messages show the same state this panel does, so they
+        // are refreshed with it rather than on a timer of their own.
+        if (cfg.msgButton && cfg.enabled)
+            sweepMsgButtons();
         if (!tab || !tab.root)
             return;
         const root = tab.root;
@@ -894,27 +1444,28 @@ export function setup(ctx, overrides) {
         root.className = "arf";
         liveEls = null;
         root.appendChild(buildHeader());
-        const last = lastChatId != null ? undoable.get(String(lastChatId)) : null;
-        if (last)
-            root.appendChild(buildLastRefine(last));
+        const back = undoHere();
+        if (back.length)
+            root.appendChild(buildLastRefine(back));
         root.appendChild(buildTabs());
         const body = el("div", "arf-body");
         const here = tabNow();
-        if (here === "rules") {
-            body.appendChild(buildRulesCard());
-            body.appendChild(buildTryCard());
+        if (here === "prompt") {
+            body.appendChild(buildBlocksCard());
+            body.appendChild(buildMacroCard());
             body.appendChild(buildPresetCard());
         }
-        else if (here === "prompt") {
-            body.appendChild(buildBlocksCard());
+        else if (here === "context") {
             body.appendChild(buildContextCard());
             body.appendChild(buildPreviewCard());
+            body.appendChild(buildTryCard());
         }
         else if (here === "model") {
             body.appendChild(buildConnectionCard());
             body.appendChild(buildSamplerCard());
         }
         else if (here === "limits") {
+            body.appendChild(buildProtectCard());
             body.appendChild(buildGuardCard());
             body.appendChild(buildSafetyCard());
         }
@@ -987,9 +1538,13 @@ export function setup(ctx, overrides) {
         // select and lose the caret in whatever box was being typed in.
         liveEls = { dot: dot, text: words };
         const row = el("div", "arf-row");
+        const stop = whyNot();
         const now = button("Refine the latest reply", true);
-        now.disabled = busy || !cfg.enabled;
+        now.disabled = busy || !!stop;
         now.style.opacity = now.disabled ? "0.5" : "1";
+        now.style.cursor = now.disabled ? "not-allowed" : "pointer";
+        if (stop)
+            now.title = stop;
         now.addEventListener("click", () => refineNow());
         row.appendChild(now);
         const auto = document.createElement("label");
@@ -1008,41 +1563,76 @@ export function setup(ctx, overrides) {
         auto.appendChild(el("span", "", "every reply, automatically"));
         row.appendChild(auto);
         wrap.appendChild(row);
+        // Why the button is greyed out, said once rather than left to a tooltip
+        // nobody sees on a phone. The master switch being off is not written out:
+        // the switch is right there saying it.
+        if (stop && cfg.enabled)
+            wrap.appendChild(warn(stop));
+        if (outsideAnyChat())
+            wrap.appendChild(note("Refining runs inside a chat. On the home screen or a character page there is nothing to refine yet, so the panel waits here."));
         return wrap;
     }
-    // The heart of the tab. After a refine you want to see what it did to your
-    // writing and be able to disagree, and this is that, sitting above the tabs
-    // so it is there whichever one you left open.
-    function buildLastRefine(last) {
-        const wrap = card("The last refine");
+    // Every refine in this chat that can still be put back, newest first. It used
+    // to show one, which meant a second refine took away the way back from the
+    // first without saying so.
+    function buildLastRefine(list) {
+        const wrap = card(list.length === 1 ? "The last refine" : "Refines you can put back", undefined, list.length > 1 ? String(list.length) : undefined);
         wrap.setAttribute("data-arf-last", "1");
+        for (let i = 0; i < list.length; i++) {
+            const one = list[i];
+            // The newest is open; the rest are folded, or a busy chat buries the panel
+            // under its own history.
+            if (i === 0)
+                wrap.appendChild(buildUndoRow(one));
+            else
+                wrap.appendChild(fold(new Date(one.at).toTimeString().slice(0, 5) + " refine", (body) => {
+                    body.appendChild(buildUndoRow(one));
+                }));
+        }
+        if (list.length > 1) {
+            const all = el("div", "arf-row");
+            const clear = button("Dismiss them all", false);
+            clear.addEventListener("click", () => {
+                for (const one of list)
+                    undoable.delete(undoKey(one.chatId, one.messageId));
+                if (!undoHere().length)
+                    setBadge(null);
+                paint();
+            });
+            all.appendChild(clear);
+            wrap.appendChild(all);
+        }
+        return wrap;
+    }
+    function buildUndoRow(one) {
+        const box = el("div", "arf-col");
         const pane = (title, text, dim) => {
-            wrap.appendChild(el("div", "arf-note", title));
-            wrap.appendChild(el("div", "arf-well arf-scroll" + (dim ? " arf-dim" : ""), text));
+            box.appendChild(el("div", "arf-note", title));
+            box.appendChild(el("div", "arf-well arf-scroll" + (dim ? " arf-dim" : ""), text));
         };
-        pane("Before", last.before, true);
-        pane("After", last.after, false);
+        pane("Before", one.before, true);
+        pane("After", one.after, false);
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
         back.addEventListener("click", () => {
             send({
                 type: "undo_refine",
                 requestId: newId(),
-                chatId: lastChatId,
-                messageId: last.messageId,
+                chatId: one.chatId,
+                messageId: one.messageId,
             });
         });
         const seen = button("Dismiss", false);
         seen.addEventListener("click", () => {
-            if (lastChatId != null)
-                undoable.delete(String(lastChatId));
-            setBadge(null);
+            undoable.delete(undoKey(one.chatId, one.messageId));
+            if (!undoHere().length)
+                setBadge(null);
             paint();
         });
         row.appendChild(back);
         row.appendChild(seen);
-        wrap.appendChild(row);
-        return wrap;
+        box.appendChild(row);
+        return box;
     }
     function textBox(key, label, hint, rows) {
         const wrap = el("div", "arf-col");
@@ -1067,13 +1657,7 @@ export function setup(ctx, overrides) {
         wrap.appendChild(note(hint));
         return wrap;
     }
-    // ---- Rules ----
-    function buildRulesCard() {
-        const wrap = card("The rules it follows");
-        wrap.appendChild(textBox("rules", "What to change", "Plain sentences, one per line. Cut filler words. Keep paragraphs under four lines. Nothing is refined until there is something here.", 5));
-        wrap.appendChild(textBox("structureRules", "Structure and formatting", "Optional, and separate because it is a different kind of instruction: layout rather than wording. How dialogue is marked, how long a paragraph runs.", 3));
-        return wrap;
-    }
+    // ---- Prompt ----
     function buildTryCard() {
         const wrap = card("Try it", "Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat.");
         const ta = document.createElement("textarea");
@@ -1105,8 +1689,11 @@ export function setup(ctx, overrides) {
                 paint();
                 return;
             }
-            if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
-                tryResult = { ok: false, text: "Write some rules first, or there is nothing to apply." };
+            if (noTurn()) {
+                tryResult = {
+                    ok: false,
+                    text: "No block in your prompt has {{message}} in it, so there is nothing to rewrite.",
+                };
                 paint();
                 return;
             }
@@ -1213,26 +1800,25 @@ export function setup(ctx, overrides) {
     // locked blocks put back if a hand-edited or imported file has lost them.
     // Everything that draws or edits the layout goes through here, so a bad
     // stored value cannot take the section down with it.
+    // Nothing is forced back into the list any more. A block list is the reader's
+    // prompt, and putting a block back into somebody's prompt because this file
+    // thinks it belongs there is the wrong kind of help. What a missing piece
+    // costs is said out loud instead: no {{message}} anywhere is a warning on the
+    // card and a refusal to refine.
     function blockList() {
         const raw = Array.isArray(cfg.blocks) ? cfg.blocks : [];
         const list = raw
             .filter((b) => b && typeof b === "object" && b.id)
+            .slice(0, 60)
             .map((b) => ({
             id: String(b.id),
             on: b.on !== false,
             role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-            text: b.text == null ? undefined : String(b.text),
-            name: b.name == null ? undefined : String(b.name),
+            text: b.text == null ? "" : String(b.text),
+            name: b.name == null ? "" : String(b.name),
         }));
         if (!list.length)
             return DEFAULT_BLOCKS.map((b) => ({ ...b }));
-        for (const id of ["guard", "message"]) {
-            const at = list.findIndex((b) => b.id === id);
-            if (at < 0)
-                list.push({ id: id, on: true, role: id === "message" ? "user" : "system" });
-            else
-                list[at].on = true;
-        }
         return list;
     }
     function setBlocks(list, repaint) {
@@ -1241,34 +1827,37 @@ export function setup(ctx, overrides) {
         if (repaint !== false)
             paint();
     }
-    const blockLabel = (b) => BLOCK_KINDS[b.id] ? BLOCK_KINDS[b.id].label : b.name || "A block of your own";
+    const blockLabel = (b) => String(b.name || "").trim() || "Untitled block";
     function buildBlocksCard() {
         const list = blockList();
         const on = list.filter((b) => b.on).length;
-        const wrap = card("What goes in the request", "The refine is one request, and this is what goes in it and in what order. Blocks next to each other with the same role are sent as one message. A block with nothing to say is left out.", on + " of " + list.length + " on");
+        const wrap = card("Your prompt", "The refine is one request, and this is it. Blocks are sent top to bottom, and two next to each other with the same role are joined into one message. A block that comes out empty is left out.", on + " of " + list.length + " on");
+        if (noTurn())
+            wrap.appendChild(bad("No block has " + TURN_MACRO + " in it, so the model would never see the message it is meant to rewrite. Nothing will be refined until one does."));
         for (let i = 0; i < list.length; i++)
             wrap.appendChild(buildBlockRow(list, i));
         const acts = el("div", "arf-row");
-        const add = button("Add a block of your own", false);
+        const add = button("Add a block", false);
         add.addEventListener("click", () => {
             const next = blockList();
-            const msgAt = next.findIndex((b) => b.id === "message");
             const made = {
                 id: "own-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+                name: "New block",
                 on: true,
                 role: "system",
-                name: "My block",
-                text: "",
+                text: "<my_rule>\n\n</my_rule>",
             };
-            // Dropped in before the message rather than at the end, since a block
-            // after the message reads as an instruction about it and that is rarely
-            // what somebody adding one meant.
-            next.splice(msgAt < 0 ? next.length : msgAt, 0, made);
+            // Above the turn rather than at the end. Anything after the message reads
+            // as an instruction about it, which is rarely what a new rule is for.
+            const turnAt = next.findIndex((b) => String(b.text || "").indexOf(TURN_MACRO) >= 0);
+            next.splice(turnAt < 0 ? next.length : turnAt, 0, made);
             setBlocks(next);
         });
-        const reset = button("Put the order back", false);
+        const reset = button("Back to the default prompt", false);
+        reset.className += " arf-danger";
         reset.addEventListener("click", () => {
             setBlocks(DEFAULT_BLOCKS.map((b) => ({ ...b })));
+            log("put the prompt back to the default", true);
         });
         acts.appendChild(add);
         acts.appendChild(reset);
@@ -1277,9 +1866,7 @@ export function setup(ctx, overrides) {
     }
     function buildBlockRow(list, i) {
         const b = list[i];
-        const kind = BLOCK_KINDS[b.id];
-        const locked = !!(kind && kind.locked);
-        const own = !kind;
+        const holdsTurn = String(b.text || "").indexOf(TURN_MACRO) >= 0;
         const wrap = el("div", "arf-block" + (b.on ? "" : " arf-hushed"));
         wrap.setAttribute("data-arf-block", b.id);
         const top = el("div", "arf-between");
@@ -1288,7 +1875,6 @@ export function setup(ctx, overrides) {
         box.type = "checkbox";
         box.className = "arf-box";
         box.checked = b.on;
-        box.disabled = locked;
         box.setAttribute("aria-label", "Send " + blockLabel(b));
         box.addEventListener("change", () => {
             const next = blockList();
@@ -1296,7 +1882,19 @@ export function setup(ctx, overrides) {
             setBlocks(next);
         });
         left.appendChild(box);
-        left.appendChild(el("span", "arf-lab", blockLabel(b)));
+        const nameIn = document.createElement("input");
+        nameIn.type = "text";
+        nameIn.className = "arf-field arf-grow";
+        nameIn.value = b.name || "";
+        nameIn.placeholder = "What to call it";
+        nameIn.setAttribute("aria-label", "Name for this block");
+        nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
+        nameIn.addEventListener("change", () => {
+            const next = blockList();
+            next[i].name = nameIn.value;
+            setBlocks(next, false);
+        });
+        left.appendChild(nameIn);
         top.appendChild(left);
         const moves = el("div", "arf-row");
         const move = (to, label, sign) => {
@@ -1314,14 +1912,40 @@ export function setup(ctx, overrides) {
             });
             return btn;
         };
-        moves.appendChild(move(i - 1, "Move up", "↑"));
-        moves.appendChild(move(i + 1, "Move down", "↓"));
+        moves.appendChild(move(i - 1, "Move up", "\u2191"));
+        moves.appendChild(move(i + 1, "Move down", "\u2193"));
         top.appendChild(moves);
         wrap.appendChild(top);
-        const roleRow = el("div", "arf-row");
+        const ta = document.createElement("textarea");
+        ta.rows = Math.min(12, Math.max(3, String(b.text || "").split("\n").length + 1));
+        ta.className = "arf-field arf-mono";
+        ta.value = b.text || "";
+        ta.placeholder = "<my_rule>\nWhat you want it to do.\n</my_rule>";
+        ta.setAttribute("aria-label", "Text for " + blockLabel(b));
+        ta.setAttribute("data-arf-field", "blocktext:" + b.id);
+        ta.addEventListener("input", () => {
+            const next = blockList();
+            next[i].text = ta.value;
+            cfg.blocks = next;
+            persist();
+        });
+        ta.addEventListener("blur", () => {
+            const next = blockList();
+            next[i].text = ta.value;
+            // Rebuilt on the way out, not compared against the state before the edit:
+            // the input handler above has already written the new text into cfg, so
+            // by the time this runs there is nothing left to compare against. One
+            // edit can take {{message}} out of the whole prompt, which changes the
+            // warning on this card and greys out the refine button, and both have to
+            // be right the moment you leave the box.
+            setBlocks(next);
+        });
+        wrap.appendChild(ta);
+        const foot = el("div", "arf-row");
+        foot.appendChild(el("span", "arf-note", "Sent as"));
         const sel = document.createElement("select");
         sel.className = "arf-field";
-        sel.style.maxWidth = "150px";
+        sel.style.maxWidth = "140px";
         sel.setAttribute("aria-label", "Role for " + blockLabel(b));
         for (const o of ROLE_OPTIONS) {
             const op = document.createElement("option");
@@ -1335,55 +1959,46 @@ export function setup(ctx, overrides) {
             next[i].role = sel.value;
             setBlocks(next, false);
         });
-        roleRow.appendChild(el("span", "arf-note", "Sent as"));
-        roleRow.appendChild(sel);
-        if (own) {
-            const drop = button("Remove", false);
-            drop.addEventListener("click", () => {
-                const next = blockList();
-                next.splice(i, 1);
-                setBlocks(next);
-            });
-            roleRow.appendChild(drop);
-        }
-        wrap.appendChild(roleRow);
-        if (own) {
-            const nameIn = document.createElement("input");
-            nameIn.type = "text";
-            nameIn.className = "arf-field";
-            nameIn.value = b.name || "";
-            nameIn.placeholder = "What to call it";
-            nameIn.setAttribute("aria-label", "Name for this block");
-            nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
-            nameIn.addEventListener("change", () => {
-                const next = blockList();
-                next[i].name = nameIn.value;
-                setBlocks(next, false);
-            });
-            wrap.appendChild(nameIn);
-            const ta = document.createElement("textarea");
-            ta.rows = 3;
-            ta.className = "arf-field";
-            ta.value = b.text || "";
-            ta.placeholder = "What this block says";
-            ta.setAttribute("aria-label", "Text for this block");
-            ta.setAttribute("data-arf-field", "blocktext:" + b.id);
-            ta.addEventListener("input", () => {
-                const next = blockList();
-                next[i].text = ta.value;
-                cfg.blocks = next;
-                persist();
-            });
-            ta.addEventListener("blur", () => {
-                const next = blockList();
-                next[i].text = ta.value;
-                setBlocks(next, false);
-            });
-            wrap.appendChild(ta);
-        }
-        else {
-            wrap.appendChild(note(kind.hint));
-        }
+        foot.appendChild(sel);
+        if (holdsTurn)
+            foot.appendChild(el("span", "arf-pill", "holds the turn"));
+        const drop = button("Delete", false);
+        drop.className += " arf-danger";
+        drop.setAttribute("aria-label", "Delete " + blockLabel(b));
+        drop.addEventListener("click", () => {
+            const next = blockList();
+            next.splice(i, 1);
+            setBlocks(next);
+        });
+        foot.appendChild(drop);
+        wrap.appendChild(foot);
+        return wrap;
+    }
+    // What a block can say, and who answers it. Worth having on screen rather
+    // than in a document: the whole point of the block editor is writing these,
+    // and a macro you cannot remember the name of is a macro you do not use.
+    function buildMacroCard() {
+        const wrap = card("Macros you can use", "Anything in double braces is filled in at the moment of the refine. Tap one to copy it.");
+        wrap.appendChild(fold("The list", (body) => {
+            for (const m of MACROS) {
+                const row = el("div", "arf-col");
+                const head = el("div", "arf-row");
+                const tag = button(m.tag, false);
+                tag.className += " arf-mono";
+                tag.setAttribute("aria-label", "Copy " + m.tag);
+                tag.addEventListener("click", () => {
+                    copyText(m.tag);
+                    toast("Copied " + m.tag, true);
+                });
+                head.appendChild(tag);
+                if (!m.ours)
+                    head.appendChild(el("span", "arf-pill", "Lumiverse"));
+                row.appendChild(head);
+                row.appendChild(note(m.what));
+                body.appendChild(row);
+            }
+            body.appendChild(note("The ones marked Lumiverse are the host's own, so anything you already use in a character card or a preset works here too. A macro nobody can answer is left as you typed it rather than being blanked."));
+        }));
         return wrap;
     }
     function buildContextCard() {
@@ -1452,10 +2067,10 @@ export function setup(ctx, overrides) {
         for (const m of msgs) {
             const one = el("div", "arf-block");
             const head = el("div", "arf-between");
-            head.appendChild(el("span", "arf-lab", String((m && m.role) || "system")));
-            head.appendChild(el("span", "arf-pill", String((m && m.content) || "").length + " chars"));
+            head.appendChild(el("span", "arf-lab arf-mono", String((m && m.role) || "system")));
+            head.appendChild(el("span", "arf-pill arf-mono", String((m && m.content) || "").length + " chars"));
             one.appendChild(head);
-            one.appendChild(el("div", "arf-well arf-scroll", String((m && m.content) || "")));
+            one.appendChild(el("div", "arf-well arf-scroll arf-mono", String((m && m.content) || "")));
             wrap.appendChild(one);
         }
         // The rest of the call, which is part of what gets sent and is otherwise
@@ -1478,7 +2093,7 @@ export function setup(ctx, overrides) {
                     .map((k) => k + " " + preview.parameters[k])
                     .join(", ")
                 : "left to the connection"));
-        wrap.appendChild(el("div", "arf-well arf-dim", extras.join("\n")));
+        wrap.appendChild(el("div", "arf-well arf-dim arf-mono", extras.join("\n")));
         return wrap;
     }
     function previewAsText(p) {
@@ -1557,6 +2172,30 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     // ---- Limits ----
+    function buildProtectCard() {
+        const wrap = card("Protecting what is not prose", "Ask a model to improve a paragraph and it will happily drop a colour tag, reflow a code block, or decide an image link was a typo. None of that is writing, and none of it is the model's to touch.");
+        wrap.appendChild(fieldRow({
+            key: "protectOn",
+            label: "Hide markup from the model",
+            type: "bool",
+            hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. If one does not come back, the rewrite is dropped rather than saved: asking a model to preserve something and checking that it did are different things.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "wrapOutput",
+            label: "Ask for the answer in tags",
+            type: "bool",
+            hint: "On by default. The prompt asks for the rewrite between <refined> and </refined>, and only what is between them is used. A model that adds a sentence of its own around it is then harmless rather than dropped, and a rewrite cut off halfway is caught by the missing closing tag. Switching this off also empties the {{output_format}} macro.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "protectThinking",
+            label: "Never send the model's thinking",
+            type: "bool",
+            hint: "On by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back after.",
+        }));
+        if (!cfg.protectOn)
+            wrap.appendChild(warn("With this off, a rewrite can quietly change or drop any formatting in your replies."));
+        return wrap;
+    }
     function buildGuardCard() {
         const wrap = card("What it refuses to save", "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired.");
         for (const f of LIMIT_FIELDS.filter((f) => f.key === "maxGrowthPct" || f.key === "minShrinkPct"))
@@ -1589,7 +2228,7 @@ export function setup(ctx, overrides) {
         for (const [k, v] of rows) {
             const r = el("div", "arf-between");
             r.appendChild(el("span", "arf-note", k));
-            r.appendChild(el("span", "arf-lab", v));
+            r.appendChild(el("span", "arf-lab arf-mono", v));
             wrap.appendChild(r);
         }
         if (drops.size) {
@@ -1599,7 +2238,7 @@ export function setup(ctx, overrides) {
             for (const [why, n] of seen.slice(0, 6)) {
                 const r = el("div", "arf-between");
                 r.appendChild(el("span", "arf-note arf-grow", why));
-                r.appendChild(el("span", "arf-pill", String(n)));
+                r.appendChild(el("span", "arf-pill arf-mono", String(n)));
                 wrap.appendChild(r);
             }
         }
@@ -1612,7 +2251,7 @@ export function setup(ctx, overrides) {
             return wrap;
         }
         for (const a of activity) {
-            const row = el("div", "arf-row arf-note");
+            const row = el("div", "arf-row arf-note arf-mono");
             row.appendChild(el("span", "arf-when", new Date(a.at).toTimeString().slice(0, 8)));
             row.appendChild(el("span", "arf-said arf-grow" + (a.good ? "" : " arf-dim"), a.text));
             wrap.appendChild(row);
@@ -1641,7 +2280,7 @@ export function setup(ctx, overrides) {
         row.appendChild(clear);
         wrap.appendChild(row);
         wrap.appendChild(fold("What it says", (body) => {
-            body.appendChild(el("div", "arf-well arf-scroll", debugText()));
+            body.appendChild(el("div", "arf-well arf-scroll arf-mono", debugText()));
         }));
         return wrap;
     }
@@ -1734,8 +2373,21 @@ export function setup(ctx, overrides) {
         act.addEventListener("click", () => setChatOff(lastChatId, !off));
         top.appendChild(act);
         wrap.appendChild(top);
+        // Which chat, by name where there is one. A chat id is not an answer to
+        // "which chat is this", and a card the characters permission was refused
+        // for is a different thing from a chat with no card on it.
+        if (known) {
+            const who = character
+                ? "You are in " + character + "'s chat."
+                : nameWithheld
+                    ? "This chat has a character on it. Its name needs the characters permission, which is not granted."
+                    : "This chat has no character card on it, which is fine: a refine just goes without that block.";
+            wrap.appendChild(note(who));
+        }
         wrap.appendChild(note(!known
-            ? "No chat is open, so there is nothing to switch here."
+            ? outsideAnyChat()
+                ? "You are not in a chat. Open one and this switch comes back."
+                : "Waiting to be told which chat you are in."
             : off
                 ? "Auto Refine is switched off in this chat. Every other chat carries on as it is."
                 : "Leave one chat completely alone while every other chat carries on."));
@@ -1765,75 +2417,121 @@ export function setup(ctx, overrides) {
             key: "soundOn",
             label: "Play a sound",
             type: "bool",
-            hint: "Off by default. With no sound of your own it plays a short built-in blip, which is synthesised rather than shipped as a file.",
+            hint: "Off by default. The sound is yours: attach a file or paste a link below. Nothing is shipped with the extension, so this switch on its own is silent.",
         }));
         if (cfg.soundOn) {
-            wrap.appendChild(fold("Your own sound", (body) => {
-                body.appendChild(note("Any short audio file. It is held with your settings as text, so keep it small: anything over half a megabyte is refused."));
-                const row = el("div", "arf-row");
-                const picker = document.createElement("input");
-                picker.type = "file";
-                picker.accept = "audio/*";
-                picker.style.display = "none";
-                picker.addEventListener("change", () => {
-                    const file = picker.files && picker.files[0];
-                    picker.value = "";
-                    if (!file)
-                        return;
-                    if (file.size > SOUND_MAX) {
-                        soundSaid = "That file is " + Math.round(file.size / 1024) + "KB, over the 512KB limit.";
-                        paint();
-                        return;
+            if (!hasSound())
+                wrap.appendChild(warn("No sound chosen yet, so nothing will play. Attach a file or paste a link."));
+            const attached = /^data:/.test(String(cfg.soundUrl || ""));
+            const picker = document.createElement("input");
+            picker.type = "file";
+            picker.accept = "audio/*";
+            picker.style.display = "none";
+            picker.addEventListener("change", () => {
+                const file = picker.files && picker.files[0];
+                picker.value = "";
+                if (!file)
+                    return;
+                if (file.size > SOUND_MAX) {
+                    soundSaid =
+                        "That file is " +
+                            Math.round(file.size / 1024) +
+                            "KB, over the " +
+                            Math.round(SOUND_MAX / 1024) +
+                            "KB limit. A short notification sound is well under it.";
+                    paint();
+                    return;
+                }
+                readFileAsDataUrl(file, (url) => {
+                    if (!url || !/^data:audio\//.test(url)) {
+                        soundSaid = "That file could not be read as audio.";
                     }
-                    readFileAsDataUrl(file, (url) => {
-                        if (!url) {
-                            soundSaid = "That file could not be read.";
-                        }
-                        else {
-                            cfg.soundUrl = url;
-                            persist(true);
-                            soundSaid = "Using " + file.name + ".";
-                        }
-                        paint();
-                    });
+                    else {
+                        cfg.soundUrl = url;
+                        persist(true);
+                        soundSaid = "Attached " + file.name + ".";
+                    }
+                    paint();
                 });
-                const pick = button(cfg.soundUrl ? "Choose another" : "Choose a file", false);
-                pick.addEventListener("click", () => {
-                    try {
-                        picker.click();
-                    }
-                    catch (_) {
-                        soundSaid = "The browser would not open a file picker.";
-                        paint();
-                    }
+            });
+            const row = el("div", "arf-row");
+            const pick = button(attached ? "Attach another file" : "Attach a file", false);
+            pick.addEventListener("click", () => {
+                try {
+                    picker.click();
+                }
+                catch (_) {
+                    soundSaid = "The browser would not open a file picker.";
+                    paint();
+                }
+            });
+            const tryIt = button("Play it", false);
+            tryIt.disabled = !hasSound();
+            tryIt.style.opacity = hasSound() ? "1" : "0.45";
+            tryIt.addEventListener("click", () => {
+                soundSaid = null;
+                ping(true);
+            });
+            row.appendChild(pick);
+            row.appendChild(tryIt);
+            if (hasSound()) {
+                const drop = button("Remove it", false);
+                drop.addEventListener("click", () => {
+                    cfg.soundUrl = "";
+                    persist(true);
+                    soundSaid = "Removed.";
+                    paint();
                 });
-                const tryIt = button("Play it", false);
-                tryIt.addEventListener("click", () => ping(true));
-                row.appendChild(pick);
-                row.appendChild(tryIt);
-                if (cfg.soundUrl) {
-                    const drop = button("Back to the built-in", false);
-                    drop.addEventListener("click", () => {
+                row.appendChild(drop);
+            }
+            row.appendChild(picker);
+            wrap.appendChild(row);
+            wrap.appendChild(note("An attached file is held with your settings as text, so it has to be small: " +
+                Math.round(SOUND_MAX / 1024) +
+                "KB at most. A link is not, and is the better answer for anything bigger."));
+            const link = document.createElement("input");
+            link.type = "text";
+            link.className = "arf-field";
+            link.placeholder = "Or paste a link to a sound";
+            link.setAttribute("aria-label", "Link to a sound");
+            link.setAttribute("data-arf-field", "soundLink");
+            link.value = attached ? "" : String(cfg.soundUrl || "");
+            link.addEventListener("change", () => {
+                const v = String(link.value || "").trim();
+                if (!v) {
+                    if (!attached) {
                         cfg.soundUrl = "";
                         persist(true);
-                        soundSaid = "Back to the built-in blip.";
-                        paint();
-                    });
-                    row.appendChild(drop);
+                        soundSaid = null;
+                    }
+                    paint();
+                    return;
                 }
-                row.appendChild(picker);
-                body.appendChild(row);
-                body.appendChild(fieldRow({
-                    key: "soundVolume",
-                    label: "How loud (%)",
-                    type: "num",
-                    min: 0,
-                    max: 100,
-                    hint: "",
-                }));
-                if (soundSaid)
-                    body.appendChild(note(soundSaid));
+                // Only a link a browser can actually load, and never one that runs
+                // something: a sound is fetched, not executed.
+                if (!/^https?:\/\//i.test(v) && !/^data:audio\//i.test(v)) {
+                    soundSaid = "That does not look like a link. It has to start with http:// or https://.";
+                    paint();
+                    return;
+                }
+                cfg.soundUrl = v;
+                persist(true);
+                soundSaid = "Using that link.";
+                paint();
+            });
+            wrap.appendChild(link);
+            if (attached)
+                wrap.appendChild(note("A file is attached. Clear it above to use a link instead."));
+            wrap.appendChild(fieldRow({
+                key: "soundVolume",
+                label: "How loud (%)",
+                type: "num",
+                min: 0,
+                max: 100,
+                hint: "",
             }));
+            if (soundSaid)
+                wrap.appendChild(note(soundSaid));
         }
         return wrap;
     }
@@ -1849,15 +2547,21 @@ export function setup(ctx, overrides) {
             hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Needs the interface panels permission.",
         }));
         if (cfg.widgetOn && widgetFailed)
-            wrap.appendChild(note("The floating button could not be created. Check that the ui_panels permission is granted."));
+            wrap.appendChild(bad("The floating button could not be created. Check that the ui_panels permission is granted."));
+        wrap.appendChild(fieldRow({
+            key: "msgButton",
+            label: "A button on every message",
+            type: "bool",
+            hint: "Puts a refine button in each message's own row of actions, next to Edit and Copy. After a refine the same button becomes an undo, so putting one back is where you are already looking.",
+        }));
         wrap.appendChild(fieldRow({
             key: "inputRefine",
             label: "Refine what I am typing",
             type: "bool",
             hint: "Adds a row to the chat input's Extras menu that rewrites the text sitting in your input box, before you send it. It changes the box you are typing in, so it is off until you ask for it.",
         }));
-        if (cfg.inputRefine)
-            wrap.appendChild(note("It reads and writes the input box on the page, which is the one part of this extension that depends on how Lumiverse is laid out. If a Lumiverse update ever moves the box, this is what stops working, and nothing else does."));
+        if (cfg.inputRefine || cfg.msgButton)
+            wrap.appendChild(note("These two reach into the page rather than going through an API, because Lumiverse does not offer one for the message row or the input box. They are the only parts of this extension that depend on how Lumiverse is laid out. If an update ever moves either, these stop working and nothing else does."));
         return wrap;
     }
     // ---- carrying a setup somewhere else ----
@@ -1950,8 +2654,8 @@ export function setup(ctx, overrides) {
                     id: String(b.id),
                     on: b.on !== false,
                     role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-                    text: b.text == null ? undefined : String(b.text),
-                    name: b.name == null ? undefined : String(b.name),
+                    text: b.text == null ? "" : String(b.text),
+                    name: b.name == null ? "" : String(b.name),
                 }));
                 took++;
             }
@@ -2051,6 +2755,17 @@ export function setup(ctx, overrides) {
     let presetPick = "";
     let presetName = "";
     let presetSaid = null;
+    // The two that ship with it, offered alongside your own. They are not stored
+    // and cannot be renamed or deleted, so they are always there to go back to.
+    function builtIn() {
+        return BUILT_IN_PROMPTS.map((p) => ({
+            name: p.name,
+            at: 0,
+            settings: { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
+        }));
+    }
+    const isBuiltIn = (name) => BUILT_IN.indexOf(name) >= 0;
+    const allPresets = () => builtIn().concat(presets);
     function loadPresets() {
         try {
             if (typeof localStorage === "undefined")
@@ -2109,8 +2824,8 @@ export function setup(ctx, overrides) {
                     id: String(b.id),
                     on: b.on !== false,
                     role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-                    text: b.text == null ? undefined : String(b.text),
-                    name: b.name == null ? undefined : String(b.name),
+                    text: b.text == null ? "" : String(b.text),
+                    name: b.name == null ? "" : String(b.name),
                 }));
                 took++;
             }
@@ -2144,16 +2859,16 @@ export function setup(ctx, overrides) {
         return took;
     }
     function buildPresetCard() {
-        const wrap = card("Presets", "A named copy of your rules, your prompt layout, your run-up count and your samplers. Everything else stays as you have it, whichever preset you load. A connection is not saved, since an id from another account names nothing here.", presets.length ? String(presets.length) : undefined);
+        const wrap = card("Presets", "Four prompts ship with the extension and work as they stand: a short one and a detailed one, each in a version for a plain model and a version for a model that reasons. Saving your own keeps your prompt, your run-up count and your samplers under a name. Everything else stays as you have it, whichever you load. A connection is not saved, since an id from another account names nothing here.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
         const sel = document.createElement("select");
         sel.className = "arf-field";
         sel.setAttribute("aria-label", "Saved presets");
         sel.setAttribute("data-arf-field", "presetPick");
         const none = document.createElement("option");
         none.value = "";
-        none.textContent = presets.length ? "Pick a preset" : "No presets saved yet";
+        none.textContent = "Pick a preset";
         sel.appendChild(none);
-        for (const p of presets) {
+        for (const p of allPresets()) {
             const op = document.createElement("option");
             op.value = p.name;
             op.textContent = p.name;
@@ -2178,9 +2893,11 @@ export function setup(ctx, overrides) {
             presetName = nameIn.value;
         });
         wrap.appendChild(nameIn);
-        const chosen = () => presets.find((p) => p.name === presetPick) || null;
+        const chosen = () => allPresets().find((p) => p.name === presetPick) || null;
+        const chosenIsYours = () => !!presetPick && !isBuiltIn(presetPick);
         const row = el("div", "arf-row");
         const load = button("Load", false);
+        load.setAttribute("data-arf-preset", "load");
         load.disabled = !chosen();
         load.style.opacity = load.disabled ? "0.45" : "1";
         load.addEventListener("click", () => {
@@ -2195,10 +2912,16 @@ export function setup(ctx, overrides) {
             paint();
         });
         const asNew = button("Save as new", false);
+        asNew.setAttribute("data-arf-preset", "new");
         asNew.addEventListener("click", () => {
             const name = String(presetName || "").trim();
             if (!name) {
                 presetSaid = "Give it a name first.";
+                paint();
+                return;
+            }
+            if (isBuiltIn(name)) {
+                presetSaid = "That is the name of one of the two that ship with the extension. Pick another.";
                 paint();
                 return;
             }
@@ -2215,11 +2938,12 @@ export function setup(ctx, overrides) {
             paint();
         });
         const update = button("Update selected", false);
-        update.disabled = !chosen();
+        update.setAttribute("data-arf-preset", "update");
+        update.disabled = !chosenIsYours();
         update.style.opacity = update.disabled ? "0.45" : "1";
         update.addEventListener("click", () => {
             const p = chosen();
-            if (!p)
+            if (!p || isBuiltIn(p.name))
                 return;
             p.settings = presetFromNow();
             p.at = Date.now();
@@ -2228,19 +2952,20 @@ export function setup(ctx, overrides) {
             paint();
         });
         const rename = button("Rename selected", false);
-        rename.disabled = !chosen();
+        rename.setAttribute("data-arf-preset", "rename");
+        rename.disabled = !chosenIsYours();
         rename.style.opacity = rename.disabled ? "0.45" : "1";
         rename.addEventListener("click", () => {
             const p = chosen();
             const name = String(presetName || "").trim();
-            if (!p)
+            if (!p || isBuiltIn(p.name))
                 return;
             if (!name) {
                 presetSaid = "Put the new name in the box first.";
                 paint();
                 return;
             }
-            if (name !== p.name && presets.some((x) => x.name === name)) {
+            if (name !== p.name && (isBuiltIn(name) || presets.some((x) => x.name === name))) {
                 presetSaid = "There is already a preset called that.";
                 paint();
                 return;
@@ -2252,11 +2977,13 @@ export function setup(ctx, overrides) {
             paint();
         });
         const drop = button("Delete", false);
-        drop.disabled = !chosen();
+        drop.className += " arf-danger";
+        drop.setAttribute("data-arf-preset", "delete");
+        drop.disabled = !chosenIsYours();
         drop.style.opacity = drop.disabled ? "0.45" : "1";
         drop.addEventListener("click", () => {
             const p = chosen();
-            if (!p)
+            if (!p || isBuiltIn(p.name))
                 return;
             presets = presets.filter((x) => x !== p);
             savePresets();
@@ -2271,6 +2998,12 @@ export function setup(ctx, overrides) {
         row.appendChild(rename);
         row.appendChild(drop);
         wrap.appendChild(row);
+        if (presetPick && isBuiltIn(presetPick)) {
+            const which = BUILT_IN_PROMPTS.find((p) => p.name === presetPick);
+            if (which)
+                wrap.appendChild(note(which.what));
+            wrap.appendChild(note("One of the ones that ship with the extension. Load it, change it however you like, then save it under a name of your own."));
+        }
         if (presetSaid)
             wrap.appendChild(note(presetSaid));
         return wrap;
@@ -2278,18 +3011,24 @@ export function setup(ctx, overrides) {
     // ---- putting everything back ----
     function buildResetInto(wrap) {
         wrap.appendChild(el("div", "arf-rule"));
-        wrap.appendChild(el("div", "arf-lab", "Start again"));
-        wrap.appendChild(note("Puts every setting back to the value a fresh install has. Your presets are kept unless you say otherwise, and so is the list of chats you switched off."));
+        const head = el("div", "arf-row");
+        head.appendChild(el("span", "arf-sign arf-bad-ink", "!"));
+        head.appendChild(el("span", "arf-lab arf-grow", "Start again"));
+        wrap.appendChild(head);
+        wrap.appendChild(bad("This cannot be undone. Your prompt goes back to the default one, which means every block you wrote and every rule in them is gone. Export first if there is any chance you want it back."));
         const row = el("div", "arf-row");
         const go = button("Reset all settings", false);
+        go.className += " arf-danger";
         go.addEventListener("click", () => resetAll(false));
         const all = button("Reset everything, presets too", false);
+        all.className += " arf-danger";
         all.addEventListener("click", () => resetAll(true));
         row.appendChild(go);
         row.appendChild(all);
         wrap.appendChild(row);
+        wrap.appendChild(note("The first keeps your saved presets, so a prompt you saved is still there afterwards. The second takes those too."));
         if (resetSaid)
-            wrap.appendChild(note(resetSaid));
+            wrap.appendChild(resetArmed ? bad(resetSaid) : note(resetSaid));
     }
     let resetSaid = null;
     async function resetAll(alsoPresets) {
@@ -2322,7 +3061,8 @@ export function setup(ctx, overrides) {
             // branch exists to prevent.
             if (!resetArmed) {
                 resetArmed = true;
-                resetSaid = "Press it again to confirm. This cannot be undone.";
+                resetSaid =
+                    "Press it again to confirm. Everything goes back to its default and there is no undo.";
                 paint();
                 setTimeout(() => {
                     if (!resetArmed)
@@ -2363,61 +3103,48 @@ export function setup(ctx, overrides) {
     }
     let resetArmed = false;
     // ---- the sound ----
-    // A short two-note blip, synthesised rather than shipped, so the repository
-    // holds no audio file and there is still something to hear with no setup. A
-    // reader's own file replaces it.
-    function beep(vol) {
-        try {
-            const g = globalThis;
-            const Ctx = g.AudioContext || g.webkitAudioContext;
-            if (!Ctx)
-                return;
-            const ac = new Ctx();
-            const at = ac.currentTime;
-            const gain = ac.createGain();
-            gain.connect(ac.destination);
-            gain.gain.setValueAtTime(0.0001, at);
-            const play = (freq, from, len) => {
-                const osc = ac.createOscillator();
-                osc.type = "sine";
-                osc.frequency.setValueAtTime(freq, at + from);
-                osc.connect(gain);
-                osc.start(at + from);
-                osc.stop(at + from + len);
-            };
-            // Ramped rather than switched, or it clicks on the way in and out.
-            gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * 0.22), at + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.34);
-            play(660, 0, 0.12);
-            play(880, 0.12, 0.2);
-            setTimeout(() => {
-                try {
-                    ac.close();
-                }
-                catch (_) { }
-            }, 900);
-        }
-        catch (_) { }
-    }
+    // The sound is yours: a file you attach or a link you paste. Nothing is
+    // shipped and nothing is synthesised, so the switch on its own is not a
+    // sound, and the panel says so rather than being silently mute.
+    const hasSound = () => !!String(cfg.soundUrl || "").trim();
     function ping(force) {
         if (!cfg.soundOn && !force)
             return;
-        const vol = Math.min(1, Math.max(0, Number(cfg.soundVolume) / 100 || 0.6));
+        const url = String(cfg.soundUrl || "").trim();
+        if (!url)
+            return;
         try {
-            const url = String(cfg.soundUrl || "").trim();
-            if (url) {
-                const a = new globalThis.Audio(url);
-                a.volume = vol;
-                // A browser that has not seen a gesture on this page refuses to play,
-                // which is a refusal rather than a fault, so it is not reported.
-                const p = a.play();
-                if (p && typeof p.catch === "function")
-                    p.catch(() => { });
-                return;
+            const vol = Math.min(1, Math.max(0, Number(cfg.soundVolume) / 100));
+            const a = new globalThis.Audio(url);
+            a.volume = Number.isFinite(vol) ? vol : 0.6;
+            a.addEventListener("error", () => {
+                // A link that does not load, which is worth saying once: a sound that
+                // never plays looks exactly like a switch that does not work.
+                soundSaid = "That sound could not be played. Check the link, or attach a file instead.";
+                if (force)
+                    paint();
+            });
+            const p = a.play();
+            // A browser that has not seen a gesture on this page refuses to play.
+            // That is a refusal rather than a fault, so it is only reported when you
+            // pressed Play yourself and are waiting to hear something.
+            if (p && typeof p.catch === "function")
+                p.catch((e) => {
+                    if (!force)
+                        return;
+                    soundSaid =
+                        e && e.name === "NotAllowedError"
+                            ? "The browser blocked it. Interact with the page once, then try again."
+                            : "That sound could not be played.";
+                    paint();
+                });
+        }
+        catch (_) {
+            if (force) {
+                soundSaid = "That sound could not be played.";
+                paint();
             }
         }
-        catch (_) { }
-        beep(vol);
     }
     // ---- refining what you are typing ----
     // The one part of this extension that reaches into the page. Everything else
@@ -2485,8 +3212,8 @@ export function setup(ctx, overrides) {
             toast("There is nothing in the input box to refine.", true);
             return;
         }
-        if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
-            toast("Write some rules first, or there is nothing to apply.", true);
+        if (noTurn()) {
+            toast("Your prompt has no {{message}} block, so there is nothing to rewrite.", true);
             return;
         }
         if (inputWaiting)
@@ -2500,6 +3227,149 @@ export function setup(ctx, overrides) {
         // model it is looking at the player's own voice.
         send({ type: "try_refine", requestId: id, text: text, asUser: true });
     }
+    // ---- a button on each message ----
+    // Lumiverse has no API for adding one yet, so this finds the action row and
+    // puts a button in it. That makes it the second thing in the extension that
+    // depends on the page's shape, and it is off until asked for.
+    //
+    // Rather than matching a CSS module class, which changes on every build, this
+    // looks for the message wrapper by its data attribute and then for the action
+    // bar by the one button that has always been in it. If a Lumiverse update
+    // moves either, this quietly does nothing instead of throwing on every render.
+    const MSG_SEL = "[data-message-id]";
+    let msgWatch = null;
+    function actionBarIn(msg) {
+        const named = msg.querySelector('[data-component="BubbleActions"]');
+        if (named)
+            return named;
+        // Every layout has an Edit button, and it sits in the row we want.
+        const edit = msg.querySelector('button[title="Edit"]');
+        return edit && edit.parentElement ? edit.parentElement : null;
+    }
+    function messageIdOf(msg) {
+        try {
+            return String(msg.getAttribute("data-message-id") || "");
+        }
+        catch (_) {
+            return "";
+        }
+    }
+    // Whether this message has something to put back, which decides whether the
+    // button refines or undoes.
+    function undoableHere(id) {
+        if (lastChatId == null)
+            return false;
+        return undoable.has(undoKey(lastChatId, id));
+    }
+    function paintMsgBtn(btn, id) {
+        const busyHere = msgBusy === id;
+        const back = undoableHere(id);
+        btn.innerHTML = busyHere ? spinIcon() : back ? undoIcon() : refineIcon();
+        btn.title = busyHere ? "Refining" : back ? "Put this message back" : "Refine this message";
+        btn.setAttribute("aria-label", btn.title);
+        btn.disabled = busyHere;
+        btn.style.opacity = busyHere ? "0.6" : "1";
+    }
+    let msgBusy = null;
+    function addMsgButton(msg) {
+        try {
+            if (!cfg.msgButton || !cfg.enabled)
+                return;
+            const id = messageIdOf(msg);
+            if (!id)
+                return;
+            // Still streaming: the action row is not there yet, and a later pass
+            // catches it.
+            const part = msg.getAttribute("data-part");
+            if (part === "streaming")
+                return;
+            const bar = actionBarIn(msg);
+            if (!bar)
+                return;
+            const had = bar.querySelector("[data-arf-msg]");
+            if (had) {
+                paintMsgBtn(had, id);
+                return;
+            }
+            const b = document.createElement("button");
+            b.type = "button";
+            b.setAttribute("data-arf-msg", id);
+            b.className = "arf-msgbtn";
+            paintMsgBtn(b, id);
+            b.addEventListener("click", (e) => {
+                try {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                catch (_) { }
+                if (undoableHere(id)) {
+                    send({ type: "undo_refine", requestId: newId(), chatId: lastChatId, messageId: id });
+                    return;
+                }
+                const why = whyNot();
+                if (why) {
+                    toast(why, true);
+                    return;
+                }
+                msgBusy = id;
+                markBusy(true);
+                sweepMsgButtons();
+                paint();
+                send({ type: "refine_now", requestId: newId(), chatId: lastChatId, messageId: id });
+            });
+            bar.appendChild(b);
+        }
+        catch (_) { }
+    }
+    function sweepMsgButtons() {
+        try {
+            const all = document.querySelectorAll(MSG_SEL);
+            for (let i = 0; i < all.length; i++)
+                addMsgButton(all[i]);
+        }
+        catch (_) { }
+    }
+    function dropMsgButtons() {
+        try {
+            const all = document.querySelectorAll("[data-arf-msg]");
+            for (let i = 0; i < all.length; i++)
+                all[i].remove();
+        }
+        catch (_) { }
+    }
+    function watchMessages(on) {
+        if (!on) {
+            if (msgWatch) {
+                try {
+                    msgWatch.disconnect();
+                }
+                catch (_) { }
+                msgWatch = null;
+            }
+            dropMsgButtons();
+            return;
+        }
+        if (msgWatch) {
+            sweepMsgButtons();
+            return;
+        }
+        try {
+            msgWatch = new MutationObserver(() => sweepMsgButtons());
+            msgWatch.observe(document.body, {
+                childList: true,
+                subtree: true,
+                // A message is staged before it streams and the same element flips
+                // data-part when streaming ends, with no child change to notice.
+                attributes: true,
+                attributeFilter: ["data-part"],
+            });
+            sweepMsgButtons();
+        }
+        catch (_) {
+            msgWatch = null;
+        }
+    }
+    disposers.push(() => watchMessages(false));
     // ---- the floating button and the input bar row ----
     let widget = null;
     let inputAction = null;
@@ -2557,6 +3427,8 @@ export function setup(ctx, overrides) {
             raiseWidget();
         else
             dropWidget();
+        // The button on each message.
+        watchMessages(!!cfg.msgButton && !!cfg.enabled);
         // The Extras row that refines what you are typing.
         const want = !!cfg.inputRefine && !!cfg.enabled;
         if (want && !inputAction) {
@@ -2606,17 +3478,10 @@ export function setup(ctx, overrides) {
         return "";
     }
     function refineNow() {
-        if (!cfg.enabled) {
-            toast("Auto Refine is switched off.", true);
-            return;
-        }
-        if (lastChatId == null) {
-            toast("No chat is open. Open a chat and try again.", true);
-            return;
-        }
-        if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
-            toast("No rules are written yet.", true);
-            log("nothing to do: no rules are written yet");
+        const why = whyNot();
+        if (why) {
+            toast(why, true);
+            log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
         markBusy(true);
@@ -2634,38 +3499,39 @@ export function setup(ctx, overrides) {
             ctx.events.on("CHAT_CHANGED", (p) => {
                 if (!p)
                     return;
-                lastChatId = p.chatId || null;
-                lastMessageId = null;
+                // A null id here is the build saying you walked out, which is worth
+                // believing: it is the only event that reports it directly.
+                if (!p.chatId)
+                    leftTheChat();
+                else
+                    sawChat(p.chatId);
                 paint();
             }),
             ctx.events.on("CHAT_SWITCHED", (p) => {
                 if (!p || typeof p.chatId === "undefined")
                     return;
-                lastChatId = p.chatId || null;
-                lastMessageId = null;
+                if (!p.chatId)
+                    leftTheChat();
+                else
+                    sawChat(p.chatId);
                 paint();
             }),
             ctx.events.on("CHARACTER_MESSAGE_RENDERED", (p) => {
                 if (!p)
                     return;
-                if (p.chatId)
-                    lastChatId = p.chatId;
-                if (p.messageId)
-                    lastMessageId = p.messageId;
+                sawChat(p.chatId, p.messageId);
                 paint();
             }),
             ctx.events.on("USER_MESSAGE_RENDERED", (p) => {
-                if (p && p.chatId)
-                    lastChatId = p.chatId;
+                if (!p)
+                    return;
+                sawChat(p.chatId);
                 paint();
             }),
             ctx.events.on("GENERATION_ENDED", (p) => {
                 if (!p)
                     return;
-                if (p.chatId)
-                    lastChatId = p.chatId;
-                if (p.messageId)
-                    lastMessageId = p.messageId;
+                sawChat(p.chatId, p.messageId);
                 if (cfg.enabled && cfg.refineOn && !p.error && !chatIsOff(p.chatId)) {
                     markBusy(true);
                     paint();
@@ -2691,6 +3557,33 @@ export function setup(ctx, overrides) {
                         send({ type: "list_connections", requestId: newId() });
                         return;
                     }
+                    if (msg.type === "active_chat") {
+                        // An answer for a question asked before the last chat change is
+                        // about a chat nobody is looking at any more.
+                        if (chatAsk && msg.requestId !== chatAsk)
+                            return;
+                        chatAsk = null;
+                        if (msg.resolved && !msg.chatId) {
+                            // It could look, and there is nothing open. The home screen, or a
+                            // character page with no chat started yet.
+                            leftTheChat();
+                            return;
+                        }
+                        if (msg.chatId) {
+                            // A chat the address bar has already moved on from is a stale
+                            // answer, not news.
+                            if (urlNamesChats && !urlHolds(msg.chatId))
+                                return;
+                            sawChat(msg.chatId);
+                            character = msg.character ? String(msg.character) : null;
+                            // A chat with a card whose name did not come back is a chat the
+                            // characters permission was refused for, which is worth telling
+                            // apart from a chat that has no card.
+                            nameWithheld = !!msg.hasCharacter && !msg.character;
+                        }
+                        paint();
+                        return;
+                    }
                     if (msg.type === "connections") {
                         connections = Array.isArray(msg.list) ? msg.list : [];
                         paint();
@@ -2698,6 +3591,7 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "refined") {
                         markBusy(false);
+                        msgBusy = null;
                         tally.saved++;
                         lastRun = { ms: lastRunMs, ok: true, why: "" };
                         // A refine only happens in the chat the reader is in, so this is
@@ -2705,15 +3599,22 @@ export function setup(ctx, overrides) {
                         // panel would hold a refine it could not show anybody.
                         if (msg.chatId != null && lastChatId == null)
                             lastChatId = msg.chatId;
-                        if (msg.chatId != null && msg.canUndo)
-                            undoable.set(String(msg.chatId), {
+                        if (msg.chatId != null && msg.canUndo) {
+                            const k = undoKey(msg.chatId, msg.messageId);
+                            undoable.delete(k);
+                            undoable.set(k, {
+                                chatId: msg.chatId,
                                 messageId: msg.messageId,
                                 before: String(msg.before || ""),
                                 after: String(msg.after || ""),
+                                at: Date.now(),
                             });
+                            while (undoable.size > UNDO_MAX)
+                                undoable.delete(undoable.keys().next().value);
+                        }
                         // The badge is the point of the tab being closable: something
                         // happened to your writing and you can see that without opening it.
-                        setBadge("1");
+                        setBadge(String(undoHere().length || 1));
                         log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
                         toast("Reply refined.");
                         ping();
@@ -2722,6 +3623,7 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "refine_skipped") {
                         markBusy(false);
+                        msgBusy = null;
                         const why = String(msg.why || "no reason given");
                         tally.dropped++;
                         countDrop(why);
@@ -2732,6 +3634,7 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "refine_result") {
                         markBusy(false);
+                        msgBusy = null;
                         if (msg.ok) {
                             lastRun = { ms: lastRunMs, ok: true, why: "" };
                             log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
@@ -2794,9 +3697,10 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "undo_result") {
                         if (msg.ok) {
-                            if (lastChatId != null)
-                                undoable.delete(String(lastChatId));
-                            setBadge(null);
+                            if (msg.messageId != null)
+                                undoable.delete(undoKey(msg.chatId, msg.messageId));
+                            if (!undoHere().length)
+                                setBadge(null);
                             tally.undone++;
                             log("put a reply back the way it was", true);
                             toast("Put back.", true);
@@ -2902,6 +3806,7 @@ export function setup(ctx, overrides) {
     injectStyle();
     armBackend();
     syncExtras();
+    askActiveChat();
     send({ type: "list_connections", requestId: newId() });
     log("ready v" + VERSION);
     paint();
@@ -2926,7 +3831,7 @@ export const __testing = {
     CONFIG,
     COST_FIELDS,
     LIMIT_FIELDS,
-    BLOCK_KINDS,
+    MACROS,
     DEFAULT_BLOCKS,
     ROLE_OPTIONS,
     SAMPLER_FIELDS,

@@ -399,20 +399,19 @@ console.log("\nthe prompt layout editor");
     await goTab(page, "Prompt");
     const names = () =>
       page.evaluate(() =>
-        Array.from(document.querySelectorAll("#drawer [data-arf-block] .arf-lab")).map((n) =>
-          n.textContent.trim(),
-        ),
+        Array.from(
+          document.querySelectorAll('#drawer [data-arf-block] [data-arf-field^="blockname:"]'),
+        ).map((n) => n.value),
       );
     const before = await names();
-    ok("every block is listed", before.length >= 8, before.join(" | "));
+    ok("every block in the prompt is listed", before.length >= 6, before.join(" | "));
 
-    // The two locked blocks cannot be switched off, whatever else moves.
-    const lockedOff = await page.evaluate(() =>
-      Array.from(
-        document.querySelectorAll("#drawer [data-arf-block] input[type=checkbox]"),
-      ).filter((b) => b.disabled).length,
+    const holds = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("#drawer [data-arf-block]")).some((b) =>
+        /holds the turn/.test(b.textContent),
+      ),
     );
-    ok("the job and the message are locked on", lockedOff >= 2);
+    ok("the block carrying the turn is marked as such", holds);
 
     // Move the second block up and see the order actually change.
     await page.evaluate(() => {
@@ -424,34 +423,60 @@ console.log("\nthe prompt layout editor");
 
     const sent = await page.evaluate(() => {
       const last = window.__sent.filter((m) => m.type === "set_settings").pop();
-      return last && last.settings && last.settings.blocks
-        ? last.settings.blocks.map((b) => b.id)
-        : [];
+      return last && last.settings && last.settings.blocks ? last.settings.blocks : [];
     });
-    ok("and the new order goes to the backend", sent.length >= 8 && sent[sent.length - 1] === "message", sent.join(","));
+    ok(
+      "and the new order goes to the backend, with the text",
+      sent.length >= 6 && sent.some((b) => (b.text || "").indexOf("{{message}}") >= 0),
+      sent.map((b) => b.id).join(","),
+    );
 
-    // A block of the reader's own, with its text.
+    // A new block lands above the turn: anything after the message reads as an
+    // instruction about it.
     await page.evaluate(() => {
       const add = Array.from(document.querySelectorAll("#drawer button")).find((b) =>
-        /Add a block of your own/.test(b.textContent),
+        /^Add a block$/.test(b.textContent.trim()),
       );
       add.click();
     });
     const own = await page.evaluate(() => {
       const last = window.__sent.filter((m) => m.type === "set_settings").pop();
-      const ids = last.settings.blocks.map((b) => b.id);
-      return { ids: ids, beforeMessage: ids.indexOf("message") === ids.length - 1 };
+      const at = last.settings.blocks.findIndex((b) => b.id.indexOf("own-") === 0);
+      const turnAt = last.settings.blocks.findIndex(
+        (b) => (b.text || "").indexOf("{{message}}") >= 0,
+      );
+      return { at: at, turnAt: turnAt };
     });
-    ok("a block of your own lands before the message", own.beforeMessage, own.ids.join(","));
+    ok("a new block lands above the turn", own.at >= 0 && own.at < own.turnAt, JSON.stringify(own));
 
     await page.evaluate(() => {
       const reset = Array.from(document.querySelectorAll("#drawer button")).find((b) =>
-        /Put the order back/.test(b.textContent),
+        /Back to the default prompt/.test(b.textContent),
       );
       reset.click();
     });
     const back = await names();
-    ok("and putting the order back restores the default", back.join("|") === before.join("|"));
+    ok("and going back to the default restores it", back.join("|") === before.join("|"));
+
+    // The one mistake the editor makes possible, and it must be loud.
+    await page.evaluate(() => {
+      const boxes = Array.from(
+        document.querySelectorAll('#drawer [data-arf-field^="blocktext:"]'),
+      );
+      for (const ta of boxes) {
+        if (ta.value.indexOf("{{message}}") < 0) continue;
+        ta.value = "nothing here any more";
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        ta.dispatchEvent(new Event("blur", { bubbles: true }));
+      }
+    });
+    await settle(page);
+    const shouted = await page.evaluate(
+      () =>
+        !!document.querySelector("#drawer .arf-bad") &&
+        /\{\{message\}\}/.test(document.querySelector("#drawer .arf-body").textContent),
+    );
+    ok("a prompt with no {{message}} says so in the danger colour", shouted);
   });
   ok("no errors while editing the layout", errors.length === 0, errors.join("\n         "));
 }
@@ -516,19 +541,17 @@ console.log("\nsettings that were saved before");
   // hand-edited or half-written file looks like.
   await inTab(
     browser,
-    { saved: { blocks: [{ id: "rules", on: true, role: "system" }] } },
+    { saved: { blocks: [{ id: "rules", name: "Only rules", on: true, role: "system", text: "cut filler" }] } },
     async (page) => {
       await goTab(page, "Prompt");
       const shown = await page.evaluate(() =>
-        Array.from(document.querySelectorAll("#drawer [data-arf-block] .arf-lab")).map((n) =>
-          n.textContent.trim(),
-        ),
+        Array.from(
+          document.querySelectorAll('#drawer [data-arf-block] [data-arf-field^="blockname:"]'),
+        ).map((n) => n.value),
       );
-      ok(
-        "the locked blocks are put back rather than the panel breaking",
-        shown.length === 3,
-        shown.join(" | "),
-      );
+      ok("a one-block prompt is shown as it is, not repaired", shown.length === 1, shown.join(" | "));
+      const warned = await page.evaluate(() => !!document.querySelector("#drawer .arf-bad"));
+      ok("and it says the prompt cannot work", warned);
     },
   );
 }
@@ -559,7 +582,7 @@ console.log("\nthe tabs");
     ok("the switch and the refine button sit above the tabs", above);
 
     // One tab's worth of cards on screen at a time, which is the whole point.
-    for (const label of ["Rules", "Prompt", "Model", "Limits", "Log", "Setup"]) {
+    for (const label of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
       await goTab(page, label);
       const cards = await page.evaluate(
         () => document.querySelectorAll("#drawer .arf-body .arf-card").length,
@@ -580,7 +603,7 @@ console.log("\nthe tabs");
 console.log("\nseeing what gets sent");
 {
   await inTab(browser, {}, async (page) => {
-    await goTab(page, "Prompt");
+    await goTab(page, "Context");
     await page.evaluate(() => {
       Array.from(document.querySelectorAll("#drawer button"))
         .find((b) => /Show me the request/.test(b.textContent))
@@ -652,18 +675,17 @@ console.log("\nhow much thinking");
 console.log("\npresets");
 {
   const errors = await inTab(browser, {}, async (page) => {
-    await goTab(page, "Rules");
-    // Write a rule, then save it under a name.
+    await goTab(page, "Prompt");
+    // Change a block, then save the prompt under a name.
     await page.evaluate(() => {
-      const ta = document.querySelector('#drawer [data-arf-field="rules"]');
-      ta.value = "Cut filler words.";
+      const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+      ta.value = "<my_rule>Cut filler words.</my_rule>";
       ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("blur", { bubbles: true }));
       const name = document.querySelector('#drawer [data-arf-field="presetName"]');
       name.value = "Tight prose";
       name.dispatchEvent(new Event("input", { bubbles: true }));
-      Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => b.textContent.trim() === "Save as new")
-        .click();
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
     });
     await settle(page);
     const saved = await page.evaluate(() =>
@@ -673,10 +695,10 @@ console.log("\npresets");
     );
     ok("a preset is saved under its name", saved.indexOf("Tight prose") >= 0, saved.join(" | "));
 
-    // Change the rules, then load the preset back.
+    // Change it again, then load the preset back.
     await page.evaluate(() => {
-      const ta = document.querySelector('#drawer [data-arf-field="rules"]');
-      ta.value = "Something else entirely.";
+      const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+      ta.value = "<my_rule>Something else entirely.</my_rule>";
       ta.dispatchEvent(new Event("input", { bubbles: true }));
       ta.dispatchEvent(new Event("blur", { bubbles: true }));
     });
@@ -688,26 +710,22 @@ console.log("\npresets");
     });
     await settle(page);
     await page.evaluate(() => {
-      Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => b.textContent.trim() === "Load")
-        .click();
+      document.querySelector('#drawer [data-arf-preset="load"]').click();
     });
     await settle(page);
     const back = await page.evaluate(
-      () => document.querySelector('#drawer [data-arf-field="rules"]').value,
+      () => document.querySelector('#drawer [data-arf-field^="blocktext:"]').value,
     );
-    ok("loading it brings the rules back", back === "Cut filler words.", back);
+    ok("loading it brings the prompt back", back === "<my_rule>Cut filler words.</my_rule>", back);
 
     // A preset carries the rules and not the switches.
     const carried = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1")));
     const keys = Object.keys(carried[0].settings).sort();
-    ok("it saves what shapes a refine", keys.indexOf("rules") >= 0 && keys.indexOf("blocks") >= 0);
+    ok("it saves what shapes a refine", keys.indexOf("blocks") >= 0 && keys.indexOf("samplers") >= 0);
     ok("and not the switches that are yours", keys.indexOf("enabled") < 0 && keys.indexOf("connectionId") < 0, keys.join(","));
 
     await page.evaluate(() => {
-      Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => b.textContent.trim() === "Delete")
-        .click();
+      document.querySelector('#drawer [data-arf-preset="delete"]').click();
     });
     await settle(page);
     const gone = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1")).length);
@@ -718,7 +736,7 @@ console.log("\npresets");
 
 console.log("\nstarting again");
 {
-  await inTab(browser, { saved: { rules: "Cut filler.", contextMessages: 9 } }, async (page) => {
+  await inTab(browser, { saved: { contextMessages: 9, timeoutSecs: 45 } }, async (page) => {
     await goTab(page, "Setup");
     // The stub host has no confirm dialog, which is the path that asks in the
     // panel instead. One press arms it, the second does it.
@@ -729,9 +747,9 @@ console.log("\nstarting again");
     });
     await settle(page);
     const still = await page.evaluate(
-      () => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).rules,
+      () => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).contextMessages,
     );
-    ok("one press does not throw anything away", still === "Cut filler.", String(still));
+    ok("one press does not throw anything away", still === 9, String(still));
     const asks = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
     ok("it asks first", /Press it again/.test(asks));
 
@@ -744,7 +762,7 @@ console.log("\nstarting again");
     const after = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
     );
-    ok("the second press puts the defaults back", after.rules === "" && after.contextMessages === 4);
+    ok("the second press puts the defaults back", after.contextMessages === 4 && after.timeoutSecs === 90);
   });
 }
 
@@ -760,7 +778,7 @@ console.log("\nthe extras, which are off until asked for");
 
   await inTab(
     browser,
-    { saved: { widgetOn: true, inputRefine: true, rules: "Cut filler words." } },
+    { saved: { widgetOn: true, inputRefine: true } },
     async (page) => {
     const up = await page.evaluate(() => ({
       widget: !!window.__widget,
@@ -802,7 +820,15 @@ console.log("\nthe extras, which are off until asked for");
 
   // With no rules there is nothing to apply, and the draft is left alone
   // rather than sent to a model to be rewritten by nothing.
-  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+  await inTab(
+    browser,
+    {
+      saved: {
+        inputRefine: true,
+        blocks: [{ id: "a", name: "No turn", on: true, role: "system", text: "cut filler" }],
+      },
+    },
+    async (page) => {
     await page.evaluate(() => {
       const box = document.createElement("textarea");
       box.setAttribute("data-component", "ChatInput");
@@ -814,8 +840,9 @@ console.log("\nthe extras, which are off until asked for");
     const asked = await page.evaluate(
       () => window.__sent.filter((m) => m.type === "try_refine").length,
     );
-    ok("with no rules written, nothing is sent and the draft is untouched", asked === 0);
-  });
+    ok("with no {{message}} in the prompt, nothing is sent and the draft is untouched", asked === 0);
+    },
+  );
 }
 
 await browser.close();
