@@ -882,7 +882,15 @@ console.log("\nin one place at a time");
     const keys = ((menu && menu.items) || []).map((i) => i.key);
     ok("holding it opens Lumiverse's own menu", !!menu, JSON.stringify(menu));
     ok("with the draft entry in it, which is where it went", keys.indexOf("draft") >= 0, keys.join(","));
-    ok("and the tab and the off switch you asked for", keys.indexOf("open") >= 0 && keys.indexOf("off") >= 0, keys.join(","));
+    ok("and the tab and the off switch", keys.indexOf("open") >= 0 && keys.indexOf("off") >= 0, keys.join(","));
+    // Only what the button cannot already do. A tap refines, so an entry for
+    // refining is a second button; the automatic pass and the per chat switch
+    // are settings and belong on the tab with their explanations.
+    ok(
+      "and nothing the button or the tab already covers",
+      keys.indexOf("refine") < 0 && keys.indexOf("auto") < 0 && keys.indexOf("chat") < 0,
+      keys.join(","),
+    );
     ok("anchored to the button rather than the corner", !!(menu && menu.position && menu.position.y > 0), JSON.stringify(menu && menu.position));
   });
 
@@ -1015,6 +1023,45 @@ console.log("\nthe floating button's size");
   await inTab(browser, { saved: { widgetOn: true, widgetSize: 400 } }, async (page) => {
     const spec = await page.evaluate(() => window.__widgetSpec);
     ok("a size past the end of the range is pulled back", spec && spec.width === 96, JSON.stringify(spec));
+  });
+
+  // The button is rebuilt on every size change, and it listens on the window to
+  // tell a tap from the host dragging it. Those listeners have to come off with
+  // the button they belong to, or every resize leaves another set behind
+  // running on every pointermove across the page.
+  await inTab(browser, { saved: { widgetOn: true } }, async (page) => {
+    await goTab(page, "Setup");
+    const counted = await page.evaluate(async () => {
+      let live = 0;
+      const add = EventTarget.prototype.addEventListener;
+      const rm = EventTarget.prototype.removeEventListener;
+      EventTarget.prototype.addEventListener = function (t, f, c) {
+        if (this === window && /^pointer/.test(t)) live++;
+        return add.call(this, t, f, c);
+      };
+      EventTarget.prototype.removeEventListener = function (t, f, c) {
+        if (this === window && /^pointer/.test(t)) live--;
+        return rm.call(this, t, f, c);
+      };
+      // Re-queried each time: the row is rebuilt with the panel.
+      const step = async (v) => {
+        const size = document.querySelector('#drawer [data-arf-field="widgetSize"]');
+        if (!size) throw new Error("no size field on screen");
+        size.value = String(v);
+        size.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((r) => requestAnimationFrame(r));
+      };
+      // Rebuild it several times over.
+      for (const v of [50, 60, 70, 80]) await step(v);
+      const after = live;
+      await step(90);
+      return { after: after, andAgain: live };
+    });
+    ok(
+      "rebuilding the button does not pile up window listeners",
+      counted.after <= 3 && counted.andAgain <= 3,
+      JSON.stringify(counted),
+    );
   });
 }
 

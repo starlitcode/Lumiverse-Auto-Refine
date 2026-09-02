@@ -5110,11 +5110,22 @@ export function setup(ctx: Ctx, overrides?: any) {
   let widget: any = null;
   let inputAction: any = null;
 
+  // Runs the listeners off the last button that was built. Null when there is
+  // none to take down.
+  let widgetOff: (() => void) | null = null;
+
   function dropWidget() {
+    // The listeners first: destroy can throw, and a button that is gone with
+    // its listeners still on the window is the shape of the leak this avoids.
+    try {
+      widgetOff && widgetOff();
+    } catch (_) {}
+    widgetOff = null;
     try {
       widget && widget.destroy && widget.destroy();
     } catch (_) {}
     widget = null;
+    floatBtn = null;
   }
 
   function raiseWidget() {
@@ -5188,13 +5199,19 @@ export function setup(ctx: Ctx, overrides?: any) {
         (globalThis as any).addEventListener("pointerup", onUp, true);
         (globalThis as any).addEventListener("pointercancel", onUp, true);
         (globalThis as any).addEventListener("pointermove", onMove, true);
-        disposers.push(() => {
+        // Held against this button rather than the session. The button is
+        // rebuilt every time its size changes and every time it is switched off
+        // and on, and these used to be dropped only at teardown: three more
+        // window listeners per rebuild, each holding a button that is no longer
+        // on screen, all of them running on every pointermove across the page.
+        widgetOff = () => {
           try {
             (globalThis as any).removeEventListener("pointerup", onUp, true);
             (globalThis as any).removeEventListener("pointercancel", onUp, true);
             (globalThis as any).removeEventListener("pointermove", onMove, true);
           } catch (_) {}
-        });
+          disarm();
+        };
       } catch (_) {}
 
       b.addEventListener("pointerdown", (e: any) => {
@@ -5334,24 +5351,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (menuToken) return;
 
+    // Only what the button cannot already do, and nothing that is a setting.
+    //
+    // Refining the latest reply is not here because that is what a tap does,
+    // and a menu entry for the thing the button already is reads as a second
+    // button. The automatic pass and the per chat switch are not here because
+    // they are settings: they belong on the tab with their explanations next to
+    // them, not in a menu opened over the chat where the label is all you get.
     const items: Array<{ key: string; label: string }> = [];
     // The panel first. It is what somebody holding the button is most likely
-    // after, and every other entry here is also in it.
+    // after, and everything taken out of this list is in it.
     items.push({ key: "open", label: "Open the Auto Refine tab" });
-    items.push({ key: "refine", label: "Refine the latest reply" });
     if (undoHere().length) items.push({ key: "undo", label: "Put the last refine back" });
     // On the same terms as the panel entry: its setting puts it in the Extras
     // menu, and this menu takes it over while the button is on screen.
     if (cfg.inputRefine) items.push({ key: "draft", label: "Refine what I am typing" });
-    items.push({
-      key: "auto",
-      label: cfg.refineOn ? "Stop refining every reply" : "Refine every reply",
-    });
-    if (lastChatId != null)
-      items.push({
-        key: "chat",
-        label: chatIsOff(lastChatId) ? "Turn Auto Refine on in this chat" : "Turn Auto Refine off in this chat",
-      });
     // Last, under everything else, because these two are the only entries that
     // take the button off the screen.
     items.push({ key: "hide", label: "Hide this button" });
@@ -5380,18 +5394,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       paint();
       return;
     }
-    if (picked === "refine") refineNow();
-    else if (picked === "undo") {
+    if (picked === "undo") {
       const one = undoHere()[0];
       if (one)
         send({ type: "undo_refine", requestId: newId(), chatId: one.chatId, messageId: one.messageId });
     } else if (picked === "draft") refineInput();
-    else if (picked === "auto") {
-      cfg.refineOn = !cfg.refineOn;
-      persist(true);
-      toast(cfg.refineOn ? "Refining every reply." : "Automatic refining is off.", true);
-      paint();
-    } else if (picked === "chat") setChatOff(lastChatId, !chatIsOff(lastChatId));
     else if (picked === "open") {
       try {
         tab && tab.activate && tab.activate();
