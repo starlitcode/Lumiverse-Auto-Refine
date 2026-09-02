@@ -35,7 +35,6 @@ const CONFIG = {
     minShrinkPct: 40,
     keepOriginal: true,
     confirmBeforeSave: false,
-    showRefineButton: true,
     toast: true,
 };
 const COST_FIELDS = [
@@ -101,18 +100,118 @@ const LIMIT_FIELDS = [
         hint: "Off by default. The automatic pass never touches what you wrote whatever this says: only the button does.",
     },
     {
-        key: "showRefineButton",
-        label: "Show the refine button in Extras",
-        type: "bool",
-        hint: "A one-tap way to refine the latest reply without opening this tab, which is the only way in on a phone.",
-    },
-    {
         key: "toast",
         label: "Show a pop-up on each refine",
         type: "bool",
         hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
     },
 ];
+// getComputedStyle hands colours back as rgb() or rgba() and nothing else, so
+// those forms are the whole of what needs parsing. Anything else is unknown,
+// and unknown means leave it alone.
+function parseColor(input) {
+    const s = String(input == null ? "" : input).trim();
+    const m = s.match(/^rgba?\(([^)]+)\)$/i);
+    if (!m)
+        return null;
+    const parts = m[1].replace(/\//g, " ").replace(/,/g, " ").split(/\s+/).filter(Boolean);
+    if (parts.length < 3)
+        return null;
+    const num = (t, max) => {
+        const v = t.indexOf("%") >= 0 ? (parseFloat(t) / 100) * max : parseFloat(t);
+        return Number.isFinite(v) ? v : NaN;
+    };
+    const r = num(parts[0], 255), g = num(parts[1], 255), b = num(parts[2], 255);
+    if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b))
+        return null;
+    let a = 1;
+    if (parts.length > 3) {
+        const v = num(parts[3], 1);
+        a = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+    }
+    return { r: r, g: g, b: b, a: a };
+}
+// One colour laid over another, which is what a translucent panel over a
+// translucent drawer over the page actually is.
+function blendColor(top, under) {
+    const a = top.a + under.a * (1 - top.a);
+    if (a <= 0)
+        return { r: 0, g: 0, b: 0, a: 0 };
+    const mix = (t, u) => (t * top.a + u * under.a * (1 - top.a)) / a;
+    return { r: mix(top.r, under.r), g: mix(top.g, under.g), b: mix(top.b, under.b), a: a };
+}
+function relLuminance(c) {
+    const f = (v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+}
+function contrastRatio(a, b) {
+    const x = relLuminance(a), y = relLuminance(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+// Below this, text is repainted near-white or near-black, whichever reads
+// better on what is behind it.
+const TEXT_FLOOR = 3.2;
+// A filled button whose fill is this close to the surface behind it reads as
+// plain text however legible its label is, so it is given an edge instead. Low
+// enough that a merely quiet accent is left alone.
+const FILL_FLOOR = 1.45;
+const WHITE = { r: 255, g: 255, b: 255, a: 1 };
+const BLACK = { r: 0, g: 0, b: 0, a: 1 };
+const PAGE_FALLBACK = { r: 24, g: 20, b: 34, a: 1 };
+function betterInk(back) {
+    const onWhite = contrastRatio(WHITE, back);
+    const onBlack = contrastRatio(BLACK, back);
+    return onWhite >= onBlack
+        ? { color: "rgba(255,255,255,0.94)", ratio: onWhite }
+        : { color: "rgba(0,0,0,0.9)", ratio: onBlack };
+}
+// What an element is really sitting on. A panel is usually a solid colour with
+// the theme's translucent tint laid over it as a gradient, and backgroundColor
+// reports only the colour underneath. So the first stop of a gradient is read
+// too: these tints are one colour repeated, so the first stop is the whole
+// story.
+function surfaceOf(el) {
+    try {
+        const cs = getComputedStyle(el);
+        const base = parseColor(cs.backgroundColor);
+        const img = String(cs.backgroundImage || "");
+        if (img && img !== "none") {
+            const stop = img.match(/rgba?\([^)]+\)/i);
+            const tint = stop ? parseColor(stop[0]) : null;
+            if (tint)
+                return base ? blendColor(tint, base) : tint;
+        }
+        return base;
+    }
+    catch (_) {
+        return null;
+    }
+}
+// Walk up collecting surfaces until one is opaque, then blend them back down.
+function backdropOf(el) {
+    const stack = [];
+    let node = el;
+    let hops = 0;
+    while (node && hops < 24) {
+        const c = surfaceOf(node);
+        if (c && c.a > 0) {
+            stack.push(c);
+            if (c.a >= 0.999)
+                break;
+        }
+        node = node.parentElement;
+        hops++;
+    }
+    let out = stack.length && stack[stack.length - 1].a >= 0.999
+        ? stack.pop()
+        : PAGE_FALLBACK;
+    for (let i = stack.length - 1; i >= 0; i--)
+        out = blendColor(stack[i], out);
+    return out;
+}
 // A page of writing with a spark over it. Drawn rather than borrowed so it sits
 // at the same weight as the host's own icons, and readable at the size a tab
 // gives it: three lines of text, the last one short so it reads as a paragraph
@@ -245,35 +344,106 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // ---- one stylesheet, not a style attribute per element ----
+    // Kept in one place so the coarse-pointer rule is a second rule rather than a
+    // branch at every call site, and so a tap target grows for a finger without
+    // anything asking how wide the screen is. Sizes are pinned in px: the host's
+    // font scale is the reader's story text, and chrome that inherits it grows
+    // until a section stops fitting on a phone.
+    const CSS = ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
+        "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf *{box-sizing:border-box}" +
+        ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-note{font-size:12px;line-height:1.45;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-lab{font-size:12.5px;color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-rule{height:1px;background:var(--lumiverse-border,rgba(147,112,219,.12));margin:2px 0}" +
+        ".arf-col{display:flex;flex-direction:column;gap:5px}" +
+        ".arf-sec{display:flex;flex-direction:column;gap:9px}" +
+        ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
+        ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
+        // Inputs sit on a fill rather than an invented black, and take a neutral
+        // border so a theme with a strong accent does not tint every box.
+        ".arf-field{width:100%;padding:8px 10px;border-radius:var(--lumiverse-radius,8px);" +
+        "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+        "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "font:13px/1.5 var(--lumiverse-font-family,system-ui)}" +
+        ".arf-field:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:1px}" +
+        "textarea.arf-field{resize:vertical;min-height:64px}" +
+        // One transparent pixel of border always present, so giving a button an
+        // edge when its fill is too quiet costs no layout.
+        ".arf-btn{min-height:32px;padding:7px 12px;border-radius:var(--lumiverse-radius,8px);cursor:pointer;" +
+        "font:12.5px var(--lumiverse-font-family,system-ui);border:1px solid transparent;" +
+        "background:var(--lumiverse-secondary,rgba(128,128,128,.15));" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
+        ".arf-btn:hover:not(:disabled){background:var(--lumiverse-secondary-hover,rgba(128,128,128,.25))}" +
+        ".arf-btn.arf-primary{background:var(--lumiverse-primary,rgba(147,112,219,.9));color:#fff}" +
+        ".arf-btn.arf-primary:hover:not(:disabled){background:var(--lumiverse-primary-hover,rgba(167,132,239,.95))}" +
+        ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
+        ".arf-btn:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:1px}" +
+        ".arf-box{width:17px;height:17px;flex:none;cursor:pointer;accent-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+        ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
+        "border-radius:var(--lumiverse-radius,8px);" +
+        "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+        "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+        ".arf-well.arf-dim{color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-scroll{max-height:130px;overflow-y:auto}" +
+        ".arf-dot{flex:none;width:7px;height:7px;border-radius:50%;" +
+        "background:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
+        ".arf-dot.arf-live{background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+        ".arf-dot.arf-busy{background:var(--lumiverse-primary,rgba(147,112,219,.9));" +
+        "box-shadow:0 0 6px 1px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+        ".arf-when{flex:none;font-variant-numeric:tabular-nums;" +
+        "color:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
+        ".arf-fold{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;" +
+        "background:none;border:0;padding:0;text-align:left;width:100%}" +
+        ".arf-fold:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:2px}" +
+        // A checkbox comfortable under a mouse is too small for a finger, and the
+        // width of the screen does not say which is in use. This asks directly.
+        "@media (pointer: coarse){" +
+        ".arf-btn{min-height:40px;padding:10px 14px}" +
+        ".arf-box{width:22px;height:22px}" +
+        ".arf-field{padding:10px 12px}}";
+    let styleEl = null;
+    function injectStyle() {
+        try {
+            if (styleEl || typeof document === "undefined")
+                return;
+            styleEl = document.createElement("style");
+            styleEl.setAttribute("data-arf-style", "1");
+            styleEl.textContent = CSS;
+            document.head.appendChild(styleEl);
+            disposers.push(() => {
+                try {
+                    styleEl && styleEl.remove();
+                }
+                catch (_) { }
+                styleEl = null;
+            });
+        }
+        catch (_) { }
+    }
     // ---- small builders ----
-    const MUTED = "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
-    const BORDER = "var(--lumiverse-border,rgba(255,255,255,.16))";
-    const FIELD = "width:100%;box-sizing:border-box;padding:8px 10px;border-radius:var(--lumiverse-radius,8px);" +
-        "border:1px solid " + BORDER + ";background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
-        "color:var(--lumiverse-text,#eee);font:13px var(--lumiverse-font-family,system-ui)";
-    const el = (tag, css, text) => {
+    const el = (tag, cls, text) => {
         const d = document.createElement(tag);
-        if (css)
-            d.style.cssText = css;
+        if (cls)
+            d.className = cls;
         if (text != null)
             d.textContent = text;
         return d;
     };
-    const heading = (text) => el("div", "font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:" + MUTED, text);
-    const note = (text) => el("div", "font-size:12px;line-height:1.45;color:" + MUTED, text);
+    const heading = (text) => el("div", "arf-h", text);
+    const note = (text) => el("div", "arf-note", text);
     function button(label, primary) {
         const b = document.createElement("button");
         b.type = "button";
+        b.className = "arf-btn" + (primary ? " arf-primary" : "");
         b.textContent = label;
-        b.style.cssText =
-            "min-height:32px;padding:7px 12px;border-radius:var(--lumiverse-radius,8px);cursor:pointer;" +
-                "font:12.5px var(--lumiverse-font-family,system-ui);border:1px solid " +
-                (primary
-                    ? "transparent;background:var(--lumiverse-primary,rgba(147,112,219,.9));color:#fff"
-                    : BORDER + ";background:var(--lumiverse-secondary,rgba(255,255,255,.06));color:var(--lumiverse-text,#eee)");
         return b;
     }
-    const rule = () => el("div", "height:1px;background:" + BORDER + ";margin:2px 0");
+    const rule = () => el("div", "arf-rule");
     // ---- the tab ----
     let tab = null;
     let badge = null;
@@ -305,6 +475,56 @@ export function setup(ctx, overrides) {
             return { text: "Refining every reply as it arrives", tone: "idle" };
         return { text: "Waiting for you to press Refine", tone: "idle" };
     }
+    // Browser-drawn controls are painted from the page's colour scheme, and with
+    // none set the browser assumes light, which is why a checkbox comes out as a
+    // white block on a dark panel. Measured rather than assumed, so a light theme
+    // still gets light controls.
+    function setScheme(root) {
+        try {
+            const back = backdropOf(root);
+            root.style.colorScheme = relLuminance(back) > 0.5 ? "light" : "dark";
+        }
+        catch (_) { }
+    }
+    // Walk the panel and repair only what genuinely fails. Elements with no text
+    // yet are included: a status line waiting for something to say has already
+    // been given its colour, and it will not change when the text arrives.
+    function sweepReadable(root) {
+        try {
+            const nodes = [root].concat(Array.prototype.slice.call(root.querySelectorAll("*")));
+            for (const n of nodes) {
+                const tag = String(n.tagName || "").toLowerCase();
+                const isControl = tag === "button" || tag === "input" || tag === "select" || tag === "textarea";
+                const hasText = !isControl && n.firstChild && n.firstChild.nodeType === 3;
+                const painted = n.getAttribute && n.getAttribute("data-arf-painted") != null;
+                if (!isControl && !hasText && !painted)
+                    continue;
+                const cs = getComputedStyle(n);
+                const fg = parseColor(cs.color);
+                if (!fg)
+                    continue;
+                const back = backdropOf(n.parentElement || root);
+                const shown = blendColor(fg, back);
+                if (contrastRatio(shown, back) < TEXT_FLOOR) {
+                    const ink = betterInk(back);
+                    n.style.color = ink.color;
+                }
+                // A filled button whose fill is close to the surface behind it reads as
+                // plain text, however legible the label is. It gets an edge instead of
+                // having its label repainted, which would fix the wrong half.
+                if (tag === "button") {
+                    const fill = surfaceOf(n);
+                    const behind = backdropOf((n.parentElement || root).parentElement || root);
+                    if (fill && fill.a > 0.05) {
+                        const solid = blendColor(fill, behind);
+                        if (contrastRatio(solid, behind) < FILL_FLOOR)
+                            n.style.borderColor = "var(--lumiverse-border-hover,rgba(147,112,219,.25))";
+                    }
+                }
+            }
+        }
+        catch (_) { }
+    }
     function paint() {
         if (!tab || !tab.root)
             return;
@@ -314,9 +534,7 @@ export function setup(ctx, overrides) {
         const focusKey = document.activeElement?.getAttribute?.("data-arf-field");
         const caret = document.activeElement?.selectionStart;
         root.innerHTML = "";
-        root.style.cssText =
-            "display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
-                "font:13px var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,#eee)";
+        root.className = "arf";
         root.appendChild(buildHeader());
         const last = lastChatId != null ? undoable.get(String(lastChatId)) : null;
         if (last)
@@ -326,6 +544,15 @@ export function setup(ctx, overrides) {
         root.appendChild(buildFold());
         root.appendChild(buildChatSwitch());
         root.appendChild(buildActivity());
+        setScheme(root);
+        // Colours only resolve once the tree is in the page and laid out, so the
+        // repair runs a frame later rather than against a half-built panel.
+        try {
+            requestAnimationFrame(() => sweepReadable(root));
+        }
+        catch (_) {
+            sweepReadable(root);
+        }
         if (focusKey) {
             const back = root.querySelector('[data-arf-field="' + focusKey + '"]');
             if (back && typeof back.focus === "function") {
@@ -339,20 +566,19 @@ export function setup(ctx, overrides) {
         }
     }
     function buildHeader() {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:8px");
-        const top = el("div", "display:flex;align-items:center;gap:9px");
-        const mark = el("span", "flex:none;display:inline-flex;color:var(--lumiverse-primary,rgba(147,112,219,.9))");
+        const wrap = el("div", "arf-col");
+        const top = el("div", "arf-row");
+        const mark = el("span", "arf-mark");
         mark.innerHTML = refineIcon();
-        const name = el("div", "font-size:14px;font-weight:600;flex:1", "Auto Refine");
+        const name = el("div", "arf-title", "Auto Refine");
         const sw = document.createElement("input");
         sw.type = "checkbox";
         sw.checked = !!cfg.enabled;
         sw.setAttribute("aria-label", "Turn Auto Refine on");
-        sw.style.cssText = "flex:none;width:18px;height:18px;cursor:pointer";
+        sw.className = "arf-box";
         sw.addEventListener("change", () => {
             cfg.enabled = !!sw.checked;
             persist(true);
-            syncActions();
             paint();
         });
         top.appendChild(mark);
@@ -360,28 +586,24 @@ export function setup(ctx, overrides) {
         top.appendChild(sw);
         wrap.appendChild(top);
         const st = statusLine();
-        const line = el("div", "display:flex;align-items:center;gap:7px;font-size:12px;color:" + MUTED);
-        const dot = el("span", "flex:none;width:7px;height:7px;border-radius:50%;background:" +
-            (st.tone === "off"
-                ? MUTED
-                : "var(--lumiverse-primary,rgba(147,112,219,.9))") +
-            (st.tone === "busy" ? ";box-shadow:0 0 6px 1px var(--lumiverse-primary-020,rgba(147,112,219,.45))" : ""));
+        const line = el("div", "arf-row arf-note");
+        const dot = el("span", "arf-dot" + (st.tone === "off" ? "" : st.tone === "busy" ? " arf-busy" : " arf-live"));
         line.appendChild(dot);
         line.appendChild(el("span", "", st.text));
         wrap.appendChild(line);
-        const row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+        const row = el("div", "arf-row");
         const now = button("Refine the latest reply", true);
         now.disabled = busy || !cfg.enabled;
         now.style.opacity = now.disabled ? "0.5" : "1";
         now.addEventListener("click", () => refineNow());
         row.appendChild(now);
         const auto = document.createElement("label");
-        auto.style.cssText =
-            "display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;color:" + MUTED;
+        auto.className = "arf-row arf-note";
+        auto.style.cursor = "pointer";
         const autoBox = document.createElement("input");
         autoBox.type = "checkbox";
         autoBox.checked = !!cfg.refineOn;
-        autoBox.style.cssText = "width:16px;height:16px;cursor:pointer";
+        autoBox.className = "arf-box";
         autoBox.addEventListener("change", () => {
             cfg.refineOn = !!autoBox.checked;
             persist(true);
@@ -397,22 +619,17 @@ export function setup(ctx, overrides) {
     // writing and be able to disagree, and this is that, sitting where you are
     // already looking rather than behind a menu.
     function buildLastRefine(last) {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:7px");
+        const wrap = el("div", "arf-col");
         wrap.setAttribute("data-arf-last", "1");
         wrap.appendChild(rule());
         wrap.appendChild(heading("The last refine"));
         const pane = (title, text, dim) => {
-            const h = el("div", "font-size:11px;color:" + MUTED, title);
-            const b = el("div", "white-space:pre-wrap;line-height:1.5;font-size:12.5px;max-height:120px;overflow-y:auto;" +
-                "padding:7px 9px;border-radius:8px;border:1px solid " + BORDER + ";" +
-                "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))" +
-                (dim ? ";color:" + MUTED : ""), text);
-            wrap.appendChild(h);
-            wrap.appendChild(b);
+            wrap.appendChild(el("div", "arf-note", title));
+            wrap.appendChild(el("div", "arf-well arf-scroll" + (dim ? " arf-dim" : ""), text));
         };
         pane("Before", last.before, true);
         pane("After", last.after, false);
-        const row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+        const row = el("div", "arf-row");
         const back = button("Put it back", false);
         back.addEventListener("click", () => {
             send({
@@ -436,13 +653,13 @@ export function setup(ctx, overrides) {
     }
     function textBox(key, label, hint, rows) {
         const wrap = el("div", "display:flex;flex-direction:column;gap:5px");
-        wrap.appendChild(el("div", "font-size:12.5px", label));
+        wrap.appendChild(el("div", "arf-lab", label));
         const ta = document.createElement("textarea");
         ta.rows = rows;
         ta.value = String(cfg[key] == null ? "" : cfg[key]);
         ta.setAttribute("data-arf-field", key);
         ta.setAttribute("aria-label", label);
-        ta.style.cssText = FIELD + ";resize:vertical;line-height:1.5";
+        ta.className = "arf-field";
         ta.addEventListener("input", () => {
             cfg[key] = ta.value;
             persist();
@@ -458,7 +675,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildRules() {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:10px");
+        const wrap = el("div", "arf-sec");
         wrap.appendChild(rule());
         wrap.appendChild(heading("The rules it follows"));
         wrap.appendChild(textBox("rules", "What to change", "Plain sentences, one per line. Cut filler words. Keep paragraphs under four lines. Nothing is refined until there is something here.", 5));
@@ -466,7 +683,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildTryIt() {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:7px");
+        const wrap = el("div", "arf-col");
         wrap.appendChild(rule());
         wrap.appendChild(heading("Try it"));
         wrap.appendChild(note("Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat."));
@@ -475,9 +692,9 @@ export function setup(ctx, overrides) {
         ta.placeholder = "Paste a reply here";
         ta.setAttribute("data-arf-field", "tryText");
         ta.setAttribute("aria-label", "Text to try the rules on");
-        ta.style.cssText = FIELD + ";resize:vertical;line-height:1.5";
+        ta.className = "arf-field";
         wrap.appendChild(ta);
-        const row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+        const row = el("div", "arf-row");
         const grab = button("Use my last reply", false);
         grab.addEventListener("click", () => {
             const t = lastRenderedReply();
@@ -518,38 +735,35 @@ export function setup(ctx, overrides) {
         if (tryBusy)
             wrap.appendChild(note("Working..."));
         else if (tryResult)
-            wrap.appendChild(el("div", "white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:7px 9px;border-radius:8px;" +
-                "border:1px solid " + BORDER + ";background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))" +
-                (tryResult.ok ? "" : ";color:" + MUTED), tryResult.text));
+            wrap.appendChild(el("div", "arf-well arf-scroll" + (tryResult.ok ? "" : " arf-dim"), tryResult.text));
         return wrap;
     }
     let tryWaiting = null;
     function fieldRow(f) {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:4px");
+        const wrap = el("div", "arf-col");
         if (f.type === "bool") {
             const lab = document.createElement("label");
-            lab.style.cssText =
-                "display:flex;align-items:center;gap:9px;justify-content:space-between;cursor:pointer";
-            lab.appendChild(el("span", "flex:1;font-size:12.5px", f.label));
+            lab.className = "arf-between";
+            lab.style.cursor = "pointer";
+            lab.appendChild(el("span", "arf-lab", f.label));
             const box = document.createElement("input");
             box.type = "checkbox";
             box.checked = !!cfg[f.key];
             box.setAttribute("data-arf-field", f.key);
-            box.style.cssText = "flex:none;width:17px;height:17px;cursor:pointer";
+            box.className = "arf-box";
             box.addEventListener("change", () => {
                 cfg[f.key] = !!box.checked;
                 persist(true);
-                syncActions();
             });
             lab.appendChild(box);
             wrap.appendChild(lab);
         }
         else if (f.type === "pick") {
-            wrap.appendChild(el("div", "font-size:12.5px", f.label));
+            wrap.appendChild(el("div", "arf-lab", f.label));
             const sel = document.createElement("select");
             sel.setAttribute("data-arf-field", f.key);
             sel.setAttribute("aria-label", f.label);
-            sel.style.cssText = FIELD;
+            sel.className = "arf-field";
             const opts = f.key === "connectionId"
                 ? [{ value: "", label: "The model I am chatting with" }].concat(connections.map((c) => ({
                     value: c.id,
@@ -572,7 +786,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(sel);
         }
         else {
-            wrap.appendChild(el("div", "font-size:12.5px", f.label));
+            wrap.appendChild(el("div", "arf-lab", f.label));
             const num = document.createElement("input");
             num.type = "number";
             if (f.min != null)
@@ -582,7 +796,7 @@ export function setup(ctx, overrides) {
             num.value = String(cfg[f.key]);
             num.setAttribute("data-arf-field", f.key);
             num.setAttribute("aria-label", f.label);
-            num.style.cssText = FIELD;
+            num.className = "arf-field";
             num.addEventListener("change", () => {
                 let v = Math.round(Number(num.value));
                 if (!Number.isFinite(v))
@@ -602,13 +816,16 @@ export function setup(ctx, overrides) {
     }
     // Set once and left, so it stays folded and out of the way of the rules.
     function buildFold() {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:9px");
+        const wrap = el("div", "arf-sec");
         wrap.appendChild(rule());
-        const head = el("div", "display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none");
-        head.setAttribute("role", "button");
-        head.setAttribute("tabindex", "0");
+        // A real button, so the keyboard and a screen reader get it for free
+        // rather than from a role attribute and a keydown handler that has to
+        // remember Space as well as Enter.
+        const head = document.createElement("button");
+        head.type = "button";
+        head.className = "arf-fold";
         head.setAttribute("aria-expanded", costOpen ? "true" : "false");
-        const caret = el("span", "font-size:10px;color:" + MUTED, costOpen ? "▾" : "▸");
+        const caret = el("span", "arf-note", costOpen ? "\u25be" : "\u25b8");
         head.appendChild(caret);
         head.appendChild(heading("How the pass runs"));
         const toggle = () => {
@@ -616,12 +833,6 @@ export function setup(ctx, overrides) {
             paint();
         };
         head.addEventListener("click", toggle);
-        head.addEventListener("keydown", (e) => {
-            if (e && (e.key === "Enter" || e.key === " " || e.key === "Spacebar")) {
-                e.preventDefault();
-                toggle();
-            }
-        });
         wrap.appendChild(head);
         if (!costOpen)
             return wrap;
@@ -639,8 +850,8 @@ export function setup(ctx, overrides) {
         const wrap = el("div", "display:flex;flex-direction:column;gap:5px");
         wrap.setAttribute("data-arf-chat-switch", "1");
         wrap.appendChild(rule());
-        const top = el("div", "display:flex;align-items:center;gap:9px;justify-content:space-between");
-        top.appendChild(el("span", "flex:1;font-size:12.5px", "This chat"));
+        const top = el("div", "arf-between");
+        top.appendChild(el("span", "arf-lab", "This chat"));
         const known = lastChatId != null;
         const off = chatIsOff(lastChatId);
         const act = button(off ? "Turn on here" : "Turn off here", false);
@@ -658,7 +869,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildActivity() {
-        const wrap = el("div", "display:flex;flex-direction:column;gap:6px");
+        const wrap = el("div", "arf-col");
         wrap.appendChild(rule());
         wrap.appendChild(heading("What it has been doing"));
         if (!activity.length) {
@@ -666,9 +877,9 @@ export function setup(ctx, overrides) {
             return wrap;
         }
         for (const a of activity) {
-            const row = el("div", "display:flex;gap:8px;font-size:12px;line-height:1.45");
-            row.appendChild(el("span", "flex:none;color:" + MUTED + ";font-variant-numeric:tabular-nums", new Date(a.at).toTimeString().slice(0, 5)));
-            row.appendChild(el("span", "flex:1;min-width:0" + (a.good ? "" : ";color:" + MUTED), a.text));
+            const row = el("div", "arf-row arf-note");
+            row.appendChild(el("span", "arf-when", new Date(a.at).toTimeString().slice(0, 5)));
+            row.appendChild(el("span", "arf-said" + (a.good ? "" : " arf-dim"), a.text));
             wrap.appendChild(row);
         }
         return wrap;
@@ -711,50 +922,6 @@ export function setup(ctx, overrides) {
             chatId: lastChatId,
             messageId: lastMessageId,
         });
-    }
-    // ---- the one-tap way in ----
-    // The tab needs the drawer, and the drawer needs room. This is the route that
-    // works on a phone, and it is how somebody refines one reply without opening
-    // anything.
-    const actions = new Map();
-    function dropActions() {
-        for (const [, a] of actions) {
-            try {
-                a.off && a.off();
-            }
-            catch (_) { }
-            try {
-                a.action && a.action.destroy && a.action.destroy();
-            }
-            catch (_) { }
-        }
-        actions.clear();
-    }
-    function addAction(id, label, onClick) {
-        try {
-            if (!ctx.ui || typeof ctx.ui.registerInputBarAction !== "function")
-                return;
-            const action = ctx.ui.registerInputBarAction({
-                id: id,
-                label: label,
-                icon: refineIcon(),
-                iconSvg: refineIcon(),
-            });
-            const off = action && typeof action.onClick === "function" ? action.onClick(onClick) : null;
-            actions.set(id, { action: action, off: off });
-        }
-        catch (_) { }
-    }
-    function syncActions() {
-        dropActions();
-        addAction("auto-refine-open", "Auto Refine", () => {
-            try {
-                tab && tab.activate && tab.activate();
-            }
-            catch (_) { }
-        });
-        if (cfg.showRefineButton)
-            addAction("auto-refine-now", "Refine the latest reply", () => refineNow());
     }
     // ---- host events ----
     try {
@@ -915,17 +1082,16 @@ export function setup(ctx, overrides) {
             const modal = ctx.ui.showModal({ title: "Save this refine?" });
             const root = modal.root;
             root.innerHTML = "";
-            root.style.cssText =
-                "display:flex;flex-direction:column;gap:9px;max-height:70vh;overflow-y:auto;" +
-                    "font:13px var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,#eee)";
+            root.className = "arf";
+            root.style.maxHeight = "70vh";
+            root.style.overflowY = "auto";
             const pane = (title, text) => {
                 root.appendChild(heading(title));
-                root.appendChild(el("div", "white-space:pre-wrap;line-height:1.5;padding:8px 10px;border-radius:8px;" +
-                    "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));border:1px solid " + BORDER, text));
+                root.appendChild(el("div", "arf-well", text));
             };
             pane("As it is now", String(msg.before || ""));
             pane("After the refine", String(msg.after || ""));
-            const bar = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+            const bar = el("div", "arf-row");
             const yes = button("Save it", true);
             const no = button("Leave it alone", false);
             yes.addEventListener("click", () => {
@@ -976,7 +1142,7 @@ export function setup(ctx, overrides) {
         }
     }
     catch (_) { }
-    syncActions();
+    injectStyle();
     armBackend();
     send({ type: "list_connections", requestId: newId() });
     log("ready v" + VERSION);
@@ -986,7 +1152,6 @@ export function setup(ctx, overrides) {
             clearTimeout(saveTimer);
             saveTimer = null;
         }
-        dropActions();
         for (const d of disposers.splice(0)) {
             try {
                 d();
@@ -999,4 +1164,18 @@ export function setup(ctx, overrides) {
 // The defaults and the fields built from them, so a check can hold the two
 // against each other. A setting in one and not the other looks fine and quietly
 // never loads.
-export const __testing = { CONFIG, COST_FIELDS, LIMIT_FIELDS, refineIcon, VERSION };
+export const __testing = {
+    CONFIG,
+    COST_FIELDS,
+    LIMIT_FIELDS,
+    refineIcon,
+    VERSION,
+    // Pure, so a theme with a light accent can be checked without a browser.
+    parseColor,
+    blendColor,
+    relLuminance,
+    contrastRatio,
+    betterInk,
+    TEXT_FLOOR,
+    FILL_FLOOR,
+};
