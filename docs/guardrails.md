@@ -18,6 +18,24 @@ This is the one rule in the extension with no switch.
 
 **Nothing at all**, or the same text back. Neither is a rewrite.
 
+## The rewrite sanitised the reply
+
+The one the other checks cannot see. A softened reply is not a refusal, is the right length, and keeps every protected token. There is nothing wrong with it on its own; it is only wrong beside the original, which is the one thing no other check looks at.
+
+**Refuse a rewrite that sanitised the reply** compares the charged language in the two. A rewrite that dropped most of what was there is refused and the reply is left as it was.
+
+It is built to stay quiet. The built-in list holds only words that are hard to use innocently, because everyday words like hit, skin or pain are the vocabulary of ordinary description and would fire on any refine that tightened a paragraph. It needs at least three such words in the reply before it can fire at all, and **How much of it may go** sets the fraction, 60% by default, so losing one or two reads as an edit.
+
+That narrowness misses some real softening, and it is the right way round: a missed one leaves you where you already were, while a false one throws away a good rewrite and teaches you to distrust the feature. **Words of your own to watch** is there because you know better than any list what softening looks like in what you write.
+
+## Asking again
+
+**Ask again when a check fails** is 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn rather than a settled answer, and the same request often comes back clean.
+
+Only the failures a second try could fix are retried. A rewrite refused for its length is one the model meant, so asking again buys the same answer at the same price. A call that errored, or one you stopped, is never repeated.
+
+Every retry is another call on your bill, which is why it is off until you ask for it.
+
 ## The rewrite is the wrong size
 
 **Too long.** A refine that grows a reply by more than the limit you set has written new scene rather than polished what was there. The default is 60%.

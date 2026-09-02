@@ -69,6 +69,12 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "protectThinking",
       "protectInline",
       "thinkTags",
+      "guardRefusal",
+      "guardPreamble",
+      "guardSoften",
+      "softenPct",
+      "softenWords",
+      "retryRefine",
       "wrapOutput",
       "streamProgress",
       "watchLive",
@@ -220,6 +226,16 @@ const CONFIG = {
   protectThinking: true,
   // Names the reader adds, one per line, on top of the built-in set.
   thinkTags: "",
+  // The checks on what an answer says. All on, because each is a shape that was
+  // going to be written into somebody's chat.
+  guardRefusal: true,
+  guardPreamble: true,
+  guardSoften: true,
+  softenPct: 60,
+  softenWords: "",
+  // Extra asks after a failed check. None by default: somebody who never opened
+  // this has not agreed to pay for three refines where they asked for one.
+  retryRefine: 0,
   // Show the rewrite arriving rather than only its length. Off by default: it
   // is a thing to switch on when you want to watch one, not something to pay
   // bridge traffic for on every reply.
@@ -489,8 +505,8 @@ const PLAIN_SHORT: Block[] = [
       "took his hand.\n\n" +
       "Three sentences of the same length in a row: change one. Three " +
       "fragments in a row: change one.\n\n" +
-      "Three physical details stacked on one beat: keep the one that carries " +
-      "the moment.\n\n" +
+      "Three physical details stacked on one moment: keep the one that carries " +
+      "it.\n\n" +
       "The last line stays the last line. Do not add one that points at what " +
       "happens next, and do not turn it into a question for the other person.\n" +
       "</fix_these>",
@@ -531,7 +547,7 @@ const PLAIN_LONG: Block[] = [
       "published fiction almost never. Cut every one you find:\n\n" +
       PHRASES +
       "\n\nCut a phrase rather than swapping it for a near neighbour. If the " +
-      "beat still needs carrying, carry it with what this person is doing in " +
+      "moment still needs carrying, carry it with what this person is doing in " +
       "this room, and if nothing is happening there, let the line go.\n" +
       "</phrases_to_cut>",
   },
@@ -609,7 +625,7 @@ const PLAIN_LONG: Block[] = [
       "at her.\n\n" +
       "Feeling belongs in what someone does. Do not name it as well: if she is " +
       "already pulling her coat closed, do not add that she felt exposed.\n\n" +
-      "One physical detail per beat. Three stacked together is a list, and a " +
+      "One physical detail at a time. Three stacked together is a list, and a " +
       "reader skims a list.\n\n" +
       "A heartbeat, a shiver or a held breath standing in for an emotion is " +
       "the emotion left unwritten. Write what the person does instead.\n" +
@@ -867,6 +883,57 @@ const ROLE_OPTIONS = [
 // The sampler values that reach the request. Anything not on this list is not
 // passed on, on either side of the bridge. Blank means the connection decides,
 // which is why none of these carry a default.
+// The checks on what an answer says, as opposed to how long it is. Each one is
+// a shape that was going to be written into somebody's chat, and each is the
+// reader's to switch off: somebody writing a story these fire on constantly is
+// better served turning one off than turning the extension off.
+const GUARD_FIELDS: Field[] = [
+  {
+    key: "guardRefusal",
+    label: "Refuse an answer that declines the job",
+    type: "bool",
+    hint: "On by default. Catches an answer that is the model saying it will not do this rather than a rewrite, which is the one thing that must never be saved over your reply. Only applies to a short answer: a long one that happens to contain the words is a scene, not a refusal.",
+  },
+  {
+    key: "guardPreamble",
+    label: "Refuse an answer that talks about the edit",
+    type: "bool",
+    hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is ignored rather than saved.",
+  },
+  {
+    key: "guardSoften",
+    label: "Refuse a rewrite that sanitised the reply",
+    type: "bool",
+    hint: "On by default, and the only check that reads the original as well as the rewrite. A softened reply is not a refusal, is the right length, and keeps every protected token: it just came back with the edge taken off, which nothing else here can see. This compares the charged language in the two and refuses a rewrite that dropped most of it. It needs at least three such words in the reply before it can fire, so it stays quiet on prose that never had that register.",
+  },
+  {
+    key: "softenPct",
+    label: "How much of it may go",
+    type: "num",
+    min: 10,
+    max: 100,
+    needs: { key: "guardSoften" },
+    under: true,
+    hint: "As a percentage of the charged words that were in the reply. 60 by default, so losing more than three in five counts as sanitising and losing one or two reads as an ordinary edit. Lower is stricter.",
+  },
+  {
+    key: "softenWords",
+    label: "Words of your own to watch",
+    type: "lines",
+    needs: { key: "guardSoften" },
+    under: true,
+    hint: "Optional, one per line, added to the built-in list. That list is deliberately short and holds only words that are hard to use innocently, because everyday words like hit, skin or pain would fire on any refine that tightened a description. Add what softening looks like in what you write.",
+  },
+  {
+    key: "retryRefine",
+    label: "Ask again when a check fails",
+    type: "num",
+    min: 0,
+    max: 3,
+    hint: "How many extra times to ask, and 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn rather than a settled answer, and asking again often comes back clean. Only the failures a second try could fix are retried: a rewrite refused for its length is one the model meant, so asking again buys the same answer at the same price. Every retry is another call on your bill.",
+  },
+];
+
 // What the floating button offers once it is switched on. Kept out of the main
 // list so they appear under it rather than beside it.
 const WIDGET_FIELDS: Field[] = [
@@ -1528,7 +1595,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // refine that took forty seconds looked the same as one that had quietly
   // failed, and a model that streams looked the same as one that had not
   // started.
-  let stage: "" | "asking" | "thinking" | "writing" | "checking" = "";
+  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" = "";
   let streamed = 0;
 
   function stageWords(): string {
@@ -1538,6 +1605,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (stage === "writing")
       return "Writing" + (streamed ? ", " + streamed.toLocaleString() + " characters" : "") + clockPart;
     if (stage === "checking") return "Checking the answer" + clockPart;
+    // Which try this is, because a refine that quietly takes three times as
+    // long reads as broken unless it says why.
+    if (stage === "retrying")
+      return (
+        "That answer failed a check, asking again" +
+        (retryAt ? " (" + retryAt + " of " + retryOf + ")" : "") +
+        clockPart
+      );
     // How long the reader said to wait, so a slow one reads as slow rather
     // than as stuck.
     const cap = Number(cfg.timeoutSecs) || 90;
@@ -1677,6 +1752,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // until a section stops fitting on a phone.
   // The cross the browser puts inside a search field, as a shape rather than a
   // glyph, so it can be given a colour.
+  const FOCUS_RING =
+    "0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
+    "0 0 8px 0 var(--lumiverse-primary-020,rgba(147,112,219,.2))";
+
   const SEARCH_X =
     "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'/%3E%3C/svg%3E\")";
 
@@ -1704,11 +1783,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     // alpha, sitting on the field's own edge: a solid 2px outline with an
     // offset draws a second rounded rectangle around every box, which is a halo
     // rather than a focus mark.
-    // The border changes and nothing else. A ring or a glow around a focused
-    // box is a second rounded rectangle drawn over the first, and on a panel
-    // this dense it reads as damage rather than as focus.
+    // Auto Retry's ring, to the pixel, so the two extensions mark a focused box
+    // the same way. A 2px ring in the accent at low alpha with a short halo
+    // behind it.
+    //
+    // The blur is kept tight on purpose. Sixteen of blur with two of spread
+    // paints eighteen past the edge, and the rows here are nowhere near
+    // eighteen apart, so it washes over whatever sits above and below and reads
+    // as belonging to the row rather than to the box. Eight is far enough to be
+    // a glow and short enough to stay inside the field's own gap.
     "input.arf-field:focus,textarea.arf-field:focus{outline:none;" +
-    "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+    "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
+    "box-shadow:" + FOCUS_RING + "}" +
     // The search box gets nothing on focus, not even that border change. It is
     // the first thing on the panel and it is focused the moment anybody uses
     // it, so a mark on it is lit most of the time it is on screen.
@@ -1762,9 +1848,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-btn.arf-primary{background:var(--lumiverse-primary,rgba(147,112,219,.9));color:#fff}" +
     ".arf-btn.arf-primary:hover:not(:disabled){background:var(--lumiverse-primary-hover,rgba(167,132,239,.95))}" +
     ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
-    ".arf-btn:focus-visible{outline:none;" +
-    "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
-    "0 0 8px 0 var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+    ".arf-btn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
     ".arf-box{width:17px;height:17px;flex:none;cursor:pointer;accent-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
     ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
     "border-radius:var(--lumiverse-radius,8px);" +
@@ -1797,8 +1881,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "font:12.5px var(--lumiverse-font-family,system-ui);" +
     "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
     ".arf-fold:hover{background:var(--lumiverse-secondary,rgba(128,128,128,.15))}" +
-    ".arf-fold:focus-visible{outline:none;" +
-    "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+    ".arf-fold:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
     ".arf-caret{flex:none;font-size:9px;width:9px;" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     ".arf-foldbody{display:flex;flex-direction:column;gap:11px;padding:2px 2px 4px 10px;" +
@@ -1920,8 +2003,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
     ".arf-msgbtn:hover:not(:disabled){color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf-msgbtn:disabled{cursor:default}" +
-    ".arf-msgbtn:focus-visible{outline:none;" +
-    "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+    ".arf-msgbtn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
     "@keyframes arf-turn{to{transform:rotate(360deg)}}" +
     ".arf-spin{animation:arf-turn 900ms linear infinite;transform-origin:50% 50%}" +
     // A reader who has asked for less movement gets a still icon rather than a
@@ -2664,10 +2746,21 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   let tryWaiting: string | null = null;
 
-  // The settings other rows hang off. Changing one of these has to rebuild the
-  // panel, not just save it, or its children stay on screen after the thing
+  // The settings other rows hang off. Changing one of these rebuilds the panel
+  // rather than only saving it, or its children stay on screen after the thing
   // they belong to has been switched off.
-  const PARENTS = ["widgetOn", "thinkingMode"];
+  //
+  // Read off the rows themselves rather than kept as a list by hand. The hand
+  // written version was wrong within a day of being written: a new setting with
+  // children was added, its parent was not added here, and its children sat
+  // there doing nothing. A list that has to be maintained alongside the thing it
+  // describes is a list that drifts.
+  const PARENTS = (() => {
+    const out: string[] = ["thinkingMode"];
+    for (const list of [GUARD_FIELDS, WIDGET_FIELDS, COST_FIELDS, LIMIT_FIELDS])
+      for (const f of list) if (f.needs && out.indexOf(f.needs.key) < 0) out.push(f.needs.key);
+    return out;
+  })();
   const hasChildren = (key: string) => PARENTS.indexOf(key) >= 0;
 
   // Whether a row has anything to do where it sits.
@@ -3407,10 +3500,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildGuardCard(): HTMLElement {
     const wrap = card(
       "What it refuses to save",
-      "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired.",
+      "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired. Each is yours to switch off.",
     );
     for (const f of LIMIT_FIELDS.filter((f) => f.key === "maxGrowthPct" || f.key === "minShrinkPct"))
       wrap.appendChild(fieldRow(f));
+    for (const f of GUARD_FIELDS) if (fieldShows(f)) wrap.appendChild(fieldRow(f));
+    if (!cfg.guardRefusal && !cfg.guardPreamble && !cfg.guardSoften)
+      wrap.appendChild(
+        warn(
+          "Every check on what the answer says is off. A refusal written by the model can now be saved over your reply, and the length limits are all that is left.",
+        ),
+      );
     return wrap;
   }
 
@@ -3437,6 +3537,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // because it is replaced several times a second and is gone the moment the
   // refine lands.
   let live = "";
+  // Which try is running, for the line that says so.
+  let retryAt = 0;
+  let retryOf = 0;
 
   // Written straight into the element rather than through paint(). A repaint
   // five times a second would rebuild the whole panel under whoever is reading
@@ -5745,6 +5848,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     clearLive();
+    retryAt = 0;
+    retryOf = 0;
     markBusy(true);
     paint();
     send({
@@ -5814,6 +5919,14 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (msg.type === "refine_progress") {
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
             if (typeof msg.text === "string" && msg.text) showLive(msg.text);
+            if (msg.stage === "retrying") {
+              retryAt = Number(msg.attempt) || 0;
+              retryOf = Number(msg.of) || 0;
+              // A new answer is coming, so the last one stops being the thing
+              // on screen.
+              clearLive();
+              log("an answer failed a check, asking again");
+            }
             markBusy(true, msg.stage);
             return;
           }

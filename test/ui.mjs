@@ -1043,6 +1043,80 @@ console.log("\nloading a preset from where you were reading");
   });
 }
 
+console.log("\nthe mark on a focused box");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    const ring = await page.evaluate(() => {
+      const box = document.querySelector('#drawer input.arf-field[type="number"]');
+      if (!box) return null;
+      box.focus();
+      const cs = getComputedStyle(box);
+      return { shadow: cs.boxShadow, outline: cs.outlineStyle };
+    });
+    // Auto Retry's ring: a 2px band plus a short halo behind it.
+    ok("a focused box takes the glow", !!ring && /rgba?\([^)]*\)/.test(ring.shadow), JSON.stringify(ring));
+    ok(
+      "with two layers, the band and the halo",
+      !!ring && (ring.shadow.match(/rgba?\(/g) || []).length === 2 && / 8px /.test(ring.shadow),
+      ring && ring.shadow,
+    );
+    ok("and no browser outline over it", !!ring && ring.outline === "none");
+
+    // The two that were deliberately left bare stay bare.
+    const bare = await page.evaluate(() => {
+      const s = document.querySelector('#drawer [data-arf-field="hunt"]');
+      s.focus();
+      return getComputedStyle(s).boxShadow;
+    });
+    ok("the search box keeps none, as asked", bare === "none", bare);
+  });
+}
+
+console.log("\nthe checks are yours to switch off");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Limits");
+    const on = await page.evaluate(() =>
+      ["guardRefusal", "guardPreamble", "guardSoften", "retryRefine"].map(
+        (k) => !!document.querySelector('#drawer [data-arf-field="' + k + '"]'),
+      ),
+    );
+    ok("each check has a switch of its own", on.every(Boolean), JSON.stringify(on));
+
+    // The two that belong to the softening check appear under it.
+    const under = await page.evaluate(() => ({
+      pct: !!document.querySelector('#drawer [data-arf-field="softenPct"]'),
+      words: !!document.querySelector('#drawer [data-arf-field="softenWords"]'),
+    }));
+    ok("its own settings sit under it while it is on", under.pct && under.words);
+
+    await page.evaluate(() => {
+      const sw = document.querySelector('#drawer [data-arf-field="guardSoften"]');
+      sw.checked = false;
+      sw.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    const gone = await page.evaluate(() => ({
+      pct: !!document.querySelector('#drawer [data-arf-field="softenPct"]'),
+      sent: (window.__sent.filter((m) => m.type === "set_settings").pop() || {}).settings,
+    }));
+    ok("and go with it when it is off", !gone.pct);
+    ok("what you switched off reaches the backend", gone.sent.guardSoften === false);
+  });
+
+  // Turning all three off is a real decision, so it is said out loud.
+  await inTab(
+    browser,
+    { saved: { guardRefusal: false, guardPreamble: false, guardSoften: false } },
+    async (page) => {
+      await goTab(page, "Limits");
+      const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+      ok("switching every one off warns you", /can now be saved over your reply/.test(said));
+    },
+  );
+}
+
 console.log("\nwatching one arrive");
 {
   await inTab(browser, { saved: { watchLive: true, streamProgress: true } }, async (page) => {

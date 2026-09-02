@@ -1469,3 +1469,150 @@ describe("stopping a refine", () => {
     expect(got.stopped).toBe(0);
   });
 });
+
+// The failure the other checks cannot see. A softened reply is not a refusal,
+// is the right length, and keeps every protected token. It is only wrong beside
+// the original, which is the one thing nothing else here looks at.
+describe("a rewrite that sanitised the reply", () => {
+  const bloody = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i go in" },
+    {
+      id: "m2",
+      role: "assistant",
+      content:
+        "The blade went in under his ribs and the blood came fast, soaking her sleeve. " +
+        "He was bleeding out on the stones before she got the knife free.",
+    },
+  ];
+
+  test("dropping the charged language is refused", async () => {
+    const h = await armed(
+      [
+        "<REFINED>The strike landed under his ribs and he went down hard, " +
+          "soaking her sleeve. He was fading on the stones before she stepped back.</REFINED>",
+      ],
+      {},
+      bloody(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/softened the reply/i);
+  });
+
+  // The check has to survive ordinary tightening or it gets switched off, and
+  // then it catches nothing at all.
+  test("an ordinary tightening that keeps the register is saved", async () => {
+    const h = await armed(
+      [
+        "<REFINED>The blade went in under his ribs. The blood came fast and soaked her sleeve, " +
+          "and he was bleeding out on the stones before she got the knife free.</REFINED>",
+      ],
+      {},
+      bloody(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("switched off, the softened rewrite is saved", async () => {
+    const h = await armed(
+      [
+        "<REFINED>The strike landed under his ribs and he went down hard, " +
+          "soaking her sleeve. He was fading on the stones before she stepped back.</REFINED>",
+      ],
+      { guardSoften: false },
+      bloody(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  // Prose that never had the register cannot be softened out of it, and a
+  // single word going is an edit rather than sanitising.
+  test("a reply with almost none of it is left to the other checks", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("a word of the reader's own counts too", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      { softenWords: "cursed\nwretched\nbitter" },
+      [
+        { id: "m0", role: "assistant", content: "The gate stands open." },
+        { id: "m1", role: "user", content: "i go in" },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "She stepped through, cursed and wretched, into the bitter cold that hit her.",
+        },
+      ],
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.skipped().join(" ")).toMatch(/softened the reply/i);
+  });
+});
+
+describe("asking again when a check fails", () => {
+  test("off by default, so one bad answer is one call", async () => {
+    const h = await armed([
+      "I'm sorry, but I can't help with that.",
+      "<REFINED>She stepped through and the cold hit her.</REFINED>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("switched on, a refusal is asked again and the clean answer is saved", async () => {
+    const h = await armed(
+      [
+        "I'm sorry, but I can't help with that.",
+        "<REFINED>She stepped through and the cold hit her.</REFINED>",
+      ],
+      { retryRefine: 2 },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("it gives up after the number you set", async () => {
+    const h = await armed(["I'm sorry, but I can't help with that."], { retryRefine: 2 });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(90);
+    expect(h.asked.length).toBe(3);
+    expect(h.writes.length).toBe(0);
+  });
+
+  // A rewrite refused for its length is one the model meant. Asking again buys
+  // the same answer at the same price.
+  test("a failure a second try cannot fix is not retried", async () => {
+    const h = await armed(["<REFINED>Short.</REFINED>"], { retryRefine: 2 });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+    expect(h.skipped().join(" ")).toMatch(/shorter/i);
+  });
+
+  test("and a stop is never asked again", async () => {
+    const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      whileAsking: () => {
+        h.front({ type: "cancel_refine", requestId: "s1" });
+      },
+    });
+    await h.front({ type: "set_settings", settings: { ...RULES, retryRefine: 3 } });
+    await h.ended({ chatId: "c1", messageId: "m2", userId: "u1" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+  });
+});

@@ -690,6 +690,117 @@ const PREAMBLE =
 const REFUSAL =
   /\b(?:i(?:'|’)?m sorry,? but|i can(?:'|’)?t (?:help|assist|comply|do that)|i (?:will|won(?:'|’)?t) not (?:rewrite|continue|produce)|as an ai\b|i'm unable to (?:help|assist))/i;
 
+// ---- a rewrite that quietly sanitised the reply ----
+// The failure the other checks cannot see. A softened reply is not a refusal,
+// is the right length, and keeps every protected token: it just came back with
+// the edge taken off. Nothing catches that by looking at the rewrite alone,
+// because there is nothing wrong with it. It is only wrong next to the original.
+//
+// So this compares the two. The signal is a charged word that was in the reply
+// and is gone from the rewrite. One word going is an edit; the register being
+// stripped out is what this is looking for, and that is the fraction below.
+//
+// Deliberately narrow. A check that fires on ordinary edits would be turned off
+// within a day, and then it catches nothing at all.
+// Kept deliberately short, and every word on it earns its place by being hard
+// to use innocently. An earlier draft of this list held hit, beat, bare, skin,
+// chest, dead, pain and desire, which are the vocabulary of ordinary
+// description: a refine that tightened a paragraph would have been called
+// softening several times a session, and a check that cries wolf is a check
+// somebody switches off, after which it catches nothing at all.
+//
+// The narrow list misses some real softening. That is the right way round: a
+// missed softening leaves the reader where they already were, and a false one
+// throws away a good rewrite and teaches them to distrust the whole feature.
+const CHARGED = [
+  'blood', 'bloody', 'bleeding', 'wound', 'wounded', 'corpse',
+  'stab', 'stabbed', 'strangle', 'strangled', 'choke', 'choked',
+  'knife', 'blade', 'gun', 'gunshot',
+  'naked', 'nude', 'breast', 'breasts', 'nipple', 'nipples',
+  'thigh', 'thighs', 'groin', 'arousal', 'aroused', 'lust',
+  'moan', 'moaned', 'moaning', 'whimper', 'whimpered',
+  'rape', 'raped', 'torture', 'tortured', 'mutilate', 'mutilated',
+  'slur', 'obscene', 'filthy',
+  'fuck', 'fucked', 'fucking', 'shit', 'bastard', 'bitch', 'cunt', 'cock',
+];
+
+// The reader's own, on top of the built-in list. Somebody writing a particular
+// kind of story knows better than any list what softening looks like in it.
+let extraCharged: string[] = [];
+
+function setCharged(raw: any): void {
+  const out: string[] = [];
+  for (const line of String(raw == null ? '' : raw).split(/[\n,]/)) {
+    const w = String(line).trim().toLowerCase().replace(/[^a-z0-9'-]/g, '');
+    if (!w || w.length < 2) continue;
+    if (CHARGED.indexOf(w) >= 0 || out.indexOf(w) >= 0) continue;
+    out.push(w);
+    if (out.length >= 200) break;
+  }
+  extraCharged = out;
+}
+
+let guardSoften = true;
+// How much of the charged language may go before it counts as softening. A
+// refine legitimately cuts a word or two, so this is a fraction rather than a
+// count, and it is the reader's to set.
+let softenPct = 60;
+
+function chargedIn(text: string): Record<string, number> {
+  const seen: Record<string, number> = {};
+  const words = String(text).toLowerCase().match(/[a-z0-9'-]+/g);
+  if (!words) return seen;
+  const list = CHARGED.concat(extraCharged);
+  for (const w of words) if (list.indexOf(w) >= 0) seen[w] = (seen[w] || 0) + 1;
+  return seen;
+}
+
+// Returns the words that went, or an empty list when nothing did.
+function softenedAway(original: string, rewrite: string): string[] {
+  if (!guardSoften) return [];
+  const was = chargedIn(original);
+  const names = Object.keys(was);
+  if (!names.length) return [];
+  const now = chargedIn(rewrite);
+  const gone: string[] = [];
+  let hadTotal = 0;
+  let lostTotal = 0;
+  for (const w of names) {
+    hadTotal += was[w];
+    const lost = was[w] - (now[w] || 0);
+    if (lost > 0) {
+      lostTotal += lost;
+      gone.push(w);
+    }
+  }
+  if (!lostTotal) return [];
+  // Below this there is not enough of the register present to say anything went
+  // out of it. One charged word in a reply, gone from the rewrite, is an edit;
+  // reading it as sanitising would fail a good refine on a single word.
+  if (hadTotal < 3) return [];
+  const pct = (lostTotal / hadTotal) * 100;
+  const bar = Number.isFinite(softenPct) ? Math.min(100, Math.max(1, softenPct)) : 60;
+  return pct >= bar ? gone : [];
+}
+
+let guardRefusal = true;
+let guardPreamble = true;
+// How many extra asks a failed check is worth. Zero by default: every retry is
+// another call, and somebody who never opened this setting has not agreed to
+// pay for three refines where they asked for one.
+let retryRefine = 0;
+
+// Which failures a second ask could plausibly fix. A refusal, a preamble, a
+// softened rewrite and an answer cut off mid-write are all the model having a
+// bad turn. A rewrite refused for its length is the model meaning it, and one
+// that dropped a protection token has already been re-read once; asking again
+// buys the same answer at the same price.
+function worthRetrying(why: string): boolean {
+  return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished|changed nothing/i.test(
+    String(why || ''),
+  );
+}
+
 // Wrapping the whole answer in quotes, which a model does when it reads the
 // message as a quotation rather than as the thing it is editing.
 function unwrapQuotes(t: string): string {
@@ -754,10 +865,20 @@ function judgeInner(answer: any, original: string): Verdict {
 
   if (!text) return { ok: false, text: '', why: 'the model sent nothing back' };
   if (text === orig) return { ok: false, text: '', why: 'the model changed nothing' };
-  if (PREAMBLE.test(text))
+  if (guardPreamble && PREAMBLE.test(text))
     return { ok: false, text: '', why: 'the model wrote about the edit instead of making it' };
-  if (REFUSAL.test(text) && text.length < 600)
+  if (guardRefusal && REFUSAL.test(text) && text.length < 600)
     return { ok: false, text: '', why: 'the model declined to rewrite it' };
+  const soft = softenedAway(orig, text);
+  if (soft.length)
+    return {
+      ok: false,
+      text: '',
+      why:
+        'the rewrite softened the reply, dropping ' +
+        soft.slice(0, 4).join(', ') +
+        (soft.length > 4 ? ' and ' + (soft.length - 4) + ' more' : ''),
+    };
 
   // Length. A refine that doubles a reply has written new scene, and one that
   // halves it has thrown writing away. Both are judged against what the reader
@@ -1281,18 +1402,40 @@ async function refineMessage(
   const armed = shield(split.body);
   if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
 
-  tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
-  const answer = await askModel(armed.text, m.role === 'user', scene, userId);
-  if (answer.error) return { ok: false, why: answer.error };
-  tell(userId, { type: 'refine_progress', stage: 'checking' });
+  // Asked, judged, and asked again when the answer failed a check. A refusal, a
+  // preamble or a softened rewrite is usually the same model having a bad turn
+  // rather than a settled opinion, and the same request often comes back clean.
+  // Off by default, because every extra ask is another call on the bill.
+  //
+  // Only the checks a second try could fix are retried. A rewrite refused for
+  // being too long is a rewrite the model meant, and asking again for the same
+  // thing is spending money to be told the same answer.
+  let verdict: Verdict = { ok: false, text: '', why: 'nothing was tried' };
+  let notes = '';
+  const tries = 1 + (Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0);
+  for (let attempt = 0; attempt < tries; attempt++) {
+    if (attempt > 0) {
+      tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: attempt + 1, of: tries });
+      say('info', 'asking again after: ' + verdict.why);
+    }
+    tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
+    const answer = await askModel(armed.text, m.role === 'user', scene, userId);
+    // An error is the call failing rather than the answer being wrong, and
+    // asking again would usually fail the same way. A stop especially: asking
+    // again is the opposite of what was asked for.
+    if (answer.error) return { ok: false, why: answer.error, notes: notes };
+    tell(userId, { type: 'refine_progress', stage: 'checking' });
 
-  // Judged against the text that was actually sent, so a message that is half
-  // markup is not called "too short" for the tokens standing in for it.
-  const verdict = judge(answer.content, armed.text);
-  // Whatever the model wrote around the tags travels with every answer from
-  // here on, refused ones included. A prompt that asked for a report on what
-  // was cut wants that report most on the pass that was turned down.
-  const notes = verdict.notes || '';
+    // Judged against the text that was actually sent, so a message that is half
+    // markup is not called "too short" for the tokens standing in for it.
+    verdict = judge(answer.content, armed.text);
+    // Whatever the model wrote around the tags travels with every answer from
+    // here on, refused ones included. A prompt that asked for a report on what
+    // was cut wants that report most on the pass that was turned down.
+    if (verdict.notes) notes = verdict.notes;
+    if (verdict.ok) break;
+    if (!worthRetrying(verdict.why)) break;
+  }
   if (!verdict.ok) return { ok: false, why: verdict.why, notes: notes };
 
   const back = unshield(verdict.text, armed.parts);
@@ -1530,6 +1673,14 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       protectOn = s.protectOn !== false;
       protectThinking = s.protectThinking !== false;
       setThinkTags(s.thinkTags);
+      guardRefusal = s.guardRefusal !== false;
+      guardPreamble = s.guardPreamble !== false;
+      guardSoften = s.guardSoften !== false;
+      softenPct = Number(s.softenPct);
+      softenPct = Number.isFinite(softenPct) ? softenPct : 60;
+      setCharged(s.softenWords);
+      retryRefine = Number(s.retryRefine);
+      retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
       protectInline = !!s.protectInline;
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
