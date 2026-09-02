@@ -2,7 +2,7 @@
 
 A refine is one model call. This page is about what goes in it.
 
-Most extensions of this kind hand you a rules box and keep the rest to themselves, so when a rewrite comes out wrong there is no way to tell whether the model ignored your rule or never saw the thing your rule was about. Here the whole request is a list of blocks under **How the prompt is built**, and you can move any of them, switch most of them off, and change the role each one is sent as.
+Most extensions of this kind hand you a rules box and keep the rest to themselves, so when a rewrite comes out wrong there is no way to tell whether the model ignored your rule or never saw the thing your rule was about. Here the whole request is a list of blocks under the **Prompt** tab, and you can move any of them, switch most of them off, and change the role each one is sent as.
 
 ## The blocks
 
@@ -13,13 +13,16 @@ In the order a fresh install sends them:
 | What the job is | Rewrite this message, keep what happens, answer with the message and nothing else. Locked on. |
 | Who the character is | Name, description, personality and scenario from the card in this chat. |
 | What has been happening | The messages leading up to the one being rewritten. |
+| What is true in this world | The lorebook entries this chat has active, as the host works them out. |
 | Your rules | The **What to change** box. |
 | Your structure rules | The **Structure and formatting** box. |
 | Whose message it is | One line saying whether the character wrote it or you did. |
 | Where the thinking goes | Only sent when you have let it think first. Keeps its working out of the answer. |
 | The message to rewrite | The text itself. Locked on. |
 
-A block with nothing to say is left out rather than sent empty, so a chat with no card, or a run-up you set to none, simply does not appear in the request.
+A block with nothing to say is left out rather than sent empty, so a chat with no card, no lorebook and a run-up set to none simply does not appear in the request.
+
+The lore block asks the host which entries are active rather than matching keywords itself. Lumiverse already decides which of a chat's entries are switched on and which the recent messages triggered, and a second opinion on that would quietly disagree with the one the chat itself is using.
 
 **Two are locked on.** The job and the message cannot be switched off, because everything that checks the answer afterwards assumes the model was given both. They can still be moved and re-roled.
 
@@ -58,7 +61,7 @@ Zero sends none. That is the cheap setting, and it is fine for rules about wordi
 
 ## Sampler settings
 
-Under **How the pass runs**, every sampler is blank to begin with, and blank means the connection's own preset decides. That is the right default: if you tuned a preset, an extension should not quietly override it.
+Under **Model**, every sampler is blank to begin with, and blank means the connection's own preset decides. That is the right default: if you tuned a preset, an extension should not quietly override it.
 
 Fill one in and it is sent with the refine and only with the refine. Your chat is not affected, and neither is the preset.
 
@@ -66,13 +69,57 @@ Temperature is the one worth touching. A rewrite usually wants it lower than the
 
 **Clear them all** hands every one of them back to the connection.
 
+## How much thinking it does
+
+Under **Model**, **Let it think first** has three answers:
+
+- **No, keep it quick.** The default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives.
+- **Whatever my connection is set to.** Sends nothing at all on the subject, which is what leaves your own reasoning settings in charge. Pick this if you have already tuned reasoning where you configure your models.
+- **Yes, and I will say how much.** Adds an effort level: low, medium or high. What each one means is the provider's business, and a provider that does not take an effort level ignores it.
+
+## Seeing what gets sent
+
+**Show me the request** builds the request for the reply you are looking at and shows it, message by message, with the role and size of each. No model is called and nothing is charged; it costs one read of your chat.
+
+It is built by the same function a real refine uses, so it cannot become a nice description of something the extension does not actually send. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
+
+If no reply can be found it still builds, with a stand-in where your message would go, and says so. That is the useful case for checking a layout before there is a chat to try it on.
+
+**Copy it** puts the whole thing on your clipboard, which is the thing to paste when asking why a refine did something strange.
+
+## Presets
+
+At the bottom of the **Rules** tab, presets save your refining setup under a name and switch between them without copying anything by hand.
+
+What a preset carries is everything that decides how a refine reads:
+
+- your rules and your structure rules
+- the prompt layout, blocks and roles and order, including blocks of your own
+- how many messages of run-up go in
+- your sampler values
+- how much thinking it does
+
+What stays yours whichever preset you load is everything else: whether refining is on at all, which connection does it, the length limits, whether it asks before saving, the sounds, and the chats you switched off.
+
+**A connection is not saved.** A connection id from another account names nothing on yours, so a shared preset carrying one would quietly point at nothing. Pick your connection once under Model and it stays put through every preset.
+
+The buttons work the way you would expect: **Load** switches to the preset in the list, **Save as new** stores the current setup under the name in the box, **Update selected** overwrites the chosen one, **Rename selected** renames it, and **Delete** removes it. Loading takes effect at once and is saved, so there is no separate Save step.
+
+Presets live in your browser. To move them to another device, use the export below, which includes them.
+
 ## Import and export
 
 **Export to a file** writes one JSON file with your rules, your prompt layout and your sampler settings in it. **Import a file** reads one back.
 
 Importing replaces what you have, so export first if you want a way back. The chats you switched off are not in the file: they name chats that do not exist on the machine reading it.
 
-Every value in a file is checked against what it is supposed to be before it is used, so a hand-edited or truncated file loads what it can and says how many settings it took, rather than leaving the panel in a state it cannot draw.
+Every value in a file is checked against what it is supposed to be before it is used, so a hand-edited or truncated file loads what it can and says how many settings it took, rather than leaving the panel in a state it cannot draw. A sound in a file has to be audio and has to be small, or it is dropped rather than loaded.
+
+## Starting again
+
+**Reset all settings**, under Setup, puts every setting back to the value a fresh install has and keeps your presets. **Reset everything, presets too** takes those as well. Both ask first, and neither can be undone.
+
+Whichever tab you were on stays where it was. That is not a setting anybody means to reset, and being thrown back to the first tab reads as the panel breaking.
 
 ---
 

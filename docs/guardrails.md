@@ -37,4 +37,4 @@ Two shapes are unwrapped instead of refused, because they are the right rewrite 
 
 **Keep what a refine replaced** is on by default. It holds the text as it stood before each refine so you can put it back from the panel.
 
-It is held in memory for as long as the page is open, and never written anywhere. That is deliberate: it is a way back from a refine you did not like, not a record of your chat, and keeping your writing on disk to provide an undo is a worse trade than losing the undo on reload.
+It is held in memory for as long as the page is open, and never written anywhere. That is intentional: it is a way back from a refine you did not like, not a record of your chat, and keeping your writing on disk to provide an undo is a worse trade than losing the undo on reload.

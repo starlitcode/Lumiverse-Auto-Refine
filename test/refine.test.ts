@@ -50,7 +50,14 @@ const CARD = {
 function host(
   messages: Msg[],
   answers: string[],
-  opts: { fail?: string; chatFail?: string; cardFail?: string; noCard?: boolean } = {},
+  opts: {
+    fail?: string;
+    chatFail?: string;
+    cardFail?: string;
+    noCard?: boolean;
+    loreFail?: string;
+    noLore?: boolean;
+  } = {},
 ) {
   const handlers: Record<string, Array<(p: any) => any>> = {};
   let frontHandler: any = null;
@@ -83,6 +90,18 @@ function host(
         { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
         { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
       ],
+    },
+    world_books: {
+      getActivated: async () => {
+        if (opts.loreFail) throw new Error(opts.loreFail);
+        return opts.noLore ? [] : [{ id: "w1" }, { id: "w2" }];
+      },
+      entries: {
+        get: async (id: string) =>
+          id === "w1"
+            ? { name: "The crossing", content: "The ferry runs at dusk and never after." }
+            : { name: "The gate", content: "The gate is shut at the last bell." },
+      },
     },
     chats: {
       get: async () => {
@@ -461,6 +480,123 @@ describe("what the model is told about the scene", () => {
     await wait(50);
     expect(said(h)).not.toContain("ferry pilot");
     expect(said(h)).not.toContain("i walk through it");
+  });
+});
+
+describe("the lorebook", () => {
+  test("active entries go in the prompt", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The ferry runs at dusk");
+    expect(said(h)).toContain("The gate is shut at the last bell");
+  });
+
+  test("a chat with no active entries sends no lore block", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noLore: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("What is true in this world");
+  });
+
+  test("a refused world books permission refines anyway", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), {
+      loreFail: "PERMISSION_DENIED: world_books",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    expect(said(h)).not.toContain("ferry runs at dusk");
+  });
+
+  test("switching the lore block off leaves it out", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [
+        { id: "guard", on: true, role: "system" },
+        { id: "lore", on: false, role: "system" },
+        { id: "message", on: true, role: "user" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("ferry runs at dusk");
+  });
+});
+
+describe("how much thinking it asks for", () => {
+  test("off sends the off source", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].reasoning).toEqual({ source: "off" });
+  });
+
+  test("inherit sends nothing, which is what leaves your settings alone", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { thinkingMode: "inherit" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].reasoning).toBeUndefined();
+  });
+
+  test("an effort you picked is sent as a custom source", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      thinkingMode: "custom",
+      thinkingEffort: "high",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].reasoning).toEqual({ source: "custom", effort: "high" });
+  });
+
+  test("an effort that is not one of the three falls back rather than being sent", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      thinkingMode: "custom",
+      thinkingEffort: "as much as it takes",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].reasoning).toEqual({ source: "custom", effort: "medium" });
+  });
+});
+
+describe("seeing what gets sent", () => {
+  test("the preview is the real request and calls no model", async () => {
+    const h = await armed(["should not be used"]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const got = h.sent.find((m) => m.type === "prompt_preview");
+    expect(got.ok).toBe(true);
+    expect(h.asked.length).toBe(0);
+    const whole = got.messages.map((m: any) => m.content).join("\n");
+    expect(whole).toContain("Cut filler words");
+    expect(whole).toContain("She stepped through and, suddenly");
+    expect(got.messages[got.messages.length - 1].role).toBe("user");
+  });
+
+  test("it writes nothing to the chat", async () => {
+    const h = await armed(["x"]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+  });
+
+  test("it says when it had to stand in for a message", async () => {
+    const h = await armed(["x"]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: null, messageId: null });
+    await wait(50);
+    const got = h.sent.find((m) => m.type === "prompt_preview");
+    expect(got.ok).toBe(true);
+    expect(got.real).toBe(false);
+  });
+
+  test("and carries the rest of the call, not just the messages", async () => {
+    const h = await armed(["x"], { connectionId: "c-fast", samplers: { temperature: 0.4 } });
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const got = h.sent.find((m) => m.type === "prompt_preview");
+    expect(got.connectionId).toBe("c-fast");
+    expect(got.parameters).toEqual({ temperature: 0.4 });
   });
 });
 

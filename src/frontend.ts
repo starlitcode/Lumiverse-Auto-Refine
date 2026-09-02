@@ -1,7 +1,7 @@
 /*
  * Auto Refine frontend.
  *
- * The whole surface is one drawer tab. That is a deliberate choice rather than
+ * The whole surface is one drawer tab. That is chosen rather than
  * a default: this is a thing you keep open and glance at while you write, not a
  * form you fill in and close. You want to see what the last refine did to your
  * prose, and put it back if you disagree, without stopping to open anything.
@@ -25,7 +25,25 @@ interface Ctx {
 
 const VERSION = "1.0.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
+const CARET_OPEN = "\u25be";
+const CARET_SHUT = "\u25b8";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
+const PRESETS_KEY = "lv-auto-refine:presets:v1";
+
+// What a preset carries: everything that decides how a refine reads. The rest
+// stays yours whichever preset you load, which is the split that makes a preset
+// worth having. A connection is not in here on purpose: an id from somebody
+// else's account names nothing on yours, so a shared preset that carried one
+// would quietly point at nothing.
+const PRESET_KEYS = [
+  "rules",
+  "structureRules",
+  "blocks",
+  "contextMessages",
+  "samplers",
+  "thinkingMode",
+  "thinkingEffort",
+];
 
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
@@ -39,16 +57,34 @@ const CONFIG = {
   refineUserMessages: false,
   connectionId: "",
   thinkingMode: "off",
+  thinkingEffort: "medium",
   timeoutSecs: 90,
   maxGrowthPct: 60,
   minShrinkPct: 40,
   keepOriginal: true,
   confirmBeforeSave: false,
   toast: true,
+  // A sound when a refine lands, off until asked for. An extension that starts
+  // making noise because it was installed is an extension people uninstall.
+  soundOn: false,
+  // Empty means the built-in two-note blip, which is synthesised rather than
+  // shipped so there is no audio file in the repository. A reader's own sound
+  // is held as a data URL, which is why it is capped.
+  soundUrl: "",
+  soundVolume: 60,
+  // The floating button: one tap to refine the latest reply without opening the
+  // drawer. Needs the ui_panels permission, and says so if it is missing.
+  widgetOn: false,
+  // Refining what you are about to send, from the input bar, before it is sent.
+  // Off by default: it edits the box you are typing in, which is not something
+  // to start doing unasked.
+  inputRefine: false,
   // How many messages of the run-up go in the prompt. A rewrite that cannot see
   // what just happened flattens a scene into general prose, which is the
   // failure people blame on the model.
   contextMessages: 4,
+  // Which tab the panel opens on, remembered so it comes back where you left it.
+  tab: "rules",
   // The prompt layout. Empty means the default order below, so a fresh install
   // does not carry a copy of it around and a later change to the default
   // reaches anybody who never edited theirs.
@@ -79,6 +115,10 @@ const BLOCK_KINDS: Record<string, { label: string; hint: string; locked?: boolea
     label: "What has been happening",
     hint: "The messages leading up to this one, so a rewrite keeps the thread of the scene instead of polishing a paragraph in isolation.",
   },
+  lore: {
+    label: "What is true in this world",
+    hint: "The lorebook entries this chat has active, as the host works them out. Needs the world books permission; without it the block is left out.",
+  },
   rules: { label: "Your rules", hint: "The What to change box, above." },
   structure: { label: "Your structure rules", hint: "The Structure and formatting box, above." },
   whose: {
@@ -100,6 +140,7 @@ const DEFAULT_BLOCKS: Block[] = [
   { id: "guard", on: true, role: "system" },
   { id: "character", on: true, role: "system" },
   { id: "context", on: true, role: "system" },
+  { id: "lore", on: true, role: "system" },
   { id: "rules", on: true, role: "system" },
   { id: "structure", on: true, role: "system" },
   { id: "whose", on: true, role: "system" },
@@ -152,6 +193,9 @@ type Field = {
   min?: number;
   max?: number;
   options?: Array<{ value: string; label: string }>;
+  // Shown only while thinkingMode holds this value. A row that does nothing
+  // where it sits is worse than a row that is not there.
+  needs?: string;
 };
 
 const COST_FIELDS: Field[] = [
@@ -168,9 +212,22 @@ const COST_FIELDS: Field[] = [
     type: "pick",
     options: [
       { value: "off", label: "No, keep it quick" },
-      { value: "inherit", label: "Yes, whatever the connection does" },
+      { value: "inherit", label: "Whatever my connection is set to" },
+      { value: "custom", label: "Yes, and I will say how much" },
     ],
-    hint: "Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives.",
+    hint: "Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives. The middle one sends nothing at all, which is what leaves your own reasoning settings in charge.",
+  },
+  {
+    key: "thinkingEffort",
+    label: "How much thinking",
+    type: "pick",
+    needs: "custom",
+    options: [
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+    ],
+    hint: "Only used when you picked the last option above. What each level means is the provider's business, and a provider that does not take an effort level ignores it.",
   },
   {
     key: "timeoutSecs",
@@ -391,6 +448,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
       } catch (_) {}
       send({ type: "set_settings", settings: cfg });
+      // The floating button and the Extras row follow the settings that turn
+      // them on, and this is the one place every change passes through.
+      syncExtras();
     };
     if (now) {
       if (saveTimer) clearTimeout(saveTimer);
@@ -448,8 +508,64 @@ export function setup(ctx: Ctx, overrides?: any) {
   let connections: Array<{ id: string; name: string; provider: string; model: string; isDefault: boolean }> = [];
   let tryResult: { ok: boolean; text: string } | null = null;
   let tryBusy = false;
+  // The status line's own nodes, so the running clock can be written into them
+  // without repainting the panel around whatever somebody is typing in.
+  let liveEls: { dot: any; text: any } | null = null;
+  let clock: any = null;
+  let runStartedAt = 0;
+  let lastRun: { ms: number; ok: boolean; why: string } | null = null;
+  // Counts for the Log tab. Session only: this answers "is it doing anything",
+  // not "what did it do last week".
+  const tally = { saved: 0, dropped: 0, undone: 0 };
+  const drops = new Map<string, number>();
+  const DROPS_MAX = 20;
+  function countDrop(why: string) {
+    const k = String(why || "no reason given").slice(0, 80);
+    drops.set(k, (drops.get(k) || 0) + 1);
+    while (drops.size > DROPS_MAX) drops.delete(drops.keys().next().value as string);
+  }
+  let preview: any = null;
+  let previewBusy = false;
+  let previewWaiting: string | null = null;
+  let soundSaid: string | null = null;
+  let widgetFailed = false;
+  const SOUND_MAX = 512 * 1024;
+
+  // The clock under the status line. Runs only while something is in flight,
+  // and writes one number rather than rebuilding the panel.
+  function markBusy(on: boolean) {
+    if (on && !busy) runStartedAt = Date.now();
+    if (!on && busy && runStartedAt) lastRunMs = Date.now() - runStartedAt;
+    busy = on;
+    if (on) {
+      if (!clock)
+        clock = setInterval(() => {
+          try {
+            if (!busy || !liveEls) return;
+            const secs = (Date.now() - runStartedAt) / 1000;
+            liveEls.text.textContent = "Refining a reply, " + secs.toFixed(0) + "s";
+          } catch (_) {}
+        }, 500);
+    } else if (clock) {
+      clearInterval(clock);
+      clock = null;
+    }
+  }
+  let lastRunMs = 0;
+  disposers.push(() => {
+    if (clock) clearInterval(clock);
+    clock = null;
+  });
 
   const chatIsOff = (id: any) => id != null && chatsOff.indexOf(String(id)) >= 0;
+  function saveChatsOff() {
+    try {
+      if (typeof localStorage !== "undefined")
+        localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(chatsOff));
+    } catch (_) {}
+    send({ type: "set_chats_off", chats: chatsOff.slice() });
+  }
+
   function setChatOff(id: any, off: boolean) {
     if (id == null) return;
     const s = String(id);
@@ -457,11 +573,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (off && at < 0) chatsOff.push(s);
     else if (!off && at >= 0) chatsOff.splice(at, 1);
     while (chatsOff.length > 500) chatsOff.shift();
-    try {
-      if (typeof localStorage !== "undefined")
-        localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(chatsOff));
-    } catch (_) {}
-    send({ type: "set_chats_off", chats: chatsOff.slice() });
+    saveChatsOff();
     paint();
   }
 
@@ -528,14 +640,75 @@ export function setup(ctx: Ctx, overrides?: any) {
     "box-shadow:0 0 6px 1px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
     ".arf-when{flex:none;font-variant-numeric:tabular-nums;" +
     "color:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
-    ".arf-fold{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;" +
-    "background:none;border:0;padding:0;text-align:left;width:100%}" +
+    // ---- the fold, as a box rather than a line of text ----
+    // A heading you can click looks like a heading until you click it. Given an
+    // edge, a fill and a caret that turns, it looks like a thing that opens,
+    // which is the whole job.
+    ".arf-fold{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;" +
+    "width:100%;text-align:left;min-height:34px;padding:7px 10px;" +
+    "border-radius:var(--lumiverse-radius-sm,5px);" +
+    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+    "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
+    "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+    "font:12.5px var(--lumiverse-font-family,system-ui);" +
+    "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
+    ".arf-fold:hover{background:var(--lumiverse-secondary,rgba(128,128,128,.15))}" +
     ".arf-fold:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:2px}" +
-    // A checkbox comfortable under a mouse is too small for a finger, and the
-    // width of the screen does not say which is in use. This asks directly.
+    ".arf-caret{flex:none;font-size:9px;width:9px;" +
+    "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+    ".arf-foldbody{display:flex;flex-direction:column;gap:11px;padding:2px 2px 4px 10px;" +
+    "border-left:1px solid var(--lumiverse-border,rgba(147,112,219,.12));margin-left:5px}" +
+
+    // ---- cards ----
+    // Every group of settings gets a box of its own. This is the difference
+    // between a panel you can scan and a column of rows you have to read: the
+    // eye finds the edge of a box without being told to.
+    ".arf-card{display:flex;flex-direction:column;gap:11px;padding:12px;" +
+    "border-radius:var(--lumiverse-radius-md,10px);" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+    "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
+    // The card's own title. Bigger and plainer than the old all-caps label,
+    // because at 11px uppercase a heading reads as another muted row.
+    ".arf-cardh{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;" +
+    "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+    ".arf-cardh .arf-note{font-weight:400}" +
+
+    // ---- the tab strip ----
+    // Scrolls sideways rather than wrapping. Wrapped tabs move under each other
+    // as the panel narrows, and the row you tapped is not where you left it.
+    ".arf-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;" +
+    "border-bottom:1px solid var(--lumiverse-border,rgba(147,112,219,.12))}" +
+    ".arf-tabs::-webkit-scrollbar{display:none}" +
+    ".arf-tab{flex:none;cursor:pointer;background:none;border:0;border-bottom:2px solid transparent;" +
+    "padding:9px 11px;margin-bottom:-1px;white-space:nowrap;" +
+    "font:12.5px var(--lumiverse-font-family,system-ui);" +
+    "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
+    "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
+    ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+    ".arf-tab[aria-selected=true]{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+    "border-bottom-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+    ".arf-tab:focus-visible{outline:2px solid var(--lumiverse-primary,rgba(147,112,219,.9));outline-offset:-2px}" +
+    ".arf-body{display:flex;flex-direction:column;gap:12px}" +
+    // A pill for a count or a state, next to a card title.
+    ".arf-pill{flex:none;font-size:11px;padding:2px 7px;border-radius:999px;" +
+    "background:var(--lumiverse-secondary,rgba(128,128,128,.15));" +
+    "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+    // One block in the prompt list. Indented and edged so eight of them read as
+    // a list of things rather than as twenty-four loose rows.
+    ".arf-block{display:flex;flex-direction:column;gap:7px;padding:9px 10px;" +
+    "border-radius:var(--lumiverse-radius-sm,5px);" +
+    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+    "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+    ".arf-block.arf-hushed{opacity:.55}" +
+    ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
+    ".arf-grow{flex:1;min-width:0}" +
+    // ---- a checkbox comfortable under a mouse is too small for a finger ----
+    // The width of the screen does not say which is in use. This asks directly.
     "@media (pointer: coarse){" +
     ".arf-btn{min-height:40px;padding:10px 14px}" +
-    ".arf-fold{min-height:40px}" +
+    ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
+    ".arf-fold{min-height:44px}" +
+    ".arf-tab{padding:12px 13px}" +
     ".arf-box{width:22px;height:22px}" +
     ".arf-field{padding:10px 12px}}";
 
@@ -667,6 +840,83 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
+  // ---- the tabs ----
+  // Six boxes, and everything belongs in exactly one of them. The panel was one
+  // column with every setting in it, which reads as a wall however carefully
+  // each row is written: nothing tells the eye where one subject ends.
+  const TABS: Array<{ id: string; label: string }> = [
+    { id: "rules", label: "Rules" },
+    { id: "prompt", label: "Prompt" },
+    { id: "model", label: "Model" },
+    { id: "limits", label: "Limits" },
+    { id: "log", label: "Log" },
+    { id: "setup", label: "Setup" },
+  ];
+  const tabNow = () => (TABS.some((t) => t.id === cfg.tab) ? String(cfg.tab) : "rules");
+
+  // A box with a title. Everything on a tab goes in one of these, so a group of
+  // settings has an edge around it rather than being told apart by spacing.
+  function card(title?: string, hint?: string, pill?: string): HTMLElement {
+    const c = el("div", "arf-card");
+    if (title) {
+      const h = el("div", "arf-cardh");
+      h.appendChild(el("span", "arf-grow", title));
+      if (pill) h.appendChild(el("span", "arf-pill", pill));
+      c.appendChild(h);
+    }
+    if (hint) c.appendChild(note(hint));
+    return c;
+  }
+
+  // Which folds are open, by title, remembered while the page is open.
+  const openFolds = new Set<string>();
+  function fold(title: string, fill: (body: HTMLElement) => void): HTMLElement {
+    const wrap = el("div", "arf-col");
+    const open = openFolds.has(title);
+    // A real button, so the keyboard and a screen reader get it for free rather
+    // than from a role attribute and a keydown handler that has to remember
+    // Space as well as Enter.
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "arf-fold";
+    head.setAttribute("aria-expanded", open ? "true" : "false");
+    head.appendChild(el("span", "arf-caret", open ? CARET_OPEN : CARET_SHUT));
+    head.appendChild(el("span", "arf-grow", title));
+    head.addEventListener("click", () => {
+      if (openFolds.has(title)) openFolds.delete(title);
+      else openFolds.add(title);
+      paint();
+    });
+    wrap.appendChild(head);
+    if (open) {
+      const body = el("div", "arf-foldbody");
+      fill(body);
+      wrap.appendChild(body);
+    }
+    return wrap;
+  }
+
+  function buildTabs(): HTMLElement {
+    const strip = el("div", "arf-tabs");
+    strip.setAttribute("role", "tablist");
+    const here = tabNow();
+    for (const t of TABS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "arf-tab";
+      b.textContent = t.label;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", t.id === here ? "true" : "false");
+      b.addEventListener("click", () => {
+        cfg.tab = t.id;
+        persist(true);
+        paint();
+      });
+      strip.appendChild(b);
+    }
+    return strip;
+  }
+
   function paint() {
     if (!tab || !tab.root) return;
     const root = tab.root as HTMLElement;
@@ -677,17 +927,40 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     root.innerHTML = "";
     root.className = "arf";
+    liveEls = null;
 
     root.appendChild(buildHeader());
     const last = lastChatId != null ? undoable.get(String(lastChatId)) : null;
     if (last) root.appendChild(buildLastRefine(last));
-    root.appendChild(buildRules());
-    root.appendChild(buildPromptShape());
-    root.appendChild(buildTryIt());
-    root.appendChild(buildFold());
-    root.appendChild(buildChatSwitch());
-    root.appendChild(buildTransfer());
-    root.appendChild(buildActivity());
+    root.appendChild(buildTabs());
+
+    const body = el("div", "arf-body");
+    const here = tabNow();
+    if (here === "rules") {
+      body.appendChild(buildRulesCard());
+      body.appendChild(buildTryCard());
+      body.appendChild(buildPresetCard());
+    } else if (here === "prompt") {
+      body.appendChild(buildBlocksCard());
+      body.appendChild(buildContextCard());
+      body.appendChild(buildPreviewCard());
+    } else if (here === "model") {
+      body.appendChild(buildConnectionCard());
+      body.appendChild(buildSamplerCard());
+    } else if (here === "limits") {
+      body.appendChild(buildGuardCard());
+      body.appendChild(buildSafetyCard());
+    } else if (here === "log") {
+      body.appendChild(buildLiveCard());
+      body.appendChild(buildActivityCard());
+      body.appendChild(buildDebugCard());
+    } else {
+      body.appendChild(buildChatCard());
+      body.appendChild(buildAlertCard());
+      body.appendChild(buildReachCard());
+      body.appendChild(buildTransferCard());
+    }
+    root.appendChild(body);
 
     setScheme(root);
     // Colours only resolve once the tree is in the page and laid out, so the
@@ -709,12 +982,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // ---- the control card, which never moves ----
+  // Above the tabs, because the switch and the button are what somebody came
+  // for, and hunting for the master switch on the tab it happens to live on is
+  // the thing that makes a tabbed panel worse than a list.
   function buildHeader(): HTMLElement {
-    const wrap = el("div", "arf-col");
+    const wrap = card();
     const top = el("div", "arf-row");
     const mark = el("span", "arf-mark");
     mark.innerHTML = refineIcon();
-    const name = el("div", "arf-title", "Auto Refine");
+    const name = el("div", "arf-cardh arf-grow", "Auto Refine");
     const sw = document.createElement("input");
     sw.type = "checkbox";
     sw.checked = !!cfg.enabled;
@@ -736,9 +1013,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       "span",
       "arf-dot" + (st.tone === "off" ? "" : st.tone === "busy" ? " arf-busy" : " arf-live"),
     );
+    const words = el("span", "", st.text);
     line.appendChild(dot);
-    line.appendChild(el("span", "", st.text));
+    line.appendChild(words);
     wrap.appendChild(line);
+    // Held so the running clock can be written straight into it. Repainting the
+    // whole panel once a second to move one number would close every open
+    // select and lose the caret in whatever box was being typed in.
+    liveEls = { dot: dot, text: words };
 
     const row = el("div", "arf-row");
     const now = button("Refine the latest reply", true);
@@ -767,13 +1049,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The heart of the tab. After a refine you want to see what it did to your
-  // writing and be able to disagree, and this is that, sitting where you are
-  // already looking rather than behind a menu.
+  // writing and be able to disagree, and this is that, sitting above the tabs
+  // so it is there whichever one you left open.
   function buildLastRefine(last: { messageId: any; before: string; after: string }): HTMLElement {
-    const wrap = el("div", "arf-col");
+    const wrap = card("The last refine");
     wrap.setAttribute("data-arf-last", "1");
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("The last refine"));
     const pane = (title: string, text: string, dim: boolean) => {
       wrap.appendChild(el("div", "arf-note", title));
       wrap.appendChild(el("div", "arf-well arf-scroll" + (dim ? " arf-dim" : ""), text));
@@ -803,7 +1083,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function textBox(key: string, label: string, hint: string, rows: number): HTMLElement {
-    const wrap = el("div", "display:flex;flex-direction:column;gap:5px");
+    const wrap = el("div", "arf-col");
     wrap.appendChild(el("div", "arf-lab", label));
     const ta = document.createElement("textarea");
     ta.rows = rows;
@@ -826,227 +1106,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // ---- the prompt layout ----
-  // The stored list when there is one, the default otherwise, with the two
-  // locked blocks put back if a hand-edited or imported file has lost them.
-  // Everything that draws or edits the layout goes through here, so a bad
-  // stored value cannot take the section down with it.
-  function blockList(): Block[] {
-    const raw = Array.isArray(cfg.blocks) ? cfg.blocks : [];
-    const list: Block[] = raw
-      .filter((b: any) => b && typeof b === "object" && b.id)
-      .map((b: any) => ({
-        id: String(b.id),
-        on: b.on !== false,
-        role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-        text: b.text == null ? undefined : String(b.text),
-        name: b.name == null ? undefined : String(b.name),
-      }));
-    if (!list.length) return DEFAULT_BLOCKS.map((b) => ({ ...b }));
-    for (const id of ["guard", "message"]) {
-      const at = list.findIndex((b) => b.id === id);
-      if (at < 0) list.push({ id: id, on: true, role: id === "message" ? "user" : "system" });
-      else list[at].on = true;
-    }
-    return list;
-  }
-
-  function setBlocks(list: Block[], repaint?: boolean) {
-    cfg.blocks = list;
-    persist(true);
-    if (repaint !== false) paint();
-  }
-
-  const blockLabel = (b: Block) =>
-    BLOCK_KINDS[b.id] ? BLOCK_KINDS[b.id].label : b.name || "A block of your own";
-
-  function buildPromptShape(): HTMLElement {
-    const wrap = el("div", "arf-sec");
-    wrap.appendChild(rule());
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className = "arf-fold";
-    head.setAttribute("aria-expanded", shapeOpen ? "true" : "false");
-    head.appendChild(el("span", "arf-note", shapeOpen ? "▾" : "▸"));
-    head.appendChild(heading("How the prompt is built"));
-    head.addEventListener("click", () => {
-      shapeOpen = !shapeOpen;
-      paint();
-    });
-    wrap.appendChild(head);
-    if (!shapeOpen) return wrap;
-
-    wrap.appendChild(
-      note(
-        "The refine is one request, and this is what goes in it and in what order. Blocks next to each other with the same role are sent as one message. A block with nothing to say is left out.",
-      ),
-    );
-
-    const list = blockList();
-    for (let i = 0; i < list.length; i++) {
-      wrap.appendChild(buildBlockRow(list, i));
-    }
-
-    const acts = el("div", "arf-row");
-    const add = button("Add a block of your own", false);
-    add.addEventListener("click", () => {
-      const next = blockList();
-      const msgAt = next.findIndex((b) => b.id === "message");
-      const made: Block = {
-        id: "own-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
-        on: true,
-        role: "system",
-        name: "My block",
-        text: "",
-      };
-      // Dropped in before the message rather than at the end, since a block
-      // after the message reads as an instruction about it and that is rarely
-      // what somebody adding one meant.
-      next.splice(msgAt < 0 ? next.length : msgAt, 0, made);
-      setBlocks(next);
-    });
-    const reset = button("Put the order back", false);
-    reset.addEventListener("click", () => {
-      setBlocks(DEFAULT_BLOCKS.map((b) => ({ ...b })));
-    });
-    acts.appendChild(add);
-    acts.appendChild(reset);
-    wrap.appendChild(acts);
-
-    wrap.appendChild(rule());
-    wrap.appendChild(
-      fieldRow({
-        key: "contextMessages",
-        label: "Messages of run-up to send",
-        type: "num",
-        min: 0,
-        max: 40,
-        hint: "How much of the chat the What has been happening block carries. 0 sends none. More context costs more on every refine, and long messages are trimmed so a single wall of text cannot fill the request.",
-      }),
-    );
-    return wrap;
-  }
-
-  function buildBlockRow(list: Block[], i: number): HTMLElement {
-    const b = list[i];
-    const kind = BLOCK_KINDS[b.id];
-    const locked = !!(kind && kind.locked);
-    const own = !kind;
-
-    const wrap = el("div", "arf-col");
-    wrap.setAttribute("data-arf-block", b.id);
-    const top = el("div", "arf-between");
-
-    const left = el("div", "arf-row");
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.className = "arf-box";
-    box.checked = b.on;
-    box.disabled = locked;
-    box.setAttribute("aria-label", "Send " + blockLabel(b));
-    box.addEventListener("change", () => {
-      const next = blockList();
-      next[i].on = !!box.checked;
-      setBlocks(next, false);
-    });
-    left.appendChild(box);
-    left.appendChild(el("span", "arf-lab", blockLabel(b)));
-    top.appendChild(left);
-
-    const moves = el("div", "arf-row");
-    const move = (to: number, label: string, sign: string) => {
-      const btn = button(sign, false);
-      btn.setAttribute("aria-label", label + " " + blockLabel(b));
-      btn.disabled = to < 0 || to >= list.length;
-      btn.style.opacity = btn.disabled ? "0.45" : "1";
-      btn.addEventListener("click", () => {
-        const next = blockList();
-        const held = next[i];
-        next.splice(i, 1);
-        next.splice(to, 0, held);
-        setBlocks(next);
-      });
-      return btn;
-    };
-    moves.appendChild(move(i - 1, "Move up", "↑"));
-    moves.appendChild(move(i + 1, "Move down", "↓"));
-    top.appendChild(moves);
-    wrap.appendChild(top);
-
-    const roleRow = el("div", "arf-row");
-    const sel = document.createElement("select");
-    sel.className = "arf-field";
-    sel.style.maxWidth = "160px";
-    sel.setAttribute("aria-label", "Role for " + blockLabel(b));
-    for (const o of ROLE_OPTIONS) {
-      const op = document.createElement("option");
-      op.value = o.value;
-      op.textContent = o.label;
-      sel.appendChild(op);
-    }
-    sel.value = b.role;
-    sel.addEventListener("change", () => {
-      const next = blockList();
-      next[i].role = sel.value;
-      setBlocks(next, false);
-    });
-    roleRow.appendChild(el("span", "arf-note", "Sent as"));
-    roleRow.appendChild(sel);
-    if (own) {
-      const drop = button("Remove", false);
-      drop.addEventListener("click", () => {
-        const next = blockList();
-        next.splice(i, 1);
-        setBlocks(next);
-      });
-      roleRow.appendChild(drop);
-    }
-    wrap.appendChild(roleRow);
-
-    if (own) {
-      const nameIn = document.createElement("input");
-      nameIn.type = "text";
-      nameIn.className = "arf-field";
-      nameIn.value = b.name || "";
-      nameIn.placeholder = "What to call it";
-      nameIn.setAttribute("aria-label", "Name for this block");
-      nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
-      nameIn.addEventListener("change", () => {
-        const next = blockList();
-        next[i].name = nameIn.value;
-        setBlocks(next, false);
-      });
-      wrap.appendChild(nameIn);
-
-      const ta = document.createElement("textarea");
-      ta.rows = 3;
-      ta.className = "arf-field";
-      ta.value = b.text || "";
-      ta.placeholder = "What this block says";
-      ta.setAttribute("aria-label", "Text for this block");
-      ta.setAttribute("data-arf-field", "blocktext:" + b.id);
-      ta.addEventListener("input", () => {
-        const next = blockList();
-        next[i].text = ta.value;
-        cfg.blocks = next;
-        persist();
-      });
-      ta.addEventListener("blur", () => {
-        const next = blockList();
-        next[i].text = ta.value;
-        setBlocks(next, false);
-      });
-      wrap.appendChild(ta);
-    } else {
-      wrap.appendChild(note(kind.hint));
-    }
-    return wrap;
-  }
-
-  function buildRules(): HTMLElement {
-    const wrap = el("div", "arf-sec");
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("The rules it follows"));
+  // ---- Rules ----
+  function buildRulesCard(): HTMLElement {
+    const wrap = card("The rules it follows");
     wrap.appendChild(
       textBox(
         "rules",
@@ -1066,14 +1128,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  function buildTryIt(): HTMLElement {
-    const wrap = el("div", "arf-col");
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("Try it"));
-    wrap.appendChild(
-      note(
-        "Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat.",
-      ),
+  function buildTryCard(): HTMLElement {
+    const wrap = card(
+      "Try it",
+      "Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat.",
     );
     const ta = document.createElement("textarea");
     ta.rows = 3;
@@ -1178,6 +1236,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.addEventListener("change", () => {
         cfg[f.key] = sel.value;
         persist(true);
+        // The effort row appears and goes with this one, so the panel has to be
+        // rebuilt rather than just saved.
+        if (f.key === "thinkingMode") paint();
       });
       wrap.appendChild(sel);
     } else {
@@ -1201,67 +1262,365 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
       wrap.appendChild(num);
     }
-    wrap.appendChild(note(f.hint));
+    if (f.hint) wrap.appendChild(note(f.hint));
     return wrap;
   }
 
-  // Set once and left, so it stays folded and out of the way of the rules.
-  function buildFold(): HTMLElement {
-    const wrap = el("div", "arf-sec");
-    wrap.appendChild(rule());
-    // A real button, so the keyboard and a screen reader get it for free
-    // rather than from a role attribute and a keydown handler that has to
-    // remember Space as well as Enter.
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className = "arf-fold";
-    head.setAttribute("aria-expanded", costOpen ? "true" : "false");
-    const caret = el("span", "arf-note", costOpen ? "\u25be" : "\u25b8");
-    head.appendChild(caret);
-    head.appendChild(heading("How the pass runs"));
-    const toggle = () => {
-      costOpen = !costOpen;
-      paint();
-    };
-    head.addEventListener("click", toggle);
-    wrap.appendChild(head);
-    if (!costOpen) return wrap;
+  // ---- Prompt ----
+  // The stored list when there is one, the default otherwise, with the two
+  // locked blocks put back if a hand-edited or imported file has lost them.
+  // Everything that draws or edits the layout goes through here, so a bad
+  // stored value cannot take the section down with it.
+  function blockList(): Block[] {
+    const raw = Array.isArray(cfg.blocks) ? cfg.blocks : [];
+    const list: Block[] = raw
+      .filter((b: any) => b && typeof b === "object" && b.id)
+      .map((b: any) => ({
+        id: String(b.id),
+        on: b.on !== false,
+        role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
+        text: b.text == null ? undefined : String(b.text),
+        name: b.name == null ? undefined : String(b.name),
+      }));
+    if (!list.length) return DEFAULT_BLOCKS.map((b) => ({ ...b }));
+    for (const id of ["guard", "message"]) {
+      const at = list.findIndex((b) => b.id === id);
+      if (at < 0) list.push({ id: id, on: true, role: id === "message" ? "user" : "system" });
+      else list[at].on = true;
+    }
+    return list;
+  }
 
-    wrap.appendChild(
-      note(
-        "A refine is a second model call on every reply, so the first two are where the money and the waiting go. Both default to the cheap answer.",
-      ),
+  function setBlocks(list: Block[], repaint?: boolean) {
+    cfg.blocks = list;
+    persist(true);
+    if (repaint !== false) paint();
+  }
+
+  const blockLabel = (b: Block) =>
+    BLOCK_KINDS[b.id] ? BLOCK_KINDS[b.id].label : b.name || "A block of your own";
+
+  function buildBlocksCard(): HTMLElement {
+    const list = blockList();
+    const on = list.filter((b) => b.on).length;
+    const wrap = card(
+      "What goes in the request",
+      "The refine is one request, and this is what goes in it and in what order. Blocks next to each other with the same role are sent as one message. A block with nothing to say is left out.",
+      on + " of " + list.length + " on",
     );
-    for (const f of COST_FIELDS) wrap.appendChild(fieldRow(f));
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("What it refuses to save"));
+    for (let i = 0; i < list.length; i++) wrap.appendChild(buildBlockRow(list, i));
+
+    const acts = el("div", "arf-row");
+    const add = button("Add a block of your own", false);
+    add.addEventListener("click", () => {
+      const next = blockList();
+      const msgAt = next.findIndex((b) => b.id === "message");
+      const made: Block = {
+        id: "own-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+        on: true,
+        role: "system",
+        name: "My block",
+        text: "",
+      };
+      // Dropped in before the message rather than at the end, since a block
+      // after the message reads as an instruction about it and that is rarely
+      // what somebody adding one meant.
+      next.splice(msgAt < 0 ? next.length : msgAt, 0, made);
+      setBlocks(next);
+    });
+    const reset = button("Put the order back", false);
+    reset.addEventListener("click", () => {
+      setBlocks(DEFAULT_BLOCKS.map((b) => ({ ...b })));
+    });
+    acts.appendChild(add);
+    acts.appendChild(reset);
+    wrap.appendChild(acts);
+    return wrap;
+  }
+
+  function buildBlockRow(list: Block[], i: number): HTMLElement {
+    const b = list[i];
+    const kind = BLOCK_KINDS[b.id];
+    const locked = !!(kind && kind.locked);
+    const own = !kind;
+
+    const wrap = el("div", "arf-block" + (b.on ? "" : " arf-hushed"));
+    wrap.setAttribute("data-arf-block", b.id);
+    const top = el("div", "arf-between");
+
+    const left = el("div", "arf-row arf-grow");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = "arf-box";
+    box.checked = b.on;
+    box.disabled = locked;
+    box.setAttribute("aria-label", "Send " + blockLabel(b));
+    box.addEventListener("change", () => {
+      const next = blockList();
+      next[i].on = !!box.checked;
+      setBlocks(next);
+    });
+    left.appendChild(box);
+    left.appendChild(el("span", "arf-lab", blockLabel(b)));
+    top.appendChild(left);
+
+    const moves = el("div", "arf-row");
+    const move = (to: number, label: string, sign: string) => {
+      const btn = button(sign, false);
+      btn.className += " arf-mini";
+      btn.setAttribute("aria-label", label + " " + blockLabel(b));
+      btn.disabled = to < 0 || to >= list.length;
+      btn.style.opacity = btn.disabled ? "0.45" : "1";
+      btn.addEventListener("click", () => {
+        const next = blockList();
+        const held = next[i];
+        next.splice(i, 1);
+        next.splice(to, 0, held);
+        setBlocks(next);
+      });
+      return btn;
+    };
+    moves.appendChild(move(i - 1, "Move up", "↑"));
+    moves.appendChild(move(i + 1, "Move down", "↓"));
+    top.appendChild(moves);
+    wrap.appendChild(top);
+
+    const roleRow = el("div", "arf-row");
+    const sel = document.createElement("select");
+    sel.className = "arf-field";
+    sel.style.maxWidth = "150px";
+    sel.setAttribute("aria-label", "Role for " + blockLabel(b));
+    for (const o of ROLE_OPTIONS) {
+      const op = document.createElement("option");
+      op.value = o.value;
+      op.textContent = o.label;
+      sel.appendChild(op);
+    }
+    sel.value = b.role;
+    sel.addEventListener("change", () => {
+      const next = blockList();
+      next[i].role = sel.value;
+      setBlocks(next, false);
+    });
+    roleRow.appendChild(el("span", "arf-note", "Sent as"));
+    roleRow.appendChild(sel);
+    if (own) {
+      const drop = button("Remove", false);
+      drop.addEventListener("click", () => {
+        const next = blockList();
+        next.splice(i, 1);
+        setBlocks(next);
+      });
+      roleRow.appendChild(drop);
+    }
+    wrap.appendChild(roleRow);
+
+    if (own) {
+      const nameIn = document.createElement("input");
+      nameIn.type = "text";
+      nameIn.className = "arf-field";
+      nameIn.value = b.name || "";
+      nameIn.placeholder = "What to call it";
+      nameIn.setAttribute("aria-label", "Name for this block");
+      nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
+      nameIn.addEventListener("change", () => {
+        const next = blockList();
+        next[i].name = nameIn.value;
+        setBlocks(next, false);
+      });
+      wrap.appendChild(nameIn);
+
+      const ta = document.createElement("textarea");
+      ta.rows = 3;
+      ta.className = "arf-field";
+      ta.value = b.text || "";
+      ta.placeholder = "What this block says";
+      ta.setAttribute("aria-label", "Text for this block");
+      ta.setAttribute("data-arf-field", "blocktext:" + b.id);
+      ta.addEventListener("input", () => {
+        const next = blockList();
+        next[i].text = ta.value;
+        cfg.blocks = next;
+        persist();
+      });
+      ta.addEventListener("blur", () => {
+        const next = blockList();
+        next[i].text = ta.value;
+        setBlocks(next, false);
+      });
+      wrap.appendChild(ta);
+    } else {
+      wrap.appendChild(note(kind.hint));
+    }
+    return wrap;
+  }
+
+  function buildContextCard(): HTMLElement {
+    const wrap = card("How much of the chat it sends");
     wrap.appendChild(
-      note(
-        "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the list below says which one fired.",
-      ),
+      fieldRow({
+        key: "contextMessages",
+        label: "Messages of run-up to send",
+        type: "num",
+        min: 0,
+        max: 40,
+        hint: "How much of the chat the What has been happening block carries. 0 sends none. More context costs more on every refine, and long messages are trimmed so a single wall of text cannot fill the request.",
+      }),
     );
-    for (const f of LIMIT_FIELDS) wrap.appendChild(fieldRow(f));
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("Sampler settings"));
-    wrap.appendChild(
-      note(
-        "Left blank, the connection's own preset decides, which is what you want unless you have a reason. Fill one in and it is sent with the refine, and only with the refine: your chat is not affected.",
-      ),
+    return wrap;
+  }
+
+  // The request itself, exactly as it goes out. Built by the backend with the
+  // same function a real refine uses, so this cannot become a nice description
+  // of something the extension does not actually send.
+  function buildPreviewCard(): HTMLElement {
+    const wrap = card(
+      "See what gets sent",
+      "Builds the request for the reply you are looking at and shows it, message by message, without calling a model. Nothing is sent and nothing is charged.",
     );
-    for (const s of SAMPLER_FIELDS) wrap.appendChild(samplerRow(s));
-    const clear = button("Clear them all", false);
-    clear.addEventListener("click", () => {
-      cfg.samplers = {};
-      persist(true);
+    const row = el("div", "arf-row");
+    const go = button(preview ? "Build it again" : "Show me the request", false);
+    go.disabled = previewBusy;
+    go.style.opacity = previewBusy ? "0.5" : "1";
+    go.addEventListener("click", () => {
+      previewBusy = true;
+      preview = null;
+      const id = newId();
+      previewWaiting = id;
+      send({
+        type: "preview_prompt",
+        requestId: id,
+        chatId: lastChatId,
+        messageId: lastMessageId,
+      });
       paint();
     });
-    const clearRow = el("div", "arf-row");
-    clearRow.appendChild(clear);
-    wrap.appendChild(clearRow);
+    row.appendChild(go);
+    if (preview) {
+      const copy = button("Copy it", false);
+      copy.addEventListener("click", () => {
+        copyText(previewAsText(preview));
+        toast("Copied.", true);
+      });
+      row.appendChild(copy);
+    }
+    wrap.appendChild(row);
+
+    if (previewBusy) {
+      wrap.appendChild(note("Building..."));
+      return wrap;
+    }
+    if (!preview) return wrap;
+    if (!preview.ok) {
+      wrap.appendChild(el("div", "arf-well arf-dim", String(preview.why || "It could not be built.")));
+      return wrap;
+    }
+
+    const msgs = Array.isArray(preview.messages) ? preview.messages : [];
+    let chars = 0;
+    for (const m of msgs) chars += String((m && m.content) || "").length;
+    wrap.appendChild(
+      note(
+        msgs.length +
+          (msgs.length === 1 ? " message, " : " messages, ") +
+          chars.toLocaleString() +
+          " characters" +
+          (preview.real ? "" : ", with a stand-in where your reply would go, since no reply was found on screen"),
+      ),
+    );
+    for (const m of msgs) {
+      const one = el("div", "arf-block");
+      const head = el("div", "arf-between");
+      head.appendChild(el("span", "arf-lab", String((m && m.role) || "system")));
+      head.appendChild(el("span", "arf-pill", String((m && m.content) || "").length + " chars"));
+      one.appendChild(head);
+      one.appendChild(el("div", "arf-well arf-scroll", String((m && m.content) || "")));
+      wrap.appendChild(one);
+    }
+    // The rest of the call, which is part of what gets sent and is otherwise
+    // spread across two other tabs.
+    const extras: string[] = [];
+    extras.push(
+      "Connection: " +
+        (preview.connectionId
+          ? (connections.find((c) => c.id === preview.connectionId) || ({} as any)).name ||
+            preview.connectionId
+          : "the one you are chatting with"),
+    );
+    extras.push(
+      "Thinking: " +
+        (!preview.reasoning
+          ? "whatever your connection is set to"
+          : preview.reasoning.source === "off"
+            ? "off"
+            : "on, " + String(preview.reasoning.effort || "medium") + " effort"),
+    );
+    extras.push(
+      "Samplers: " +
+        (preview.parameters
+          ? Object.keys(preview.parameters)
+              .map((k) => k + " " + preview.parameters[k])
+              .join(", ")
+          : "left to the connection"),
+    );
+    wrap.appendChild(el("div", "arf-well arf-dim", extras.join("\n")));
     return wrap;
   }
 
-  function samplerRow(s: { id: string; label: string; min: number; max: number; step: string; hint: string }): HTMLElement {
+  function previewAsText(p: any): string {
+    const msgs = Array.isArray(p && p.messages) ? p.messages : [];
+    return msgs
+      .map((m: any) => "[" + String((m && m.role) || "") + "]\n" + String((m && m.content) || ""))
+      .join("\n\n");
+  }
+
+  // ---- Model ----
+  function buildConnectionCard(): HTMLElement {
+    const wrap = card(
+      "Which model refines",
+      "A refine is a second model call on every reply, so these decide what it costs. They default to the cheap answer.",
+    );
+    for (const f of COST_FIELDS) {
+      if (f.needs && cfg.thinkingMode !== f.needs) continue;
+      wrap.appendChild(fieldRow(f));
+    }
+    return wrap;
+  }
+
+  function buildSamplerCard(): HTMLElement {
+    const set = SAMPLER_FIELDS.filter(
+      (s) => cfg.samplers && cfg.samplers[s.id] != null && cfg.samplers[s.id] !== "",
+    ).length;
+    const wrap = card(
+      "Samplers",
+      "Left blank, the connection's own preset decides, which is what you want unless you have a reason. Fill one in and it is sent with the refine and only with the refine: your chat is not affected.",
+      set ? set + " set" : "all default",
+    );
+    wrap.appendChild(
+      fold("Sampler values", (body) => {
+        for (const s of SAMPLER_FIELDS) body.appendChild(samplerRow(s));
+        const clear = button("Clear them all", false);
+        clear.addEventListener("click", () => {
+          cfg.samplers = {};
+          persist(true);
+          paint();
+        });
+        const clearRow = el("div", "arf-row");
+        clearRow.appendChild(clear);
+        body.appendChild(clearRow);
+      }),
+    );
+    return wrap;
+  }
+
+  function samplerRow(s: {
+    id: string;
+    label: string;
+    min: number;
+    max: number;
+    step: string;
+    hint: string;
+  }): HTMLElement {
     const wrap = el("div", "arf-col");
     wrap.appendChild(el("div", "arf-lab", s.label));
     const box = document.createElement("input");
@@ -1300,18 +1659,361 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // ---- Limits ----
+  function buildGuardCard(): HTMLElement {
+    const wrap = card(
+      "What it refuses to save",
+      "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired.",
+    );
+    for (const f of LIMIT_FIELDS.filter((f) => f.key === "maxGrowthPct" || f.key === "minShrinkPct"))
+      wrap.appendChild(fieldRow(f));
+    return wrap;
+  }
+
+  function buildSafetyCard(): HTMLElement {
+    const wrap = card("Before it writes");
+    for (const f of LIMIT_FIELDS.filter(
+      (f) => f.key !== "maxGrowthPct" && f.key !== "minShrinkPct" && f.key !== "toast",
+    ))
+      wrap.appendChild(fieldRow(f));
+    return wrap;
+  }
+
+  // ---- Log ----
+  // What is happening right now, which the panel could not say before: it knew
+  // it was busy and nothing else, so a refine that took forty seconds looked
+  // the same as one that had quietly failed.
+  function buildLiveCard(): HTMLElement {
+    const st = statusLine();
+    const wrap = card("Right now", undefined, st.tone === "busy" ? "working" : st.text);
+    const rows: Array<[string, string]> = [];
+    rows.push(["Chat", lastChatId == null ? "none open" : String(lastChatId).slice(0, 8)]);
+    rows.push(["Refines saved", String(tally.saved)]);
+    rows.push(["Rewrites dropped", String(tally.dropped)]);
+    rows.push(["Put back", String(tally.undone)]);
+    if (lastRun)
+      rows.push([
+        "Last refine took",
+        (lastRun.ms / 1000).toFixed(1) + "s, " + (lastRun.ok ? "saved" : "dropped"),
+      ]);
+    for (const [k, v] of rows) {
+      const r = el("div", "arf-between");
+      r.appendChild(el("span", "arf-note", k));
+      r.appendChild(el("span", "arf-lab", v));
+      wrap.appendChild(r);
+    }
+    if (drops.size) {
+      wrap.appendChild(el("div", "arf-rule"));
+      wrap.appendChild(el("div", "arf-note", "Why rewrites were dropped"));
+      const seen = Array.from(drops.entries()).sort((a, b) => b[1] - a[1]);
+      for (const [why, n] of seen.slice(0, 6)) {
+        const r = el("div", "arf-between");
+        r.appendChild(el("span", "arf-note arf-grow", why));
+        r.appendChild(el("span", "arf-pill", String(n)));
+        wrap.appendChild(r);
+      }
+    }
+    return wrap;
+  }
+
+  function buildActivityCard(): HTMLElement {
+    const wrap = card("What it has been doing", undefined, activity.length ? String(activity.length) : undefined);
+    if (!activity.length) {
+      wrap.appendChild(note("Nothing yet."));
+      return wrap;
+    }
+    for (const a of activity) {
+      const row = el("div", "arf-row arf-note");
+      row.appendChild(el("span", "arf-when", new Date(a.at).toTimeString().slice(0, 8)));
+      row.appendChild(el("span", "arf-said arf-grow" + (a.good ? "" : " arf-dim"), a.text));
+      wrap.appendChild(row);
+    }
+    return wrap;
+  }
+
+  function buildDebugCard(): HTMLElement {
+    const wrap = card(
+      "Reporting a problem",
+      "Everything somebody would otherwise have to ask you for, in one paste. Your rules and your writing are not in it: it carries settings and counts, not text.",
+    );
+    const row = el("div", "arf-row");
+    const copy = button("Copy debug info", false);
+    copy.addEventListener("click", () => {
+      copyText(debugText());
+      toast("Copied.", true);
+      log("copied debug info", true);
+    });
+    const clear = button("Clear the log", false);
+    clear.addEventListener("click", () => {
+      activity.length = 0;
+      drops.clear();
+      tally.saved = 0;
+      tally.dropped = 0;
+      tally.undone = 0;
+      paint();
+    });
+    row.appendChild(copy);
+    row.appendChild(clear);
+    wrap.appendChild(row);
+    wrap.appendChild(fold("What it says", (body) => {
+      body.appendChild(el("div", "arf-well arf-scroll", debugText()));
+    }));
+    return wrap;
+  }
+
+  // Settings and counts, never your writing. A bug report should be safe to
+  // paste in public, and a rules box can hold anything.
+  function debugText(): string {
+    const lines: string[] = [];
+    lines.push("Auto Refine " + VERSION);
+    lines.push("when: " + new Date().toISOString());
+    lines.push("");
+    lines.push("on: " + (cfg.enabled ? "yes" : "no") + ", automatic: " + (cfg.refineOn ? "yes" : "no"));
+    lines.push("chat open: " + (lastChatId == null ? "no" : "yes") + ", off in this chat: " + (chatIsOff(lastChatId) ? "yes" : "no"));
+    lines.push("chats switched off: " + chatsOff.length);
+    lines.push(
+      "rules: " +
+        String(cfg.rules || "").length +
+        " chars, structure rules: " +
+        String(cfg.structureRules || "").length +
+        " chars",
+    );
+    lines.push("connection: " + (cfg.connectionId ? "picked" : "the chat's own") + ", connections seen: " + connections.length);
+    lines.push(
+      "thinking: " +
+        cfg.thinkingMode +
+        (cfg.thinkingMode === "custom" ? " (" + cfg.thinkingEffort + ")" : "") +
+        ", timeout: " + cfg.timeoutSecs + "s",
+    );
+    lines.push("run-up messages: " + cfg.contextMessages);
+    const list = blockList();
+    lines.push("blocks: " + list.map((b) => b.id + (b.on ? "" : "(off)") + ":" + b.role).join(" > "));
+    const set = SAMPLER_FIELDS.filter((s) => cfg.samplers && cfg.samplers[s.id] != null && cfg.samplers[s.id] !== "");
+    lines.push("samplers: " + (set.length ? set.map((s) => s.id + "=" + cfg.samplers[s.id]).join(", ") : "all default"));
+    lines.push(
+      "limits: grow " + cfg.maxGrowthPct + "%, shrink " + cfg.minShrinkPct + "%, keep original " +
+        (cfg.keepOriginal ? "yes" : "no") + ", ask first " + (cfg.confirmBeforeSave ? "yes" : "no"),
+    );
+    lines.push("your own messages: " + (cfg.refineUserMessages ? "button may refine them" : "never"));
+    lines.push("input bar refine: " + (cfg.inputRefine ? "on" : "off") + ", widget: " + (cfg.widgetOn ? "on" : "off") + ", sound: " + (cfg.soundOn ? "on" : "off"));
+    lines.push("");
+    lines.push("saved: " + tally.saved + ", dropped: " + tally.dropped + ", put back: " + tally.undone);
+    if (lastRun) lines.push("last refine: " + (lastRun.ms / 1000).toFixed(1) + "s, " + (lastRun.ok ? "saved" : "dropped: " + lastRun.why));
+    if (drops.size) {
+      lines.push("");
+      lines.push("drops by reason:");
+      for (const [why, n] of Array.from(drops.entries()).sort((a, b) => b[1] - a[1]))
+        lines.push("  " + n + "x " + why);
+    }
+    if (activity.length) {
+      lines.push("");
+      lines.push("recent:");
+      for (const a of activity.slice(0, 12))
+        lines.push("  " + new Date(a.at).toTimeString().slice(0, 8) + " " + a.text);
+    }
+    return lines.join("\n");
+  }
+
+  function copyText(text: string) {
+    try {
+      const nav: any = (globalThis as any).navigator;
+      if (nav && nav.clipboard && typeof nav.clipboard.writeText === "function") {
+        nav.clipboard.writeText(text).catch(() => fallbackCopy(text));
+        return;
+      }
+    } catch (_) {}
+    fallbackCopy(text);
+  }
+
+  // For a page without the clipboard API, or one that refuses it because the
+  // click was not close enough to a user gesture.
+  function fallbackCopy(text: string) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        (document as any).execCommand("copy");
+      } catch (_) {}
+      document.body.removeChild(ta);
+    } catch (_) {}
+  }
+
+  // ---- Setup ----
+  function buildChatCard(): HTMLElement {
+    const wrap = card("This chat");
+    const top = el("div", "arf-between");
+    top.appendChild(el("span", "arf-lab", "Auto Refine here"));
+    const known = lastChatId != null;
+    const off = chatIsOff(lastChatId);
+    const act = button(off ? "Turn on here" : "Turn off here", false);
+    act.disabled = !known;
+    act.style.opacity = known ? "1" : "0.45";
+    act.style.cursor = known ? "pointer" : "not-allowed";
+    act.addEventListener("click", () => setChatOff(lastChatId, !off));
+    top.appendChild(act);
+    wrap.appendChild(top);
+    wrap.appendChild(
+      note(
+        !known
+          ? "No chat is open, so there is nothing to switch here."
+          : off
+            ? "Auto Refine is switched off in this chat. Every other chat carries on as it is."
+            : "Leave one chat completely alone while every other chat carries on.",
+      ),
+    );
+    if (chatsOff.length) {
+      const row = el("div", "arf-between");
+      row.appendChild(el("span", "arf-note arf-grow", chatsOff.length + " chat" + (chatsOff.length === 1 ? "" : "s") + " switched off"));
+      const all = button("Turn them all back on", false);
+      all.addEventListener("click", () => {
+        chatsOff = [];
+        saveChatsOff();
+        paint();
+      });
+      row.appendChild(all);
+      wrap.appendChild(row);
+    }
+    return wrap;
+  }
+
+  function buildAlertCard(): HTMLElement {
+    const wrap = card("When a refine lands", "How you find out, other than the tab's badge.");
+    wrap.appendChild(
+      fieldRow({
+        key: "toast",
+        label: "Show a pop-up",
+        type: "bool",
+        hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
+      }),
+    );
+    wrap.appendChild(
+      fieldRow({
+        key: "soundOn",
+        label: "Play a sound",
+        type: "bool",
+        hint: "Off by default. With no sound of your own it plays a short built-in blip, which is synthesised rather than shipped as a file.",
+      }),
+    );
+    if (cfg.soundOn) {
+      wrap.appendChild(
+        fold("Your own sound", (body) => {
+          body.appendChild(
+            note(
+              "Any short audio file. It is held with your settings as text, so keep it small: anything over half a megabyte is refused.",
+            ),
+          );
+          const row = el("div", "arf-row");
+          const picker = document.createElement("input");
+          picker.type = "file";
+          picker.accept = "audio/*";
+          picker.style.display = "none";
+          picker.addEventListener("change", () => {
+            const file = picker.files && picker.files[0];
+            picker.value = "";
+            if (!file) return;
+            if (file.size > SOUND_MAX) {
+              soundSaid = "That file is " + Math.round(file.size / 1024) + "KB, over the 512KB limit.";
+              paint();
+              return;
+            }
+            readFileAsDataUrl(file, (url) => {
+              if (!url) {
+                soundSaid = "That file could not be read.";
+              } else {
+                cfg.soundUrl = url;
+                persist(true);
+                soundSaid = "Using " + file.name + ".";
+              }
+              paint();
+            });
+          });
+          const pick = button(cfg.soundUrl ? "Choose another" : "Choose a file", false);
+          pick.addEventListener("click", () => {
+            try {
+              picker.click();
+            } catch (_) {
+              soundSaid = "The browser would not open a file picker.";
+              paint();
+            }
+          });
+          const tryIt = button("Play it", false);
+          tryIt.addEventListener("click", () => ping(true));
+          row.appendChild(pick);
+          row.appendChild(tryIt);
+          if (cfg.soundUrl) {
+            const drop = button("Back to the built-in", false);
+            drop.addEventListener("click", () => {
+              cfg.soundUrl = "";
+              persist(true);
+              soundSaid = "Back to the built-in blip.";
+              paint();
+            });
+            row.appendChild(drop);
+          }
+          row.appendChild(picker);
+          body.appendChild(row);
+          body.appendChild(
+            fieldRow({
+              key: "soundVolume",
+              label: "How loud (%)",
+              type: "num",
+              min: 0,
+              max: 100,
+              hint: "",
+            }),
+          );
+          if (soundSaid) body.appendChild(note(soundSaid));
+        }),
+      );
+    }
+    return wrap;
+  }
+
+  // Ways in other than the drawer. Both are off until asked for, because an
+  // extension that adds a floating button and an input bar row on install is
+  // one that redecorated somebody's screen without asking.
+  function buildReachCard(): HTMLElement {
+    const wrap = card("Ways to reach it", "The drawer tab is always there. These are extra.");
+    wrap.appendChild(
+      fieldRow({
+        key: "widgetOn",
+        label: "A floating button",
+        type: "bool",
+        hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Needs the interface panels permission.",
+      }),
+    );
+    if (cfg.widgetOn && widgetFailed)
+      wrap.appendChild(
+        note("The floating button could not be created. Check that the ui_panels permission is granted."),
+      );
+    wrap.appendChild(
+      fieldRow({
+        key: "inputRefine",
+        label: "Refine what I am typing",
+        type: "bool",
+        hint: "Adds a row to the chat input's Extras menu that rewrites the text sitting in your input box, before you send it. It changes the box you are typing in, so it is off until you ask for it.",
+      }),
+    );
+    if (cfg.inputRefine)
+      wrap.appendChild(
+        note(
+          "It reads and writes the input box on the page, which is the one part of this extension that depends on how Lumiverse is laid out. If a Lumiverse update ever moves the box, this is what stops working, and nothing else does.",
+        ),
+      );
+    return wrap;
+  }
+
   // ---- carrying a setup somewhere else ----
   // One file with everything in it: the rules, the layout, the samplers, the
   // lot. Not the chats you switched off, which name chats that do not exist on
   // the machine reading the file.
-  function buildTransfer(): HTMLElement {
-    const wrap = el("div", "arf-col");
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("Import and export"));
-    wrap.appendChild(
-      note(
-        "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back.",
-      ),
+  function buildTransferCard(): HTMLElement {
+    const wrap = card(
+      "Your whole setup",
+      "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back.",
     );
 
     const row = el("div", "arf-row");
@@ -1357,6 +2059,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(picker);
     wrap.appendChild(row);
     if (transferSaid) wrap.appendChild(note(transferSaid));
+    // The other half of the same subject: this card is about your setup as a
+    // whole, and throwing it away belongs next to carrying it somewhere.
+    buildResetInto(wrap);
     return wrap;
   }
 
@@ -1404,6 +2109,12 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
         cfg.samplers = clean;
         took++;
+      } else if (key === "soundUrl") {
+        // A sound arrives as a data URL and could be anything. Only audio, and
+        // only up to the same cap the picker enforces.
+        if (typeof got !== "string") continue;
+        cfg.soundUrl = /^data:audio\//.test(got) && got.length <= SOUND_MAX * 2 ? got : "";
+        took++;
       } else if (typeof want === "boolean") {
         cfg[key] = !!got;
         took++;
@@ -1422,6 +2133,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (!took) return "Nothing in that file matched a setting here.";
     persist(true);
+    syncExtras();
     return "Imported " + took + " setting" + (took === 1 ? "" : "s") + ".";
   }
 
@@ -1460,52 +2172,556 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
-  function buildChatSwitch(): HTMLElement {
-    const wrap = el("div", "display:flex;flex-direction:column;gap:5px");
-    wrap.setAttribute("data-arf-chat-switch", "1");
-    wrap.appendChild(rule());
-    const top = el("div", "arf-between");
-    top.appendChild(el("span", "arf-lab", "This chat"));
-    const known = lastChatId != null;
-    const off = chatIsOff(lastChatId);
-    const act = button(off ? "Turn on here" : "Turn off here", false);
-    act.disabled = !known;
-    act.style.opacity = known ? "1" : "0.45";
-    act.style.cursor = known ? "pointer" : "not-allowed";
-    act.addEventListener("click", () => setChatOff(lastChatId, !off));
-    top.appendChild(act);
-    wrap.appendChild(top);
+  function readFileAsDataUrl(file: any, cb: (url: string | null) => void): void {
+    try {
+      const reader = new FileReader();
+      reader.onload = () => cb(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => cb(null);
+      reader.readAsDataURL(file);
+    } catch (_) {
+      cb(null);
+    }
+  }
+
+  // ---- presets ----
+  // A named copy of the refining setup, so somebody who writes one set of rules
+  // for prose and another for dialogue can move between them without keeping
+  // both in a text file somewhere.
+  type Preset = { name: string; at: number; settings: Record<string, any> };
+  let presets: Preset[] = [];
+  let presetPick = "";
+  let presetName = "";
+  let presetSaid: string | null = null;
+
+  function loadPresets() {
+    try {
+      if (typeof localStorage === "undefined") return;
+      const raw = localStorage.getItem(PRESETS_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(list))
+        presets = list
+          .filter((x: any) => x && typeof x === "object" && x.name)
+          .slice(0, 60)
+          .map((x: any) => ({
+            name: String(x.name),
+            at: Number(x.at) || 0,
+            settings: x.settings && typeof x.settings === "object" ? x.settings : {},
+          }));
+    } catch (_) {
+      presets = [];
+    }
+  }
+  loadPresets();
+
+  function savePresets() {
+    try {
+      if (typeof localStorage !== "undefined")
+        localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+    } catch (_) {}
+  }
+
+  // Only the keys a preset owns, and each one copied rather than referenced, or
+  // editing your rules would quietly edit the preset you saved them from.
+  function presetFromNow(): Record<string, any> {
+    const out: Record<string, any> = {};
+    for (const k of PRESET_KEYS) {
+      if (k === "blocks") out.blocks = blockList().map((b) => ({ ...b }));
+      else if (k === "samplers") out.samplers = Object.assign({}, cfg.samplers || {});
+      else out[k] = cfg[k];
+    }
+    return out;
+  }
+
+  function applyPreset(p: Preset): number {
+    let took = 0;
+    for (const k of PRESET_KEYS) {
+      if (!(k in p.settings)) continue;
+      const got = p.settings[k];
+      if (k === "blocks") {
+        if (!Array.isArray(got)) continue;
+        cfg.blocks = got
+          .filter((b: any) => b && typeof b === "object" && b.id)
+          .slice(0, 40)
+          .map((b: any) => ({
+            id: String(b.id),
+            on: b.on !== false,
+            role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
+            text: b.text == null ? undefined : String(b.text),
+            name: b.name == null ? undefined : String(b.name),
+          }));
+        took++;
+      } else if (k === "samplers") {
+        if (!got || typeof got !== "object" || Array.isArray(got)) continue;
+        const clean: Record<string, number> = {};
+        for (const f of SAMPLER_FIELDS) {
+          const v = Number(got[f.id]);
+          if (got[f.id] === "" || got[f.id] == null || !Number.isFinite(v)) continue;
+          clean[f.id] = Math.min(f.max, Math.max(f.min, v));
+        }
+        cfg.samplers = clean;
+        took++;
+      } else if (k === "contextMessages") {
+        const v = Number(got);
+        if (Number.isFinite(v)) {
+          cfg.contextMessages = Math.min(40, Math.max(0, Math.round(v)));
+          took++;
+        }
+      } else if (typeof got === "string") {
+        cfg[k] = got;
+        took++;
+      }
+    }
+    if (took) persist(true);
+    return took;
+  }
+
+  function buildPresetCard(): HTMLElement {
+    const wrap = card(
+      "Presets",
+      "A named copy of your rules, your prompt layout, your run-up count and your samplers. Everything else stays as you have it, whichever preset you load. A connection is not saved, since an id from another account names nothing here.",
+      presets.length ? String(presets.length) : undefined,
+    );
+
+    const sel = document.createElement("select");
+    sel.className = "arf-field";
+    sel.setAttribute("aria-label", "Saved presets");
+    sel.setAttribute("data-arf-field", "presetPick");
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = presets.length ? "Pick a preset" : "No presets saved yet";
+    sel.appendChild(none);
+    for (const p of presets) {
+      const op = document.createElement("option");
+      op.value = p.name;
+      op.textContent = p.name;
+      sel.appendChild(op);
+    }
+    sel.value = presetPick;
+    sel.addEventListener("change", () => {
+      presetPick = sel.value;
+      presetName = sel.value;
+      presetSaid = null;
+      paint();
+    });
+    wrap.appendChild(sel);
+
+    const nameIn = document.createElement("input");
+    nameIn.type = "text";
+    nameIn.className = "arf-field";
+    nameIn.placeholder = "A name for this setup";
+    nameIn.value = presetName;
+    nameIn.setAttribute("aria-label", "Preset name");
+    nameIn.setAttribute("data-arf-field", "presetName");
+    nameIn.addEventListener("input", () => {
+      presetName = nameIn.value;
+    });
+    wrap.appendChild(nameIn);
+
+    const chosen = () => presets.find((p) => p.name === presetPick) || null;
+    const row = el("div", "arf-row");
+
+    const load = button("Load", false);
+    load.disabled = !chosen();
+    load.style.opacity = load.disabled ? "0.45" : "1";
+    load.addEventListener("click", () => {
+      const p = chosen();
+      if (!p) return;
+      const took = applyPreset(p);
+      presetSaid = took
+        ? "Loaded " + p.name + "."
+        : "There was nothing in that preset to load.";
+      log("loaded the preset " + p.name, true);
+      paint();
+    });
+
+    const asNew = button("Save as new", false);
+    asNew.addEventListener("click", () => {
+      const name = String(presetName || "").trim();
+      if (!name) {
+        presetSaid = "Give it a name first.";
+        paint();
+        return;
+      }
+      if (presets.some((p) => p.name === name)) {
+        presetSaid = "There is already a preset called that. Use Update selected, or pick another name.";
+        paint();
+        return;
+      }
+      presets.push({ name: name, at: Date.now(), settings: presetFromNow() });
+      presets = presets.slice(-60);
+      savePresets();
+      presetPick = name;
+      presetSaid = "Saved " + name + ".";
+      paint();
+    });
+
+    const update = button("Update selected", false);
+    update.disabled = !chosen();
+    update.style.opacity = update.disabled ? "0.45" : "1";
+    update.addEventListener("click", () => {
+      const p = chosen();
+      if (!p) return;
+      p.settings = presetFromNow();
+      p.at = Date.now();
+      savePresets();
+      presetSaid = "Updated " + p.name + ".";
+      paint();
+    });
+
+    const rename = button("Rename selected", false);
+    rename.disabled = !chosen();
+    rename.style.opacity = rename.disabled ? "0.45" : "1";
+    rename.addEventListener("click", () => {
+      const p = chosen();
+      const name = String(presetName || "").trim();
+      if (!p) return;
+      if (!name) {
+        presetSaid = "Put the new name in the box first.";
+        paint();
+        return;
+      }
+      if (name !== p.name && presets.some((x) => x.name === name)) {
+        presetSaid = "There is already a preset called that.";
+        paint();
+        return;
+      }
+      p.name = name;
+      savePresets();
+      presetPick = name;
+      presetSaid = "Renamed.";
+      paint();
+    });
+
+    const drop = button("Delete", false);
+    drop.disabled = !chosen();
+    drop.style.opacity = drop.disabled ? "0.45" : "1";
+    drop.addEventListener("click", () => {
+      const p = chosen();
+      if (!p) return;
+      presets = presets.filter((x) => x !== p);
+      savePresets();
+      presetPick = "";
+      presetName = "";
+      presetSaid = "Deleted " + p.name + ".";
+      paint();
+    });
+
+    row.appendChild(load);
+    row.appendChild(asNew);
+    row.appendChild(update);
+    row.appendChild(rename);
+    row.appendChild(drop);
+    wrap.appendChild(row);
+    if (presetSaid) wrap.appendChild(note(presetSaid));
+    return wrap;
+  }
+
+  // ---- putting everything back ----
+  function buildResetInto(wrap: HTMLElement) {
+    wrap.appendChild(el("div", "arf-rule"));
+    wrap.appendChild(el("div", "arf-lab", "Start again"));
     wrap.appendChild(
       note(
-        !known
-          ? "No chat is open, so there is nothing to switch here."
-          : off
-            ? "Auto Refine is switched off in this chat. Every other chat carries on as it is."
-            : "Leave one chat completely alone while every other chat carries on.",
+        "Puts every setting back to the value a fresh install has. Your presets are kept unless you say otherwise, and so is the list of chats you switched off.",
       ),
     );
-    return wrap;
+    const row = el("div", "arf-row");
+    const go = button("Reset all settings", false);
+    go.addEventListener("click", () => resetAll(false));
+    const all = button("Reset everything, presets too", false);
+    all.addEventListener("click", () => resetAll(true));
+    row.appendChild(go);
+    row.appendChild(all);
+    wrap.appendChild(row);
+    if (resetSaid) wrap.appendChild(note(resetSaid));
   }
 
-  function buildActivity(): HTMLElement {
-    const wrap = el("div", "arf-col");
-    wrap.appendChild(rule());
-    wrap.appendChild(heading("What it has been doing"));
-    if (!activity.length) {
-      wrap.appendChild(note("Nothing yet."));
-      return wrap;
+  let resetSaid: string | null = null;
+
+  async function resetAll(alsoPresets: boolean) {
+    // A confirmation, because this is the one control here that throws work
+    // away. Everything else on the panel is a switch or a box you can put back.
+    const title = alsoPresets ? "Reset everything?" : "Reset all settings?";
+    const message = alsoPresets
+      ? "Every setting goes back to its default and every saved preset is deleted. There is no undo."
+      : "Every setting goes back to its default. Your presets are kept.";
+    let yes = false;
+    let asked = false;
+    try {
+      if (ctx.ui && typeof ctx.ui.showConfirm === "function") {
+        const answer = await ctx.ui.showConfirm({
+          title: title,
+          message: message,
+          variant: "danger",
+          confirmLabel: "Reset",
+        });
+        asked = true;
+        yes = !!(answer && answer.confirmed);
+      }
+    } catch (_) {
+      asked = false;
     }
-    for (const a of activity) {
-      const row = el("div", "arf-row arf-note");
-      row.appendChild(el("span", "arf-when", new Date(a.at).toTimeString().slice(0, 5)));
-      row.appendChild(el("span", "arf-said" + (a.good ? "" : " arf-dim"), a.text));
-      wrap.appendChild(row);
+    if (!asked) {
+      // A host with no confirm dialog, or one that refused. Ask in the panel
+      // rather than resetting on a single tap, which is the outcome this whole
+      // branch exists to prevent.
+      if (!resetArmed) {
+        resetArmed = true;
+        resetSaid = "Press it again to confirm. This cannot be undone.";
+        paint();
+        setTimeout(() => {
+          if (!resetArmed) return;
+          resetArmed = false;
+          resetSaid = null;
+          paint();
+        }, 8000);
+        return;
+      }
+      yes = true;
     }
-    return wrap;
+    if (!yes) {
+      resetArmed = false;
+      return;
+    }
+    resetArmed = false;
+    // Which tab you were looking at is not a setting anybody means to reset,
+    // and putting it back would throw you off the page you pressed the button
+    // on, which reads as the panel breaking.
+    const here = tabNow();
+    for (const k of Object.keys(CONFIG)) cfg[k] = (CONFIG as any)[k];
+    cfg.blocks = [];
+    cfg.samplers = {};
+    cfg.tab = here;
+    if (alsoPresets) {
+      presets = [];
+      presetPick = "";
+      presetName = "";
+      savePresets();
+    }
+    preview = null;
+    persist(true);
+    resetSaid = alsoPresets ? "Everything is back to its defaults." : "Settings are back to their defaults.";
+    log("reset the settings", true);
+    paint();
+  }
+  let resetArmed = false;
+
+  // ---- the sound ----
+  // A short two-note blip, synthesised rather than shipped, so the repository
+  // holds no audio file and there is still something to hear with no setup. A
+  // reader's own file replaces it.
+  function beep(vol: number) {
+    try {
+      const g: any = globalThis as any;
+      const Ctx = g.AudioContext || g.webkitAudioContext;
+      if (!Ctx) return;
+      const ac = new Ctx();
+      const at = ac.currentTime;
+      const gain = ac.createGain();
+      gain.connect(ac.destination);
+      gain.gain.setValueAtTime(0.0001, at);
+      const play = (freq: number, from: number, len: number) => {
+        const osc = ac.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, at + from);
+        osc.connect(gain);
+        osc.start(at + from);
+        osc.stop(at + from + len);
+      };
+      // Ramped rather than switched, or it clicks on the way in and out.
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * 0.22), at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.34);
+      play(660, 0, 0.12);
+      play(880, 0.12, 0.2);
+      setTimeout(() => {
+        try {
+          ac.close();
+        } catch (_) {}
+      }, 900);
+    } catch (_) {}
   }
 
-  // Read off the page at the moment it is asked for, so nothing is held between
-  // replies.
+  function ping(force?: boolean) {
+    if (!cfg.soundOn && !force) return;
+    const vol = Math.min(1, Math.max(0, Number(cfg.soundVolume) / 100 || 0.6));
+    try {
+      const url = String(cfg.soundUrl || "").trim();
+      if (url) {
+        const a: any = new (globalThis as any).Audio(url);
+        a.volume = vol;
+        // A browser that has not seen a gesture on this page refuses to play,
+        // which is a refusal rather than a fault, so it is not reported.
+        const p = a.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+        return;
+      }
+    } catch (_) {}
+    beep(vol);
+  }
+
+  // ---- refining what you are typing ----
+  // The one part of this extension that reaches into the page. Everything else
+  // goes through the host's own APIs; there is no API for the input box, so
+  // this finds it, and this is what breaks if Lumiverse ever moves it.
+  const INPUT_PICKS = [
+    'textarea[data-component="ChatInput"]',
+    '[data-component="ChatInput"] textarea',
+    '[data-component="InputBar"] textarea',
+    'form textarea',
+    "textarea",
+  ];
+
+  function composer(): any | null {
+    try {
+      for (const pick of INPUT_PICKS) {
+        const found = document.querySelectorAll(pick);
+        // The last one on the page, since a panel of ours is also a textarea
+        // and the chat input is below everything it could be confused with.
+        for (let i = found.length - 1; i >= 0; i--) {
+          const node: any = found[i];
+          if (!node || node.disabled || node.readOnly) continue;
+          // Never our own panel, whichever selector found it.
+          if (node.closest && node.closest(".arf")) continue;
+          const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+          if (box && (!box.width || !box.height)) continue;
+          return node;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Written through the native setter, then announced as an input event. A
+  // plain assignment sets the DOM value and leaves the framework holding the
+  // old one, so the box shows the new text and sends the old.
+  function setComposer(node: any, text: string): boolean {
+    try {
+      const proto = Object.getPrototypeOf(node);
+      const desc = Object.getOwnPropertyDescriptor(proto, "value");
+      if (desc && desc.set) desc.set.call(node, text);
+      else node.value = text;
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  let inputWaiting: string | null = null;
+  let inputNode: any = null;
+  function refineInput() {
+    const node = composer();
+    if (!node) {
+      toast("Could not find the input box on this page.", true);
+      log("could not find the input box");
+      return;
+    }
+    const text = String(node.value || "").trim();
+    if (!text) {
+      toast("There is nothing in the input box to refine.", true);
+      return;
+    }
+    if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
+      toast("Write some rules first, or there is nothing to apply.", true);
+      return;
+    }
+    if (inputWaiting) return;
+    inputNode = node;
+    const id = newId();
+    inputWaiting = id;
+    log("refining what you are typing");
+    // The same path the Try it box uses: nothing is saved to the chat, the
+    // answer comes back and this puts it in the box. asUser is what tells the
+    // model it is looking at the player's own voice.
+    send({ type: "try_refine", requestId: id, text: text, asUser: true });
+  }
+
+  // ---- the floating button and the input bar row ----
+  let widget: any = null;
+  let inputAction: any = null;
+
+  function dropWidget() {
+    try {
+      widget && widget.destroy && widget.destroy();
+    } catch (_) {}
+    widget = null;
+  }
+
+  function raiseWidget() {
+    if (widget) return;
+    try {
+      const d = 44;
+      widget = (ctx as any).ui.createFloatWidget({
+        width: d,
+        height: d,
+        initialPosition: { x: 16, y: 140 },
+        snapToEdge: true,
+        tooltip: "Refine the latest reply",
+        chromeless: true,
+      });
+    } catch (_) {
+      // ui_panels is not granted. The extension is fine without it; the button
+      // is the only thing missing, and the panel says so rather than the
+      // switch silently doing nothing.
+      widget = null;
+      widgetFailed = true;
+      log("could not create the floating button. Check that the ui_panels permission is granted.");
+      return;
+    }
+    widgetFailed = false;
+    try {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("aria-label", "Refine the latest reply");
+      b.style.cssText =
+        "width:100%;height:100%;border-radius:50%;cursor:pointer;display:flex;" +
+        "align-items:center;justify-content:center;border:1px solid " +
+        "var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "background:var(--lumiverse-bg-elevated,rgba(35,30,48,.9));" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "box-shadow:var(--lumiverse-shadow-sm,0 2px 8px rgba(0,0,0,.2))";
+      b.innerHTML = refineIcon();
+      b.addEventListener("click", () => refineNow());
+      widget.root.appendChild(b);
+    } catch (_) {}
+  }
+
+  function syncExtras() {
+    // The floating button.
+    if (cfg.widgetOn && cfg.enabled) raiseWidget();
+    else dropWidget();
+
+    // The Extras row that refines what you are typing.
+    const want = !!cfg.inputRefine && !!cfg.enabled;
+    if (want && !inputAction) {
+      try {
+        if (ctx.ui && typeof ctx.ui.registerInputBarAction === "function") {
+          inputAction = ctx.ui.registerInputBarAction({
+            id: "auto-refine-input",
+            label: "Refine what I am typing",
+            iconSvg: refineIcon(),
+          });
+          if (inputAction && typeof inputAction.onClick === "function")
+            inputAction.onClick(() => refineInput());
+        }
+      } catch (_) {
+        inputAction = null;
+      }
+    } else if (!want && inputAction) {
+      try {
+        inputAction.destroy && inputAction.destroy();
+      } catch (_) {}
+      inputAction = null;
+    }
+  }
+  disposers.push(() => {
+    dropWidget();
+    try {
+      inputAction && inputAction.destroy && inputAction.destroy();
+    } catch (_) {}
+    inputAction = null;
+  });
+
   function lastRenderedReply(): string {
     try {
       if (typeof document === "undefined") return "";
@@ -1532,7 +2748,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       log("nothing to do: no rules are written yet");
       return;
     }
-    busy = true;
+    markBusy(true);
     paint();
     send({
       type: "refine_now",
@@ -1572,7 +2788,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (p.chatId) lastChatId = p.chatId;
         if (p.messageId) lastMessageId = p.messageId;
         if (cfg.enabled && cfg.refineOn && !p.error && !chatIsOff(p.chatId)) {
-          busy = true;
+          markBusy(true);
           paint();
         }
       }),
@@ -1599,7 +2815,9 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "refined") {
-            busy = false;
+            markBusy(false);
+            tally.saved++;
+            lastRun = { ms: lastRunMs, ok: true, why: "" };
             // A refine only happens in the chat the reader is in, so this is
             // also the chat. Adopted when nothing else has said so yet, or the
             // panel would hold a refine it could not show anybody.
@@ -1613,28 +2831,65 @@ export function setup(ctx: Ctx, overrides?: any) {
             // The badge is the point of the tab being closable: something
             // happened to your writing and you can see that without opening it.
             setBadge("1");
-            log("refined a reply", true);
+            log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
             toast("Reply refined.");
+            ping();
+            paint();
             return;
           }
           if (msg.type === "refine_skipped") {
-            busy = false;
-            log("left a reply alone: " + String(msg.why || "no reason given"));
+            markBusy(false);
+            const why = String(msg.why || "no reason given");
+            tally.dropped++;
+            countDrop(why);
+            lastRun = { ms: lastRunMs, ok: false, why: why };
+            log("left a reply alone: " + why);
+            paint();
             return;
           }
           if (msg.type === "refine_result") {
-            busy = false;
+            markBusy(false);
             if (msg.ok) {
-              log("refined a reply on request", true);
+              lastRun = { ms: lastRunMs, ok: true, why: "" };
+              log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
               toast("Reply refined.", true);
             } else {
-              log("could not refine: " + String(msg.why || "no reason given"));
-              toast("Not refined: " + String(msg.why || "no reason given"), true);
+              const why = String(msg.why || "no reason given");
+              tally.dropped++;
+              countDrop(why);
+              lastRun = { ms: lastRunMs, ok: false, why: why };
+              log("could not refine: " + why);
+              toast("Not refined: " + why, true);
             }
             paint();
             return;
           }
           if (msg.type === "try_result") {
+            // The input bar and the Try it box use the same request, so the
+            // waiting id is what says where the answer goes.
+            if (inputWaiting === msg.requestId) {
+              inputWaiting = null;
+              const node = inputNode || composer();
+              inputNode = null;
+              if (!msg.ok) {
+                const why = String(msg.why || "no reason given");
+                countDrop(why);
+                log("did not touch your draft: " + why);
+                toast("Left your draft alone: " + why, true);
+              } else if (!node) {
+                log("the input box went away before the refine came back");
+                toast("The input box went away before it came back.", true);
+              } else if (setComposer(node, String(msg.after || ""))) {
+                log("refined what you were typing", true);
+                toast("Your draft was refined.");
+                ping();
+              } else {
+                log("could not write to the input box");
+                toast("Could not write to the input box.", true);
+              }
+              paint();
+              return;
+            }
             if (tryWaiting !== msg.requestId) return;
             tryWaiting = null;
             tryBusy = false;
@@ -1654,6 +2909,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (msg.ok) {
               if (lastChatId != null) undoable.delete(String(lastChatId));
               setBadge(null);
+              tally.undone++;
               log("put a reply back the way it was", true);
               toast("Put back.", true);
             } else {
@@ -1663,8 +2919,16 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "confirm_refine") {
-            busy = false;
+            markBusy(false);
             askToSave(msg);
+            return;
+          }
+          if (msg.type === "prompt_preview") {
+            if (previewWaiting !== msg.requestId) return;
+            previewWaiting = null;
+            previewBusy = false;
+            preview = msg;
+            paint();
             return;
           }
         } catch (_) {}
@@ -1741,6 +3005,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   injectStyle();
   armBackend();
+  syncExtras();
   send({ type: "list_connections", requestId: newId() });
   log("ready v" + VERSION);
   paint();

@@ -10,7 +10,9 @@
     "generation",
     "chat_mutation",
     "chats",
-    "characters"
+    "characters",
+    "world_books",
+    "ui_panels"
   ],
   "entry_frontend": "dist/frontend.js",
   "entry_backend": "dist/backend.js",

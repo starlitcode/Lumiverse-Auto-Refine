@@ -27,4 +27,14 @@ First release.
 - **A rewrite can see who is speaking and what just happened.** The character card and the last few messages go in the prompt, both optional and both trimmed to a ceiling. A refine that cannot see the run-up flattens a scene into general prose, which is the failure people blame on the model.
 - **Sampler settings for the refine call**, blank to begin with, so the connection's own preset decides until you say otherwise. What you set is sent with the refine and nothing else.
 - **Import and export**, one file with your rules, your prompt layout and your samplers in it. Every value in a file is checked before it is used, so a hand-edited one loads what it can rather than leaving the panel unable to draw.
+- **The panel is six tabs, not one column.** Rules, Prompt, Model, Limits, Log and Setup, with the switch, the refine button and the last refine above them so they are there whichever tab you left open. Each group of settings sits in a box of its own.
+- **A preview of the request.** Show me the request builds the real thing and shows it message by message, with roles and sizes, without calling a model or charging anything. It is built by the same code a refine uses, so it cannot drift into describing something else.
+- **The lorebook goes in the prompt.** The entries the chat has active, as the host works them out, so a rewrite does not contradict what the world has already established.
+- **Thinking is yours to set.** Off, whatever your connection is already set to, or an effort level you pick.
+- **Presets**, saving your rules, your prompt layout, your run-up count, your samplers and your thinking under a name. Your connection and your switches stay yours whichever preset you load.
+- **Refining what you are typing.** A row in the chat input's Extras menu rewrites the text in your input box before you send it. Off by default, because it edits the box you are typing in.
+- **A floating button**, off by default, that refines the latest reply in one tap and can be dragged where you want it.
+- **A sound when a refine lands**, off by default, and your own file if you would rather. With none chosen it plays a short blip that is synthesised rather than shipped, so there is no audio file in the repository.
+- **A Log tab.** What it is doing right now with a running clock, the counts for this session, why rewrites were dropped and how often, and one button that copies a bug report carrying settings and counts but never your writing.
+- **Starting again**, putting every setting back to its default, with your presets kept unless you say otherwise. It asks first, and it leaves you on the tab you were on.
 - **A switch for one chat**, so a scene can be left completely alone.

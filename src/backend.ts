@@ -33,7 +33,8 @@ let rules = '';
 let structureRules = '';       // extra shape rules, for a model that reasons
 let refineUserMessages = false;
 let connectionId = '';         // empty means the reader's active connection
-let thinkingMode = 'off';      // off | inherit
+let thinkingMode = 'off';      // off | inherit | custom
+let thinkingEffort = 'medium'; // only read when thinkingMode is custom
 let timeoutSecs = 90;
 // How the request is put together: which blocks go in, in what order, and what
 // role each one is sent as. The reader owns this, which is the point of it
@@ -132,6 +133,7 @@ const DEFAULT_BLOCKS = [
   { id: GUARD_ID, on: true, role: 'system' },
   { id: 'character', on: true, role: 'system' },
   { id: 'context', on: true, role: 'system' },
+  { id: 'lore', on: true, role: 'system' },
   { id: 'rules', on: true, role: 'system' },
   { id: 'structure', on: true, role: 'system' },
   { id: 'whose', on: true, role: 'system' },
@@ -142,8 +144,20 @@ const DEFAULT_BLOCKS = [
 interface Piece {
   character: string;
   context: string;
+  lore: string;
   message: string;
   isUser: boolean;
+}
+
+// What a refine knows about the scene, gathered once per run. Every field is
+// optional: a chat with no card, no lorebook and no history still refines, with
+// those blocks left out.
+const NO_SCENE: Scene = { character: '', context: '', lore: '', name: '' };
+interface Scene {
+  character: string;
+  context: string;
+  lore: string;
+  name: string;
 }
 
 // The text one block carries, or empty when it has nothing to say. A block with
@@ -153,6 +167,7 @@ function blockText(id: string, custom: string | undefined, p: Piece): string {
   if (id === MESSAGE_ID) return p.message;
   if (id === 'character') return p.character ? 'Who this is about:\n\n' + p.character : '';
   if (id === 'context') return p.context ? 'What has been happening:\n\n' + p.context : '';
+  if (id === 'lore') return p.lore ? 'What is true in this world:\n\n' + p.lore : '';
   if (id === 'rules') {
     const own = String(rules || '').trim();
     return own ? 'The instructions to follow:\n\n' + own : '';
@@ -188,8 +203,14 @@ function activeBlocks(): Array<{ id: string; on: boolean; role: string; text?: s
   return list;
 }
 
-function buildPrompt(text: string, isUser: boolean, character: string, context: string): any[] {
-  const piece: Piece = { character: character, context: context, message: text, isUser: isUser };
+function buildPrompt(text: string, isUser: boolean, scene: Scene): any[] {
+  const piece: Piece = {
+    character: scene.character,
+    context: scene.context,
+    lore: scene.lore,
+    message: text,
+    isUser: isUser,
+  };
   const out: any[] = [];
   for (const b of activeBlocks()) {
     if (!b || !b.on) continue;
@@ -361,6 +382,63 @@ function gatherHistory(msgs: any[], at: number, charName: string): string {
   return out.reverse().join('\n\n');
 }
 
+// The lorebook entries the host says are active for this chat. Read through the
+// host rather than matched here: it already decides which entries a chat has
+// switched on and which of those the recent messages triggered, and a second
+// opinion on that would quietly disagree with the one the chat itself uses.
+const LORE_ENTRIES_MAX = 24;
+const LORE_ENTRY_MAX = 1200;
+const LORE_TOTAL_MAX = 8000;
+
+async function gatherLore(chatId: string, userId?: string): Promise<string> {
+  try {
+    const books = spindle.world_books;
+    if (!books || typeof books.getActivated !== 'function') return '';
+    const on = await books.getActivated(chatId, userId);
+    if (!Array.isArray(on) || !on.length) return '';
+    const out: string[] = [];
+    let total = 0;
+    for (const hit of on.slice(0, LORE_ENTRIES_MAX)) {
+      if (!hit || !hit.id) continue;
+      let entry: any = null;
+      try {
+        entry = books.entries && typeof books.entries.get === 'function'
+          ? await books.entries.get(hit.id, userId)
+          : null;
+      } catch (_) {
+        // One entry that will not load is not a reason to send no lore at all.
+        continue;
+      }
+      const body = clip(entry && (entry.content != null ? entry.content : entry.text), LORE_ENTRY_MAX);
+      if (!body) continue;
+      const name = String((entry && (entry.name || entry.comment)) || '').trim();
+      const line = name ? name + ': ' + body : body;
+      if (total + line.length > LORE_TOTAL_MAX) break;
+      total += line.length;
+      out.push(line);
+    }
+    return out.join('\n\n');
+  } catch (_) {
+    // No permission, or a host without lorebooks. Refine without it.
+    return '';
+  }
+}
+
+// How much thinking the refine asks for. Three answers, and the middle one is
+// the reader saying "whatever I already set", which is why it sends nothing at
+// all rather than a value that would override it.
+const EFFORTS = ['low', 'medium', 'high'];
+
+function reasoningFor(): any {
+  if (thinkingMode === 'off') return { source: 'off' };
+  if (thinkingMode === 'custom')
+    return {
+      source: 'custom',
+      effort: EFFORTS.indexOf(thinkingEffort) >= 0 ? thinkingEffort : 'medium',
+    };
+  return null;
+}
+
 // ---- sampler values ----
 // An allow-list rather than passing the panel's object straight through. The
 // bounds are the sane range for each one, and a value outside it is clamped
@@ -401,8 +479,7 @@ function cleanSamplers(): Record<string, number> | null {
 async function askModel(
   text: string,
   isUser: boolean,
-  character: string,
-  context: string,
+  scene: Scene,
 ): Promise<{ content: string; error: string }> {
   const controller: any = typeof (globalThis as any).AbortController === 'function'
     ? new (globalThis as any).AbortController()
@@ -412,7 +489,7 @@ async function askModel(
   let timer: any = null;
   if (controller) timer = setTimeout(() => { try { controller.abort(); } catch (_) {} }, ms);
   try {
-    const req: any = { messages: buildPrompt(text, isUser, character, context) };
+    const req: any = { messages: buildPrompt(text, isUser, scene) };
     // Only the values the reader actually changed. An empty object is left out
     // so the connection's own preset stays in charge, which is what somebody
     // who never opened the sampler section expects.
@@ -424,8 +501,10 @@ async function askModel(
     if (connectionId) req.connection_id = connectionId;
     // Off by default. A rewrite is not a reasoning problem, and paying for
     // extended thinking on every reply is the cost nobody notices until the
-    // bill arrives.
-    if (thinkingMode === 'off') req.reasoning = { source: 'off' };
+    // bill arrives. Inherit leaves the field off entirely, which is what hands
+    // the question back to the connection's own settings.
+    const think = reasoningFor();
+    if (think) req.reasoning = think;
     if (controller) req.signal = controller.signal;
     const result = await spindle.generate.quiet(req);
     return { content: String((result && result.content) || ''), error: '' };
@@ -492,9 +571,14 @@ async function refineMessage(
   // with the blocks left out rather than not refining at all.
   const card = await gatherCard(chatId, userId);
   const at = msgs.findIndex((x: any) => x && x.id === m.id);
-  const history = gatherHistory(msgs, at, card.name);
+  const scene: Scene = {
+    character: card.text,
+    context: gatherHistory(msgs, at, card.name),
+    lore: await gatherLore(chatId, userId),
+    name: card.name,
+  };
 
-  const answer = await askModel(original, m.role === 'user', card.text, history);
+  const answer = await askModel(original, m.role === 'user', scene);
   if (answer.error) return { ok: false, why: answer.error };
 
   const verdict = judge(answer.content, original);
@@ -614,7 +698,9 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       structureRules = String(s.structureRules == null ? '' : s.structureRules);
       refineUserMessages = !!s.refineUserMessages;
       connectionId = String(s.connectionId == null ? '' : s.connectionId);
-      thinkingMode = s.thinkingMode === 'inherit' ? 'inherit' : 'off';
+      thinkingMode =
+        s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
+      thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
       timeoutSecs = Number(s.timeoutSecs) || 90;
       maxGrowthPct = Number(s.maxGrowthPct);
       maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
@@ -722,6 +808,68 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       return;
     }
 
+    // What the request actually looks like, without sending it anywhere. Built
+    // by the same function a real refine uses, so it cannot drift into being a
+    // pretty description of something else. No model is called and nothing is
+    // written; this costs nothing but a chat read.
+    if (payload.type === 'preview_prompt') {
+      try {
+        const stand = 'The message being refined would go here.';
+        let text = stand;
+        let scene: Scene = NO_SCENE;
+        let real = false;
+        let isUser = false;
+        if (payload.chatId) {
+          let msgs: any[] = [];
+          try {
+            msgs = await spindle.chat.getMessages(payload.chatId);
+          } catch (_) {
+            msgs = [];
+          }
+          if (Array.isArray(msgs) && msgs.length) {
+            // The message asked for, or the newest one there is, so a preview
+            // works on a chat the reader has only just opened.
+            const want = payload.messageId
+              ? msgs.find((x: any) => x && x.id === payload.messageId)
+              : null;
+            const m = want || msgs[msgs.length - 1];
+            if (m && m.content) {
+              text = String(m.content);
+              isUser = m.role === 'user';
+              real = true;
+            }
+            const card = await gatherCard(payload.chatId, userId);
+            const at = m ? msgs.findIndex((x: any) => x && x.id === m.id) : -1;
+            scene = {
+              character: card.text,
+              context: at > 0 ? gatherHistory(msgs, at, card.name) : '',
+              lore: await gatherLore(payload.chatId, userId),
+              name: card.name,
+            };
+          }
+        }
+        const messages = buildPrompt(text, isUser, scene);
+        replyTo(userId, {
+          type: 'prompt_preview',
+          requestId: payload.requestId,
+          ok: true,
+          real: real,
+          messages: messages,
+          parameters: cleanSamplers(),
+          connectionId: connectionId || '',
+          reasoning: reasoningFor(),
+        });
+      } catch (e: any) {
+        replyTo(userId, {
+          type: 'prompt_preview',
+          requestId: payload.requestId,
+          ok: false,
+          why: (e && e.message) || 'the preview could not be built',
+        });
+      }
+      return;
+    }
+
     // Try the rules on some text without saving anything. The panel's own
     // rehearsal: the answer comes back and goes nowhere near the chat.
     if (payload.type === 'try_refine') {
@@ -734,7 +882,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       // Pasted text belongs to no chat, so there is no card and no history to
       // send. That is the honest version of a rehearsal: it shows what the
       // rules do on their own, which is the thing being tried out.
-      const answer = await askModel(text, !!payload.asUser, '', '');
+      const answer = await askModel(text, !!payload.asUser, NO_SCENE);
       if (answer.error) {
         replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: answer.error });
         return;

@@ -139,6 +139,25 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null 
         toast: (t) => {
           (window.__toasts = window.__toasts || []).push(t);
         },
+        createFloatWidget: () => {
+          const host = document.createElement("div");
+          host.id = "float";
+          document.body.appendChild(host);
+          window.__widget = true;
+          return { root: host, destroy: () => { window.__widget = false; host.remove(); } };
+        },
+        registerInputBarAction: (spec) => {
+          window.__inputAction = spec;
+          return {
+            onClick: (fn) => {
+              window.__inputClick = fn;
+              return () => {};
+            },
+            destroy: () => {
+              window.__inputAction = null;
+            },
+          };
+        },
       },
       sendToBackend: (m) => window.__sent.push(m),
       onBackendMessage: (fn) => {
@@ -147,7 +166,7 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null 
       },
     });
   });
-  await page.waitForFunction(() => document.querySelectorAll("#drawer .arf-h").length > 0);
+  await page.waitForFunction(() => document.querySelectorAll("#drawer .arf-tab").length > 0);
   // The readability sweep runs a frame after the panel is built, so anything
   // measuring what was painted has to let that frame happen first.
   await settle(page);
@@ -158,6 +177,19 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null 
     await page.close();
   }
   return errors;
+}
+
+// Move to a named tab. Everything below lives on one, so nearly every check
+// starts here.
+async function goTab(page, label) {
+  await page.evaluate((want) => {
+    const t = Array.from(document.querySelectorAll("#drawer .arf-tab")).find(
+      (b) => b.textContent.trim() === want,
+    );
+    if (!t) throw new Error("no tab called " + want);
+    t.click();
+  }, label);
+  await settle(page);
 }
 
 // What the sweep had to repair. Zero on the stock theme is the point: a panel
@@ -340,11 +372,13 @@ console.log("\non a phone");
       );
       ok("and nothing pushes the page sideways", spill);
 
-      // Open both folds, since that is where the rows are densest and where a
-      // tap target is most likely to have been squeezed.
+      // The densest tab, with its fold open, which is where a tap target is
+      // most likely to have been squeezed.
+      await goTab(page, "Model");
       await page.evaluate(() => {
         for (const b of document.querySelectorAll("#drawer .arf-fold")) b.click();
       });
+      await settle(page);
       const small = await page.evaluate(() => {
         const bad = [];
         for (const el of document.querySelectorAll("#drawer button, #drawer input, #drawer select")) {
@@ -362,11 +396,7 @@ console.log("\non a phone");
 console.log("\nthe prompt layout editor");
 {
   const errors = await inTab(browser, {}, async (page) => {
-    await page.evaluate(() => {
-      const heads = Array.from(document.querySelectorAll("#drawer .arf-fold"));
-      const one = heads.find((h) => /How the prompt is built/.test(h.textContent));
-      one.click();
-    });
+    await goTab(page, "Prompt");
     const names = () =>
       page.evaluate(() =>
         Array.from(document.querySelectorAll("#drawer [data-arf-block] .arf-lab")).map((n) =>
@@ -429,9 +459,10 @@ console.log("\nthe prompt layout editor");
 console.log("\nsampler settings");
 {
   await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
     await page.evaluate(() => {
       const one = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
-        /How the pass runs/.test(h.textContent),
+        /Sampler values/.test(h.textContent),
       );
       one.click();
     });
@@ -487,12 +518,7 @@ console.log("\nsettings that were saved before");
     browser,
     { saved: { blocks: [{ id: "rules", on: true, role: "system" }] } },
     async (page) => {
-      await page.evaluate(() => {
-        const one = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
-          /How the prompt is built/.test(h.textContent),
-        );
-        one.click();
-      });
+      await goTab(page, "Prompt");
       const shown = await page.evaluate(() =>
         Array.from(document.querySelectorAll("#drawer [data-arf-block] .arf-lab")).map((n) =>
           n.textContent.trim(),
@@ -505,6 +531,291 @@ console.log("\nsettings that were saved before");
       );
     },
   );
+}
+
+console.log("\nthe tabs");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    const labels = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("#drawer .arf-tab")).map((b) => b.textContent.trim()),
+    );
+    ok("every tab is there", labels.length === 6, labels.join(" | "));
+
+    // The control card is above the strip on purpose: hunting for the master
+    // switch on whichever tab it happens to live on is what makes a tabbed
+    // panel worse than a list.
+    const above = await page.evaluate(() => {
+      const strip = document.querySelector("#drawer .arf-tabs");
+      const sw = document.querySelector('#drawer input[aria-label="Turn Auto Refine on"]');
+      const btn = Array.from(document.querySelectorAll("#drawer button")).find((b) =>
+        /Refine the latest reply/.test(b.textContent),
+      );
+      if (!strip || !sw || !btn) return false;
+      return (
+        strip.compareDocumentPosition(sw) === Node.DOCUMENT_POSITION_PRECEDING &&
+        strip.compareDocumentPosition(btn) === Node.DOCUMENT_POSITION_PRECEDING
+      );
+    });
+    ok("the switch and the refine button sit above the tabs", above);
+
+    // One tab's worth of cards on screen at a time, which is the whole point.
+    for (const label of ["Rules", "Prompt", "Model", "Limits", "Log", "Setup"]) {
+      await goTab(page, label);
+      const cards = await page.evaluate(
+        () => document.querySelectorAll("#drawer .arf-body .arf-card").length,
+      );
+      ok(label + " shows its own cards", cards >= 1 && cards <= 4, "found " + cards);
+    }
+
+    await goTab(page, "Log");
+    const remembered = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings.tab;
+    });
+    ok("the tab you are on is remembered", remembered === "log", String(remembered));
+  });
+  ok("no errors moving between tabs", errors.length === 0, errors.join("\n         "));
+}
+
+console.log("\nseeing what gets sent");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Show me the request/.test(b.textContent))
+        .click();
+    });
+    const asked = await page.evaluate(() =>
+      window.__sent.filter((m) => m.type === "preview_prompt").length,
+    );
+    ok("it asks the backend to build the real request", asked === 1);
+
+    // The backend answers, and the panel renders what came back.
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
+      window.__fromBackend({
+        type: "prompt_preview",
+        requestId: id,
+        ok: true,
+        real: true,
+        messages: [
+          { role: "system", content: "You are editing one message." },
+          { role: "user", content: "The line being rewritten." },
+        ],
+        parameters: { temperature: 0.4 },
+        connectionId: "",
+        reasoning: { source: "off" },
+      });
+    });
+    await settle(page);
+    const shown = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("each message is shown with its role", /system/.test(shown) && /user/.test(shown));
+    ok("and the text that would be sent", /The line being rewritten/.test(shown));
+    ok("along with the rest of the call", /temperature 0.4/.test(shown) && /Thinking: off/.test(shown));
+  });
+}
+
+console.log("\nhow much thinking");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+    const hidden = await page.evaluate(
+      () => !document.querySelector('#drawer [data-arf-field="thinkingEffort"]'),
+    );
+    ok("the effort row is not there until it would do something", hidden);
+
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="thinkingMode"]');
+      sel.value = "custom";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    const there = await page.evaluate(
+      () => !!document.querySelector('#drawer [data-arf-field="thinkingEffort"]'),
+    );
+    ok("and appears when you ask to set it", there);
+
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="thinkingEffort"]');
+      sel.value = "high";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const sent = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings;
+    });
+    ok("what you picked reaches the backend", sent.thinkingMode === "custom" && sent.thinkingEffort === "high");
+  });
+}
+
+console.log("\npresets");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Rules");
+    // Write a rule, then save it under a name.
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="rules"]');
+      ta.value = "Cut filler words.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      const name = document.querySelector('#drawer [data-arf-field="presetName"]');
+      name.value = "Tight prose";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Save as new")
+        .click();
+    });
+    await settle(page);
+    const saved = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('#drawer [data-arf-field="presetPick"] option')).map(
+        (o) => o.textContent,
+      ),
+    );
+    ok("a preset is saved under its name", saved.indexOf("Tight prose") >= 0, saved.join(" | "));
+
+    // Change the rules, then load the preset back.
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="rules"]');
+      ta.value = "Something else entirely.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("blur", { bubbles: true }));
+    });
+    await settle(page);
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      sel.value = "Tight prose";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Load")
+        .click();
+    });
+    await settle(page);
+    const back = await page.evaluate(
+      () => document.querySelector('#drawer [data-arf-field="rules"]').value,
+    );
+    ok("loading it brings the rules back", back === "Cut filler words.", back);
+
+    // A preset carries the rules and not the switches.
+    const carried = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1")));
+    const keys = Object.keys(carried[0].settings).sort();
+    ok("it saves what shapes a refine", keys.indexOf("rules") >= 0 && keys.indexOf("blocks") >= 0);
+    ok("and not the switches that are yours", keys.indexOf("enabled") < 0 && keys.indexOf("connectionId") < 0, keys.join(","));
+
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Delete")
+        .click();
+    });
+    await settle(page);
+    const gone = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1")).length);
+    ok("and deleting one removes it", gone === 0);
+  });
+  ok("no errors working with presets", errors.length === 0, errors.join("\n         "));
+}
+
+console.log("\nstarting again");
+{
+  await inTab(browser, { saved: { rules: "Cut filler.", contextMessages: 9 } }, async (page) => {
+    await goTab(page, "Setup");
+    // The stub host has no confirm dialog, which is the path that asks in the
+    // panel instead. One press arms it, the second does it.
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /^Reset all settings$/.test(b.textContent.trim()))
+        .click();
+    });
+    await settle(page);
+    const still = await page.evaluate(
+      () => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).rules,
+    );
+    ok("one press does not throw anything away", still === "Cut filler.", String(still));
+    const asks = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("it asks first", /Press it again/.test(asks));
+
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /^Reset all settings$/.test(b.textContent.trim()))
+        .click();
+    });
+    await settle(page);
+    const after = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
+    );
+    ok("the second press puts the defaults back", after.rules === "" && after.contextMessages === 4);
+  });
+}
+
+console.log("\nthe extras, which are off until asked for");
+{
+  await inTab(browser, {}, async (page) => {
+    const quiet = await page.evaluate(() => ({
+      widget: !!window.__widget,
+      row: !!window.__inputAction,
+    }));
+    ok("no floating button and no input bar row on a fresh install", !quiet.widget && !quiet.row);
+  });
+
+  await inTab(
+    browser,
+    { saved: { widgetOn: true, inputRefine: true, rules: "Cut filler words." } },
+    async (page) => {
+    const up = await page.evaluate(() => ({
+      widget: !!window.__widget,
+      row: !!window.__inputAction,
+    }));
+    ok("both appear when they are switched on", up.widget && up.row);
+
+    // Refining the draft reads the input box, sends it, and writes the answer
+    // back through the setter the framework is listening to.
+    await page.evaluate(() => {
+      const box = document.createElement("textarea");
+      box.setAttribute("data-component", "ChatInput");
+      box.value = "i walk through it, suddenly";
+      box.style.cssText = "width:200px;height:40px";
+      document.body.appendChild(box);
+      window.__saw = [];
+      box.addEventListener("input", () => window.__saw.push(box.value));
+      window.__inputClick();
+    });
+    const askedAsUser = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "try_refine").pop();
+      return last && { text: last.text, asUser: last.asUser, id: last.requestId };
+    });
+    ok("it sends what you typed, marked as yours", askedAsUser && askedAsUser.asUser === true);
+    ok("with the text from the box", askedAsUser && /i walk through it/.test(askedAsUser.text));
+
+    await page.evaluate((id) => {
+      window.__fromBackend({ type: "try_result", requestId: id, ok: true, after: "I walk through it." });
+    }, askedAsUser.id);
+    await settle(page);
+    const wrote = await page.evaluate(() => ({
+      value: document.querySelector('textarea[data-component="ChatInput"]').value,
+      events: window.__saw.length,
+    }));
+    ok("the answer goes back in the box", wrote.value === "I walk through it.", wrote.value);
+    ok("and an input event is raised, so the app sees it too", wrote.events > 0);
+    },
+  );
+
+  // With no rules there is nothing to apply, and the draft is left alone
+  // rather than sent to a model to be rewritten by nothing.
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    await page.evaluate(() => {
+      const box = document.createElement("textarea");
+      box.setAttribute("data-component", "ChatInput");
+      box.value = "i walk through it";
+      box.style.cssText = "width:200px;height:40px";
+      document.body.appendChild(box);
+      window.__inputClick();
+    });
+    const asked = await page.evaluate(
+      () => window.__sent.filter((m) => m.type === "try_refine").length,
+    );
+    ok("with no rules written, nothing is sent and the draft is untouched", asked === 0);
+  });
 }
 
 await browser.close();
