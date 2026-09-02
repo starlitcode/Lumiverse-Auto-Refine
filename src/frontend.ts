@@ -20,7 +20,7 @@ interface Ctx {
 
 // Bumped on each release. Shown in the log line the panel writes on startup, so
 // a bug report always says which version it came from.
-const VERSION = "0.1.0";
+const VERSION = "1.0.0";
 
 const STORE_KEY = "lv-auto-refine:settings:v1";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
