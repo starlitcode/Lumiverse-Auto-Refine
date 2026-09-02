@@ -25,7 +25,6 @@
 // user is known and comes back empty.
 let masterOn = true;
 let refineOn = false; // the automatic pass, off until asked for
-let refineUserMessages = false;
 let connectionId = ''; // empty means the reader's active connection
 let thinkingMode = 'off'; // off | inherit | custom
 let thinkingEffort = 'medium'; // only read when thinkingMode is custom
@@ -259,16 +258,26 @@ function unwrapOutput(answer) {
 }
 const REASONING_NOTE = 'Think about the edit before you write it, then give only the rewritten ' +
     'message as your answer. Your reasoning must not appear in the answer.';
+// Your own messages get their own prompt. Refining what a character wrote and
+// refining what you wrote are different jobs: one is polishing somebody else's
+// prose, the other is tidying your own without turning it into the narrator's.
+// One prompt doing both ends up hedged enough to do neither well.
+//
+// Empty means you have not written one, and the reply prompt is used instead,
+// which is what it did before this existed.
+let userBlocks = [];
 // The blocks as they will actually be sent: the reader's list when it has one,
 // the default otherwise.
-function activeBlocks() {
+function activeBlocks(isUser) {
+    if (isUser && Array.isArray(userBlocks) && userBlocks.length)
+        return userBlocks.slice();
     return Array.isArray(blocks) && blocks.length ? blocks.slice() : DEFAULT_BLOCKS.slice();
 }
 // Whether the prompt shows the model the thing it is meant to rewrite. Asked
 // before any model is called, so a prompt that could not possibly work is
 // refused rather than paid for.
-function promptHasTurn() {
-    for (const b of activeBlocks()) {
+function promptHasTurn(isUser) {
+    for (const b of activeBlocks(isUser)) {
         if (!b || b.on === false)
             continue;
         if (String(b.text || '').indexOf(TURN_MACRO) >= 0)
@@ -467,7 +476,7 @@ async function buildPrompt(text, isUser, scene, userId) {
         shieldNote: scene.shieldNote,
     };
     const out = [];
-    for (const b of activeBlocks()) {
+    for (const b of activeBlocks(isUser)) {
         if (!b || !b.on)
             continue;
         // Ours are masked, not filled, so the host pass runs over the block's own
@@ -804,6 +813,11 @@ async function askModel(text, isUser, scene, userId) {
         // with, and running it on a cheaper one is most of the saving.
         if (connectionId)
             req.connection_id = connectionId;
+        // Who the call is for. Without it an operator-scoped install refuses the
+        // whole request with "userId is required for operator-scoped extensions",
+        // which is a refusal rather than a fault and read as a broken rule.
+        if (userId)
+            req.userId = userId;
         // Off by default. A rewrite is not a reasoning problem, and paying for
         // extended thinking on every reply is the cost nobody notices until the
         // bill arrives. Inherit leaves the field off entirely, which is what hands
@@ -861,6 +875,12 @@ async function askModel(text, isUser, scene, userId) {
             return { content: '', error: 'the model did not answer within ' + Math.round(ms / 1000) + 's' };
         if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
             return { content: '', error: 'the generation permission is not granted' };
+        // A refusal that reads as a bug in your rules unless it is named.
+        if (typeof msg === 'string' && msg.indexOf('userId is required') >= 0)
+            return {
+                content: '',
+                error: 'Lumiverse could not tell which account this refine was for. Reload the page, and if it keeps happening it is worth reporting.',
+            };
         return { content: '', error: msg };
     }
     finally {
@@ -879,11 +899,6 @@ async function refineMessage(chatId, messageId, userId, byHand) {
         return { ok: false, why: 'Auto Refine is switched off' };
     if (chatsOff.has(String(chatId)))
         return { ok: false, why: 'Auto Refine is switched off in this chat' };
-    if (!promptHasTurn())
-        return {
-            ok: false,
-            why: 'no block in your prompt contains {{message}}, so the model would never see the reply',
-        };
     let msgs = [];
     try {
         msgs = await spindle.chat.getMessages(chatId);
@@ -901,14 +916,24 @@ async function refineMessage(chatId, messageId, userId, byHand) {
         return { ok: false, why: 'the greeting is written by a person, so it is never refined' };
     if (m.role !== 'assistant' && m.role !== 'user')
         return { ok: false, why: 'only replies and your own messages can be refined' };
-    // Never on the automatic pass, whatever the setting says. That pass fires off
-    // a reply arriving, and rewriting what the reader just typed because the
-    // character answered it is not something to do without being asked. The
-    // setting governs the button, which is somebody asking.
+    // Never on the automatic pass. That pass fires off a reply arriving, and
+    // rewriting what the reader just typed because the character answered it is
+    // not something to do without being asked.
+    //
+    // By hand it goes ahead with no setting in the way. There was a switch here
+    // and it was asking the same question twice: pressing the refine button on
+    // your own message is already you asking for exactly this.
     if (m.role === 'user' && !byHand)
-        return { ok: false, why: 'your own messages are only refined when you press the button' };
-    if (m.role === 'user' && byHand && !refineUserMessages)
-        return { ok: false, why: 'refining your own messages is switched off' };
+        return { ok: false, why: 'your own messages are only refined when you ask for one' };
+    // Checked here rather than at the top, because which prompt is used depends
+    // on whose message this is and the two can be in different states.
+    if (!promptHasTurn(m.role === 'user'))
+        return {
+            ok: false,
+            why: 'no block in your ' +
+                (m.role === 'user' ? 'own-messages prompt' : 'prompt') +
+                ' contains {{message}}, so the model would never see it',
+        };
     const original = String(m.content == null ? '' : m.content);
     if (!original.trim())
         return { ok: false, why: 'that message is empty' };
@@ -999,6 +1024,16 @@ async function saveRefined(chatId, m, original, next, userId) {
         return { ok: false, why: 'the message could not be saved: ' + ((e && e.message) || 'no reason given') };
     }
 }
+// Everything the manifest asks for, so the panel can name what is missing
+// rather than saying a permission is missing.
+const NEEDED = [
+    'generation',
+    'chat_mutation',
+    'chats',
+    'characters',
+    'world_books',
+    'ui_panels',
+];
 // ---- the events ----
 try {
     spindle.on('GENERATION_STARTED', (p) => {
@@ -1082,7 +1117,6 @@ spindle.onFrontendMessage(async (payload, userId) => {
             const s = payload.settings;
             masterOn = s.enabled !== false;
             refineOn = !!s.refineOn;
-            refineUserMessages = !!s.refineUserMessages;
             connectionId = String(s.connectionId == null ? '' : s.connectionId);
             thinkingMode =
                 s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
@@ -1097,6 +1131,18 @@ spindle.onFrontendMessage(async (payload, userId) => {
             // The prompt layout. Only a list of block-shaped things is taken; a
             // corrupted or half-written value falls back to the default rather than
             // building a prompt out of whatever came over the bridge.
+            userBlocks = Array.isArray(s.userBlocks)
+                ? s.userBlocks
+                    .filter((b) => b && typeof b === 'object' && b.id)
+                    .slice(0, 60)
+                    .map((b) => ({
+                    id: String(b.id),
+                    name: b.name == null ? undefined : String(b.name),
+                    on: b.on !== false,
+                    role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
+                    text: b.text == null ? '' : String(b.text),
+                }))
+                : [];
             blocks = Array.isArray(s.blocks)
                 ? s.blocks
                     .filter((b) => b && typeof b === 'object' && b.id)
@@ -1240,11 +1286,13 @@ spindle.onFrontendMessage(async (payload, userId) => {
                     }
                 }
                 const messages = await buildPrompt(text, isUser, scene, userId);
+                const whichPrompt = isUser && userBlocks.length ? 'yours' : 'replies';
                 replyTo(userId, {
                     type: 'prompt_preview',
                     requestId: payload.requestId,
                     ok: true,
                     real: real,
+                    which: whichPrompt,
                     messages: messages,
                     parameters: cleanSamplers(),
                     wrapOutput: wrapOutput,
@@ -1260,6 +1308,44 @@ spindle.onFrontendMessage(async (payload, userId) => {
                     why: (e && e.message) || 'the preview could not be built',
                 });
             }
+            return;
+        }
+        // What the host is actually letting this extension do. Asked rather than
+        // assumed: a permission can be granted or taken away while the extension is
+        // running, and nothing restarts when it happens.
+        if (payload.type === 'get_permissions') {
+            let granted = [];
+            try {
+                if (spindle.permissions && typeof spindle.permissions.getGranted === 'function') {
+                    const got = await spindle.permissions.getGranted();
+                    if (Array.isArray(got))
+                        granted = got.map((x) => String(x));
+                }
+                else if (spindle.permissions && typeof spindle.permissions.has === 'function') {
+                    // A host with only the local cache. Less authoritative and still an
+                    // answer.
+                    granted = NEEDED.filter((n) => {
+                        try {
+                            return spindle.permissions.has(n);
+                        }
+                        catch (_) {
+                            return false;
+                        }
+                    });
+                }
+            }
+            catch (_) {
+                // Could not ask. Answering with nothing would say every permission is
+                // refused, which is a worse lie than saying it is not known.
+                replyTo(userId, { type: 'permissions', requestId: payload.requestId, known: false, granted: [] });
+                return;
+            }
+            replyTo(userId, {
+                type: 'permissions',
+                requestId: payload.requestId,
+                known: true,
+                granted: granted,
+            });
             return;
         }
         // Which chat is open, asked rather than assumed. The panel cannot see this
@@ -1383,6 +1469,19 @@ spindle.onFrontendMessage(async (payload, userId) => {
 // Said once this module is listening. A panel has no way to know the backend
 // was not up yet, or has restarted since and forgotten everything it was told.
 // Hearing this, it says it all again.
+// A grant given or taken away while the extension is running changes what the
+// panel should be saying, and nothing restarts when it happens.
+try {
+    if (spindle.permissions && typeof spindle.permissions.onChanged === 'function') {
+        spindle.permissions.onChanged(() => {
+            try {
+                spindle.sendToFrontend({ type: 'permissions_changed' });
+            }
+            catch (_) { }
+        });
+    }
+}
+catch (_) { }
 try {
     spindle.sendToFrontend({ type: 'backend_ready' });
 }

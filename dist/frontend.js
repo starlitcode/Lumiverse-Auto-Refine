@@ -28,7 +28,7 @@ const PARTS = [
         id: "prompt",
         label: "Your prompt",
         what: "Every block: its name, its text, its role and its place in the order.",
-        keys: ["blocks"],
+        keys: ["blocks", "userBlocks"],
     },
     {
         id: "context",
@@ -57,7 +57,6 @@ const PARTS = [
             "minShrinkPct",
             "keepOriginal",
             "confirmBeforeSave",
-            "refineUserMessages",
             "protectOn",
             "protectThinking",
             "protectInline",
@@ -98,6 +97,49 @@ const DEBUG_PARTS = [
     { id: "chat", label: "Where you are", what: "Whether a chat is open and whether it has a card. No ids, no names." },
     { id: "browser", label: "Your browser", what: "The user agent string and the screen size, which is what a layout bug needs." },
 ];
+// What the manifest asks for, what each one is for, and what still works
+// without it. Refusing one is a choice somebody is allowed to make, so the
+// panel names the cost rather than nagging.
+const PERMS = [
+    {
+        id: "generation",
+        label: "Generation",
+        why: "Runs the refine.",
+        without: "Nothing is refined at all, by any path. This is the one it cannot work without.",
+        fatal: true,
+    },
+    {
+        id: "chat_mutation",
+        label: "Chat mutation",
+        why: "Saves the rewrite over the message.",
+        without: "Refines still run and cost you a model call, and nothing can be written, so nothing changes.",
+        fatal: true,
+    },
+    {
+        id: "chats",
+        label: "Chats",
+        why: "Says which chat you are in and which card it belongs to.",
+        without: "It falls back to the last chat it saw a reply in, so the per-chat switch and the buttons can act on a chat you have left.",
+    },
+    {
+        id: "characters",
+        label: "Characters",
+        why: "Reads the card behind {{description}} and the rest.",
+        without: "Those macros come back empty and their blocks are left out. Refining carries on.",
+    },
+    {
+        id: "world_books",
+        label: "World books",
+        why: "Reads the lorebook entries this chat has active, behind {{lore}}.",
+        without: "That macro comes back empty and its block is left out. Refining carries on.",
+    },
+    {
+        id: "ui_panels",
+        label: "Interface panels",
+        why: "The floating button.",
+        without: "Everything works except the floating button, and its switch says so.",
+    },
+];
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
@@ -109,6 +151,7 @@ const PRESETS_KEY = "lv-auto-refine:presets:v1";
 // would quietly point at nothing.
 const PRESET_KEYS = [
     "blocks",
+    "userBlocks",
     "contextMessages",
     "maxHistoryTokens",
     "maxLoreTokens",
@@ -123,7 +166,6 @@ const CONFIG = {
     // with a model, which is not something to start doing to somebody's chat
     // because they installed an extension.
     refineOn: false,
-    refineUserMessages: false,
     connectionId: "",
     thinkingMode: "off",
     thinkingEffort: "medium",
@@ -147,6 +189,10 @@ const CONFIG = {
     // What one tap does when there is a refine to put back. On, the button turns
     // into an undo the way the message button does; off, a tap always refines.
     widgetUndo: true,
+    // How big the floating button is, across. The same default and the same 28
+    // to 96 range as Auto Retry's floating button, so the two sit at matching
+    // sizes when somebody runs both.
+    widgetSize: 44,
     // Markup, code and the model's own thinking are lifted out of a message
     // before it is sent and put back afterwards. On by default: a rewrite that
     // eats a colour tag is the most common way this kind of extension ruins
@@ -189,6 +235,9 @@ const CONFIG = {
     // does not carry a copy of it around and a later change to the default
     // reaches anybody who never edited theirs.
     blocks: [],
+    // The prompt used when the message being refined is one of yours. Empty means
+    // you have not written one and the reply prompt is used instead.
+    userBlocks: [],
     // Sampler values for the refine call. Empty means the connection's preset
     // decides, which is the right default: somebody who tuned a preset should not
     // have it quietly overridden by an extension.
@@ -551,6 +600,59 @@ const RESTRAINT = {
         "the answer more often than not.\n" +
         "</restraint>",
 };
+// The prompt for your own messages. A different job: your writing is already
+// in your voice, and the failure to avoid is a refine that makes you sound like
+// the narrator. Shorter than the reply prompt because there is less to do.
+const YOURS_DEFAULT = [
+    {
+        id: "job",
+        name: "The job",
+        on: true,
+        role: "system",
+        text: "<your_job>\n" +
+            "You are tidying one message written by the player in a story two people " +
+            "are writing together. Fix how it reads. Do not write for them.\n\n" +
+            "Everything they did, said and meant stays. Do not add an action, a line " +
+            "of speech, or a reaction they did not write. Do not answer for the " +
+            "character.\n" +
+            "</your_job>",
+    },
+    ...CONTEXT_BLOCKS,
+    {
+        id: "voice",
+        name: "Their voice",
+        on: true,
+        role: "system",
+        text: "<their_voice>\n" +
+            "This is the player writing, not the narrator. Keep how they write.\n\n" +
+            "If they write in short plain lines, keep them short and plain. If they " +
+            "write lower case, keep it lower case. If they write in the present tense " +
+            "or the first person, do not move them out of it. A message that comes " +
+            "back in polished third person is a message they will not recognise as " +
+            "their own.\n\n" +
+            "Their length is their choice. A one line message stays a one line " +
+            "message.\n" +
+            "</their_voice>",
+    },
+    {
+        id: "fix",
+        name: "What to fix",
+        on: true,
+        role: "system",
+        text: "<what_to_fix>\n" +
+            "Typing mistakes, missing words, a word plainly meant to be another one.\n\n" +
+            "Punctuation and capitalisation, unless they are writing lower case on " +
+            "purpose, in which case leave it.\n\n" +
+            "A sentence that has come out tangled enough to be hard to follow. Say " +
+            "the same thing in the same voice, more clearly.\n\n" +
+            "Nothing else. Do not improve their word choice, do not add detail, and " +
+            "do not make a plain line more vivid.\n" +
+            "</what_to_fix>",
+    },
+    DO_NOT_TOUCH,
+    HOW_TO_ANSWER,
+    TURN_BLOCK,
+];
 // ---- a model that reasons, short ----
 const THINKS_SHORT = [
     THINKS_JOB,
@@ -661,6 +763,28 @@ const ROLE_OPTIONS = [
 // The sampler values that reach the request. Anything not on this list is not
 // passed on, on either side of the bridge. Blank means the connection decides,
 // which is why none of these carry a default.
+// What the floating button offers once it is switched on. Kept out of the main
+// list so they appear under it rather than beside it.
+const WIDGET_FIELDS = [
+    {
+        key: "widgetSize",
+        label: "How big it is",
+        type: "num",
+        min: 28,
+        max: 96,
+        needs: { key: "widgetOn" },
+        under: true,
+        hint: "In pixels across, the same range Auto Retry's floating button uses. 44 by default, which is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way. Changing it rebuilds the button.",
+    },
+    {
+        key: "widgetUndo",
+        label: "One tap puts the last refine back",
+        type: "bool",
+        needs: { key: "widgetOn" },
+        under: true,
+        hint: "On by default. When there is a refine to put back, a tap does that instead of refining, the way the message button does. Off, a tap always refines.",
+    },
+];
 const SAMPLER_FIELDS = [
     {
         id: "temperature",
@@ -708,7 +832,8 @@ const COST_FIELDS = [
         key: "thinkingEffort",
         label: "How much thinking",
         type: "pick",
-        needs: "custom",
+        needs: { key: "thinkingMode", is: "custom" },
+        under: true,
         options: [
             { value: "auto", label: "Auto, whatever the provider does" },
             { value: "none", label: "None" },
@@ -758,12 +883,6 @@ const LIMIT_FIELDS = [
         label: "Ask before saving a refine",
         type: "bool",
         hint: "Off by default. On, every refine shows you both versions and waits for a yes.",
-    },
-    {
-        key: "refineUserMessages",
-        label: "Let the button refine your own messages",
-        type: "bool",
-        hint: "Off by default. The automatic pass never touches what you wrote whatever this says: only the button does.",
     },
     {
         key: "toast",
@@ -1147,6 +1266,23 @@ export function setup(ctx, overrides) {
     let previewRaw = false;
     let soundSaid = null;
     let nameWithheld = false;
+    // Null until the backend has answered. Not knowing and knowing nothing is
+    // granted are different, and showing six refusals because the answer has not
+    // arrived yet would be a lie the reader acts on.
+    let granted = null;
+    let permsAsk = null;
+    function askPermissions() {
+        const id = newId();
+        permsAsk = id;
+        send({ type: "get_permissions", requestId: id });
+    }
+    const hasPerm = (id) => !granted || granted.indexOf(id) >= 0;
+    function missing() {
+        const have = granted;
+        if (!have)
+            return [];
+        return PERMS.filter((p) => have.indexOf(p.id) < 0);
+    }
     let widgetFailed = false;
     const SOUND_MAX = 512 * 1024;
     // The clock under the status line. Runs only while something is in flight,
@@ -1317,12 +1453,11 @@ export function setup(ctx, overrides) {
         // this dense it reads as damage rather than as focus.
         "input.arf-field:focus,textarea.arf-field:focus{outline:none;" +
         "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
-        // A menu you pick from is not a box you type in, and a ring around one
-        // reads as "still editing" when the choice is already made. It gets the
-        // border and nothing else.
-        "select.arf-field:focus{outline:none;" +
-        "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
-        "select.arf-field:focus-visible{outline:none}" +
+        // A menu you pick from is not a box you type in. It gets nothing: no ring,
+        // no glow, and not even a border change, because the menu opening is
+        // already the whole of the feedback.
+        "select.arf-field:focus,select.arf-field:focus-visible{outline:none;" +
+        "box-shadow:none;border-color:var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
         // The browser's own up and down arrows on a number box are drawn by the
         // browser rather than the theme, so on a dark panel they arrive as grey
         // chevrons belonging to no design here. The value is typed, and a focused
@@ -1427,6 +1562,21 @@ export function setup(ctx, overrides) {
         ".arf-block.arf-hushed{opacity:.55}" +
         ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
         ".arf-btn.arf-mini2{min-height:26px;padding:3px 10px;font-size:11.5px}" +
+        // Two choices side by side, where a menu would be heavier than the choice.
+        // A row that only exists while the one above it is on. Indented and edged
+        // so it reads as belonging to that row rather than as the next setting.
+        ".arf-under{padding-left:11px;margin-left:3px;" +
+        "border-left:2px solid var(--lumiverse-border,rgba(147,112,219,.12))}" +
+        ".arf-seg{display:flex;gap:0;border-radius:var(--lumiverse-radius,8px);overflow:hidden;" +
+        "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
+        ".arf-segbtn{flex:1;min-height:32px;padding:7px 10px;cursor:pointer;border:0;" +
+        "font:12.5px var(--lumiverse-font-family,system-ui);background:transparent;" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-segbtn[aria-pressed=true]{background:var(--lumiverse-secondary,rgba(128,128,128,.15));" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-segbtn:focus-visible{outline:none;" +
+        "box-shadow:inset 0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+        "@media (pointer: coarse){.arf-segbtn{min-height:40px}}" +
         // The floating button. Squared against the host's container rather than
         // trusting it, so it is a circle whatever shape the container turns out to
         // be: it was coming out as a squashed oval.
@@ -1597,7 +1747,10 @@ export function setup(ctx, overrides) {
     }
     // A prompt that never shows the model the message is a prompt that cannot do
     // anything, and it is the one mistake the block editor makes possible.
-    const noTurn = () => !blockList().some((b) => b.on && String(b.text || "").indexOf(TURN_MACRO) >= 0);
+    const holdsTurn = (list) => list.some((b) => b.on && String(b.text || "").indexOf(TURN_MACRO) >= 0);
+    // The reply prompt, which is the one the automatic pass and the refine button
+    // use. The own-messages prompt is checked where it is edited.
+    const noTurn = () => !holdsTurn(blockList("blocks"));
     function statusLine() {
         if (!cfg.enabled)
             return { text: "Off", tone: "off" };
@@ -1830,7 +1983,13 @@ export function setup(ctx, overrides) {
             return [buildProtectCard(), buildGuardCard(), buildSafetyCard()];
         if (id === "log")
             return [buildLiveCard(), buildActivityCard(), buildDebugCard()];
-        return [buildChatCard(), buildAlertCard(), buildReachCard(), buildTransferCard()];
+        return [
+            buildPermsCard(),
+            buildChatCard(),
+            buildAlertCard(),
+            buildReachCard(),
+            buildTransferCard(),
+        ];
     }
     function buildTabs() {
         const strip = el("div", "arf-tabs");
@@ -1855,20 +2014,41 @@ export function setup(ctx, overrides) {
     // Whatever is actually doing the scrolling. The drawer gives the tab a root
     // to fill, and depending on the build the scrollbar is on that root, on
     // something above it, or on the page.
-    function scroller(root) {
+    // Every ancestor that can scroll, plus the window. One was not enough: the
+    // drawer nests, and which of the boxes actually holds the scrollbar depends
+    // on the build and on how tall the panel happens to be. Reading them all and
+    // putting them all back costs nothing and cannot pick the wrong one.
+    function scrollers(root) {
+        const out = [];
         try {
             let node = root;
-            while (node && node !== document.body) {
-                if (node.scrollHeight > node.clientHeight + 4) {
-                    const how = getComputedStyle(node).overflowY;
-                    if (how === "auto" || how === "scroll")
-                        return node;
-                }
+            let hops = 0;
+            while (node && hops < 12) {
+                hops++;
+                if (node.scrollTop > 0)
+                    out.push({ node: node, at: node.scrollTop });
                 node = node.parentElement;
             }
+            const w = globalThis;
+            const page = document.scrollingElement || document.documentElement;
+            if (page && page.scrollTop > 0)
+                out.push({ node: page, at: page.scrollTop });
+            if (w && w.scrollY > 0)
+                out.push({ node: w, at: w.scrollY });
         }
         catch (_) { }
-        return null;
+        return out;
+    }
+    function putBack(held) {
+        for (const one of held) {
+            try {
+                if (one.node && one.node.scrollTo && one.node === globalThis)
+                    one.node.scrollTo(0, one.at);
+                else if (one.node)
+                    one.node.scrollTop = one.at;
+            }
+            catch (_) { }
+        }
     }
     function paint() {
         // The buttons on the messages show the same state this panel does, so they
@@ -1881,8 +2061,7 @@ export function setup(ctx, overrides) {
         // Where you were reading. The panel is rebuilt from nothing on every
         // repaint, which resets the scroll to the top, so saving a preset from the
         // bottom of a long tab threw you back to the switch. Held and put back.
-        const scrolled = scroller(root);
-        const wasAt = scrolled ? scrolled.scrollTop : 0;
+        const held = scrollers(root);
         // The rule boxes are rebuilt with everything else, so a repaint while
         // somebody is typing would take the cursor with it. Held and put back.
         const focusKey = document.activeElement?.getAttribute?.("data-arf-field");
@@ -1891,6 +2070,12 @@ export function setup(ctx, overrides) {
         root.className = "arf";
         liveEls = null;
         root.appendChild(buildHeader());
+        // A refused permission that stops the whole thing is the answer to "why is
+        // nothing happening", and it belongs where that question gets asked rather
+        // than on a tab somebody has to go and find.
+        for (const p of missing())
+            if (p.fatal)
+                root.appendChild(bad(p.label + " is refused, so nothing can be refined. " + p.without));
         const back = undoHere();
         if (back.length)
             root.appendChild(buildLastRefine(back));
@@ -1927,29 +2112,22 @@ export function setup(ctx, overrides) {
         setScheme(root);
         // Put back before the frame is painted, or the panel visibly jumps to the
         // top and back down.
-        if (scrolled && wasAt > 0) {
-            try {
-                scrolled.scrollTop = wasAt;
-            }
-            catch (_) { }
-        }
+        putBack(held);
         // Colours only resolve once the tree is in the page and laid out, so the
         // repair runs a frame later rather than against a half-built panel. The
-        // scroll is set again there: a tab that grew taller between the two frames
-        // would otherwise have clamped the first attempt to its old height.
+        // scroll is set again there and once more after: a panel that grew taller
+        // between the frames would have clamped the earlier attempts to its old
+        // height, which is what left this looking unfixed.
         try {
             requestAnimationFrame(() => {
                 sweepReadable(root);
-                if (scrolled && wasAt > 0 && scrolled.scrollTop !== wasAt) {
-                    try {
-                        scrolled.scrollTop = wasAt;
-                    }
-                    catch (_) { }
-                }
+                putBack(held);
+                requestAnimationFrame(() => putBack(held));
             });
         }
         catch (_) {
             sweepReadable(root);
+            putBack(held);
         }
         if (focusKey) {
             const back = root.querySelector('[data-arf-field="' + focusKey + '"]');
@@ -2176,8 +2354,20 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     let tryWaiting = null;
+    // The settings other rows hang off. Changing one of these has to rebuild the
+    // panel, not just save it, or its children stay on screen after the thing
+    // they belong to has been switched off.
+    const PARENTS = ["widgetOn", "thinkingMode"];
+    const hasChildren = (key) => PARENTS.indexOf(key) >= 0;
+    // Whether a row has anything to do where it sits.
+    function fieldShows(f) {
+        if (!f.needs)
+            return true;
+        const held = cfg[f.needs.key];
+        return f.needs.is === undefined ? !!held : held === f.needs.is;
+    }
     function fieldRow(f) {
-        const wrap = el("div", "arf-col");
+        const wrap = el("div", "arf-col" + (f.under ? " arf-under" : ""));
         if (f.type === "bool") {
             const lab = document.createElement("label");
             lab.className = "arf-between";
@@ -2191,6 +2381,10 @@ export function setup(ctx, overrides) {
             box.addEventListener("change", () => {
                 cfg[f.key] = !!box.checked;
                 persist(true);
+                // Rows hang off this one, so they have to go and come back with it
+                // rather than sit there doing nothing until the next repaint.
+                if (hasChildren(f.key))
+                    paint();
             });
             lab.appendChild(box);
             wrap.appendChild(lab);
@@ -2219,9 +2413,7 @@ export function setup(ctx, overrides) {
             sel.addEventListener("change", () => {
                 cfg[f.key] = sel.value;
                 persist(true);
-                // The effort row appears and goes with this one, so the panel has to be
-                // rebuilt rather than just saved.
-                if (f.key === "thinkingMode")
+                if (hasChildren(f.key))
                     paint();
             });
             wrap.appendChild(sel);
@@ -2266,8 +2458,13 @@ export function setup(ctx, overrides) {
     // thinks it belongs there is the wrong kind of help. What a missing piece
     // costs is said out loud instead: no {{message}} anywhere is a warning on the
     // card and a refusal to refine.
-    function blockList() {
-        const raw = Array.isArray(cfg.blocks) ? cfg.blocks : [];
+    // Which of the two prompts the editor is showing. Held for the session
+    // rather than saved: it is where you are looking, not a setting.
+    let editing = "blocks";
+    const editingYours = () => editing === "userBlocks";
+    function blockList(which) {
+        const key = which || editing;
+        const raw = Array.isArray(cfg[key]) ? cfg[key] : [];
         const list = raw
             .filter((b) => b && typeof b === "object" && b.id)
             .slice(0, 60)
@@ -2279,11 +2476,11 @@ export function setup(ctx, overrides) {
             name: b.name == null ? "" : String(b.name),
         }));
         if (!list.length)
-            return DEFAULT_BLOCKS.map((b) => ({ ...b }));
+            return (key === "userBlocks" ? YOURS_DEFAULT : DEFAULT_BLOCKS).map((b) => ({ ...b }));
         return list;
     }
     function setBlocks(list, repaint) {
-        cfg.blocks = list;
+        cfg[editing] = list;
         persist(true);
         if (repaint !== false)
             paint();
@@ -2293,8 +2490,33 @@ export function setup(ctx, overrides) {
         const list = blockList();
         const on = list.filter((b) => b.on).length;
         const wrap = card("Your prompt", "The refine is one request, and this is it. Blocks are sent top to bottom, and two next to each other with the same role are joined into one message. A block that comes out empty is left out.", on + " of " + list.length + " on");
-        if (noTurn())
-            wrap.appendChild(bad("No block has " + TURN_MACRO + " in it, so the model would never see the message it is meant to rewrite. Nothing will be refined until one does."));
+        // Two prompts, because refining a reply and tidying your own message are
+        // different jobs. One prompt hedged to do both does neither well.
+        const pick = el("div", "arf-seg");
+        for (const one of [
+            { id: "blocks", label: "For replies" },
+            { id: "userBlocks", label: "For your messages" },
+        ]) {
+            const b2 = document.createElement("button");
+            b2.type = "button";
+            b2.className = "arf-segbtn";
+            b2.textContent = one.label;
+            b2.setAttribute("aria-pressed", editing === one.id ? "true" : "false");
+            b2.setAttribute("data-arf-editing", one.id);
+            b2.addEventListener("click", () => {
+                editing = one.id;
+                paint();
+            });
+            pick.appendChild(b2);
+        }
+        wrap.appendChild(pick);
+        wrap.appendChild(note(editingYours()
+            ? "Used when you refine one of your own messages, or the draft in your input box. Your own messages are never refined automatically, whatever else is switched on: it takes you asking."
+            : "Used for every reply the character writes, by the automatic pass and by the refine button."));
+        if (!holdsTurn(list))
+            wrap.appendChild(bad("No block has " +
+                TURN_MACRO +
+                " in it, so the model would never see the message it is meant to rewrite. Nothing here will be refined until one does."));
         for (let i = 0; i < list.length; i++)
             wrap.appendChild(buildBlockRow(list, i));
         const acts = el("div", "arf-row");
@@ -2317,10 +2539,10 @@ export function setup(ctx, overrides) {
             next.splice(turnAt < 0 ? next.length : turnAt, 0, made);
             setBlocks(next);
         });
-        const reset = button("Back to the default prompt", false);
+        const reset = button("Back to the default", false);
         reset.className += " arf-danger";
         reset.addEventListener("click", () => {
-            setBlocks(DEFAULT_BLOCKS.map((b) => ({ ...b })));
+            setBlocks((editingYours() ? YOURS_DEFAULT : DEFAULT_BLOCKS).map((b) => ({ ...b })));
             log("put the prompt back to the default", true);
         });
         acts.appendChild(add);
@@ -2406,16 +2628,6 @@ export function setup(ctx, overrides) {
         });
         wrap.appendChild(ta);
         const foot = el("div", "arf-row");
-        const big = button("Expand", false);
-        big.setAttribute("aria-label", "Open " + blockLabel(b) + " in a bigger editor");
-        big.addEventListener("click", () => {
-            openBig(blockLabel(b), ta.value, (text) => {
-                const next = blockList();
-                next[i].text = text;
-                setBlocks(next);
-            });
-        });
-        foot.appendChild(big);
         foot.appendChild(el("span", "arf-note", "Sent as"));
         const sel = document.createElement("select");
         sel.className = "arf-field";
@@ -2644,7 +2856,7 @@ export function setup(ctx, overrides) {
     function buildConnectionCard() {
         const wrap = card("Which model refines", "A refine is a second model call on every reply, so these decide what it costs. They default to the cheap answer.");
         for (const f of COST_FIELDS) {
-            if (f.needs && cfg.thinkingMode !== f.needs)
+            if (!fieldShows(f))
                 continue;
             wrap.appendChild(fieldRow(f));
         }
@@ -2909,7 +3121,7 @@ export function setup(ctx, overrides) {
                 (cfg.protectThinking ? "yes" : "no") +
                 ", answer in tags: " +
                 (cfg.wrapOutput ? "yes" : "no"));
-            lines.push("your own messages: " + (cfg.refineUserMessages ? "button may refine them" : "never"));
+            lines.push("your own messages: refined only when you ask, never automatically");
             lines.push("message button: " +
                 (cfg.msgButton ? "on" : "off") +
                 ", widget: " +
@@ -2923,8 +3135,13 @@ export function setup(ctx, overrides) {
         if (on("prompt")) {
             lines.push("");
             lines.push("[prompt shape]");
-            const list = blockList();
+            const list = blockList("blocks");
+            const yours = blockList("userBlocks");
             lines.push("blocks: " + list.length + ", on: " + list.filter((b) => b.on).length);
+            lines.push("own-messages prompt: " +
+                (Array.isArray(cfg.userBlocks) && cfg.userBlocks.length
+                    ? yours.length + " blocks of your own"
+                    : "the default"));
             for (const b of list) {
                 // Names, roles and macros. Never the text: a block can hold anything,
                 // and a bug report should be safe to paste where anyone can read it.
@@ -2942,6 +3159,8 @@ export function setup(ctx, overrides) {
             }
             if (noTurn())
                 lines.push("  NOTE: no block carries {{message}}");
+            if (!holdsTurn(yours))
+                lines.push("  NOTE: the own-messages prompt carries no {{message}}");
         }
         if (on("counts")) {
             lines.push("");
@@ -3014,6 +3233,38 @@ export function setup(ctx, overrides) {
         catch (_) { }
     }
     // ---- Setup ----
+    // What the host is letting it do, and what each refusal costs. Refusing one
+    // is a choice somebody is allowed to make, so this names the cost once and
+    // does not nag: when everything is granted it says so in one line.
+    function buildPermsCard() {
+        const gone = missing();
+        const wrap = card("What it is allowed to do", undefined, granted ? (gone.length ? gone.length + " refused" : "all granted") : "asking");
+        if (!granted) {
+            wrap.appendChild(note("Waiting for Lumiverse to say. This usually answers at once."));
+            return wrap;
+        }
+        if (!gone.length) {
+            wrap.appendChild(notice("good", "Everything it asks for is granted, so nothing here is held back."));
+            return wrap;
+        }
+        // The two it cannot work without are said loudly. The rest are a cost
+        // rather than a fault, and are said plainly.
+        for (const p of gone)
+            wrap.appendChild(p.fatal
+                ? bad(p.label + " is refused. " + p.without)
+                : warn(p.label + " is refused. " + p.without));
+        wrap.appendChild(note("Grant any of these in Lumiverse's own extension settings. Nothing here needs a reload: the panel notices the moment one changes."));
+        wrap.appendChild(fold("What each one is for", (body) => {
+            for (const p of PERMS) {
+                const row = el("div", "arf-between");
+                row.appendChild(el("span", "arf-lab arf-grow", p.label));
+                row.appendChild(el("span", "arf-pill", hasPerm(p.id) ? "granted" : "refused"));
+                body.appendChild(row);
+                body.appendChild(note(p.why + " Without it: " + p.without.toLowerCase()));
+            }
+        }));
+        return wrap;
+    }
     function buildChatCard() {
         const wrap = card("This chat");
         const top = el("div", "arf-between");
@@ -3199,7 +3450,11 @@ export function setup(ctx, overrides) {
             hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Needs the interface panels permission.",
         }));
         if (cfg.widgetOn && widgetFailed)
-            wrap.appendChild(bad("The floating button could not be created. Check that the ui_panels permission is granted."));
+            wrap.appendChild(bad("The floating button could not be created. Check that the interface panels permission is granted."));
+        // Its own settings, which only exist while it does.
+        if (cfg.widgetOn)
+            for (const f of WIDGET_FIELDS)
+                wrap.appendChild(fieldRow(f));
         wrap.appendChild(fieldRow({
             key: "msgButton",
             label: "A button on every message",
@@ -3227,7 +3482,10 @@ export function setup(ctx, overrides) {
         out.addEventListener("click", () => {
             const settings = {};
             for (const k of keysFor("exportParts"))
-                settings[k] = k === "blocks" ? blockList().map((b) => ({ ...b })) : cfg[k];
+                settings[k] =
+                    k === "blocks" || k === "userBlocks"
+                        ? blockList(k).map((b) => ({ ...b }))
+                        : cfg[k];
             const body = {
                 extension: "auto-refine",
                 version: VERSION,
@@ -3326,10 +3584,10 @@ export function setup(ctx, overrides) {
                 continue;
             const want = CONFIG[key];
             const got = s[key];
-            if (key === "blocks") {
+            if (key === "blocks" || key === "userBlocks") {
                 if (!Array.isArray(got))
                     continue;
-                cfg.blocks = got
+                cfg[key] = got
                     .filter((b) => b && typeof b === "object" && b.id)
                     .slice(0, 40)
                     .map((b) => ({
@@ -3718,7 +3976,9 @@ export function setup(ctx, overrides) {
         const out = {};
         for (const k of PRESET_KEYS) {
             if (k === "blocks")
-                out.blocks = blockList().map((b) => ({ ...b }));
+                out.blocks = blockList("blocks").map((b) => ({ ...b }));
+            else if (k === "userBlocks")
+                out.userBlocks = blockList("userBlocks").map((b) => ({ ...b }));
             else if (k === "samplers")
                 out.samplers = Object.assign({}, cfg.samplers || {});
             else
@@ -3732,10 +3992,10 @@ export function setup(ctx, overrides) {
             if (!(k in p.settings))
                 continue;
             const got = p.settings[k];
-            if (k === "blocks") {
+            if (k === "blocks" || k === "userBlocks") {
                 if (!Array.isArray(got))
                     continue;
-                cfg.blocks = got
+                cfg[k] = got
                     .filter((b) => b && typeof b === "object" && b.id)
                     .slice(0, 40)
                     .map((b) => ({
@@ -4352,7 +4612,7 @@ export function setup(ctx, overrides) {
             // Square, and the button fills it. It came out as a squashed oval
             // because the host sizes the container and the button inside was drawing
             // its own 50% radius against whatever shape that turned out to be.
-            const d = 46;
+            const d = widgetWanted();
             widget = ctx.ui.createFloatWidget({
                 width: d,
                 height: d,
@@ -4372,6 +4632,7 @@ export function setup(ctx, overrides) {
             return;
         }
         widgetFailed = false;
+        widgetAt = widgetWanted();
         try {
             // The host's container is whatever shape it is, so this squares itself
             // rather than trusting it, and the icon is centred in a fixed box.
@@ -4383,59 +4644,109 @@ export function setup(ctx, overrides) {
             b.setAttribute("aria-label", "Auto Refine");
             b.innerHTML = refineIcon();
             paintFloat(b);
-            // One tap refines. A press and hold, or a right click, opens the menu:
-            // the tap is the thing you want ninety percent of the time, and the rest
-            // should not cost it a second tap.
+            // One tap does the main thing. A press and hold, or a right click, opens
+            // the menu.
+            //
+            // The hold used to be armed on pointerdown and disarmed on the button's
+            // own pointerup, and the host captures the pointer to drag the widget, so
+            // that pointerup never arrived. Every tap became a hold, and the click
+            // that followed was swallowed by a flag nothing ever cleared: the button
+            // did nothing at all. Now the disarm listens on the window, in the
+            // capture phase, where a captured pointer still reports, and a drag of
+            // more than a few pixels cancels it as well.
             let held = null;
-            const openMenu = (e) => {
-                try {
-                    e.preventDefault();
-                }
-                catch (_) { }
-                widgetMenu();
+            let downAt = null;
+            let menuOpened = false;
+            const disarm = () => {
+                if (held)
+                    clearTimeout(held);
+                held = null;
+                downAt = null;
             };
-            b.addEventListener("click", () => {
-                if (widgetJustHeld) {
-                    widgetJustHeld = false;
+            const onMove = (e) => {
+                if (!downAt || !held)
                     return;
-                }
-                if (undoHere().length && msgBusy === null && !busy && cfg.widgetUndo) {
-                    const one = undoHere()[0];
-                    send({
-                        type: "undo_refine",
-                        requestId: newId(),
-                        chatId: one.chatId,
-                        messageId: one.messageId,
-                    });
-                    return;
-                }
-                refineNow();
-            });
-            b.addEventListener("contextmenu", openMenu);
-            b.addEventListener("pointerdown", () => {
+                const dx = Math.abs((e.clientX || 0) - downAt.x);
+                const dy = Math.abs((e.clientY || 0) - downAt.y);
+                // Moved: this is the host dragging the widget, not a hold.
+                if (dx > 6 || dy > 6)
+                    disarm();
+            };
+            // Capture phase and on the window, so a pointer the host has captured
+            // still gets here.
+            const onUp = () => disarm();
+            try {
+                globalThis.addEventListener("pointerup", onUp, true);
+                globalThis.addEventListener("pointercancel", onUp, true);
+                globalThis.addEventListener("pointermove", onMove, true);
+                disposers.push(() => {
+                    try {
+                        globalThis.removeEventListener("pointerup", onUp, true);
+                        globalThis.removeEventListener("pointercancel", onUp, true);
+                        globalThis.removeEventListener("pointermove", onMove, true);
+                    }
+                    catch (_) { }
+                });
+            }
+            catch (_) { }
+            b.addEventListener("pointerdown", (e) => {
+                menuOpened = false;
+                downAt = { x: (e && e.clientX) || 0, y: (e && e.clientY) || 0 };
                 if (held)
                     clearTimeout(held);
                 held = setTimeout(() => {
                     held = null;
-                    widgetJustHeld = true;
+                    menuOpened = true;
                     widgetMenu();
                 }, 550);
             });
-            const letGo = () => {
-                if (held)
-                    clearTimeout(held);
-                held = null;
-            };
-            b.addEventListener("pointerup", letGo);
-            b.addEventListener("pointerleave", letGo);
-            b.addEventListener("pointercancel", letGo);
+            b.addEventListener("click", (e) => {
+                disarm();
+                // Only suppressed when the menu actually opened, rather than by a flag
+                // that could be left set.
+                if (menuOpened) {
+                    menuOpened = false;
+                    return;
+                }
+                try {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                catch (_) { }
+                widgetTap();
+            });
+            b.addEventListener("contextmenu", (e) => {
+                try {
+                    e.preventDefault();
+                }
+                catch (_) { }
+                disarm();
+                menuOpened = true;
+                widgetMenu();
+            });
             root.appendChild(b);
             floatBtn = b;
         }
         catch (_) { }
     }
     let floatBtn = null;
-    let widgetJustHeld = false;
+    let widgetAt = 0;
+    const widgetWanted = () => Math.min(96, Math.max(28, Math.round(Number(cfg.widgetSize) || 44)));
+    // What one tap does: put the last refine back when there is one and you asked
+    // for that, otherwise refine.
+    function widgetTap() {
+        if (cfg.widgetUndo && !busy && msgBusy === null && undoHere().length) {
+            const one = undoHere()[0];
+            send({
+                type: "undo_refine",
+                requestId: newId(),
+                chatId: one.chatId,
+                messageId: one.messageId,
+            });
+            return;
+        }
+        refineNow();
+    }
     // What the floating button shows, which is the same three states the message
     // button has: working, something to put back, or ready.
     function paintFloat(b) {
@@ -4446,6 +4757,15 @@ export function setup(ctx, overrides) {
             const back = cfg.widgetUndo && undoHere().length > 0;
             const working = busy;
             el2.innerHTML = working ? spinIcon() : back ? undoIcon() : refineIcon();
+            // The icons are written at a fixed 20px, which is most of a 28px button
+            // and lost inside a 96px one. Just over half the button leaves the ring
+            // around it looking even at either end of the range.
+            const svg = el2.querySelector && el2.querySelector("svg");
+            if (svg) {
+                const mark = String(Math.round(widgetWanted() * 0.52));
+                svg.setAttribute("width", mark);
+                svg.setAttribute("height", mark);
+            }
             el2.className = "arf-float" + (working ? " arf-working" : "") + (back ? " arf-back" : "");
             el2.title = working
                 ? "Refining"
@@ -4522,7 +4842,10 @@ export function setup(ctx, overrides) {
         }
     }
     function syncExtras() {
-        // The floating button.
+        // The floating button. Rebuilt when the size changes: the host sizes the
+        // container when it is made and there is no asking it to resize.
+        if (widget && widgetWanted() !== widgetAt)
+            dropWidget();
         if (cfg.widgetOn && cfg.enabled)
             raiseWidget();
         else
@@ -4654,6 +4977,7 @@ export function setup(ctx, overrides) {
                         return;
                     if (msg.type === "backend_ready") {
                         armBackend();
+                        askPermissions();
                         send({ type: "list_connections", requestId: newId() });
                         return;
                     }
@@ -4664,6 +4988,20 @@ export function setup(ctx, overrides) {
                         if (msg.stage === "writing" && typeof msg.chars === "number")
                             streamed = msg.chars;
                         markBusy(true, msg.stage);
+                        return;
+                    }
+                    if (msg.type === "permissions") {
+                        if (permsAsk && msg.requestId !== permsAsk)
+                            return;
+                        permsAsk = null;
+                        granted = msg.known && Array.isArray(msg.granted) ? msg.granted.map(String) : null;
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "permissions_changed") {
+                        // A grant given or taken away while the page is open. Nothing
+                        // restarts, so the panel asks again rather than going stale.
+                        askPermissions();
                         return;
                     }
                     if (msg.type === "active_chat") {
@@ -4928,6 +5266,7 @@ export function setup(ctx, overrides) {
     armBackend();
     syncExtras();
     askActiveChat();
+    askPermissions();
     send({ type: "list_connections", requestId: newId() });
     log("ready v" + VERSION);
     paint();

@@ -34,7 +34,6 @@ const RULES = {
   enabled: true,
   refineOn: true,
   blocks: PROMPT,
-  refineUserMessages: false,
   connectionId: "",
   thinkingMode: "off",
   timeoutSecs: 90,
@@ -286,14 +285,14 @@ describe("refining a reply", () => {
   });
 
   test("your own message is left alone by the automatic pass", async () => {
-    const h = await armed(["i stride through it"], { refineUserMessages: true });
+    const h = await armed(["i stride through it"]);
     await h.ended({ chatId: "c1", messageId: "m1" });
     await wait(50);
     expect(h.body("m1")).toBe("i walk through it");
   });
 
-  test("but the button will refine it when you ask", async () => {
-    const h = await armed(["I walk through it."], { refineUserMessages: true });
+  test("but asking for one refines it, with no setting in the way", async () => {
+    const h = await armed(["<refined>I walk through it.</refined>"]);
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
     await wait(50);
     expect(h.body("m1")).toBe("I walk through it.");

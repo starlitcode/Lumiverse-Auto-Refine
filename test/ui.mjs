@@ -139,9 +139,14 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null 
         toast: (t) => {
           (window.__toasts = window.__toasts || []).push(t);
         },
-        createFloatWidget: () => {
+        createFloatWidget: (spec) => {
           const host = document.createElement("div");
           host.id = "float";
+          // The host owns the box the button is drawn in, so what it was asked
+          // for is the only place the size is observable.
+          window.__widgetSpec = spec || null;
+          host.style.width = ((spec && spec.width) || 0) + "px";
+          host.style.height = ((spec && spec.height) || 0) + "px";
           document.body.appendChild(host);
           window.__widget = true;
           return { root: host, destroy: () => { window.__widget = false; host.remove(); } };
@@ -451,7 +456,7 @@ console.log("\nthe prompt layout editor");
 
     await page.evaluate(() => {
       const reset = Array.from(document.querySelectorAll("#drawer button")).find((b) =>
-        /Back to the default prompt/.test(b.textContent),
+        /^Back to the default$/.test(b.textContent.trim()),
       );
       reset.click();
     });
@@ -587,7 +592,7 @@ console.log("\nthe tabs");
       const cards = await page.evaluate(
         () => document.querySelectorAll("#drawer .arf-body .arf-card").length,
       );
-      ok(label + " shows its own cards", cards >= 1 && cards <= 4, "found " + cards);
+      ok(label + " shows its own cards", cards >= 1 && cards <= 5, "found " + cards);
     }
 
     await goTab(page, "Log");
@@ -841,6 +846,40 @@ console.log("\nthe extras, which are off until asked for");
   );
 }
 
+console.log("\nthe floating button's size");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    // Its settings belong to it: with the button off there is nothing to size.
+    const hidden = await page.evaluate(
+      () => !document.querySelector('#drawer [data-arf-field="widgetSize"]'),
+    );
+    ok("its settings are hidden while the button is off", hidden);
+
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-field="widgetOn"]').click();
+    });
+    await settle(page);
+    // The same range Auto Retry's floating button uses, so the two sit at
+    // matching sizes for somebody running both.
+    const shown = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-field="widgetSize"]');
+      return n && { min: n.min, max: n.max, value: n.value };
+    });
+    ok("switching it on brings its settings back under it", !!shown);
+    ok(
+      "and its range matches Auto Retry's",
+      shown && shown.min === "28" && shown.max === "96" && shown.value === "44",
+      JSON.stringify(shown),
+    );
+  });
+
+  await inTab(browser, { saved: { widgetOn: true, widgetSize: 400 } }, async (page) => {
+    const spec = await page.evaluate(() => window.__widgetSpec);
+    ok("a size past the end of the range is pulled back", spec && spec.width === 96, JSON.stringify(spec));
+  });
+}
+
 console.log("\nsearch");
 {
   await inTab(browser, {}, async (page) => {
@@ -877,10 +916,26 @@ console.log("\nsearch");
 console.log("\nthe bigger editor");
 {
   const errors = await inTab(browser, {}, async (page) => {
-    await goTab(page, "Prompt");
+    // Prompt blocks no longer carry an Expand of their own. The two places the
+    // big editor is still reached from are the debug report, which is editable
+    // so nothing private is pasted into a public issue, and the preview, which
+    // is read only. This is the editable one.
+    await goTab(page, "Log");
     await page.evaluate(() => {
+      window.__copied = [];
+      try {
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: (t) => {
+              window.__copied.push(t);
+              return Promise.resolve();
+            },
+          },
+        });
+      } catch (_) {}
       Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => b.textContent.trim() === "Expand")
+        .find((b) => b.textContent.trim() === "Read and edit it first")
         .click();
     });
     await settle(page);
@@ -890,11 +945,13 @@ console.log("\nthe bigger editor");
       return {
         there: !!over,
         filled: ta ? ta.value.length > 0 : false,
+        editable: ta ? !ta.readOnly : false,
         // Focusing a textarea is what raises the keyboard on a phone.
         focused: document.activeElement === ta,
       };
     });
-    ok("it opens with the block's text in it", open.there && open.filled);
+    ok("it opens with the report in it", open.there && open.filled);
+    ok("and lets you take lines out before it is copied", open.editable);
     ok("and does not focus the box, so no keyboard pops up", !open.focused);
 
     await page.evaluate(() => {
@@ -905,11 +962,8 @@ console.log("\nthe bigger editor");
         .click();
     });
     await settle(page);
-    const saved = await page.evaluate(() => {
-      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
-      return last.settings.blocks.some((b) => b.text === "edited in the big editor");
-    });
-    ok("Done writes it back", saved);
+    const copied = await page.evaluate(() => window.__copied.slice());
+    ok("Done copies what you left in it", copied.indexOf("edited in the big editor") >= 0, copied.join(" | "));
     const shut = await page.evaluate(() => !document.querySelector(".arf-over"));
     ok("and closes", shut);
   });
