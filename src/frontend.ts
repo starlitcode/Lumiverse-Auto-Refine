@@ -268,7 +268,6 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
   { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
   { tag: "{{whose}}", what: "A line saying whether the character or the player wrote it.", ours: true },
   { tag: "{{refine_notes}}", what: "Where to keep its reasoning. Empty unless thinking is on.", ours: true },
-  { tag: "{{output_format}}", what: "Tells it to wrap the answer in <refined> tags. Empty if you switched that off.", ours: true },
   { tag: "{{protect_notes}}", what: "Tells it to leave the protection tokens alone. Only appears when there are some.", ours: true },
   { tag: "{{description}}", what: "The character card's description.", ours: false },
   { tag: "{{personality}}", what: "The card's personality.", ours: false },
@@ -339,7 +338,16 @@ const HOW_TO_ANSWER: Block = {
   name: "How to answer",
   on: true,
   role: "system",
-  text: "{{output_format}}\n\n{{protect_notes}}",
+  text:
+    "<how_to_answer>\n" +
+    "Put the rewritten message between <refined> and </refined>. Only what is " +
+    "between those two tags is saved, so the tags are not optional.\n\n" +
+    "Inside the tags, write the message and nothing else. No preamble, no " +
+    "heading, no note about what you changed.\n\n" +
+    "Anything you write outside the tags is shown to me and never saved into " +
+    "the chat. Leave it empty unless something above asked you for it.\n" +
+    "</how_to_answer>\n\n" +
+    "{{protect_notes}}",
 };
 
 // The list of phrases, which is the same list in both lengths. These are the
@@ -2064,7 +2072,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (id === "context") return [buildContextCard(), buildPreviewCard(), buildTryCard()];
     if (id === "model") return [buildConnectionCard(), buildSamplerCard()];
     if (id === "limits") return [buildProtectCard(), buildGuardCard(), buildSafetyCard()];
-    if (id === "log") return [buildLiveCard(), buildActivityCard(), buildDebugCard()];
+    if (id === "log") {
+      const notes = buildNotesCard();
+      return notes
+        ? [buildLiveCard(), notes, buildActivityCard(), buildDebugCard()]
+        : [buildLiveCard(), buildActivityCard(), buildDebugCard()];
+    }
     return [
       buildPermsCard(),
       buildChatCard(),
@@ -3131,9 +3144,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "wrapOutput",
-        label: "Ask for the answer in tags",
+        label: "Take the answer from between the tags",
         type: "bool",
-        hint: "On by default. The prompt asks for the rewrite between <refined> and </refined>, and only what is between them is used. A model that adds a sentence of its own around it is then harmless rather than dropped, and a rewrite cut off halfway is caught by the missing closing tag. Switching this off also empties the {{output_format}} macro.",
+        hint: "On by default. This is the reading rule, not the asking: when the answer carries <refined> and </refined>, only what is between them is saved, and an opening tag with nothing closing it means the rewrite was cut off and is dropped rather than saved half written. Asking for the tags is your prompt's job. The one that ships with it asks in the How to answer block, in plain words you can reword, move or delete. Off, the whole answer is taken as the rewrite.",
       }),
     );
     wrap.appendChild(
@@ -3179,6 +3192,24 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // ---- Log ----
+  // What the model wrote around the <refined> tags on the last pass. Nothing
+  // outside those tags is ever saved into a chat, which is what makes it a safe
+  // place for a prompt to ask for a report: what was cut, what was added, what
+  // was deliberately left alone. Kept here so the report has somewhere to be
+  // read instead of being dropped on the floor.
+  let lastNotes = "";
+  let lastNotesAt = 0;
+
+  function takeNotes(msg: any): void {
+    try {
+      const t = String((msg && msg.notes) || "").trim();
+      if (!t) return;
+      lastNotes = t.length > 8000 ? t.slice(0, 8000) + "\u2026" : t;
+      lastNotesAt = Date.now();
+      log("the model sent a note back with the refine", true);
+    } catch (_) {}
+  }
+
   // What is happening right now, which the panel could not say before: it knew
   // it was busy and nothing else, so a refine that took forty seconds looked
   // the same as one that had quietly failed.
@@ -3212,6 +3243,38 @@ export function setup(ctx: Ctx, overrides?: any) {
         wrap.appendChild(r);
       }
     }
+    return wrap;
+  }
+
+  // Only there when there is something to show. A prompt that never asks for a
+  // report should not carry an empty card about one.
+  function buildNotesCard(): HTMLElement | null {
+    if (!lastNotes) return null;
+    const wrap = card(
+      "What it said about the edit",
+      "Whatever the model wrote outside the <refined> tags on the last pass. None of it was saved into your chat. This is empty unless your prompt asks for it: add the tags you want to the How to answer block and the answer lands here.",
+      new Date(lastNotesAt).toTimeString().slice(0, 5),
+    );
+    const box = el("div", "arf-well arf-mono", lastNotes);
+    wrap.appendChild(box);
+    const row = el("div", "arf-row");
+    const copy = button("Copy", false);
+    copy.addEventListener("click", () => {
+      copyText(lastNotes);
+      toast("Copied.", true);
+    });
+    const big = button("Expand", false);
+    big.addEventListener("click", () => openBig("What it said about the edit", lastNotes));
+    const clear = button("Clear", false);
+    clear.addEventListener("click", () => {
+      lastNotes = "";
+      lastNotesAt = 0;
+      paint();
+    });
+    row.appendChild(copy);
+    row.appendChild(big);
+    row.appendChild(clear);
+    wrap.appendChild(row);
     return wrap;
   }
 
@@ -4787,9 +4850,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     return undoable.has(undoKey(lastChatId, id));
   }
 
+  // Only touches the button when it would actually say something different.
+  //
+  // This is not a tidiness point. Painting rewrites innerHTML, which is a
+  // childList change, and this runs from an observer watching the whole body
+  // for childList changes. Repainting a button that already said the right
+  // thing scheduled another sweep, which repainted it again: the tab locked up
+  // the moment the setting was switched on.
   function paintMsgBtn(btn: any, id: string) {
     const busyHere = msgBusy === id;
     const back = undoableHere(id);
+    const state = busyHere ? "busy" : back ? "back" : "ready";
+    if (btn.getAttribute("data-arf-state") === state) return;
+    btn.setAttribute("data-arf-state", state);
     btn.innerHTML = busyHere ? spinIcon() : back ? undoIcon() : refineIcon();
     btn.title = busyHere ? "Refining" : back ? "Put this message back" : "Refine this message";
     btn.setAttribute("aria-label", btn.title);
@@ -5329,7 +5402,13 @@ export function setup(ctx: Ctx, overrides?: any) {
             paint();
             return;
           }
+          if (msg.type === "refine_notes") {
+            takeNotes(msg);
+            paint();
+            return;
+          }
           if (msg.type === "refine_skipped") {
+            takeNotes(msg);
             markBusy(false);
             msgBusy = null;
             const why = String(msg.why || "no reason given");
@@ -5341,6 +5420,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "refine_result") {
+            takeNotes(msg);
             markBusy(false);
             msgBusy = null;
             previewBusy = false;
@@ -5397,6 +5477,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (tryWaiting !== msg.requestId) return;
             tryWaiting = null;
             tryBusy = false;
+            takeNotes(msg);
             tryResult = msg.ok
               ? { ok: true, text: String(msg.after || "") }
               : {

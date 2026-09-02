@@ -122,7 +122,14 @@ const TURN_MACRO = '{{message}}';
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
 // rather than a stray heading in the prompt.
-const OURS = ['message', 'history', 'lore', 'whose', 'refine_notes', 'protect_notes', 'output_format'];
+// A macro earns its place by carrying something only this extension can answer:
+// the turn, the run-up, the lorebook, or a note that has to match machinery
+// running elsewhere in the refine. Asking for the answer in tags is none of
+// those. It is a sentence, it belongs to whoever wrote the prompt, and hiding it
+// behind a macro meant it could not be reworded, moved, or asked to report what
+// it changed. It is written out in the default prompt instead, where it can be
+// edited like any other line.
+const OURS = ['message', 'history', 'lore', 'whose', 'refine_notes', 'protect_notes'];
 const NO_SCENE = { character: '', context: '', lore: '', name: '' };
 // The prompt a fresh install ships with, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
@@ -217,7 +224,15 @@ const DEFAULT_BLOCKS = [
         name: 'How to answer',
         on: true,
         role: 'system',
-        text: '{{output_format}}\n\n{{protect_notes}}',
+        text: '<how_to_answer>\n' +
+            'Put the rewritten message between <refined> and </refined>. Only what is ' +
+            'between those two tags is saved, so the tags are not optional.\n\n' +
+            'Inside the tags, write the message and nothing else. No preamble, no ' +
+            'heading, no note about what you changed.\n\n' +
+            'Anything you write outside the tags is shown to me and never saved into ' +
+            'the chat. Leave it empty unless something above asked you for it.\n' +
+            '</how_to_answer>\n\n' +
+            '{{protect_notes}}',
     },
     {
         id: 'turn',
@@ -238,8 +253,6 @@ let wrapOutput = true;
 // the same either way; this only decides whether anybody can watch it.
 let streamProgress = true;
 const OUT_TAG = 'refined';
-const OUTPUT_NOTE = 'Put the rewritten message between <' + OUT_TAG + '> and </' + OUT_TAG + '>. ' +
-    'Write nothing outside those tags: no preamble, no notes on what you changed.';
 // Greedy on purpose. A rewrite can legitimately contain the closing tag as
 // text, and the last one is the end of the answer.
 const OUT_RE = new RegExp('<' + OUT_TAG + '[^>]*>([\\s\\S]*)<\\/' + OUT_TAG + '>', 'i');
@@ -247,14 +260,21 @@ const OUT_OPEN = new RegExp('<' + OUT_TAG + '[^>]*>', 'i');
 // What the model actually meant to hand back. When the tags are there this is
 // exact, and every check downstream then runs on the rewrite rather than on the
 // rewrite plus whatever was said around it.
+// outside is whatever the model wrote around the tags. It is never saved into
+// the chat, and it used to be dropped unread. A prompt is free to ask for a
+// note on what was cut and what was left alone, and that note lands here, so it
+// is carried back to the panel to be shown rather than thrown away.
 function unwrapOutput(answer) {
     const hit = OUT_RE.exec(answer);
-    if (hit && typeof hit[1] === 'string')
-        return { text: hit[1].trim(), tagged: true };
+    if (hit && typeof hit[1] === 'string') {
+        const before = answer.slice(0, hit.index);
+        const after = answer.slice(hit.index + hit[0].length);
+        return { text: hit[1].trim(), tagged: true, outside: (before + '\n' + after).trim() };
+    }
     // An opening tag with nothing closing it: the answer was cut off mid-write.
     if (OUT_OPEN.test(answer))
-        return { text: '', tagged: true };
-    return { text: answer, tagged: false };
+        return { text: '', tagged: true, outside: '' };
+    return { text: answer, tagged: false, outside: '' };
 }
 const REASONING_NOTE = 'Think about the edit before you write it, then give only the rewritten ' +
     'message as your answer. Your reasoning must not appear in the answer.';
@@ -424,8 +444,6 @@ function fillOurs(text, p) {
             return thinkingMode !== 'off' ? REASONING_NOTE : '';
         if (id === 'protect_notes')
             return p.shieldNote || '';
-        if (id === 'output_format')
-            return wrapOutput ? OUTPUT_NOTE : '';
         return '';
     });
 }
@@ -543,8 +561,11 @@ function unfence(t) {
 function judge(answer, original) {
     const got = unwrapOutput(String(answer == null ? '' : answer));
     if (wrapOutput && got.tagged && !got.text)
-        return { ok: false, text: '', why: 'the rewrite was cut off before it finished' };
-    return judgeInner(got.text, original);
+        return { ok: false, text: '', why: 'the rewrite was cut off before it finished', notes: got.outside };
+    const out = judgeInner(got.text, original);
+    if (got.outside)
+        out.notes = got.outside;
+    return out;
 }
 function judgeInner(answer, original) {
     const raw = String(answer == null ? '' : answer);
@@ -966,12 +987,17 @@ async function refineMessage(chatId, messageId, userId, byHand) {
     // Judged against the text that was actually sent, so a message that is half
     // markup is not called "too short" for the tokens standing in for it.
     const verdict = judge(answer.content, armed.text);
+    // Whatever the model wrote around the tags travels with every answer from
+    // here on, refused ones included. A prompt that asked for a report on what
+    // was cut wants that report most on the pass that was turned down.
+    const notes = verdict.notes || '';
     if (!verdict.ok)
-        return { ok: false, why: verdict.why };
+        return { ok: false, why: verdict.why, notes: notes };
     const back = unshield(verdict.text, armed.parts);
     if (back.lost.length)
         return {
             ok: false,
+            notes: notes,
             why: 'the rewrite dropped ' +
                 back.lost.length +
                 (back.lost.length === 1 ? ' piece' : ' pieces') +
@@ -986,10 +1012,14 @@ async function refineMessage(chatId, messageId, userId, byHand) {
             messageId: messageId,
             before: original,
             after: whole,
+            notes: notes,
         });
-        return { ok: false, why: 'waiting for you to say yes' };
+        return { ok: false, why: 'waiting for you to say yes', notes: notes };
     }
-    return saveRefined(chatId, m, original, whole, userId);
+    const saved = await saveRefined(chatId, m, original, whole, userId);
+    if (notes)
+        saved.notes = notes;
+    return saved;
 }
 async function saveRefined(chatId, m, original, next, userId) {
     const k = key(chatId, m.id);
@@ -1094,7 +1124,13 @@ try {
                     chatId: p.chatId,
                     messageId: messageId,
                     why: done.why,
+                    notes: done.notes || '',
                 });
+            }
+            // A refine that worked still has a report to hand over when the prompt
+            // asked for one, and the automatic pass has no other way to show it.
+            else if (done.ok && done.notes) {
+                replyTo(p.userId, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
             }
         }
         catch (e) {
@@ -1186,6 +1222,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 messageId: payload.messageId,
                 ok: done.ok,
                 why: done.why,
+                notes: done.notes || '',
             });
             return;
         }
@@ -1416,6 +1453,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 requestId: payload.requestId,
                 ok: verdict.ok,
                 why: verdict.why,
+                notes: verdict.notes || '',
                 after: verdict.ok ? verdict.text : String(answer.content || ''),
             });
             return;

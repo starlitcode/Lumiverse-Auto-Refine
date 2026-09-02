@@ -40,7 +40,7 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Limits
 
 - **Hide markup from the model**, **Hide plain italic and bold too** and **Never send the model's thinking** keep a rewrite away from what is not prose, in [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
-- **Ask for the answer in tags** is what makes a model's preamble harmless instead of fatal, in [The answer it asks for](prompt.md#the-answer-it-asks-for).
+- **Take the answer from between the tags** is what makes a model's preamble harmless instead of fatal, in [The answer it asks for](prompt.md#the-answer-it-asks-for). Asking for the tags is your prompt's job; this decides what is done with the answer.
 - **Watch the rewrite arrive** streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved.
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits, in [What it refuses to save](guardrails.md).
 - **Keep what a refine replaced** holds the original so you can put it back.
@@ -50,6 +50,7 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Log
 
 - **Right now** is the live view. It names the stage rather than just saying busy: asking, thinking, writing with a character count when your connection streams, then checking. The clock runs, and past eight seconds it also says how long is left before the timeout gives up. It writes into the line in place rather than repainting the panel under you, and the dot beside it breathes while something is running.
+- **What it said about the edit** is whatever the model wrote outside the `<refined>` tags on the last pass. None of it is saved into your chat, which is what makes it a safe place for your prompt to ask what was cut and what was left alone, in [Asking it what it changed](prompt.md#asking-it-what-it-changed). The card only appears when something arrives in it.
 - **What it has been doing** is the running list, newest first.
 - **Reporting a problem** copies everything somebody would otherwise have to ask you for. **What it carries** decides which parts go in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser. What your blocks actually say is never in it, only their names, roles and macros, so it is safe to paste in public. **Read and edit it first** opens the whole thing so you can take out anything you would rather not post before it is copied.
 

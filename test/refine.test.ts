@@ -26,7 +26,7 @@ const PROMPT = [
   { id: "lore", name: "World", on: true, role: "system", text: "<world>\n{{lore}}\n</world>" },
   { id: "history", name: "Scene", on: true, role: "system", text: "<recent_scene>\n{{history}}\n</recent_scene>" },
   { id: "cliches", name: "Cliches", on: true, role: "system", text: "<cliches>\nCut filler words.\n</cliches>" },
-  { id: "answer", name: "How to answer", on: true, role: "system", text: "{{output_format}}\n\n{{protect_notes}}" },
+  { id: "answer", name: "How to answer", on: true, role: "system", text: "<how_to_answer>\nPut the rewritten message between <refined> and </refined>.\n</how_to_answer>\n\n{{protect_notes}}" },
   { id: "turn", name: "The turn", on: true, role: "user", text: "{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
 ];
 
@@ -924,11 +924,13 @@ describe("nothing is ever sent to the chat", () => {
 describe("the answer it asks for", () => {
   const original = "She stepped through and, suddenly, the cold just hit her.";
 
-  test("the prompt asks for the rewrite in tags", async () => {
+  // The ask is the prompt's, written out in a block, not a macro this extension
+  // fills in. Which means it reaches the model exactly as it was typed.
+  test("the prompt asks for the rewrite in the words the block was written in", async () => {
     const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).toContain("<refined>");
+    expect(said(h)).toContain("Put the rewritten message between <refined> and </refined>.");
   });
 
   test("only what is between the tags is saved", async () => {
@@ -967,11 +969,30 @@ describe("the answer it asks for", () => {
     expect(h.skipped().join(" ")).toMatch(/wrote about the edit/i);
   });
 
-  test("and the prompt stops asking for them", async () => {
+  // Switching it off changes how the answer is read, never what was asked. The
+  // ask belongs to whoever wrote the block, so it goes out either way and it is
+  // theirs to delete.
+  test("switching it off leaves the prompt exactly as it was written", async () => {
     const h = await armed(["She stepped through and the cold hit her."], { wrapOutput: false });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).not.toContain("<refined>");
+    expect(said(h)).toContain("<refined>");
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // Nothing outside the tags is ever saved, which is what makes it somewhere a
+  // prompt can safely ask for a report on what was cut.
+  test("what the model wrote around the tags is carried back, not saved", async () => {
+    const h = await armed([
+      "<changes>Cut two filler words. Left the dialogue alone.</changes>\n" +
+        "<refined>She stepped through and the cold hit her.</refined>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    const notes = h.sent.filter((m: any) => m && typeof m.notes === "string" && m.notes);
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0].notes).toContain("Left the dialogue alone");
   });
 });
 

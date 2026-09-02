@@ -25,7 +25,6 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{whose}}` | A line saying whether the character or the player wrote it. |
 | `{{refine_notes}}` | Where to keep its reasoning. Empty unless thinking is on. |
-| `{{output_format}}` | The instruction to answer in tags. Empty if you switched that off. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
 **Lumiverse's**, which the host resolves: `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{user}}`, and anything else that works in a character card or a preset.
@@ -49,11 +48,33 @@ System is right for almost everything. Two cases where changing it helps:
 
 ## The answer it asks for
 
-**Ask for the answer in tags**, under Limits, is on by default. The prompt asks for the rewrite between `<refined>` and `</refined>`, and only what is between them is used.
+The rewrite comes back between `<refined>` and `</refined>`, and only what is between them is saved.
 
 This is worth more than it sounds. Without it, a model that opens with "Sure! Here is the rewritten message:" has its whole answer dropped, because saving that line into your chat is worse than saving nothing. With it, the sentence outside the tags is simply ignored and the rewrite lands. It also catches an answer that ran out of room: an opening tag with nothing closing it means the rewrite was cut off, and a half-written message is never saved.
 
-Switching it off empties the `{{output_format}}` macro and puts the older checks back in charge.
+**Asking for the tags is your prompt's job, not a macro's.** The prompts that ship with it ask in the **How to answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` to fill it in for you, and that is deliberate: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
+
+**Take the answer from between the tags**, under Limits, is the reading half and is on by default. It decides what is done with an answer, never what is asked for. Off, the whole answer is taken as the rewrite and the older checks catch a preamble instead.
+
+## Asking it what it changed
+
+Nothing outside the `<refined>` tags is ever saved into your chat. That makes the space around them somewhere a prompt can safely ask for anything it likes, and the obvious thing to ask for is a report: what was cut, what was added, what was deliberately left alone.
+
+Add the tags you want to the **How to answer** block, in your own words. For example:
+
+```
+Before the rewrite, list what you changed:
+
+<cut>every phrase you removed, one per line</cut>
+<added>anything you added, one per line</added>
+<kept>anything you were tempted to change and left alone, and why</kept>
+
+Then give the rewrite between <refined> and </refined>.
+```
+
+What comes back outside the tags appears on the **Log** tab under **What it said about the edit**, with the time it arrived, and can be copied or read at full size. It is never written into the message. The card is not there at all until something arrives in it, so a prompt that never asks for a report never carries an empty card about one.
+
+The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<refined>` and `</refined>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 
 ## The four prompts that ship with it
 
