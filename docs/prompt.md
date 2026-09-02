@@ -37,7 +37,14 @@ They are resolved in that order for a reason. Ours go in **last**, after the hos
 
 The turn is last by default, and that is worth keeping. Anything after the message reads as an instruction about it, so a rule placed below it is more likely to be followed, and a block of narration placed below it is more likely to be treated as something to act on. A new block goes in above the turn unless you move it.
 
-The other reason order matters is caching. If your provider caches prompts, the reuse runs up to the first thing that changed, so blocks that never change belong at the top and blocks that change every turn belong at the bottom. The prompts that ship with it are already that way round.
+The other reason order matters is caching. If your provider caches prompts, the reuse runs from the front up to the first thing that changed, so the order that costs least is the order of how often something moves:
+
+1. **The rules.** Identical on every refine in every chat.
+2. **The setting**: who the story follows, who you are writing with, what is true in its world. Identical for a whole chat.
+3. **The pages before this one.** Redrawn every turn.
+4. **The passage.** Different every time.
+
+All five shipped prompts are built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
 
 ## Roles
 

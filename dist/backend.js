@@ -202,88 +202,55 @@ const NO_SCENE = { character: '', context: '', lore: '', name: '' };
 // to as, and XML tags as headings with a closing tag at the end, because a
 // model reads a tagged block as one instruction rather than as a paragraph that
 // blurs into the next one.
+// What a fresh install refines with until the reader changes it. The same
+// prompt the panel ships as Short, and the same order: the rules first, because
+// they never change and a provider that caches prompts reuses everything up to
+// the first thing that did; then the setting, then the pages before this one,
+// then the passage.
 const DEFAULT_BLOCKS = [
     {
-        id: 'system',
+        id: 'job',
         name: 'The job',
         on: true,
         role: 'system',
-        text: '<your_task>\n' +
-            'You are editing one message from an ongoing story. Rewrite it so that it ' +
-            'follows every rule you are given below.\n\n' +
-            'Keep the same events, the same speech, and the same meaning. You are ' +
-            'changing how it is written, not what happens in it. Do not add new ' +
-            'actions, new dialogue, or new characters. Do not continue the scene past ' +
-            'where it ends. Do not resolve anything the message leaves open.\n\n' +
-            'Reply with the rewritten message and nothing else. No preamble, no ' +
-            'explanation of what you changed, no notes at the end.\n' +
-            '</your_task>',
+        text: '<your_job>\n' +
+            'You are the second pair of eyes on a draft. Two authors are writing this ' +
+            'story between them, passing it back and forth, and the passage below has ' +
+            'just been written.\n\n' +
+            'Your work is on the writing. Every event, every line of speech and ' +
+            'everything anyone means survives it, and the passage ends on the moment ' +
+            'it already ends on.\n' +
+            '</your_job>',
     },
     {
-        id: 'character',
-        name: 'Who the character is',
+        id: 'cut',
+        name: 'What to cut',
         on: true,
         role: 'system',
-        text: '<character>\n{{description}}\n</character>',
+        text: '<what_to_cut>\n' +
+            'Take out the phrases that arrive by habit: a held breath, a hammering ' +
+            'heart, a voice barely above a whisper, darkening eyes, a shiver down a ' +
+            'spine, the ghost of a smile, air thick with something.\n\n' +
+            'Take out these words where the sentence still stands without them: ' +
+            'suddenly, slowly, just, really, very, almost, somehow, seemed to, began ' +
+            'to.\n\n' +
+            'Where a sentence restates the one before it in other words, keep ' +
+            'whichever is doing the work and let the other go.\n\n' +
+            'When something goes, let the gap close. A passage is usually better one ' +
+            'sentence shorter.\n' +
+            '</what_to_cut>',
     },
     {
-        id: 'persona',
-        name: 'Who the player is',
+        id: 'leave',
+        name: 'What to leave',
         on: true,
         role: 'system',
-        text: '<player>\n{{persona}}\n</player>',
-    },
-    {
-        id: 'lore',
-        name: 'What is true in this world',
-        on: true,
-        role: 'system',
-        text: '<world>\n{{lore}}\n</world>',
-    },
-    {
-        id: 'history',
-        name: 'What has been happening',
-        on: true,
-        role: 'system',
-        text: '<recent_scene>\n{{history}}\n</recent_scene>',
-    },
-    {
-        id: 'cliches',
-        name: 'Cliches',
-        on: true,
-        role: 'system',
-        text: '<cliches>\n' +
-            'Cut phrases that turn up in every story rather than in this one. You know ' +
-            'the ones: a breath you did not know you were holding, a voice barely above ' +
-            'a whisper, a heart hammering against ribs, something unspoken hanging in ' +
-            'the air.\n\n' +
-            'Replace each with what is actually happening to this person in this room. ' +
-            'If nothing is actually happening, cut the line rather than replacing it.\n' +
-            '</cliches>',
-    },
-    {
-        id: 'sentences',
-        name: 'Sentence rhythm',
-        on: true,
-        role: 'system',
-        text: '<sentence_rhythm>\n' +
-            'Vary your sentence lengths. Three medium sentences in a row is a rhythm a ' +
-            'reader stops hearing.\n\n' +
-            'Cut the sentence that restates the one before it in different words. Cut ' +
-            'adverbs that only repeat what the verb already said.\n' +
-            '</sentence_rhythm>',
-    },
-    {
-        id: 'dialogue',
-        name: 'Dialogue',
-        on: true,
-        role: 'system',
-        text: '<dialogue>\n' +
-            'Keep every line of speech saying what it said. You may change how it is ' +
-            'said if the wording is stiff, but never what is meant.\n\n' +
-            'Cut speech tags that explain the line: she said angrily, he asked ' +
-            'curiously. If the line does not carry it, the line is the problem.\n' +
-            '</dialogue>',
+        text: '<what_to_leave>\n' +
+            'A passage that already reads well comes back exactly as it was. ' +
+            'Rewriting what did not need it costs the most of anything you can do ' +
+            'here: it takes away a line your co-author chose.\n\n' +
+            'Your rewrite comes back no longer than what you were given.\n' +
+            '</what_to_leave>',
     },
     {
         id: 'answer',
@@ -291,21 +258,37 @@ const DEFAULT_BLOCKS = [
         on: true,
         role: 'system',
         text: '<how_to_answer>\n' +
-            'Put the rewritten message between <REFINED> and </REFINED>. Only what is ' +
-            'between those two tags is saved, so the tags are not optional.\n\n' +
-            'Inside the tags, write the message and nothing else. No preamble, no ' +
-            'heading, no note about what you changed.\n\n' +
-            'Anything you write outside the tags is shown to me and never saved into ' +
-            'the chat. Leave it empty unless something above asked you for it.\n' +
+            'Your whole answer takes this shape:\n\n' +
+            '<REFINED>\n' +
+            'the passage, rewritten\n' +
+            '</REFINED>\n\n' +
+            'Only what sits between those two tags is saved, so both belong in every ' +
+            'answer. Inside them, write the passage as a reader would meet it.\n\n' +
+            'Anything outside the tags reaches me and never reaches the story, so a ' +
+            'note about the edit belongs there if you have one.\n' +
             '</how_to_answer>\n\n' +
             '{{protect_notes}}',
     },
     {
+        id: 'character',
+        name: 'Who the story follows',
+        on: true,
+        role: 'system',
+        text: '<who_the_story_follows>\n{{description}}\n</who_the_story_follows>',
+    },
+    {
+        id: 'history',
+        name: 'The pages before this one',
+        on: true,
+        role: 'system',
+        text: '<earlier_pages>\n{{history}}\n</earlier_pages>',
+    },
+    {
         id: 'turn',
-        name: 'The turn to refine',
+        name: 'The passage to refine',
         on: true,
         role: 'user',
-        text: '{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>',
+        text: '{{whose}}\n\n<passage_to_refine>\n{{message}}\n</passage_to_refine>',
     },
 ];
 // Reasoning models are told where to put their working. Sent as its own block
@@ -462,11 +445,10 @@ function unshield(text, parts) {
             lost.push(i);
     return { text: out, lost: lost };
 }
-const SHIELD_NOTE = 'Some parts of the message have been replaced with tokens that look like ' +
-    '[[AR1]], [[AR2]] and so on. They stand for formatting that must survive ' +
-    'exactly as it is. Copy every one of them into your answer unchanged, in the ' +
-    'same place. Do not edit them, translate them, split them across lines, or ' +
-    'remove them.';
+const SHIELD_NOTE = 'Parts of this passage have been replaced with tokens shaped like [[AR1]], ' +
+    '[[AR2]] and so on. Each stands in for formatting that has to survive the ' +
+    'edit exactly as it is. Copy every one into your answer unchanged and in the ' +
+    'same place, treating each as a single character you cannot spell.';
 // The model's own working, which is not prose and is not the reader's writing.
 // It is cut off before the refine and put back afterwards, so a rewrite can
 // never quietly edit what a model worked out in a place nobody would check.
@@ -567,9 +549,10 @@ function fillOurs(text, p) {
             return p.lore;
         if (id === 'whose')
             return p.isUser
-                ? 'This message was written by the player, in their own voice. Keep ' +
-                    'their voice. Do not rewrite it as the narrator or as the character.'
-                : 'This message was written by the character or the narrator.';
+                ? 'Your co-author wrote this passage, in their own hand. Keep their ' +
+                    'hand: it belongs to them, and the story is written in more than one.'
+                : 'This passage is the story in its own voice, the narrator and the ' +
+                    'characters.';
         if (id === 'protect_notes')
             return p.shieldNote || '';
         return '';

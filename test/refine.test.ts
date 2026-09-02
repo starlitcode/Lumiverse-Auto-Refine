@@ -1616,3 +1616,55 @@ describe("asking again when a check fails", () => {
     expect(h.asked.length).toBe(1);
   });
 });
+
+// A provider that caches prompts reuses the run of the request that has not
+// changed since last time, counting from the front. So everything that holds
+// still belongs above everything that moves: the rules, then the setting, then
+// the pages before this one, then the passage.
+//
+// The presets used to put the run-up third, which put a block that is redrawn
+// every turn above every rule, and made the whole prompt new on every reply.
+describe("a prompt built to be cached", () => {
+  // Built from the prompt that ships, not the small fixture the other checks
+  // use: an empty list falls back to the default, which is the thing whose
+  // order this is about.
+  const build = async (over: any = {}) => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      blocks: [],
+      ...over,
+    });
+    await h.front({ type: "preview_prompt", requestId: "p1", chatId: "c1", messageId: "m2" });
+    await wait(20);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p1");
+    return (got.messages || []).map((m: any) => String(m.content || "")).join("\n\n");
+  };
+
+  test("the run-up and the passage come after the rules", async () => {
+    const whole = await build();
+    const rules = whole.indexOf("</how_to_answer>");
+    const runUp = whole.indexOf("<earlier_pages>");
+    const turn = whole.indexOf("<passage_to_refine>");
+    expect(rules).toBeGreaterThan(-1);
+    expect(runUp).toBeGreaterThan(rules);
+    expect(turn).toBeGreaterThan(runUp);
+  });
+
+  test("and the setting sits between them", async () => {
+    const whole = await build();
+    const rules = whole.indexOf("</how_to_answer>");
+    const who = whole.indexOf("<who_the_story_follows>");
+    const runUp = whole.indexOf("<earlier_pages>");
+    expect(who).toBeGreaterThan(rules);
+    expect(runUp).toBeGreaterThan(who);
+  });
+
+  // What the front of the request is worth: the run above the first thing that
+  // moved is the same on every refine, so it is the part a provider can reuse.
+  test("the rules are byte for byte the same across two different chats", async () => {
+    const a = await build();
+    const b = await build();
+    const cut = (t: string) => t.slice(0, t.indexOf("<who_the_story_follows>"));
+    expect(cut(a)).toBe(cut(b));
+    expect(cut(a).length).toBeGreaterThan(200);
+  });
+});
