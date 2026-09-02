@@ -82,6 +82,59 @@ function note(set: Set<string>, v: string, cap: number) {
   while (set.size > cap) set.delete(set.values().next().value as string);
 }
 
+// ---- storage that follows the account ----
+// Settings used to live only in the browser, which meant opening Lumiverse on a
+// different browser, or a different machine, presented a fresh install: every
+// rule, preset and sampler gone. They belong to the account.
+//
+// One backend process can serve every account on a server, and spindle.storage
+// resolves to a single shared directory in that case, so writing through it
+// would pool one reader's prompts where another reader could read them back.
+// userStorage always resolves per user. On an ordinary single user install the
+// id is inferred and this behaves exactly as the shared store did.
+const SETTINGS_FILE = 'settings.json';
+const PRESETS_FILE = 'presets.json';
+
+function hasUserStorage(): boolean {
+  try {
+    return !!(spindle.userStorage && typeof spindle.userStorage.getJson === 'function');
+  } catch (_) {
+    return false;
+  }
+}
+
+// Reads this user's copy. On the first read after upgrading, anything left in
+// the old shared store is carried up rather than presenting empty settings to
+// somebody who had them a minute ago.
+async function readUserJson(file: string, userId?: string): Promise<any> {
+  if (hasUserStorage()) {
+    try {
+      const v = await spindle.userStorage.getJson(file, { fallback: null, userId: userId });
+      if (v != null) return v;
+    } catch (_) { /* fall through to the old store */ }
+    let legacy: any = null;
+    try { legacy = JSON.parse(await spindle.storage.read(file)); } catch (_) { legacy = null; }
+    if (legacy != null) {
+      try { await spindle.userStorage.setJson(file, legacy, { userId: userId }); } catch (_) {}
+    }
+    return legacy;
+  }
+  try { return JSON.parse(await spindle.storage.read(file)); } catch (_) { return null; }
+}
+
+async function writeUserJson(file: string, value: any, userId?: string): Promise<void> {
+  if (hasUserStorage()) {
+    try {
+      await spindle.userStorage.setJson(file, value, { userId: userId });
+      return;
+    } catch (_) { /* fall through, so a save is never silently lost */ }
+  }
+  await spindle.storage.write(file, JSON.stringify(value));
+}
+
+// Replying with no userId broadcasts to every connected reader on an operator
+// scoped install, so every reply carries the id of whoever asked. A user scoped
+// install ignores the argument.
 function replyTo(userId: string | undefined, msg: any) {
   try {
     if (userId) spindle.sendToFrontend(msg, userId);
@@ -1097,6 +1150,21 @@ async function refineMessage(
   return saved;
 }
 
+// What a message says right now, or null when it cannot be read. Null means
+// proceed: a host that will not answer is not evidence that anything changed,
+// and refusing every refine because a read failed is worse than the race.
+async function currentContent(chatId: string, messageId: any): Promise<string | null> {
+  try {
+    const msgs = await spindle.chat.getMessages(chatId);
+    if (!Array.isArray(msgs)) return null;
+    const m = msgs.find((x: any) => x && x.id === messageId);
+    if (!m) return null;
+    return String(m.content == null ? '' : m.content);
+  } catch (_) {
+    return null;
+  }
+}
+
 async function saveRefined(
   chatId: string,
   m: any,
@@ -1106,6 +1174,25 @@ async function saveRefined(
 ): Promise<RefineOutcome> {
   const k = key(chatId, m.id);
   try {
+    // The message is read, sent to a model, and written back, and the model
+    // call takes seconds. Anything else editing that message in the meantime
+    // would be silently reverted by this write: another extension applying a
+    // word swap, or the reader editing the reply while waiting.
+    //
+    // Auto Retry is the concrete case. It swaps words on the same reply, on the
+    // same event, and its swap landed while this refine was still in flight.
+    // Whoever wrote last won, and it was usually this.
+    //
+    // So the message is read again here and the write is refused if it moved.
+    // A refine is worth less than somebody else's edit: the refine can be run
+    // again on the new text, and the edit cannot be recovered.
+    const fresh = await currentContent(chatId, m.id);
+    if (fresh !== null && fresh !== original) {
+      return {
+        ok: false,
+        why: 'that message changed while the rewrite was being written, so it was left alone',
+      };
+    }
     if (keepOriginal) remember(before, k, { text: original, at: Date.now() }, BEFORE_MAX);
     remember(ourWrites, k, next, OURS_MAX);
     const patch: any = { content: next };
@@ -1269,6 +1356,51 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       protectInline = !!s.protectInline;
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
+      // Written to the account as well as held here, so the next browser to
+      // ask gets these rather than a fresh install. Failing to write is worth
+      // saying out loud: settings that look saved and are not is the worst
+      // shape this can take.
+      try {
+        await writeUserJson(SETTINGS_FILE, s, userId);
+      } catch (e: any) {
+        say('warn', 'settings could not be saved to the account: ' + ((e && e.message) || String(e)));
+        replyTo(userId, { type: 'account_save_failed', what: 'settings' });
+      }
+      return;
+    }
+
+    // The panel asking for the account's copy on load. This is the only path
+    // that can read it: the id arrives with a frontend message, and the read
+    // that runs at startup has no user to resolve.
+    if (payload.type === 'load_settings') {
+      let saved: any = null;
+      try {
+        saved = await readUserJson(SETTINGS_FILE, userId);
+      } catch (_) {
+        saved = null;
+      }
+      replyTo(userId, { type: 'loaded_settings', requestId: payload.requestId, settings: saved });
+      return;
+    }
+
+    if (payload.type === 'save_presets') {
+      try {
+        await writeUserJson(PRESETS_FILE, payload.presets, userId);
+      } catch (e: any) {
+        say('warn', 'presets could not be saved to the account: ' + ((e && e.message) || String(e)));
+        replyTo(userId, { type: 'account_save_failed', what: 'presets' });
+      }
+      return;
+    }
+
+    if (payload.type === 'load_presets') {
+      let saved: any = null;
+      try {
+        saved = await readUserJson(PRESETS_FILE, userId);
+      } catch (_) {
+        saved = null;
+      }
+      replyTo(userId, { type: 'loaded_presets', requestId: payload.requestId, presets: saved });
       return;
     }
 

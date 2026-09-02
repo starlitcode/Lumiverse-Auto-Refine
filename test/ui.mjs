@@ -82,7 +82,7 @@ const settle = (page) =>
 
 // Boots the extension in a page with the tab mounted, and hands the callback the
 // page plus whatever the stub host recorded.
-async function inTab(browser, { css = "", viewport, touch = false, saved = null } = {}, fn) {
+async function inTab(browser, { css = "", viewport, touch = false, saved = null, noMenu = false } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
   );
@@ -112,6 +112,7 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null 
   }
   await page.addScriptTag({ content: SOURCE, type: "module" });
   await page.waitForFunction(() => !!window.__setup);
+  if (noMenu) await page.evaluate(() => { window.__noMenu = true; });
 
   await page.evaluate(() => {
     window.__sent = [];
@@ -139,6 +140,17 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null 
         toast: (t) => {
           (window.__toasts = window.__toasts || []).push(t);
         },
+        // Only present when a check asks for it. A host without it is a host
+        // whose floating button has no menu, which is the case that decides
+        // whether the Extras row hides for the button or stays put.
+        ...(window.__noMenu
+          ? {}
+          : {
+              showContextMenu: (spec) => {
+                window.__menu = spec;
+                return Promise.resolve({ selectedKey: window.__menuPick || null });
+              },
+            }),
         createFloatWidget: (spec) => {
           const host = document.createElement("div");
           host.id = "float";
@@ -777,15 +789,17 @@ console.log("\nthe extras, which are off until asked for");
     ok("no floating button and no input bar row on a fresh install", !quiet.widget && !quiet.row);
   });
 
+  // No floating button, so the Extras row is the only way to reach this and it
+  // registers.
   await inTab(
     browser,
-    { saved: { widgetOn: true, inputRefine: true } },
+    { saved: { inputRefine: true } },
     async (page) => {
     const up = await page.evaluate(() => ({
       widget: !!window.__widget,
       row: !!window.__inputAction,
     }));
-    ok("both appear when they are switched on", up.widget && up.row);
+    ok("the Extras row appears when there is no button to hold it", !up.widget && up.row);
 
     // Refining the draft reads the input box, sends it, and writes the answer
     // back through the setter the framework is listening to.
@@ -844,6 +858,130 @@ console.log("\nthe extras, which are off until asked for");
     ok("with no {{message}} in the prompt, nothing is sent and the draft is untouched", asked === 0);
     },
   );
+}
+
+console.log("\nin one place at a time");
+{
+  // With a button on screen and a menu to draw, the button's menu takes over
+  // what would otherwise be a row in the chat input's Extras menu.
+  await inTab(browser, { saved: { widgetOn: true, inputRefine: true } }, async (page) => {
+    const up = await page.evaluate(() => ({
+      widget: !!window.__widget,
+      row: !!window.__inputAction,
+    }));
+    ok("the button takes the Extras row over", up.widget && !up.row);
+
+    await page.evaluate(() => {
+      window.__menuPick = null;
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle(page);
+    const menu = await page.evaluate(() => window.__menu);
+    const keys = ((menu && menu.items) || []).map((i) => i.key);
+    ok("holding it opens Lumiverse's own menu", !!menu, JSON.stringify(menu));
+    ok("with the draft entry in it, which is where it went", keys.indexOf("draft") >= 0, keys.join(","));
+    ok("and the tab and the off switch you asked for", keys.indexOf("open") >= 0 && keys.indexOf("off") >= 0, keys.join(","));
+    ok("anchored to the button rather than the corner", !!(menu && menu.position && menu.position.y > 0), JSON.stringify(menu && menu.position));
+  });
+
+  // A Lumiverse too old to draw a menu. The button then has nowhere to hold the
+  // row, so the row stays in Extras rather than vanishing.
+  await inTab(
+    browser,
+    { saved: { widgetOn: true, inputRefine: true }, noMenu: true },
+    async (page) => {
+      const up = await page.evaluate(() => ({
+        widget: !!window.__widget,
+        row: !!window.__inputAction,
+      }));
+      ok("with no menu to hold it, the row stays in Extras", up.widget && up.row);
+    },
+  );
+}
+
+console.log("\nsettings that follow the account");
+{
+  await inTab(browser, {}, async (page) => {
+    const asked = await page.evaluate(() => ({
+      settings: window.__sent.filter((m) => m.type === "load_settings").length,
+      presets: window.__sent.filter((m) => m.type === "load_presets").length,
+    }));
+    ok("it asks the account for both on load", asked.settings === 1 && asked.presets === 1);
+
+    // The account's copy wins over whatever this browser had.
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
+      window.__fromBackend({
+        type: "loaded_settings",
+        requestId: id,
+        settings: { contextMessages: 9, timeoutSecs: 45 },
+      });
+    });
+    await settle(page);
+    const now = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
+    );
+    ok("what comes back wins and is cached here", now.contextMessages === 9 && now.timeoutSecs === 45);
+
+    // A value of the wrong shape falls back rather than leaving the panel
+    // holding something it cannot draw.
+    await page.evaluate(() => {
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "loaded_settings", requestId: "not-the-one", settings: { timeoutSecs: 1 } });
+    });
+    await settle(page);
+    const ignored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).timeoutSecs,
+    );
+    ok("an answer to a question nobody asked is ignored", ignored === 45, String(ignored));
+  });
+
+  // Nothing in the account, something in this browser: this browser's copy goes
+  // up rather than staying where only this browser can see it.
+  await inTab(browser, { saved: { contextMessages: 7 } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "loaded_settings", requestId: id, settings: null });
+    });
+    await settle(page);
+    const up = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last && last.settings.contextMessages;
+    });
+    ok("an empty account is filled from this browser", up === 7, String(up));
+  });
+
+  // Saving a preset sends it up as well as writing it here.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const name = document.querySelector('#drawer [data-arf-field="presetName"]');
+      name.value = "On the road";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
+    });
+    await settle(page);
+    const sent = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "save_presets").pop();
+      return last && last.presets.map((p) => p.name);
+    });
+    ok("a saved preset goes up to the account too", !!sent && sent.indexOf("On the road") >= 0, JSON.stringify(sent));
+  });
+
+  // A write that failed is said out loud. Settings that look saved and are not
+  // is the worst shape this can take.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "account_save_failed", what: "settings" });
+    });
+    await settle(page);
+    const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("a failed account save is not swallowed", /could not be saved to your account/.test(said));
+  });
 }
 
 console.log("\nthe floating button's size");

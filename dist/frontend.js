@@ -1049,6 +1049,69 @@ export function setup(ctx, overrides) {
         }
     }
     Object.assign(cfg, loadSaved(), overrides || {});
+    // Settings arriving from the account, checked key by key against the shape
+    // the default says they should be. The account copy is written by this same
+    // extension, but it can be older than this version, half written by a save
+    // that failed, or edited by hand, and a panel that cannot be drawn is a worse
+    // outcome than a setting that falls back to its default.
+    function coerceSaved(s) {
+        const out = {};
+        if (!s || typeof s !== "object")
+            return out;
+        for (const key of Object.keys(CONFIG)) {
+            if (!(key in s))
+                continue;
+            const want = CONFIG[key];
+            const got = s[key];
+            if (key === "blocks" || key === "userBlocks") {
+                if (!Array.isArray(got))
+                    continue;
+                out[key] = got
+                    .filter((b) => b && typeof b === "object" && b.id)
+                    .slice(0, 40)
+                    .map((b) => ({
+                    id: String(b.id),
+                    on: b.on !== false,
+                    role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
+                    text: b.text == null ? "" : String(b.text),
+                    name: b.name == null ? "" : String(b.name),
+                }));
+            }
+            else if (key === "samplers") {
+                if (!got || typeof got !== "object" || Array.isArray(got))
+                    continue;
+                const clean = {};
+                for (const f of SAMPLER_FIELDS) {
+                    const v = Number(got[f.id]);
+                    if (got[f.id] === "" || got[f.id] == null || !Number.isFinite(v))
+                        continue;
+                    clean[f.id] = Math.min(f.max, Math.max(f.min, v));
+                }
+                out.samplers = clean;
+            }
+            else if (key === "soundUrl") {
+                if (typeof got !== "string")
+                    continue;
+                out.soundUrl = /^data:audio\//.test(got) && got.length <= SOUND_MAX * 2 ? got : "";
+            }
+            else if (typeof want === "boolean")
+                out[key] = !!got;
+            else if (typeof want === "number") {
+                const v = Number(got);
+                if (Number.isFinite(v))
+                    out[key] = v;
+            }
+            else if (typeof want === "string") {
+                if (typeof got === "string")
+                    out[key] = got;
+            }
+            else if (Array.isArray(want)) {
+                if (Array.isArray(got))
+                    out[key] = got.slice(0, 60);
+            }
+        }
+        return out;
+    }
     // Saved as it is changed, and pushed to the backend in the same breath. There
     // is no Save button here: a drawer tab has no moment where it closes, so a
     // "nothing sticks until you press Save" contract would have nothing to hang
@@ -1079,6 +1142,51 @@ export function setup(ctx, overrides) {
         if (saveTimer)
             clearTimeout(saveTimer);
         saveTimer = setTimeout(write, 400);
+    }
+    // ---- the account copy ----
+    // localStorage is a cache: fast, survives being offline, and gone the moment
+    // you open a different browser. The account copy is the real one. It is asked
+    // for on load, wins when it has anything, and is written on every save.
+    //
+    // Both halves of this are asked for here and answered in the one backend
+    // handler further down, rather than by subscribing a second listener. A
+    // second subscriber is one more thing to unsubscribe on teardown, and it
+    // assumes the host fans a message out to every listener, which is not
+    // something worth depending on for the path that loads your settings.
+    let accountAsk = "";
+    function loadFromAccount() {
+        accountAsk = "arf-load-" + newId();
+        send({ type: "load_settings", requestId: accountAsk });
+    }
+    // The account's answer. Empty means it has nothing yet, and this browser's
+    // copy goes up instead: that is the first load after upgrading, and leaving
+    // the settings somewhere only this browser can see is what the whole change
+    // is about.
+    function tookAccountSettings(msg) {
+        if (!msg || msg.requestId !== accountAsk)
+            return;
+        accountAsk = "";
+        const s = msg.settings;
+        if (s && typeof s === "object" && Object.keys(s).length) {
+            Object.assign(cfg, coerceSaved(s));
+            try {
+                if (typeof localStorage !== "undefined")
+                    localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
+            }
+            catch (_) { }
+            send({ type: "set_settings", settings: cfg });
+            syncExtras();
+            log("settings loaded from your account", true);
+            paint();
+            return;
+        }
+        try {
+            if (typeof localStorage !== "undefined" && localStorage.getItem(STORE_KEY)) {
+                send({ type: "set_settings", settings: cfg });
+                log("settings moved up to your account", true);
+            }
+        }
+        catch (_) { }
     }
     let chatsOff = [];
     try {
@@ -1620,6 +1728,13 @@ export function setup(ctx, overrides) {
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
         "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5))}" +
         "textarea.arf-bigta{flex:1;min-height:0;resize:none}" +
+        // Nothing on focus here, not even the border change the small boxes get.
+        // The editor is one box filling the screen, opened deliberately, with
+        // nothing to tab between: a mark saying which box has focus answers a
+        // question nobody was asking, and at this size it draws a line down the
+        // whole window.
+        "textarea.arf-bigta:focus,textarea.arf-bigta:focus-visible{outline:none;box-shadow:none;" +
+        "border-color:var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
         // The button this extension puts on a message and in the input bar. Styled
         // to sit with the host's own icon buttons rather than to stand out: it is
         // one more action in a row of them, not a badge.
@@ -3504,7 +3619,7 @@ export function setup(ctx, overrides) {
             key: "widgetOn",
             label: "A floating button",
             type: "bool",
-            hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Needs the interface panels permission.",
+            hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Hold it, or right click it, for a menu with the tab, the automatic pass, the per chat switch and a way to hide it again. While it is on screen its menu also holds anything that would otherwise be a row in the chat input's Extras menu. Needs the interface panels permission.",
         }));
         if (cfg.widgetOn && widgetFailed)
             wrap.appendChild(bad("The floating button could not be created. Check that the interface panels permission is granted."));
@@ -3522,7 +3637,7 @@ export function setup(ctx, overrides) {
             key: "inputRefine",
             label: "Refine what I am typing",
             type: "bool",
-            hint: "Adds a row to the chat input's Extras menu that rewrites the text sitting in your input box, before you send it. It changes the box you are typing in, so it is off until you ask for it.",
+            hint: "Rewrites the text sitting in your input box, before you send it. It changes the box you are typing in, so it is off until you ask for it. It lives in one place at a time: while the floating button is on screen this is in that button's menu, and it is a row in the chat input's Extras menu only when there is no button to hold it.",
         }));
         if (cfg.inputRefine || cfg.msgButton)
             wrap.appendChild(note("These two reach into the page rather than going through an API, because Lumiverse does not offer one for the message row or the input box. They are the only parts of this extension that depend on how Lumiverse is laid out. If an update ever moves either, these stop working and nothing else does."));
@@ -4026,6 +4141,49 @@ export function setup(ctx, overrides) {
                 localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
         }
         catch (_) { }
+        // And up to the account, so a preset saved on a phone is there on a laptop.
+        try {
+            send({ type: "save_presets", presets: presets });
+        }
+        catch (_) { }
+    }
+    // The account's presets on load. The account wins when it has any; when it
+    // has none and this browser does, this browser's go up. Same rule the
+    // settings use, so the two cannot disagree about which copy is the real one.
+    let presetAsk = "";
+    function loadPresetsFromAccount() {
+        presetAsk = "arf-presets-" + newId();
+        send({ type: "load_presets", requestId: presetAsk });
+    }
+    function tookAccountPresets(msg) {
+        if (!msg || msg.requestId !== presetAsk)
+            return;
+        presetAsk = "";
+        const list = Array.isArray(msg.presets) ? msg.presets : null;
+        const clean = list
+            ? list
+                .filter((x) => x && typeof x === "object" && x.name)
+                .slice(0, 60)
+                .map((x) => ({
+                name: String(x.name),
+                at: Number(x.at) || 0,
+                settings: x.settings && typeof x.settings === "object" ? x.settings : {},
+            }))
+            : [];
+        if (clean.length) {
+            presets = clean;
+            try {
+                if (typeof localStorage !== "undefined")
+                    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+            }
+            catch (_) { }
+            log("brought " + clean.length + (clean.length === 1 ? " preset" : " presets") + " down from your account", true);
+            paint();
+        }
+        else if (presets.length) {
+            savePresets();
+            log("sent " + presets.length + (presets.length === 1 ? " preset" : " presets") + " up to your account", true);
+        }
     }
     // Only the keys a preset owns, and each one copied rather than referenced, or
     // editing your rules would quietly edit the preset you saved them from.
@@ -4800,6 +4958,35 @@ export function setup(ctx, overrides) {
     let floatBtn = null;
     let widgetAt = 0;
     const widgetWanted = () => Math.min(96, Math.max(28, Math.round(Number(cfg.widgetSize) || 44)));
+    const widgetUp = () => !!widget && !!floatBtn;
+    // Whether the floating button can actually take over the entries that hide
+    // for it. Its menu is Lumiverse's, not ours: a host without showContextMenu
+    // has no menu to put them in, and an entry that hid for a button with nowhere
+    // to hold it would simply be gone.
+    // Where the host should draw the menu: under the middle of the button.
+    // Null when the button cannot be measured, and the host then places it
+    // itself rather than being handed a wrong position.
+    function anchorOf() {
+        try {
+            if (!floatBtn || typeof floatBtn.getBoundingClientRect !== "function")
+                return null;
+            const r = floatBtn.getBoundingClientRect();
+            if (!r || (!r.width && !r.height))
+                return null;
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.bottom) };
+        }
+        catch (_) {
+            return null;
+        }
+    }
+    const widgetCarriesEntries = () => {
+        try {
+            return widgetUp() && typeof ctx?.ui?.showContextMenu === "function";
+        }
+        catch (_) {
+            return false;
+        }
+    };
     // What one tap does: put the last refine back when there is one and you asked
     // for that, otherwise refine.
     function widgetTap() {
@@ -4844,12 +5031,36 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
-    // Held, or right clicked. Everything the button could do that one tap cannot.
+    // One menu at a time. Android raises contextmenu on a long press as well as
+    // running the hold timer, so this is asked for twice on the way to one
+    // gesture. The host's menu cannot be taken down and rebuilt, so the second
+    // ask is dropped rather than stacked on the first.
+    let menuToken = null;
+    // Held, or right clicked. Everything the button could do that one tap cannot,
+    // drawn by Lumiverse rather than by us: a menu of ours over the chat would be
+    // a second menu style on the same screen, and would have to guess at what a
+    // pointer meant on a phone.
     async function widgetMenu() {
+        const menu = ctx && ctx.ui && ctx.ui.showContextMenu;
+        if (typeof menu !== "function") {
+            // A Lumiverse without the API. Say where everything is rather than
+            // opening nothing and looking broken. The Extras row is still registered
+            // in this case, because widgetCarriesEntries answers no.
+            log("this version of Lumiverse cannot open the button's menu");
+            toast("Everything is in the Auto Refine tab in the drawer.", true);
+            return;
+        }
+        if (menuToken)
+            return;
         const items = [];
+        // The panel first. It is what somebody holding the button is most likely
+        // after, and every other entry here is also in it.
+        items.push({ key: "open", label: "Open the Auto Refine tab" });
         items.push({ key: "refine", label: "Refine the latest reply" });
         if (undoHere().length)
             items.push({ key: "undo", label: "Put the last refine back" });
+        // On the same terms as the panel entry: its setting puts it in the Extras
+        // menu, and this menu takes it over while the button is on screen.
         if (cfg.inputRefine)
             items.push({ key: "draft", label: "Refine what I am typing" });
         items.push({
@@ -4859,27 +5070,39 @@ export function setup(ctx, overrides) {
         if (lastChatId != null)
             items.push({
                 key: "chat",
-                label: chatIsOff(lastChatId) ? "Turn on in this chat" : "Turn off in this chat",
+                label: chatIsOff(lastChatId) ? "Turn Auto Refine on in this chat" : "Turn Auto Refine off in this chat",
             });
-        items.push({ key: "open", label: "Open the panel" });
-        items.push({ key: "off", label: "Switch Auto Refine off" });
+        // Last, under everything else, because these two are the only entries that
+        // take the button off the screen.
+        items.push({ key: "hide", label: "Hide this button" });
+        items.push({ key: "off", label: "Turn Auto Refine off" });
+        const token = {};
+        menuToken = token;
         let picked = null;
         try {
-            if (ctx.ui && typeof ctx.ui.showContextMenu === "function") {
-                const got = await ctx.ui.showContextMenu({ items: items });
-                picked = got && got.selectedKey ? String(got.selectedKey) : null;
-            }
-            else {
-                // A host with no context menu. Opening the panel is the honest
-                // fallback: everything in the list above is in it.
-                picked = "open";
-            }
+            // Anchored to the button. A hold means the finger is already over it, and
+            // the menu is also reachable by right click, so the button is the one
+            // place that is right for both.
+            const at = anchorOf();
+            const got = await menu.call(ctx.ui, at ? { position: at, items: items } : { items: items });
+            picked = got && got.selectedKey ? String(got.selectedKey) : null;
         }
-        catch (_) {
-            picked = "open";
+        catch (e) {
+            log("the button's menu could not be opened: " + ((e && e.message) || String(e)));
+        }
+        finally {
+            if (menuToken === token)
+                menuToken = null;
         }
         if (!picked)
             return;
+        if (picked === "hide") {
+            cfg.widgetOn = false;
+            persist(true);
+            toast("The floating button is hidden. Switch it back on under Setup.", true);
+            paint();
+            return;
+        }
         if (picked === "refine")
             refineNow();
         else if (picked === "undo") {
@@ -4918,10 +5141,19 @@ export function setup(ctx, overrides) {
             raiseWidget();
         else
             dropWidget();
+        // The button is settled before the Extras row is decided, because that
+        // decision is "is there a button to hold this instead".
         // The button on each message.
         watchMessages(!!cfg.msgButton && !!cfg.enabled);
         // The Extras row that refines what you are typing.
-        const want = !!cfg.inputRefine && !!cfg.enabled;
+        //
+        // In one place at a time. While the floating button is on screen its menu
+        // holds this, and the Extras menu holds it only when there is no button to.
+        // Two ways to reach one thing is one more than anybody needs, and it
+        // clutters a menu that was opened for something else. With the button off,
+        // or refused because ui_panels was not granted, Extras is the only way to
+        // reach it on a phone, so it comes back.
+        const want = !!cfg.inputRefine && !!cfg.enabled && !widgetCarriesEntries();
         if (want && !inputAction) {
             try {
                 if (ctx.ui && typeof ctx.ui.registerInputBarAction === "function") {
@@ -5136,6 +5368,23 @@ export function setup(ctx, overrides) {
                         paint();
                         return;
                     }
+                    if (msg.type === "loaded_settings") {
+                        tookAccountSettings(msg);
+                        return;
+                    }
+                    if (msg.type === "loaded_presets") {
+                        tookAccountPresets(msg);
+                        return;
+                    }
+                    if (msg.type === "account_save_failed") {
+                        // Settings that look saved and are not is the worst shape this can
+                        // take, so it is said plainly rather than logged quietly.
+                        const what = String(msg.what || "settings");
+                        log("your " + what + " could not be saved to your account. They are still saved in this browser.");
+                        toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
+                        paint();
+                        return;
+                    }
                     if (msg.type === "refine_notes") {
                         takeNotes(msg);
                         paint();
@@ -5343,6 +5592,11 @@ export function setup(ctx, overrides) {
     syncExtras();
     askActiveChat();
     askPermissions();
+    // After armBackend, so the replies have somewhere to land. Both are
+    // fire and forget: the panel is already drawn from the browser's cache, and
+    // the account copy repaints it when it arrives.
+    loadFromAccount();
+    loadPresetsFromAccount();
     send({ type: "list_connections", requestId: newId() });
     log("ready v" + VERSION);
     paint();

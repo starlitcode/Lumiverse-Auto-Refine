@@ -68,6 +68,9 @@ function host(
     noLore?: boolean;
     macroFail?: string;
     stream?: boolean;
+    // Runs while the model is "thinking", which is the window another
+    // extension's write lands in.
+    whileAsking?: () => void;
   } = {},
 ) {
   const handlers: Record<string, Array<(p: any) => any>> = {};
@@ -79,6 +82,9 @@ function host(
   let turn = 0;
 
   let chatBroken = false;
+  let storageBroken = false;
+  const shared: Record<string, string> = {};
+  const perUser: Record<string, any> = {};
   const forbidden: string[] = [];
   const spindle = {
     on: (name: string, fn: any) => {
@@ -102,6 +108,7 @@ function host(
       },
       quiet: async (req: any) => {
         asked.push(req);
+        if (opts.whileAsking) opts.whileAsking();
         if (opts.fail) throw new Error(opts.fail);
         const answer = answers[Math.min(turn, answers.length - 1)];
         turn++;
@@ -199,8 +206,27 @@ function host(
         writes.push({ id: id, content: patch.content });
       },
     },
-    storage: { read: async () => null, write: async () => {} },
-    userStorage: { getJson: async () => null, setJson: async () => {} },
+    // The old shared store, which every account on a server would read the
+    // same copy of. Kept so the upgrade path can be checked.
+    storage: {
+      read: async (file: string) => (file in shared ? shared[file] : null),
+      write: async (file: string, text: string) => {
+        if (storageBroken) throw new Error("the disk is full");
+        shared[file] = text;
+      },
+    },
+    // Per user, keyed the way the real one is. A check that reads back another
+    // account's key is the whole point of this being here.
+    userStorage: {
+      getJson: async (file: string, o: any) => {
+        const k = String((o && o.userId) || '') + ':' + file;
+        return k in perUser ? perUser[k] : (o && o.fallback) !== undefined ? o.fallback : null;
+      },
+      setJson: async (file: string, value: any, o: any) => {
+        if (storageBroken) throw new Error("the disk is full");
+        perUser[String((o && o.userId) || '') + ':' + file] = value;
+      },
+    },
     permissions: { has: () => true, onChanged: () => {}, onDenied: () => {} },
   };
 
@@ -235,8 +261,19 @@ function host(
     sent,
     writes,
     asked,
+    // Lets a check stand in for another extension writing to the same reply.
+    edit: (id: string, content: string) => {
+      const m = msgs.find((x) => x.id === id);
+      if (m) m.content = content;
+    },
     body: (id: string) => (msgs.find((m) => m.id === id) || ({} as any)).content,
-    front: (p: any) => frontHandler(p, "u1"),
+    front: (p: any, who?: string) => frontHandler(p, who === undefined ? "u1" : who),
+    // What each account's store actually holds, and the old shared one.
+    perUser,
+    shared,
+    breakStorage: () => {
+      storageBroken = true;
+    },
     ended: async (p: any) => {
       for (const fn of handlers.GENERATION_ENDED || []) await fn(p);
     },
@@ -1121,5 +1158,117 @@ describe("the backend after a restart", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.writes.length).toBe(0);
+  });
+});
+
+// Settings used to live only in the browser, so opening Lumiverse anywhere else
+// presented a fresh install. They belong to the account, and on a server serving
+// several accounts they have to belong to one account each.
+describe("settings that follow the account", () => {
+  test("saving writes them to the account, not just to memory", async () => {
+    const h = await armed(["<refined>x</refined>"]);
+    expect(h.perUser["u1:settings.json"]).toBeTruthy();
+    expect(h.perUser["u1:settings.json"].contextMessages).toBe(RULES.contextMessages);
+  });
+
+  test("loading gives back what that account saved", async () => {
+    const h = await armed(["<refined>x</refined>"], { contextMessages: 11 });
+    await h.front({ type: "load_settings", requestId: "r1" });
+    await wait(10);
+    const got = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "r1");
+    expect(got).toBeTruthy();
+    expect(got.settings.contextMessages).toBe(11);
+  });
+
+  // The one that matters on a shared server. Two accounts, two prompts, and
+  // neither can read the other's.
+  test("one account cannot read another's settings", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    await h.front({ type: "set_settings", settings: { ...RULES, contextMessages: 3 } }, "alice");
+    await h.front({ type: "set_settings", settings: { ...RULES, contextMessages: 8 } }, "bob");
+    await h.front({ type: "load_settings", requestId: "ra" }, "alice");
+    await h.front({ type: "load_settings", requestId: "rb" }, "bob");
+    await wait(10);
+    const a = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "ra");
+    const b = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "rb");
+    expect(a.settings.contextMessages).toBe(3);
+    expect(b.settings.contextMessages).toBe(8);
+  });
+
+  test("presets are the same story", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    await h.front({ type: "save_presets", presets: [{ name: "Alice's", at: 1, settings: {} }] }, "alice");
+    await h.front({ type: "load_presets", requestId: "pb" }, "bob");
+    await wait(10);
+    const b = h.sent.find((m: any) => m.type === "loaded_presets" && m.requestId === "pb");
+    expect(b.presets).toBe(null);
+  });
+
+  // Somebody who had settings before this existed should not open the panel to
+  // a fresh install.
+  test("the old shared copy is carried up on the first read", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.shared["settings.json"] = JSON.stringify({ contextMessages: 6 });
+    await h.front({ type: "load_settings", requestId: "r1" });
+    await wait(10);
+    const got = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "r1");
+    expect(got.settings.contextMessages).toBe(6);
+    expect(h.perUser["u1:settings.json"].contextMessages).toBe(6);
+  });
+
+  // Settings that look saved and are not is the worst shape this can take.
+  // Both stores down. One down alone is not a failure: the write falls through
+  // to the other rather than being lost, which is the point of the fallback.
+  test("a write that fails everywhere says so rather than going quiet", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.breakStorage();
+    await h.front({ type: "set_settings", settings: RULES });
+    await wait(10);
+    expect(h.sent.some((m: any) => m.type === "account_save_failed" && m.what === "settings")).toBe(true);
+  });
+
+  // A refine still works when the disk does not, because the settings that
+  // matter are already in memory.
+  test("and a failed write does not stop the refine that follows", async () => {
+    const h = host(chat(), ["<refined>She stepped through and the cold hit her.</refined>"]);
+    h.breakStorage();
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+});
+
+// Two extensions on one reply. Auto Retry swaps words on the same event this
+// refines on, and a refine takes seconds: the message it read is not
+// necessarily the message that is there when it writes.
+describe("when something else edits the reply mid-refine", () => {
+  test("the refine is dropped rather than reverting the other edit", async () => {
+    const h = host(chat(), ["<refined>She stepped through and the cold hit her.</refined>"], {
+      whileAsking: () => h.edit("m2", "Somebody else got here first."),
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("Somebody else got here first.");
+    expect(h.skipped().join(" ")).toMatch(/changed while the rewrite/i);
+  });
+
+  test("and nothing is written at all, so the other edit survives whole", async () => {
+    const h = host(chat(), ["<refined>She stepped through and the cold hit her.</refined>"], {
+      whileAsking: () => h.edit("m2", "Somebody else got here first."),
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+  });
+
+  // The guard must not fire when nothing actually moved.
+  test("an untouched reply is still refined", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 });
