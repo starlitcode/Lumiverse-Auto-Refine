@@ -1,0 +1,18 @@
+{
+  "version": "0.1.0",
+  "name": "Auto Refine",
+  "identifier": "auto_refine",
+  "author": "starlitcode",
+  "github": "https://github.com/starlitcode/Lumiverse-Auto-Refine",
+  "homepage": "https://github.com/starlitcode/Lumiverse-Auto-Refine",
+  "description": "Runs a second model pass over a finished reply and saves the result, following rules you write. The greeting is never touched, the original is kept so you can put it back, and the pass can run on a cheaper connection than the one you roleplay with.",
+  "permissions": [
+    "generation",
+    "chat_mutation",
+    "chats",
+    "ui_panels"
+  ],
+  "entry_frontend": "dist/frontend.js",
+  "entry_backend": "dist/backend.js",
+  "minimum_lumiverse_version": "0.1.0"
+}
