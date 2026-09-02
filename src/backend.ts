@@ -337,6 +337,12 @@ const DEFAULT_BLOCKS: Block[] = [
 // puts the rewrite between the tags, and taking what is between them is exact
 // where reading around a preamble is guesswork.
 let wrapOutput = true;
+// Whether the arriving text is sent to the panel to be watched, rather than
+// just its length. Off by default: it is a thing to turn on when you want to
+// see one happen, not something worth paying bridge traffic for on every reply.
+let watchLive = false;
+const WATCH_TAIL = 4000;
+
 // Whether to stream the refine so the panel can show it arriving. The answer is
 // the same either way; this only decides whether anybody can watch it.
 let streamProgress = true;
@@ -495,15 +501,73 @@ const SHIELD_NOTE =
 // The model's own working, which is not prose and is not the reader's writing.
 // It is cut off before the refine and put back afterwards, so a rewrite can
 // never quietly edit what a model worked out in a place nobody would check.
-const THINK_WRAPS: RegExp[] = [
-  /^\s*<(think|thinking|reasoning|thought)>[\s\S]*?<\/\1>\s*/i,
-  /^\s*\[(?:thinking|thought)\][\s\S]*?\[\/(?:thinking|thought)\]\s*/i,
-  /^\s*<\|(?:begin_of_thought|thinking)\|>[\s\S]*?<\|(?:end_of_thought|\/thinking)\|>\s*/i,
+const THINK_TAGS = [
+  'think',
+  'thinking',
+  'thought',
+  'thoughts',
+  'reasoning',
+  'reflection',
+  'scratchpad',
+  'analysis',
 ];
+
+// Names the reader added, because no built-in list can cover every model. A
+// name here is not cosmetic: a reasoning block this fails to recognise is
+// handed to the refiner as prose, rewritten, and saved into the chat in place
+// of the reply. Getting it wrong loses somebody's writing rather than just
+// missing a check.
+let extraThinkTags: string[] = [];
+
+function thinkNames(): string[] {
+  return THINK_TAGS.concat(extraThinkTags);
+}
+
+// Anything that would change what the pattern means is dropped rather than
+// escaped, since a tag name is letters, digits, underscores and hyphens and
+// nothing else. A reader pasting "<think>" gets the name out of it.
+function cleanTagName(raw: string): string {
+  return String(raw == null ? '' : raw)
+    .replace(/[^A-Za-z0-9_-]/g, '')
+    .slice(0, 40);
+}
+
+function setThinkTags(raw: any): void {
+  const lines = String(raw == null ? '' : raw).split(/[\n,]/);
+  const out: string[] = [];
+  for (const line of lines) {
+    const name = cleanTagName(line);
+    if (!name) continue;
+    const low = name.toLowerCase();
+    if (THINK_TAGS.indexOf(low) >= 0) continue;
+    if (out.indexOf(low) >= 0) continue;
+    out.push(low);
+    if (out.length >= 20) break;
+  }
+  extraThinkTags = out;
+}
+
+// The four shapes a model wraps its working in. Built per call from the current
+// list rather than once at load, because the reader can add a name at any time.
+function thinkWraps(): RegExp[] {
+  const alt = thinkNames().join('|');
+  return [
+    // <think> ... </think>, attributes allowed on the opener.
+    new RegExp('^\\s*<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>\\s*', 'i'),
+    // [thinking] ... [/thinking]
+    new RegExp('^\\s*\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]\\s*', 'i'),
+    // <|think|> ... <|/think|>, and the variants that put the pipe the other
+    // way round. Builds disagree about which way it goes, so either closes
+    // either.
+    new RegExp('^\\s*<\\|(?:' + alt + ')\\|?>[\\s\\S]*?<\\|?\\/?(?:' + alt + ')\\|?>\\s*', 'i'),
+    // The named pair some builds use instead of a tag name.
+    /^\s*<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>\s*/i,
+  ];
+}
 
 function splitThinking(text: string): { head: string; body: string } {
   if (!protectThinking) return { head: '', body: text };
-  for (const rule of THINK_WRAPS) {
+  for (const rule of thinkWraps()) {
     const hit = rule.exec(text);
     if (hit && hit.index === 0) return { head: hit[0], body: text.slice(hit[0].length) };
   }
@@ -930,6 +994,57 @@ function cleanSamplers(): Record<string, number> | null {
   return any ? out : null;
 }
 
+// ---- stopping one ----
+// The refines in flight, per reader, so a stop can reach the one that is
+// running. The controller was only ever wired to the timeout, which meant a
+// refine could be waited out but never called off: a slow model held the button
+// spinning for the full ninety seconds with nothing to do about it.
+//
+// Keyed by reader rather than globally, or one person's stop would abort
+// somebody else's refine on a server with several accounts on it.
+const running = new Map<string, Set<any>>();
+
+function holdRun(userId: string | undefined, controller: any): void {
+  if (!controller) return;
+  const k = String(userId == null ? '' : userId);
+  const set = running.get(k) || new Set<any>();
+  set.add(controller);
+  running.set(k, set);
+}
+
+function dropRun(userId: string | undefined, controller: any): void {
+  if (!controller) return;
+  const k = String(userId == null ? '' : userId);
+  const set = running.get(k);
+  if (!set) return;
+  set.delete(controller);
+  if (!set.size) running.delete(k);
+}
+
+// Returns how many were stopped, so the panel can say nothing was running
+// rather than claiming it stopped something.
+function stopRuns(userId: string | undefined): number {
+  const k = String(userId == null ? '' : userId);
+  let set = running.get(k);
+  // Nothing under the reader's own key. The automatic pass runs under whatever
+  // id the generation event carried, and not every build puts one on it, so its
+  // refine is held unattributed. An unattributed run has no other claimant, and
+  // leaving it to the timeout is the only other answer: the reader who pressed
+  // stop gets it.
+  if ((!set || !set.size) && k !== '') set = running.get('');
+  if (!set || !set.size) return 0;
+  let n = 0;
+  for (const c of Array.from(set)) {
+    try {
+      c.__arfWhy = 'stopped';
+      c.abort();
+      n++;
+    } catch (_) {}
+  }
+  set.clear();
+  return n;
+}
+
 // ---- running one refine ----
 async function askModel(
   text: string,
@@ -943,7 +1058,19 @@ async function askModel(
   const secs = Number(timeoutSecs);
   const ms = Number.isFinite(secs) && secs > 0 ? Math.min(600, Math.max(5, secs)) * 1000 : 90000;
   let timer: any = null;
-  if (controller) timer = setTimeout(() => { try { controller.abort(); } catch (_) {} }, ms);
+  // Marked as the reader's own before it is aborted by anything, so a stop
+  // arriving while the timeout is also pending finds it either way.
+  let stopped = false;
+  if (controller) {
+    controller.__arfWhy = '';
+    holdRun(userId, controller);
+    timer = setTimeout(() => {
+      try {
+        controller.__arfWhy = 'timeout';
+        controller.abort();
+      } catch (_) {}
+    }, ms);
+  }
   try {
     const req: any = { messages: await buildPrompt(text, isUser, scene, userId) };
     // Only the values the reader actually changed. An empty object is left out
@@ -993,7 +1120,16 @@ async function askModel(
           const now = Date.now();
           if (now - said > 300) {
             said = now;
-            tell(userId, { type: 'refine_progress', stage: 'writing', chars: text.length });
+            tell(userId, {
+              type: 'refine_progress',
+              stage: 'writing',
+              chars: text.length,
+              // The text so far, for the panel to show when the reader asked to
+              // watch. Capped and sent as a tail: a whole rewrite five times a
+              // second is more traffic than the refine, and the end is the part
+              // anybody watching is looking at.
+              text: watchLive ? text.slice(-WATCH_TAIL) : '',
+            });
           }
         }
         return { content: text, error: '' };
@@ -1010,8 +1146,14 @@ async function askModel(
     return { content: String((result && result.content) || ''), error: '' };
   } catch (e: any) {
     const msg = (e && e.message) || String(e);
-    if (e && e.name === 'AbortError')
+    if (e && e.name === 'AbortError') {
+      // Two things abort this, and they are not the same news. A timeout is the
+      // model failing to answer; a stop is the reader deciding they did not
+      // want it after all, which is not a fault and should not read as one.
+      const why = controller && controller.__arfWhy;
+      if (why === 'stopped') return { content: '', error: 'you stopped it' };
       return { content: '', error: 'the model did not answer within ' + Math.round(ms / 1000) + 's' };
+    }
     if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
       return { content: '', error: 'the generation permission is not granted' };
     // A refusal that reads as a bug in your rules unless it is named.
@@ -1024,6 +1166,7 @@ async function askModel(
     return { content: '', error: msg };
   } finally {
     if (timer != null) clearTimeout(timer);
+    dropRun(userId, controller);
   }
 }
 
@@ -1386,9 +1529,11 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
       protectOn = s.protectOn !== false;
       protectThinking = s.protectThinking !== false;
+      setThinkTags(s.thinkTags);
       protectInline = !!s.protectInline;
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
+      watchLive = !!s.watchLive;
       // Written to the account as well as held here, so the next browser to
       // ask gets these rather than a fresh install. Failing to write is worth
       // saying out loud: settings that look saved and are not is the worst
@@ -1434,6 +1579,15 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         saved = null;
       }
       replyTo(userId, { type: 'loaded_presets', requestId: payload.requestId, presets: saved });
+      return;
+    }
+
+    // Stopping whatever is in flight for this reader. Answered even when there
+    // was nothing to stop, so the panel can say so rather than claiming it
+    // stopped something.
+    if (payload.type === 'cancel_refine') {
+      const n = stopRuns(userId);
+      replyTo(userId, { type: 'refine_stopped', requestId: payload.requestId, stopped: n });
       return;
     }
 

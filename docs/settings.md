@@ -41,9 +41,10 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Limits
 
+- **Extra thinking tag names** is under **Never send the model's thinking**. The common wrappers are already known: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model uses an unusual one. This is worth getting right, because working that is not recognised is handed to the refiner as prose, rewritten, and saved over the reply.
 - **Hide markup from the model**, **Hide plain italic and bold too** and **Never send the model's thinking** keep a rewrite away from what is not prose, in [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
 - **Take the answer from between the tags** is what makes a model's preamble harmless instead of fatal, in [The answer it asks for](prompt.md#the-answer-it-asks-for). Asking for the tags is your prompt's job; this decides what is done with the answer.
-- **Watch the rewrite arrive** streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved.
+- **Watch the rewrite arrive** streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved. Under it, **Show me the words as they arrive** puts a **Watch it happen** card on the Log tab that fills in as the model writes. On a reasoning prompt you watch it work the edit out and then write it, because the working comes back first.
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits, in [What it refuses to save](guardrails.md).
 - **Keep what a refine replaced** holds the original so you can put it back.
 - **Ask before saving a refine** shows you both versions and waits for a yes.
@@ -51,6 +52,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Log
 
+- **Watch it happen** is there while a refine is running, if you asked for it under Limits. It fills in as the model writes.
 - **Right now** is the live view. It names the stage rather than just saying busy: asking, thinking, writing with a character count when your connection streams, then checking. The clock runs, and past eight seconds it also says how long is left before the timeout gives up. It writes into the line in place rather than repainting the panel under you, and the dot beside it breathes while something is running.
 - **What it said about the edit** is whatever the model wrote outside the `<REFINED>` tags on the last pass. The two reasoning prompts ask for the model's working there, between `<REFINE_NOTES>` tags, so it lands here beside the refine it belongs to. None of it is saved into your chat, which is what makes it a safe place for your prompt to ask what was cut and what was left alone, in [Asking it what it changed](prompt.md#asking-it-what-it-changed). The card only appears when something arrives in it.
 - **What it has been doing** is the running list, newest first.

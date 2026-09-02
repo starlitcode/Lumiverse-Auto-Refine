@@ -60,7 +60,10 @@ const PARTS = [
             "protectOn",
             "protectThinking",
             "protectInline",
+            "thinkTags",
             "wrapOutput",
+            "streamProgress",
+            "watchLive",
         ],
     },
     {
@@ -199,6 +202,12 @@ const CONFIG = {
     // somebody's reply, and they only notice three messages later.
     protectOn: true,
     protectThinking: true,
+    // Names the reader adds, one per line, on top of the built-in set.
+    thinkTags: "",
+    // Show the rewrite arriving rather than only its length. Off by default: it
+    // is a thing to switch on when you want to watch one, not something to pay
+    // bridge traffic for on every reply.
+    watchLive: false,
     // Asking for the rewrite inside <REFINED> tags rather than on its own. A
     // model that cannot help adding a sentence of its own still puts the rewrite
     // between the tags, and taking what is between them is exact.
@@ -1776,6 +1785,11 @@ export function setup(ctx, overrides) {
         "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
         ".arf-float:hover{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
         ".arf-float.arf-back{color:var(--lumiverse-success,#22c55e)}" +
+        // Dimmed rather than hidden. The button is how somebody switches the
+        // extension off and reaches the tab, so it stays reachable on a screen with
+        // nothing to refine; it just stops looking like it is offering a refine.
+        ".arf-float.arf-idle{opacity:.5}" +
+        ".arf-float.arf-idle:hover{opacity:.75}" +
         ".arf-float.arf-working{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
         // A ring that breathes while something is running. This is the one piece of
         // movement in the whole extension, and it is here because a floating button
@@ -2170,10 +2184,15 @@ export function setup(ctx, overrides) {
         if (id === "limits")
             return [buildProtectCard(), buildGuardCard(), buildSafetyCard()];
         if (id === "log") {
+            const out = [buildLiveCard()];
+            const watch = buildWatchCard();
+            if (watch)
+                out.push(watch);
             const notes = buildNotesCard();
-            return notes
-                ? [buildLiveCard(), notes, buildActivityCard(), buildDebugCard()]
-                : [buildLiveCard(), buildActivityCard(), buildDebugCard()];
+            if (notes)
+                out.push(notes);
+            out.push(buildActivityCard(), buildDebugCard());
+            return out;
         }
         return [
             buildPermsCard(),
@@ -2247,6 +2266,11 @@ export function setup(ctx, overrides) {
         // are refreshed with it rather than on a timer of their own.
         if (cfg.msgButton && cfg.enabled)
             sweepMsgButtons();
+        // And the floating button, which used to be painted only by the live clock.
+        // That clock runs while a refine is running, so walking out to the home
+        // screen left the button sitting there looking ready to refine something
+        // that was no longer on the page.
+        paintFloat();
         if (!tab || !tab.root)
             return;
         const root = tab.root;
@@ -2261,6 +2285,7 @@ export function setup(ctx, overrides) {
         root.innerHTML = "";
         root.className = "arf";
         liveEls = null;
+        liveWatch = null;
         root.appendChild(buildHeader());
         // A refused permission that stops the whole thing is the answer to "why is
         // nothing happening", and it belongs where that question gets asked rather
@@ -2580,6 +2605,24 @@ export function setup(ctx, overrides) {
             });
             lab.appendChild(box);
             wrap.appendChild(lab);
+        }
+        else if (f.type === "lines") {
+            wrap.appendChild(el("div", "arf-lab", f.label));
+            const ta = document.createElement("textarea");
+            ta.setAttribute("data-arf-field", f.key);
+            ta.setAttribute("aria-label", f.label);
+            ta.className = "arf-field arf-mono";
+            ta.rows = 3;
+            ta.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
+            ta.addEventListener("input", () => {
+                cfg[f.key] = ta.value;
+                persist();
+            });
+            ta.addEventListener("blur", () => {
+                cfg[f.key] = ta.value;
+                persist(true);
+            });
+            wrap.appendChild(ta);
         }
         else if (f.type === "pick") {
             wrap.appendChild(el("div", "arf-lab", f.label));
@@ -3142,10 +3185,26 @@ export function setup(ctx, overrides) {
             hint: "On by default. Streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved. A connection that cannot stream falls back on its own.",
         }));
         wrap.appendChild(fieldRow({
+            key: "watchLive",
+            label: "Show me the words as they arrive",
+            type: "bool",
+            needs: { key: "streamProgress" },
+            under: true,
+            hint: "Off by default. Puts a Watch it happen card on the Log tab that fills in as the model writes, rather than only counting characters. On a reasoning prompt you see it work the edit out first and then write it, because the working comes back before the rewrite. It costs a little traffic between the panel and the server on every refine, which is why it is something to switch on when you want to watch one rather than something left on.",
+        }));
+        wrap.appendChild(fieldRow({
             key: "protectThinking",
             label: "Never send the model's thinking",
             type: "bool",
             hint: "On by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back after.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "thinkTags",
+            label: "Extra thinking tag names",
+            type: "lines",
+            needs: { key: "protectThinking" },
+            under: true,
+            hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
         }));
         if (!cfg.protectOn)
             wrap.appendChild(warn("With this off, a rewrite can quietly change or drop any formatting in your replies."));
@@ -3171,6 +3230,85 @@ export function setup(ctx, overrides) {
     // read instead of being dropped on the floor.
     let lastNotes = "";
     let lastNotesAt = 0;
+    // ---- watching one arrive ----
+    // The rewrite as it is being written. Held here rather than in the log,
+    // because it is replaced several times a second and is gone the moment the
+    // refine lands.
+    let live = "";
+    // Written straight into the element rather than through paint(). A repaint
+    // five times a second would rebuild the whole panel under whoever is reading
+    // it, take the scroll with it, and drop focus from anything they were typing
+    // in. This is the same reason the status line writes itself in place.
+    function showLive(text) {
+        live = text;
+        try {
+            if (!liveWatch) {
+                paint();
+                return;
+            }
+            const parts = splitLive(text);
+            liveWatch.notes.textContent = parts.notes;
+            liveWatch.notesWrap.hidden = !parts.notes;
+            liveWatch.out.textContent = parts.body;
+            liveWatch.outWrap.hidden = !parts.body;
+            // Following the newest line, the way a terminal does.
+            liveWatch.notes.scrollTop = liveWatch.notes.scrollHeight;
+            liveWatch.out.scrollTop = liveWatch.out.scrollHeight;
+        }
+        catch (_) { }
+    }
+    let liveWatch = null;
+    // What has arrived so far, split into the two things a reasoning prompt asks
+    // for. Written to work on half a tag: this runs on text that is still being
+    // written, so every opener may have no closer yet.
+    function splitLive(text) {
+        const t = String(text || "");
+        let notes = "";
+        let body = "";
+        const nOpen = /<\s*refine_notes\s*>/i.exec(t);
+        if (nOpen) {
+            const rest = t.slice(nOpen.index + nOpen[0].length);
+            const nClose = /<\s*\/\s*refine_notes\s*>/i.exec(rest);
+            notes = nClose ? rest.slice(0, nClose.index) : rest;
+        }
+        const bOpen = /<\s*refined\s*>/i.exec(t);
+        if (bOpen) {
+            const rest = t.slice(bOpen.index + bOpen[0].length);
+            const bClose = /<\s*\/\s*refined\s*>/i.exec(rest);
+            body = bClose ? rest.slice(0, bClose.index) : rest;
+        }
+        else if (!nOpen) {
+            // No tags yet, or a prompt that does not use them. Whatever is there is
+            // the rewrite as far as anybody watching is concerned.
+            body = t;
+        }
+        return { notes: notes.trim(), body: body.trim() };
+    }
+    function buildWatchCard() {
+        if (!cfg.watchLive || !cfg.streamProgress)
+            return null;
+        const running = busy || msgBusy !== null;
+        if (!running && !live)
+            return null;
+        const wrap = card("Watch it happen", undefined, running ? "live" : "finished");
+        const parts = splitLive(live);
+        const notesWrap = el("div", "arf-col");
+        notesWrap.appendChild(el("div", "arf-lab", "What it is working out"));
+        const notes = el("div", "arf-well arf-mono arf-scroll", parts.notes);
+        notesWrap.appendChild(notes);
+        notesWrap.hidden = !parts.notes;
+        wrap.appendChild(notesWrap);
+        const outWrap = el("div", "arf-col");
+        outWrap.appendChild(el("div", "arf-lab", "The rewrite, as it is written"));
+        const out = el("div", "arf-well arf-mono arf-scroll", parts.body);
+        outWrap.appendChild(out);
+        outWrap.hidden = !parts.body;
+        wrap.appendChild(outWrap);
+        if (!parts.notes && !parts.body)
+            wrap.appendChild(note("Waiting for the first words to come back."));
+        liveWatch = { notes: notes, notesWrap: notesWrap, out: out, outWrap: outWrap };
+        return wrap;
+    }
     function takeNotes(msg) {
         try {
             const t = String((msg && msg.notes) || "").trim();
@@ -5080,7 +5218,14 @@ export function setup(ctx, overrides) {
     // What one tap does: put the last refine back when there is one and you asked
     // for that, otherwise refine.
     function widgetTap() {
-        if (cfg.widgetUndo && !busy && msgBusy === null && undoHere().length) {
+        // A refine is running, so the tap stops it. The button is showing a
+        // spinner: tapping the spinner to call it off is the thing anybody would
+        // try first, and it used to start a second refine on top of the first.
+        if (busy || msgBusy !== null) {
+            cancelRefine();
+            return;
+        }
+        if (cfg.widgetUndo && undoHere().length) {
             const one = undoHere()[0];
             send({
                 type: "undo_refine",
@@ -5100,7 +5245,12 @@ export function setup(ctx, overrides) {
             return;
         try {
             const back = cfg.widgetUndo && undoHere().length > 0;
-            const working = busy;
+            const working = busy || msgBusy !== null;
+            // Why a tap would do nothing, when that is the answer. On the home screen
+            // there is no chat to refine, and the button was still drawn ready for
+            // one: the tap explained itself in a toast, but only after you had
+            // pressed a button that looked willing.
+            const stuck = working || back ? "" : whyNot();
             el2.innerHTML = working ? spinIcon() : back ? undoIcon() : refineIcon();
             // The icons are written at a fixed 20px, which is most of a 28px button
             // and lost inside a 96px one. Just over half the button leaves the ring
@@ -5111,12 +5261,18 @@ export function setup(ctx, overrides) {
                 svg.setAttribute("width", mark);
                 svg.setAttribute("height", mark);
             }
-            el2.className = "arf-float" + (working ? " arf-working" : "") + (back ? " arf-back" : "");
+            el2.className =
+                "arf-float" +
+                    (working ? " arf-working" : "") +
+                    (back ? " arf-back" : "") +
+                    (stuck ? " arf-idle" : "");
             el2.title = working
-                ? "Refining"
+                ? "Refining. Tap to stop it."
                 : back
                     ? "Put the last refine back. Hold for more."
-                    : "Refine the latest reply. Hold for more.";
+                    : stuck
+                        ? stuck + " Hold for more."
+                        : "Refine the latest reply. Hold for more.";
             el2.setAttribute("aria-label", el2.title);
         }
         catch (_) { }
@@ -5153,6 +5309,10 @@ export function setup(ctx, overrides) {
         // The panel first. It is what somebody holding the button is most likely
         // after, and everything taken out of this list is in it.
         items.push({ key: "open", label: "Open the Auto Refine tab" });
+        // First while it is running, because it is the only thing anybody opens
+        // this menu for mid-refine and the reason they are in a hurry.
+        if (busy || msgBusy !== null)
+            items.push({ key: "stop", label: "Stop this refine" });
         if (undoHere().length)
             items.push({ key: "undo", label: "Put the last refine back" });
         // On the same terms as the panel entry: its setting puts it in the Extras
@@ -5190,7 +5350,9 @@ export function setup(ctx, overrides) {
             paint();
             return;
         }
-        if (picked === "undo") {
+        if (picked === "stop")
+            cancelRefine();
+        else if (picked === "undo") {
             const one = undoHere()[0];
             if (one)
                 send({ type: "undo_refine", requestId: newId(), chatId: one.chatId, messageId: one.messageId });
@@ -5277,13 +5439,33 @@ export function setup(ctx, overrides) {
         catch (_) { }
         return "";
     }
+    // Calls off whatever is running. Safe to press when nothing is: the backend
+    // answers with how many it stopped, and the panel says so either way.
+    function cancelRefine() {
+        if (!busy && msgBusy === null)
+            return;
+        send({ type: "cancel_refine", requestId: newId() });
+        log("asked it to stop");
+    }
+    // A new refine starts on an empty screen rather than under the last one.
+    function clearLive() {
+        live = "";
+        liveWatch = null;
+    }
     function refineNow() {
+        // Pressing refine while one is already running used to queue a second
+        // against the same reply, and whichever finished last won. One at a time.
+        if (busy || msgBusy !== null) {
+            toast("A refine is already running. Press it again to stop that one.", true);
+            return;
+        }
         const why = whyNot();
         if (why) {
             toast(why, true);
             log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
+        clearLive();
         markBusy(true);
         paint();
         send({
@@ -5364,6 +5546,8 @@ export function setup(ctx, overrides) {
                     if (msg.type === "refine_progress") {
                         if (msg.stage === "writing" && typeof msg.chars === "number")
                             streamed = msg.chars;
+                        if (typeof msg.text === "string" && msg.text)
+                            showLive(msg.text);
                         markBusy(true, msg.stage);
                         return;
                     }
@@ -5469,6 +5653,18 @@ export function setup(ctx, overrides) {
                         const what = String(msg.what || "settings");
                         log("your " + what + " could not be saved to your account. They are still saved in this browser.");
                         toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "refine_stopped") {
+                        // Nothing was running, so nothing is claimed. The busy flag is
+                        // cleared regardless: if the panel thought something was running
+                        // and the backend says otherwise, the panel is the one that is
+                        // wrong, and leaving it spinning is the worse half of that.
+                        if (!msg.stopped)
+                            log("there was nothing running to stop");
+                        markBusy(false);
+                        msgBusy = null;
                         paint();
                         return;
                     }

@@ -1367,3 +1367,105 @@ describe("the working a reasoning prompt asks for", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 });
+
+// A reasoning block this fails to recognise is handed to the refiner as prose,
+// rewritten, and saved over the reply. That is a worse failure than missing a
+// check, which is why the list is the reader's to extend.
+describe("thinking the extension has to recognise", () => {
+  const withHead = (head: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    {
+      id: "m2",
+      role: "assistant",
+      content: head + "She stepped through and, suddenly, the cold just hit her.",
+    },
+  ];
+
+  test("a built-in tag is kept out of what the model is shown", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withHead("<scratchpad>plan the edit</scratchpad>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("plan the edit");
+    expect(h.body("m2")).toContain("<scratchpad>plan the edit</scratchpad>");
+  });
+
+  test("an unusual one is sent as prose until it is named", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withHead("<mythink>plan the edit</mythink>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("plan the edit");
+  });
+
+  test("and is kept out once the reader names it", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { thinkTags: "mythink" },
+      withHead("<mythink>plan the edit</mythink>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("plan the edit");
+    expect(h.body("m2")).toContain("<mythink>plan the edit</mythink>");
+  });
+
+  test("a name pasted with its brackets still works", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { thinkTags: "<mythink>" },
+      withHead("<mythink>plan the edit</mythink>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("plan the edit");
+  });
+
+  // A name is letters, digits, underscores and hyphens. Anything that would
+  // change what the pattern means is dropped rather than escaped.
+  test("a name that would break the pattern cannot", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { thinkTags: ".*|(" },
+      withHead("<mythink>plan the edit</mythink>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    // The junk name matched nothing, so the block went through as prose and the
+    // message arrived whole rather than the pattern eating it.
+    expect(said(h)).toContain("plan the edit");
+    expect(said(h)).toContain("the cold just hit her");
+  });
+});
+
+describe("stopping a refine", () => {
+  test("a stop reaches the run and the reply is left alone", async () => {
+    const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      // Stop it while the model is still "thinking".
+      whileAsking: () => {
+        h.front({ type: "cancel_refine", requestId: "s1" });
+      },
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const said2 = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s1");
+    expect(said2).toBeTruthy();
+    expect(said2.stopped).toBe(1);
+  });
+
+  test("stopping when nothing is running says so rather than claiming otherwise", async () => {
+    const h = await armed(["<REFINED>x</REFINED>"]);
+    await h.front({ type: "cancel_refine", requestId: "s1" });
+    await wait(10);
+    const got = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s1");
+    expect(got.stopped).toBe(0);
+  });
+});

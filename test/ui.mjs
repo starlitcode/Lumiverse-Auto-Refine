@@ -1043,6 +1043,76 @@ console.log("\nloading a preset from where you were reading");
   });
 }
 
+console.log("\nwatching one arrive");
+{
+  await inTab(browser, { saved: { watchLive: true, streamProgress: true } }, async (page) => {
+    await goTab(page, "Log");
+    const quiet = await page.evaluate(() =>
+      /Watch it happen/.test(document.querySelector("#drawer .arf-body").textContent),
+    );
+    ok("nothing to watch while nothing is running", !quiet);
+
+    // A refine starts, then the words come back in pieces the way a provider
+    // hands them over.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_ack", requestId: "w1" });
+      window.__fromBackend({
+        type: "refine_progress",
+        stage: "writing",
+        chars: 40,
+        text: "<REFINE_NOTES>\nThe second sentence restates the first.\n</REFINE_NOTES>\n<REFINED>She stepped",
+      });
+    });
+    await settle(page);
+    const mid = await page.evaluate(() => {
+      const body = document.querySelector("#drawer .arf-body").textContent;
+      return {
+        there: /Watch it happen/.test(body),
+        working: /restates the first/.test(body),
+        rewrite: /She stepped/.test(body),
+        // The tags themselves are the plumbing, not the show.
+        raw: /REFINE_NOTES/.test(body),
+      };
+    });
+    ok("the card appears once words are coming back", mid.there);
+    ok("what it is working out is shown", mid.working);
+    ok("and the rewrite as it is written", mid.rewrite);
+    ok("without the tags themselves", !mid.raw);
+
+    // More arrives. The panel must not be rebuilt under the reader five times a
+    // second, so the text is written into the element in place.
+    const inPlace = await page.evaluate(async () => {
+      const before = document.querySelector("#drawer .arf-body");
+      window.__fromBackend({
+        type: "refine_progress",
+        stage: "writing",
+        chars: 60,
+        text: "<REFINED>She stepped through and the cold hit her.</REFINED>",
+      });
+      await new Promise((r) => requestAnimationFrame(r));
+      return {
+        same: document.querySelector("#drawer .arf-body") === before,
+        shows: /the cold hit her/.test(document.querySelector("#drawer .arf-body").textContent),
+      };
+    });
+    ok("more words land without rebuilding the panel", inPlace.same);
+    ok("and the newest text is what is shown", inPlace.shows);
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_ack", requestId: "w1" });
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 9, text: "" });
+    });
+    await settle(page);
+    const off = await page.evaluate(() =>
+      /Watch it happen/.test(document.querySelector("#drawer .arf-body").textContent),
+    );
+    ok("switched off, there is no card and no text to send", !off);
+  });
+}
+
 console.log("\na temporary chat");
 {
   // A chat with no card on it is the temporary chat: a scratch conversation
