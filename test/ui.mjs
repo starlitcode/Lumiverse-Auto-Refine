@@ -992,6 +992,110 @@ console.log("\nsettings that follow the account");
   });
 }
 
+console.log("\na temporary chat");
+{
+  // A chat with no card on it is the temporary chat: a scratch conversation
+  // with the model, thrown away on the way out. The switch has to work in one,
+  // and must not be written down, because the next one carries a different id
+  // and the entry could never match anything again.
+  const asTemp = async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat",
+        requestId: id,
+        chatId: "temp-1",
+        character: null,
+        hasCharacter: false,
+        resolved: true,
+      });
+    });
+    await settle(page);
+  };
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await asTemp(page);
+    const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("the panel says it is a temporary chat", /temporary chat/i.test(said));
+    ok("and does not call it a chat with no card", !/no character card on it/.test(said));
+
+    // The switch still works: it is held in memory and the backend is told.
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Turn off here")
+        .click();
+    });
+    await settle(page);
+    const after = await page.evaluate(() => ({
+      told: (window.__sent.filter((m) => m.type === "set_chats_off").pop() || {}).chats,
+      written: JSON.parse(localStorage.getItem("lv-auto-refine:chats-off:v1") || "[]"),
+      said: document.querySelector("#drawer .arf-body").textContent,
+    }));
+    ok("switching it off still reaches the backend", (after.told || []).indexOf("temp-1") >= 0, JSON.stringify(after.told));
+    ok("but nothing about it is written down", after.written.indexOf("temp-1") < 0, JSON.stringify(after.written));
+    ok("and the panel says the switch will not be remembered", /not remembered/.test(after.said));
+  });
+
+  // An ordinary chat switched off afterwards must not drag the temporary one
+  // into storage with it.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await asTemp(page);
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Turn off here")
+        .click();
+    });
+    await settle(page);
+    // Now an ordinary chat, switched off in turn. The reply has to answer the
+    // question the panel actually asked: an answer to anything else is about a
+    // chat nobody is looking at, and the panel is right to drop it.
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat",
+        requestId: id,
+        chatId: "real-1",
+        character: "Wren",
+        hasCharacter: true,
+        resolved: true,
+      });
+    });
+    await settle(page);
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Turn off here")
+        .click();
+    });
+    await settle(page);
+    const written = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("lv-auto-refine:chats-off:v1") || "[]"),
+    );
+    ok("a real chat is remembered", written.indexOf("real-1") >= 0, JSON.stringify(written));
+    ok("and does not carry the temporary one into storage", written.indexOf("temp-1") < 0, JSON.stringify(written));
+  });
+
+  // A backend that could not look is not evidence of no card.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat",
+        requestId: id,
+        chatId: "unknown-1",
+        character: null,
+        hasCharacter: false,
+        resolved: false,
+      });
+    });
+    await settle(page);
+    const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("a chat it could not look at is not called temporary", !/temporary chat/i.test(said));
+  });
+}
+
 console.log("\nthe floating button's size");
 {
   await inTab(browser, {}, async (page) => {

@@ -1502,10 +1502,28 @@ export function setup(ctx, overrides) {
         clock = null;
     });
     const chatIsOff = (id) => id != null && chatsOff.indexOf(String(id)) >= 0;
+    // Chats the host says have no character card on them, which is the temporary
+    // chat: a scratch conversation with the model itself, thrown away on the way
+    // out. Recorded from the chat rather than from a missing name, because a name
+    // can also be missing when the characters permission was refused, and those
+    // two are not the same thing to say.
+    const cardless = new Set();
+    const isTemporary = (id) => id != null && cardless.has(String(id));
     function saveChatsOff() {
+        // A temporary chat is filtered out of what gets written down, not out of
+        // the list itself. The switch has to hold for the chat that is open, and
+        // the backend still has to be told so it leaves that chat alone; but the
+        // chat is discarded on the way out and the next one carries a different id,
+        // so a remembered entry could never match anything again. It would sit in
+        // storage looking like a setting and doing nothing.
+        //
+        // Filtered here rather than where the switch is flipped, so that later
+        // switching an ordinary chat off cannot write the temporary one down
+        // alongside it.
+        const keep = chatsOff.filter((c) => !cardless.has(c));
         try {
             if (typeof localStorage !== "undefined")
-                localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(chatsOff));
+                localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(keep));
         }
         catch (_) { }
         send({ type: "set_chats_off", chats: chatsOff.slice() });
@@ -3438,10 +3456,11 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildChatCard() {
-        const wrap = card("This chat");
+        const known = lastChatId != null;
+        const temp = isTemporary(lastChatId);
+        const wrap = card("This chat", undefined, temp ? "temporary" : undefined);
         const top = el("div", "arf-between");
         top.appendChild(el("span", "arf-lab", "Auto Refine here"));
-        const known = lastChatId != null;
         const off = chatIsOff(lastChatId);
         const act = button(off ? "Turn on here" : "Turn off here", false);
         act.disabled = !known;
@@ -3458,7 +3477,9 @@ export function setup(ctx, overrides) {
                 ? "You are in " + character + "'s chat."
                 : nameWithheld
                     ? "This chat has a character on it. Its name needs the characters permission, which is not granted."
-                    : "This chat has no character card on it, which is fine: a refine just goes without that block.";
+                    : temp
+                        ? "This is a temporary chat, so there is no character card to send. A refine goes without that block, which is what you want here: there is no character voice to keep."
+                        : "This chat has no character card on it, which is fine: a refine just goes without that block.";
             wrap.appendChild(note(who));
         }
         wrap.appendChild(note(!known
@@ -3466,8 +3487,12 @@ export function setup(ctx, overrides) {
                 ? "You are not in a chat. Open one and this switch comes back."
                 : "Waiting to be told which chat you are in."
             : off
-                ? "Auto Refine is switched off in this chat. Every other chat carries on as it is."
-                : "Leave one chat completely alone while every other chat carries on."));
+                ? temp
+                    ? "Auto Refine is off in this temporary chat. Every other chat carries on as it is. This lasts while the chat is open and is not remembered, since the chat itself is not kept."
+                    : "Auto Refine is switched off in this chat. Every other chat carries on as it is."
+                : temp
+                    ? "Switch Auto Refine off for this temporary chat. It lasts while the chat is open and is not remembered, since the chat itself is not kept."
+                    : "Leave one chat completely alone while every other chat carries on."));
         if (chatsOff.length) {
             const row = el("div", "arf-between");
             row.appendChild(el("span", "arf-note arf-grow", chatsOff.length + " chat" + (chatsOff.length === 1 ? "" : "s") + " switched off"));
@@ -5331,6 +5356,16 @@ export function setup(ctx, overrides) {
                             // characters permission was refused for, which is worth telling
                             // apart from a chat that has no card.
                             nameWithheld = !!msg.hasCharacter && !msg.character;
+                            // Only an answer from a backend that could actually look counts.
+                            // One from a backend that could not is not evidence of no card,
+                            // and treating it as such would call every chat temporary for the
+                            // rest of the page.
+                            if (msg.resolved) {
+                                if (msg.hasCharacter)
+                                    cardless.delete(String(msg.chatId));
+                                else
+                                    cardless.add(String(msg.chatId));
+                            }
                         }
                         paint();
                         return;
