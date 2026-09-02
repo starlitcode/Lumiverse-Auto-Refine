@@ -34,8 +34,24 @@ const RULES = {
   confirmBeforeSave: false,
 };
 
+// The card the stub host hands back. first_mes is in here on purpose: it is a
+// writing sample, and a model told to rewrite will copy one if it is shown one,
+// so a test below checks it never reaches the prompt.
+const CARD = {
+  name: "Wren",
+  description: "A ferry pilot who has crossed the same water for thirty years.",
+  personality: "Blunt, and slow to trust anyone who arrives at night.",
+  scenario: "The last crossing before the gate is shut.",
+  first_mes: "The gate stands open, and the road past it is dark.",
+  mes_example: "Wren: You are late.",
+};
+
 // answers is what the stubbed model says, one per call, in order.
-function host(messages: Msg[], answers: string[], opts: { fail?: string } = {}) {
+function host(
+  messages: Msg[],
+  answers: string[],
+  opts: { fail?: string; chatFail?: string; cardFail?: string; noCard?: boolean } = {},
+) {
   const handlers: Record<string, Array<(p: any) => any>> = {};
   let frontHandler: any = null;
   const sent: any[] = [];
@@ -67,6 +83,18 @@ function host(messages: Msg[], answers: string[], opts: { fail?: string } = {}) 
         { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
         { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
       ],
+    },
+    chats: {
+      get: async () => {
+        if (opts.chatFail) throw new Error(opts.chatFail);
+        return opts.noCard ? { id: "c1" } : { id: "c1", character_id: "ch1" };
+      },
+    },
+    characters: {
+      get: async () => {
+        if (opts.cardFail) throw new Error(opts.cardFail);
+        return { ...CARD };
+      },
     },
     chat: {
       getMessages: async () => msgs.map((m) => ({ ...m })),
@@ -362,6 +390,191 @@ describe("trying it before turning it on", () => {
     const got = h.sent.find((m) => m.type === "try_result");
     expect(got.ok).toBe(false);
     expect(got.why).toMatch(/wrote about the edit/i);
+  });
+});
+
+// Everything the model was told, flattened, for the assertions that only care
+// that a thing was said and not which block said it.
+const said = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
+
+describe("what the model is told about the scene", () => {
+  test("the character card is in the prompt", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A ferry pilot who has crossed the same water");
+    expect(said(h)).toContain("Blunt, and slow to trust");
+  });
+
+  test("the card's own writing samples are not, so they cannot be copied in", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("You are late");
+  });
+
+  test("the run-up is in the prompt, with the two voices named apart", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("Player: i walk through it");
+    expect(said(h)).toContain("Wren: The gate stands open");
+  });
+
+  test("the message being rewritten is sent once, not also as context", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const hits = said(h).split("She stepped through and, suddenly, the cold just hit her.").length - 1;
+    expect(hits).toBe(1);
+  });
+
+  test("with context set to none, no history is sent", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { contextMessages: 0 });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("i walk through it");
+  });
+
+  test("a refused characters permission refines anyway, without the card", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), {
+      cardFail: "PERMISSION_DENIED: characters",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    expect(said(h)).not.toContain("ferry pilot");
+  });
+
+  test("and so does a chat with no card on it", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noCard: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    // With no name to use, the history still labels who spoke.
+    expect(said(h)).toContain("Character: The gate stands open");
+  });
+
+  test("trying the rules on pasted text sends no chat and no card", async () => {
+    const h = await armed(["A tighter version of the line."]);
+    await h.front({ type: "try_refine", requestId: "t", text: "A line with, suddenly, filler in it." });
+    await wait(50);
+    expect(said(h)).not.toContain("ferry pilot");
+    expect(said(h)).not.toContain("i walk through it");
+  });
+});
+
+describe("how the prompt is put together", () => {
+  test("blocks are sent in the order the reader set them", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [
+        { id: "guard", on: true, role: "system" },
+        { id: "rules", on: true, role: "system" },
+        { id: "character", on: true, role: "system" },
+        { id: "message", on: true, role: "user" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.asked[0].messages[0].content;
+    expect(whole.indexOf("Cut filler words")).toBeLessThan(whole.indexOf("ferry pilot"));
+  });
+
+  test("a block switched off is left out", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [
+        { id: "guard", on: true, role: "system" },
+        { id: "character", on: false, role: "system" },
+        { id: "message", on: true, role: "user" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("ferry pilot");
+  });
+
+  test("a block sent as a different role arrives as that role", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [
+        { id: "guard", on: true, role: "system" },
+        { id: "rules", on: true, role: "user" },
+        { id: "message", on: true, role: "user" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const roles = h.asked[0].messages.map((m: any) => m.role);
+    expect(roles).toEqual(["system", "user"]);
+    expect(h.asked[0].messages[1].content).toContain("Cut filler words");
+  });
+
+  test("a block the reader wrote themselves is sent as they wrote it", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [
+        { id: "guard", on: true, role: "system" },
+        { id: "mine", on: true, role: "system", text: "Write in British spelling." },
+        { id: "message", on: true, role: "user" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("Write in British spelling.");
+  });
+
+  test("the guard and the message go back in if a saved layout has lost them", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      blocks: [{ id: "rules", on: true, role: "system" }],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("You are editing one message");
+    expect(said(h)).toContain("She stepped through and, suddenly");
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+});
+
+describe("sampler settings", () => {
+  test("nothing is sent when the reader has not set any", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters).toBeUndefined();
+  });
+
+  test("only the ones they filled in are sent", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      samplers: { temperature: 0.4, top_p: "", top_k: "" },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters).toEqual({ temperature: 0.4 });
+  });
+
+  test("a value past the end of its range is pulled back to the end", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      samplers: { temperature: 9, top_p: -1 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters).toEqual({ temperature: 2, top_p: 0 });
+  });
+
+  test("anything that is not a sampler is not passed on", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      samplers: { temperature: 0.4, api_key: "sk-nope", stream: true },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters).toEqual({ temperature: 0.4 });
+  });
+
+  test("zero is a value, not a blank", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {
+      samplers: { temperature: 0 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters).toEqual({ temperature: 0 });
   });
 });
 

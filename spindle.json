@@ -9,7 +9,8 @@
   "permissions": [
     "generation",
     "chat_mutation",
-    "chats"
+    "chats",
+    "characters"
   ],
   "entry_frontend": "dist/frontend.js",
   "entry_backend": "dist/backend.js",

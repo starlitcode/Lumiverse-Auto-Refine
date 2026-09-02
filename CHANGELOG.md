@@ -23,4 +23,8 @@ First release.
 - **The original is kept so a refine can be put back**, for as long as the page is open.
 - **Ask before saving**, showing both versions side by side.
 - **Try it on some text** without saving anything, using the rules as they stand rather than as they were saved.
+- **The prompt is a list of blocks you control.** The instruction, the character card, the run-up from the chat, your rules, your structure rules, whose message it is, and the message itself. Reorder them, switch most of them off, send each as System, User or Assistant, and add blocks of your own text anywhere in the order. Two are locked on, the instruction and the message, because every check on the answer assumes the model was given both.
+- **A rewrite can see who is speaking and what just happened.** The character card and the last few messages go in the prompt, both optional and both trimmed to a ceiling. A refine that cannot see the run-up flattens a scene into general prose, which is the failure people blame on the model.
+- **Sampler settings for the refine call**, blank to begin with, so the connection's own preset decides until you say otherwise. What you set is sent with the refine and nothing else.
+- **Import and export**, one file with your rules, your prompt layout and your samplers in it. Every value in a file is checked before it is used, so a hand-edited one loads what it can rather than leaving the panel unable to draw.
 - **A switch for one chat**, so a scene can be left completely alone.

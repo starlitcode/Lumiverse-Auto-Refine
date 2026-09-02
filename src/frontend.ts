@@ -45,7 +45,101 @@ const CONFIG = {
   keepOriginal: true,
   confirmBeforeSave: false,
   toast: true,
+  // How many messages of the run-up go in the prompt. A rewrite that cannot see
+  // what just happened flattens a scene into general prose, which is the
+  // failure people blame on the model.
+  contextMessages: 4,
+  // The prompt layout. Empty means the default order below, so a fresh install
+  // does not carry a copy of it around and a later change to the default
+  // reaches anybody who never edited theirs.
+  blocks: [] as Block[],
+  // Sampler values for the refine call. Empty means the connection's preset
+  // decides, which is the right default: somebody who tuned a preset should not
+  // have it quietly overridden by an extension.
+  samplers: {} as Record<string, any>,
 };
+
+type Block = { id: string; on: boolean; role: string; text?: string; name?: string };
+
+// The blocks the extension knows how to fill in, and what each one is for. The
+// reader reorders them, switches them off, and changes the role each is sent
+// as; these two are locked on because everything the pass does downstream
+// assumes the model was given the instruction and the message.
+const BLOCK_KINDS: Record<string, { label: string; hint: string; locked?: boolean }> = {
+  guard: {
+    label: "What the job is",
+    hint: "Rewrite this message, keep what happens, answer with the message and nothing else. Locked on: every check on the answer assumes the model was told this.",
+    locked: true,
+  },
+  character: {
+    label: "Who the character is",
+    hint: "Name, description, personality and scenario from the card. Needs the characters permission; without it this block is simply left out.",
+  },
+  context: {
+    label: "What has been happening",
+    hint: "The messages leading up to this one, so a rewrite keeps the thread of the scene instead of polishing a paragraph in isolation.",
+  },
+  rules: { label: "Your rules", hint: "The What to change box, above." },
+  structure: { label: "Your structure rules", hint: "The Structure and formatting box, above." },
+  whose: {
+    label: "Whose message it is",
+    hint: "One line saying whether the character wrote it or you did, so your own messages are not rewritten in the narrator's voice.",
+  },
+  thinking: {
+    label: "Where the thinking goes",
+    hint: "Only sent when you have let it think first. Tells it to keep its working out of the answer.",
+  },
+  message: {
+    label: "The message to rewrite",
+    hint: "The text itself. Locked on, and usually last: what comes after it reads as an instruction about it.",
+    locked: true,
+  },
+};
+
+const DEFAULT_BLOCKS: Block[] = [
+  { id: "guard", on: true, role: "system" },
+  { id: "character", on: true, role: "system" },
+  { id: "context", on: true, role: "system" },
+  { id: "rules", on: true, role: "system" },
+  { id: "structure", on: true, role: "system" },
+  { id: "whose", on: true, role: "system" },
+  { id: "thinking", on: true, role: "system" },
+  { id: "message", on: true, role: "user" },
+];
+
+const ROLE_OPTIONS = [
+  { value: "system", label: "System" },
+  { value: "user", label: "User" },
+  { value: "assistant", label: "Assistant" },
+];
+
+// The sampler values that reach the request. Anything not on this list is not
+// passed on, on either side of the bridge. Blank means the connection decides,
+// which is why none of these carry a default.
+const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: number; step: string; hint: string }> = [
+  {
+    id: "temperature",
+    label: "Temperature",
+    min: 0,
+    max: 2,
+    step: "0.05",
+    hint: "How loose the wording is. A rewrite usually wants this lower than the one you roleplay with.",
+  },
+  { id: "top_p", label: "Top P", min: 0, max: 1, step: "0.01", hint: "" },
+  { id: "top_k", label: "Top K", min: 0, max: 500, step: "1", hint: "" },
+  { id: "min_p", label: "Min P", min: 0, max: 1, step: "0.01", hint: "" },
+  {
+    id: "max_tokens",
+    label: "Longest answer (tokens)",
+    min: 1,
+    max: 200000,
+    step: "1",
+    hint: "A ceiling low enough to cut the rewrite off mid-sentence gets it dropped for being too short, so leave room.",
+  },
+  { id: "frequency_penalty", label: "Frequency penalty", min: -2, max: 2, step: "0.05", hint: "" },
+  { id: "presence_penalty", label: "Presence penalty", min: -2, max: 2, step: "0.05", hint: "" },
+  { id: "repetition_penalty", label: "Repetition penalty", min: 0, max: 2, step: "0.05", hint: "" },
+];
 
 // The settings that live behind the "How the pass runs" fold. Everything else
 // is on the face of the tab, because it is what somebody changes while they
@@ -441,6 +535,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // width of the screen does not say which is in use. This asks directly.
     "@media (pointer: coarse){" +
     ".arf-btn{min-height:40px;padding:10px 14px}" +
+    ".arf-fold{min-height:40px}" +
     ".arf-box{width:22px;height:22px}" +
     ".arf-field{padding:10px 12px}}";
 
@@ -482,9 +577,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---- the tab ----
   let tab: any = null;
   let badge: string | null = null;
-  // The section that stays folded, remembered while the page is open so it does
-  // not close itself every time the tab repaints.
+  // The sections that stay folded, remembered while the page is open so they do
+  // not close themselves every time the tab repaints.
   let costOpen = false;
+  let shapeOpen = false;
+  let transferSaid: string | null = null;
 
   function setBadge(v: string | null) {
     // Written only when it changes. This goes to the host on every call, and a
@@ -538,6 +635,16 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (contrastRatio(shown, back) < TEXT_FLOOR) {
           const ink = betterInk(back);
           n.style.color = ink.color;
+          // Marked so the next repaint re-measures it. Without the mark an
+          // element the sweep already fixed reads as healthy the second time
+          // round, since what it is measuring is the repair. The two kinds of
+          // repair are marked apart because they mean different things: ink
+          // means a theme made its own text unreadable, edge means a fill sits
+          // close to the surface behind it, which the stock theme does on
+          // purpose.
+          try {
+            n.setAttribute("data-arf-painted", "ink");
+          } catch (_) {}
         }
         // A filled button whose fill is close to the surface behind it reads as
         // plain text, however legible the label is. It gets an edge instead of
@@ -547,8 +654,13 @@ export function setup(ctx: Ctx, overrides?: any) {
           const behind = backdropOf((n.parentElement || root).parentElement || root);
           if (fill && fill.a > 0.05) {
             const solid = blendColor(fill, behind);
-            if (contrastRatio(solid, behind) < FILL_FLOOR)
+            if (contrastRatio(solid, behind) < FILL_FLOOR) {
               n.style.borderColor = "var(--lumiverse-border-hover,rgba(147,112,219,.25))";
+              try {
+                if (n.getAttribute("data-arf-painted") == null)
+                  n.setAttribute("data-arf-painted", "edge");
+              } catch (_) {}
+            }
           }
         }
       }
@@ -570,9 +682,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const last = lastChatId != null ? undoable.get(String(lastChatId)) : null;
     if (last) root.appendChild(buildLastRefine(last));
     root.appendChild(buildRules());
+    root.appendChild(buildPromptShape());
     root.appendChild(buildTryIt());
     root.appendChild(buildFold());
     root.appendChild(buildChatSwitch());
+    root.appendChild(buildTransfer());
     root.appendChild(buildActivity());
 
     setScheme(root);
@@ -709,6 +823,223 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     wrap.appendChild(ta);
     wrap.appendChild(note(hint));
+    return wrap;
+  }
+
+  // ---- the prompt layout ----
+  // The stored list when there is one, the default otherwise, with the two
+  // locked blocks put back if a hand-edited or imported file has lost them.
+  // Everything that draws or edits the layout goes through here, so a bad
+  // stored value cannot take the section down with it.
+  function blockList(): Block[] {
+    const raw = Array.isArray(cfg.blocks) ? cfg.blocks : [];
+    const list: Block[] = raw
+      .filter((b: any) => b && typeof b === "object" && b.id)
+      .map((b: any) => ({
+        id: String(b.id),
+        on: b.on !== false,
+        role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
+        text: b.text == null ? undefined : String(b.text),
+        name: b.name == null ? undefined : String(b.name),
+      }));
+    if (!list.length) return DEFAULT_BLOCKS.map((b) => ({ ...b }));
+    for (const id of ["guard", "message"]) {
+      const at = list.findIndex((b) => b.id === id);
+      if (at < 0) list.push({ id: id, on: true, role: id === "message" ? "user" : "system" });
+      else list[at].on = true;
+    }
+    return list;
+  }
+
+  function setBlocks(list: Block[], repaint?: boolean) {
+    cfg.blocks = list;
+    persist(true);
+    if (repaint !== false) paint();
+  }
+
+  const blockLabel = (b: Block) =>
+    BLOCK_KINDS[b.id] ? BLOCK_KINDS[b.id].label : b.name || "A block of your own";
+
+  function buildPromptShape(): HTMLElement {
+    const wrap = el("div", "arf-sec");
+    wrap.appendChild(rule());
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "arf-fold";
+    head.setAttribute("aria-expanded", shapeOpen ? "true" : "false");
+    head.appendChild(el("span", "arf-note", shapeOpen ? "▾" : "▸"));
+    head.appendChild(heading("How the prompt is built"));
+    head.addEventListener("click", () => {
+      shapeOpen = !shapeOpen;
+      paint();
+    });
+    wrap.appendChild(head);
+    if (!shapeOpen) return wrap;
+
+    wrap.appendChild(
+      note(
+        "The refine is one request, and this is what goes in it and in what order. Blocks next to each other with the same role are sent as one message. A block with nothing to say is left out.",
+      ),
+    );
+
+    const list = blockList();
+    for (let i = 0; i < list.length; i++) {
+      wrap.appendChild(buildBlockRow(list, i));
+    }
+
+    const acts = el("div", "arf-row");
+    const add = button("Add a block of your own", false);
+    add.addEventListener("click", () => {
+      const next = blockList();
+      const msgAt = next.findIndex((b) => b.id === "message");
+      const made: Block = {
+        id: "own-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+        on: true,
+        role: "system",
+        name: "My block",
+        text: "",
+      };
+      // Dropped in before the message rather than at the end, since a block
+      // after the message reads as an instruction about it and that is rarely
+      // what somebody adding one meant.
+      next.splice(msgAt < 0 ? next.length : msgAt, 0, made);
+      setBlocks(next);
+    });
+    const reset = button("Put the order back", false);
+    reset.addEventListener("click", () => {
+      setBlocks(DEFAULT_BLOCKS.map((b) => ({ ...b })));
+    });
+    acts.appendChild(add);
+    acts.appendChild(reset);
+    wrap.appendChild(acts);
+
+    wrap.appendChild(rule());
+    wrap.appendChild(
+      fieldRow({
+        key: "contextMessages",
+        label: "Messages of run-up to send",
+        type: "num",
+        min: 0,
+        max: 40,
+        hint: "How much of the chat the What has been happening block carries. 0 sends none. More context costs more on every refine, and long messages are trimmed so a single wall of text cannot fill the request.",
+      }),
+    );
+    return wrap;
+  }
+
+  function buildBlockRow(list: Block[], i: number): HTMLElement {
+    const b = list[i];
+    const kind = BLOCK_KINDS[b.id];
+    const locked = !!(kind && kind.locked);
+    const own = !kind;
+
+    const wrap = el("div", "arf-col");
+    wrap.setAttribute("data-arf-block", b.id);
+    const top = el("div", "arf-between");
+
+    const left = el("div", "arf-row");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = "arf-box";
+    box.checked = b.on;
+    box.disabled = locked;
+    box.setAttribute("aria-label", "Send " + blockLabel(b));
+    box.addEventListener("change", () => {
+      const next = blockList();
+      next[i].on = !!box.checked;
+      setBlocks(next, false);
+    });
+    left.appendChild(box);
+    left.appendChild(el("span", "arf-lab", blockLabel(b)));
+    top.appendChild(left);
+
+    const moves = el("div", "arf-row");
+    const move = (to: number, label: string, sign: string) => {
+      const btn = button(sign, false);
+      btn.setAttribute("aria-label", label + " " + blockLabel(b));
+      btn.disabled = to < 0 || to >= list.length;
+      btn.style.opacity = btn.disabled ? "0.45" : "1";
+      btn.addEventListener("click", () => {
+        const next = blockList();
+        const held = next[i];
+        next.splice(i, 1);
+        next.splice(to, 0, held);
+        setBlocks(next);
+      });
+      return btn;
+    };
+    moves.appendChild(move(i - 1, "Move up", "↑"));
+    moves.appendChild(move(i + 1, "Move down", "↓"));
+    top.appendChild(moves);
+    wrap.appendChild(top);
+
+    const roleRow = el("div", "arf-row");
+    const sel = document.createElement("select");
+    sel.className = "arf-field";
+    sel.style.maxWidth = "160px";
+    sel.setAttribute("aria-label", "Role for " + blockLabel(b));
+    for (const o of ROLE_OPTIONS) {
+      const op = document.createElement("option");
+      op.value = o.value;
+      op.textContent = o.label;
+      sel.appendChild(op);
+    }
+    sel.value = b.role;
+    sel.addEventListener("change", () => {
+      const next = blockList();
+      next[i].role = sel.value;
+      setBlocks(next, false);
+    });
+    roleRow.appendChild(el("span", "arf-note", "Sent as"));
+    roleRow.appendChild(sel);
+    if (own) {
+      const drop = button("Remove", false);
+      drop.addEventListener("click", () => {
+        const next = blockList();
+        next.splice(i, 1);
+        setBlocks(next);
+      });
+      roleRow.appendChild(drop);
+    }
+    wrap.appendChild(roleRow);
+
+    if (own) {
+      const nameIn = document.createElement("input");
+      nameIn.type = "text";
+      nameIn.className = "arf-field";
+      nameIn.value = b.name || "";
+      nameIn.placeholder = "What to call it";
+      nameIn.setAttribute("aria-label", "Name for this block");
+      nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
+      nameIn.addEventListener("change", () => {
+        const next = blockList();
+        next[i].name = nameIn.value;
+        setBlocks(next, false);
+      });
+      wrap.appendChild(nameIn);
+
+      const ta = document.createElement("textarea");
+      ta.rows = 3;
+      ta.className = "arf-field";
+      ta.value = b.text || "";
+      ta.placeholder = "What this block says";
+      ta.setAttribute("aria-label", "Text for this block");
+      ta.setAttribute("data-arf-field", "blocktext:" + b.id);
+      ta.addEventListener("input", () => {
+        const next = blockList();
+        next[i].text = ta.value;
+        cfg.blocks = next;
+        persist();
+      });
+      ta.addEventListener("blur", () => {
+        const next = blockList();
+        next[i].text = ta.value;
+        setBlocks(next, false);
+      });
+      wrap.appendChild(ta);
+    } else {
+      wrap.appendChild(note(kind.hint));
+    }
     return wrap;
   }
 
@@ -910,7 +1241,223 @@ export function setup(ctx: Ctx, overrides?: any) {
       ),
     );
     for (const f of LIMIT_FIELDS) wrap.appendChild(fieldRow(f));
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("Sampler settings"));
+    wrap.appendChild(
+      note(
+        "Left blank, the connection's own preset decides, which is what you want unless you have a reason. Fill one in and it is sent with the refine, and only with the refine: your chat is not affected.",
+      ),
+    );
+    for (const s of SAMPLER_FIELDS) wrap.appendChild(samplerRow(s));
+    const clear = button("Clear them all", false);
+    clear.addEventListener("click", () => {
+      cfg.samplers = {};
+      persist(true);
+      paint();
+    });
+    const clearRow = el("div", "arf-row");
+    clearRow.appendChild(clear);
+    wrap.appendChild(clearRow);
     return wrap;
+  }
+
+  function samplerRow(s: { id: string; label: string; min: number; max: number; step: string; hint: string }): HTMLElement {
+    const wrap = el("div", "arf-col");
+    wrap.appendChild(el("div", "arf-lab", s.label));
+    const box = document.createElement("input");
+    box.type = "number";
+    box.min = String(s.min);
+    box.max = String(s.max);
+    box.step = s.step;
+    box.className = "arf-field";
+    box.placeholder = "Leave to the connection";
+    box.setAttribute("aria-label", s.label);
+    box.setAttribute("data-arf-field", "sampler:" + s.id);
+    const held = cfg.samplers && cfg.samplers[s.id];
+    box.value = held == null || held === "" ? "" : String(held);
+    box.addEventListener("change", () => {
+      const next = Object.assign({}, cfg.samplers || {});
+      const raw = String(box.value).trim();
+      // Cleared means handing it back to the connection, which is not the same
+      // as sending zero, so the key goes rather than being set to 0.
+      if (!raw) delete next[s.id];
+      else {
+        let v = Number(raw);
+        if (!Number.isFinite(v)) {
+          delete next[s.id];
+          box.value = "";
+        } else {
+          v = Math.min(s.max, Math.max(s.min, v));
+          next[s.id] = v;
+          box.value = String(v);
+        }
+      }
+      cfg.samplers = next;
+      persist(true);
+    });
+    wrap.appendChild(box);
+    if (s.hint) wrap.appendChild(note(s.hint));
+    return wrap;
+  }
+
+  // ---- carrying a setup somewhere else ----
+  // One file with everything in it: the rules, the layout, the samplers, the
+  // lot. Not the chats you switched off, which name chats that do not exist on
+  // the machine reading the file.
+  function buildTransfer(): HTMLElement {
+    const wrap = el("div", "arf-col");
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("Import and export"));
+    wrap.appendChild(
+      note(
+        "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back.",
+      ),
+    );
+
+    const row = el("div", "arf-row");
+    const out = button("Export to a file", false);
+    out.addEventListener("click", () => {
+      const body = {
+        extension: "auto-refine",
+        version: VERSION,
+        savedAt: new Date().toISOString(),
+        settings: Object.assign({}, cfg, { blocks: blockList() }),
+      };
+      const ok = downloadText("auto-refine-settings.json", JSON.stringify(body, null, 2));
+      transferSaid = ok
+        ? "Exported."
+        : "The browser would not save the file. Some private windows block downloads.";
+      paint();
+    });
+
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "application/json,.json";
+    picker.style.display = "none";
+    picker.addEventListener("change", () => {
+      const file = picker.files && picker.files[0];
+      picker.value = "";
+      if (!file) return;
+      readFileAsText(file, (text) => {
+        transferSaid = applyImport(text);
+        paint();
+      });
+    });
+    const inBtn = button("Import a file", false);
+    inBtn.addEventListener("click", () => {
+      try {
+        picker.click();
+      } catch (_) {
+        transferSaid = "The browser would not open a file picker.";
+        paint();
+      }
+    });
+    row.appendChild(out);
+    row.appendChild(inBtn);
+    row.appendChild(picker);
+    wrap.appendChild(row);
+    if (transferSaid) wrap.appendChild(note(transferSaid));
+    return wrap;
+  }
+
+  // Reads a file back into the settings. Every value is checked against what it
+  // is supposed to be rather than assigned: this is a file somebody was handed,
+  // and one bad field should not leave the panel in a state it cannot repaint.
+  function applyImport(text: string | null): string {
+    if (!text) return "That file could not be read.";
+    let body: any = null;
+    try {
+      body = JSON.parse(text);
+    } catch (_) {
+      return "That file is not settings JSON.";
+    }
+    const s = body && body.settings && typeof body.settings === "object" ? body.settings : body;
+    if (!s || typeof s !== "object") return "That file has no settings in it.";
+    if (body && body.extension && body.extension !== "auto-refine")
+      return "That file is for a different extension.";
+
+    let took = 0;
+    for (const key of Object.keys(CONFIG)) {
+      if (!(key in s)) continue;
+      const want = (CONFIG as any)[key];
+      const got = (s as any)[key];
+      if (key === "blocks") {
+        if (!Array.isArray(got)) continue;
+        cfg.blocks = got
+          .filter((b: any) => b && typeof b === "object" && b.id)
+          .slice(0, 40)
+          .map((b: any) => ({
+            id: String(b.id),
+            on: b.on !== false,
+            role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
+            text: b.text == null ? undefined : String(b.text),
+            name: b.name == null ? undefined : String(b.name),
+          }));
+        took++;
+      } else if (key === "samplers") {
+        if (!got || typeof got !== "object" || Array.isArray(got)) continue;
+        const clean: Record<string, number> = {};
+        for (const f of SAMPLER_FIELDS) {
+          const v = Number(got[f.id]);
+          if (got[f.id] === "" || got[f.id] == null || !Number.isFinite(v)) continue;
+          clean[f.id] = Math.min(f.max, Math.max(f.min, v));
+        }
+        cfg.samplers = clean;
+        took++;
+      } else if (typeof want === "boolean") {
+        cfg[key] = !!got;
+        took++;
+      } else if (typeof want === "number") {
+        const v = Number(got);
+        if (Number.isFinite(v)) {
+          cfg[key] = v;
+          took++;
+        }
+      } else if (typeof want === "string") {
+        if (typeof got === "string") {
+          cfg[key] = got;
+          took++;
+        }
+      }
+    }
+    if (!took) return "Nothing in that file matched a setting here.";
+    persist(true);
+    return "Imported " + took + " setting" + (took === 1 ? "" : "s") + ".";
+  }
+
+  // Save text as a file. False if the browser refused, which some private
+  // windows do, and which is worth saying rather than looking like nothing
+  // happened.
+  function downloadText(filename: string, text: string): boolean {
+    try {
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 1000);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function readFileAsText(file: any, cb: (text: string | null) => void): void {
+    try {
+      const reader = new FileReader();
+      reader.onload = () => cb(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => cb(null);
+      reader.readAsText(file);
+    } catch (_) {
+      cb(null);
+    }
   }
 
   function buildChatSwitch(): HTMLElement {
@@ -1219,6 +1766,10 @@ export const __testing = {
   CONFIG,
   COST_FIELDS,
   LIMIT_FIELDS,
+  BLOCK_KINDS,
+  DEFAULT_BLOCKS,
+  ROLE_OPTIONS,
+  SAMPLER_FIELDS,
   refineIcon,
   VERSION,
   // Pure, so a theme with a light accent can be checked without a browser.

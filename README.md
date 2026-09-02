@@ -34,17 +34,31 @@ A refine is a second model call on every reply, so two settings decide what that
 - **Refine using this connection.** A rewrite does not need the model you roleplay with. Point this at a cheaper or faster connection and the whole feature costs a fraction of what it would otherwise.
 - **Let the model think first.** Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives.
 
-## Installing
+## Install
 
-Install from the Extensions panel by repository URL, or `POST /api/v1/spindle/install`.
+In Lumiverse, open Extensions and install from the repository URL:
 
-It asks for three permissions: `generation` to run the refine, `chat_mutation` to save the result, and `chats` to know which chat you are in. The tab itself costs nothing: drawer tabs are open to every extension. The [privacy page](docs/privacy.md) says what each is used for and what you still have if you refuse it.
+```
+https://github.com/starlitcode/Lumiverse-Auto-Refine
+```
+
+Then open the sidebar drawer and pick the **Auto Refine** tab. Ctrl+K finds it too. Write a rule or two and it is ready; everything else is optional.
+
+It asks for four permissions: `generation` to run the refine, `chat_mutation` to save the result, `chats` to know which chat you are in, and `characters` to read the card so a rewrite knows who is speaking. The tab itself costs nothing, since drawer tabs are open to every extension. The [privacy page](docs/privacy.md) says what each is used for and what you still have if you refuse it.
+
+## How the prompt is built
+
+The refine is one model call, and you decide what goes in it. Under **How the prompt is built** each part is a block you can reorder, switch off, or send as a different role: the instruction, the character card, the run-up from the chat, your rules, your structure rules, whose message it is, and the message itself. You can add blocks of your own text anywhere in that order.
+
+Two blocks are locked on, the instruction and the message, because every check on the answer assumes the model was given both.
 
 ## Documentation
 
 - [Writing rules](docs/rules.md)
+- [How the prompt is built](docs/prompt.md) - the blocks, their order, the roles, and the sampler settings
 - [What it refuses to save](docs/guardrails.md)
 - [Settings](docs/settings.md)
+- [Import and export](docs/prompt.md#import-and-export)
 - [Privacy](docs/privacy.md)
 
 ## Building

@@ -35,6 +35,17 @@ let refineUserMessages = false;
 let connectionId = '';         // empty means the reader's active connection
 let thinkingMode = 'off';      // off | inherit
 let timeoutSecs = 90;
+// How the request is put together: which blocks go in, in what order, and what
+// role each one is sent as. The reader owns this, which is the point of it
+// being a list rather than a hardcoded prompt.
+let blocks: Array<{ id: string; on: boolean; role: string; text?: string }> = [];
+// How much of the chat to show the model as context, in messages. The refine
+// sees the message it is rewriting either way; this is what came before it.
+let contextMessages = 4;
+// Sampler values for the refine call, sent as parameters. Empty means the
+// connection's own preset decides, which is the right default: a reader who
+// has not asked for a temperature should get the one they already tuned.
+let samplers: Record<string, any> = {};
 let maxGrowthPct = 60;         // how much longer a refine may make a reply
 let minShrinkPct = 40;         // and how much shorter before it looks wrong
 let keepOriginal = true;
@@ -84,19 +95,24 @@ function say(level: 'info' | 'warn', text: string) {
   try { spindle.log[level]('auto-refine: ' + text); } catch (_) {}
 }
 
-// ---- the prompt ----
-// Written out here rather than assembled inline, because this is the part a
-// reader would want to audit and the part most likely to need tuning. It is
-// plain instruction, no cleverness: the model is told what it is holding, what
-// to do to it, and what not to do.
+// ---- putting the request together ----
+// The reader decides what goes into the refine and in what order, because a
+// prompt that cannot be rearranged is a prompt that only suits whoever wrote
+// it. Each block is a piece of the request with a role of its own, and the
+// order is the order they are sent in.
 //
-// The three "do not" lines are doing the real work. A model asked to rewrite
-// prose will, left alone, introduce itself, explain its edits, or wrap the
-// answer in quotes. Every one of those would be saved into the chat as though
-// the character had said it.
-const BASE_RULES =
+// Two of them are not the reader's to remove. The guard says what a refine is
+// and is not, and the message is the thing being refined; without either there
+// is no job to do. Everything else can be turned off, moved, or re-roled.
+const GUARD_ID = 'guard';
+const MESSAGE_ID = 'message';
+const REQUIRED = [GUARD_ID, MESSAGE_ID];
+
+// The line that separates a refine from another turn of roleplay. Not editable,
+// because every guardrail further down assumes the model was told this.
+const GUARD_TEXT =
   'You are editing one message from an ongoing roleplay. Rewrite it so it ' +
-  'follows the instructions below.\n\n' +
+  'follows the instructions you have been given.\n\n' +
   'Keep the same events, the same speech, and the same meaning. You are ' +
   'polishing how it is written, not changing what happens. Do not add new ' +
   'actions, new dialogue, or new characters. Do not continue the scene past ' +
@@ -109,25 +125,86 @@ const REASONING_NOTE =
   'Think about the edit before you write it, then give only the rewritten ' +
   'message as your answer. Your reasoning must not appear in the answer.';
 
-function buildPrompt(text: string, isUser: boolean): any[] {
-  const parts = [BASE_RULES];
-  const own = String(rules || '').trim();
-  if (own) parts.push('The instructions to follow:\n\n' + own);
-  const shape = String(structureRules || '').trim();
-  if (shape) parts.push('Structure and formatting:\n\n' + shape);
-  // Only when the reader has left thinking on. A model with no thinking to do
-  // does not need to be told where not to put it.
-  if (thinkingMode !== 'off') parts.push(REASONING_NOTE);
-  parts.push(
-    isUser
+// What a fresh install sends, in this order. Chosen so the model reads who the
+// character is, then what has been happening, then what to do, then the thing
+// to do it to, which is the order a person would want it.
+const DEFAULT_BLOCKS = [
+  { id: GUARD_ID, on: true, role: 'system' },
+  { id: 'character', on: true, role: 'system' },
+  { id: 'context', on: true, role: 'system' },
+  { id: 'rules', on: true, role: 'system' },
+  { id: 'structure', on: true, role: 'system' },
+  { id: 'whose', on: true, role: 'system' },
+  { id: 'thinking', on: true, role: 'system' },
+  { id: MESSAGE_ID, on: true, role: 'user' },
+];
+
+interface Piece {
+  character: string;
+  context: string;
+  message: string;
+  isUser: boolean;
+}
+
+// The text one block carries, or empty when it has nothing to say. A block with
+// nothing in it is left out rather than sent as a blank line.
+function blockText(id: string, custom: string | undefined, p: Piece): string {
+  if (id === GUARD_ID) return GUARD_TEXT;
+  if (id === MESSAGE_ID) return p.message;
+  if (id === 'character') return p.character ? 'Who this is about:\n\n' + p.character : '';
+  if (id === 'context') return p.context ? 'What has been happening:\n\n' + p.context : '';
+  if (id === 'rules') {
+    const own = String(rules || '').trim();
+    return own ? 'The instructions to follow:\n\n' + own : '';
+  }
+  if (id === 'structure') {
+    const shape = String(structureRules || '').trim();
+    return shape ? 'Structure and formatting:\n\n' + shape : '';
+  }
+  if (id === 'whose')
+    return p.isUser
       ? 'The message is written by the human player, in their own voice. Keep ' +
         'their voice. Do not make it sound like the narrator or the character.'
-      : 'The message is written by the character or narrator.',
-  );
-  return [
-    { role: 'system', content: parts.join('\n\n') },
-    { role: 'user', content: text },
-  ];
+      : 'The message is written by the character or narrator.';
+  // Only worth sending when the reader has left thinking on. A model with no
+  // thinking to do does not need telling where not to put it.
+  if (id === 'thinking') return thinkingMode !== 'off' ? REASONING_NOTE : '';
+  // Anything else is the reader's own block, and it carries whatever they typed.
+  return String(custom == null ? '' : custom).trim();
+}
+
+const ROLES = ['system', 'user', 'assistant'];
+
+// The blocks as they will actually be sent: the reader's list when it has one,
+// the default otherwise, with the two required blocks put back if a stored list
+// has lost them.
+function activeBlocks(): Array<{ id: string; on: boolean; role: string; text?: string }> {
+  const list = Array.isArray(blocks) && blocks.length ? blocks.slice() : DEFAULT_BLOCKS.slice();
+  for (const id of REQUIRED) {
+    const at = list.findIndex((b) => b && b.id === id);
+    if (at < 0) list.push({ id: id, on: true, role: id === MESSAGE_ID ? 'user' : 'system' });
+    else list[at] = { ...list[at], on: true };
+  }
+  return list;
+}
+
+function buildPrompt(text: string, isUser: boolean, character: string, context: string): any[] {
+  const piece: Piece = { character: character, context: context, message: text, isUser: isUser };
+  const out: any[] = [];
+  for (const b of activeBlocks()) {
+    if (!b || !b.on) continue;
+    const body = blockText(String(b.id), b.text, piece);
+    if (!body.trim()) continue;
+    const role = ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system';
+    // Blocks that land next to each other with the same role are joined rather
+    // than sent as separate messages. Providers differ on how they treat two
+    // system messages in a row, and one is what the reader meant by putting
+    // them together.
+    const last = out.length ? out[out.length - 1] : null;
+    if (last && last.role === role) last.content += '\n\n' + body;
+    else out.push({ role: role, content: body });
+  }
+  return out;
 }
 
 // ---- reading the answer ----
@@ -205,8 +282,128 @@ function judge(answer: any, original: string): Verdict {
   return { ok: true, text: text, why: '' };
 }
 
+// ---- what the model is told about the scene ----
+// A rewrite with no idea who is speaking or what just happened is the reason
+// refinement goes wrong: it smooths the prose and loses the person. So the card
+// and the run-up go in the prompt. Both are optional. Either lookup can be
+// refused, come back empty, or belong to a chat with no card at all, and a
+// refine still has to work in all three cases, so nothing here throws upward.
+
+// The parts of a card worth sending. A card holds more than this, but a greeting
+// and an example exchange are writing samples, and sending those to a model told
+// to rewrite invites it to copy them into the reply.
+const CARD_FIELDS: Array<[string, string]> = [
+  ['name', 'Name'],
+  ['description', 'Description'],
+  ['personality', 'Personality'],
+  ['scenario', 'Scenario'],
+];
+const CARD_MAX = 4000;      // per field, in characters
+const CONTEXT_MSG_MAX = 1200;
+const CONTEXT_TOTAL_MAX = 12000;
+
+function clip(s: any, max: number): string {
+  const t = String(s == null ? '' : s).trim();
+  return t.length > max ? t.slice(0, max).trimEnd() + '…' : t;
+}
+
+// The character card as plain text, and the name on its own so the history can
+// label who is talking. Empty on any refusal, which is the normal case for a
+// reader who has not granted the characters permission.
+async function gatherCard(
+  chatId: string,
+  userId?: string,
+): Promise<{ text: string; name: string }> {
+  const empty = { text: '', name: '' };
+  try {
+    if (!spindle.chats || typeof spindle.chats.get !== 'function') return empty;
+    const chat = await spindle.chats.get(chatId, userId);
+    // A chat can hold several cards; character_id names the one it belongs to,
+    // and that is the one being rewritten.
+    const cardId = chat && chat.character_id;
+    if (!cardId) return empty;
+    if (!spindle.characters || typeof spindle.characters.get !== 'function') return empty;
+    const card = await spindle.characters.get(cardId, userId);
+    if (!card) return empty;
+    const lines: string[] = [];
+    for (const pair of CARD_FIELDS) {
+      const v = clip(card[pair[0]], CARD_MAX);
+      if (v) lines.push(pair[1] + ': ' + v);
+    }
+    return { text: lines.join('\n\n'), name: String(card.name || '').trim() };
+  } catch (_) {
+    // No permission, no such chat, or the host said no. The refine goes ahead
+    // without a card rather than failing over one.
+    return empty;
+  }
+}
+
+// The messages leading up to the one being rewritten, oldest first, labelled so
+// the model can tell the two voices apart. The message itself is not in here:
+// it arrives as its own block, and sending it twice teaches the model that
+// repeating it is what the answer looks like.
+function gatherHistory(msgs: any[], at: number, charName: string): string {
+  const want = Math.max(0, Math.min(40, Number(contextMessages) || 0));
+  if (!want || at <= 0) return '';
+  const them = charName || 'Character';
+  const out: string[] = [];
+  let total = 0;
+  for (let i = at - 1; i >= 0 && out.length < want; i--) {
+    const m = msgs[i];
+    if (!m || (m.role !== 'assistant' && m.role !== 'user')) continue;
+    const body = clip(m.content, CONTEXT_MSG_MAX);
+    if (!body) continue;
+    const line = (m.role === 'user' ? 'Player' : them) + ': ' + body;
+    if (total + line.length > CONTEXT_TOTAL_MAX) break;
+    total += line.length;
+    out.push(line);
+  }
+  return out.reverse().join('\n\n');
+}
+
+// ---- sampler values ----
+// An allow-list rather than passing the panel's object straight through. The
+// bounds are the sane range for each one, and a value outside it is clamped
+// rather than dropped: somebody who typed 5 into temperature meant the top of
+// the range, and silently sending nothing would look like the setting is
+// broken. Anything not on this list never reaches the request.
+const SAMPLERS: Array<{ id: string; min: number; max: number; whole?: boolean }> = [
+  { id: 'temperature', min: 0, max: 2 },
+  { id: 'top_p', min: 0, max: 1 },
+  { id: 'top_k', min: 0, max: 500, whole: true },
+  { id: 'min_p', min: 0, max: 1 },
+  { id: 'max_tokens', min: 1, max: 200000, whole: true },
+  { id: 'frequency_penalty', min: -2, max: 2 },
+  { id: 'presence_penalty', min: -2, max: 2 },
+  { id: 'repetition_penalty', min: 0, max: 2 },
+];
+
+function cleanSamplers(): Record<string, number> | null {
+  const out: Record<string, number> = {};
+  let any = false;
+  const src = samplers && typeof samplers === 'object' ? samplers : {};
+  for (const s of SAMPLERS) {
+    const raw = src[s.id];
+    // Blank is the reader leaving it to the connection, and is not the same as
+    // zero. Only a value they actually typed is sent.
+    if (raw === '' || raw == null) continue;
+    let n = Number(raw);
+    if (!Number.isFinite(n)) continue;
+    n = Math.min(s.max, Math.max(s.min, n));
+    if (s.whole) n = Math.round(n);
+    out[s.id] = n;
+    any = true;
+  }
+  return any ? out : null;
+}
+
 // ---- running one refine ----
-async function askModel(text: string, isUser: boolean): Promise<{ content: string; error: string }> {
+async function askModel(
+  text: string,
+  isUser: boolean,
+  character: string,
+  context: string,
+): Promise<{ content: string; error: string }> {
   const controller: any = typeof (globalThis as any).AbortController === 'function'
     ? new (globalThis as any).AbortController()
     : null;
@@ -215,7 +412,12 @@ async function askModel(text: string, isUser: boolean): Promise<{ content: strin
   let timer: any = null;
   if (controller) timer = setTimeout(() => { try { controller.abort(); } catch (_) {} }, ms);
   try {
-    const req: any = { messages: buildPrompt(text, isUser) };
+    const req: any = { messages: buildPrompt(text, isUser, character, context) };
+    // Only the values the reader actually changed. An empty object is left out
+    // so the connection's own preset stays in charge, which is what somebody
+    // who never opened the sampler section expects.
+    const params = cleanSamplers();
+    if (params) req.parameters = params;
     // The connection the reader picked for refining, which is the point of
     // being able to pick one: a rewrite does not need the model you roleplay
     // with, and running it on a cheaper one is most of the saving.
@@ -285,7 +487,14 @@ async function refineMessage(
   const original = String(m.content == null ? '' : m.content);
   if (!original.trim()) return { ok: false, why: 'that message is empty' };
 
-  const answer = await askModel(original, m.role === 'user');
+  // Who this is and what led up to it. Both are best-effort: a chat with no
+  // card, or a reader who has not granted the two read permissions, refines
+  // with the blocks left out rather than not refining at all.
+  const card = await gatherCard(chatId, userId);
+  const at = msgs.findIndex((x: any) => x && x.id === m.id);
+  const history = gatherHistory(msgs, at, card.name);
+
+  const answer = await askModel(original, m.role === 'user', card.text, history);
   if (answer.error) return { ok: false, why: answer.error };
 
   const verdict = judge(answer.content, original);
@@ -413,6 +622,23 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       minShrinkPct = Number.isFinite(minShrinkPct) ? minShrinkPct : 40;
       keepOriginal = s.keepOriginal !== false;
       confirmBeforeSave = !!s.confirmBeforeSave;
+      // The prompt layout. Only a list of block-shaped things is taken; a
+      // corrupted or half-written value falls back to the default rather than
+      // building a prompt out of whatever came over the bridge.
+      blocks = Array.isArray(s.blocks)
+        ? s.blocks
+            .filter((b: any) => b && typeof b === 'object' && b.id)
+            .slice(0, 40)
+            .map((b: any) => ({
+              id: String(b.id),
+              on: b.on !== false,
+              role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
+              text: b.text == null ? undefined : String(b.text),
+            }))
+        : [];
+      contextMessages = Number(s.contextMessages);
+      contextMessages = Number.isFinite(contextMessages) ? contextMessages : 4;
+      samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
       return;
     }
 
@@ -505,7 +731,10 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: 'there is no text to try it on' });
         return;
       }
-      const answer = await askModel(text, !!payload.asUser);
+      // Pasted text belongs to no chat, so there is no card and no history to
+      // send. That is the honest version of a rehearsal: it shows what the
+      // rules do on their own, which is the thing being tried out.
+      const answer = await askModel(text, !!payload.asUser, '', '');
       if (answer.error) {
         replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: answer.error });
         return;
