@@ -10,7 +10,7 @@ A block is a name, a role, and text. The name is only for you. The role is Syste
 
 Blocks are sent top to bottom. Two next to each other with the same role are joined into one message, because providers disagree about what two system messages in a row mean and putting them together is what you meant by putting them together.
 
-A block whose text comes out empty is left out rather than sent blank, and so is one that is nothing but empty tags: a chat with no lorebook does not send `<world></world>`, which reads to a model as "this world is empty" rather than as "nothing was said about the world".
+A block whose text comes out empty is left out, not sent blank, and so is one that is nothing but empty tags: a chat with no lorebook does not send `<world></world>`, which reads to a model as "this world is empty" rather than as "nothing was said about the world".
 
 ## Macros
 
@@ -44,7 +44,7 @@ The other reason order matters is caching. If your provider caches prompts, the 
 System is right for almost everything. Two cases where changing it helps:
 
 - A model that ignores system instructions. Some providers weight the last user message far more heavily than anything in the system prompt, and moving your rules to **User** is the fix.
-- A model that treats the message as something to continue rather than edit. Sending the turn as **Assistant** makes it read as the thing already written, which sometimes stops a model appending a new paragraph to it.
+- A model that treats the message as something to continue instead of editing. Sending the turn as **Assistant** makes it read as the thing already written, which sometimes stops a model appending a new paragraph to it.
 
 ## The answer it asks for
 
@@ -52,7 +52,7 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 This is worth more than it sounds. Without it, a model that opens with "Sure! Here is the rewritten message:" has its whole answer dropped, because saving that line into your chat is worse than saving nothing. With it, the sentence outside the tags is simply ignored and the rewrite lands. It also catches an answer that ran out of room: an opening tag with nothing closing it means the rewrite was cut off, and a half-written message is never saved.
 
-**Asking for the tags is your prompt's job, not a macro's.** The prompts that ship with it ask in the **How to answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` to fill it in for you, and that is deliberate: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
+**Asking for the tags is your prompt's job, not a macro's.** The prompts that ship with it ask in the **How to answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` filling it in for you, and that is the point: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
 
 **Take the answer from between the tags**, under Limits, is the reading half and is on by default. It decides what is done with an answer, never what is asked for. Off, the whole answer is taken as the rewrite and the older checks catch a preamble instead.
 
@@ -71,13 +71,13 @@ the rewritten message
 
 `<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat. It appears on the **Log** tab under **What it said about the edit**, beside the refine it belongs to. That is what makes asking for it worth the tokens: reasoning nobody ever reads is only a bill.
 
-**The two plain prompts do not ask for this**, and that is deliberate rather than an omission. A model that does not reason, given a thinking tag, fills it with a summary of what it is about to do and then does something else: output spent on a paragraph nobody wanted.
+**The two plain prompts do not ask for this**, and it is a choice, not an oversight. A model that does not reason, given a thinking tag, fills it with a summary of what it is about to do and then does something else: output spent on a paragraph nobody wanted.
 
 Both tags are shouted. A model skimming a long prompt for the shape of the answer finds a run of capitals before it finds a word, and these are the only two things in the prompt that have to be got exactly right. The answer is read case-insensitively, so a prompt you wrote in lower case still works.
 
 ## Asking it what it changed
 
-Nothing outside the `<REFINED>` tags is ever saved into your chat. That makes the space around them somewhere a prompt can safely ask for anything it likes, and the obvious thing to ask for is a report: what was cut, what was added, what was deliberately left alone.
+Nothing outside the `<REFINED>` tags is ever saved into your chat. That makes the space around them somewhere a prompt can safely ask for anything it likes, and the obvious thing to ask for is a report: what was cut, what was added, what it chose to leave.
 
 Add the tags you want to the **How to answer** block, in your own words. For example:
 
@@ -110,7 +110,7 @@ Two questions have different answers: does your model reason, and do you want th
 
 The reasoning pair is the shorter one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 
-The rules themselves are specific rather than general. "Cut clichés" gives a model nothing to act on; the shipped prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
+The rules themselves are specific, not general. "Cut clichés" gives a model nothing to act on; the shipped prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
 
 All four work as they stand. Load one, change whatever you like, save it under a name of your own.
 
@@ -124,7 +124,7 @@ Three settings under **Context**, and they are the ones most likely to make a re
 
 **Most tokens of lorebook** is a ceiling on the entries this chat has active. Whole entries again: half a lorebook entry is worse than one fewer of them.
 
-Tokens rather than characters because that is the unit a context window is measured in, and the same eight thousand characters is a wildly different amount of prompt depending on the language and the formatting. They are counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not.
+Tokens, not characters, because that is the unit a context window is measured in, and the same eight thousand characters is a wildly different amount of prompt depending on the language and the formatting. They are counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not.
 
 ## Protecting what is not prose
 
@@ -132,7 +132,7 @@ Ask a model to improve a paragraph and it will happily drop a `<font color>` tag
 
 **Hide markup from the model**, under Limits, is on by default. Before the refine, each run of markup is lifted out and replaced with a short token like `[[AR1]]`. The model is told the tokens must come back untouched. Afterwards the real text goes back.
 
-What makes this worth having rather than hopeful is the last step. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
+What makes this a guarantee, and not just a hope, is the last step. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
 
 What gets protected: fenced code, inline code, images, links, comments, and any tag carrying an attribute, which is where a colour or an href lives.
 
@@ -148,7 +148,7 @@ Under **Model**, every sampler is blank to begin with, and blank means the conne
 
 Fill one in and it is sent with the refine and only with the refine. Your chat is not affected, and neither is the preset.
 
-Temperature is the one worth touching. A rewrite usually wants it lower than the one you roleplay with, since you are asking for the same scene said better rather than for another idea. **Longest answer** is worth a look in the other direction: a ceiling low enough to cut the rewrite off mid-sentence gets it dropped for being too short, which looks like the refine failing rather than the setting being tight.
+Temperature is the one worth touching. A rewrite usually wants it lower than the one you roleplay with, since you are asking for the same scene said better, not for another idea. **Longest answer** is worth a look in the other direction: a ceiling low enough to cut the rewrite off mid-sentence gets it dropped for being too short, which looks like the refine failing rather than the setting being tight.
 
 **Clear them all** hands every one of them back to the connection.
 
@@ -172,9 +172,9 @@ If no reply can be found it still builds, with a stand-in where your message wou
 
 ## Starting a block from nothing
 
-A new block is empty. The prompts that ship with it use XML tags because that is what works, but a tag is a style rather than a rule, and a new block should not arrive already written in somebody else's.
+A new block is empty. The prompts that ship with it use XML tags because that is what works, but a tag is a style, not a rule, and a new block should not arrive already written in somebody else's.
 
-**Expand** opens a block in an editor the size of the screen, which is where a paragraph is actually comfortable to write. It does not put the cursor in the box: focusing a textarea is what raises the keyboard on a phone, and it would cover the thing you just opened. The preview has one too, for reading rather than editing.
+**Expand** opens a block in an editor the size of the screen, which is where a paragraph is actually comfortable to write. It does not put the cursor in the box: focusing a textarea is what raises the keyboard on a phone, and it would cover the thing you just opened. The preview has one too, for reading, with no editing.
 
 ## Presets
 
@@ -201,7 +201,7 @@ Presets live in your browser. To move them to another device, use the export bel
 
 Importing replaces what you have, so export first if you want a way back. The chats you switched off are not in the file: they name chats that do not exist on the machine reading it.
 
-Every value in a file is checked against what it is supposed to be before it is used, so a hand-edited or truncated file loads what it can and says how many settings it took, rather than leaving the panel in a state it cannot draw. A sound in a file has to be audio and has to be small, or it is dropped rather than loaded.
+Every value in a file is checked against what it is supposed to be before it is used, so a hand-edited or truncated file loads what it can and says how many settings it took, leaving the panel in a state it can still draw. A sound in a file has to be audio and has to be small, or it is dropped.
 
 ## Starting again
 

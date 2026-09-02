@@ -395,7 +395,7 @@ const THINKS_ANSWER: Block = {
     "Answer in two parts, in this order.\n\n" +
     "First, your working, between <REFINE_NOTES> and </REFINE_NOTES>. Name what " +
     "is weak in the message as it stands, say what you intend to change and " +
-    "why, and say what you are deliberately leaving alone. Be specific: quote " +
+    "why, and say what you looked at and chose to leave. Be specific: quote " +
     "the phrases you mean. This is for me to read, not for the story.\n\n" +
     "Then the rewritten message, between <REFINED> and </REFINED>. Only what is " +
     "between those two tags is saved, so the tags are not optional. Inside " +
@@ -892,13 +892,13 @@ const GUARD_FIELDS: Field[] = [
     key: "guardRefusal",
     label: "Refuse an answer that declines the job",
     type: "bool",
-    hint: "On by default. Catches an answer that is the model saying it will not do this rather than a rewrite, which is the one thing that must never be saved over your reply. Only applies to a short answer: a long one that happens to contain the words is a scene, not a refusal.",
+    hint: "On by default. Catches an answer where the model says it will not do this. That is the one thing that must never be saved over your reply. Only applies to a short answer: a long one that happens to contain the words is a scene, not a refusal.",
   },
   {
     key: "guardPreamble",
     label: "Refuse an answer that talks about the edit",
     type: "bool",
-    hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is ignored rather than saved.",
+    hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is ignored, not saved.",
   },
   {
     key: "guardSoften",
@@ -922,7 +922,7 @@ const GUARD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "guardSoften" },
     under: true,
-    hint: "Optional, one per line, added to the built-in list. That list is deliberately short and holds only words that are hard to use innocently, because everyday words like hit, skin or pain would fire on any refine that tightened a description. Add what softening looks like in what you write.",
+    hint: "Optional, one per line, added to the built-in list. That list is short and holds only words that are hard to use innocently, because everyday words like hit, skin or pain would fire on any refine that tightened a description. Add what softening looks like in what you write.",
   },
   {
     key: "retryRefine",
@@ -930,7 +930,7 @@ const GUARD_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 3,
-    hint: "How many extra times to ask, and 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn rather than a settled answer, and asking again often comes back clean. Only the failures a second try could fix are retried: a rewrite refused for its length is one the model meant, so asking again buys the same answer at the same price. Every retry is another call on your bill.",
+    hint: "How many extra times to ask, and 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn, not a settled answer, and asking again often comes back clean. Only the failures a second try could fix are retried: a rewrite refused for its length is one the model meant, so asking again buys the same answer at the same price. Every retry is another call on your bill.",
   },
 ];
 
@@ -1055,7 +1055,7 @@ const LIMIT_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 500,
-    hint: "A rewrite this much longer has written new scene rather than polished what was there. 0 allows any length.",
+    hint: "A rewrite this much longer has written new scene instead of polishing what was there. 0 allows any length.",
   },
   {
     key: "minShrinkPct",
@@ -1063,7 +1063,7 @@ const LIMIT_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 99,
-    hint: "A rewrite this much shorter has lost writing rather than tightened it. 0 allows any length.",
+    hint: "A rewrite this much shorter has lost writing instead of tightening it. 0 allows any length.",
   },
   {
     key: "keepOriginal",
@@ -1988,7 +1988,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5))}" +
     "textarea.arf-bigta{flex:1;min-height:0;resize:none}" +
     // Nothing on focus here, not even the border change the small boxes get.
-    // The editor is one box filling the screen, opened deliberately, with
+    // The editor is one box filling the screen, opened on purpose, with
     // nothing to tab between: a mark saying which box has focus answers a
     // question nobody was asking, and at this size it draws a line down the
     // whole window.
@@ -2446,6 +2446,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const p of missing())
       if (p.fatal)
         root.appendChild(bad(p.label + " is refused, so nothing can be refined. " + p.without));
+    // First, above everything. A refine waiting on an answer is the one thing on
+    // this panel that is holding something up.
+    if (pending) root.appendChild(buildPendingCard());
     const back = undoHere();
     if (back.length) root.appendChild(buildLastRefine(back));
     root.appendChild(buildSearch());
@@ -2592,6 +2595,66 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Every refine in this chat that can still be put back, newest first. It used
   // to show one, which meant a second refine took away the way back from the
   // first without saying so.
+  // A refine waiting on your yes. Held here so it exists whether or not the host
+  // can draw a modal: without this, a Lumiverse with no showModal dropped the
+  // whole refine on the floor and said nothing, which reads as the button not
+  // working.
+  let pending: { chatId: any; messageId: any; before: string; after: string; at: number } | null =
+    null;
+
+  function takePending(yes: boolean) {
+    const one = pending;
+    pending = null;
+    if (!undoHere().length) setBadge(null);
+    if (!one) return;
+    if (yes) {
+      send({
+        type: "apply_refine",
+        requestId: newId(),
+        chatId: one.chatId,
+        messageId: one.messageId,
+        after: one.after,
+      });
+      log("accepted a refine", true);
+    } else {
+      log("turned a refine down");
+      toast("Left as it was.", true);
+    }
+    paint();
+  }
+
+  function buildPendingCard(): HTMLElement {
+    const one = pending as NonNullable<typeof pending>;
+    const wrap = card(
+      "Waiting for you",
+      "This refine is written and nothing has been saved. Read both and say which one stands.",
+      new Date(one.at).toTimeString().slice(0, 5),
+    );
+    wrap.appendChild(el("div", "arf-lab", "As it is now"));
+    wrap.appendChild(el("div", "arf-well arf-scroll", one.before));
+    wrap.appendChild(el("div", "arf-lab", "After the refine"));
+    wrap.appendChild(el("div", "arf-well arf-scroll", one.after));
+    const row = el("div", "arf-row");
+    const yes = button("Accept it", true);
+    yes.setAttribute("data-arf-pending", "accept");
+    yes.addEventListener("click", () => takePending(true));
+    const no = button("Turn it down", false);
+    no.setAttribute("data-arf-pending", "decline");
+    no.addEventListener("click", () => takePending(false));
+    const big = button("Read it in full", false);
+    big.addEventListener("click", () =>
+      openBig(
+        "Both versions",
+        "As it is now\n\n" + one.before + "\n\n---\n\nAfter the refine\n\n" + one.after,
+      ),
+    );
+    row.appendChild(yes);
+    row.appendChild(no);
+    row.appendChild(big);
+    wrap.appendChild(row);
+    return wrap;
+  }
+
   function buildLastRefine(list: Undo[]): HTMLElement {
     const wrap = card(
       list.length === 1 ? "The last refine" : "Refines you can put back",
@@ -3434,7 +3497,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "protectOn",
         label: "Hide markup from the model",
         type: "bool",
-        hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. If one does not come back, the rewrite is dropped rather than saved: asking a model to preserve something and checking that it did are different things.",
+        hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. If one does not come back, the rewrite is dropped: asking a model to preserve something and checking that it did are different things.",
       }),
     );
     if (cfg.protectOn)
@@ -3469,7 +3532,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         type: "bool",
         needs: { key: "streamProgress" },
         under: true,
-        hint: "Off by default. Puts a Watch it happen card on the Log tab that fills in as the model writes, rather than only counting characters. On a reasoning prompt you see it work the edit out first and then write it, because the working comes back before the rewrite. It costs a little traffic between the panel and the server on every refine, which is why it is something to switch on when you want to watch one rather than something left on.",
+        hint: "Off by default. Puts a Watch it happen card on the Log tab that fills in as the model writes, instead of only counting characters. On a reasoning prompt you see it work the edit out first and then write it, because the working comes back before the rewrite. It costs a little traffic between the panel and the server on every refine, which is why it is something to switch on when you want to watch one, not something to leave on.",
       }),
     );
     wrap.appendChild(
@@ -3527,7 +3590,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // What the model wrote around the <REFINED> tags on the last pass. Nothing
   // outside those tags is ever saved into a chat, which is what makes it a safe
   // place for a prompt to ask for a report: what was cut, what was added, what
-  // was deliberately left alone. Kept here so the report has somewhere to be
+  // was left alone on purpose. Kept here so the report has somewhere to be
   // read instead of being dropped on the floor.
   let lastNotes = "";
   let lastNotesAt = 0;
@@ -4083,7 +4146,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "soundOn",
         label: "Play a sound",
         type: "bool",
-        hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised rather than shipped as a file. Attach your own below if you would rather.",
+        hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised in the browser, with no file to ship. Attach your own below if you would rather.",
       }),
     );
     if (cfg.soundOn) {
@@ -5620,6 +5683,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       cancelRefine();
       return;
     }
+    // A refine is holding for an answer. The tap opens the tab where both
+    // versions are, since accepting a rewrite of somebody's writing on a stray
+    // tap is the one thing this button must never do.
+    if (pending) {
+      try {
+        tab && tab.activate && tab.activate();
+      } catch (_) {}
+      toast("A refine is waiting for you in the Auto Refine tab.", true);
+      return;
+    }
     if (cfg.widgetUndo && undoHere().length) {
       const one = undoHere()[0];
       send({
@@ -5704,6 +5777,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     const items: Array<{ key: string; label: string }> = [];
     // The panel first. It is what somebody holding the button is most likely
     // after, and everything taken out of this list is in it.
+    // A refine holding for an answer comes before everything, because nothing
+    // else is going to happen until it is settled.
+    if (pending) {
+      items.push({ key: "accept", label: "Accept the refine that is waiting" });
+      items.push({ key: "decline", label: "Turn it down and keep the reply" });
+    }
     items.push({ key: "open", label: "Open the Auto Refine tab" });
     // First while it is running, because it is the only thing anybody opens
     // this menu for mid-refine and the reason they are in a hurry.
@@ -5740,7 +5819,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       paint();
       return;
     }
-    if (picked === "stop") cancelRefine();
+    if (picked === "accept") takePending(true);
+    else if (picked === "decline") takePending(false);
+    else if (picked === "stop") cancelRefine();
     else if (picked === "undo") {
       const one = undoHere()[0];
       if (one)
@@ -6144,6 +6225,22 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
           if (msg.type === "confirm_refine") {
             markBusy(false);
+            pending = {
+              chatId: msg.chatId,
+              messageId: msg.messageId,
+              before: String(msg.before || ""),
+              after: String(msg.after || ""),
+              at: Date.now(),
+            };
+            markBusy(false);
+            msgBusy = null;
+            setBadge("1");
+            log("a refine is waiting for you", true);
+            ping();
+            paint();
+            // And as a modal where the host can draw one, since this is a
+            // question holding something up. The card is the same decision and
+            // stays until one of them is answered.
             askToSave(msg);
             return;
           }
@@ -6184,23 +6281,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       const bar = el("div", "arf-row");
       const yes = button("Save it", true);
       const no = button("Leave it alone", false);
-      yes.addEventListener("click", () => {
-        send({
-          type: "apply_refine",
-          requestId: newId(),
-          chatId: msg.chatId,
-          messageId: msg.messageId,
-          after: msg.after,
-        });
+      // Both buttons go through the same place the card's do, so answering
+      // either settles the other. Two surfaces, one decision.
+      const shut = () => {
         try {
           modal.dismiss && modal.dismiss();
         } catch (_) {}
+      };
+      yes.addEventListener("click", () => {
+        takePending(true);
+        shut();
       });
       no.addEventListener("click", () => {
-        log("left a reply alone: you said no");
-        try {
-          modal.dismiss && modal.dismiss();
-        } catch (_) {}
+        takePending(false);
+        shut();
       });
       bar.appendChild(yes);
       bar.appendChild(no);

@@ -1043,6 +1043,95 @@ console.log("\nloading a preset from where you were reading");
   });
 }
 
+console.log("\naccepting or turning one down");
+{
+  // The panel holds the decision itself, so it exists whether or not the host
+  // can draw a modal. Without that, a Lumiverse with no showModal dropped the
+  // whole refine and said nothing.
+  const waiting = async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "confirm_refine",
+        chatId: "c1",
+        messageId: "m2",
+        before: "She stepped through and, suddenly, the cold just hit her.",
+        after: "She stepped through and the cold hit her.",
+      });
+    });
+    await settle(page);
+  };
+
+  await inTab(browser, {}, async (page) => {
+    await waiting(page);
+    const shown = await page.evaluate(() => {
+      const body = document.querySelector("#drawer").textContent;
+      return {
+        card: /Waiting for you/.test(body),
+        before: /suddenly, the cold just hit her/.test(body),
+        after: /and the cold hit her/.test(body),
+        accept: !!document.querySelector('#drawer [data-arf-pending="accept"]'),
+        decline: !!document.querySelector('#drawer [data-arf-pending="decline"]'),
+        badge: window.__badge,
+      };
+    });
+    ok("a finished refine waits in the panel", shown.card);
+    ok("with both versions to read", shown.before && shown.after);
+    ok("and a way to take it or leave it", shown.accept && shown.decline);
+    ok("the tab says something is waiting", shown.badge === "1", String(shown.badge));
+
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-pending="accept"]').click();
+    });
+    await settle(page);
+    const took = await page.evaluate(() => ({
+      sent: window.__sent.filter((m) => m.type === "apply_refine").pop(),
+      gone: !/Waiting for you/.test(document.querySelector("#drawer").textContent),
+      badge: window.__badge,
+    }));
+    ok("accepting sends it to be saved", !!took.sent && took.sent.messageId === "m2");
+    ok("with the rewrite you were shown", took.sent.after === "She stepped through and the cold hit her.");
+    ok("and the card goes", took.gone);
+    ok("and the badge with it", took.badge === null, String(took.badge));
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await waiting(page);
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-pending="decline"]').click();
+    });
+    await settle(page);
+    const left = await page.evaluate(() => ({
+      saved: window.__sent.filter((m) => m.type === "apply_refine").length,
+      gone: !/Waiting for you/.test(document.querySelector("#drawer").textContent),
+    }));
+    ok("turning it down saves nothing at all", left.saved === 0);
+    ok("and clears the question", left.gone);
+  });
+
+  // The floating button offers the same decision, and a stray tap cannot make
+  // it: accepting a rewrite of somebody's writing by accident is the one thing
+  // the button must not do.
+  await inTab(browser, { saved: { widgetOn: true } }, async (page) => {
+    await waiting(page);
+    await page.evaluate(() => {
+      window.__menuPick = null;
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle(page);
+    const keys = await page.evaluate(() => ((window.__menu || {}).items || []).map((i) => i.key));
+    ok("the button's menu can answer it", keys.indexOf("accept") >= 0 && keys.indexOf("decline") >= 0, keys.join(","));
+
+    await page.evaluate(() => {
+      document.querySelector("#float .arf-float").click();
+    });
+    await settle(page);
+    const tapped = await page.evaluate(() => window.__sent.filter((m) => m.type === "apply_refine").length);
+    ok("but a tap alone accepts nothing", tapped === 0);
+  });
+}
+
 console.log("\nthe mark on a focused box");
 {
   await inTab(browser, {}, async (page) => {

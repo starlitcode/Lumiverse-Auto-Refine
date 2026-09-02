@@ -30,7 +30,7 @@ That narrowness misses some real softening, and it is the right way round: a mis
 
 ## Asking again
 
-**Ask again when a check fails** is 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn rather than a settled answer, and the same request often comes back clean.
+**Ask again when a check fails** is 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn, not a settled answer, and the same request often comes back clean.
 
 Only the failures a second try could fix are retried. A rewrite refused for its length is one the model meant, so asking again buys the same answer at the same price. A call that errored, or one you stopped, is never repeated.
 
@@ -38,13 +38,13 @@ Every retry is another call on your bill, which is why it is off until you ask f
 
 ## The rewrite is the wrong size
 
-**Too long.** A refine that grows a reply by more than the limit you set has written new scene rather than polished what was there. The default is 60%.
+**Too long.** A refine that grows a reply by more than the limit you set has written new scene instead of polishing what was there. The default is 60%.
 
-**Too short.** A refine below the shrink limit has thrown writing away rather than tightened it. The default is 40%.
+**Too short.** A refine below the shrink limit has thrown writing away instead of tightening it. The default is 40%.
 
 Both are yours to change, and either can be set to 0 to allow any length. Raise the growth limit if your rules genuinely ask for expansion, but read the note in [Writing rules](rules.md) first: a rule that asks for more writing is asking for a reply, not a refine.
 
-## Wrapping, which is fixed rather than dropped
+## Wrapping, which is fixed instead of dropped
 
 Two shapes are unwrapped instead of refused, because they are the right rewrite in the wrong packaging:
 

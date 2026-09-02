@@ -668,7 +668,7 @@ const REFUSAL = /\b(?:i(?:'|’)?m sorry,? but|i can(?:'|’)?t (?:help|assist|c
 //
 // Deliberately narrow. A check that fires on ordinary edits would be turned off
 // within a day, and then it catches nothing at all.
-// Kept deliberately short, and every word on it earns its place by being hard
+// Kept short, and every word on it has to be hard
 // to use innocently. An earlier draft of this list held hit, beat, bare, skin,
 // chest, dead, pain and desire, which are the vocabulary of ordinary
 // description: a refine that tightened a paragraph would have been called
