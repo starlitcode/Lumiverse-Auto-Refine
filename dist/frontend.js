@@ -34,7 +34,7 @@ const PARTS = [
         id: "context",
         label: "Context",
         what: "How much of the chat goes in.",
-        keys: ["contextMessages"],
+        keys: ["contextMessages", "maxHistoryTokens", "maxLoreTokens"],
     },
     {
         id: "model",
@@ -60,6 +60,7 @@ const PARTS = [
             "refineUserMessages",
             "protectOn",
             "protectThinking",
+            "protectInline",
             "wrapOutput",
         ],
     },
@@ -109,6 +110,8 @@ const PRESETS_KEY = "lv-auto-refine:presets:v1";
 const PRESET_KEYS = [
     "blocks",
     "contextMessages",
+    "maxHistoryTokens",
+    "maxLoreTokens",
     "samplers",
     "thinkingMode",
     "thinkingEffort",
@@ -169,6 +172,11 @@ const CONFIG = {
     // what just happened flattens a scene into general prose, which is the
     // failure people blame on the model.
     contextMessages: 4,
+    // Budgets in tokens, which is the unit a context window is measured in.
+    // Whole entries and whole messages are kept or dropped: half a lorebook entry
+    // is worse than one fewer of them.
+    maxLoreTokens: 2500,
+    maxHistoryTokens: 4500,
     // Which tab the panel opens on, remembered so it comes back where you left it.
     tab: "prompt",
     // What each of the three carries. Empty means everything, which is what a
@@ -205,17 +213,17 @@ const MACROS = [
 ];
 const TURN_MACRO = "{{message}}";
 // ---- the prompts that ship with it ----
-// Four, because two questions have different answers: does your model reason,
-// and do you want the short version or the whole thing.
+// Two questions, four answers. Does your model reason, and do you want the
+// short version or the whole thing.
+//
+// Short and Detailed are the same instructions. Detailed says each one at
+// length and gives it a block of its own; Short says all of it in three. Pick
+// by how much prompt you want to pay for on every refine, not by what it
+// covers, because they cover the same ground.
 //
 // A model that reasons is given the standard and left to apply it. A model that
-// does not is given the list, because it will pattern-match a list and will not
-// derive one from a principle. That is the difference between the two columns,
-// and it is why the reasoning prompts are shorter rather than longer.
-//
-// All four are written second person, and use XML tags as headings with a
-// closing tag at the end, because a model reads a tagged block as one
-// instruction instead of a paragraph running into the next one.
+// does not is given the list, because it will match a list and will not derive
+// one. That is why the thinking pair is the shorter pair.
 const CONTEXT_BLOCKS = [
     {
         id: "character",
@@ -253,40 +261,54 @@ const TURN_BLOCK = {
     role: "user",
     text: "{{whose}}\n\n<turn_to_refine>\n{{message}}\n</turn_to_refine>",
 };
-// The block that keeps a rewrite off everything that is not prose. This exists
-// even though the extension already hides markup behind tokens, because the two
-// cover different holes: protection catches what it can find, and this catches
-// what it cannot. A stat block, a translation line, a tracker somebody's card
-// prints every turn: none of those are wrapped in tags, so nothing can lift
-// them out, and only the instruction keeps them intact.
-const DO_NOT_TOUCH = {
-    id: "hands_off",
-    name: "What not to touch",
-    on: true,
-    role: "system",
-    text: "<leave_these_exactly>\n" +
-        "Some of what you are given is not prose and is not yours to edit. Copy it " +
-        "through character for character, in the same place it was:\n\n" +
-        "- HTML and XML tags of any kind, and everything inside the angle brackets\n" +
-        "- anything that looks like [[AR1]], which stands in for formatting that was " +
-        "taken out before you saw it\n" +
-        "- code, whether fenced or inline, and anything inside backticks\n" +
-        "- links, image links, and file paths\n" +
-        "- stat blocks, status bars, trackers, inventories, timestamps and any line " +
-        "printed to the same shape every turn\n" +
-        "- text in a second language sitting beside the first, and the line that " +
-        "translates it: fix neither and reorder neither\n" +
-        "- names as they are spelled, including odd spellings and capitalisation\n" +
-        "- numbers, dates, times and measurements\n\n" +
-        "If you are unsure whether something is prose, it is not. Leave it.\n" +
-        "</leave_these_exactly>",
-};
 const HOW_TO_ANSWER = {
     id: "answer",
     name: "How to answer",
     on: true,
     role: "system",
     text: "{{output_format}}\n\n{{protect_notes}}",
+};
+// The list of phrases, which is the same list in both lengths. These are the
+// ones that show up in machine-written roleplay several times a session and in
+// published fiction almost never.
+const PHRASES = "- a breath they did not know they were holding\n" +
+    "- a breath that hitches, or catches\n" +
+    "- a heart hammering, pounding, racing or thundering against ribs\n" +
+    "- a voice barely above a whisper\n" +
+    "- eyes that darken, or flick, or trace\n" +
+    "- a shiver running down a spine, or sent anywhere\n" +
+    "- the ghost of a smile\n" +
+    "- the air thick with anything\n" +
+    "- something shifting, hanging or crackling in the air\n" +
+    "- an emotion given as a mixture of two other emotions\n" +
+    "- not knowing whether to do one thing or another\n" +
+    "- doing something before they could stop themselves\n" +
+    "- closing the distance\n" +
+    "- swallowing hard\n" +
+    "- time slowing, or the world falling away";
+const FILLER = "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
+    "seemed to, began to, found themselves";
+const DO_NOT_TOUCH = {
+    id: "hands_off",
+    name: "What not to touch",
+    on: true,
+    role: "system",
+    text: "<leave_these_exactly>\n" +
+        "Some of what you are given is not prose. Copy it through character for " +
+        "character, in the same place it was:\n\n" +
+        "- HTML and XML tags, and everything inside the angle brackets\n" +
+        "- tokens shaped like [[AR1]], which stand for formatting taken out before " +
+        "you saw it\n" +
+        "- code, fenced or inline, and anything in backticks\n" +
+        "- links, image links and file paths\n" +
+        "- stat blocks, status bars, trackers, inventories, timestamps, and any " +
+        "line printed to the same shape every turn\n" +
+        "- a second language beside the first, and the line translating it: change " +
+        "neither, reorder neither\n" +
+        "- names as spelled, including odd spellings and capitalisation\n" +
+        "- numbers, dates, times and measurements\n\n" +
+        "If you are unsure whether something is prose, it is not. Leave it.\n" +
+        "</leave_these_exactly>",
 };
 const JOB_BLOCK = {
     id: "job",
@@ -295,90 +317,144 @@ const JOB_BLOCK = {
     role: "system",
     text: "<your_job>\n" +
         "You are editing one message from a story two people are writing together. " +
-        "Someone wrote this message and you are fixing how it reads. You are not " +
-        "writing the next one.\n\n" +
+        "Someone wrote this message. You are fixing how it reads, not writing the " +
+        "next one.\n\n" +
         "The events stay. The speech stays. What anyone means stays. Nobody new " +
-        "walks in, nothing new happens, and the scene ends exactly where it ended.\n" +
+        "arrives, nothing new happens, and the scene ends where it ended.\n" +
         "</your_job>",
 };
-const CUT_THESE = {
-    id: "cut",
-    name: "Cut these",
-    on: true,
-    role: "system",
-    text: "<cut_these>\n" +
-        "These turn up in every machine-written scene and almost never in a book. " +
-        "Cut them wherever you find them:\n\n" +
-        "- a breath someone did not know they were holding\n" +
-        "- a heart hammering, pounding or thundering against ribs\n" +
-        "- a voice barely above a whisper\n" +
-        "- eyes that darken, or trace, or flick\n" +
-        "- something unspoken hanging in the air\n" +
-        "- an emotion described as a mixture of two other emotions\n" +
-        "- not knowing whether to do one thing or another\n\n" +
-        "Cut these words unless the sentence stops working without them: " +
-        "suddenly, slowly, slightly, just, really, very, almost, seemed to, " +
-        "began to, found himself, found herself.\n\n" +
-        "When you cut a line, do not write another line doing the same job. The " +
-        "message is usually better one sentence shorter.\n" +
-        "</cut_these>",
-};
-const LEAVE_ALONE = {
-    id: "leave",
-    name: "What to leave alone",
-    on: true,
-    role: "system",
-    text: "<leave_it_alone>\n" +
-        "A passage that is already good comes back exactly as it was. Rewriting " +
-        "something that did not need it is the worst thing you can do here: it " +
-        "takes away a line the writer chose, and they cannot always see what you " +
-        "changed.\n\n" +
-        "Your rewrite should not be longer than what you were given. If it is, " +
-        "you added instead of fixing.\n" +
-        "</leave_it_alone>",
-};
 // ---- the plain model, short ----
+// Three rule blocks holding everything the detailed version holds.
 const PLAIN_SHORT = [
     JOB_BLOCK,
     ...CONTEXT_BLOCKS,
-    CUT_THESE,
-    LEAVE_ALONE,
+    {
+        id: "cut",
+        name: "Cut these",
+        on: true,
+        role: "system",
+        text: "<cut_these>\n" +
+            "Cut these wherever they appear:\n\n" +
+            PHRASES +
+            "\n\nCut these words unless the sentence stops working without them: " +
+            FILLER +
+            ".\n\n" +
+            "Cut the sentence that restates the one before it in other words. Cut " +
+            "the speech tag that explains the line, such as she said angrily. Cut " +
+            "the label on a feeling the scene already shows.\n\n" +
+            "When you cut, do not write a replacement. The message is usually better " +
+            "one sentence shorter.\n" +
+            "</cut_these>",
+    },
+    {
+        id: "fix",
+        name: "Fix these",
+        on: true,
+        role: "system",
+        text: "<fix_these>\n" +
+            "Hands, eyes and breath do not act alone. Her hand found his becomes she " +
+            "took his hand.\n\n" +
+            "Three sentences of the same length in a row: change one. Three " +
+            "fragments in a row: change one.\n\n" +
+            "Three physical details stacked on one beat: keep the one that carries " +
+            "the moment.\n\n" +
+            "The last line stays the last line. Do not add one that points at what " +
+            "happens next, and do not turn it into a question for the other person.\n" +
+            "</fix_these>",
+    },
+    {
+        id: "leave",
+        name: "What to leave alone",
+        on: true,
+        role: "system",
+        text: "<leave_it_alone>\n" +
+            "A passage that is already good comes back exactly as it was. Rewriting " +
+            "what did not need it is the failure that costs most here, because it " +
+            "takes away a line the writer chose and they cannot see what you " +
+            "changed.\n\n" +
+            "Your rewrite is not longer than what you were given. If it is, you " +
+            "added instead of fixing.\n" +
+            "</leave_it_alone>",
+    },
     DO_NOT_TOUCH,
     HOW_TO_ANSWER,
     TURN_BLOCK,
 ];
 // ---- the plain model, in full ----
+// The same rules, one to a block, each said at length.
 const PLAIN_LONG = [
     JOB_BLOCK,
     ...CONTEXT_BLOCKS,
-    CUT_THESE,
+    {
+        id: "cut",
+        name: "Phrases to cut",
+        on: true,
+        role: "system",
+        text: "<phrases_to_cut>\n" +
+            "These appear in machine-written roleplay several times a session and in " +
+            "published fiction almost never. Cut every one you find:\n\n" +
+            PHRASES +
+            "\n\nCut a phrase rather than swapping it for a near neighbour. If the " +
+            "beat still needs carrying, carry it with what this person is doing in " +
+            "this room, and if nothing is happening there, let the line go.\n" +
+            "</phrases_to_cut>",
+    },
+    {
+        id: "words",
+        name: "Words to cut",
+        on: true,
+        role: "system",
+        text: "<words_to_cut>\n" +
+            "Cut these unless the sentence stops working without them: " +
+            FILLER +
+            ".\n\n" +
+            "Cut an adverb that repeats what its verb already said: whispered " +
+            "quietly, hurried quickly.\n\n" +
+            "Cut an intensifier doing the work a stronger word would do on its own. " +
+            "Very tired is tired said weakly; exhausted is the word.\n" +
+            "</words_to_cut>",
+    },
+    {
+        id: "repeats",
+        name: "Repetition",
+        on: true,
+        role: "system",
+        text: "<repetition>\n" +
+            "Read the message twice: once for sense, once for what it says twice.\n\n" +
+            "The commonest fault in a message like this is a sentence that restates " +
+            "the one before it in other words. One of the two is doing the work. " +
+            "Keep that one and cut the other.\n\n" +
+            "Watch for a word used twice in three lines where the second use was not " +
+            "meant as an echo.\n" +
+            "</repetition>",
+    },
     {
         id: "rhythm",
         name: "Rhythm",
         on: true,
         role: "system",
         text: "<rhythm>\n" +
-            "Read the message for length before you read it for sense. If three " +
-            "sentences in a row run about the same length, change one of them.\n\n" +
+            "Read for length before you read for meaning. Three sentences of about " +
+            "the same length in a row is a rhythm a reader stops hearing: change one " +
+            "of them.\n\n" +
             "A fragment lands once. Three in a row is a tic.\n\n" +
-            "Cut the sentence that says what the sentence before it already said in " +
-            "different words. This is the single most common thing wrong with these " +
-            "messages, and it is worth reading the whole message twice to catch.\n" +
+            "A paragraph that runs past six lines usually holds two paragraphs.\n" +
             "</rhythm>",
     },
     {
-        id: "dialogue",
+        id: "speech",
         name: "Speech",
         on: true,
         role: "system",
         text: "<speech>\n" +
-            "Every line keeps its meaning. You can fix phrasing that is stiff or " +
-            "unnatural. You cannot change what was said, and you cannot add a line " +
-            "nobody said.\n\n" +
-            "Cut the tag that explains the line: she said angrily, he asked, curious. " +
-            "If the tone is not already in the words, fix the words.\n\n" +
+            "Every line keeps its meaning. Fix phrasing that is stiff or unnatural. " +
+            "Do not change what was said, and do not add a line nobody said.\n\n" +
+            "Cut the tag that explains the line: she said angrily, he asked, " +
+            "curious. If the tone is not in the words, fix the words.\n\n" +
             "Cut speech that repeats back what the other person just did before " +
-            "answering it.\n" +
+            "answering it.\n\n" +
+            "Keep a character who speaks badly speaking badly. Clipped, rambling, " +
+            "plain or crude is a voice, and smoothing it is not an improvement.\n" +
             "</speech>",
     },
     {
@@ -387,13 +463,15 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<bodies_and_feeling>\n" +
-            "Hands, eyes and breath do not act on their own. If the message says her " +
-            "hand found his, write that she took his hand.\n\n" +
-            "Feeling belongs in what someone does. Do not name the feeling as well: " +
-            "if she is already pulling her coat closed, you do not need to say she " +
-            "felt exposed.\n\n" +
-            "One physical detail per beat is plenty. Three stacked together is a list, " +
-            "and a reader skims a list.\n" +
+            "Hands, eyes and breath do not act on their own. Her hand found his " +
+            "becomes she took his hand. His eyes traced her face becomes he looked " +
+            "at her.\n\n" +
+            "Feeling belongs in what someone does. Do not name it as well: if she is " +
+            "already pulling her coat closed, do not add that she felt exposed.\n\n" +
+            "One physical detail per beat. Three stacked together is a list, and a " +
+            "reader skims a list.\n\n" +
+            "A heartbeat, a shiver or a held breath standing in for an emotion is " +
+            "the emotion left unwritten. Write what the person does instead.\n" +
             "</bodies_and_feeling>",
     },
     {
@@ -402,18 +480,51 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<how_it_ends>\n" +
-            "The message ends where it ends. Do not add a closing line that gestures " +
-            "at what happens next, and do not turn the last line into a question " +
-            "aimed at the other person.\n\n" +
-            "If it already ends on a hook, keep the hook. The shape of the turn is not " +
-            "yours to change.\n" +
+            "The message ends where it ends. Do not add a closing line pointing at " +
+            "what happens next, and do not turn the last line into a question aimed " +
+            "at the other person.\n\n" +
+            "If it already ends on a hook, keep the hook. The shape of the turn is " +
+            "not yours to change.\n" +
             "</how_it_ends>",
     },
-    LEAVE_ALONE,
+    {
+        id: "leave",
+        name: "What to leave alone",
+        on: true,
+        role: "system",
+        text: "<leave_it_alone>\n" +
+            "A passage that is already good comes back exactly as it was. Rewriting " +
+            "what did not need it is the failure that costs most here, because it " +
+            "takes away a line the writer chose and they cannot see what you " +
+            "changed.\n\n" +
+            "Your rewrite is not longer than what you were given. If it is, you " +
+            "added instead of fixing.\n\n" +
+            "If you find nothing worth changing, return the message unchanged.\n" +
+            "</leave_it_alone>",
+    },
     DO_NOT_TOUCH,
     HOW_TO_ANSWER,
     TURN_BLOCK,
 ];
+const THINKS_JOB = {
+    id: "job",
+    name: "The job",
+    on: true,
+    role: "system",
+    text: "<your_job>\n" +
+        "You are editing one message from a story two people are writing together. " +
+        "Work out what is weak in how it is written, then fix that.\n\n" +
+        "The events stay. The speech stays. What anyone means stays. Nobody new " +
+        "arrives, nothing new happens, and the scene ends where it ended.\n" +
+        "</your_job>",
+};
+const THINKS_NOTES = {
+    id: "notes",
+    name: "Where your thinking goes",
+    on: true,
+    role: "system",
+    text: "{{refine_notes}}",
+};
 const THE_STANDARD = {
     id: "standard",
     name: "The standard",
@@ -422,11 +533,11 @@ const THE_STANDARD = {
     text: "<the_standard>\n" +
         "One question decides every line: could this sentence sit in any story, or " +
         "only in this one?\n\n" +
-        "A sentence that could sit anywhere is the sentence to fix. Put in its " +
-        "place what is true of this person, in this room, right now. If nothing is " +
-        "true there, cut the line and do not replace it.\n\n" +
-        "Ask the same question of speech, of gesture, and of description. Ask it " +
-        "of your own rewrite before you answer.\n" +
+        "A sentence that could sit anywhere is the one to fix. Put in its place " +
+        "what is true of this person, in this room, right now. If nothing is true " +
+        "there, cut the line and write no replacement.\n\n" +
+        "Ask it of speech, of gesture, of description. Ask it of your own rewrite " +
+        "before you answer.\n" +
         "</the_standard>",
 };
 const RESTRAINT = {
@@ -436,28 +547,9 @@ const RESTRAINT = {
     role: "system",
     text: "<restraint>\n" +
         "A passage that is already good comes back exactly as it was.\n\n" +
-        "Do not make the message longer to make it better. Shorter with nothing " +
-        "wasted is almost always the right answer.\n" +
+        "Do not lengthen the message to improve it. Shorter with nothing wasted is " +
+        "the answer more often than not.\n" +
         "</restraint>",
-};
-const THINKS_JOB = {
-    id: "job",
-    name: "The job",
-    on: true,
-    role: "system",
-    text: "<your_job>\n" +
-        "You are editing one message from a story two people are writing together. " +
-        "Work out what is weak about how it is written, then fix that.\n\n" +
-        "The events stay. The speech stays. What anyone means stays. Nobody new " +
-        "walks in, nothing new happens, and the scene ends exactly where it ended.\n" +
-        "</your_job>",
-};
-const THINKS_NOTES = {
-    id: "notes",
-    name: "Where your thinking goes",
-    on: true,
-    role: "system",
-    text: "{{refine_notes}}",
 };
 // ---- a model that reasons, short ----
 const THINKS_SHORT = [
@@ -471,6 +563,7 @@ const THINKS_SHORT = [
     TURN_BLOCK,
 ];
 // ---- a model that reasons, in full ----
+// The same standard, plus where to point it and a pass over its own answer.
 const THINKS_LONG = [
     THINKS_JOB,
     THINKS_NOTES,
@@ -482,15 +575,18 @@ const THINKS_LONG = [
         on: true,
         role: "system",
         text: "<where_to_look>\n" +
-            "Four places account for most of what goes wrong in a message like this. " +
-            "Check each one before you decide the message is fine.\n\n" +
-            "The second sentence. It often restates the first in different words. One " +
-            "of the two is doing the work; keep that one.\n\n" +
-            "The body. Hands and eyes that act on their own, a heartbeat standing in " +
-            "for a feeling, three physical details stacked where one would land.\n\n" +
-            "The speech tag. If it explains the tone, the line underneath it is not " +
+            "Five places account for most of what goes wrong in a message like this. " +
+            "Check each before deciding the message is fine.\n\n" +
+            "The second sentence. It often restates the first in other words. One of " +
+            "the two is doing the work.\n\n" +
+            "The body. Hands and eyes acting alone, a heartbeat standing in for a " +
+            "feeling, three physical details where one would land.\n\n" +
+            "The speech tag. If it explains the tone, the line under it is not " +
             "carrying its weight.\n\n" +
-            "The last line. A turn that ends by gesturing at what comes next is asking " +
+            "The stock phrase. A held breath, a hammering heart, a whisper, a " +
+            "shiver, air thick with something. These arrive by habit rather than by " +
+            "choice.\n\n" +
+            "The last line. A turn ending by pointing at what comes next is asking " +
             "the other writer to do the work.\n" +
             "</where_to_look>",
     },
@@ -500,11 +596,11 @@ const THINKS_LONG = [
         on: true,
         role: "system",
         text: "<voice>\n" +
-            "The message has a voice already. Yours is not it. Fix what is weak in the " +
-            "voice that is there rather than replacing it with a cleaner one.\n\n" +
-            "This matters most with a character who speaks badly on purpose: clipped, " +
-            "rambling, plain, crude. Smoothing that out is not an improvement, it is a " +
-            "different character.\n" +
+            "The message has a voice. Yours is not it. Fix what is weak in the voice " +
+            "that is there rather than replacing it with a cleaner one.\n\n" +
+            "This matters most with a character who speaks badly on purpose: " +
+            "clipped, rambling, plain, crude. Smoothing that is not an improvement, " +
+            "it is a different character.\n" +
             "</voice>",
     },
     RESTRAINT,
@@ -517,10 +613,10 @@ const THINKS_LONG = [
         text: "<before_you_answer>\n" +
             "Read your rewrite against the original once more and answer two " +
             "questions.\n\n" +
-            "Did anything happen in your version that did not happen in theirs? If so, " +
-            "take it out.\n\n" +
-            "Is your version longer? If so, find what you added and decide honestly " +
-            "whether it earns its place. Usually it does not.\n" +
+            "Did anything happen in yours that did not happen in theirs? Take it " +
+            "out.\n\n" +
+            "Is yours longer? Find what you added and decide whether it earns its " +
+            "place. It usually does not.\n" +
             "</before_you_answer>",
     },
     HOW_TO_ANSWER,
@@ -535,25 +631,25 @@ const BUILT_IN_PROMPTS = [
         name: "Short",
         blocks: PLAIN_SHORT,
         thinking: "off",
-        what: "The one to start with. Seven blocks, the common faults named outright, and nothing your model has to work out for itself.",
+        what: "The one to start with. Everything the detailed version says, said in three blocks instead of nine. Same rules, less prompt to pay for on every refine.",
     },
     {
         name: "Detailed",
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "The same idea, taken further: rhythm, speech, bodies and endings each get a block. Costs more per refine and catches more.",
+        what: "The same rules, one to a block, each said at length: phrases, words, repetition, rhythm, speech, bodies, endings. Costs more per refine and is followed more closely.",
     },
     {
         name: "Short, for a thinking model",
         blocks: THINKS_SHORT,
         thinking: "inherit",
-        what: "Gives your model the standard and lets it work out the rest. Shorter than the plain one on purpose: a model that reasons does not need the list.",
+        what: "Gives your model the standard and lets it work out the rest. Shorter than the plain pair on purpose: a model that reasons does not need the list.",
     },
     {
         name: "Detailed, for a thinking model",
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "The standard, where to look for trouble, keeping the writer's voice, and a pass over its own answer before it hands it back.",
+        what: "The standard, the five places to point it, keeping the writer's voice, and a pass over its own answer before it hands it back.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
@@ -614,11 +710,16 @@ const COST_FIELDS = [
         type: "pick",
         needs: "custom",
         options: [
+            { value: "auto", label: "Auto, whatever the provider does" },
+            { value: "none", label: "None" },
+            { value: "minimal", label: "Minimal" },
             { value: "low", label: "Low" },
             { value: "medium", label: "Medium" },
             { value: "high", label: "High" },
+            { value: "xhigh", label: "Extra high" },
+            { value: "max", label: "Max" },
         ],
-        hint: "Only used when you picked the last option above. What each level means is the provider's business, and a provider that does not take an effort level ignores it.",
+        hint: "Only used when you picked the last option above. What each level means is the provider's business, and one that does not take an effort level ignores it. A rewrite rarely needs more than low.",
     },
     {
         key: "timeoutSecs",
@@ -1211,9 +1312,11 @@ export function setup(ctx, overrides) {
         // alpha, sitting on the field's own edge: a solid 2px outline with an
         // offset draws a second rounded rectangle around every box, which is a halo
         // rather than a focus mark.
+        // The border changes and nothing else. A ring or a glow around a focused
+        // box is a second rounded rectangle drawn over the first, and on a panel
+        // this dense it reads as damage rather than as focus.
         "input.arf-field:focus,textarea.arf-field:focus{outline:none;" +
-        "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
-        "box-shadow:0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+        "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
         // A menu you pick from is not a box you type in, and a ring around one
         // reads as "still editing" when the choice is already made. It gets the
         // border and nothing else.
@@ -2026,13 +2129,6 @@ export function setup(ctx, overrides) {
         ta.className = "arf-field";
         wrap.appendChild(ta);
         const row = el("div", "arf-row");
-        const big = button("Expand", false);
-        big.addEventListener("click", () => {
-            openBig("Text to try the rules on", ta.value, (text) => {
-                ta.value = text;
-            });
-        });
-        row.appendChild(big);
         const grab = button("Use my last reply", false);
         grab.addEventListener("click", () => {
             const t = lastRenderedReply();
@@ -2380,15 +2476,32 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildContextCard() {
-        const wrap = card("How much of the chat it sends");
+        const wrap = card("How much it is told", "What the {{history}} and {{lore}} macros carry. Every one of these costs tokens on every single refine, which is where a cheap feature quietly becomes an expensive one.");
         wrap.appendChild(fieldRow({
             key: "contextMessages",
             label: "Messages of run-up to send",
             type: "num",
             min: 0,
             max: 40,
-            hint: "How much of the chat the What has been happening block carries. 0 sends none. More context costs more on every refine, and long messages are trimmed so a single wall of text cannot fill the request.",
+            hint: "How many messages before the one being refined. 0 sends none, which is fine for rules about wording and wrong for rules about continuity.",
         }));
+        wrap.appendChild(fieldRow({
+            key: "maxHistoryTokens",
+            label: "Most tokens of run-up",
+            type: "num",
+            min: 0,
+            max: 200000,
+            hint: "A ceiling on the same thing, in tokens. Whichever runs out first decides. Whole messages are kept or dropped, oldest first, so the turn just before the one being refined is always the one that survives.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "maxLoreTokens",
+            label: "Most tokens of lorebook",
+            type: "num",
+            min: 0,
+            max: 200000,
+            hint: "A ceiling on the entries this chat has active. Whole entries are kept or dropped. 0 sends none, which is the same as switching the block off.",
+        }));
+        wrap.appendChild(note("Counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not."));
         return wrap;
     }
     // The request itself, exactly as it goes out. Built by the backend with the
@@ -2436,6 +2549,14 @@ export function setup(ctx, overrides) {
                 toast("Copied.", true);
             });
             row.appendChild(copy);
+            // A request is longer than a drawer is wide. This is the same text at the
+            // size of the screen, to read rather than to edit.
+            const big = button("Expand", false);
+            big.setAttribute("aria-label", "Read the request at full size");
+            big.addEventListener("click", () => {
+                openBig(previewRaw ? "The request, as data" : "The request", previewRaw ? previewAsRaw(preview) : previewAsText(preview));
+            });
+            row.appendChild(big);
         }
         wrap.appendChild(row);
         if (previewBusy) {
@@ -2597,6 +2718,13 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. If one does not come back, the rewrite is dropped rather than saved: asking a model to preserve something and checking that it did are different things.",
         }));
+        if (cfg.protectOn)
+            wrap.appendChild(fieldRow({
+                key: "protectInline",
+                label: "Hide plain italic and bold too",
+                type: "bool",
+                hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it, which makes the rewrite worse to protect something it was unlikely to break. They stay visible and the prompt tells it to leave them alone. Anything carrying an attribute, like a colour, is hidden either way.",
+            }));
         wrap.appendChild(fieldRow({
             key: "wrapOutput",
             label: "Ask for the answer in tags",
@@ -2758,7 +2886,13 @@ export function setup(ctx, overrides) {
                 ", timeout: " +
                 cfg.timeoutSecs +
                 "s");
-            lines.push("run-up messages: " + cfg.contextMessages);
+            lines.push("run-up: " +
+                cfg.contextMessages +
+                " messages, " +
+                cfg.maxHistoryTokens +
+                " tokens; lore " +
+                cfg.maxLoreTokens +
+                " tokens");
             const set = SAMPLER_FIELDS.filter((f) => cfg.samplers && cfg.samplers[f.id] != null && cfg.samplers[f.id] !== "");
             lines.push("samplers: " + (set.length ? set.map((f) => f.id + "=" + cfg.samplers[f.id]).join(", ") : "all default"));
             lines.push("limits: grow " +
@@ -2937,11 +3071,11 @@ export function setup(ctx, overrides) {
             key: "soundOn",
             label: "Play a sound",
             type: "bool",
-            hint: "Off by default. The sound is yours: attach a file or paste a link below. Nothing is shipped with the extension, so this switch on its own is silent.",
+            hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised rather than shipped as a file. Attach your own below if you would rather.",
         }));
         if (cfg.soundOn) {
             if (!hasSound())
-                wrap.appendChild(warn("No sound chosen yet, so nothing will play. Attach a file or paste a link."));
+                wrap.appendChild(note("Using the built-in blip. Attach a file or paste a link below to use your own."));
             const attached = /^data:/.test(String(cfg.soundUrl || ""));
             const picker = document.createElement("input");
             picker.type = "file";
@@ -2986,8 +3120,6 @@ export function setup(ctx, overrides) {
                 }
             });
             const tryIt = button("Play it", false);
-            tryIt.disabled = !hasSound();
-            tryIt.style.opacity = hasSound() ? "1" : "0.45";
             tryIt.addEventListener("click", () => {
                 soundSaid = null;
                 ping(true);
@@ -2995,11 +3127,11 @@ export function setup(ctx, overrides) {
             row.appendChild(pick);
             row.appendChild(tryIt);
             if (hasSound()) {
-                const drop = button("Remove it", false);
+                const drop = button("Back to the built-in", false);
                 drop.addEventListener("click", () => {
                     cfg.soundUrl = "";
                     persist(true);
-                    soundSaid = "Removed.";
+                    soundSaid = "Back to the built-in blip.";
                     paint();
                 });
                 row.appendChild(drop);
@@ -3450,6 +3582,8 @@ export function setup(ctx, overrides) {
     // the keyboard on a phone, which covers the thing you opened, and somebody
     // who wants to type will tap it anyway.
     let closeBig = null;
+    // done is left out for a viewer: something to read at full size rather than
+    // edit, which is what the preview wants.
     function openBig(label, initial, done) {
         if (typeof document === "undefined")
             return;
@@ -3468,13 +3602,24 @@ export function setup(ctx, overrides) {
         ta.className = "arf-field arf-mono arf-bigta";
         ta.value = initial;
         ta.setAttribute("aria-label", label);
+        if (!done)
+            ta.readOnly = true;
         box.appendChild(ta);
         const row = el("div", "arf-row");
         row.style.justifyContent = "flex-end";
-        const cancel = button("Cancel", false);
-        const save = button("Done", true);
+        const copy = button("Copy", false);
+        copy.addEventListener("click", () => {
+            copyText(ta.value);
+            toast("Copied.", true);
+        });
+        row.appendChild(copy);
+        const cancel = button(done ? "Cancel" : "Close", false);
         row.appendChild(cancel);
-        row.appendChild(save);
+        let save = null;
+        if (done) {
+            save = button("Done", true);
+            row.appendChild(save);
+        }
         box.appendChild(row);
         over.appendChild(box);
         const onKey = (e) => {
@@ -3494,11 +3639,12 @@ export function setup(ctx, overrides) {
                 closeBig = null;
         }
         cancel.addEventListener("click", shut);
-        save.addEventListener("click", () => {
-            const text = ta.value;
-            shut();
-            done(text);
-        });
+        if (save && done)
+            save.addEventListener("click", () => {
+                const text = ta.value;
+                shut();
+                done(text);
+            });
         // A tap on the dark part closes it, the way every sheet on a phone does.
         over.addEventListener("click", (e) => {
             if (e && e.target === over)
@@ -3884,24 +4030,60 @@ export function setup(ctx, overrides) {
     }
     let resetArmed = false;
     // ---- the sound ----
-    // The sound is yours: a file you attach or a link you paste. Nothing is
-    // shipped and nothing is synthesised, so the switch on its own is not a
-    // sound, and the panel says so rather than being silently mute.
+    // A short two-note blip when nothing else is chosen, synthesised rather than
+    // shipped so the repository holds no audio file and the switch still makes a
+    // sound on its own. A file you attach or a link you paste replaces it.
     const hasSound = () => !!String(cfg.soundUrl || "").trim();
+    function beep(vol) {
+        try {
+            const g = globalThis;
+            const Ctx = g.AudioContext || g.webkitAudioContext;
+            if (!Ctx)
+                return;
+            const ac = new Ctx();
+            const at = ac.currentTime;
+            const gain = ac.createGain();
+            gain.connect(ac.destination);
+            // Ramped rather than switched, or it clicks going in and out.
+            gain.gain.setValueAtTime(0.0001, at);
+            gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * 0.2), at + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.32);
+            const play = (freq, from, len) => {
+                const osc = ac.createOscillator();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, at + from);
+                osc.connect(gain);
+                osc.start(at + from);
+                osc.stop(at + from + len);
+            };
+            play(660, 0, 0.11);
+            play(880, 0.11, 0.18);
+            setTimeout(() => {
+                try {
+                    ac.close();
+                }
+                catch (_) { }
+            }, 900);
+        }
+        catch (_) { }
+    }
     function ping(force) {
         if (!cfg.soundOn && !force)
             return;
+        const vol = Math.min(1, Math.max(0, Number(cfg.soundVolume) / 100));
         const url = String(cfg.soundUrl || "").trim();
-        if (!url)
+        if (!url) {
+            beep(Number.isFinite(vol) ? vol : 0.6);
             return;
+        }
         try {
-            const vol = Math.min(1, Math.max(0, Number(cfg.soundVolume) / 100));
             const a = new globalThis.Audio(url);
             a.volume = Number.isFinite(vol) ? vol : 0.6;
             a.addEventListener("error", () => {
-                // A link that does not load, which is worth saying once: a sound that
-                // never plays looks exactly like a switch that does not work.
-                soundSaid = "That sound could not be played. Check the link, or attach a file instead.";
+                // A link that does not load. Worth saying, and worth still making a
+                // sound: the point of the switch is to hear something.
+                soundSaid = "That sound could not be played, so the built-in one was used instead.";
+                beep(Number.isFinite(vol) ? vol : 0.6);
                 if (force)
                     paint();
             });
@@ -3919,6 +4101,8 @@ export function setup(ctx, overrides) {
                             : "That sound could not be played.";
                     paint();
                 });
+            else if (!p)
+                beep(Number.isFinite(vol) ? vol : 0.6);
         }
         catch (_) {
             if (force) {

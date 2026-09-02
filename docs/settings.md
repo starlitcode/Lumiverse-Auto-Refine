@@ -26,8 +26,8 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Context
 
-- **Messages of run-up to send** is how much of the chat the `{{history}}` macro carries.
-- **See what gets sent** builds the real request and shows it to you, message by message, without calling a model. **Raw** shows the same thing as the JSON that goes over the wire, which is what to paste when asking somebody why a request did something.
+- **How much it is told** is the message count and the two token budgets, for the run-up and the lorebook. In [How much it is told](prompt.md#how-much-it-is-told).
+- **See what gets sent** builds the real request and shows it to you, message by message, without calling a model. **Raw** shows the same thing as the JSON that goes over the wire, and **Expand** opens either at the size of the screen.
 - **Try it** runs one refine on pasted text and shows what comes back, without writing anything to your chat.
 
 ## Model
@@ -39,7 +39,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Limits
 
-- **Hide markup from the model** and **Never send the model's thinking** keep a rewrite away from what is not prose, in [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
+- **Hide markup from the model**, **Hide plain italic and bold too** and **Never send the model's thinking** keep a rewrite away from what is not prose, in [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
 - **Ask for the answer in tags** is what makes a model's preamble harmless instead of fatal, in [The answer it asks for](prompt.md#the-answer-it-asks-for).
 - **Watch the rewrite arrive** streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved.
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits, in [What it refuses to save](guardrails.md).
@@ -56,7 +56,7 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Setup
 
 - **This chat** leaves one chat completely alone while every other chat carries on. It is written down in your browser, so it survives a reload, and it is a list of chat ids and nothing else.
-- **When a refine lands** is how you find out: a pop-up, a sound, or neither. The sound is yours: attach a file or paste a link. Nothing is shipped with the extension, so the switch on its own is silent and says so.
+- **When a refine lands** is how you find out: a pop-up, a sound, or neither. With nothing chosen the sound is a short built-in blip, synthesised rather than shipped as a file. Attach your own or paste a link to replace it.
 - **Ways to reach it** are three optional ways in, all off by default. **A button on every message** puts a refine button in each message's own row of actions, next to Edit and Copy, and after a refine that same button becomes an undo. **A floating button** puts a round button over the chat: one tap refines the latest reply, or puts the last one back when there is one to put back, and holding it or right clicking opens a menu with everything else. It pulses while a refine is running, which is often the only part of the extension on screen. It needs the interface panels permission. **Refine what I am typing** adds a row to the chat input's Extras menu that rewrites the text in your input box before you send it.
 - **Your whole setup** exports to a file, imports one back, and puts things back to their defaults. All three work in the same list of parts: your prompt, context, model, samplers, limits, alerts, buttons, switches, presets and the chats you switched off. **What goes in the file**, **What to take from a file** and **What to put back** each have their own choice, so you can export only your prompt, take only somebody's samplers, or start your prompt again without losing your connection. In [Import and export](prompt.md#import-and-export) and [Starting again](prompt.md#starting-again).
 

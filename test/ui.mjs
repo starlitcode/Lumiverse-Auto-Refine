@@ -994,6 +994,154 @@ console.log("\nthe raw view");
   });
 }
 
+console.log("\non a desktop");
+{
+  // The drawer is wider on a computer, and a panel that only ever gets checked
+  // at 380px can lay out badly with room to spare.
+  await inTab(
+    browser,
+    {
+      viewport: { width: 1440, height: 900 },
+      css: "#drawer{width:460px}",
+    },
+    async (page) => {
+      const spill = await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+      );
+      ok("nothing pushes the page sideways", spill);
+      const m = await worstText(page);
+      ok("every label is readable", m.worst >= 3.2, "worst " + m.worst.toFixed(2) + " on " + m.where);
+
+      // A mouse gets the smaller targets, which is the point of asking the
+      // pointer rather than the width.
+      const tall = await page.evaluate(() => {
+        const b = Array.from(document.querySelectorAll("#drawer .arf-btn")).find((x) =>
+          x.getBoundingClientRect().height > 0,
+        );
+        return b ? b.getBoundingClientRect().height : 0;
+      });
+      ok("buttons are mouse sized, not finger sized", tall > 0 && tall < 38, String(tall));
+
+      await goTab(page, "Prompt");
+      const wide = await page.evaluate(() => {
+        const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+        const box = ta.getBoundingClientRect();
+        const card = ta.closest(".arf-card").getBoundingClientRect();
+        return { ta: box.width, card: card.width };
+      });
+      ok(
+        "a block box fills the width it is given",
+        wide.ta > wide.card - 60,
+        JSON.stringify(wide),
+      );
+    },
+  );
+}
+
+console.log("\nlight and dark, after every change");
+{
+  for (const [name, css] of [
+    ["dark", ""],
+    [
+      "light",
+      ":root{--lumiverse-bg:#fff;--lumiverse-bg-elevated:#f4f2f8;" +
+        "--lumiverse-text:rgba(0,0,0,.9);--lumiverse-text-muted:rgba(0,0,0,.55);" +
+        "--lumiverse-text-dim:rgba(0,0,0,.4);--lumiverse-fill:rgba(0,0,0,.05);" +
+        "--lumiverse-fill-subtle:rgba(0,0,0,.03);--lumiverse-border:rgba(0,0,0,.12)}" +
+        "body{background:#fff}#drawer{background:#fff}",
+    ],
+  ]) {
+    await inTab(browser, { css }, async (page) => {
+      // Every tab, since a card only added to one of them is a card only one
+      // theme check would ever see.
+      for (const label of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+        await goTab(page, label);
+        const m = await worstText(page);
+        ok(
+          name + ": " + label + " is readable",
+          m.worst >= 3.2,
+          "worst " + m.worst.toFixed(2) + " on " + m.where,
+        );
+      }
+    });
+  }
+}
+
+console.log("\nhow much it is told");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    const there = await page.evaluate(() => ({
+      msgs: !!document.querySelector('#drawer [data-arf-field="contextMessages"]'),
+      hist: !!document.querySelector('#drawer [data-arf-field="maxHistoryTokens"]'),
+      lore: !!document.querySelector('#drawer [data-arf-field="maxLoreTokens"]'),
+    }));
+    ok("both token budgets are there beside the message count", there.msgs && there.hist && there.lore);
+
+    await page.evaluate(() => {
+      const b = document.querySelector('#drawer [data-arf-field="maxLoreTokens"]');
+      b.value = "800";
+      b.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const sent = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings;
+    });
+    ok("and reach the backend", sent.maxLoreTokens === 800);
+  });
+}
+
+console.log("\nreading the request at full size");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    // Try it does not need one: the box is three rows of text you pasted.
+    const onTry = await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll("#drawer .arf-card")).find((c) =>
+        /^Try it/.test(c.textContent),
+      );
+      return Array.from(card.querySelectorAll("button")).some(
+        (b) => b.textContent.trim() === "Expand",
+      );
+    });
+    ok("Try it has no Expand, because it does not need one", !onTry);
+
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
+      window.__fromBackend({
+        type: "prompt_preview",
+        requestId: id,
+        ok: true,
+        real: true,
+        messages: [{ role: "system", content: "the whole instruction, at length" }],
+        parameters: null,
+        connectionId: "",
+        reasoning: { source: "off" },
+      });
+    });
+    await settle(page);
+    await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll("#drawer .arf-card")).find((c) =>
+        /See what gets sent/.test(c.textContent),
+      );
+      Array.from(card.querySelectorAll("button"))
+        .find((b) => b.textContent.trim() === "Expand")
+        .click();
+    });
+    await settle(page);
+    const view = await page.evaluate(() => {
+      const over = document.querySelector(".arf-over");
+      const ta = over && over.querySelector("textarea");
+      const labels = Array.from(over.querySelectorAll("button")).map((b) => b.textContent.trim());
+      return { text: ta ? ta.value : "", readOnly: ta ? ta.readOnly : false, labels: labels };
+    });
+    ok("the preview opens at full size", /the whole instruction, at length/.test(view.text));
+    ok("as something to read rather than edit", view.readOnly, view.labels.join(","));
+    ok("with Copy and Close, and no Done", view.labels.indexOf("Done") < 0 && view.labels.indexOf("Close") >= 0);
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

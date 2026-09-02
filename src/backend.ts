@@ -29,8 +29,6 @@ declare function clearTimeout(handle: any): void;
 // user is known and comes back empty.
 let masterOn = true;
 let refineOn = false;          // the automatic pass, off until asked for
-let rules = '';
-let structureRules = '';       // extra shape rules, for a model that reasons
 let refineUserMessages = false;
 let connectionId = '';         // empty means the reader's active connection
 let thinkingMode = 'off';      // off | inherit | custom
@@ -330,6 +328,10 @@ function promptHasTurn(): boolean {
 // different things, and only the second one is a guarantee.
 let protectOn = true;
 let protectThinking = true;
+// Hiding <i> and <b> as well. Off, because a sentence with holes in it is
+// harder to rewrite well than one with a couple of tags the model can read
+// around, and the prompt already tells it to leave them alone.
+let protectInline = false;
 
 // Short, ASCII, and shaped like nothing in prose, so a model treats it as an
 // opaque handle rather than as something to correct. Numbered rather than
@@ -337,14 +339,26 @@ let protectThinking = true;
 const TOKEN = (n: number) => '[[AR' + n + ']]';
 const TOKEN_ANY = /\[\[AR(\d+)\]\]/g;
 
-// What gets lifted out, in the order it is looked for. Longest and most
-// structural first, or an HTML tag inside a code fence would be taken on its
-// own and the fence left broken around it.
+// Two kinds of markup, and they need opposite treatment.
+//
+// Anything opaque comes out: code, images, links, comments, and any tag
+// carrying attributes, because a colour or an href is exactly what a rewrite
+// mangles and none of it is prose.
+//
+// Bare inline formatting stays in. <i>, <b> and the rest wrap words mid
+// sentence, and replacing them with tokens leaves the model reading a sentence
+// with holes in it. It reads around them instead, and the prompt tells it to
+// leave them alone. Hiding those was making the rewrite worse to protect
+// something the model was never likely to break.
+const INLINE_OK = /^<\/?(?:i|b|em|strong|u|s|small|sub|sup|mark|q|code)>$/i;
+
 const GUARDED: RegExp[] = [
-  /```[\s\S]*?```/g,          // fenced code
-  /`[^`\n]+`/g,                // inline code
-  /!\[[^\]]*\]\([^)]*\)/g,      // an image
-  /<\/?[a-zA-Z][^<>]*>/g,      // any HTML tag, opening or closing
+  /```[\s\S]*?```/g,               // fenced code
+  /`[^`\n]+`/g,                     // inline code
+  /!\[[^\]]*\]\([^)]*\)/g,           // an image
+  /\[[^\]]*\]\([^)\s]+\)/g,           // a link, target and all
+  /<!--[\s\S]*?-->/g,               // a comment
+  /<\/?[a-zA-Z][^<>]*>/g,           // every other tag, checked below
 ];
 
 interface Shield {
@@ -358,6 +372,9 @@ function shield(text: string): Shield {
   let out = text;
   for (const rule of GUARDED) {
     out = out.replace(rule, (hit) => {
+      // Bare inline formatting is left where it is, unless the reader asked
+      // for it to be hidden too.
+      if (!protectInline && INLINE_OK.test(hit)) return hit;
       // A cap, so a message that is mostly markup does not turn into a wall of
       // tokens the model cannot read around.
       if (parts.length >= 60) return hit;
@@ -663,23 +680,28 @@ async function gatherCard(
 // the model can tell the two voices apart. The message itself is not in here:
 // it arrives as its own block, and sending it twice teaches the model that
 // repeating it is what the answer looks like.
-function gatherHistory(msgs: any[], at: number, charName: string): string {
+async function gatherHistory(
+  msgs: any[],
+  at: number,
+  charName: string,
+  userId?: string,
+): Promise<string> {
   const want = Math.max(0, Math.min(40, Number(contextMessages) || 0));
   if (!want || at <= 0) return '';
   const them = charName || 'Character';
   const out: string[] = [];
-  let total = 0;
+  // Backwards from the message being refined, because the turn just before it
+  // matters more than one twenty turns ago, and the budget runs out from the
+  // far end rather than the near one.
   for (let i = at - 1; i >= 0 && out.length < want; i--) {
     const m = msgs[i];
     if (!m || (m.role !== 'assistant' && m.role !== 'user')) continue;
-    const body = clip(m.content, CONTEXT_MSG_MAX);
+    const body = String(m.content == null ? '' : m.content).trim();
     if (!body) continue;
-    const line = (m.role === 'user' ? 'Player' : them) + ': ' + body;
-    if (total + line.length > CONTEXT_TOTAL_MAX) break;
-    total += line.length;
-    out.push(line);
+    out.push((m.role === 'user' ? 'Player' : them) + ': ' + body);
   }
-  return out.reverse().join('\n\n');
+  const kept = await fitToBudget(out, maxHistoryTokens, userId);
+  return kept.reverse().join('\n\n');
 }
 
 // The lorebook entries the host says are active for this chat. Read through the
@@ -687,8 +709,46 @@ function gatherHistory(msgs: any[], at: number, charName: string): string {
 // switched on and which of those the recent messages triggered, and a second
 // opinion on that would quietly disagree with the one the chat itself uses.
 const LORE_ENTRIES_MAX = 24;
-const LORE_ENTRY_MAX = 1200;
-const LORE_TOTAL_MAX = 8000;
+// Budgets in tokens, which is the unit a context window is actually measured
+// in. Characters were a stand-in for it and a poor one: the same 8000
+// characters is wildly different depending on the language and the formatting.
+let maxLoreTokens = 2500;
+let maxHistoryTokens = 4500;
+
+// The host's own tokeniser when it will answer, and the usual estimate when it
+// will not. Roughly four characters a token is close enough for a budget, and
+// being approximate here costs a few tokens either way rather than anything
+// that matters.
+async function countTokens(text: string, userId?: string): Promise<number> {
+  const guess = Math.ceil(String(text || '').length / 4);
+  try {
+    if (!spindle.tokens || typeof spindle.tokens.countText !== 'function') return guess;
+    const got = await spindle.tokens.countText(text, { userId: userId });
+    const n = got && Number(got.total_tokens);
+    return Number.isFinite(n) && n > 0 ? n : guess;
+  } catch (_) {
+    return guess;
+  }
+}
+
+// Adds pieces until the budget runs out. Whole pieces only: half a lorebook
+// entry or half a message is worse than one fewer of them.
+async function fitToBudget(
+  pieces: string[],
+  budget: number,
+  userId?: string,
+): Promise<string[]> {
+  if (budget <= 0) return [];
+  const out: string[] = [];
+  let used = 0;
+  for (const one of pieces) {
+    const cost = await countTokens(one, userId);
+    if (used + cost > budget) break;
+    used += cost;
+    out.push(one);
+  }
+  return out;
+}
 
 async function gatherLore(chatId: string, userId?: string): Promise<string> {
   try {
@@ -697,7 +757,6 @@ async function gatherLore(chatId: string, userId?: string): Promise<string> {
     const on = await books.getActivated(chatId, userId);
     if (!Array.isArray(on) || !on.length) return '';
     const out: string[] = [];
-    let total = 0;
     for (const hit of on.slice(0, LORE_ENTRIES_MAX)) {
       if (!hit || !hit.id) continue;
       let entry: any = null;
@@ -709,15 +768,16 @@ async function gatherLore(chatId: string, userId?: string): Promise<string> {
         // One entry that will not load is not a reason to send no lore at all.
         continue;
       }
-      const body = clip(entry && (entry.content != null ? entry.content : entry.text), LORE_ENTRY_MAX);
+      const body = String(
+        (entry && (entry.content != null ? entry.content : entry.text)) || '',
+      ).trim();
       if (!body) continue;
       const name = String((entry && (entry.name || entry.comment)) || '').trim();
-      const line = name ? name + ': ' + body : body;
-      if (total + line.length > LORE_TOTAL_MAX) break;
-      total += line.length;
-      out.push(line);
+      out.push(name ? name + ': ' + body : body);
     }
-    return out.join('\n\n');
+    // Trimmed to the budget rather than to a character count, whole entries at
+    // a time.
+    return (await fitToBudget(out, maxLoreTokens, userId)).join('\n\n');
   } catch (_) {
     // No permission, or a host without lorebooks. Refine without it.
     return '';
@@ -727,7 +787,7 @@ async function gatherLore(chatId: string, userId?: string): Promise<string> {
 // How much thinking the refine asks for. Three answers, and the middle one is
 // the reader saying "whatever I already set", which is why it sends nothing at
 // all rather than a value that would override it.
-const EFFORTS = ['low', 'medium', 'high'];
+const EFFORTS = ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 function reasoningFor(): any {
   if (thinkingMode === 'off') return { source: 'off' };
@@ -917,7 +977,7 @@ async function refineMessage(
   const at = msgs.findIndex((x: any) => x && x.id === m.id);
   let scene: Scene = {
     character: card.text,
-    context: gatherHistory(msgs, at, card.name),
+    context: await gatherHistory(msgs, at, card.name, userId),
     lore: await gatherLore(chatId, userId),
     name: card.name,
     chatId: chatId,
@@ -1073,8 +1133,6 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       const s = payload.settings;
       masterOn = s.enabled !== false;
       refineOn = !!s.refineOn;
-      rules = String(s.rules == null ? '' : s.rules);
-      structureRules = String(s.structureRules == null ? '' : s.structureRules);
       refineUserMessages = !!s.refineUserMessages;
       connectionId = String(s.connectionId == null ? '' : s.connectionId);
       thinkingMode =
@@ -1104,9 +1162,15 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         : [];
       contextMessages = Number(s.contextMessages);
       contextMessages = Number.isFinite(contextMessages) ? contextMessages : 4;
+      maxLoreTokens = Number(s.maxLoreTokens);
+      maxLoreTokens = Number.isFinite(maxLoreTokens) && maxLoreTokens >= 0 ? maxLoreTokens : 2500;
+      maxHistoryTokens = Number(s.maxHistoryTokens);
+      maxHistoryTokens =
+        Number.isFinite(maxHistoryTokens) && maxHistoryTokens >= 0 ? maxHistoryTokens : 4500;
       samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
       protectOn = s.protectOn !== false;
       protectThinking = s.protectThinking !== false;
+      protectInline = !!s.protectInline;
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
       return;
@@ -1226,7 +1290,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
             const at = m ? msgs.findIndex((x: any) => x && x.id === m.id) : -1;
             scene = {
               character: card.text,
-              context: at > 0 ? gatherHistory(msgs, at, card.name) : '',
+              context: at > 0 ? await gatherHistory(msgs, at, card.name, userId) : '',
               lore: await gatherLore(payload.chatId, userId),
               name: card.name,
               chatId: payload.chatId,

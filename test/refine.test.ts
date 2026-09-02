@@ -80,6 +80,7 @@ function host(
   let turn = 0;
 
   let chatBroken = false;
+  const forbidden: string[] = [];
   const spindle = {
     on: (name: string, fn: any) => {
       (handlers[name] = handlers[name] || []).push(fn);
@@ -90,6 +91,16 @@ function host(
     sendToFrontend: (msg: any) => sent.push(msg),
     log: { info: () => {}, warn: () => {}, error: () => {} },
     generate: {
+      // The loud one, which posts its result into the chat as a new message.
+      // Calling this instead of quiet would turn every refine into a reply.
+      raw: async () => {
+        forbidden.push("generate.raw");
+        return { content: "" };
+      },
+      rawStream: async () => {
+        forbidden.push("generate.rawStream");
+        return (async function* () {})();
+      },
       quiet: async (req: any) => {
         asked.push(req);
         if (opts.fail) throw new Error(opts.fail);
@@ -160,6 +171,24 @@ function host(
       },
     },
     chat: {
+      // Every way a host could let an extension put something in the chat.
+      // None of these should ever be called: this extension edits a message
+      // that already exists and does nothing else.
+      createMessage: async () => {
+        forbidden.push("chat.createMessage");
+      },
+      addMessage: async () => {
+        forbidden.push("chat.addMessage");
+      },
+      sendMessage: async () => {
+        forbidden.push("chat.sendMessage");
+      },
+      appendMessage: async () => {
+        forbidden.push("chat.appendMessage");
+      },
+      deleteMessage: async () => {
+        forbidden.push("chat.deleteMessage");
+      },
       getMessages: async () => {
         if (chatBroken) throw new Error("the host went away");
         return msgs.map((m) => ({ ...m }));
@@ -213,6 +242,8 @@ function host(
       for (const fn of handlers.GENERATION_ENDED || []) await fn(p);
     },
     skipped: () => sent.filter((m) => m.type === "refine_skipped").map((m) => m.why),
+    // Anything called that would have put something in the chat.
+    forbidden,
     // Makes the host fail the way a host that went away does.
     breakChat: () => {
       chatBroken = true;
@@ -840,6 +871,54 @@ describe("protecting what is not prose", () => {
     expect(h.body("m2")).toBe(
       "<think>She is cold. Lead with that.</think>She stepped through and the cold hit her.",
     );
+  });
+});
+
+describe("nothing is ever sent to the chat", () => {
+  // The whole extension edits one message that already exists. There is no
+  // path that writes a new one, and the check is worth having because the
+  // difference between generate.quiet and generate.raw is one word and the
+  // second one posts its answer into the conversation.
+  test("a refine writes over the message and creates nothing", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.forbidden).toEqual([]);
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].id).toBe("m2");
+  });
+
+  test("the generation is the quiet one, which does not post its answer", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.forbidden).toEqual([]);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("trying the rules writes nothing at all", async () => {
+    const h = await armed(["<refined>A tighter line.</refined>"]);
+    await h.front({ type: "try_refine", requestId: "t", text: "A line with filler in it." });
+    await wait(50);
+    expect(h.forbidden).toEqual([]);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("and a preview neither writes nor generates", async () => {
+    const h = await armed(["x"]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.forbidden).toEqual([]);
+    expect(h.writes.length).toBe(0);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("a dropped rewrite writes nothing, so a refusal cannot reach the chat", async () => {
+    const h = await armed(["I'm sorry, but I can't help with rewriting this content."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.forbidden).toEqual([]);
+    expect(h.writes.length).toBe(0);
   });
 });
 

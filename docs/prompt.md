@@ -59,24 +59,32 @@ Switching it off empties the `{{output_format}}` macro and puts the older checks
 
 Two questions have different answers: does your model reason, and do you want the short version or the whole thing.
 
-| Prompt | For |
+| Prompt | What it is |
 | --- | --- |
-| **Short** | The one to start with. Seven blocks, the common faults named outright. |
-| **Detailed** | The same idea taken further: rhythm, speech, bodies and endings each get a block. |
-| **Short, for a thinking model** | Gives your model the standard and lets it work out the rest. |
-| **Detailed, for a thinking model** | The standard, where to look for trouble, keeping the writer's voice, and a pass over its own answer. |
+| **Short** | Everything Detailed says, in three rule blocks instead of nine. |
+| **Detailed** | The same rules, one to a block, each said at length: phrases, words, repetition, rhythm, speech, bodies, endings. |
+| **Short, for a thinking model** | The standard, and let it work out the rest. |
+| **Detailed, for a thinking model** | The standard, the five places to point it, keeping the writer's voice, and a pass over its own answer. |
 
-A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will pattern-match a list and will not derive one from a principle. That is why the thinking prompts are the shorter pair rather than the longer one.
+**Short and Detailed cover the same ground.** Pick by how much prompt you want to pay for on every refine, not by what it catches. Detailed is followed more closely because it says each rule at length and gives it a heading of its own; Short costs a fraction as much per reply.
 
-All four work as they stand. Load one, change whatever you like, and save it under a name of your own.
+The reasoning pair is the shorter one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 
-## How much of the chat it sends
+The rules themselves are specific rather than general. "Cut clichés" gives a model nothing to act on; the shipped prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
 
-**Messages of run-up to send** decides what **What has been happening** carries. Four is the default.
+All four work as they stand. Load one, change whatever you like, save it under a name of your own.
 
-More context costs more on every refine, and it is the setting most likely to make a refine expensive without looking like it. Long messages are trimmed and the block as a whole has a ceiling, so one wall of text cannot fill the request on its own.
+## How much it is told
 
-Zero sends none. That is the cheap setting, and it is fine for rules about wording. It is the wrong setting for rules about continuity, because a model that cannot see the run-up will smooth a scene into general prose and take the thread out with it.
+Three settings under **Context**, and they are the ones most likely to make a refine expensive without looking like it. Every one of them costs tokens on every single reply.
+
+**Messages of run-up to send** is how many messages before the one being refined. Four is the default. Zero sends none, which is fine for rules about wording and wrong for rules about continuity: a model that cannot see the run-up will smooth a scene into general prose and take the thread out with it.
+
+**Most tokens of run-up** is a ceiling on the same thing, and whichever runs out first decides. Whole messages are kept or dropped, working backwards from the message being refined, so the turn just before it always survives.
+
+**Most tokens of lorebook** is a ceiling on the entries this chat has active. Whole entries again: half a lorebook entry is worse than one fewer of them.
+
+Tokens rather than characters because that is the unit a context window is measured in, and the same eight thousand characters is a wildly different amount of prompt depending on the language and the formatting. They are counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not.
 
 ## Protecting what is not prose
 
@@ -86,7 +94,9 @@ Ask a model to improve a paragraph and it will happily drop a `<font color>` tag
 
 What makes this worth having rather than hopeful is the last step. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
 
-What gets protected: fenced code, inline code, images, and every HTML tag.
+What gets protected: fenced code, inline code, images, links, comments, and any tag carrying an attribute, which is where a colour or an href lives.
+
+**Bare inline formatting stays visible.** `<i>`, `<b>`, `<em>` and the rest wrap words in the middle of a sentence, and replacing them with tokens hands the model a sentence with holes in it. That made the rewrite worse to protect something the model was unlikely to break. They stay where they are, and the prompt tells it to leave them alone. **Hide plain italic and bold too** puts them behind tokens as well if you would rather.
 
 Protection catches what it can find. The prompts that ship with it also carry a **What not to touch** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
@@ -108,7 +118,7 @@ Under **Model**, **Let it think first** has three answers:
 
 - **No, keep it quick.** The default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives.
 - **Whatever my connection is set to.** Sends nothing at all on the subject, which is what leaves your own reasoning settings in charge. Pick this if you have already tuned reasoning where you configure your models.
-- **Yes, and I will say how much.** Adds an effort level: low, medium or high. What each one means is the provider's business, and a provider that does not take an effort level ignores it.
+- **Yes, and I will say how much.** Adds an effort level: auto, none, minimal, low, medium, high, extra high or max. What each one means is the provider's business, and one that does not take an effort level ignores it. A rewrite rarely needs more than low.
 
 ## Seeing what gets sent
 
@@ -124,7 +134,7 @@ If no reply can be found it still builds, with a stand-in where your message wou
 
 A new block is empty. The prompts that ship with it use XML tags because that is what works, but a tag is a style rather than a rule, and a new block should not arrive already written in somebody else's.
 
-**Expand** opens a block in an editor the size of the screen, which is where a paragraph is actually comfortable to write. It does not put the cursor in the box: focusing a textarea is what raises the keyboard on a phone, and it would cover the thing you just opened.
+**Expand** opens a block in an editor the size of the screen, which is where a paragraph is actually comfortable to write. It does not put the cursor in the box: focusing a textarea is what raises the keyboard on a phone, and it would cover the thing you just opened. The preview has one too, for reading rather than editing.
 
 ## Presets
 

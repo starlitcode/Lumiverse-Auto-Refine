@@ -14,7 +14,7 @@ In Lumiverse, open Extensions and install from the repository URL:
 https://github.com/starlitcode/Lumiverse-Auto-Refine
 ```
 
-Then open the sidebar drawer and pick the **Auto Refine** tab. `Ctrl+K` finds it too. It works as it stands: a prompt ships with it, so switch it on and go. Everything else is optional.
+Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt ships with it, so switching it on is the whole of the setup. Everything below is optional.
 
 ## What it does
 
@@ -51,7 +51,7 @@ Six tabs, and everything belongs to exactly one of them. The switch, the refine 
 | Tab | What is on it |
 | --- | --- |
 | **Prompt** | The request itself, block by block, the macros a block can carry, and your presets |
-| **Context** | How much of the chat goes in, a preview of exactly what gets sent, and a place to try it on some text |
+| **Context** | How much of the chat and the lorebook goes in, a preview of exactly what gets sent, and a place to try it on some text |
 | **Model** | Which connection refines, how much thinking it does, the timeout, and the samplers |
 | **Limits** | What it protects, what it refuses to save, and what it does before it writes |
 | **Log** | What is happening right now, what it has been doing, and one button that copies a bug report |
@@ -63,13 +63,13 @@ A refine is a second model call on every reply, so three settings decide what th
 
 - **Refine using this connection.** A rewrite does not need the model you roleplay with. Point this at a cheaper or faster connection and the whole feature costs a fraction of what it would otherwise.
 - **Let it think first.** Off by default. Rewriting a paragraph is not a reasoning problem. You can also leave it at whatever your connection is already set to, or pick an effort level yourself.
-- **Messages of run-up to send.** How much of the chat goes in the prompt. More context makes a better rewrite and costs more on every one.
+- **How much it is told.** How many messages of run-up go in, and the token ceilings on that and on the lorebook. More context makes a better rewrite and costs more on every one.
 
 ## Your prompt is the settings
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
 
-Four prompts ship with it and work as they stand: a short one and a detailed one, each in a version for a plain model and a version for a model that reasons. Load one, change what you like, save it under your own name.
+Four prompts ship with it and work as they stand. Short and Detailed say the same things at two lengths, so pick by how much prompt you want to pay for on every refine rather than by what it covers. Each comes in a version for a plain model and a version for a model that reasons: the reasoning pair is the shorter one, because a model that reasons is given the standard and works out the rest, and one that does not is given the list.
 
 ## Seeing what gets sent
 
@@ -97,18 +97,7 @@ Two parts reach into the page rather than going through an API, because Lumivers
 
 Auditing it, or pointing a scanner at it? The two files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`, named in `spindle.json`. They are committed as plain readable JavaScript, not minified or bundled.
 
-## Building
-
-`dist/` is committed as readable JavaScript, so the extension installs with no build step and the file that runs is one you can read.
-
-```
-bun install
-bun run check     # types and tests
-bun run test:ui   # the same panel in a real browser, needs Playwright
-bun run build     # rebuilds dist/ from src/
-```
-
-`src/` and `dist/` move together in the same commit. CI rebuilds and fails on any drift.
+**Nothing is ever added to your chat.** The extension reads messages and edits ones that already exist. There is no path that writes a new message, and the model call it makes is the quiet kind, which does not post its answer into the conversation.
 
 ## Credits
 

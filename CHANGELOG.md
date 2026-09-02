@@ -35,6 +35,9 @@ First release.
 - **The model's own thinking is never sent.** It is cut off before the refine and put back exactly as it was, so a rewrite cannot quietly edit what a model worked out in a place nobody checks.
 - **Every refine can be put back, not just the last one.** A second refine in the same chat used to take away the way back from the first without saying so.
 - **A button on every message**, off by default, in the message's own row of actions next to Edit and Copy. After a refine the same button becomes an undo.
+- **Context budgets in tokens**, for the run-up and for the lorebook, beside the message count. Whole messages and whole entries are kept or dropped, counted with Lumiverse's own tokeniser where it will answer.
+- **Inline formatting stays visible to the model.** Hiding `<i>` and `<b>` behind tokens handed it a sentence with holes in it, which made the rewrite worse to protect something it was unlikely to break. Anything carrying an attribute is still hidden, and there is a switch for the rest.
+- **Eight thinking levels** rather than three: auto, none, minimal, low, medium, high, extra high, max.
 - **A search that looks across every tab**, not just the one you are on, with folds opened so nothing hides from it.
 - **Expand**, on every block and on the Try it box, opening the text in an editor the size of the screen. It does not focus the box, so no keyboard jumps up on a phone and covers what you opened.
 - **Import, export and reset all work in parts.** Your prompt, context, model, samplers, limits, alerts, buttons, switches, presets and chats-off, each with its own switch in all three. Export only your prompt, take only somebody's samplers, or start your prompt again without losing your connection.
@@ -50,7 +53,7 @@ First release.
 - **Presets**, saving your whole prompt, your run-up count, your samplers and your thinking under a name. Your connection and your switches stay yours whichever preset you load, and the four that ship with it are always in the list.
 - **Refining what you are typing.** A row in the chat input's Extras menu rewrites the text in your input box before you send it. Off by default, because it edits the box you are typing in.
 - **A floating button**, off by default, that refines the latest reply in one tap and can be dragged where you want it.
-- **A sound when a refine lands**, off by default. The sound is yours: attach a file or paste a link. Nothing is shipped with the extension, so the switch alone is silent and the panel says so rather than looking broken.
+- **A sound when a refine lands**, off by default, and a short built-in blip when you have not chosen one. It is synthesised rather than shipped, so there is no audio file in the repository. Attach your own or paste a link to replace it.
 - **A Log tab.** What it is doing right now with a running clock, the counts for this session, why rewrites were dropped and how often, and one button that copies a bug report carrying settings and counts but never your writing.
 - **Starting again**, putting every setting back to its default, with your presets kept unless you say otherwise. It asks first, and it leaves you on the tab you were on.
 - **A switch for one chat**, so a scene can be left completely alone.
