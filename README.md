@@ -12,6 +12,8 @@ You write rules in plain sentences. Cut filler words. Keep paragraphs under four
 
 Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it.
 
+It lives in a tab in Lumiverse's sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
+
 ## What makes it careful
 
 Handing your writing to a model and saving whatever it says is a risky thing to do quietly, so most of this extension is about refusing to save the wrong thing.
@@ -36,7 +38,7 @@ A refine is a second model call on every reply, so two settings decide what that
 
 Install from the Extensions panel by repository URL, or `POST /api/v1/spindle/install`.
 
-It asks for four permissions: `generation` to run the refine, `chat_mutation` to save the result, `chats` to know which chat you are in, and `ui_panels` for the floating button. The [privacy page](docs/privacy.md) says what each is used for and what you still have if you refuse it.
+It asks for three permissions: `generation` to run the refine, `chat_mutation` to save the result, and `chats` to know which chat you are in. The tab itself costs nothing: drawer tabs are open to every extension. The [privacy page](docs/privacy.md) says what each is used for and what you still have if you refuse it.
 
 ## Documentation
 

@@ -8,12 +8,13 @@ Nothing else from your chat goes with it. Not the other messages, not your chara
 
 The extension has no networking of its own. It never opens a connection and never contacts a server of mine or anyone else's, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing.
 
-## The four permissions
+## The three permissions
 
 - **`generation`** runs the refine. Without it the extension does nothing at all, and says so.
 - **`chat_mutation`** saves the result over the message. Refuse it and refining still runs but nothing can be written, so nothing changes.
 - **`chats`** answers which chat you are looking at, so the per-chat switch and the buttons act on the right one. Refuse it and the extension falls back to the last chat it saw a reply in.
-- **`ui_panels`** is screen space for the floating button, and nothing else. Refuse it and everything works without that button.
+
+The tab it lives in costs nothing. Drawer tabs are open to every extension, so there is no permission behind the whole of the interface.
 
 ## What it keeps
 

@@ -1,13 +1,19 @@
 /*
  * Auto Refine frontend.
  *
- * The panel, the buttons, and the running log. None of the refining happens
- * here: this side collects what the reader wants, hands it to the backend, and
- * shows what came back. The backend holds the rules and does the model pass.
+ * The whole surface is one drawer tab. That is a deliberate choice rather than
+ * a default: this is a thing you keep open and glance at while you write, not a
+ * form you fill in and close. You want to see what the last refine did to your
+ * prose, and put it back if you disagree, without stopping to open anything.
  *
- * Everything on screen is built by hand rather than with a framework, styled
- * from the host's own --lumiverse-* variables so it arrives in the reader's
- * theme rather than in one of ours.
+ * A drawer tab has no moment where it closes, so there is no "nothing sticks
+ * until Save" to build on. Everything here saves as you change it, which is
+ * safe because nothing on this panel is destructive on its own: a rule is text
+ * until a reply arrives, and the two switches that make something happen are
+ * switches, which is exactly the control somebody expects to act at once.
+ *
+ * None of the refining happens on this side. This collects what the reader
+ * wants, hands it to the backend, and shows what came back.
  */
 
 interface Ctx {
@@ -15,24 +21,18 @@ interface Ctx {
   ui: any;
   sendToBackend?: (msg: any) => void;
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
-  dom?: any;
 }
 
-// Bumped on each release. Shown in the log line the panel writes on startup, so
-// a bug report always says which version it came from.
 const VERSION = "1.0.0";
-
 const STORE_KEY = "lv-auto-refine:settings:v1";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
 
-// Every setting, with the value a fresh install starts on. The panel is built
-// from the schema below rather than from this, but a key missing here is a key
-// that never loads, so the two are checked against each other.
+// Every setting, with the value a fresh install starts on.
 const CONFIG = {
   enabled: true,
-  // The automatic pass is off until the reader turns it on. This rewrites
-  // saved messages with a model, which is not something to start doing to
-  // somebody's chat because they installed an extension.
+  // The automatic pass is off until asked for. This rewrites saved messages
+  // with a model, which is not something to start doing to somebody's chat
+  // because they installed an extension.
   refineOn: false,
   rules: "",
   structureRules: "",
@@ -45,191 +45,103 @@ const CONFIG = {
   keepOriginal: true,
   confirmBeforeSave: false,
   showRefineButton: true,
-  showFloatingButton: false,
   toast: true,
-  liveLog: false,
 };
 
+// The settings that live behind the "How the pass runs" fold. Everything else
+// is on the face of the tab, because it is what somebody changes while they
+// work. These are set once and left.
 type Field = {
   key: string;
   label: string;
-  type: "bool" | "text" | "num" | "pick";
+  type: "bool" | "num" | "pick";
   hint: string;
-  needs?: string[];
   min?: number;
   max?: number;
-  int?: boolean;
-  rows?: number;
   options?: Array<{ value: string; label: string }>;
-  run?: string;
-};
-type Group = {
-  title: string;
-  desc?: string;
-  collapsed?: boolean;
-  needs?: string[];
-  fields: Field[];
 };
 
-// A labelled run of rows inside a section, so a long list says what its parts
-// have in common instead of reading as one wall.
-const RUNS: Record<string, { title: string; note: string }> = {
-  guardrails: {
-    title: "What it refuses to save",
-    note: "A model asked to rewrite prose sometimes answers with something else. These are the limits on what comes back, and a rewrite that fails one of them is dropped and the reply is left exactly as it was.",
-  },
-  cost: {
-    title: "What the pass costs",
-    note: "A refine is a second model call on every reply, so these two are where the money and the waiting go. Both default to the cheap answer.",
-  },
-};
-
-const SCHEMA: Group[] = [
+const COST_FIELDS: Field[] = [
   {
-    title: "Basics",
-    desc: "The main switch, and the ways to reach it.",
-    fields: [
-      {
-        key: "enabled",
-        label: "Turn Auto Refine on",
-        type: "bool",
-        hint: "The master switch. Off, nothing is refined and no model call is made, automatic or by hand.",
-      },
-      {
-        key: "refineOn",
-        label: "Refine every reply as it arrives",
-        type: "bool",
-        hint: "Off by default. On, each finished reply is sent for a refine and the result is saved over it. The greeting is never included. Leave it off and use the button instead if you would rather decide reply by reply.",
-      },
-      {
-        key: "refineUserMessages",
-        label: "Also refine your own messages",
-        type: "bool",
-        hint: "Off by default. On, the button will refine a message you wrote as well as a reply, keeping your voice rather than the character's. Automatic refining never touches your messages whatever this says: only the button does.",
-      },
-      {
-        key: "showRefineButton",
-        label: "Show a 'refine this reply' button",
-        type: "bool",
-        hint: "Adds a button to the chat input's Extras menu that refines the latest reply on demand. It works whether or not automatic refining is on.",
-      },
-      {
-        key: "showFloatingButton",
-        label: "Floating on/off button",
-        type: "bool",
-        hint: "Off by default. Puts a small round button over the chat that turns Auto Refine on and off in one tap, and holds the settings and the refine button in its own menu.",
-      },
-      {
-        key: "toast",
-        label: "Show a pop-up when a reply is refined",
-        type: "bool",
-        hint: "On by default. A short message saying a reply was refined, or why one was left alone. Turn it off if you would rather it worked quietly.",
-      },
-      {
-        key: "liveLog",
-        label: "Show the on-screen panel",
-        type: "bool",
-        hint: "Off by default. A small panel over the chat with the last twenty things it did and why, which is the quickest way to see what a rule is actually doing.",
-      },
-    ],
+    key: "connectionId",
+    label: "Refine using",
+    type: "pick",
+    options: [{ value: "", label: "The model I am chatting with" }],
+    hint: "A rewrite does not need the model you roleplay with. Pointing this at a cheaper or faster connection is the biggest saving there is here.",
   },
   {
-    title: "The rules it follows",
-    desc: "What you want changed about a reply. This is the whole of what the model is told to do, so it is worth writing plainly.",
-    fields: [
-      {
-        key: "rules",
-        label: "Your refinement rules",
-        type: "text",
-        rows: 6,
-        hint: "Written to the model as instructions, exactly as you type them. Plain sentences work best: \"cut filler words\", \"keep paragraphs under four lines\", \"never start a sentence with And\". Nothing is refined until there is something here.",
-      },
-      {
-        key: "structureRules",
-        label: "Structure and formatting rules",
-        type: "text",
-        rows: 4,
-        hint: "Optional, and kept separate because it is a different kind of instruction. Layout rather than wording: how dialogue is marked, whether actions go in asterisks, how long a paragraph runs. Sent alongside the rules above.",
-      },
+    key: "thinkingMode",
+    label: "Let it think first",
+    type: "pick",
+    options: [
+      { value: "off", label: "No, keep it quick" },
+      { value: "inherit", label: "Yes, whatever the connection does" },
     ],
+    hint: "Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives.",
   },
   {
-    title: "How the pass runs",
-    collapsed: true,
-    desc: "Which model does the refining, what it costs, and what is done with an answer that looks wrong.",
-    fields: [
-      {
-        key: "connectionId",
-        run: "cost",
-        label: "Refine using this connection",
-        type: "pick",
-        options: [{ value: "", label: "The one I am chatting with" }],
-        hint: "A refine is a rewrite, not a performance, so it does not need the model you roleplay with. Pointing this at a cheaper or faster connection is the single biggest saving here. Leave it on the default to use whatever you are chatting with.",
-      },
-      {
-        key: "thinkingMode",
-        run: "cost",
-        label: "Let the model think first",
-        type: "pick",
-        options: [
-          { value: "off", label: "No, keep it quick" },
-          { value: "inherit", label: "Yes, whatever the connection does" },
-        ],
-        hint: "Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every single reply is the cost nobody notices until the bill arrives. Turn it on if your rules ask for real judgement.",
-      },
-      {
-        key: "timeoutSecs",
-        label: "Give up waiting after (seconds)",
-        type: "num",
-        int: true,
-        min: 5,
-        max: 600,
-        hint: "How long to wait for the refine before dropping it and leaving the reply alone. The default of 90 suits most models. A hung call is cancelled rather than left running.",
-      },
-      {
-        key: "maxGrowthPct",
-        run: "guardrails",
-        label: "Longest a rewrite may get (%)",
-        type: "num",
-        int: true,
-        min: 0,
-        max: 500,
-        hint: "A rewrite this much longer than the original is dropped. A refine that grows a reply by half has written new scene rather than polished what was there. Set to 0 to allow any length.",
-      },
-      {
-        key: "minShrinkPct",
-        run: "guardrails",
-        label: "Shortest a rewrite may get (%)",
-        type: "num",
-        int: true,
-        min: 0,
-        max: 99,
-        hint: "A rewrite this much shorter than the original is dropped, because writing has gone missing rather than been tightened. Set to 0 to allow any length.",
-      },
-      {
-        key: "keepOriginal",
-        run: "guardrails",
-        label: "Keep what a refine replaced",
-        type: "bool",
-        hint: "On by default. Holds the text as it stood before each refine so you can put it back from the panel. Kept in this browser session only and never written anywhere, so a reload clears it.",
-      },
-      {
-        key: "confirmBeforeSave",
-        run: "guardrails",
-        label: "Ask before saving a refine",
-        type: "bool",
-        hint: "Off by default. On, every refine shows you the rewrite and waits for a yes before it saves. Slow with automatic refining on, which is the point for anyone who does not want surprises.",
-      },
-    ],
+    key: "timeoutSecs",
+    label: "Give up waiting after (seconds)",
+    type: "num",
+    min: 5,
+    max: 600,
+    hint: "A refine that has not come back by then is cancelled and the reply is left alone.",
   },
 ];
 
-// ---- the icon ----
+const LIMIT_FIELDS: Field[] = [
+  {
+    key: "maxGrowthPct",
+    label: "Longest a rewrite may get (%)",
+    type: "num",
+    min: 0,
+    max: 500,
+    hint: "A rewrite this much longer has written new scene rather than polished what was there. 0 allows any length.",
+  },
+  {
+    key: "minShrinkPct",
+    label: "Shortest a rewrite may get (%)",
+    type: "num",
+    min: 0,
+    max: 99,
+    hint: "A rewrite this much shorter has lost writing rather than tightened it. 0 allows any length.",
+  },
+  {
+    key: "keepOriginal",
+    label: "Keep what a refine replaced",
+    type: "bool",
+    hint: "On by default, and what makes Put it back possible. Held while the page is open and written nowhere.",
+  },
+  {
+    key: "confirmBeforeSave",
+    label: "Ask before saving a refine",
+    type: "bool",
+    hint: "Off by default. On, every refine shows you both versions and waits for a yes.",
+  },
+  {
+    key: "refineUserMessages",
+    label: "Let the button refine your own messages",
+    type: "bool",
+    hint: "Off by default. The automatic pass never touches what you wrote whatever this says: only the button does.",
+  },
+  {
+    key: "showRefineButton",
+    label: "Show the refine button in Extras",
+    type: "bool",
+    hint: "A one-tap way to refine the latest reply without opening this tab, which is the only way in on a phone.",
+  },
+  {
+    key: "toast",
+    label: "Show a pop-up on each refine",
+    type: "bool",
+    hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
+  },
+];
+
 // A page of writing with a spark over it. Drawn rather than borrowed so it sits
-// at the same weight as the host's own icons, and readable at the 20px the
-// Extras menu gives it: three lines of text, one shortened to read as a
-// paragraph rather than a list, and a four-point spark at the corner for the
-// pass that goes over it.
+// at the same weight as the host's own icons, and readable at the size a tab
+// gives it: three lines of text, the last one short so it reads as a paragraph
+// rather than a list, and a spark for the pass that goes over it.
 function refineIcon(): string {
   return (
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
@@ -246,11 +158,8 @@ function refineIcon(): string {
 
 export function setup(ctx: Ctx, overrides?: any) {
   const disposers: Array<() => void> = [];
-  let tornDown = false;
-
   const cfg: any = Object.assign({}, CONFIG);
 
-  // ---- what is remembered in this browser ----
   function loadSaved(): any {
     try {
       if (typeof localStorage === "undefined") return {};
@@ -260,17 +169,34 @@ export function setup(ctx: Ctx, overrides?: any) {
       return {};
     }
   }
-  function saveLocal() {
-    try {
-      if (typeof localStorage !== "undefined")
-        localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
-    } catch (_) {}
-  }
   Object.assign(cfg, loadSaved(), overrides || {});
 
-  // Chats the reader switched Auto Refine off in. A list of ids and nothing
-  // else, kept in this browser: it would mean nothing on another account, so it
-  // is not synced.
+  // Saved as it is changed, and pushed to the backend in the same breath. There
+  // is no Save button here: a drawer tab has no moment where it closes, so a
+  // "nothing sticks until you press Save" contract would have nothing to hang
+  // on and would only ever surprise somebody who walked away mid-edit.
+  let saveTimer: any = null;
+  function persist(now?: boolean) {
+    const write = () => {
+      saveTimer = null;
+      try {
+        if (typeof localStorage !== "undefined")
+          localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
+      } catch (_) {}
+      send({ type: "set_settings", settings: cfg });
+    };
+    if (now) {
+      if (saveTimer) clearTimeout(saveTimer);
+      write();
+      return;
+    }
+    // Typing in a rule box should not write on every keystroke. A short settle
+    // is enough, and the box also writes on blur, so nothing is lost by
+    // wandering off mid-sentence.
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(write, 400);
+  }
+
   let chatsOff: string[] = [];
   try {
     if (typeof localStorage !== "undefined") {
@@ -286,79 +212,37 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   };
   const newId = () =>
-    "ar-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    "arf-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 
-  // ---- the running log ----
-  const LOG_MAX = 20;
-  const logLines: Array<{ at: number; text: string }> = [];
-  let paintLog: (() => void) | null = null;
-  function log(text: string) {
-    logLines.push({ at: Date.now(), text: String(text) });
-    while (logLines.length > LOG_MAX) logLines.shift();
-    if (paintLog) {
-      try {
-        paintLog();
-      } catch (_) {}
-    }
-  }
-
-  // ---- telling the backend what it needs ----
-  // Everything the backend knows arrived over this bridge, and a backend that
+  // Everything the backend knows arrived over the bridge, and a backend that
   // restarts comes back knowing none of it. It cannot look the settings up
-  // either: that read runs before any user is known. So the panel says it all
-  // again the moment the backend announces itself.
+  // either: that read runs before any user is known. So this says it all again
+  // whenever the backend announces itself.
   function armBackend() {
-    send({ type: "set_settings", settings: baselineOrCfg() });
+    send({ type: "set_settings", settings: cfg });
     send({ type: "set_chats_off", chats: chatsOff.slice() });
   }
-  // The values as last saved, while the panel is open with edits in it. Edits
-  // change cfg as they are typed and are rolled back if the panel is dismissed,
-  // so sending cfg would hand the backend a setting nobody saved.
-  let modalBaseline: any = null;
-  const baselineOrCfg = () => modalBaseline || cfg;
 
-  // ---- toasts ----
-  function toast(text: string, force?: boolean) {
-    if (!cfg.toast && !force) return;
-    try {
-      if (ctx.ui && typeof ctx.ui.toast === "function") {
-        ctx.ui.toast(text);
-        return;
-      }
-    } catch (_) {}
-    try {
-      if (typeof document === "undefined") return;
-      const el = document.createElement("div");
-      el.textContent = text;
-      el.setAttribute("data-arf-toast", "1");
-      el.style.cssText =
-        "position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:2147483000;" +
-        "max-width:min(420px,calc(100vw - 32px));padding:10px 14px;border-radius:10px;" +
-        "font:13px/1.45 var(--lumiverse-font-family,system-ui);" +
-        "background:var(--lumiverse-card-bg-solid,rgb(35,30,48));" +
-        "color:var(--lumiverse-text,#eee);" +
-        "border:1px solid var(--lumiverse-border,rgba(255,255,255,.16));" +
-        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.35))";
-      document.body.appendChild(el);
-      const go = setTimeout(() => {
-        try {
-          el.remove();
-        } catch (_) {}
-      }, 4200);
-      disposers.push(() => {
-        clearTimeout(go);
-        try {
-          el.remove();
-        } catch (_) {}
-      });
-    } catch (_) {}
+  // ---- state the tab shows ----
+  const LOG_MAX = 20;
+  const activity: Array<{ at: number; text: string; good: boolean }> = [];
+  function log(text: string, good?: boolean) {
+    activity.unshift({ at: Date.now(), text: String(text), good: !!good });
+    while (activity.length > LOG_MAX) activity.pop();
+    paint();
   }
 
-  // ---- where the reader is ----
   let lastChatId: any = null;
   let lastMessageId: any = null;
-  const chatIsOff = (id: any) => id != null && chatsOff.indexOf(String(id)) >= 0;
+  let busy = false;
+  // The refine that can still be undone, per chat. What the tab is really for:
+  // seeing what happened to your prose and disagreeing with it.
+  const undoable = new Map<string, { messageId: any; before: string; after: string }>();
+  let connections: Array<{ id: string; name: string; provider: string; model: string; isDefault: boolean }> = [];
+  let tryResult: { ok: boolean; text: string } | null = null;
+  let tryBusy = false;
 
+  const chatIsOff = (id: any) => id != null && chatsOff.indexOf(String(id)) >= 0;
   function setChatOff(id: any, off: boolean) {
     if (id == null) return;
     const s = String(id);
@@ -371,336 +255,512 @@ export function setup(ctx: Ctx, overrides?: any) {
         localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(chatsOff));
     } catch (_) {}
     send({ type: "set_chats_off", chats: chatsOff.slice() });
+    paint();
   }
 
-  // ---- what a refine left behind ----
-  // One entry per chat, so the panel can offer to put the last one back.
-  const undoable = new Map<string, { messageId: any; before: string; after: string }>();
+  function toast(text: string, force?: boolean) {
+    if (!cfg.toast && !force) return;
+    try {
+      if (ctx.ui && typeof ctx.ui.toast === "function") {
+        ctx.ui.toast(text);
+      }
+    } catch (_) {}
+  }
 
-  // ---- styling helpers ----
+  // ---- small builders ----
   const MUTED = "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
-  const FIELD_CSS =
-    "width:100%;box-sizing:border-box;padding:9px 11px;border-radius:var(--lumiverse-radius,8px);" +
-    "border:1px solid var(--lumiverse-border,rgba(255,255,255,.16));" +
-    "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
+  const BORDER = "var(--lumiverse-border,rgba(255,255,255,.16))";
+  const FIELD =
+    "width:100%;box-sizing:border-box;padding:8px 10px;border-radius:var(--lumiverse-radius,8px);" +
+    "border:1px solid " + BORDER + ";background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
     "color:var(--lumiverse-text,#eee);font:13px var(--lumiverse-font-family,system-ui)";
 
-  function btn(label: string, primary: boolean): HTMLButtonElement {
+  const el = (tag: string, css?: string, text?: string) => {
+    const d = document.createElement(tag);
+    if (css) d.style.cssText = css;
+    if (text != null) d.textContent = text;
+    return d;
+  };
+  const heading = (text: string) =>
+    el(
+      "div",
+      "font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:" + MUTED,
+      text,
+    );
+  const note = (text: string) =>
+    el("div", "font-size:12px;line-height:1.45;color:" + MUTED, text);
+  function button(label: string, primary: boolean): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
     b.style.cssText =
-      "min-height:36px;padding:9px 14px;border-radius:var(--lumiverse-radius,8px);cursor:pointer;" +
-      "font:13px var(--lumiverse-font-family,system-ui);border:1px solid " +
+      "min-height:32px;padding:7px 12px;border-radius:var(--lumiverse-radius,8px);cursor:pointer;" +
+      "font:12.5px var(--lumiverse-font-family,system-ui);border:1px solid " +
       (primary
         ? "transparent;background:var(--lumiverse-primary,rgba(147,112,219,.9));color:#fff"
-        : "var(--lumiverse-border,rgba(255,255,255,.16));background:var(--lumiverse-secondary,rgba(255,255,255,.06));color:var(--lumiverse-text,#eee)");
+        : BORDER + ";background:var(--lumiverse-secondary,rgba(255,255,255,.06));color:var(--lumiverse-text,#eee)");
     return b;
   }
+  const rule = () => el("div", "height:1px;background:" + BORDER + ";margin:2px 0");
 
-  // ---- the settings panel ----
-  let modalHandle: any = null;
-  let connections: Array<{ id: string; name: string; provider: string; model: string; isDefault: boolean }> = [];
-  let repaintConnections: (() => void) | null = null;
+  // ---- the tab ----
+  let tab: any = null;
+  let badge: string | null = null;
+  // The section that stays folded, remembered while the page is open so it does
+  // not close itself every time the tab repaints.
+  let costOpen = false;
 
-  function buildRow(f: Field): HTMLElement {
-    const row = document.createElement("div");
-    row.setAttribute("data-arf-row", f.key);
-    row.style.cssText = "display:flex;flex-direction:column;gap:5px";
-
-    const top = document.createElement("label");
-    top.style.cssText =
-      "display:flex;align-items:center;gap:10px;justify-content:space-between;cursor:pointer";
-    const name = document.createElement("span");
-    name.textContent = f.label;
-    name.style.cssText = "flex:1;min-width:0;font-size:13.5px";
-    top.appendChild(name);
-
-    let input: any = null;
-    if (f.type === "bool") {
-      input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = !!cfg[f.key];
-      input.style.cssText = "flex:none;width:18px;height:18px;cursor:pointer";
-      input.addEventListener("change", () => {
-        cfg[f.key] = !!input.checked;
-        applyDeps();
-      });
-      top.appendChild(input);
-      row.appendChild(top);
-    } else if (f.type === "pick") {
-      row.appendChild(top);
-      input = document.createElement("select");
-      input.style.cssText = FIELD_CSS;
-      const fill = () => {
-        input.innerHTML = "";
-        const opts =
-          f.key === "connectionId"
-            ? [{ value: "", label: "The one I am chatting with" }].concat(
-                connections.map((c) => ({
-                  value: c.id,
-                  label:
-                    (c.name || c.provider || "Connection") +
-                    (c.model ? " (" + c.model + ")" : "") +
-                    (c.isDefault ? " - default" : ""),
-                })),
-              )
-            : f.options || [];
-        for (const o of opts) {
-          const el = document.createElement("option");
-          el.value = o.value;
-          el.textContent = o.label;
-          input.appendChild(el);
-        }
-        input.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
-      };
-      fill();
-      if (f.key === "connectionId") repaintConnections = fill;
-      input.addEventListener("change", () => {
-        cfg[f.key] = input.value;
-      });
-      row.appendChild(input);
-    } else if (f.type === "text") {
-      row.appendChild(top);
-      input = document.createElement("textarea");
-      input.rows = f.rows || 4;
-      input.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
-      input.style.cssText = FIELD_CSS + ";resize:vertical;line-height:1.5";
-      input.addEventListener("change", () => {
-        cfg[f.key] = input.value;
-      });
-      row.appendChild(input);
-    } else {
-      row.appendChild(top);
-      input = document.createElement("input");
-      input.type = "number";
-      if (f.min != null) input.min = String(f.min);
-      if (f.max != null) input.max = String(f.max);
-      input.value = String(cfg[f.key]);
-      input.style.cssText = FIELD_CSS;
-      input.addEventListener("change", () => {
-        let v = Number(input.value);
-        if (!Number.isFinite(v)) v = Number(CONFIG[f.key as keyof typeof CONFIG]);
-        if (f.int) v = Math.round(v);
-        if (f.min != null) v = Math.max(f.min, v);
-        if (f.max != null) v = Math.min(f.max, v);
-        cfg[f.key] = v;
-        input.value = String(v);
-      });
-      row.appendChild(input);
-    }
-
-    const hint = document.createElement("div");
-    hint.textContent = f.hint;
-    hint.style.cssText = "font-size:12px;line-height:1.45;color:" + MUTED;
-    row.appendChild(hint);
-    return row;
+  function setBadge(v: string | null) {
+    // Written only when it changes. This goes to the host on every call, and a
+    // panel that repaints on a timer would otherwise say the same thing several
+    // times a second.
+    if (v === badge) return;
+    badge = v;
+    try {
+      tab && tab.setBadge && tab.setBadge(v);
+    } catch (_) {}
   }
 
-  const depRows: Array<{ row: HTMLElement; needs: string[] }> = [];
-  let applyDeps: () => void = () => {};
+  function statusLine(): { text: string; tone: "off" | "idle" | "busy" } {
+    if (!cfg.enabled) return { text: "Off", tone: "off" };
+    if (chatIsOff(lastChatId)) return { text: "Off in this chat", tone: "off" };
+    if (busy) return { text: "Refining a reply", tone: "busy" };
+    if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim())
+      return { text: "Waiting for some rules to follow", tone: "off" };
+    if (cfg.refineOn) return { text: "Refining every reply as it arrives", tone: "idle" };
+    return { text: "Waiting for you to press Refine", tone: "idle" };
+  }
 
-  function buildBody(root: HTMLElement) {
+  function paint() {
+    if (!tab || !tab.root) return;
+    const root = tab.root as HTMLElement;
+    // The rule boxes are rebuilt with everything else, so a repaint while
+    // somebody is typing would take the cursor with it. Held and put back.
+    const focusKey = (document.activeElement as any)?.getAttribute?.("data-arf-field");
+    const caret = (document.activeElement as any)?.selectionStart;
+
     root.innerHTML = "";
-    depRows.length = 0;
     root.style.cssText =
-      "display:flex;flex-direction:column;gap:14px;max-height:min(78vh,760px);overflow-y:auto;" +
+      "display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
       "font:13px var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,#eee)";
 
-    const head = document.createElement("div");
-    head.style.cssText = "display:flex;align-items:center;gap:10px";
-    const mark = document.createElement("span");
-    mark.innerHTML = refineIcon();
-    mark.style.cssText = "flex:none;display:inline-flex;color:var(--lumiverse-primary,rgba(147,112,219,.9))";
-    const title = document.createElement("div");
-    title.textContent = "Auto Refine";
-    title.style.cssText = "font-size:16px;font-weight:600;flex:1";
-    const ver = document.createElement("div");
-    ver.textContent = "v" + VERSION;
-    ver.style.cssText = "font-size:11px;color:" + MUTED;
-    head.appendChild(mark);
-    head.appendChild(title);
-    head.appendChild(ver);
-    root.appendChild(head);
+    root.appendChild(buildHeader());
+    const last = lastChatId != null ? undoable.get(String(lastChatId)) : null;
+    if (last) root.appendChild(buildLastRefine(last));
+    root.appendChild(buildRules());
+    root.appendChild(buildTryIt());
+    root.appendChild(buildFold());
+    root.appendChild(buildChatSwitch());
+    root.appendChild(buildActivity());
 
-    for (const g of SCHEMA) {
-      const sec = document.createElement("div");
-      sec.style.cssText = "display:flex;flex-direction:column;gap:10px";
-      const h = document.createElement("div");
-      h.textContent = g.title;
-      h.style.cssText = "font-size:13px;font-weight:600";
-      sec.appendChild(h);
-      if (g.desc) {
-        const d = document.createElement("div");
-        d.textContent = g.desc;
-        d.style.cssText = "font-size:12px;line-height:1.45;color:" + MUTED;
-        sec.appendChild(d);
+    if (focusKey) {
+      const back = root.querySelector('[data-arf-field="' + focusKey + '"]') as any;
+      if (back && typeof back.focus === "function") {
+        back.focus();
+        try {
+          if (caret != null && back.setSelectionRange) back.setSelectionRange(caret, caret);
+        } catch (_) {}
       }
-      let openRun: string | null = null;
-      for (const f of g.fields) {
-        if (f.run && RUNS[f.run] && f.run !== openRun) {
-          openRun = f.run;
-          const rh = document.createElement("div");
-          rh.textContent = RUNS[f.run].title;
-          rh.style.cssText =
-            "font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:" + MUTED;
-          const rn = document.createElement("div");
-          rn.textContent = RUNS[f.run].note;
-          rn.style.cssText = "font-size:12px;line-height:1.45;color:" + MUTED;
-          sec.appendChild(rh);
-          sec.appendChild(rn);
-        } else if (!f.run) {
-          openRun = null;
-        }
-        const row = buildRow(f);
-        if (f.needs && f.needs.length) depRows.push({ row: row, needs: f.needs });
-        sec.appendChild(row);
-      }
-      root.appendChild(sec);
     }
+  }
 
-    root.appendChild(buildTryItOut());
-    root.appendChild(buildChatRow());
-
-    const bar = document.createElement("div");
-    bar.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;padding-top:4px";
-    const save = btn("Save", true);
-    save.addEventListener("click", () => {
-      saveLocal();
-      modalBaseline = snapshot();
-      send({ type: "set_settings", settings: cfg });
+  function buildHeader(): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:8px");
+    const top = el("div", "display:flex;align-items:center;gap:9px");
+    const mark = el("span", "flex:none;display:inline-flex;color:var(--lumiverse-primary,rgba(147,112,219,.9))");
+    mark.innerHTML = refineIcon();
+    const name = el("div", "font-size:14px;font-weight:600;flex:1", "Auto Refine");
+    const sw = document.createElement("input");
+    sw.type = "checkbox";
+    sw.checked = !!cfg.enabled;
+    sw.setAttribute("aria-label", "Turn Auto Refine on");
+    sw.style.cssText = "flex:none;width:18px;height:18px;cursor:pointer";
+    sw.addEventListener("change", () => {
+      cfg.enabled = !!sw.checked;
+      persist(true);
       syncActions();
-      syncLog();
-      toast("Settings saved.", true);
-      log("settings saved");
+      paint();
     });
-    bar.appendChild(save);
-    root.appendChild(bar);
+    top.appendChild(mark);
+    top.appendChild(name);
+    top.appendChild(sw);
+    wrap.appendChild(top);
 
-    applyDeps = () => {
-      for (const d of depRows)
-        d.row.style.display = d.needs.some((k) => !!cfg[k]) ? "flex" : "none";
-    };
-    applyDeps();
-  }
+    const st = statusLine();
+    const line = el("div", "display:flex;align-items:center;gap:7px;font-size:12px;color:" + MUTED);
+    const dot = el(
+      "span",
+      "flex:none;width:7px;height:7px;border-radius:50%;background:" +
+        (st.tone === "off"
+          ? MUTED
+          : "var(--lumiverse-primary,rgba(147,112,219,.9))") +
+        (st.tone === "busy" ? ";box-shadow:0 0 6px 1px var(--lumiverse-primary-020,rgba(147,112,219,.45))" : ""),
+    );
+    line.appendChild(dot);
+    line.appendChild(el("span", "", st.text));
+    wrap.appendChild(line);
 
-  function snapshot(): any {
-    const out: any = {};
-    for (const g of SCHEMA) for (const f of g.fields) out[f.key] = cfg[f.key];
-    return out;
-  }
+    const row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+    const now = button("Refine the latest reply", true);
+    now.disabled = busy || !cfg.enabled;
+    now.style.opacity = now.disabled ? "0.5" : "1";
+    now.addEventListener("click", () => refineNow());
+    row.appendChild(now);
 
-  // Somewhere to try the rules on real text before turning anything on. Without
-  // this the only way to find out what a rule does is to let it rewrite a reply
-  // and read the result, which is a poor way to discover you meant something
-  // else. Nothing here is saved to the chat.
-  function buildTryItOut(): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "display:flex;flex-direction:column;gap:8px";
-    const h = document.createElement("div");
-    h.textContent = "Try it on some text";
-    h.style.cssText = "font-size:13px;font-weight:600";
-    const note = document.createElement("div");
-    note.textContent =
-      "Runs one refine on whatever is in the box, using the rules as they stand rather than as they were saved, and shows you what comes back. Nothing is written to your chat.";
-    note.style.cssText = "font-size:12px;line-height:1.45;color:" + MUTED;
-    const ta = document.createElement("textarea");
-    ta.rows = 3;
-    ta.placeholder = "Paste a reply here";
-    ta.setAttribute("aria-label", "Text to try the rules on");
-    ta.style.cssText = FIELD_CSS + ";resize:vertical;line-height:1.5";
-    const out = document.createElement("div");
-    out.style.cssText =
-      "font-size:12px;line-height:1.5;white-space:pre-wrap;color:" + MUTED + ";min-height:1em";
-    const row = document.createElement("div");
-    row.style.cssText = "display:flex;gap:8px;flex-wrap:wrap";
-    const grab = btn("Use my last reply", false);
-    const go = btn("Try it", false);
-    grab.addEventListener("click", () => {
-      const t = lastRenderedReply();
-      if (!t) {
-        out.textContent = "Could not find a reply on screen to read.";
-        return;
-      }
-      ta.value = t;
-      out.textContent = "Filled in from the reply on screen.";
+    const auto = document.createElement("label");
+    auto.style.cssText =
+      "display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;color:" + MUTED;
+    const autoBox = document.createElement("input");
+    autoBox.type = "checkbox";
+    autoBox.checked = !!cfg.refineOn;
+    autoBox.style.cssText = "width:16px;height:16px;cursor:pointer";
+    autoBox.addEventListener("change", () => {
+      cfg.refineOn = !!autoBox.checked;
+      persist(true);
+      paint();
     });
-    go.addEventListener("click", () => {
-      const text = String(ta.value || "").trim();
-      if (!text) {
-        out.textContent = "Put some text in the box first.";
-        return;
-      }
-      if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
-        out.textContent = "Write some rules above first, or there is nothing to apply.";
-        return;
-      }
-      out.textContent = "Working...";
-      // The rules as they stand in the boxes, so a change can be tried before
-      // it is saved. This is the one place the unsaved values are sent.
-      send({ type: "set_settings", settings: cfg });
-      const id = newId();
-      tryWaiting = { id: id, out: out };
-      send({ type: "try_refine", requestId: id, text: text, asUser: false });
-    });
-    row.appendChild(grab);
-    row.appendChild(go);
-    wrap.appendChild(h);
-    wrap.appendChild(note);
-    wrap.appendChild(ta);
+    auto.appendChild(autoBox);
+    auto.appendChild(el("span", "", "every reply, automatically"));
+    row.appendChild(auto);
     wrap.appendChild(row);
-    wrap.appendChild(out);
     return wrap;
   }
 
-  let tryWaiting: { id: string; out: HTMLElement } | null = null;
-
-  // The switch for the chat in front of you, and the only place it is.
-  let paintChatRow: (() => void) | null = null;
-  function buildChatRow(): HTMLElement {
-    const row = document.createElement("div");
-    row.setAttribute("data-arf-chat-switch", "1");
-    row.style.cssText = "display:flex;flex-direction:column;gap:5px";
-    const top = document.createElement("div");
-    top.style.cssText = "display:flex;align-items:center;gap:10px;justify-content:space-between";
-    const label = document.createElement("span");
-    label.textContent = "This chat";
-    label.style.cssText = "flex:1;min-width:0;font-size:13.5px";
-    const act = btn("", false);
-    act.style.cssText += ";min-height:0;padding:5px 12px;font-size:12px;flex:none";
-    const note = document.createElement("div");
-    note.style.cssText = "font-size:12px;line-height:1.45;color:" + MUTED;
-
-    const paint = () => {
-      const known = lastChatId != null;
-      const off = chatIsOff(lastChatId);
-      act.textContent = off ? "Turn on here" : "Turn off here";
-      act.disabled = !known;
-      act.style.opacity = known ? "1" : "0.45";
-      act.style.cursor = known ? "pointer" : "not-allowed";
-      note.textContent = !known
-        ? "No chat is open, so there is nothing to switch here."
-        : off
-          ? "Auto Refine is switched off in this chat. Every other chat carries on as it is."
-          : "Switch Auto Refine off in this chat alone, for a scene you would rather it left completely alone.";
+  // The heart of the tab. After a refine you want to see what it did to your
+  // writing and be able to disagree, and this is that, sitting where you are
+  // already looking rather than behind a menu.
+  function buildLastRefine(last: { messageId: any; before: string; after: string }): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:7px");
+    wrap.setAttribute("data-arf-last", "1");
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("The last refine"));
+    const pane = (title: string, text: string, dim: boolean) => {
+      const h = el("div", "font-size:11px;color:" + MUTED, title);
+      const b = el(
+        "div",
+        "white-space:pre-wrap;line-height:1.5;font-size:12.5px;max-height:120px;overflow-y:auto;" +
+          "padding:7px 9px;border-radius:8px;border:1px solid " + BORDER + ";" +
+          "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))" +
+          (dim ? ";color:" + MUTED : ""),
+        text,
+      );
+      wrap.appendChild(h);
+      wrap.appendChild(b);
     };
-    act.addEventListener("click", () => {
-      const off = chatIsOff(lastChatId);
-      setChatOff(lastChatId, !off);
-      paint();
-      toast(off ? "Auto Refine is back on in this chat." : "Auto Refine is off in this chat.", true);
+    pane("Before", last.before, true);
+    pane("After", last.after, false);
+    const row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+    const back = button("Put it back", false);
+    back.addEventListener("click", () => {
+      send({
+        type: "undo_refine",
+        requestId: newId(),
+        chatId: lastChatId,
+        messageId: last.messageId,
+      });
     });
-    paint();
-    paintChatRow = paint;
-    top.appendChild(label);
-    top.appendChild(act);
-    row.appendChild(top);
-    row.appendChild(note);
-    return row;
+    const seen = button("Dismiss", false);
+    seen.addEventListener("click", () => {
+      if (lastChatId != null) undoable.delete(String(lastChatId));
+      setBadge(null);
+      paint();
+    });
+    row.appendChild(back);
+    row.appendChild(seen);
+    wrap.appendChild(row);
+    return wrap;
   }
 
-  // The last reply as the page is showing it. Read at the moment it is asked
-  // for, so nothing is held between replies.
+  function textBox(key: string, label: string, hint: string, rows: number): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:5px");
+    wrap.appendChild(el("div", "font-size:12.5px", label));
+    const ta = document.createElement("textarea");
+    ta.rows = rows;
+    ta.value = String(cfg[key] == null ? "" : cfg[key]);
+    ta.setAttribute("data-arf-field", key);
+    ta.setAttribute("aria-label", label);
+    ta.style.cssText = FIELD + ";resize:vertical;line-height:1.5";
+    ta.addEventListener("input", () => {
+      cfg[key] = ta.value;
+      persist();
+    });
+    // Written at once on the way out, so wandering off mid-sentence keeps it.
+    ta.addEventListener("blur", () => {
+      cfg[key] = ta.value;
+      persist(true);
+      paint();
+    });
+    wrap.appendChild(ta);
+    wrap.appendChild(note(hint));
+    return wrap;
+  }
+
+  function buildRules(): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:10px");
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("The rules it follows"));
+    wrap.appendChild(
+      textBox(
+        "rules",
+        "What to change",
+        "Plain sentences, one per line. Cut filler words. Keep paragraphs under four lines. Nothing is refined until there is something here.",
+        5,
+      ),
+    );
+    wrap.appendChild(
+      textBox(
+        "structureRules",
+        "Structure and formatting",
+        "Optional, and separate because it is a different kind of instruction: layout rather than wording. How dialogue is marked, how long a paragraph runs.",
+        3,
+      ),
+    );
+    return wrap;
+  }
+
+  function buildTryIt(): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:7px");
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("Try it"));
+    wrap.appendChild(
+      note(
+        "Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat.",
+      ),
+    );
+    const ta = document.createElement("textarea");
+    ta.rows = 3;
+    ta.placeholder = "Paste a reply here";
+    ta.setAttribute("data-arf-field", "tryText");
+    ta.setAttribute("aria-label", "Text to try the rules on");
+    ta.style.cssText = FIELD + ";resize:vertical;line-height:1.5";
+    wrap.appendChild(ta);
+
+    const row = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+    const grab = button("Use my last reply", false);
+    grab.addEventListener("click", () => {
+      const t = lastRenderedReply();
+      if (!t) {
+        tryResult = { ok: false, text: "Could not find a reply on screen to read." };
+        paint();
+        return;
+      }
+      ta.value = t;
+      ta.focus();
+    });
+    const go = button("Try it", false);
+    go.disabled = tryBusy;
+    go.style.opacity = tryBusy ? "0.5" : "1";
+    go.addEventListener("click", () => {
+      const text = String(ta.value || "").trim();
+      if (!text) {
+        tryResult = { ok: false, text: "Put some text in the box first." };
+        paint();
+        return;
+      }
+      if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
+        tryResult = { ok: false, text: "Write some rules first, or there is nothing to apply." };
+        paint();
+        return;
+      }
+      tryBusy = true;
+      tryResult = null;
+      persist(true);
+      const id = newId();
+      tryWaiting = id;
+      send({ type: "try_refine", requestId: id, text: text, asUser: false });
+      paint();
+    });
+    row.appendChild(grab);
+    row.appendChild(go);
+    wrap.appendChild(row);
+
+    if (tryBusy) wrap.appendChild(note("Working..."));
+    else if (tryResult)
+      wrap.appendChild(
+        el(
+          "div",
+          "white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:7px 9px;border-radius:8px;" +
+            "border:1px solid " + BORDER + ";background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))" +
+            (tryResult.ok ? "" : ";color:" + MUTED),
+          tryResult.text,
+        ),
+      );
+    return wrap;
+  }
+
+  let tryWaiting: string | null = null;
+
+  function fieldRow(f: Field): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:4px");
+    if (f.type === "bool") {
+      const lab = document.createElement("label");
+      lab.style.cssText =
+        "display:flex;align-items:center;gap:9px;justify-content:space-between;cursor:pointer";
+      lab.appendChild(el("span", "flex:1;font-size:12.5px", f.label));
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !!cfg[f.key];
+      box.setAttribute("data-arf-field", f.key);
+      box.style.cssText = "flex:none;width:17px;height:17px;cursor:pointer";
+      box.addEventListener("change", () => {
+        cfg[f.key] = !!box.checked;
+        persist(true);
+        syncActions();
+      });
+      lab.appendChild(box);
+      wrap.appendChild(lab);
+    } else if (f.type === "pick") {
+      wrap.appendChild(el("div", "font-size:12.5px", f.label));
+      const sel = document.createElement("select");
+      sel.setAttribute("data-arf-field", f.key);
+      sel.setAttribute("aria-label", f.label);
+      sel.style.cssText = FIELD;
+      const opts =
+        f.key === "connectionId"
+          ? [{ value: "", label: "The model I am chatting with" }].concat(
+              connections.map((c) => ({
+                value: c.id,
+                label:
+                  (c.name || c.provider || "Connection") +
+                  (c.model ? " (" + c.model + ")" : "") +
+                  (c.isDefault ? " - default" : ""),
+              })),
+            )
+          : f.options || [];
+      for (const o of opts) {
+        const op = document.createElement("option");
+        op.value = o.value;
+        op.textContent = o.label;
+        sel.appendChild(op);
+      }
+      sel.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
+      sel.addEventListener("change", () => {
+        cfg[f.key] = sel.value;
+        persist(true);
+      });
+      wrap.appendChild(sel);
+    } else {
+      wrap.appendChild(el("div", "font-size:12.5px", f.label));
+      const num = document.createElement("input");
+      num.type = "number";
+      if (f.min != null) num.min = String(f.min);
+      if (f.max != null) num.max = String(f.max);
+      num.value = String(cfg[f.key]);
+      num.setAttribute("data-arf-field", f.key);
+      num.setAttribute("aria-label", f.label);
+      num.style.cssText = FIELD;
+      num.addEventListener("change", () => {
+        let v = Math.round(Number(num.value));
+        if (!Number.isFinite(v)) v = Number((CONFIG as any)[f.key]);
+        if (f.min != null) v = Math.max(f.min, v);
+        if (f.max != null) v = Math.min(f.max, v);
+        cfg[f.key] = v;
+        num.value = String(v);
+        persist(true);
+      });
+      wrap.appendChild(num);
+    }
+    wrap.appendChild(note(f.hint));
+    return wrap;
+  }
+
+  // Set once and left, so it stays folded and out of the way of the rules.
+  function buildFold(): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:9px");
+    wrap.appendChild(rule());
+    const head = el(
+      "div",
+      "display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none",
+    );
+    head.setAttribute("role", "button");
+    head.setAttribute("tabindex", "0");
+    head.setAttribute("aria-expanded", costOpen ? "true" : "false");
+    const caret = el("span", "font-size:10px;color:" + MUTED, costOpen ? "▾" : "▸");
+    head.appendChild(caret);
+    head.appendChild(heading("How the pass runs"));
+    const toggle = () => {
+      costOpen = !costOpen;
+      paint();
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", (e: any) => {
+      if (e && (e.key === "Enter" || e.key === " " || e.key === "Spacebar")) {
+        e.preventDefault();
+        toggle();
+      }
+    });
+    wrap.appendChild(head);
+    if (!costOpen) return wrap;
+
+    wrap.appendChild(
+      note(
+        "A refine is a second model call on every reply, so the first two are where the money and the waiting go. Both default to the cheap answer.",
+      ),
+    );
+    for (const f of COST_FIELDS) wrap.appendChild(fieldRow(f));
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("What it refuses to save"));
+    wrap.appendChild(
+      note(
+        "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the list below says which one fired.",
+      ),
+    );
+    for (const f of LIMIT_FIELDS) wrap.appendChild(fieldRow(f));
+    return wrap;
+  }
+
+  function buildChatSwitch(): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:5px");
+    wrap.setAttribute("data-arf-chat-switch", "1");
+    wrap.appendChild(rule());
+    const top = el("div", "display:flex;align-items:center;gap:9px;justify-content:space-between");
+    top.appendChild(el("span", "flex:1;font-size:12.5px", "This chat"));
+    const known = lastChatId != null;
+    const off = chatIsOff(lastChatId);
+    const act = button(off ? "Turn on here" : "Turn off here", false);
+    act.disabled = !known;
+    act.style.opacity = known ? "1" : "0.45";
+    act.style.cursor = known ? "pointer" : "not-allowed";
+    act.addEventListener("click", () => setChatOff(lastChatId, !off));
+    top.appendChild(act);
+    wrap.appendChild(top);
+    wrap.appendChild(
+      note(
+        !known
+          ? "No chat is open, so there is nothing to switch here."
+          : off
+            ? "Auto Refine is switched off in this chat. Every other chat carries on as it is."
+            : "Leave one chat completely alone while every other chat carries on.",
+      ),
+    );
+    return wrap;
+  }
+
+  function buildActivity(): HTMLElement {
+    const wrap = el("div", "display:flex;flex-direction:column;gap:6px");
+    wrap.appendChild(rule());
+    wrap.appendChild(heading("What it has been doing"));
+    if (!activity.length) {
+      wrap.appendChild(note("Nothing yet."));
+      return wrap;
+    }
+    for (const a of activity) {
+      const row = el("div", "display:flex;gap:8px;font-size:12px;line-height:1.45");
+      row.appendChild(
+        el(
+          "span",
+          "flex:none;color:" + MUTED + ";font-variant-numeric:tabular-nums",
+          new Date(a.at).toTimeString().slice(0, 5),
+        ),
+      );
+      row.appendChild(el("span", "flex:1;min-width:0" + (a.good ? "" : ";color:" + MUTED), a.text));
+      wrap.appendChild(row);
+    }
+    return wrap;
+  }
+
+  // Read off the page at the moment it is asked for, so nothing is held between
+  // replies.
   function lastRenderedReply(): string {
     try {
       if (typeof document === "undefined") return "";
@@ -713,35 +773,34 @@ export function setup(ctx: Ctx, overrides?: any) {
     return "";
   }
 
-  function openSettings() {
-    try {
-      if (!ctx.ui || typeof ctx.ui.showModal !== "function") {
-        toast("This Lumiverse cannot open the settings window.", true);
-        return;
-      }
-      const modal = ctx.ui.showModal({ title: "Auto Refine" });
-      modalHandle = modal;
-      modalBaseline = snapshot();
-      buildBody(modal.root);
-      // The connections are asked for each time the panel opens, since one can
-      // be added or removed without this panel hearing about it.
-      send({ type: "list_connections", requestId: newId() });
-      if (typeof modal.onDismiss === "function")
-        modal.onDismiss(() => {
-          // Nothing sticks unless Save was pressed.
-          if (modalBaseline) Object.assign(cfg, modalBaseline);
-          modalBaseline = null;
-          modalHandle = null;
-          paintChatRow = null;
-          repaintConnections = null;
-          tryWaiting = null;
-        });
-    } catch (e) {
-      log("could not open the settings window");
+  function refineNow() {
+    if (!cfg.enabled) {
+      toast("Auto Refine is switched off.", true);
+      return;
     }
+    if (lastChatId == null) {
+      toast("No chat is open. Open a chat and try again.", true);
+      return;
+    }
+    if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
+      toast("No rules are written yet.", true);
+      log("nothing to do: no rules are written yet");
+      return;
+    }
+    busy = true;
+    paint();
+    send({
+      type: "refine_now",
+      requestId: newId(),
+      chatId: lastChatId,
+      messageId: lastMessageId,
+    });
   }
 
-  // ---- the buttons on the chat ----
+  // ---- the one-tap way in ----
+  // The tab needs the drawer, and the drawer needs room. This is the route that
+  // works on a phone, and it is how somebody refines one reply without opening
+  // anything.
   const actions = new Map<string, any>();
   function dropActions() {
     for (const [, a] of actions) {
@@ -754,117 +813,63 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     actions.clear();
   }
-  function addAction(id: string, label: string, icon: string, onClick: () => void) {
-    if (actions.has(id)) return;
+  function addAction(id: string, label: string, onClick: () => void) {
     try {
       if (!ctx.ui || typeof ctx.ui.registerInputBarAction !== "function") return;
-      const action = ctx.ui.registerInputBarAction({ id: id, label: label, icon: icon });
+      const action = ctx.ui.registerInputBarAction({
+        id: id,
+        label: label,
+        icon: refineIcon(),
+        iconSvg: refineIcon(),
+      });
       const off = action && typeof action.onClick === "function" ? action.onClick(onClick) : null;
       actions.set(id, { action: action, off: off });
     } catch (_) {}
   }
   function syncActions() {
     dropActions();
-    addAction("auto-refine-settings", "Auto Refine settings", refineIcon(), () => openSettings());
-    if (cfg.showRefineButton)
-      addAction("auto-refine-now", "Refine this reply", refineIcon(), () => refineNow());
-  }
-
-  function refineNow() {
-    if (!cfg.enabled) {
-      toast("Auto Refine is switched off.", true);
-      return;
-    }
-    if (lastChatId == null) {
-      toast("No chat is open. Open a chat and try again.", true);
-      return;
-    }
-    if (!String(cfg.rules || "").trim() && !String(cfg.structureRules || "").trim()) {
-      toast("No refinement rules are set up yet.", true);
-      return;
-    }
-    toast("Refining the latest reply...", true);
-    send({
-      type: "refine_now",
-      requestId: newId(),
-      chatId: lastChatId,
-      messageId: lastMessageId,
+    addAction("auto-refine-open", "Auto Refine", () => {
+      try {
+        tab && tab.activate && tab.activate();
+      } catch (_) {}
     });
+    if (cfg.showRefineButton)
+      addAction("auto-refine-now", "Refine the latest reply", () => refineNow());
   }
 
-  // ---- the on-screen panel ----
-  let logEl: HTMLElement | null = null;
-  function syncLog() {
-    if (!cfg.liveLog || !cfg.enabled) {
-      if (logEl) {
-        try {
-          logEl.remove();
-        } catch (_) {}
-        logEl = null;
-        paintLog = null;
-      }
-      return;
-    }
-    if (logEl || typeof document === "undefined") return;
-    const el = document.createElement("div");
-    el.id = "__lvRefineLog";
-    el.setAttribute("data-arf-ui", "1");
-    el.style.cssText =
-      "position:fixed;right:16px;bottom:96px;z-index:2147482000;width:min(320px,calc(100vw - 32px));" +
-      "max-height:40vh;overflow-y:auto;padding:10px 12px;border-radius:10px;" +
-      "font:12px/1.5 var(--lumiverse-font-family,system-ui);" +
-      "background:var(--lumiverse-card-bg-solid,rgb(35,30,48));color:var(--lumiverse-text,#eee);" +
-      "border:1px solid var(--lumiverse-border,rgba(255,255,255,.16));" +
-      "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.35))";
-    document.body.appendChild(el);
-    logEl = el;
-    paintLog = () => {
-      if (!logEl) return;
-      const at = (t: number) => new Date(t).toTimeString().slice(0, 8);
-      logEl.textContent = "";
-      const head = document.createElement("div");
-      head.textContent = "Auto Refine";
-      head.style.cssText = "font-weight:600;margin-bottom:6px";
-      logEl.appendChild(head);
-      for (const l of logLines) {
-        const d = document.createElement("div");
-        d.textContent = at(l.at) + "  " + l.text;
-        d.style.cssText = "margin-bottom:3px";
-        logEl.appendChild(d);
-      }
-    };
-    paintLog();
-  }
-
-  // ---- what the host tells us ----
+  // ---- host events ----
   try {
     const offs = [
       ctx.events.on("CHAT_CHANGED", (p: any) => {
         if (!p) return;
         lastChatId = p.chatId || null;
         lastMessageId = null;
-        if (paintChatRow) paintChatRow();
+        paint();
       }),
       ctx.events.on("CHAT_SWITCHED", (p: any) => {
         if (!p || typeof p.chatId === "undefined") return;
         lastChatId = p.chatId || null;
         lastMessageId = null;
-        if (paintChatRow) paintChatRow();
+        paint();
       }),
       ctx.events.on("CHARACTER_MESSAGE_RENDERED", (p: any) => {
         if (!p) return;
         if (p.chatId) lastChatId = p.chatId;
         if (p.messageId) lastMessageId = p.messageId;
-        if (paintChatRow) paintChatRow();
+        paint();
       }),
       ctx.events.on("USER_MESSAGE_RENDERED", (p: any) => {
         if (p && p.chatId) lastChatId = p.chatId;
-        if (paintChatRow) paintChatRow();
+        paint();
       }),
       ctx.events.on("GENERATION_ENDED", (p: any) => {
         if (!p) return;
         if (p.chatId) lastChatId = p.chatId;
         if (p.messageId) lastMessageId = p.messageId;
+        if (cfg.enabled && cfg.refineOn && !p.error && !chatIsOff(p.chatId)) {
+          busy = true;
+          paint();
+        }
       }),
     ];
     for (const o of offs) if (typeof o === "function") disposers.push(o);
@@ -872,7 +877,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     log("could not listen for replies. Check that the generation permission is granted.");
   }
 
-  // ---- what the backend tells us ----
+  // ---- backend messages ----
   try {
     if (ctx && typeof ctx.onBackendMessage === "function") {
       const off = ctx.onBackendMessage((msg: any) => {
@@ -880,59 +885,80 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (!msg) return;
           if (msg.type === "backend_ready") {
             armBackend();
+            send({ type: "list_connections", requestId: newId() });
             return;
           }
           if (msg.type === "connections") {
             connections = Array.isArray(msg.list) ? msg.list : [];
-            if (repaintConnections) repaintConnections();
+            paint();
             return;
           }
           if (msg.type === "refined") {
+            busy = false;
+            // A refine only happens in the chat the reader is in, so this is
+            // also the chat. Adopted when nothing else has said so yet, or the
+            // panel would hold a refine it could not show anybody.
+            if (msg.chatId != null && lastChatId == null) lastChatId = msg.chatId;
             if (msg.chatId != null && msg.canUndo)
               undoable.set(String(msg.chatId), {
                 messageId: msg.messageId,
                 before: String(msg.before || ""),
                 after: String(msg.after || ""),
               });
-            log("refined a reply");
+            // The badge is the point of the tab being closable: something
+            // happened to your writing and you can see that without opening it.
+            setBadge("1");
+            log("refined a reply", true);
             toast("Reply refined.");
             return;
           }
           if (msg.type === "refine_skipped") {
+            busy = false;
             log("left a reply alone: " + String(msg.why || "no reason given"));
             return;
           }
           if (msg.type === "refine_result") {
+            busy = false;
             if (msg.ok) {
-              log("refined a reply on request");
+              log("refined a reply on request", true);
               toast("Reply refined.", true);
             } else {
               log("could not refine: " + String(msg.why || "no reason given"));
               toast("Not refined: " + String(msg.why || "no reason given"), true);
             }
+            paint();
             return;
           }
           if (msg.type === "try_result") {
-            if (!tryWaiting || tryWaiting.id !== msg.requestId) return;
-            const out = tryWaiting.out;
+            if (tryWaiting !== msg.requestId) return;
             tryWaiting = null;
-            out.textContent = msg.ok
-              ? String(msg.after || "")
-              : "This would not have been saved: " +
-                String(msg.why || "no reason given") +
-                (msg.after ? "\n\nWhat came back:\n" + String(msg.after) : "");
+            tryBusy = false;
+            tryResult = msg.ok
+              ? { ok: true, text: String(msg.after || "") }
+              : {
+                  ok: false,
+                  text:
+                    "This would not have been saved: " +
+                    String(msg.why || "no reason given") +
+                    (msg.after ? "\n\nWhat came back:\n" + String(msg.after) : ""),
+                };
+            paint();
             return;
           }
           if (msg.type === "undo_result") {
             if (msg.ok) {
-              log("put a reply back the way it was");
+              if (lastChatId != null) undoable.delete(String(lastChatId));
+              setBadge(null);
+              log("put a reply back the way it was", true);
               toast("Put back.", true);
             } else {
-              toast("Could not put it back: " + String(msg.why || ""), true);
+              log("could not put it back: " + String(msg.why || "no reason given"));
             }
+            paint();
             return;
           }
           if (msg.type === "confirm_refine") {
+            busy = false;
             askToSave(msg);
             return;
           }
@@ -942,9 +968,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   } catch (_) {}
 
-  // The confirmation, when the reader asked to see every rewrite first. Built
-  // as a modal rather than a browser confirm so the two versions can be read
-  // side by side, which is the only way to answer the question honestly.
+  // The one modal in the extension, and it earns it: this is a question that
+  // has to be answered before anything is written, which is exactly the moment
+  // a modal is for. Everything else lives in the tab.
   function askToSave(msg: any) {
     try {
       if (!ctx.ui || typeof ctx.ui.showModal !== "function") return;
@@ -952,27 +978,24 @@ export function setup(ctx: Ctx, overrides?: any) {
       const root = modal.root as HTMLElement;
       root.innerHTML = "";
       root.style.cssText =
-        "display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow-y:auto;" +
+        "display:flex;flex-direction:column;gap:9px;max-height:70vh;overflow-y:auto;" +
         "font:13px var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,#eee)";
       const pane = (title: string, text: string) => {
-        const h = document.createElement("div");
-        h.textContent = title;
-        h.style.cssText = "font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:" + MUTED;
-        const b = document.createElement("div");
-        b.textContent = text;
-        b.style.cssText =
-          "white-space:pre-wrap;line-height:1.5;padding:8px 10px;border-radius:8px;" +
-          "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
-          "border:1px solid var(--lumiverse-border,rgba(255,255,255,.16))";
-        root.appendChild(h);
-        root.appendChild(b);
+        root.appendChild(heading(title));
+        root.appendChild(
+          el(
+            "div",
+            "white-space:pre-wrap;line-height:1.5;padding:8px 10px;border-radius:8px;" +
+              "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));border:1px solid " + BORDER,
+            text,
+          ),
+        );
       };
       pane("As it is now", String(msg.before || ""));
       pane("After the refine", String(msg.after || ""));
-      const bar = document.createElement("div");
-      bar.style.cssText = "display:flex;gap:8px;flex-wrap:wrap";
-      const yes = btn("Save it", true);
-      const no = btn("Leave it alone", false);
+      const bar = el("div", "display:flex;gap:8px;flex-wrap:wrap");
+      const yes = button("Save it", true);
+      const no = button("Leave it alone", false);
       yes.addEventListener("click", () => {
         send({
           type: "apply_refine",
@@ -998,33 +1021,48 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // ---- start ----
+  try {
+    if (ctx.ui && typeof ctx.ui.registerDrawerTab === "function") {
+      tab = ctx.ui.registerDrawerTab({
+        id: "auto-refine",
+        title: "Auto Refine",
+        shortName: "Refine",
+        description: "Rewrite each reply to follow rules you write, and put one back if you disagree",
+        // What the command palette searches, written for somebody who does not
+        // already know the extension by name.
+        keywords: ["refine", "rewrite", "polish", "edit", "prose", "style", "rules"],
+        iconSvg: refineIcon(),
+      });
+      disposers.push(() => {
+        try {
+          tab && tab.destroy && tab.destroy();
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
+
   syncActions();
-  syncLog();
   armBackend();
+  send({ type: "list_connections", requestId: newId() });
   log("ready v" + VERSION);
+  paint();
 
   return () => {
-    tornDown = true;
-    dropActions();
-    if (logEl) {
-      try {
-        logEl.remove();
-      } catch (_) {}
-      logEl = null;
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
     }
+    dropActions();
     for (const d of disposers.splice(0)) {
       try {
         d();
       } catch (_) {}
     }
-    try {
-      if (modalHandle && modalHandle.dismiss) modalHandle.dismiss();
-    } catch (_) {}
-    modalHandle = null;
+    tab = null;
   };
 }
 
-// The defaults and the form built from them, so a check can hold the two
-// against each other. A setting in one and not the other is the fault this
-// catches: it looks fine and quietly never loads.
-export const __testing = { CONFIG, SCHEMA, RUNS, refineIcon, VERSION };
+// The defaults and the fields built from them, so a check can hold the two
+// against each other. A setting in one and not the other looks fine and quietly
+// never loads.
+export const __testing = { CONFIG, COST_FIELDS, LIMIT_FIELDS, refineIcon, VERSION };
