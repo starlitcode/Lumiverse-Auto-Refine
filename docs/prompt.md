@@ -88,6 +88,8 @@ What makes this worth having rather than hopeful is the last step. **If a token 
 
 What gets protected: fenced code, inline code, images, and every HTML tag.
 
+Protection catches what it can find. The prompts that ship with it also carry a **What not to touch** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
+
 **Never send the model's thinking** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was.
 
 ## Sampler settings
@@ -117,6 +119,12 @@ It is built by the same function a real refine uses, so it cannot become a nice 
 If no reply can be found it still builds, with a stand-in where your message would go, and says so. That is the useful case for checking a layout before there is a chat to try it on.
 
 **Copy it** puts the whole thing on your clipboard, which is the thing to paste when asking why a refine did something strange.
+
+## Starting a block from nothing
+
+A new block is empty. The prompts that ship with it use XML tags because that is what works, but a tag is a style rather than a rule, and a new block should not arrive already written in somebody else's.
+
+**Expand** opens a block in an editor the size of the screen, which is where a paragraph is actually comfortable to write. It does not put the cursor in the box: focusing a textarea is what raises the keyboard on a phone, and it would cover the thing you just opened.
 
 ## Presets
 

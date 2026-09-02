@@ -68,6 +68,7 @@ function host(
     loreFail?: string;
     noLore?: boolean;
     macroFail?: string;
+    stream?: boolean;
   } = {},
 ) {
   const handlers: Record<string, Array<(p: any) => any>> = {};
@@ -78,6 +79,7 @@ function host(
   const msgs = messages.map((m) => ({ ...m }));
   let turn = 0;
 
+  let chatBroken = false;
   const spindle = {
     on: (name: string, fn: any) => {
       (handlers[name] = handlers[name] || []).push(fn);
@@ -95,6 +97,20 @@ function host(
         turn++;
         return { content: answer, finish_reason: "stop", usage: {} };
       },
+      // Only present when the check asks for it, since a host without it is
+      // the case the fallback exists for.
+      quietStream: opts.stream
+        ? async (req: any) => {
+            asked.push(req);
+            if (opts.fail) throw new Error(opts.fail);
+            const answer = answers[Math.min(turn, answers.length - 1)];
+            turn++;
+            return (async function* () {
+              // Handed over in pieces, the way a provider does.
+              for (let i = 0; i < answer.length; i += 12) yield answer.slice(i, i + 12);
+            })();
+          }
+        : undefined,
     },
     connections: {
       list: async () => [
@@ -144,7 +160,10 @@ function host(
       },
     },
     chat: {
-      getMessages: async () => msgs.map((m) => ({ ...m })),
+      getMessages: async () => {
+        if (chatBroken) throw new Error("the host went away");
+        return msgs.map((m) => ({ ...m }));
+      },
       updateMessage: async (_chatId: string, id: string, patch: any) => {
         const m = msgs.find((x) => x.id === id);
         if (!m) return;
@@ -194,6 +213,10 @@ function host(
       for (const fn of handlers.GENERATION_ENDED || []) await fn(p);
     },
     skipped: () => sent.filter((m) => m.type === "refine_skipped").map((m) => m.why),
+    // Makes the host fail the way a host that went away does.
+    breakChat: () => {
+      chatBroken = true;
+    },
   };
 }
 
@@ -871,6 +894,75 @@ describe("the answer it asks for", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(said(h)).not.toContain("<refined>");
+  });
+});
+
+describe("when something goes wrong inside", () => {
+  test("a handler that throws still answers, so the panel is not left waiting", async () => {
+    // getMessages throwing is the shape of a host that went away mid-refine.
+    const h = host(chat(), ["x"]);
+    await h.front({ type: "set_settings", settings: RULES });
+    (h as any).breakChat();
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const done = h.sent.find((m) => m.type === "refine_result");
+    expect(done).toBeTruthy();
+    expect(done.ok).toBe(false);
+  });
+
+  test("and the automatic pass answers too rather than going silent", async () => {
+    const h = host(chat(), ["x"]);
+    await h.front({ type: "set_settings", settings: RULES });
+    (h as any).breakChat();
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.sent.some((m) => m.type === "refine_skipped")).toBe(true);
+  });
+
+  test("a preview still builds when the chat cannot be read", async () => {
+    // Not a failure: a preview is about the shape of the request, and it is
+    // more useful with a stand-in message than not at all. It says which it is.
+    const h = host(chat(), ["x"]);
+    await h.front({ type: "set_settings", settings: RULES });
+    (h as any).breakChat();
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const got = h.sent.find((m) => m.type === "prompt_preview");
+    expect(got.ok).toBe(true);
+    expect(got.real).toBe(false);
+  });
+});
+
+describe("watching it arrive", () => {
+  test("a streaming connection reports as it writes", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"], {}, chat(), {
+      stream: true,
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const said = h.sent.filter((m) => m.type === "refine_progress");
+    expect(said.some((m) => m.stage === "writing")).toBe(true);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a connection that cannot stream still refines", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and streaming switched off falls back to the plain call", async () => {
+    const h = await armed(
+      ["<refined>She stepped through and the cold hit her.</refined>"],
+      { streamProgress: false },
+      chat(),
+      { stream: true },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.sent.filter((m) => m.type === "refine_progress" && m.stage === "writing").length).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 });
 

@@ -35,6 +35,14 @@ First release.
 - **The model's own thinking is never sent.** It is cut off before the refine and put back exactly as it was, so a rewrite cannot quietly edit what a model worked out in a place nobody checks.
 - **Every refine can be put back, not just the last one.** A second refine in the same chat used to take away the way back from the first without saying so.
 - **A button on every message**, off by default, in the message's own row of actions next to Edit and Copy. After a refine the same button becomes an undo.
+- **A search that looks across every tab**, not just the one you are on, with folds opened so nothing hides from it.
+- **Expand**, on every block and on the Try it box, opening the text in an editor the size of the screen. It does not focus the box, so no keyboard jumps up on a phone and covers what you opened.
+- **Import, export and reset all work in parts.** Your prompt, context, model, samplers, limits, alerts, buttons, switches, presets and chats-off, each with its own switch in all three. Export only your prompt, take only somebody's samplers, or start your prompt again without losing your connection.
+- **The bug report is yours to choose and yours to read.** Six parts you can switch on and off, and a Read and edit it first that opens the whole thing so you can take out anything you would rather not post. What your blocks say is never in it, only their names, roles and macros.
+- **The live view names the stage.** Asking, thinking, writing with a character count when your connection streams, then checking, with a clock and a countdown to the timeout. The dot breathes and the floating button pulses while something is running.
+- **Streaming**, on by default and falling back on its own where a connection cannot. The answer is judged when it is complete either way; this only decides whether you can watch it arrive.
+- **A What not to touch block in all four prompts**, covering the things protection cannot find: stat blocks, trackers, a translation line beside the original, names and numbers.
+- **The floating button is round again**, squares itself against whatever the host gives it, and does more: one tap refines or puts the last refine back, holding it opens a menu.
 - **The panel is six tabs, not one column.** Rules, Prompt, Model, Limits, Log and Setup, with the switch, the refine button and the last refine above them so they are there whichever tab you left open. Each group of settings sits in a box of its own.
 - **A preview of the request.** Show me the request builds the real thing and shows it message by message, with roles and sizes, without calling a model or charging anything. It is built by the same code a refine uses, so it cannot drift into describing something else.
 - **The lorebook goes in the prompt.** The entries the chat has active, as the host works them out, so a rewrite does not contradict what the world has already established.

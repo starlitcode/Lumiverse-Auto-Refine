@@ -92,6 +92,13 @@ function replyTo(userId: string | undefined, msg: any) {
   } catch (_) {}
 }
 
+// Progress, which is never worth failing a refine over.
+function tell(userId: string | undefined, msg: any) {
+  try {
+    replyTo(userId, msg);
+  } catch (_) {}
+}
+
 function say(level: 'info' | 'warn', text: string) {
   try { spindle.log[level]('auto-refine: ' + text); } catch (_) {}
 }
@@ -264,6 +271,9 @@ const DEFAULT_BLOCKS: Block[] = [
 // puts the rewrite between the tags, and taking what is between them is exact
 // where reading around a preamble is guesswork.
 let wrapOutput = true;
+// Whether to stream the refine so the panel can show it arriving. The answer is
+// the same either way; this only decides whether anybody can watch it.
+let streamProgress = true;
 const OUT_TAG = 'refined';
 const OUTPUT_NOTE =
   'Put the rewritten message between <' + OUT_TAG + '> and </' + OUT_TAG + '>. ' +
@@ -797,6 +807,46 @@ async function askModel(
     const think = reasoningFor();
     if (think) req.reasoning = think;
     if (controller) req.signal = controller.signal;
+
+    // Streamed when the host can, and not otherwise. Nothing about the refine
+    // changes either way: the whole answer is judged when it is complete. What
+    // streaming buys is the panel being able to say "writing, 300 characters"
+    // instead of sitting silent for forty seconds, which is the difference
+    // between slow and broken.
+    const canStream =
+      streamProgress &&
+      spindle.generate &&
+      typeof spindle.generate.quietStream === 'function';
+    if (canStream) {
+      let text = '';
+      let said = 0;
+      try {
+        const flow = await spindle.generate.quietStream(req);
+        for await (const bit of flow) {
+          const piece =
+            typeof bit === 'string'
+              ? bit
+              : String((bit && (bit.content || bit.delta || bit.text)) || '');
+          if (!piece) continue;
+          text += piece;
+          // Reported at most a few times a second: a token-by-token message to
+          // the frontend would cost more than the refine.
+          const now = Date.now();
+          if (now - said > 300) {
+            said = now;
+            tell(userId, { type: 'refine_progress', stage: 'writing', chars: text.length });
+          }
+        }
+        return { content: text, error: '' };
+      } catch (e: any) {
+        // A host that has the method but cannot stream this connection. Fall
+        // through to the plain call rather than failing the refine.
+        if (e && e.name === 'AbortError') throw e;
+        say('warn', 'streaming failed, falling back: ' + ((e && e.message) || 'no reason given'));
+      }
+    }
+
+    tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
     const result = await spindle.generate.quiet(req);
     return { content: String((result && result.content) || ''), error: '' };
   } catch (e: any) {
@@ -882,8 +932,10 @@ async function refineMessage(
   const armed = shield(split.body);
   if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
 
+  tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
   const answer = await askModel(armed.text, m.role === 'user', scene, userId);
   if (answer.error) return { ok: false, why: answer.error };
+  tell(userId, { type: 'refine_progress', stage: 'checking' });
 
   // Judged against the text that was actually sent, so a message that is half
   // markup is not called "too short" for the tokens standing in for it.
@@ -984,7 +1036,15 @@ try {
       if (!messageId) return;
       if (refined.has(String(messageId))) return;
 
-      const done = await refineMessage(p.chatId, messageId, p.userId, false);
+      let done: { ok: boolean; why: string };
+      try {
+        done = await refineMessage(p.chatId, messageId, p.userId, false);
+      } catch (e: any) {
+        // A throw here used to end the whole handler, so the panel sat busy
+        // until the page was reloaded.
+        done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
+        say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
+      }
       if (!done.ok && done.why) {
         replyTo(p.userId, {
           type: 'refine_skipped',
@@ -1048,6 +1108,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       protectOn = s.protectOn !== false;
       protectThinking = s.protectThinking !== false;
       wrapOutput = s.wrapOutput !== false;
+      streamProgress = s.streamProgress !== false;
       return;
     }
 
@@ -1287,7 +1348,29 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       return;
     }
   } catch (e: any) {
-    say('warn', 'a message from the panel could not be handled: ' + ((e && e.message) || String(e)));
+    const why = (e && e.message) || String(e);
+    say('warn', 'a message from the panel could not be handled: ' + why);
+    // The panel is waiting. Swallowing this into a log line left it spinning
+    // with no way to know the answer was never coming, so whatever it asked
+    // for is answered with the failure.
+    try {
+      const kind =
+        payload && payload.type === 'try_refine'
+          ? 'try_result'
+          : payload && payload.type === 'preview_prompt'
+            ? 'prompt_preview'
+            : payload && payload.type === 'undo_refine'
+              ? 'undo_result'
+              : payload && payload.type === 'active_chat'
+                ? 'active_chat'
+                : 'refine_result';
+      replyTo(userId, {
+        type: kind,
+        requestId: payload && payload.requestId,
+        ok: false,
+        why: 'something went wrong inside the extension: ' + why,
+      });
+    } catch (_) {}
   }
 });
 

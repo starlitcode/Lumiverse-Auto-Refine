@@ -6,6 +6,10 @@ It is a tab rather than a window on purpose. This is something you keep open and
 
 **There is no Save button.** A tab has no moment where it closes, so a "nothing sticks until you press Save" contract would have nothing to hang on. Everything saves as you change it. That is safe here because almost nothing on the tab is destructive on its own: a block is only text until a reply arrives, and the switches that make something happen are switches, which is the control people expect to act at once. The two that do throw something away, deleting a preset and starting again, ask first.
 
+## Finding a setting
+
+The search box above the tabs looks across every one of them, not just the one you are standing on. A setting you cannot remember the home of is exactly the one you are searching for. Matches are grouped by the tab they live on, folds are opened so nothing hides from it, and the tab strip steps out of the way while a search is running.
+
 ## Above the tabs
 
 Three things never move, whichever tab you left open, because they are what you came for.
@@ -16,14 +20,14 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Prompt
 
-- **Your prompt** is the whole request, block by block. Rename them, reorder them, switch them off, change the role each is sent as, write your own. In [How the prompt is built](prompt.md).
+- **Your prompt** is the whole request, block by block. Rename them, reorder them, switch them off, change the role each is sent as, write your own. **Expand** opens one in an editor the size of the screen, and does not focus the box, so no keyboard jumps up on a phone. In [How the prompt is built](prompt.md).
 - **Macros you can use** is the list of what a block can carry, with a tap to copy each one.
 - **Presets** save a whole setup under a name. Four ship with the extension and work as they stand, in [Presets](prompt.md#presets).
 
 ## Context
 
 - **Messages of run-up to send** is how much of the chat the `{{history}}` macro carries.
-- **See what gets sent** builds the real request and shows it to you, message by message, without calling a model.
+- **See what gets sent** builds the real request and shows it to you, message by message, without calling a model. **Raw** shows the same thing as the JSON that goes over the wire, which is what to paste when asking somebody why a request did something.
 - **Try it** runs one refine on pasted text and shows what comes back, without writing anything to your chat.
 
 ## Model
@@ -37,6 +41,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 - **Hide markup from the model** and **Never send the model's thinking** keep a rewrite away from what is not prose, in [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
 - **Ask for the answer in tags** is what makes a model's preamble harmless instead of fatal, in [The answer it asks for](prompt.md#the-answer-it-asks-for).
+- **Watch the rewrite arrive** streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved.
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits, in [What it refuses to save](guardrails.md).
 - **Keep what a refine replaced** holds the original so you can put it back.
 - **Ask before saving a refine** shows you both versions and waits for a yes.
@@ -44,16 +49,16 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Log
 
-- **Right now** is the live view: what it is doing, how long the current refine has been running, and the counts for this session. It updates in place rather than repainting the panel under you.
+- **Right now** is the live view. It names the stage rather than just saying busy: asking, thinking, writing with a character count when your connection streams, then checking. The clock runs, and past eight seconds it also says how long is left before the timeout gives up. It writes into the line in place rather than repainting the panel under you, and the dot beside it breathes while something is running.
 - **What it has been doing** is the running list, newest first.
-- **Reporting a problem** copies everything somebody would otherwise have to ask you for. It carries settings and counts, never your rules or your writing, so it is safe to paste in public.
+- **Reporting a problem** copies everything somebody would otherwise have to ask you for. **What it carries** decides which parts go in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser. What your blocks actually say is never in it, only their names, roles and macros, so it is safe to paste in public. **Read and edit it first** opens the whole thing so you can take out anything you would rather not post before it is copied.
 
 ## Setup
 
 - **This chat** leaves one chat completely alone while every other chat carries on. It is written down in your browser, so it survives a reload, and it is a list of chat ids and nothing else.
 - **When a refine lands** is how you find out: a pop-up, a sound, or neither. The sound is yours: attach a file or paste a link. Nothing is shipped with the extension, so the switch on its own is silent and says so.
-- **Ways to reach it** are three optional ways in, all off by default. **A button on every message** puts a refine button in each message's own row of actions, next to Edit and Copy, and after a refine that same button becomes an undo. **A floating button** puts a round button over the chat that refines the latest reply in one tap, and needs the interface panels permission. **Refine what I am typing** adds a row to the chat input's Extras menu that rewrites the text in your input box before you send it.
-- **Your whole setup** exports it to a file, imports one back, and puts everything back to its defaults. In [Import and export](prompt.md#import-and-export) and [Starting again](prompt.md#starting-again).
+- **Ways to reach it** are three optional ways in, all off by default. **A button on every message** puts a refine button in each message's own row of actions, next to Edit and Copy, and after a refine that same button becomes an undo. **A floating button** puts a round button over the chat: one tap refines the latest reply, or puts the last one back when there is one to put back, and holding it or right clicking opens a menu with everything else. It pulses while a refine is running, which is often the only part of the extension on screen. It needs the interface panels permission. **Refine what I am typing** adds a row to the chat input's Extras menu that rewrites the text in your input box before you send it.
+- **Your whole setup** exports to a file, imports one back, and puts things back to their defaults. All three work in the same list of parts: your prompt, context, model, samplers, limits, alerts, buttons, switches, presets and the chats you switched off. **What goes in the file**, **What to take from a file** and **What to put back** each have their own choice, so you can export only your prompt, take only somebody's samplers, or start your prompt again without losing your connection. In [Import and export](prompt.md#import-and-export) and [Starting again](prompt.md#starting-again).
 
 ---
 

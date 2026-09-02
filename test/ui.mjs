@@ -741,9 +741,7 @@ console.log("\nstarting again");
     // The stub host has no confirm dialog, which is the path that asks in the
     // panel instead. One press arms it, the second does it.
     await page.evaluate(() => {
-      Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => /^Reset all settings$/.test(b.textContent.trim()))
-        .click();
+      document.querySelector('#drawer [data-arf-reset]').click();
     });
     await settle(page);
     const still = await page.evaluate(
@@ -754,9 +752,7 @@ console.log("\nstarting again");
     ok("it asks first", /Press it again/.test(asks));
 
     await page.evaluate(() => {
-      Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => /^Reset all settings$/.test(b.textContent.trim()))
-        .click();
+      document.querySelector('#drawer [data-arf-reset]').click();
     });
     await settle(page);
     const after = await page.evaluate(() =>
@@ -843,6 +839,159 @@ console.log("\nthe extras, which are off until asked for");
     ok("with no {{message}} in the prompt, nothing is sent and the draft is untouched", asked === 0);
     },
   );
+}
+
+console.log("\nsearch");
+{
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-field="hunt"]');
+      box.value = "temperature";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await settle(page);
+    const found = await page.evaluate(() => {
+      const body = document.querySelector("#drawer .arf-body");
+      return { text: body.textContent, cards: body.querySelectorAll(".arf-card").length };
+    });
+    ok("it finds a setting from another tab", /Samplers/.test(found.text) && found.cards >= 1);
+
+    // The tab strip goes while searching: what is shown is from every tab, so
+    // there is no tab to be standing on.
+    const strip = await page.evaluate(() => !!document.querySelector("#drawer .arf-tabs"));
+    ok("the tab strip steps out of the way", !strip);
+
+    await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-field="hunt"]');
+      box.value = "zzzznothing";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await settle(page);
+    const empty = await page.evaluate(() =>
+      document.querySelector("#drawer .arf-body").textContent,
+    );
+    ok("and says so when nothing matched", /Nothing matched/.test(empty));
+  });
+}
+
+console.log("\nthe bigger editor");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => b.textContent.trim() === "Expand")
+        .click();
+    });
+    await settle(page);
+    const open = await page.evaluate(() => {
+      const over = document.querySelector(".arf-over");
+      const ta = over && over.querySelector("textarea");
+      return {
+        there: !!over,
+        filled: ta ? ta.value.length > 0 : false,
+        // Focusing a textarea is what raises the keyboard on a phone.
+        focused: document.activeElement === ta,
+      };
+    });
+    ok("it opens with the block's text in it", open.there && open.filled);
+    ok("and does not focus the box, so no keyboard pops up", !open.focused);
+
+    await page.evaluate(() => {
+      const ta = document.querySelector(".arf-over textarea");
+      ta.value = "edited in the big editor";
+      Array.from(document.querySelectorAll(".arf-over button"))
+        .find((b) => b.textContent.trim() === "Done")
+        .click();
+    });
+    await settle(page);
+    const saved = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings.blocks.some((b) => b.text === "edited in the big editor");
+    });
+    ok("Done writes it back", saved);
+    const shut = await page.evaluate(() => !document.querySelector(".arf-over"));
+    ok("and closes", shut);
+  });
+  ok("no errors in the big editor", errors.length === 0, errors.join("\n         "));
+}
+
+console.log("\nchoosing what goes where");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    // Switch off the prompt for export, then check the file that comes out.
+    await page.evaluate(() => {
+      const fold = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
+        /What goes in the file/.test(h.textContent),
+      );
+      fold.click();
+    });
+    await settle(page);
+    const boxes = await page.evaluate(
+      () => document.querySelectorAll('#drawer [data-arf-part^="exportParts:"]').length,
+    );
+    ok("export offers every part", boxes >= 9, "found " + boxes);
+
+    await page.evaluate(() => {
+      const one = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
+      one.checked = false;
+      one.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    const kept = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings.exportParts;
+    });
+    ok("and remembers what you switched off", kept && kept.prompt === false);
+
+    // Reset offers the same parts, and refuses to run with none chosen.
+    await page.evaluate(() => {
+      const fold = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
+        /What to put back/.test(h.textContent),
+      );
+      fold.click();
+    });
+    await settle(page);
+    await page.evaluate(() => {
+      document
+        .querySelector('#drawer [data-arf-picker="resetParts"] [data-arf-pick="none"]')
+        .click();
+    });
+    await settle(page);
+    const off = await page.evaluate(() => {
+      const btn = document.querySelector("#drawer [data-arf-reset]");
+      return { disabled: btn.disabled, label: btn.textContent };
+    });
+    ok("reset with nothing chosen cannot be pressed", off.disabled, off.label);
+  });
+}
+
+console.log("\nthe raw view");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
+      window.__fromBackend({
+        type: "prompt_preview",
+        requestId: id,
+        ok: true,
+        real: true,
+        messages: [{ role: "system", content: "the instruction" }],
+        parameters: { temperature: 0.4 },
+        connectionId: "c-fast",
+        reasoning: { source: "off" },
+      });
+    });
+    await settle(page);
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="flip"]').click());
+    await settle(page);
+    const raw = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("raw shows the request as data", /"messages"/.test(raw) && /"temperature": 0.4/.test(raw));
+    ok("with the connection it goes to", /c-fast/.test(raw));
+  });
 }
 
 await browser.close();
