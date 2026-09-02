@@ -424,28 +424,103 @@ const TOKEN_ANY = /\[\[AR(\d+)\]\]/g;
 const INLINE_OK = /^<\/?(?:i|b|em|strong|u|s|small|sub|sup|mark|q|code)>$/i;
 
 const GUARDED: RegExp[] = [
-  /```[\s\S]*?```/g,               // fenced code
-  /`[^`\n]+`/g,                     // inline code
-  /!\[[^\]]*\]\([^)]*\)/g,           // an image
-  /\[[^\]]*\]\([^)\s]+\)/g,           // a link, target and all
-  /<!--[\s\S]*?-->/g,               // a comment
-  /<\/?[a-zA-Z][^<>]*>/g,           // every other tag, checked below
+  /```[\s\S]*?```/g,                     // fenced code
+  /~~~[\s\S]*?~~~/g,                     // the other fence some cards use
+  // Braces are on purpose left alone. A macro in a reply is already safe,
+  // because ours are filled in after the host's pass, so it reaches the model
+  // as the characters somebody typed. Hiding it as well would take a visible
+  // thing out of the prose for no gain, and anyone who wants it hidden can add
+  // the pattern themselves.
+  /`[^`\n]+`/g,                           // inline code
+  /!\[[^\]]*\]\([^)]*\)/g,                 // an image
+  /\[[^\]]*\]\([^)\s]+\)/g,                 // a link, target and all
+  /<!--[\s\S]*?-->/g,                     // a comment
+  /\[\[[^\]\n]{1,120}\]\]/g,               // wiki-style brackets
+  /【[^】\n]{0,200}】/g,                    // the bracket a lot of trackers use
+  /\|\|[^|\n]{1,200}\|\|/g,                 // a spoiler bar
+  /^[ \t]*\|.*\|[ \t]*$/gm,               // a table row, which is a grid and not prose
+  /&[a-zA-Z]{2,10};|&#\d{1,5};/g,         // an HTML entity, which models like to "fix"
+  /\bhttps?:\/\/[^\s<>"')\]]+/g,           // a bare URL
+  /<\/?[a-zA-Z][^<>]*>/g,                 // every other tag, checked below
 ];
+
+// Extra patterns the reader wrote, and patterns that keep a region visible even
+// when one of the above matched it.
+//
+// Added to the built-in list instead of replacing it. Replacing is how somebody
+// ends up with one pattern of their own and none of the defaults, and finds out
+// when a rewrite eats a code block. What is missing here is almost always one
+// more shape, not a different set.
+let shieldAdd: RegExp[] = [];
+let shieldKeep: RegExp[] = [];
+
+// Compiled here so a bad pattern is caught once, at the moment it is saved,
+// instead of throwing on every refine. Anything that matches the empty string
+// is dropped: it would match at every position and turn the message into
+// tokens.
+function makePatterns(raw: any, cap: number): { list: RegExp[]; bad: string[] } {
+  const list: RegExp[] = [];
+  const bad: string[] = [];
+  for (const line of String(raw == null ? '' : raw).split(/\n/)) {
+    const src = line.trim();
+    if (!src) continue;
+    if (list.length >= cap) break;
+    if (src.length > 400) {
+      bad.push(src.slice(0, 40) + ' (too long)');
+      continue;
+    }
+    let re: RegExp;
+    try {
+      re = new RegExp(src, 'gi');
+    } catch (e: any) {
+      bad.push(src.slice(0, 40) + ' (' + ((e && e.message) || 'not a pattern') + ')');
+      continue;
+    }
+    try {
+      re.lastIndex = 0;
+      const hit = re.exec('');
+      if (hit && hit[0] === '') {
+        bad.push(src.slice(0, 40) + ' (matches nothing, so it would match everywhere)');
+        continue;
+      }
+    } catch (_) {}
+    re.lastIndex = 0;
+    list.push(re);
+  }
+  return { list: list, bad: bad };
+}
 
 interface Shield {
   text: string;
   parts: string[];
 }
 
+// Whether a match is one the reader asked to keep visible. An exclude pattern
+// wins over every include, which is what makes it useful: the built-in tag rule
+// is broad on purpose, and this is how somebody narrows it without losing it.
+function keptVisible(hit: string): boolean {
+  for (const re of shieldKeep) {
+    try {
+      re.lastIndex = 0;
+      if (re.test(hit)) return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
 function shield(text: string): Shield {
   if (!protectOn) return { text: text, parts: [] };
   const parts: string[] = [];
   let out = text;
-  for (const rule of GUARDED) {
+  // The reader's own go first. A pattern written for a particular card is more
+  // specific than the general rules, and whichever matches first owns the
+  // region, so specific before general is the order that does what was meant.
+  for (const rule of shieldAdd.concat(GUARDED)) {
     out = out.replace(rule, (hit) => {
       // Bare inline formatting is left where it is, unless the reader asked
       // for it to be hidden too.
       if (!protectInline && INLINE_OK.test(hit)) return hit;
+      if (keptVisible(hit)) return hit;
       // A cap, so a message that is mostly markup does not turn into a wall of
       // tokens the model cannot read around.
       if (parts.length >= 60) return hit;
@@ -544,6 +619,45 @@ function thinkWraps(): RegExp[] {
     // The named pair some builds use instead of a tag name.
     /^\s*<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>\s*/i,
   ];
+}
+
+// The same wrappers, taken out of the model's own answer wherever they sit.
+//
+// Different job from splitThinking, which holds back the working already in the
+// passage. This one is about the refiner's: a model that reasons often opens
+// with a think block, and while the <REFINED> tags catch that by ignoring
+// everything outside them, two cases got through. With the tags switched off
+// the whole answer is the rewrite, working and all. And a model that puts its
+// working inside the tags had it saved into the chat.
+let stripAnswerThinking = true;
+
+function stripThinkingFrom(text: string): string {
+  if (!stripAnswerThinking) return text;
+  const alt = thinkNames().join('|');
+  let t = String(text);
+  try {
+    // Closed pairs first, in each of the four shapes.
+    if (t.indexOf('</') >= 0)
+      t = t.replace(new RegExp('<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>', 'gi'), '');
+    if (t.indexOf('[/') >= 0)
+      t = t.replace(
+        new RegExp('\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]', 'gi'),
+        '',
+      );
+    if (t.indexOf('|>') >= 0)
+      t = t.replace(
+        new RegExp('<\\|(?:' + alt + ')\\|?>[\\s\\S]*?<\\|?\\/?(?:' + alt + ')\\|?>', 'gi'),
+        '',
+      );
+    t = t.replace(/<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>/gi, '');
+    // An opener with nothing closing it, which is working that ran to the end.
+    // Only from the front: cutting from an opener in the middle would throw
+    // away a rewrite that merely mentions the word.
+    t = t.replace(new RegExp('^\\s*<\\|?(?:' + alt + ')\\|?>[\\s\\S]*$', 'i'), '');
+  } catch (_) {
+    return text;
+  }
+  return t.trim();
 }
 
 function splitThinking(text: string): { head: string; body: string } {
@@ -842,7 +956,7 @@ function judge(answer: any, original: string): Verdict {
 
 function judgeInner(answer: any, original: string): Verdict {
   const raw = String(answer == null ? '' : answer);
-  const text = unwrapQuotes(unfence(raw)).trim();
+  const text = unwrapQuotes(unfence(stripThinkingFrom(raw))).trim();
   const orig = original.trim();
 
   if (!text) return { ok: false, text: '', why: 'the model sent nothing back' };
@@ -1655,6 +1769,18 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       protectOn = s.protectOn !== false;
       protectThinking = s.protectThinking !== false;
       setThinkTags(s.thinkTags);
+      stripAnswerThinking = s.stripAnswerThinking !== false;
+      {
+        const add = makePatterns(s.shieldAdd, 30);
+        const keep = makePatterns(s.shieldKeep, 30);
+        shieldAdd = add.list;
+        shieldKeep = keep.list;
+        const bad = add.bad.concat(keep.bad);
+        // Said once, when it is saved. A pattern that cannot compile is a typo
+        // the reader can fix, and silently ignoring it is how somebody believes
+        // a region is shielded when nothing is shielding it.
+        if (bad.length) replyTo(userId, { type: 'shield_bad', patterns: bad });
+      }
       guardRefusal = s.guardRefusal !== false;
       guardPreamble = s.guardPreamble !== false;
       guardSoften = s.guardSoften !== false;

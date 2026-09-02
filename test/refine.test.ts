@@ -1668,3 +1668,122 @@ describe("a prompt built to be cached", () => {
     expect(cut(a).length).toBeGreaterThan(200);
   });
 });
+
+// The built-in shield covers the shapes that turn up everywhere. What a
+// particular card prints is the reader's to name, so their patterns are added
+// to the list instead of replacing it.
+describe("shielding what the built-in rules miss", () => {
+  const withScaffold = (body: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: body },
+  ];
+
+  test("a table row is hidden, because a grid is not prose", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      {},
+      withScaffold("| HP | 12/20 |\nShe stepped through and, suddenly, the cold just hit her."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("12/20");
+  });
+
+  test("and a bare URL, which a rewrite likes to tidy", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      {},
+      withScaffold("See https://example.com/a_b_c. She stepped through and, suddenly, the cold just hit her."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("example.com");
+  });
+
+  test("a shape of the reader's own is hidden once they name it", async () => {
+    const body = "((tracker: day 3)) She stepped through and, suddenly, the cold just hit her.";
+    const without = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      {},
+      withScaffold(body),
+    );
+    await without.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(without)).toContain("tracker: day 3");
+
+    const withIt = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      { shieldAdd: "\\(\\([^)]*\\)\\)" },
+      withScaffold(body),
+    );
+    await withIt.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(withIt)).not.toContain("tracker: day 3");
+  });
+
+  test("and an exclude keeps a region visible that a built-in would have hidden", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      { protectInline: true, shieldKeep: "<i>|</i>" },
+      withScaffold("She stepped <i>through</i> and, suddenly, the cold just hit her."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("<i>through</i>");
+  });
+
+  // A pattern that will not compile is named, so a typo is visible instead of
+  // being a region somebody believes is shielded.
+  test("a pattern that cannot be read is reported", async () => {
+    const h = await armed(["<REFINED>x</REFINED>"], { shieldAdd: "([unclosed" });
+    await wait(10);
+    const said2 = h.sent.find((m: any) => m.type === "shield_bad");
+    expect(said2).toBeTruthy();
+    expect(said2.patterns.join(" ")).toContain("([unclosed");
+  });
+
+  // One that matches the empty string would match at every position and turn
+  // the whole message into tokens.
+  test("a pattern that matches nothing at all is refused", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      { shieldAdd: "x*" },
+      withScaffold("She stepped through and, suddenly, the cold just hit her."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("the cold just hit her");
+  });
+});
+
+describe("the refiner's own thinking in its answer", () => {
+  test("working inside the tags is taken out before it is saved", async () => {
+    const h = await armed([
+      "<REFINED><think>let me tighten this</think>She stepped through and the cold hit her.</REFINED>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and with the tags switched off, where the whole answer is the rewrite", async () => {
+    const h = await armed(
+      ["<think>let me tighten this</think>\nShe stepped through and the cold hit her."],
+      { wrapOutput: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("switched off, it is left where it fell", async () => {
+    const h = await armed(
+      ["<REFINED><think>let me tighten this</think>She stepped through and the cold hit her.</REFINED>"],
+      { stripAnswerThinking: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toContain("<think>");
+  });
+});

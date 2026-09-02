@@ -141,13 +141,21 @@ Ask a model to improve a paragraph and it will happily drop a `<font color>` tag
 
 What makes this a guarantee, and not just a hope, is the last step. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
 
-What gets protected: fenced code, inline code, images, links, comments, and any tag carrying an attribute, which is where a colour or an href lives.
+What gets protected: fenced code in both fence styles, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, the bracket a lot of trackers print in, and any tag carrying an attribute, which is where a colour or an href lives.
+
+Braces are left alone on purpose. A macro sitting in a reply is already safe, because ours are filled in after the host's pass, so it reaches the model as the characters somebody typed.
+
+**Patterns of your own to hide** takes one regular expression per line and adds them to that list instead of replacing it. Replacing is how somebody ends up with one pattern of their own, none of the defaults, and a rewrite that ate a code block; what a particular card needs is nearly always one more shape. Yours are tried first, so a pattern written for one card wins over the general rules. A pattern that will not compile is named under the box, and one that matches the empty string is refused, since it would match at every position and turn the whole message into tokens.
+
+**Patterns to keep visible** is the other direction: a region matching one of these stays in front of the model even when a rule above would have hidden it. The tag rule is broad on purpose, and this is how you narrow it without losing it.
 
 **Bare inline formatting stays visible.** `<i>`, `<b>`, `<em>` and the rest wrap words in the middle of a sentence, and replacing them with tokens hands the model a sentence with holes in it. That made the rewrite worse to protect something the model was unlikely to break. They stay where they are, and the prompt tells it to leave them alone. **Hide plain italic and bold too** puts them behind tokens as well if you would rather.
 
 Protection catches what it can find. The prompts that ship with it also carry a **What not to touch** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
-**Never send the model's thinking** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was.
+**Never send the model's thinking** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra thinking tag names** is under it, for a model that wraps its working in something the built-in eight do not cover.
+
+**Take its own thinking out of the answer** is the other side of the same coin: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
 
 ## Sampler settings
 

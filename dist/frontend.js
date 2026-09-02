@@ -61,6 +61,9 @@ const PARTS = [
             "protectThinking",
             "protectInline",
             "thinkTags",
+            "stripAnswerThinking",
+            "shieldAdd",
+            "shieldKeep",
             "guardRefusal",
             "guardPreamble",
             "guardSoften",
@@ -208,6 +211,13 @@ const CONFIG = {
     // somebody's reply, and they only notice three messages later.
     protectOn: true,
     protectThinking: true,
+    // Take the refiner's own working out of its answer. Separate from the one
+    // above, which is about working already in the passage.
+    stripAnswerThinking: true,
+    // Patterns of the reader's own, added to the built-in ones, and patterns that
+    // keep a region visible even when a built-in matched it.
+    shieldAdd: "",
+    shieldKeep: "",
     // Names the reader adds, one per line, on top of the built-in set.
     thinkTags: "",
     // The checks on what an answer says. All on, because each is a shape that was
@@ -837,6 +847,28 @@ const ROLE_OPTIONS = [
 // The sampler values that reach the request. Anything not on this list is not
 // passed on, on either side of the bridge. Blank means the connection decides,
 // which is why none of these carry a default.
+// Patterns of the reader's own, on top of the built-in ones. Added rather than
+// replacing: replacing is how somebody ends up with one pattern of their own,
+// none of the defaults, and a rewrite that ate a code block. What a particular
+// card needs is nearly always one more shape, not a different set.
+const SHIELD_FIELDS = [
+    {
+        key: "shieldAdd",
+        label: "Patterns of your own to hide",
+        type: "lines",
+        needs: { key: "protectOn" },
+        under: true,
+        hint: "Optional, one regular expression per line, matched without case. Already covered: fenced and inline code, both fence styles, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, the bracket trackers use, and any tag carrying an attribute. Add a line for whatever your cards print that none of those catch. Yours are tried before the built-in ones, so a pattern written for one card wins over the general rules. Anything that will not compile is named under this box instead of failing quietly.",
+    },
+    {
+        key: "shieldKeep",
+        label: "Patterns to keep visible",
+        type: "lines",
+        needs: { key: "protectOn" },
+        under: true,
+        hint: "Optional, one per line. A region matching one of these stays in front of the model even when a rule above would have hidden it. This is how you narrow a built-in rule without losing it: the tag rule is broad on purpose, and a tag your prose reads around, like a colour span in the middle of a sentence, is better left where the model can see it.",
+    },
+];
 // The checks on what an answer says, as opposed to how long it is. Each one is
 // a shape that was going to be written into somebody's chat, and each is the
 // reader's to switch off: somebody writing a story these fire on constantly is
@@ -2734,7 +2766,7 @@ export function setup(ctx, overrides) {
     // describes is a list that drifts.
     const PARENTS = (() => {
         const out = ["thinkingMode"];
-        for (const list of [GUARD_FIELDS, WIDGET_FIELDS, COST_FIELDS, LIMIT_FIELDS])
+        for (const list of [GUARD_FIELDS, WIDGET_FIELDS, COST_FIELDS, LIMIT_FIELDS, SHIELD_FIELDS])
             for (const f of list)
                 if (f.needs && out.indexOf(f.needs.key) < 0)
                     out.push(f.needs.key);
@@ -3364,6 +3396,12 @@ export function setup(ctx, overrides) {
             hint: "On by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back after.",
         }));
         wrap.appendChild(fieldRow({
+            key: "stripAnswerThinking",
+            label: "Take its own thinking out of the answer",
+            type: "bool",
+            hint: "On by default, and a different thing from the row above: that one is about working already in the reply, this one is about working the refining model adds when it answers. The tags catch most of it, since anything outside <REFINED> is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.",
+        }));
+        wrap.appendChild(fieldRow({
             key: "thinkTags",
             label: "Extra thinking tag names",
             type: "lines",
@@ -3371,6 +3409,11 @@ export function setup(ctx, overrides) {
             under: true,
             hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
         }));
+        if (cfg.protectOn)
+            for (const f of SHIELD_FIELDS)
+                wrap.appendChild(fieldRow(f));
+        if (shieldBad.length)
+            wrap.appendChild(bad("These patterns could not be read and are doing nothing: " + shieldBad.join("; ")));
         if (!cfg.protectOn)
             wrap.appendChild(warn("With this off, a rewrite can quietly change or drop any formatting in your replies."));
         return wrap;
@@ -3398,6 +3441,9 @@ export function setup(ctx, overrides) {
     // place for a prompt to ask for a report: what was cut, what was added, what
     // was left alone on purpose. Kept here so the report has somewhere to be
     // read instead of being dropped on the floor.
+    // Patterns the backend could not compile, named so a typo is visible instead
+    // of being a region somebody believes is shielded and is not.
+    let shieldBad = [];
     let lastNotes = "";
     let lastNotesAt = 0;
     // ---- watching one arrive ----
@@ -5869,6 +5915,13 @@ export function setup(ctx, overrides) {
                             log("there was nothing running to stop");
                         markBusy(false);
                         msgBusy = null;
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "shield_bad") {
+                        shieldBad = Array.isArray(msg.patterns) ? msg.patterns.map(String).slice(0, 10) : [];
+                        if (shieldBad.length)
+                            log("some shield patterns could not be read");
                         paint();
                         return;
                     }
