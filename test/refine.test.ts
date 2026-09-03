@@ -1946,3 +1946,33 @@ describe("several answers to choose between", () => {
     expect(h.asked.length).toBe(1);
   });
 });
+
+describe("the sampler list", () => {
+  test("context size and longest answer both reach the request", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      samplers: { max_context: 16384, max_tokens: 900, temperature: 0.6 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const p = h.asked[0].parameters;
+    expect(p.max_context).toBe(16384);
+    expect(p.max_tokens).toBe(900);
+    expect(p.temperature).toBe(0.6);
+  });
+
+  test("a context size out of range is pulled back rather than sent", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      samplers: { max_context: 12 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters.max_context).toBe(512);
+  });
+
+  test("and left out entirely when it is blank, so the connection decides", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked[0].parameters).toBeUndefined();
+  });
+});

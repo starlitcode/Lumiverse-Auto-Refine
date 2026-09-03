@@ -1038,6 +1038,14 @@ const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: numbe
   { id: "top_k", label: "Top K", min: 0, max: 500, step: "1", hint: "" },
   { id: "min_p", label: "Min P", min: 0, max: 1, step: "0.01", hint: "" },
   {
+    id: "max_context",
+    label: "Context size (tokens)",
+    min: 512,
+    max: 2000000,
+    step: "1",
+    hint: "How much the provider is told it may read. Blank leaves that to the connection, which is nearly always right: this refine sends one message, its run-up and your rules, so it is a small request next to a chat. Worth setting only if your connection's own window is larger than you want to pay for on a refine.",
+  },
+  {
     id: "max_tokens",
     label: "Longest answer (tokens)",
     min: 1,
@@ -1956,7 +1964,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-btn.arf-primary:hover:not(:disabled){background:var(--lumiverse-primary-hover,rgba(167,132,239,.95))}" +
     ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
     ".arf-btn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
-    ".arf-box{width:17px;height:17px;flex:none;cursor:pointer;accent-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+    ".arf-box{-webkit-appearance:none;appearance:none;margin:0;flex:none;position:relative;" +
+    "width:38px;height:22px;border-radius:11px;cursor:pointer;" +
+    "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
+    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.25));" +
+    "transition:background-color var(--lumiverse-transition-fast,150ms ease)," +
+    "border-color var(--lumiverse-transition-fast,150ms ease)}" +
+    ".arf-box::after{content:\"\";position:absolute;top:50%;left:3px;transform:translateY(-50%);" +
+    "width:14px;height:14px;border-radius:50%;" +
+    "background:var(--lumiverse-text-muted,rgba(255,255,255,.55));" +
+    "transition:left var(--lumiverse-transition-fast,150ms ease)," +
+    "background-color var(--lumiverse-transition-fast,150ms ease)}" +
+    ".arf-box:checked{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
+    "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+    ".arf-box:checked::after{left:19px;background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+    ".arf-box:disabled{opacity:.45;cursor:not-allowed}" +
+    "@media (prefers-reduced-motion: reduce){.arf-box,.arf-box::after{transition:none}}" +
     ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
     "border-radius:var(--lumiverse-radius,8px);" +
     "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
@@ -2161,7 +2184,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
     ".arf-fold{min-height:44px}" +
     ".arf-tab{padding:12px 13px}" +
-    ".arf-box{width:22px;height:22px}" +
+    ".arf-box{width:46px;height:26px;border-radius:13px}" +
+    ".arf-box::after{width:18px;height:18px}" +
+    ".arf-box:checked::after{left:23px}" +
     ".arf-field{padding:10px 12px}}";
 
   let styleEl: any = null;
@@ -2441,7 +2466,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (id === "prompt") return [buildBlocksCard(), buildMacroCard(), buildPresetCard()];
     if (id === "context") return [buildContextCard(), buildPreviewCard(), buildTryCard()];
     if (id === "model") return [buildConnectionCard(), buildSamplerCard()];
-    if (id === "limits") return [buildProtectCard(), buildGuardCard(), buildSafetyCard()];
+    if (id === "limits")
+      return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
     if (id === "log") {
       const out: HTMLElement[] = [buildLiveCard()];
       const watch = buildWatchCard();
@@ -3683,6 +3709,66 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     wrap.appendChild(
       fieldRow({
+        key: "protectThinking",
+        label: "Strip reasoning tags before it is sent",
+        type: "bool",
+        hint: "On by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back after.",
+      }),
+    );
+    wrap.appendChild(
+      fieldRow({
+        key: "stripAnswerThinking",
+        label: "Strip reasoning tags out of the answer",
+        type: "bool",
+        hint: "On by default, and a different thing from the row above: that one is about working already in the reply, this one is about working the refining model adds when it answers. The tags catch most of it, since anything outside <REFINED> is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.",
+      }),
+    );
+    // Folded. Three lists of text that most readers never open, sitting in
+    // front of the switches everybody does. A search still reaches inside,
+    // because fold opens itself while one is running.
+    if (cfg.protectThinking)
+      wrap.appendChild(
+        fold("Reasoning tag names your model uses", (body) => {
+          body.appendChild(
+            fieldRow({
+              key: "thinkTags",
+              label: "Extra reasoning tag names",
+              type: "lines",
+              hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
+            }),
+          );
+        }),
+      );
+    if (cfg.protectOn)
+      wrap.appendChild(
+        fold("Patterns of your own", (body) => {
+          for (const f of SHIELD_FIELDS)
+            body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
+        }),
+      );
+    if (shieldBad.length)
+      wrap.appendChild(
+        bad(
+          "These patterns could not be read and are doing nothing: " + shieldBad.join("; "),
+        ),
+      );
+    if (!cfg.protectOn)
+      wrap.appendChild(
+        warn("With this off, a rewrite can quietly change or drop any formatting in your replies."),
+      );
+    return wrap;
+  }
+
+  // Reading the answer, and watching it arrive. These sat in the protection
+  // card, where they read as three more things being hidden from the model.
+  // Nothing here hides anything.
+  function buildReadCard(): HTMLElement {
+    const wrap = card(
+      "Reading the answer",
+      "How the rewrite is taken out of what comes back, and whether you can watch it arrive.",
+    );
+    wrap.appendChild(
+      fieldRow({
         key: "wrapOutput",
         label: "Take the answer from between the tags",
         type: "bool",
@@ -3707,55 +3793,6 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "Off by default. Puts a Watch it happen card on the Log tab that fills in as the model writes, instead of only counting characters. On a reasoning prompt you see it work the edit out first and then write it, because the working comes back before the rewrite. It costs a little traffic between the panel and the server on every refine, which is why it is something to switch on when you want to watch one, not something to leave on.",
       }),
     );
-    wrap.appendChild(
-      fieldRow({
-        key: "protectThinking",
-        label: "Never send the model's thinking",
-        type: "bool",
-        hint: "On by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back after.",
-      }),
-    );
-    wrap.appendChild(
-      fieldRow({
-        key: "stripAnswerThinking",
-        label: "Take its own thinking out of the answer",
-        type: "bool",
-        hint: "On by default, and a different thing from the row above: that one is about working already in the reply, this one is about working the refining model adds when it answers. The tags catch most of it, since anything outside <REFINED> is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.",
-      }),
-    );
-    // Folded. Three lists of text that most readers never open, sitting in
-    // front of the switches everybody does. A search still reaches inside,
-    // because fold opens itself while one is running.
-    if (cfg.protectThinking)
-      wrap.appendChild(
-        fold("Thinking tags your model uses", (body) => {
-          body.appendChild(
-            fieldRow({
-              key: "thinkTags",
-              label: "Extra thinking tag names",
-              type: "lines",
-              hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
-            }),
-          );
-        }),
-      );
-    if (cfg.protectOn)
-      wrap.appendChild(
-        fold("Patterns of your own", (body) => {
-          for (const f of SHIELD_FIELDS)
-            body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
-        }),
-      );
-    if (shieldBad.length)
-      wrap.appendChild(
-        bad(
-          "These patterns could not be read and are doing nothing: " + shieldBad.join("; "),
-        ),
-      );
-    if (!cfg.protectOn)
-      wrap.appendChild(
-        warn("With this off, a rewrite can quietly change or drop any formatting in your replies."),
-      );
     return wrap;
   }
 

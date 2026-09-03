@@ -1231,6 +1231,67 @@ console.log("\naccepting or turning one down");
   });
 }
 
+console.log("\nswitches, not tick boxes");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Limits");
+    const look = await page.evaluate(async () => {
+      // Long enough for the slide and the colour change to have finished. A
+      // computed style read mid-transition is the value it is passing through,
+      // not the one it is going to, so reading straight away compares two
+      // points on the same animation.
+      const frame = () => new Promise((r) => setTimeout(r, 260));
+      // Re-queried after every click and read straight away. This one has rows
+      // hanging off it, so switching it rebuilds the panel and the element read
+      // a moment ago is no longer in the document.
+      const find = () => document.querySelector('#drawer [data-arf-field="protectThinking"]');
+      const snap = () => {
+        const b = find();
+        const cs = getComputedStyle(b);
+        const knob = getComputedStyle(b, "::after");
+        return {
+          w: Math.round(parseFloat(cs.width)),
+          h: Math.round(parseFloat(cs.height)),
+          radius: cs.borderRadius,
+          knob: knob.left,
+          bg: cs.backgroundColor,
+          tag: b.tagName + ":" + b.type,
+        };
+      };
+      const box = find();
+      if (!box) return null;
+      if (box.checked) { box.click(); await frame(); }
+      const a = snap();
+      find().click();
+      await frame();
+      const b2 = snap();
+      const shut = a;
+      const open = b2;
+      const knobShut = { left: a.knob };
+      const knobOpen = { left: b2.knob };
+      return {
+        // A pill rather than a square: wider than it is tall, fully rounded.
+        w: shut.w,
+        h: shut.h,
+        radius: shut.radius,
+        // The knob slides, and the track changes colour.
+        knobShut: knobShut.left,
+        knobOpen: knobOpen.left,
+        bgShut: shut.bg,
+        bgOpen: open.bg,
+        // Still a real checkbox underneath, which is what the keyboard and a
+        // screen reader are using.
+        tag: shut.tag,
+      };
+    });
+    ok("it is a pill, wider than it is tall", !!look && look.w > look.h, JSON.stringify(look));
+    ok("fully rounded", !!look && parseFloat(look.radius) >= look.h / 2, look && look.radius);
+    ok("the knob moves when it is switched", !!look && look.knobShut !== look.knobOpen, look);
+    ok("and the track changes with it", !!look && look.bgShut !== look.bgOpen, look);
+    ok("and it is still a real checkbox underneath", !!look && look.tag === "INPUT:checkbox", look && look.tag);
+  });
+}
+
 console.log("\nthe mark on a focused box");
 {
   await inTab(browser, {}, async (page) => {

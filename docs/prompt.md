@@ -153,15 +153,17 @@ Braces are left alone on purpose. A macro sitting in a reply is already safe, be
 
 Protection catches what it can find. The prompts that ship with it also carry a **What not to touch** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
-**Never send the model's thinking** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra thinking tag names** is under it, for a model that wraps its working in something the built-in eight do not cover.
+**Strip reasoning tags before it is sent** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra reasoning tag names** is under it, for a model that wraps its working in something the built-in eight do not cover.
 
-**Take its own thinking out of the answer** is the other side of the same coin: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
+**Strip reasoning tags out of the answer** is the other side of the same coin: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
 
 ## Sampler settings
 
 Under **Model**, every sampler is blank to begin with, and blank means the connection's own preset decides. That is the right default: if you tuned a preset, an extension should not quietly override it.
 
 Fill one in and it is sent with the refine and only with the refine. Your chat is not affected, and neither is the preset.
+
+**Context size** and **Longest answer** are the two ceilings. Both are blank to begin with, and blank leaves them to the connection, which is nearly always right: a refine sends one message, its run-up and your rules, so it is a small request next to a chat.
 
 Temperature is the one worth touching. A rewrite usually wants it lower than the one you roleplay with, since you are asking for the same scene said better, not for another idea. **Longest answer** is worth a look in the other direction: a ceiling low enough to cut the rewrite off mid-sentence gets it dropped for being too short, which looks like the refine failing rather than the setting being tight.
 

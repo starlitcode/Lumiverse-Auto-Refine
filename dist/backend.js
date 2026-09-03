@@ -1126,6 +1126,10 @@ const SAMPLERS = [
     { id: 'top_k', min: 0, max: 500, whole: true },
     { id: 'min_p', min: 0, max: 1 },
     { id: 'max_tokens', min: 1, max: 200000, whole: true },
+    // What the provider is told the window is. Passed through under the name
+    // most of them use; one that calls it something else ignores it, which is
+    // the same thing that happens to any sampler a provider does not take.
+    { id: 'max_context', min: 512, max: 2000000, whole: true },
     { id: 'frequency_penalty', min: -2, max: 2 },
     { id: 'presence_penalty', min: -2, max: 2 },
     { id: 'repetition_penalty', min: 0, max: 2 },
