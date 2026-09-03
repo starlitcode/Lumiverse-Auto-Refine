@@ -1539,7 +1539,8 @@ console.log("\nwatching one arrive");
         type: "refine_progress",
         stage: "writing",
         chars: 40,
-        text: "<REFINE_NOTES>\nThe second sentence restates the first.\n</REFINE_NOTES>\n<REFINED>She stepped",
+        notes: "The second sentence restates the first.",
+        text: "She stepped",
       });
     });
     await settle(page);
@@ -1557,6 +1558,22 @@ console.log("\nwatching one arrive");
     ok("what it is working out is shown", mid.working);
     ok("and the rewrite as it is written", mid.rewrite);
     ok("without the tags themselves", !mid.raw);
+
+    // And a marker that reaches the panel anyway is still never drawn: what is
+    // on screen is the writing, not the plumbing around it.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refine_progress",
+        stage: "writing",
+        chars: 60,
+        notes: "<REFINE_NOTES>The second sentence restates the first.</REFINE_NOTES>",
+        text: "<REFINED>She stepped through the gate",
+      });
+    });
+    await settle(page);
+    const stray = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("nor one that slipped through anyway", !/REFINE_NOTES|<REFINED/.test(stray));
+    ok("and the writing is still there", /She stepped through the gate/.test(stray));
 
     // More arrives. The panel must not be rebuilt under the reader five times a
     // second, so the text is written into the element in place.
@@ -1940,6 +1957,154 @@ console.log("\nchoosing what goes where");
       return { disabled: btn.disabled, label: btn.textContent };
     });
     ok("reset with nothing chosen cannot be pressed", off.disabled, off.label);
+  });
+}
+
+console.log("\nthe card that comes up on the page");
+{
+  // A refine changes writing somebody was reading. The panel is behind a tab
+  // they may never have opened, so the before, the after and the way back go on
+  // the page itself.
+  const land = async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m2",
+        canUndo: true,
+        before: "The wet slide of it hit him like an electric shock straight up his spine.",
+        after: "It slid over him, and his whole upper body locked rigid.",
+      });
+    });
+    await settle(page);
+  };
+  const pop = (page) => page.evaluate(() => !!document.querySelector("[data-arf-pop]"));
+
+  await inTab(browser, {}, async (page) => {
+    ok("nothing is on the page before a refine lands", !(await pop(page)));
+    await land(page);
+    ok("a refine puts a card on the page", await pop(page));
+    const said = await page.evaluate(() =>
+      document.querySelector("[data-arf-pop]").textContent);
+    ok("with what it said before", /electric shock/.test(said), said.slice(0, 80));
+    ok("and what it says now", /locked rigid/.test(said), said.slice(0, 80));
+
+    // Readable on the theme, measured the same way the panel is.
+    const worst = await page.evaluate(() => {
+      const parse = (s) => {
+        const m = /rgba?\(([^)]+)\)/.exec(s || "");
+        if (!m) return null;
+        const p = m[1].split(",").map((x) => parseFloat(x.trim()));
+        return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+      };
+      const over = (f, b) => ({
+        r: f.r * f.a + b.r * (1 - f.a), g: f.g * f.a + b.g * (1 - f.a),
+        b: f.b * f.a + b.b * (1 - f.a), a: 1,
+      });
+      const lum = (c) => {
+        const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+      };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const backdrop = (node) => {
+        const stack = []; let el = node;
+        while (el && el !== document.documentElement) {
+          const c = parse(getComputedStyle(el).backgroundColor);
+          if (c && c.a > 0) { stack.push(c); if (c.a >= 0.999) break; }
+          el = el.parentElement;
+        }
+        let base = { r: 255, g: 255, b: 255, a: 1 };
+        const pg = parse(getComputedStyle(document.body).backgroundColor);
+        if (pg && pg.a >= 0.999) base = pg;
+        for (let i = stack.length - 1; i >= 0; i--) base = over(stack[i], base);
+        return base;
+      };
+      let worst = 99;
+      for (const el of document.querySelectorAll("[data-arf-pop] *")) {
+        if (!Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+        const box = el.getBoundingClientRect();
+        if (!box.width || !box.height) continue;
+        const st = getComputedStyle(el);
+        const fg = parse(st.color);
+        if (!fg) continue;
+        const px = parseFloat(st.fontSize) || 16;
+        const big = px >= 24 || ((parseInt(st.fontWeight, 10) || 400) >= 700 && px >= 18.66);
+        const r = ratio(over(fg, backdrop(el)), backdrop(el)) / (big ? 3 : 4.5);
+        if (r < worst) worst = r;
+      }
+      return worst;
+    });
+    ok("and every word on it is readable", worst >= 1, "worst was " + worst.toFixed(2) + " of its floor");
+
+    // Keeping it closes the card and leaves the refine in the Log.
+    await page.evaluate(() => document.querySelector("[data-arf-pop-keep]").click());
+    await settle(page);
+    ok("keeping it closes the card", !(await pop(page)));
+    await goTab(page, "Log");
+    ok(
+      "and the refine is still there to put back",
+      await page.evaluate(() => !!document.querySelector("[data-arf-last]")),
+    );
+  });
+
+  // The same refine twice is one card, not two stacked on each other.
+  await inTab(browser, {}, async (page) => {
+    await land(page);
+    await land(page);
+    const n = await page.evaluate(() => document.querySelectorAll("[data-arf-pop]").length);
+    ok("the same refine does not stack a second card", n === 1, "found " + n);
+  });
+
+  // It sits on the page, over somebody's chat, at whatever size their screen
+  // is. The two that matter are a narrow phone, where anything fixed-width
+  // pushes the page sideways, and a desktop, where it must not take the middle
+  // of the screen.
+  const fits = (page) =>
+    page.evaluate(() => {
+      const el = document.querySelector("[data-arf-pop]");
+      const r = el.getBoundingClientRect();
+      const row = el.querySelector(".arf-pop-row").getBoundingClientRect();
+      return {
+        inside: r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1,
+        sideways: document.documentElement.scrollWidth > innerWidth + 1,
+        // The buttons are pinned, so they are on screen however long the reply
+        // is. A card whose way back has scrolled off the bottom has no way back.
+        buttonsSeen: row.bottom <= innerHeight + 1 && row.top >= 0,
+        // One scroll region rather than a scroll inside a scroll.
+        scrollers: Array.from(el.querySelectorAll("*")).filter((n) => {
+          const st = getComputedStyle(n);
+          return (
+            (st.overflowY === "auto" || st.overflowY === "scroll") &&
+            n.scrollHeight > n.clientHeight + 1
+          );
+        }).length,
+      };
+    });
+
+  for (const [what, viewport] of [
+    ["a narrow phone", { width: 320, height: 568 }],
+    ["a usual phone", { width: 390, height: 844 }],
+    ["a desktop", { width: 1440, height: 900 }],
+  ]) {
+    await inTab(browser, { viewport, touch: viewport.width < 560 }, async (page) => {
+      await land(page);
+      const got = await fits(page);
+      ok(what + ": it is on the screen", got.inside, JSON.stringify(got));
+      ok(what + ": and nothing is pushed sideways", !got.sideways);
+      ok(what + ": with the way back still reachable", got.buttonsSeen);
+      ok(what + ": and one thing scrolling, not two", got.scrollers <= 1, "found " + got.scrollers);
+    });
+  }
+
+  // Switched off, nothing appears on the page and the Log still has it.
+  await inTab(browser, { saved: { popup: false } }, async (page) => {
+    await land(page);
+    ok("switched off, nothing comes up on the page", !(await pop(page)));
+    await goTab(page, "Log");
+    ok(
+      "and the refine is still in the tab",
+      await page.evaluate(() => !!document.querySelector("[data-arf-last]")),
+    );
   });
 }
 

@@ -79,8 +79,8 @@ const PARTS = [
     {
         id: "alerts",
         label: "Alerts and sound",
-        what: "The pop-up, the sound you attached, and how loud it is.",
-        keys: ["toast", "soundOn", "soundUrl", "soundVolume"],
+        what: "The card that comes up on the page, the brief message, and the sound.",
+        keys: ["popup", "toast", "soundOn", "soundUrl", "soundVolume"],
     },
     {
         id: "reach",
@@ -199,9 +199,18 @@ const CONFIG = {
     // The floating button: one tap to refine the latest reply without opening the
     // drawer. Needs the ui_panels permission, and says so if it is missing.
     widgetOn: false,
+    // The card that comes up on the page when a refine lands, with the before,
+    // the after and the way back on it. On by default: a refine changes writing
+    // somebody was reading, and making them find a tab to see what changed is
+    // the wrong way round.
+    popup: true,
     // What one tap does when there is a refine to put back. On, the button turns
     // into an undo the way the message button does; off, a tap always refines.
-    widgetUndo: true,
+    //
+    // Off by default now. A button that silently becomes a different button is a
+    // button nobody can read, and the card above is where putting one back
+    // belongs: it says what it would be putting back.
+    widgetUndo: false,
     // How big the floating button is, across. The same default and the same 28
     // to 96 range as Auto Retry's floating button, so the two sit at matching
     // sizes when somebody runs both.
@@ -1587,6 +1596,10 @@ export function setup(ctx, overrides) {
     // The watch is left running: it is now the thing that notices you walking
     // back in.
     function leftTheChat() {
+        // The card on the page is about a message in the chat being left, so it
+        // goes with it rather than sitting over the home screen offering to put
+        // back something you can no longer see.
+        dropPop();
         if (lastChatId != null)
             leftBehind = lastChatId;
         noChatOpen = true;
@@ -2086,6 +2099,13 @@ export function setup(ctx, overrides) {
         ".arf-lab{font-size:12.5px;color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf-rule{height:1px;background:var(--lumiverse-border,rgba(147,112,219,.12));margin:2px 0}" +
         ".arf-col{display:flex;flex-direction:column;gap:5px}" +
+        // The browser hides a [hidden] element by giving it display:none, and any
+        // rule of ours that sets display beats it, because a class beats the user
+        // agent's sheet. Every arf-col above is display:flex, so hiding one did
+        // nothing at all: the Watch card drew "What it is working out" with an
+        // empty box under it on a refine that had no working to show. Said here,
+        // once, rather than at each of the places that hide something.
+        ".arf [hidden]{display:none!important}" +
         ".arf-sec{display:flex;flex-direction:column;gap:9px}" +
         ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
         ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
@@ -2304,6 +2324,42 @@ export function setup(ctx, overrides) {
         ".arf-float.arf-working{animation:arf-pulse 1400ms ease-out infinite}" +
         "@media (prefers-reduced-motion: reduce){.arf-float.arf-working{animation:none}}" +
         "@media (pointer: coarse){.arf-btn.arf-mini2{min-height:34px;padding:6px 12px}}" +
+        // The card that comes up on the page when a refine lands, so the answer to
+        // "what did it change" is in front of you rather than behind a tab you have
+        // to know to open. Bottom right on a desktop, across the bottom on a phone,
+        // and never over the message box.
+        ".arf-pop{position:fixed;right:12px;bottom:12px;z-index:2147483000;" +
+        "width:min(380px,calc(100vw - 24px));max-height:min(70vh,560px);" +
+        "display:flex;flex-direction:column;gap:8px;box-sizing:border-box;padding:12px;" +
+        "border-radius:var(--lumiverse-radius-lg,12px);" +
+        "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+        "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
+        "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));" +
+        "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5));" +
+        "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden;" +
+        "animation:arf-rise 180ms ease-out}" +
+        "@keyframes arf-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
+        "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
+        // On a phone it spans the width and sits above the input bar rather than on
+        // top of it, since the whole point is to be readable while you carry on.
+        "@media (max-width: 560px){.arf-pop{left:12px;right:12px;bottom:76px;" +
+        "width:auto;max-height:68vh}}" +
+        // One scroll region, not three. The card used to be a fixed header over two
+        // wells that each scrolled on their own, which on a 320px phone meant two
+        // boxes clipped mid-sentence with nothing to say they had more in them, and
+        // a scroll inside a scroll inside a page to get at it. The header and the
+        // buttons stay put, and everything between them scrolls together.
+        ".arf-pop-body{flex:1;min-height:0;overflow-y:auto;display:flex;" +
+        "flex-direction:column;gap:6px}" +
+        ".arf-pop .arf-scroll{max-height:none;overflow:visible}" +
+        ".arf-pop-row{flex:none}" +
+        ".arf-x{-webkit-appearance:none;appearance:none;background:none;border:0;padding:2px 6px;" +
+        "font-size:18px;line-height:1;cursor:pointer;border-radius:var(--lumiverse-radius-sm,5px);" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-x:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-x:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
         // The full-screen editor for one block of text.
         ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
         "justify-content:center;padding:16px;box-sizing:border-box;" +
@@ -3115,6 +3171,97 @@ export function setup(ctx, overrides) {
         box.appendChild(row);
         return box;
     }
+    // ---- the card that comes up on the page ----
+    // A refine changes writing you were reading, and the panel is behind a tab.
+    // Somebody who has not opened that tab had no way to see what changed and no
+    // way back, other than a floating button that had quietly turned into an undo
+    // button without saying so. This puts the before, the after and the way back
+    // in front of them, on the page, where the change happened.
+    let popEl = null;
+    let popKey = "";
+    function dropPop() {
+        try {
+            popEl && popEl.remove && popEl.remove();
+        }
+        catch (_) { }
+        popEl = null;
+        popKey = "";
+    }
+    disposers.push(dropPop);
+    function showPop(one) {
+        if (!cfg.popup)
+            return;
+        try {
+            if (typeof document === "undefined" || !document.body)
+                return;
+            const key = undoKey(one.chatId, one.messageId);
+            // The same refine twice is one card. A repaint or a second message about
+            // a refine already on screen must not stack another one on top of it.
+            if (popEl && popKey === key)
+                return;
+            dropPop();
+            popKey = key;
+            const box = document.createElement("div");
+            box.className = "arf-pop arf";
+            box.setAttribute("data-arf-pop", "1");
+            box.setAttribute("role", "status");
+            const top = el("div", "arf-between");
+            top.appendChild(el("span", "arf-h", "Refined"));
+            const shut = document.createElement("button");
+            shut.type = "button";
+            shut.className = "arf-x";
+            shut.setAttribute("aria-label", "Close");
+            shut.textContent = "×";
+            shut.addEventListener("click", dropPop);
+            top.appendChild(shut);
+            box.appendChild(top);
+            const body = el("div", "arf-pop-body");
+            body.appendChild(el("div", "arf-note", "Before"));
+            body.appendChild(el("div", "arf-well arf-scroll arf-dim", one.before));
+            body.appendChild(el("div", "arf-note", "After"));
+            body.appendChild(el("div", "arf-well arf-scroll", one.after));
+            box.appendChild(body);
+            const row = el("div", "arf-row arf-pop-row");
+            const back = button("Put it back", false);
+            back.setAttribute("data-arf-pop-undo", "1");
+            back.addEventListener("click", () => {
+                send({
+                    type: "undo_refine",
+                    requestId: newId(),
+                    chatId: one.chatId,
+                    messageId: one.messageId,
+                });
+                dropPop();
+            });
+            const keep = button("Keep it", true);
+            keep.setAttribute("data-arf-pop-keep", "1");
+            keep.addEventListener("click", () => {
+                // Keeping is not the same as forgetting: the refine stays in the Log,
+                // where it can still be put back later. This only closes the card.
+                dropPop();
+            });
+            row.appendChild(keep);
+            row.appendChild(back);
+            box.appendChild(row);
+            document.body.appendChild(box);
+            popEl = box;
+            // Painted a frame later, once it is in the page and has a colour behind
+            // it to measure against, the same as the panel.
+            try {
+                requestAnimationFrame(() => {
+                    setScheme(box);
+                    sweepReadable(box);
+                });
+            }
+            catch (_) { }
+        }
+        catch (_) {
+            // A host that will not take an element is not a reason to lose the
+            // refine: it is still in the Log, and the tab's badge still counts it.
+            popEl = null;
+            popKey = "";
+        }
+    }
     // ---- Prompt ----
     function buildTryCard() {
         const wrap = card("Try it", "Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat.");
@@ -3918,7 +4065,9 @@ export function setup(ctx, overrides) {
     // The rewrite as it is being written. Held here rather than in the log,
     // because it is replaced several times a second and is gone the moment the
     // refine lands.
-    let live = "";
+    // Split by the backend, which is the only side holding the whole answer.
+    let live = { notes: "", body: "" };
+    const liveHasAnything = () => !!(live.notes || live.body);
     // Which try is running, for the line that says so.
     let retryAt = 0;
     let retryOf = 0;
@@ -3926,14 +4075,20 @@ export function setup(ctx, overrides) {
     // five times a second would rebuild the whole panel under whoever is reading
     // it, take the scroll with it, and drop focus from anything they were typing
     // in. This is the same reason the status line writes itself in place.
-    function showLive(text) {
-        live = text;
+    // The tags are the plumbing and never the show. The backend splits on them
+    // and sends the two halves without them, so this only ever has work to do if
+    // something upstream sends a marker through anyway; it is here because a
+    // stray <REFINED> rendered on screen looks like the extension is broken, and
+    // the cost of being sure is one pass over a few thousand characters.
+    const TAG_MARKS = /<\s*\/?\s*(?:refined|refine_notes)\s*>/gi;
+    const noTags = (v) => String(v == null ? "" : v).replace(TAG_MARKS, "").trim();
+    function showLive(parts) {
+        live = parts;
         try {
             if (!liveWatch) {
                 paint();
                 return;
             }
-            const parts = splitLive(text);
             liveWatch.notes.textContent = parts.notes;
             liveWatch.notesWrap.hidden = !parts.notes;
             liveWatch.out.textContent = parts.body;
@@ -3945,40 +4100,14 @@ export function setup(ctx, overrides) {
         catch (_) { }
     }
     let liveWatch = null;
-    // What has arrived so far, split into the two things a reasoning prompt asks
-    // for. Written to work on half a tag: this runs on text that is still being
-    // written, so every opener may have no closer yet.
-    function splitLive(text) {
-        const t = String(text || "");
-        let notes = "";
-        let body = "";
-        const nOpen = /<\s*refine_notes\s*>/i.exec(t);
-        if (nOpen) {
-            const rest = t.slice(nOpen.index + nOpen[0].length);
-            const nClose = /<\s*\/\s*refine_notes\s*>/i.exec(rest);
-            notes = nClose ? rest.slice(0, nClose.index) : rest;
-        }
-        const bOpen = /<\s*refined\s*>/i.exec(t);
-        if (bOpen) {
-            const rest = t.slice(bOpen.index + bOpen[0].length);
-            const bClose = /<\s*\/\s*refined\s*>/i.exec(rest);
-            body = bClose ? rest.slice(0, bClose.index) : rest;
-        }
-        else if (!nOpen) {
-            // No tags yet, or a prompt that does not use them. Whatever is there is
-            // the rewrite as far as anybody watching is concerned.
-            body = t;
-        }
-        return { notes: notes.trim(), body: body.trim() };
-    }
     function buildWatchCard() {
         if (!cfg.watchLive || !cfg.streamProgress)
             return null;
         const running = busy || msgBusy !== null;
-        if (!running && !live)
+        if (!running && !liveHasAnything())
             return null;
         const wrap = card("Watch it happen", undefined, running ? "live" : "finished");
-        const parts = splitLive(live);
+        const parts = live;
         const notesWrap = el("div", "arf-col");
         notesWrap.appendChild(el("div", "arf-lab", "What it is working out"));
         const notes = el("div", "arf-well arf-mono arf-scroll", parts.notes);
@@ -4047,7 +4176,12 @@ export function setup(ctx, overrides) {
     function buildNotesCard() {
         if (!lastNotes)
             return null;
-        const wrap = card("What it said about the edit", "Whatever the model wrote outside the <REFINED> tags on the last pass. None of it was saved into your chat. The two reasoning prompts ask for working here, between <REFINE_NOTES> tags; on the other two this stays empty until you ask for something in the How to answer block.", new Date(lastNotesAt).toTimeString().slice(0, 5));
+        const wrap = card("What it said about the edit", 
+        // Was a paragraph explaining where these come from and which prompts ask
+        // for them, which is the docs written out again above the thing itself.
+        // The card only shows when there is something in it, and by then the
+        // reader is looking at what it is.
+        "Written outside the tags, so none of it reached your chat.", new Date(lastNotesAt).toTimeString().slice(0, 5));
         const box = el("div", "arf-well arf-mono", lastNotes);
         wrap.appendChild(box);
         const row = el("div", "arf-row");
@@ -4410,10 +4544,16 @@ export function setup(ctx, overrides) {
     function buildAlertCard() {
         const wrap = card("When a refine lands", "How you find out, other than the tab's badge.");
         wrap.appendChild(fieldRow({
-            key: "toast",
-            label: "Show a pop-up",
+            key: "popup",
+            label: "Show the before and after on screen",
             type: "bool",
-            hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
+            hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "toast",
+            label: "Show a brief message",
+            type: "bool",
+            hint: "On by default. The one-line note Lumiverse shows at the edge of the screen. Separate from the card above: this one says a refine happened, that one says what it did.",
         }));
         wrap.appendChild(fieldRow({
             key: "soundOn",
@@ -6240,7 +6380,7 @@ export function setup(ctx, overrides) {
     }
     // A new refine starts on an empty screen rather than under the last one.
     function clearLive() {
-        live = "";
+        live = { notes: "", body: "" };
         liveWatch = null;
     }
     // Best of three, asked for rather than assumed. The economics are the whole
@@ -6369,8 +6509,11 @@ export function setup(ctx, overrides) {
                     if (msg.type === "refine_progress") {
                         if (msg.stage === "writing" && typeof msg.chars === "number")
                             streamed = msg.chars;
-                        if (typeof msg.text === "string" && msg.text)
-                            showLive(msg.text);
+                        if (typeof msg.text === "string" || typeof msg.notes === "string")
+                            showLive({
+                                notes: noTags(msg.notes),
+                                body: noTags(msg.text),
+                            });
                         if (msg.stage === "retrying") {
                             retryAt = Number(msg.attempt) || 0;
                             retryOf = Number(msg.of) || 0;
@@ -6483,6 +6626,7 @@ export function setup(ctx, overrides) {
                             });
                             while (undoable.size > UNDO_MAX)
                                 undoable.delete(undoable.keys().next().value);
+                            showPop(undoable.get(k));
                         }
                         // The badge is the point of the tab being closable: something
                         // happened to your writing and you can see that without opening it.
@@ -6676,6 +6820,12 @@ export function setup(ctx, overrides) {
                         if (msg.ok) {
                             if (msg.messageId != null)
                                 undoable.delete(undoKey(msg.chatId, msg.messageId));
+                            // The card on the page is about this refine, and this refine is
+                            // gone. Closed whichever way the undo was asked for, so putting
+                            // one back from the Log does not leave the card offering to do
+                            // it again.
+                            if (msg.messageId != null && popKey === undoKey(msg.chatId, msg.messageId))
+                                dropPop();
                             if (!undoHere().length)
                                 setBadge(null);
                             tally.undone++;

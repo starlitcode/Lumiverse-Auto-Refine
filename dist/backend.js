@@ -302,7 +302,39 @@ let wrapOutput = true;
 // just its length. Off by default: it is a thing to turn on when you want to
 // see one happen, not something worth paying bridge traffic for on every reply.
 let watchLive = false;
+// Per part rather than for the answer as a whole, so a long piece of working
+// cannot push the rewrite out of what gets sent.
 const WATCH_TAIL = 4000;
+// The two halves of a part-written answer, for somebody watching it arrive.
+// Split where the whole text is: the panel is sent this and nothing else, so a
+// tag that has scrolled out of the traffic is a tag it can never find.
+//
+// The end of each half is what is sent, because that is where the writing is
+// happening and where a reader watching is looking.
+function watchParts(text) {
+    const t = String(text || '');
+    const tail = (s) => (s.length > WATCH_TAIL ? s.slice(-WATCH_TAIL) : s);
+    let notes = '';
+    let body = '';
+    const nOpen = /<\s*refine_notes\s*>/i.exec(t);
+    if (nOpen) {
+        const rest = t.slice(nOpen.index + nOpen[0].length);
+        const nClose = /<\s*\/\s*refine_notes\s*>/i.exec(rest);
+        notes = nClose ? rest.slice(0, nClose.index) : rest;
+    }
+    const bOpen = /<\s*refined\s*>/i.exec(t);
+    if (bOpen) {
+        const rest = t.slice(bOpen.index + bOpen[0].length);
+        const bClose = /<\s*\/\s*refined\s*>/i.exec(rest);
+        body = bClose ? rest.slice(0, bClose.index) : rest;
+    }
+    else if (!nOpen) {
+        // No tags yet, or a prompt that does not use them. Whatever has arrived is
+        // the rewrite as far as anybody watching is concerned.
+        body = t;
+    }
+    return { notes: tail(notes.trim()), body: tail(body.trim()) };
+}
 // Whether to stream the refine so the panel can show it arriving. The answer is
 // the same either way; this only decides whether anybody can watch it.
 let streamProgress = true;
@@ -1380,15 +1412,23 @@ async function askModel(text, isUser, scene, userId) {
                     const now = Date.now();
                     if (now - said > 300) {
                         said = now;
+                        const watch = watchLive ? watchParts(text) : null;
                         tell(userId, {
                             type: 'refine_progress',
                             stage: 'writing',
                             chars: text.length,
-                            // The text so far, for the panel to show when the reader asked to
-                            // watch. Capped and sent as a tail: a whole rewrite five times a
-                            // second is more traffic than the refine, and the end is the part
-                            // anybody watching is looking at.
-                            text: watchLive ? text.slice(-WATCH_TAIL) : '',
+                            // Split here, where the whole answer is, rather than in the
+                            // panel, which only ever sees what this sends.
+                            //
+                            // It used to send the last few thousand characters and leave the
+                            // panel to find the tags in them. On a reasoning prompt the
+                            // working comes back before the rewrite, so once the answer grew
+                            // past that tail the opening <REFINE_NOTES> had scrolled off the
+                            // front and could never be found again: the working simply
+                            // vanished from the card partway through, on exactly the prompts
+                            // that ask for it.
+                            notes: watch ? watch.notes : '',
+                            text: watch ? watch.body : '',
                         });
                     }
                 }
