@@ -5,7 +5,7 @@
   "author": "starlitcode",
   "github": "https://github.com/starlitcode/Lumiverse-Auto-Refine",
   "homepage": "https://github.com/starlitcode/Lumiverse-Auto-Refine",
-  "description": "Runs a second model pass over a finished reply and saves the result, following rules you write. The greeting is never touched, the original is kept so you can put it back, and the pass can run on a cheaper connection than the one you roleplay with.",
+  "description": "Automatically rewrite finished replies to your own writing rules, with the original kept so you can put it back.",
   "permissions": [
     "generation",
     "chat_mutation",

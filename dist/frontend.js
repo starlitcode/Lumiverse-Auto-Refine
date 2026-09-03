@@ -1861,8 +1861,13 @@ export function setup(ctx, overrides) {
             clearTimeout(ackTimer);
         ackTimer = setTimeout(() => {
             ackTimer = null;
-            if (!busy && msgBusy === null)
+            if (!busy && msgBusy === null && !sweep)
                 return;
+            // A sweep that never got its first word back is the same fault and needs
+            // the same clearing up, or its counter sits at nought of nought with a
+            // Stop button that has nothing to stop.
+            sweep = null;
+            sweepAsk = null;
             markBusy(false);
             msgBusy = null;
             const why = "this extension's backend did not answer, so nothing was sent to a model";
@@ -1879,6 +1884,37 @@ export function setup(ctx, overrides) {
             clearTimeout(ackTimer);
         ackTimer = null;
     }
+    // A sweep says which message it is on before starting it, so silence for
+    // longer than one message could take means the run itself went missing rather
+    // than the model being slow. Set again on every message. With the wait
+    // switched off there is no "longer than one message could take", so there is
+    // nothing to watch for and this stays out of the way.
+    let sweepWatch = null;
+    function armSweepWatch() {
+        if (sweepWatch)
+            clearTimeout(sweepWatch);
+        sweepWatch = null;
+        const cap = waitCap();
+        if (!cap)
+            return;
+        sweepWatch = setTimeout(() => {
+            sweepWatch = null;
+            if (!sweep)
+                return;
+            const got = sweep;
+            sweep = null;
+            sweepAsk = null;
+            log("the run through the chat stopped answering after reply " + got.at + " of " + got.of);
+            toast("The run through the chat stopped answering. What it had already saved is kept.", true);
+            paint();
+        }, (cap + 30) * 1000);
+    }
+    function clearSweepWatch() {
+        if (sweepWatch)
+            clearTimeout(sweepWatch);
+        sweepWatch = null;
+    }
+    disposers.push(clearSweepWatch);
     let deadman = null;
     function armDeadman() {
         if (deadman)
@@ -2882,12 +2918,12 @@ export function setup(ctx, overrides) {
         // Three answers to the same reply, to choose between. Spends three calls
         // and says so, and only ever when it is pressed: nothing about the
         // automatic pass changes.
-        const few = button("Try a few", false);
+        const few = button("Give me three to pick from", false);
         few.setAttribute("data-arf-many", "1");
         few.disabled = busy || !!stop;
         few.style.opacity = few.disabled ? "0.5" : "1";
         few.style.cursor = few.disabled ? "not-allowed" : "pointer";
-        few.title = stop || "Refine the latest reply three times and pick from the answers. Three calls.";
+        few.title = stop || "Refines the latest reply three times and shows you the answers. Three model calls, and nothing is saved until you pick one.";
         few.addEventListener("click", () => refineMany());
         row.appendChild(few);
         const auto = document.createElement("label");
@@ -4340,6 +4376,34 @@ export function setup(ctx, overrides) {
             });
             row.appendChild(all);
             wrap.appendChild(row);
+        }
+        // The whole chat in one go, for a chat written before the extension was
+        // installed. Down here rather than beside Refine the latest reply, because
+        // one is a button you press without thinking and this one rewrites every
+        // reply you have.
+        wrap.appendChild(el("div", "arf-lab", "Every reply already here"));
+        if (sweep) {
+            wrap.appendChild(note("Refining reply " + sweep.at + " of " + sweep.of + ". " +
+                sweep.saved + " saved, " + sweep.skipped + " left alone. Stop ends it after the one it is on."));
+            const stopRow = el("div", "arf-row");
+            const halt = button("Stop", false);
+            halt.setAttribute("data-arf-sweep-stop", "1");
+            halt.addEventListener("click", () => stopRefine());
+            stopRow.appendChild(halt);
+            wrap.appendChild(stopRow);
+        }
+        else {
+            wrap.appendChild(note("Refines every reply in this chat, oldest first, one call each. The greeting is left alone, and so are your own messages. Each one can be put back from the Log afterwards, and Stop ends the run."));
+            const goRow = el("div", "arf-row");
+            const go = button("Refine every reply here", false);
+            go.setAttribute("data-arf-sweep", "1");
+            go.disabled = !known || busy || !!whyNot();
+            go.style.opacity = go.disabled ? "0.5" : "1";
+            go.style.cursor = go.disabled ? "not-allowed" : "pointer";
+            go.title = whyNot() || "One model call per reply in this chat.";
+            go.addEventListener("click", () => askSweep());
+            goRow.appendChild(go);
+            wrap.appendChild(goRow);
         }
         return wrap;
     }
@@ -5912,15 +5976,27 @@ export function setup(ctx, overrides) {
             // one: the tap explained itself in a toast, but only after you had
             // pressed a button that looked willing.
             const stuck = working || back ? "" : whyNot();
-            el2.innerHTML = working ? spinIcon() : back ? undoIcon() : refineIcon();
             // The icons are written at a fixed 20px, which is most of a 28px button
             // and lost inside a 96px one. Just over half the button leaves the ring
             // around it looking even at either end of the range.
-            const svg = el2.querySelector && el2.querySelector("svg");
-            if (svg) {
-                const mark = String(Math.round(widgetWanted() * 0.52));
-                svg.setAttribute("width", mark);
-                svg.setAttribute("height", mark);
+            const mark = String(Math.round(widgetWanted() * 0.52));
+            const kind = (working ? "working" : back ? "back" : "ready") + ":" + mark;
+            // Only when it would draw something different.
+            //
+            // This runs from the clock, which is to say two and a half times a
+            // second while a refine is in flight, and rewriting the icon throws the
+            // old one away mid-turn. The ring is turned by the stylesheet over 900ms,
+            // so it never got past half a rotation before starting again from the
+            // top: a spinner that stutters rather than turns. The message buttons
+            // have had this guard for a while and spin smoothly; the widget did not.
+            if (el2.getAttribute("data-arf-icon") !== kind) {
+                el2.setAttribute("data-arf-icon", kind);
+                el2.innerHTML = working ? spinIcon() : back ? undoIcon() : refineIcon();
+                const svg = el2.querySelector && el2.querySelector("svg");
+                if (svg) {
+                    svg.setAttribute("width", mark);
+                    svg.setAttribute("height", mark);
+                }
             }
             el2.className =
                 "arf-float" +
@@ -6112,11 +6188,55 @@ export function setup(ctx, overrides) {
     }
     // Calls off whatever is running. Safe to press when nothing is: the backend
     // answers with how many it stopped, and the panel says so either way.
+    //
+    // A sweep counts as running even between two messages, where nothing is in
+    // flight and busy is false. Without that, Stop on a sweep did nothing at the
+    // one moment it was most likely to be pressed.
     function cancelRefine() {
-        if (!busy && msgBusy === null)
+        if (!busy && msgBusy === null && !sweep)
             return;
         send({ type: "cancel_refine", requestId: newId() });
         log("asked it to stop");
+    }
+    const stopRefine = cancelRefine;
+    // ---- every reply in the chat ----
+    // What a sweep is doing, or null when none is running. Held rather than
+    // written into the card, because the card is rebuilt on every repaint and the
+    // progress has to survive that.
+    let sweep = null;
+    let sweepAsk = null;
+    function askSweep() {
+        const why = whyNot();
+        if (why) {
+            toast(why, true);
+            return;
+        }
+        if (busy || msgBusy !== null) {
+            toast("A refine is already running. Let it finish first.", true);
+            return;
+        }
+        if (lastChatId == null) {
+            toast("No chat is open, so there is nothing to go through.", true);
+            return;
+        }
+        // Asked first, always. This is the one action in the extension that writes
+        // over a whole chat, and it costs a model call per reply. A button that did
+        // that on one press would be a button somebody presses once by accident and
+        // then has to undo forty times.
+        confirmSweep();
+    }
+    function startSweep() {
+        sweep = { at: 0, of: 0, saved: 0, skipped: 0 };
+        sweepAsk = newId();
+        clearLive();
+        choices = null;
+        // The same five-second watchdog every other request gets. A backend that is
+        // not running answers nothing at all, and without this the card would sit
+        // there counting nothing for the rest of the session.
+        armAck();
+        log("going through every reply in this chat");
+        send({ type: "refine_all", requestId: sweepAsk, chatId: lastChatId });
+        paint();
     }
     // A new refine starts on an empty screen rather than under the last one.
     function clearLive() {
@@ -6589,6 +6709,49 @@ export function setup(ctx, overrides) {
                         askToSave(msg);
                         return;
                     }
+                    if (msg.type === "refine_all_progress") {
+                        if (sweepAsk && msg.requestId !== sweepAsk)
+                            return;
+                        sweep = {
+                            at: Number(msg.at) || 0,
+                            of: Number(msg.of) || 0,
+                            saved: Number(msg.saved) || 0,
+                            skipped: Number(msg.skipped) || 0,
+                        };
+                        // Each message proves the sweep is alive, so the watchdog is set
+                        // again from here. One that never fires is one message going
+                        // missing rather than the whole run, which is the case the panel
+                        // could not otherwise tell from a very slow model.
+                        armSweepWatch();
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "refine_all_done") {
+                        if (sweepAsk && msg.requestId !== sweepAsk)
+                            return;
+                        sweepAsk = null;
+                        sweep = null;
+                        clearSweepWatch();
+                        const saved = Number(msg.saved) || 0;
+                        const left = Number(msg.skipped) || 0;
+                        // Every ending says what happened to the chat, including the ones
+                        // where nothing happened. A sweep that finds nothing to do and says
+                        // nothing reads exactly like a button that did not work.
+                        const count = saved + left === 0
+                            ? "There was no reply here to refine."
+                            : saved +
+                                (saved === 1 ? " reply refined" : " replies refined") +
+                                (left ? ", " + left + " left alone" : "") +
+                                (msg.stopped ? ", stopped partway" : "") +
+                                ".";
+                        const why = String(msg.why || "").trim();
+                        log(count.toLowerCase().replace(/\.$/, ""), saved > 0);
+                        if (why)
+                            log("what stopped the rest: " + why);
+                        toast(count + (why ? " " + why + "." : ""), !saved);
+                        paint();
+                        return;
+                    }
                     if (msg.type === "prompt_preview") {
                         // A failure answered by the outer net carries no requestId, and it
                         // still has to clear the spinner.
@@ -6608,6 +6771,55 @@ export function setup(ctx, overrides) {
         }
     }
     catch (_) { }
+    // The second question worth a modal, for the same reason as the first: it is
+    // asked before anything is written and the answer decides whether a whole
+    // chat gets rewritten.
+    //
+    // A host with no modal is not a reason to skip the question. It falls back to
+    // the browser's own confirm, and if there is not one of those either the
+    // sweep does not run: going ahead unasked is the one answer that is wrong.
+    function confirmSweep() {
+        const many = "This rewrites every reply in this chat, one model call each.";
+        const back = "The greeting and your own messages are left alone, and each rewrite can be put back from the Log.";
+        try {
+            if (ctx.ui && typeof ctx.ui.showModal === "function") {
+                const modal = ctx.ui.showModal({ title: "Refine every reply here?" });
+                const root = modal.root;
+                root.innerHTML = "";
+                root.className = "arf";
+                root.appendChild(el("div", "arf-well", many + " " + back));
+                const bar = el("div", "arf-row");
+                const yes = button("Go through the chat", true);
+                yes.setAttribute("data-arf-sweep-yes", "1");
+                const no = button("Not now", false);
+                const shut = () => {
+                    try {
+                        modal.dismiss && modal.dismiss();
+                    }
+                    catch (_) { }
+                };
+                yes.addEventListener("click", () => {
+                    shut();
+                    startSweep();
+                });
+                no.addEventListener("click", shut);
+                bar.appendChild(yes);
+                bar.appendChild(no);
+                root.appendChild(bar);
+                return;
+            }
+        }
+        catch (_) { }
+        try {
+            if (typeof globalThis.confirm === "function") {
+                if (globalThis.confirm(many + "\n\n" + back))
+                    startSweep();
+                return;
+            }
+        }
+        catch (_) { }
+        toast("This build cannot ask you first, and this is not something to start unasked.", true);
+    }
     // The one modal in the extension, and it earns it: this is a question that
     // has to be answered before anything is written, which is exactly the moment
     // a modal is for. Everything else lives in the tab.

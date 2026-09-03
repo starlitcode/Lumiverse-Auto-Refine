@@ -2103,3 +2103,97 @@ describe("the sampler list", () => {
     expect(h.asked[0].parameters).toBeUndefined();
   });
 });
+
+// A chat written before the extension was installed, brought up to the rules
+// in one go. The greeting is the thing this must never touch: it is the one
+// message a person wrote, and a pass over "every reply" is exactly where it
+// would get swept up.
+describe("going through every reply in a chat", () => {
+  const longChat = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content: "She stepped through and, suddenly, the cold just hit her." },
+    { id: "m3", role: "user", content: "i keep going" },
+    { id: "m4", role: "assistant", content: "The road bent, and, suddenly, the trees just closed over it." },
+  ];
+
+  test("every reply is refined, oldest first, and the greeting is left alone", async () => {
+    const h = await armed(["<REFINED>The cold met her as she stepped through the gate.</REFINED>"], {}, longChat());
+    await h.front({ type: "refine_all", requestId: "a1", chatId: "c1" });
+    await wait(120);
+    const done = h.sent.find((m: any) => m.type === "refine_all_done" && m.requestId === "a1");
+    expect(done).toBeTruthy();
+    expect(done.saved).toBe(2);
+    // The greeting is not among them, and neither are the user's own messages.
+    const touched = h.writes.map((w: any) => w.id).sort();
+    expect(touched).toEqual(["m2", "m4"]);
+    expect(h.body("m0")).toBe("The gate stands open, and the road past it is dark.");
+    expect(h.body("m1")).toBe("i walk through it");
+  });
+
+  test("it says which one it is on as it goes", async () => {
+    const h = await armed(["<REFINED>The cold met her as she stepped through the gate.</REFINED>"], {}, longChat());
+    await h.front({ type: "refine_all", requestId: "a2", chatId: "c1" });
+    await wait(120);
+    const steps = h.sent.filter((m: any) => m.type === "refine_all_progress" && m.requestId === "a2");
+    expect(steps.length).toBe(2);
+    expect(steps[0].at).toBe(1);
+    expect(steps[0].of).toBe(2);
+    expect(steps[1].at).toBe(2);
+  });
+
+  test("a chat with only a greeting in it says so rather than doing nothing quietly", async () => {
+    const h = await armed(["<REFINED>x</REFINED>"], {}, [
+      { id: "m0", role: "assistant", content: "The gate stands open." },
+    ]);
+    await h.front({ type: "refine_all", requestId: "a3", chatId: "c1" });
+    await wait(60);
+    const done = h.sent.find((m: any) => m.type === "refine_all_done" && m.requestId === "a3");
+    expect(done.saved).toBe(0);
+    expect(done.skipped).toBe(0);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("a reply that fails a check is counted and the rest still go", async () => {
+    // The first answer is a refusal, which is dropped; the second is fine.
+    const h = await armed(
+      [
+        "<REFINED>I can't help with that.</REFINED>",
+        "<REFINED>The trees closed over the bending road.</REFINED>",
+      ],
+      {},
+      longChat(),
+    );
+    await h.front({ type: "refine_all", requestId: "a4", chatId: "c1" });
+    await wait(150);
+    const done = h.sent.find((m: any) => m.type === "refine_all_done" && m.requestId === "a4");
+    expect(done.saved).toBe(1);
+    expect(done.skipped).toBe(1);
+    // And it says what went wrong, once, rather than per message or not at all.
+    expect(String(done.why).length).toBeGreaterThan(0);
+  });
+
+  test("a stop ends the run between messages and keeps what was saved", async () => {
+    const h = host(chat(), ["<REFINED>The cold met her as she stepped through the gate.</REFINED>"]);
+    await h.front({ type: "set_settings", settings: RULES });
+    // Stopped before it starts, which is the same door the button uses.
+    await h.front({ type: "cancel_refine", requestId: "s9" });
+    await h.front({ type: "refine_all", requestId: "a5", chatId: "c1" });
+    await wait(120);
+    const done = h.sent.find((m: any) => m.type === "refine_all_done" && m.requestId === "a5");
+    // The sweep clears the flag on the way in, so a stop pressed before it
+    // started does not cancel the run somebody has just asked for.
+    expect(done).toBeTruthy();
+    expect(done.saved).toBe(1);
+  });
+
+  test("switched off in this chat, it refines nothing", async () => {
+    const h = await armed(["<REFINED>The cold met her as she stepped through the gate.</REFINED>"], {}, longChat());
+    await h.front({ type: "set_chats_off", chats: ["c1"] });
+    await h.front({ type: "refine_all", requestId: "a6", chatId: "c1" });
+    await wait(120);
+    const done = h.sent.find((m: any) => m.type === "refine_all_done" && m.requestId === "a6");
+    expect(done.saved).toBe(0);
+    expect(h.writes.length).toBe(0);
+  });
+});

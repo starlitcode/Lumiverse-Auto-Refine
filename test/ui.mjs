@@ -1696,6 +1696,39 @@ console.log("\na temporary chat");
   });
 }
 
+console.log("\nthe spinner on the floating button");
+{
+  // The ring is turned by the stylesheet over 900ms. The clock repaints the
+  // button two and a half times a second, and repainting used to rewrite the
+  // icon, which threw away the element mid-turn and started the rotation again
+  // from the top: a spinner that stuttered instead of turning. So the check is
+  // that the element survives, not that it looks right.
+  await inTab(browser, { saved: { widgetOn: true, refineOn: true } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat", requestId: id, chatId: "c1",
+        character: "Wren", hasCharacter: true, resolved: true,
+      });
+      for (const f of window.__handlers.GENERATION_ENDED || []) f({ chatId: "c1", messageId: "m2" });
+    });
+    await settle(page);
+    const spinning = await page.evaluate(() => {
+      const svg = document.querySelector("#float .arf-spin");
+      if (svg) svg.setAttribute("data-arf-same-node", "1");
+      return !!svg;
+    });
+    ok("a refine puts a spinner on the button", spinning);
+    // Long enough for several ticks of the clock.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 1400)));
+    const kept = await page.evaluate(() => {
+      const svg = document.querySelector("#float .arf-spin");
+      return !!svg && svg.getAttribute("data-arf-same-node") === "1";
+    });
+    ok("and leaves it alone across repaints, so the turn is not restarted", kept);
+  });
+}
+
 console.log("\nthe floating button's size");
 {
   await inTab(browser, {}, async (page) => {

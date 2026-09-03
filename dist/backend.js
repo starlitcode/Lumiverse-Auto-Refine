@@ -1268,6 +1268,11 @@ function dropRun(userId, controller) {
     if (!set.size)
         running.delete(k);
 }
+// Readers who have asked a sweep of the whole chat to stop. Separate from the
+// controllers above, which end one call: a sweep is a queue, and aborting the
+// call it happens to be on would only send it to the next message. This is read
+// between messages, so the sweep ends where nothing is half written.
+const stopAll = new Set();
 // Returns how many were stopped, so the panel can say nothing was running
 // rather than claiming it stopped something.
 function stopRuns(userId) {
@@ -1963,6 +1968,80 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 });
             return;
         }
+        // Every reply already in the chat, oldest first, one at a time.
+        //
+        // One at a time on purpose. Firing them together would be quicker and would
+        // also mean a provider's rate limit turning half a chat into a row of
+        // failures with no way to tell which half. In order means the count on
+        // screen is true, a stop lands between two messages rather than inside one,
+        // and a chat left half done is picked up from the top.
+        if (payload.type === 'refine_all') {
+            replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
+            const who = String(userId == null ? '' : userId);
+            stopAll.delete(who);
+            let msgs = [];
+            try {
+                msgs = await spindle.chat.getMessages(payload.chatId);
+            }
+            catch (e) {
+                replyTo(userId, {
+                    type: 'refine_all_done',
+                    requestId: payload.requestId,
+                    chatId: payload.chatId,
+                    saved: 0,
+                    skipped: 0,
+                    stopped: false,
+                    why: 'the chat could not be read: ' + ((e && e.message) || 'no reason given'),
+                });
+                return;
+            }
+            const greetingId = greetingIdOf(msgs);
+            // Replies only, and never the greeting. Your own messages are refined
+            // when you ask for that one, not swept up in a pass over the chat.
+            const todo = (Array.isArray(msgs) ? msgs : []).filter((x) => x &&
+                x.role === 'assistant' &&
+                x.id !== greetingId &&
+                String(x.content == null ? '' : x.content).trim());
+            let saved = 0;
+            let skipped = 0;
+            const why = [];
+            for (let i = 0; i < todo.length; i++) {
+                // Checked between messages, so a stop ends the run at the next boundary
+                // rather than abandoning a rewrite half written.
+                if (stopAll.has(who))
+                    break;
+                replyTo(userId, {
+                    type: 'refine_all_progress',
+                    requestId: payload.requestId,
+                    chatId: payload.chatId,
+                    at: i + 1,
+                    of: todo.length,
+                    saved: saved,
+                    skipped: skipped,
+                });
+                const done = await refineMessage(payload.chatId, todo[i].id, userId, true);
+                if (done.ok)
+                    saved++;
+                else {
+                    skipped++;
+                    // The reasons, not one per message. A chat where forty replies all
+                    // failed the same check is one thing to read, not forty.
+                    if (done.why && why.indexOf(done.why) < 0 && why.length < 4)
+                        why.push(done.why);
+                }
+            }
+            const wasStopped = stopAll.delete(who);
+            replyTo(userId, {
+                type: 'refine_all_done',
+                requestId: payload.requestId,
+                chatId: payload.chatId,
+                saved: saved,
+                skipped: skipped,
+                stopped: wasStopped,
+                why: why.join('; '),
+            });
+            return;
+        }
         if (payload.type === 'scan_text') {
             const found = scanText(String(payload.text == null ? '' : payload.text));
             replyTo(userId, {
@@ -1975,6 +2054,11 @@ spindle.onFrontendMessage(async (payload, userId) => {
             return;
         }
         if (payload.type === 'cancel_refine') {
+            // Both, because Stop is one button and a reader pressing it means the
+            // whole thing: the call in flight, and the queue behind it if there is
+            // one. Marked before the abort, or the sweep would move to the next
+            // message on the way past.
+            stopAll.add(String(userId == null ? '' : userId));
             const n = stopRuns(userId);
             replyTo(userId, { type: 'refine_stopped', requestId: payload.requestId, stopped: n });
             return;
@@ -2274,11 +2358,20 @@ spindle.onFrontendMessage(async (payload, userId) => {
                         ? 'undo_result'
                         : payload && payload.type === 'active_chat'
                             ? 'active_chat'
-                            : 'refine_result';
+                            : payload && payload.type === 'refine_all'
+                                ? 'refine_all_done'
+                                : 'refine_result';
+            // A sweep that died has to leave the panel's counter behind it, or the
+            // card sits there saying "reply 4 of 30" for the rest of the session.
+            if (kind === 'refine_all_done')
+                stopAll.delete(String(userId == null ? '' : userId));
             replyTo(userId, {
                 type: kind,
                 requestId: payload && payload.requestId,
                 ok: false,
+                saved: 0,
+                skipped: 0,
+                stopped: false,
                 why: 'something went wrong inside the extension: ' + why,
             });
         }
