@@ -1809,6 +1809,49 @@ console.log("\nchoosing what goes where");
   });
 }
 
+console.log("\nthe run through the chat");
+{
+  // One button, in one place. It was moved next to Refine the latest reply and
+  // left behind in This chat as well, so the panel offered the same thing twice
+  // on two different tabs.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat", requestId: id, chatId: "c1",
+        character: "Wren", hasCharacter: true, resolved: true,
+      });
+    });
+    await settle(page);
+    const counts = [];
+    const tabs = await page.evaluate(() =>
+      [...document.querySelectorAll("#drawer .arf-tab")].map((b) => b.textContent.trim()));
+    for (const t of tabs) {
+      await goTab(page, t);
+      counts.push(
+        t + ":" + (await page.evaluate(() => document.querySelectorAll("[data-arf-sweep]").length)),
+      );
+    }
+    ok(
+      "the button is in one place, on every tab",
+      counts.every((c) => c.split(":")[1] === "1"),
+      counts.join(" "),
+    );
+
+    // While it runs, it takes the place of the buttons rather than reporting
+    // from somewhere else.
+    await page.evaluate(() => {
+      const m = window.__sent.filter((x) => x.type === "refine_all").pop();
+      window.__fromBackend({
+        type: "refine_all_progress",
+        requestId: m ? m.requestId : "x",
+        chatId: "c1", at: 3, of: 8, saved: 2, skipped: 0,
+      });
+    });
+    await settle(page);
+  });
+}
+
 console.log("\nthe card that comes up on the page");
 {
   // A refine changes writing somebody was reading. The panel is behind a tab
@@ -1914,6 +1957,7 @@ console.log("\nthe card that comes up on the page");
         return base;
       };
       let worst = 99;
+      let where = "";
       for (const el of document.querySelectorAll("[data-arf-pop] *")) {
         if (!Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
         const box = el.getBoundingClientRect();
@@ -1924,11 +1968,18 @@ console.log("\nthe card that comes up on the page");
         const px = parseFloat(st.fontSize) || 16;
         const big = px >= 24 || ((parseInt(st.fontWeight, 10) || 400) >= 700 && px >= 18.66);
         const r = ratio(over(fg, backdrop(el)), backdrop(el)) / (big ? 3 : 4.5);
-        if (r < worst) worst = r;
+        if (r < worst) {
+          worst = r;
+          where = (el.className || el.tagName) + ": " + el.textContent.trim().slice(0, 30);
+        }
       }
-      return worst;
+      return { worst: worst, where: where };
     });
-    ok("and every word on it is readable", worst >= 1, "worst was " + worst.toFixed(2) + " of its floor");
+    ok(
+      "and every word on it is readable",
+      worst.worst >= 1,
+      "worst was " + worst.worst.toFixed(2) + " of its floor on " + worst.where,
+    );
 
     // Keeping it closes the card and leaves the refine in the Log.
     await page.evaluate(() => document.querySelector("[data-arf-pop-keep]").click());

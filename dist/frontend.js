@@ -1129,6 +1129,9 @@ const BIG_TEXT_FLOOR = 3;
 // What counts as large: the standard's 18pt, or 14pt once it is bold.
 const BIG_PX = 24;
 const BIG_BOLD_PX = 18.66;
+// How far past the floor a repair aims. Small on purpose: this is headroom for
+// rounding, not a second opinion about what is readable.
+const CLEARANCE = 1.05;
 function floorFor(cs) {
     const px = parseFloat(cs.fontSize) || 16;
     const weight = parseInt(cs.fontWeight, 10) || 400;
@@ -1157,9 +1160,24 @@ function betterInk(back, want, from) {
     const onBlack = contrastRatio(BLACK, back);
     const toward = onWhite >= onBlack ? WHITE : BLACK;
     const most = Math.max(onWhite, onBlack);
-    const full = toward === WHITE
-        ? { color: "rgba(255,255,255,0.94)", ratio: onWhite }
-        : { color: "rgba(0,0,0,0.9)", ratio: onBlack };
+    // Softened a little, because full white on a dark panel is harsher than
+    // anything the theme itself draws. Only while it still clears the floor: the
+    // softening costs about a tenth of the ratio, which is what left a button
+    // label at 4.46 against 4.5 and the check calling it unreadable. When the
+    // softened one falls short the solid colour is used, which is the whole
+    // point of repainting in the first place.
+    const soft = toward === WHITE
+        ? { color: "rgba(255,255,255,0.94)", ink: { r: 255, g: 255, b: 255, a: 0.94 } }
+        : { color: "rgba(0,0,0,0.9)", ink: { r: 0, g: 0, b: 0, a: 0.9 } };
+    const softRatio = contrastRatio(blendColor(soft.ink, back), back);
+    // Cleared with room to spare rather than exactly. Two ways of working out
+    // what is behind an element differ in the last decimal, depending on which
+    // ancestor is treated as the opaque one, so a repair that lands on 4.53 is a
+    // repair somebody else measures at 4.46 and calls a failure. The margin is
+    // free: it decides between a black at nine tenths and a black at ten.
+    const full = want && softRatio < want * CLEARANCE
+        ? { color: toward === WHITE ? "#fff" : "#000", ratio: most }
+        : { color: soft.color, ratio: softRatio };
     if (!from || !want || most <= want)
         return full;
     const start = blendColor(from, back);
@@ -2611,7 +2629,17 @@ export function setup(ctx, overrides) {
                 // read off the line rather than being one number for the whole panel.
                 const want = floorFor(cs);
                 if (contrastRatio(shown, back) < want) {
-                    const ink = betterInk(back, want, fg);
+                    // Prose keeps as much of its own colour as it can: the panel says
+                    // things at three volumes on purpose, and repainting a quiet aside to
+                    // full white would put it level with the heading above it.
+                    //
+                    // A control has no such hierarchy to keep. A button label is one
+                    // thing at one volume, so the smallest step that scrapes the floor is
+                    // the wrong answer there: on a theme with a light accent it left
+                    // "Refine the latest reply" as mid-grey on lavender, which reads as
+                    // half-erased rather than as readable. Controls get the most readable
+                    // ink there is.
+                    const ink = isControl ? betterInk(back, want) : betterInk(back, want, fg);
                     n.style.color = ink.color;
                     // Marked so the next repaint re-measures it. Without the mark an
                     // element the sweep already fixed reads as healthy the second time
@@ -2977,6 +3005,20 @@ export function setup(ctx, overrides) {
         liveEls = { dot: dot, text: words };
         const row = el("div", "arf-row");
         const stop = whyNot();
+        // A run through the chat takes the place of the two buttons while it is
+        // going, rather than being reported somewhere else: what it is doing and
+        // the way to end it belong where the button that started it was.
+        if (sweep) {
+            wrap.appendChild(note("Going through the chat: reply " + sweep.at + " of " + sweep.of + ", " +
+                sweep.saved + " refined, " + sweep.skipped + " left alone."));
+            const halt = button("Stop", false);
+            halt.setAttribute("data-arf-sweep-stop", "1");
+            halt.title = "Ends the run after the reply it is on, so nothing is left half written.";
+            halt.addEventListener("click", () => stopRefine());
+            row.appendChild(halt);
+            wrap.appendChild(row);
+            return wrap;
+        }
         const now = button("Refine the latest reply", true);
         now.disabled = busy || !!stop;
         now.style.opacity = now.disabled ? "0.5" : "1";
@@ -2985,13 +3027,13 @@ export function setup(ctx, overrides) {
             now.title = stop;
         now.addEventListener("click", () => refineNow());
         row.appendChild(now);
-        // The whole chat, next to the one reply. A chat written before the
-        // extension was installed is the ordinary reason somebody opens this panel
-        // at all, so the button for it belongs where they are already looking
-        // rather than three cards down another tab.
+        // The whole chat, next to the one reply, and the only place it appears. A
+        // chat written before the extension was installed is the ordinary reason
+        // somebody opens this panel at all, so the button belongs where they are
+        // already looking.
         const every = button("Refine every reply here", false);
         every.setAttribute("data-arf-sweep", "1");
-        every.disabled = busy || !!stop || !!sweep || lastChatId == null;
+        every.disabled = busy || !!stop || lastChatId == null;
         every.style.opacity = every.disabled ? "0.5" : "1";
         every.style.cursor = every.disabled ? "not-allowed" : "pointer";
         every.title =
@@ -4455,34 +4497,6 @@ export function setup(ctx, overrides) {
             });
             row.appendChild(all);
             wrap.appendChild(row);
-        }
-        // The whole chat in one go, for a chat written before the extension was
-        // installed. Down here rather than beside Refine the latest reply, because
-        // one is a button you press without thinking and this one rewrites every
-        // reply you have.
-        wrap.appendChild(el("div", "arf-lab", "Every reply already here"));
-        if (sweep) {
-            wrap.appendChild(note("Refining reply " + sweep.at + " of " + sweep.of + ". " +
-                sweep.saved + " saved, " + sweep.skipped + " left alone. Stop ends it after the one it is on."));
-            const stopRow = el("div", "arf-row");
-            const halt = button("Stop", false);
-            halt.setAttribute("data-arf-sweep-stop", "1");
-            halt.addEventListener("click", () => stopRefine());
-            stopRow.appendChild(halt);
-            wrap.appendChild(stopRow);
-        }
-        else {
-            wrap.appendChild(note("Refines every reply in this chat, oldest first, one call each. The greeting is left alone, and so are your own messages. Each one can be put back from the Log afterwards, and Stop ends the run."));
-            const goRow = el("div", "arf-row");
-            const go = button("Refine every reply here", false);
-            go.setAttribute("data-arf-sweep", "1");
-            go.disabled = !known || busy || !!whyNot();
-            go.style.opacity = go.disabled ? "0.5" : "1";
-            go.style.cursor = go.disabled ? "not-allowed" : "pointer";
-            go.title = whyNot() || "One model call per reply in this chat.";
-            go.addEventListener("click", () => askSweep());
-            goRow.appendChild(go);
-            wrap.appendChild(goRow);
         }
         return wrap;
     }

@@ -17,7 +17,7 @@ The search box above the tabs looks across every one of them, not just the one y
 Three things never move, whichever tab you left open, because they are what you came for.
 
 - **The switch** is the master switch. Off, nothing is refined and no model call is made, by any path.
-- **Refine the latest reply** does one, now. **Refine every reply here** goes through a chat you already have, oldest first, one model call each, and asks before it starts. **every reply, automatically** is the automatic pass, off by default. The greeting is never included by any of them, and neither are your own messages unless you press the button on one.
+- **Refine the latest reply** does one, now. **Refine every reply here**, beside it, goes through a chat you already have, oldest first, one model call each, and asks before it starts. **every reply, automatically** is the automatic pass, off by default. The greeting is never included by any of them, and neither are your own messages unless you press the button on one.
 - **Refines you can put back** shows what changed, with **Put it back** next to each one. Every refine in this chat is in there, newest first, not just the most recent: a second refine used to take away the way back from the first without saying so. The tab carries a badge with the count.
 
 ## Prompt
