@@ -2094,6 +2094,10 @@ console.log("\nwalking back into a chat");
     page.evaluate(() => window.__sent.filter((m) => m.type === "active_chat").length);
   const saysNoChat = (page) =>
     page.evaluate(() => document.querySelector("#drawer").textContent.indexOf("No chat") >= 0);
+  // Not in any chat by name, which is what "did it take a guess for a chat"
+  // asks. Saying no chat is open is a different claim and has its own check.
+  const noneNamed = (page) =>
+    page.evaluate(() => !/You are in .*'s chat/.test(document.querySelector("#drawer").textContent));
   // The watch reads the address on a timer, so these have to wait for a tick.
   const tick = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 1600)));
 
@@ -2148,6 +2152,147 @@ console.log("\nwalking back into a chat");
     // The server, still behind. This is the answer that used to undo everything.
     await answer(page, null);
     ok("and an answer about no active chat does not undo it", !(await saysNoChat(page)));
+  });
+
+  // And the harder shape of the same thing, which is what was actually
+  // happening: nothing announces the new chat at all, and the server is behind,
+  // so the only thing that knows is the address. Reading the id out of it needs
+  // to know where in an address an id sits, which is learned from a chat we
+  // were sure about rather than assumed from the shape of a Lumiverse URL.
+  const reply = async (page, body) => {
+    await page.evaluate((b) => {
+      const m = window.__sent.filter((x) => x.type === "active_chat").pop();
+      window.__fromBackend(Object.assign({ type: "active_chat", requestId: m.requestId }, b));
+    }, body);
+    await settle(page);
+  };
+  const askedAbout = (page) =>
+    page.evaluate(() => {
+      const m = window.__sent.filter((x) => x.type === "active_chat").pop();
+      return m ? m.chatId : undefined;
+    });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    // In a chat, with its id in the address. This is the moment the slot is
+    // learned, and the only moment it can be.
+    await page.evaluate(() => history.pushState({}, "", "/chat/oldchat00001"));
+    await reply(page, {
+      chatId: "oldchat00001", character: "Wren", hasCharacter: true, resolved: true, found: true,
+    });
+    await tick(page);
+
+    // Out to the home screen.
+    await page.evaluate(() => history.pushState({}, "", "/"));
+    await tick(page);
+    await reply(page, { chatId: null, resolved: true, found: false });
+    ok("out on the home screen, no chat is open", await saysNoChat(page));
+
+    // Tap a character. The chat is made. No event, and the server has not
+    // caught up.
+    await page.evaluate(() => history.pushState({}, "", "/chat/madejustnow01"));
+    await tick(page);
+    ok(
+      "the id in the address is what gets asked about",
+      (await askedAbout(page)) === "madejustnow01",
+      "asked about " + (await askedAbout(page)),
+    );
+    // An id the backend cannot find a chat under is not a chat.
+    await reply(page, { chatId: "madejustnow01", resolved: true, found: false });
+    ok("an id that names no chat is not taken for one", await noneNamed(page));
+    // But it stops claiming there is no chat, because the address says there is.
+    ok("and it stops saying no chat is open", !(await saysNoChat(page)));
+
+    // The server catches up. Nothing navigates, nothing reloads.
+    await tick(page);
+    await reply(page, {
+      chatId: "madejustnow01", character: "Wren", hasCharacter: true, resolved: true, found: true,
+    });
+    ok(
+      "and it lands in the chat once the server agrees it exists",
+      await page.evaluate(
+        () => document.querySelector("#drawer").textContent.indexOf("You are in Wren's chat") >= 0,
+      ),
+    );
+  });
+}
+
+console.log("\nthe live line while a refine is running");
+{
+  // The clock writes the status line four times a second, and a repaint builds
+  // it from nothing. They worked it out separately and disagreed: the clock
+  // wrote "Thinking, 12s" and a repaint wrote "Refining a reply", so switching
+  // tabs mid-refine threw the line back to the flat wording and the count
+  // started again, which reads as the thing stopping.
+  const line = (page) =>
+    page.evaluate(() => {
+      const dot = document.querySelector("#drawer .arf-dot");
+      return dot && dot.parentElement ? dot.parentElement.textContent.trim() : "";
+    });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat", requestId: id, chatId: "c1",
+        character: "Wren", hasCharacter: true, resolved: true,
+      });
+    });
+    await settle(page);
+    // A refine, thinking.
+    await page.evaluate(() => {
+      for (const f of window.__handlers.GENERATION_ENDED || []) f({ chatId: "c1", messageId: "m2" });
+    });
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_progress", stage: "thinking" });
+    });
+    await settle(page);
+    const running = await line(page);
+    ok("it says what the refine is doing", /think/i.test(running), "line read " + JSON.stringify(running));
+
+    await goTab(page, "Setup");
+    const after = await line(page);
+    ok(
+      "and goes on saying it after a tab switch",
+      /think/i.test(after),
+      "line read " + JSON.stringify(after),
+    );
+    ok(
+      "with the clock where it was, not back at nothing",
+      after.replace(/\d+s/, "") === running.replace(/\d+s/, ""),
+      JSON.stringify(running) + " became " + JSON.stringify(after),
+    );
+  });
+}
+
+console.log("\nhow long to wait");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+    const box = await page.evaluate(() => {
+      const el = document.querySelector('[data-arf-field="timeoutSecs"]');
+      return el ? { min: el.min, max: el.max } : null;
+    });
+    // A reasoning model on a high effort level can think for a long time, so
+    // ten minutes is not the ceiling and there has to be a way to switch the
+    // wait off entirely.
+    ok("the wait goes up to an hour", box && Number(box.max) >= 3600, JSON.stringify(box));
+    ok("and down to nought, which is off", box && Number(box.min) === 0, JSON.stringify(box));
+
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-arf-field="timeoutSecs"]');
+      el.value = "0";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.dispatchEvent(new Event("blur", { bubbles: true }));
+    });
+    await settle(page);
+    const sent = await page.evaluate(() => {
+      const m = window.__sent.filter((x) => x.type === "set_settings").pop();
+      return m ? m.settings.timeoutSecs : "(nothing sent)";
+    });
+    ok("switching it off reaches the backend as nought", sent === 0, "sent " + sent);
   });
 }
 

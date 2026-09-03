@@ -409,6 +409,15 @@ let protectInline = false;
 // hashed: a reader looking at the preview should be able to count them.
 const TOKEN = (n: number) => '[[AR' + n + ']]';
 const TOKEN_ANY = /\[\[AR(\d+)\]\]/g;
+// A token and nothing else. The rules below run one after another over text
+// that already has tokens in it, and one of them is for wiki-style brackets,
+// which is the exact shape of a token. So the shield ate its own work: a reply
+// with a single piece of inline code came out with that code hidden as [[AR1]],
+// the bracket rule then hid [[AR1]] as [[AR2]], and a model that copied every
+// token back perfectly still had the refine turned down for dropping one piece
+// of formatting. Every model, every time, on any reply carrying code, a link,
+// an image or a comment.
+const TOKEN_ONLY = /^\[\[AR\d+\]\]$/;
 
 // Two kinds of markup, and they need opposite treatment.
 //
@@ -517,6 +526,8 @@ function shield(text: string): Shield {
   // region, so specific before general is the order that does what was meant.
   for (const rule of shieldAdd.concat(GUARDED)) {
     out = out.replace(rule, (hit) => {
+      // Never a token this function put there a moment ago.
+      if (TOKEN_ONLY.test(hit)) return hit;
       // Bare inline formatting is left where it is, unless the reader asked
       // for it to be hidden too.
       if (!protectInline && INLINE_OK.test(hit)) return hit;
@@ -537,12 +548,25 @@ function shield(text: string): Shield {
 function unshield(text: string, parts: string[]): { text: string; lost: number[] } {
   if (!parts.length) return { text: text, lost: [] };
   const seen = new Set<number>();
-  const out = text.replace(TOKEN_ANY, (whole, n) => {
-    const at = Number(n);
-    if (!(at >= 1 && at <= parts.length)) return whole;
-    seen.add(at);
-    return parts[at - 1];
-  });
+  let out = text;
+  // Round after round, not one pass. A rule can match a region that already has
+  // a token in it, a table row being the everyday case, which puts that token
+  // inside the part rather than in the text. One pass would put the region back
+  // with [[AR1]] still sitting in it as visible characters, and then report the
+  // piece it just restored as missing. A part can only ever hold a token
+  // numbered below its own, since that token was put there first, so this walks
+  // down and stops.
+  for (let round = 0; round <= parts.length; round++) {
+    let moved = false;
+    out = out.replace(TOKEN_ANY, (whole, n) => {
+      const at = Number(n);
+      if (!(at >= 1 && at <= parts.length)) return whole;
+      seen.add(at);
+      moved = true;
+      return parts[at - 1];
+    });
+    if (!moved) break;
+  }
   const lost: number[] = [];
   for (let i = 1; i <= parts.length; i++) if (!seen.has(i)) lost.push(i);
   return { text: out, lost: lost };
@@ -1343,17 +1367,27 @@ async function askModel(
     ? new (globalThis as any).AbortController()
     : null;
   const secs = Number(timeoutSecs);
-  const ms = Number.isFinite(secs) && secs > 0 ? Math.min(600, Math.max(5, secs)) * 1000 : 90000;
+  // Zero is off, and waits for as long as the model takes. A reasoning model on
+  // a high effort level can think for minutes before it writes a character, and
+  // a cap that fires mid-thought throws away work that was about to arrive.
+  const ms = !Number.isFinite(secs)
+    ? 90000
+    : secs <= 0
+      ? 0
+      : Math.min(3600, Math.max(5, secs)) * 1000;
   let timer: any = null;
   if (controller) {
     controller.__arfWhy = '';
+    // Held whether or not there is a timer, because this is also what Stop
+    // reaches for, and with the timeout off it is the only way to end a run.
     holdRun(userId, controller);
-    timer = setTimeout(() => {
-      try {
-        controller.__arfWhy = 'timeout';
-        controller.abort();
-      } catch (_) {}
-    }, ms);
+    if (ms)
+      timer = setTimeout(() => {
+        try {
+          controller.__arfWhy = 'timeout';
+          controller.abort();
+        } catch (_) {}
+      }, ms);
   }
   try {
     const req: any = { messages: await buildPrompt(text, isUser, scene, userId) };
@@ -1836,7 +1870,9 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       thinkingMode =
         s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
       thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
-      timeoutSecs = Number(s.timeoutSecs) || 90;
+      // Not `|| 90`. Zero is a setting here, meaning never give up, and the
+      // short form would have quietly turned it back into a minute and a half.
+      timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 90;
       maxGrowthPct = Number(s.maxGrowthPct);
       maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
       minShrinkPct = Number(s.minShrinkPct);
@@ -2190,6 +2226,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       let resolved = false;
       let character: string | null = null;
       let hasCharacter = false;
+      // Whether a chat actually came back. The panel reads an id out of the
+      // address bar when a chat has just been made, since the server does not
+      // call it the active one yet, and this is what tells that guess from a
+      // real chat: an id that looks the part but names nothing is not a chat to
+      // start refining into.
+      let found = false;
       try {
         let chat: any = null;
         if (chatId && spindle.chats && typeof spindle.chats.get === 'function') {
@@ -2200,6 +2242,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
           chatId = (chat && chat.id) || null;
           resolved = true;
         }
+        found = !!(chat && chat.id);
         const cardId = chat && chat.character_id;
         // Whether the chat has a card at all, which is a different question
         // from what it is called: the name needs the characters permission and
@@ -2222,6 +2265,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         character: character,
         hasCharacter: hasCharacter,
         resolved: resolved,
+        found: found,
       });
       return;
     }

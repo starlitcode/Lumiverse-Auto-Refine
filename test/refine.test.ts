@@ -893,7 +893,102 @@ describe("protecting what is not prose", () => {
     const h = await armed(["She read it out.\n\n[[AR1]]\n\nThen she stopped, slowly."], {}, fenced);
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
+    // Both halves. Checking only that the fence survived passes just as well
+    // when the refine was refused and the original was left sitting there,
+    // which is how the shield eating its own tokens went unnoticed: the fence
+    // was always there because nothing was ever saved over it.
+    expect(h.writes.length).toBe(1);
     expect(h.body("m2")).toContain("```\nkeep me exactly\n```");
+    expect(h.body("m2")).toContain("Then she stopped, slowly.");
+  });
+
+  // The shield runs its rules one after another over text that already has
+  // tokens in it, and one of those rules is for wiki-style brackets, which is
+  // the shape of a token. So it hid its own work: a reply with inline code came
+  // out as [[AR1]], the bracket rule hid that as [[AR2]], and a model that
+  // copied every token back perfectly was still turned down for dropping one
+  // piece of formatting. Every model, every time.
+  //
+  // One case per rule that runs before the bracket one, because being right
+  // about the first shape and wrong about the rest is the shape of the bug.
+  // Every token the model was actually shown, which is what a model that copies
+  // them all back would send. Read off the prompt rather than assumed, so the
+  // check is about what the shield did and not about the fixture's tag names.
+  const tokensShown = (h: any): string[] => {
+    const turn = h.asked[0].messages[h.asked[0].messages.length - 1].content;
+    return String(turn).match(/\[\[AR\d+\]\]/g) || [];
+  };
+
+  const beforeTheBrackets: Array<[string, string, string, string]> = [
+    ["inline code", "She said `hello there` and left.", "`hello there`", "She said %T and went."],
+    ["a link", "Read [the note](https://x.test/a) later.", "[the note](https://x.test/a)", "Read %T soon."],
+    [
+      "an image",
+      "It showed ![a gate](https://x.test/g.png) plainly.",
+      "![a gate](https://x.test/g.png)",
+      "It showed %T clearly.",
+    ],
+    [
+      "a comment",
+      "She left the room. <!-- a note to self --> Then it was quiet.",
+      "<!-- a note to self -->",
+      "She left the room. %T Then it went quiet.",
+    ],
+  ];
+  for (const [what, body, keep, answer] of beforeTheBrackets) {
+    test("a reply with " + what + " is not turned down for keeping every token", async () => {
+      const msgs = marked();
+      msgs[2].content = body;
+      const seen = await armed([], {}, msgs);
+      await seen.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      const toks = tokensShown(seen);
+      // One piece of formatting, so one token. More than one means the shield
+      // hid something of its own, which is the fault itself.
+      expect(toks.length).toBe(1);
+
+      const h = await armed(["<REFINED>" + answer.replace("%T", toks.join(" ")) + "</REFINED>"], {}, msgs);
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.skipped().join(" ")).not.toMatch(/formatting/i);
+      expect(h.writes.length).toBe(1);
+      expect(h.body("m2")).toContain(keep);
+    });
+  }
+
+  test("a token swallowed inside a bigger match still comes back", async () => {
+    // A table row is a region that can hold a token, since inline code inside a
+    // cell is hidden before the row rule runs. Putting the row back has to put
+    // back what was inside it too, rather than leaving [[AR1]] on screen.
+    const msgs = marked();
+    msgs[2].content = "She read the whole sheet.\n\n| name | `code` |\n\nThen she looked up.";
+    const seen = await armed([], {}, msgs);
+    await seen.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const toks = tokensShown(seen);
+    const h = await armed(
+      ["<REFINED>She read the sheet through.\n\n" + toks.join("\n") + "\n\nThen she looked up.</REFINED>"],
+      {},
+      msgs,
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.skipped().join(" ")).not.toMatch(/formatting/i);
+    const saved = h.body("m2");
+    expect(saved).toContain("| name | `code` |");
+    expect(saved).not.toMatch(/\[\[AR\d+\]\]/);
+  });
+
+  test("a rewrite that really did drop a token is still refused", async () => {
+    // The fix must not be "stop checking". A model that leaves the token out
+    // has lost the formatting, and that answer is still turned down.
+    const msgs = marked();
+    msgs[2].content = "She said `hello there` and left.";
+    const h = await armed(["<REFINED>She said nothing and left.</REFINED>"], {}, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/formatting/i);
   });
 
   test("the model's own thinking is never sent and comes back untouched", async () => {
@@ -1468,6 +1563,37 @@ describe("stopping a refine", () => {
     await wait(10);
     const got = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s1");
     expect(got.stopped).toBe(0);
+  });
+
+  // With the wait switched off there is no timer to end a run, so Stop is the
+  // only way out and it has to keep working. The run is still held for that
+  // reason and no other.
+  test("a stop still reaches the run with the wait switched off", async () => {
+    const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      whileAsking: () => {
+        h.front({ type: "cancel_refine", requestId: "s2" });
+      },
+    });
+    await h.front({ type: "set_settings", settings: { ...RULES, timeoutSecs: 0 } });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const said = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s2");
+    expect(said).toBeTruthy();
+    expect(said.stopped).toBe(1);
+  });
+
+  // Zero is a setting, not a missing value, and it reaches the backend as one.
+  // Proving the timer is really absent would need a refine slower than the
+  // default wait, which is a minute and a half of test, so this checks the step
+  // that was actually wrong: the setting arriving and being kept.
+  test("the wait switched off reaches the backend as nought", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.front({ type: "set_settings", settings: { ...RULES, timeoutSecs: 0 } });
+    await h.front({ type: "load_settings", requestId: "q1" });
+    await wait(20);
+    const got = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "q1");
+    expect(got).toBeTruthy();
+    expect(got.settings.timeoutSecs).toBe(0);
   });
 });
 

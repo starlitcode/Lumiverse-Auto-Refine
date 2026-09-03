@@ -1025,9 +1025,9 @@ const COST_FIELDS = [
         key: "timeoutSecs",
         label: "Give up waiting after (seconds)",
         type: "num",
-        min: 5,
-        max: 600,
-        hint: "A refine that has not come back by then is cancelled and the reply is left alone.",
+        min: 0,
+        max: 3600,
+        hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up. Worth raising for a reasoning model on a high effort level, which can think for a long time before it writes anything: a cap that fires mid-thought throws away work that was about to arrive. Turning it off does not leave you stuck, since Stop is always there and a backend that is not running still says so within a few seconds.",
     },
 ];
 const LIMIT_FIELDS = [
@@ -1450,7 +1450,13 @@ export function setup(ctx, overrides) {
     // places, and a flag cleared in all but one of them would go stale; pairing
     // the two at the point of reading means "no chat" cannot be believed while a
     // chat is known, whoever forgot to clear it.
-    const outsideAnyChat = () => noChatOpen && lastChatId == null;
+    //
+    // Nor while the address says otherwise. In the seconds after a chat is made,
+    // the server has not caught up and this has no id, but the address already
+    // carries one: saying "No chat open" there is the panel stating as fact the
+    // one thing it can see is untrue. It says it is working out which chat this
+    // is instead, which is what is actually happening.
+    const outsideAnyChat = () => noChatOpen && lastChatId == null && idInUrl() == null;
     // ---- knowing which chat you are in ----
     // Walking out to the home screen, or onto a character page, is the move
     // nothing reliably announces. Some builds send CHAT_SWITCHED with a null id
@@ -1479,11 +1485,14 @@ export function setup(ctx, overrides) {
     let urlTimer = null;
     // The address as of the last tick, so a change can be told from a poll.
     let urlWas = "";
-    // How many more ticks to keep asking after the address moved. Four is about
-    // three seconds, which covers a chat the server has not caught up with
-    // without turning the home screen into a poll.
-    const CHASE_TICKS = 4;
+    // How many more ticks to keep asking after the address moved. Eight is about
+    // six seconds, which covers a chat the server has not caught up with without
+    // turning the home screen into a poll.
+    const CHASE_TICKS = 8;
     let chasing = 0;
+    // Ticks between the slow asks that run while the address and this disagree.
+    const SLOW_EVERY = 8;
+    let slow = 0;
     // The chat walked out of. The backend goes on naming it while you stand on
     // the home screen, since it answers with the account's most recent chat, and
     // this is what lets that one answer be recognised and dropped without
@@ -1503,6 +1512,77 @@ export function setup(ctx, overrides) {
             return false;
         return hereUrl().indexOf(t) >= 0;
     };
+    const urlParts = () => {
+        try {
+            return String(location.pathname || "").split("/").filter(Boolean);
+        }
+        catch (_) {
+            return [];
+        }
+    };
+    // ---- reading the id out of the address ----
+    // Asking the server which chat is open cannot answer for a chat that has just
+    // been made, and on Lumiverse making one is the only way into a chat with a
+    // character: you tap them and the chat comes into being. For a while after
+    // that the server's idea of your most recent chat is the one before it, and
+    // that answer is correctly thrown out as stale, which left the panel with
+    // nothing and saying no chat was open. Walking out and back in fixed it,
+    // which is the shape of a race and not of a missing signal.
+    //
+    // The address knows immediately. What is not known is the shape of a
+    // Lumiverse address, and guessing at it is how this sort of thing breaks on
+    // somebody else's build. So it is not guessed: while a chat is known and its
+    // id is in the address, where the id sits is written down, and that is the
+    // only place ever read from afterwards. A build that puts ids somewhere else
+    // teaches this the right place on its own; one whose addresses carry no id at
+    // all never records a slot and nothing here does anything.
+    const SLOT_KEY = "lv-auto-refine:url-slot:v1";
+    let urlSlot = (() => {
+        try {
+            const raw = localStorage.getItem(SLOT_KEY);
+            const got = raw ? JSON.parse(raw) : null;
+            if (got && typeof got.at === "number" && got.at >= 0)
+                return { at: got.at, after: got.after == null ? null : String(got.after) };
+        }
+        catch (_) { }
+        return null;
+    })();
+    // Learned from a chat we are certain about. Remembered across reloads, so a
+    // tab opened on the home screen already knows where to look instead of having
+    // to visit a chat first.
+    function learnSlot(id) {
+        const t = id == null ? "" : String(id);
+        if (t.length < URL_ID_MIN)
+            return;
+        const parts = urlParts();
+        const at = parts.indexOf(t);
+        if (at < 0)
+            return;
+        const next = { at: at, after: at > 0 ? parts[at - 1] : null };
+        if (urlSlot && urlSlot.at === next.at && urlSlot.after === next.after)
+            return;
+        urlSlot = next;
+        try {
+            localStorage.setItem(SLOT_KEY, JSON.stringify(next));
+        }
+        catch (_) { }
+    }
+    // The id the address is carrying right now, if it is carrying one where a
+    // chat id has been seen before.
+    function idInUrl() {
+        if (!urlSlot)
+            return null;
+        const parts = urlParts();
+        const got = parts[urlSlot.at];
+        if (!got || got.length < URL_ID_MIN)
+            return null;
+        // The word in front has to match too. Without it, /settings/something-long
+        // would read as a chat purely for having a long enough word in the right
+        // place, and being wrong here means refining into a chat nobody opened.
+        if (urlSlot.after != null && parts[urlSlot.at - 1] !== urlSlot.after)
+            return null;
+        return got;
+    }
     // Everything that describes the chat you are in, told you are not in one.
     // The watch is left running: it is now the thing that notices you walking
     // back in.
@@ -1521,8 +1601,10 @@ export function setup(ctx, overrides) {
         // which chat is open, which is the one moment the address is certain to
         // agree; a first tick landing after somebody has moved on would read an
         // address without the id and prove nothing.
-        if (urlHolds(lastChatId))
+        if (urlHolds(lastChatId)) {
             urlNamesChats = true;
+            learnSlot(lastChatId);
+        }
         if (urlTimer)
             return;
         urlWas = hereUrl();
@@ -1531,6 +1613,7 @@ export function setup(ctx, overrides) {
             if (lastChatId != null) {
                 if (urlHolds(lastChatId)) {
                     urlNamesChats = true;
+                    learnSlot(lastChatId);
                     urlWas = now;
                     return;
                 }
@@ -1542,26 +1625,42 @@ export function setup(ctx, overrides) {
                 // as walking out, so this asks where we ended up, and keeps asking:
                 // the chat you moved into can be too new to be the active one.
                 chasing = CHASE_TICKS;
-                askActiveChat();
+                askWhereWeAre();
                 return;
             }
-            // No chat known. Tapping a character opens one and the address is what
+            // No chat known. Tapping a character makes one and the address is what
             // says so first, so a change here is the moment to ask. Only a change:
             // standing still on the home screen asks nothing.
             if (now !== urlWas) {
                 urlWas = now;
                 chasing = CHASE_TICKS;
-                askActiveChat();
+                askWhereWeAre();
+                // What the panel says depends on the address now, and nothing else
+                // repaints on the address changing. Without this the state was right
+                // and the words on screen were the ones from the home screen, which is
+                // the same bug read from a different direction.
+                paint();
                 return;
             }
-            // Asking once is not enough. Tapping a character makes the chat, and for
-            // a moment afterwards the server does not call it the active one yet, so
-            // the first answer is "nothing is open" and it is wrong. A few more asks
-            // over the next couple of seconds catch it, and then it stops: a person
-            // sitting on the home screen is not worth a question every tick.
+            // Asking once is not enough. The chat was made a second ago and the
+            // server takes a moment to agree it exists, so the first answer can be
+            // wrong whichever way it is asked. A few more over the next few seconds
+            // catch it, and then it stops: a person sitting on the home screen is not
+            // worth a question every tick.
             if (chasing > 0) {
                 chasing--;
-                askActiveChat();
+                askWhereWeAre();
+                return;
+            }
+            // Except while the address says you are in a chat and this says you are
+            // not. That is two sources disagreeing, not a settled state, and giving
+            // up on it is how a slow server turns into a panel that stays wrong until
+            // you walk out and back in. Slowly, since it is a disagreement to resolve
+            // rather than a change to catch.
+            slow++;
+            if (slow >= SLOW_EVERY && idInUrl() != null) {
+                slow = 0;
+                askWhereWeAre();
             }
         }, URL_TICK_MS);
     }
@@ -1573,18 +1672,36 @@ export function setup(ctx, overrides) {
     }
     disposers.push(stopUrlWatch);
     let chatAsk = null;
-    // What was being asked, because the two questions do not take the same
-    // answer. "who" is about a chat already known: the id goes with it, so the
-    // backend looks that one up rather than guessing which chat is active, and an
-    // answer of "nobody is in a chat" is not about that chat and is ignored.
-    // "where" is the question of which chat is open at all, and is the only one
-    // whose answer is allowed to say there is none.
+    // What was being asked, because the three questions do not take the same
+    // answer.
+    //
+    //   who    a chat already known, named in the question, so the backend looks
+    //          that one up rather than guessing which is active. "Nobody is in a
+    //          chat" is not about that chat, and is ignored.
+    //   guess  the id the address is carrying, which nothing has confirmed yet.
+    //          Taken only if the backend finds a chat under it.
+    //   where  which chat is open at all. The only one whose answer may say there
+    //          is none.
     let chatAskWhy = "where";
     function askActiveChat(about) {
         const id = newId();
         chatAsk = id;
         chatAskWhy = about == null ? "where" : "who";
         send({ type: "active_chat", requestId: id, chatId: about == null ? null : about });
+    }
+    // Where am I, asked the best way available. The address is tried first, since
+    // it is right the instant a chat is made and the server is not, and the
+    // server is asked only when the address has nothing to offer.
+    function askWhereWeAre() {
+        const fromUrl = idInUrl();
+        if (fromUrl != null && String(fromUrl) !== String(leftBehind)) {
+            const id = newId();
+            chatAsk = id;
+            chatAskWhy = "guess";
+            send({ type: "active_chat", requestId: id, chatId: fromUrl });
+            return;
+        }
+        askActiveChat();
     }
     // The one place a chat id arrives, whichever event carried it, so the flag,
     // the watch and the panel cannot end up disagreeing.
@@ -1599,6 +1716,9 @@ export function setup(ctx, overrides) {
         // and nothing left to chase.
         leftBehind = null;
         chasing = 0;
+        // A chat we are sure of, with the address showing it: the one moment where
+        // the address can be read for what it is rather than searched.
+        learnSlot(id);
         if (messageId != null)
             lastMessageId = messageId;
         if (changed) {
@@ -1687,6 +1807,16 @@ export function setup(ctx, overrides) {
     // started.
     let stage = "";
     let streamed = 0;
+    // How long a refine is given, in seconds, or 0 for as long as it takes. One
+    // reading of the setting, because the countdown on screen and the watchdog
+    // behind it disagreeing about it is how a panel says "12s left" and then
+    // waits another two minutes.
+    function waitCap() {
+        const n = Number(cfg.timeoutSecs);
+        if (!Number.isFinite(n))
+            return 90;
+        return n <= 0 ? 0 : Math.min(3600, Math.max(5, n));
+    }
     function stageWords() {
         const secs = runStartedAt ? (Date.now() - runStartedAt) / 1000 : 0;
         const clockPart = secs >= 1 ? ", " + secs.toFixed(0) + "s" : "";
@@ -1703,8 +1833,11 @@ export function setup(ctx, overrides) {
                 (retryAt ? " (" + retryAt + " of " + retryOf + ")" : "") +
                 clockPart);
         // How long the reader said to wait, so a slow one reads as slow rather
-        // than as stuck.
-        const cap = Number(cfg.timeoutSecs) || 90;
+        // than as stuck. With the wait switched off there is nothing to count down
+        // to, and a countdown that never ran out would be a lie either way.
+        const cap = waitCap();
+        if (!cap)
+            return "Refining" + clockPart;
         const left = Math.max(0, cap - secs);
         return "Refining" + clockPart + (secs > 8 ? ", " + left.toFixed(0) + "s left" : "");
     }
@@ -1750,7 +1883,13 @@ export function setup(ctx, overrides) {
     function armDeadman() {
         if (deadman)
             clearTimeout(deadman);
-        const cap = Number(cfg.timeoutSecs) || 90;
+        const cap = waitCap();
+        // Nothing to arm when the wait is switched off. Cutting a refine short here
+        // would be the panel doing the exact thing that was just switched off, and
+        // this is not what catches a backend that is not running: the ack watchdog
+        // above does that in five seconds whatever the wait is set to.
+        if (!cap)
+            return;
         // The backend gives up at the timeout, so this waits a little longer than
         // that: it should only ever fire when the answer itself went missing.
         deadman = setTimeout(() => {
@@ -1766,7 +1905,7 @@ export function setup(ctx, overrides) {
             log("gave up waiting: " + why);
             toast("The refine never came back. Nothing was changed.", true);
             paint();
-        }, Math.min(700, Math.max(20, cap + 15)) * 1000);
+        }, Math.min(3700, Math.max(20, cap + 15)) * 1000);
     }
     disposers.push(() => {
         if (deadman)
@@ -1802,16 +1941,31 @@ export function setup(ctx, overrides) {
             clock = null;
         }
     }
+    // The status line as it should read this instant. One definition, used both
+    // by the clock that writes it four times a second and by the panel that
+    // builds it from nothing.
+    //
+    // They used to work it out separately, and they disagreed while a refine was
+    // running: the clock wrote "Thinking, 12s" and a repaint wrote "Refining a
+    // reply". So switching tabs mid-refine flipped the line back to the flat
+    // wording and the count started again from whatever the next tick said, which
+    // reads exactly like the thing stopping and restarting.
+    function liveNow() {
+        const st = statusLine();
+        return {
+            text: busy ? stageWords() : st.text,
+            dot: "arf-dot" + (busy ? " arf-busy" : st.tone === "off" ? "" : " arf-live"),
+        };
+    }
     // Everything that shows a live state, written in place. A repaint once a
     // second would close an open select and take the cursor out of whatever box
     // somebody was typing in.
     function tickLive() {
         try {
             if (liveEls) {
-                const st = statusLine();
-                liveEls.text.textContent = busy ? stageWords() : st.text;
-                liveEls.dot.className =
-                    "arf-dot" + (busy ? " arf-busy" : st.tone === "off" ? "" : " arf-live");
+                const now = liveNow();
+                liveEls.text.textContent = now.text;
+                liveEls.dot.className = now.dot;
             }
         }
         catch (_) { }
@@ -2702,10 +2856,12 @@ export function setup(ctx, overrides) {
         top.appendChild(name);
         top.appendChild(sw);
         wrap.appendChild(top);
-        const st = statusLine();
+        // Built as the clock would write it, so a repaint in the middle of a refine
+        // does not throw the line back to what it said before the refine started.
+        const shown = liveNow();
         const line = el("div", "arf-row arf-note");
-        const dot = el("span", "arf-dot" + (st.tone === "off" ? "" : st.tone === "busy" ? " arf-busy" : " arf-live"));
-        const words = el("span", "", st.text);
+        const dot = el("span", shown.dot);
+        const words = el("span", "", shown.text);
         line.appendChild(dot);
         line.appendChild(words);
         wrap.appendChild(line);
@@ -3967,8 +4123,7 @@ export function setup(ctx, overrides) {
                 cfg.thinkingMode +
                 (cfg.thinkingMode === "custom" ? " (" + cfg.thinkingEffort + ")" : "") +
                 ", timeout: " +
-                cfg.timeoutSecs +
-                "s");
+                (waitCap() ? waitCap() + "s" : "off"));
             lines.push("run-up: " +
                 cfg.contextMessages +
                 " messages, " +
@@ -6143,6 +6298,13 @@ export function setup(ctx, overrides) {
                             return;
                         }
                         if (msg.chatId) {
+                            // An id read out of the address is not a chat until the backend
+                            // has found one under it. Without this, an address that happens
+                            // to carry something id-shaped in the remembered place would put
+                            // the panel in a chat that does not exist, which is worse than
+                            // the fault this is here to fix.
+                            if (chatAskWhy === "guess" && !msg.found)
+                                return;
                             // The one stale answer worth dropping: the chat you just walked
                             // out of, which the backend goes on naming while you stand on the
                             // home screen. Anything else is taken, because a chat opened by
@@ -6515,7 +6677,7 @@ export function setup(ctx, overrides) {
     injectStyle();
     armBackend();
     syncExtras();
-    askActiveChat();
+    askWhereWeAre();
     // From here rather than from the first chat seen. A tab opened on the home
     // screen has no chat to watch and used to have no watch either, so the one
     // move it needed to notice, a character being tapped, was the one move
