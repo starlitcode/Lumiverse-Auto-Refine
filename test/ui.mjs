@@ -209,6 +209,16 @@ async function goTab(page, label) {
   await settle(page);
 }
 
+// Whether a setting is on the card to be used. A row that hangs off a switch is
+// built either way and hidden when the switch is off, so being in the tree is
+// not the question; being drawn is.
+async function onScreen(page, key) {
+  return page.evaluate((k) => {
+    const box = document.querySelector('#drawer [data-arf-field="' + k + '"]');
+    return !!box && !!box.offsetParent;
+  }, key);
+}
+
 // What the sweep had to repair.
 async function repaired(page) {
   return page.evaluate(() =>
@@ -781,21 +791,17 @@ console.log("\nhow much thinking");
 {
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Model");
-    const hidden = await page.evaluate(
-      () => !document.querySelector('#drawer [data-arf-field="thinkingEffort"]'),
+    ok(
+      "the effort row is not shown until it would do something",
+      !(await onScreen(page, "thinkingEffort")),
     );
-    ok("the effort row is not there until it would do something", hidden);
 
     await page.evaluate(() => {
       const sel = document.querySelector('#drawer [data-arf-field="thinkingMode"]');
       sel.value = "custom";
       sel.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await settle(page);
-    const there = await page.evaluate(
-      () => !!document.querySelector('#drawer [data-arf-field="thinkingEffort"]'),
-    );
-    ok("and appears when you ask to set it", there);
+    ok("and appears when you ask to set it", await onScreen(page, "thinkingEffort"));
 
     await page.evaluate(() => {
       const sel = document.querySelector('#drawer [data-arf-field="thinkingEffort"]');
@@ -1403,10 +1409,10 @@ console.log("\nthe checks are yours to switch off");
       return { before: before, hasFold: !!head };
     });
     await settle(page);
-    const under = await page.evaluate(() => ({
-      pct: !!document.querySelector('#drawer [data-arf-field="softenPct"]'),
-      words: !!document.querySelector('#drawer [data-arf-field="softenWords"]'),
-    }));
+    const under = {
+      pct: await onScreen(page, "softenPct"),
+      words: await onScreen(page, "softenWords"),
+    };
     ok("its tuning is folded away rather than in the way", folded.hasFold && !folded.before);
     ok("and opening it brings its own settings out", under.pct && under.words);
 
@@ -1416,10 +1422,12 @@ console.log("\nthe checks are yours to switch off");
       sw.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await settle(page);
-    const gone = await page.evaluate(() => ({
-      pct: !!document.querySelector('#drawer [data-arf-field="softenPct"]'),
-      sent: (window.__sent.filter((m) => m.type === "set_settings").pop() || {}).settings,
-    }));
+    const gone = {
+      pct: await onScreen(page, "softenPct"),
+      sent: await page.evaluate(
+        () => (window.__sent.filter((m) => m.type === "set_settings").pop() || {}).settings,
+      ),
+    };
     ok("and go with it when it is off", !gone.pct);
     ok("what you switched off reaches the backend", gone.sent.guardSoften === false);
   });
@@ -1650,10 +1658,7 @@ console.log("\nthe floating button's size");
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Setup");
     // Its settings belong to it: with the button off there is nothing to size.
-    const hidden = await page.evaluate(
-      () => !document.querySelector('#drawer [data-arf-field="widgetSize"]'),
-    );
-    ok("its settings are hidden while the button is off", hidden);
+    ok("its settings are hidden while the button is off", !(await onScreen(page, "widgetSize")));
 
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-field="widgetOn"]').click();
@@ -1661,11 +1666,12 @@ console.log("\nthe floating button's size");
     await settle(page);
     // The same range Auto Retry's floating button uses, so the two sit at
     // matching sizes for somebody running both.
+    const out = await onScreen(page, "widgetSize");
     const shown = await page.evaluate(() => {
       const n = document.querySelector('#drawer [data-arf-field="widgetSize"]');
       return n && { min: n.min, max: n.max, value: n.value };
     });
-    ok("switching it on brings its settings back under it", !!shown);
+    ok("switching it on brings its settings back under it", out);
     ok(
       "and its range matches Auto Retry's",
       shown && shown.min === "28" && shown.max === "96" && shown.value === "44",
@@ -2362,8 +2368,11 @@ console.log("\na switch and the rows that hang off it");
   // said, and flipping the switch did not repaint, so the panel only told the
   // truth after you left the tab and came back. This drives the switch and
   // reads the panel without leaving it.
-  const there = (page, key) =>
-    page.evaluate((k) => !!document.querySelector('[data-arf-field="' + k + '"]'), key);
+  //
+  // Nothing here waits for the rebuild that follows a switch. The row has to be
+  // right in the frame after the tap, because the whole point of doing it in
+  // place is that nobody is waiting on anything.
+  const there = (page, key) => onScreen(page, key);
   const flip = async (page, key) => {
     await page.evaluate((k) => {
       document.querySelector('[data-arf-field="' + k + '"]').click();
@@ -2384,6 +2393,114 @@ console.log("\na switch and the rows that hang off it");
       () => document.querySelector('[data-arf-field="widgetOn"]').checked,
     );
     ok("the switch is left reading the way it was set", state === true);
+  });
+}
+
+console.log("\nswitching without the panel jumping");
+{
+  // A switch that rebuilds the panel takes its own knob down with it, so the
+  // slide never runs, and the page lands wherever the rebuild left it. Both
+  // read as the panel flinching under the finger. The Prompt tab is where it
+  // was worst: the whole prompt is there, several boxes of it, and greying one
+  // block out was tearing all of it down.
+  await inTab(browser, { viewport: { width: 420, height: 520 } }, async (page) => {
+    await goTab(page, "Prompt");
+    const before = await page.evaluate(() => {
+      // Marks that only survive if the nodes do.
+      const boxes = document.querySelectorAll("#drawer .arf-block textarea");
+      for (let i = 0; i < boxes.length; i++) boxes[i].__mark = i;
+      const sw = document.querySelector("#drawer .arf-block .arf-box");
+      sw.__mark = "the switch";
+      const head = Array.from(document.querySelectorAll("#drawer .arf-cardh")).find((h) =>
+        / on$/.test(h.textContent.trim()),
+      );
+      window.scrollTo(0, 180);
+      return { at: window.scrollY, count: head && head.textContent.trim() };
+    });
+    ok("there is enough prompt to scroll past", before.at > 0);
+
+    await page.evaluate(() => document.querySelector("#drawer .arf-block .arf-box").click());
+    await settle(page);
+    const now = await page.evaluate(() => {
+      const sw = document.querySelector("#drawer .arf-block .arf-box");
+      const ta = document.querySelector("#drawer .arf-block textarea");
+      return {
+        at: window.scrollY,
+        sameSwitch: sw.__mark === "the switch",
+        sameText: ta.__mark === 0,
+        hushed: /arf-hushed/.test(sw.closest(".arf-block").className),
+        off: !sw.checked,
+      };
+    });
+    ok("the switch is the same one, so its knob has something to slide", now.sameSwitch);
+    ok("the prompt boxes are left standing", now.sameText);
+    ok("the block greys out on the spot", now.off && now.hushed);
+    ok("and the page has not moved", now.at === before.at, before.at + " -> " + now.at);
+
+    // The count on the card and the warning about {{message}} are what the
+    // rebuild is for, and it happens once the knob has arrived.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    const after = await page.evaluate(() => {
+      const head = Array.from(document.querySelectorAll("#drawer .arf-cardh")).find((h) =>
+        / on$/.test(h.textContent.trim()),
+      );
+      const ta = document.querySelector("#drawer .arf-block textarea");
+      return { count: head && head.textContent.trim(), rebuilt: ta.__mark === undefined, at: window.scrollY };
+    });
+    ok("then the card catches up with what is on", after.count !== before.count, before.count + " -> " + after.count);
+    ok("which is a rebuild, arriving after the switch has moved", after.rebuilt);
+    ok("and it lands where you were reading", after.at === before.at, before.at + " -> " + after.at);
+  });
+
+  // The same for a switch with rows hanging off it: the row arrives without the
+  // panel being built again around it.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-field="widgetOn"]').__mark = "the switch";
+    });
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-field="widgetOn"]').click();
+    });
+    const kept = await page.evaluate(
+      () => document.querySelector('#drawer [data-arf-field="widgetOn"]').__mark === "the switch",
+    );
+    ok("the switch survives its own row appearing", kept);
+    ok("and the row is there in the same frame", await onScreen(page, "widgetSize"));
+  });
+
+  // The address is watched on a timer and the backend is asked where we are
+  // whenever the two disagree. Most of those answers say what the last one
+  // said, and rebuilding for one of them lands in the middle of whatever
+  // somebody was reading, which is the other half of a panel that jumps on its
+  // own.
+  await inTab(browser, {}, async (page) => {
+    const answer = () =>
+      page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({
+          type: "active_chat",
+          requestId: id,
+          chatId: "c1",
+          character: "Ada",
+          hasCharacter: true,
+          resolved: true,
+          found: true,
+        });
+      });
+    await answer();
+    await settle(page);
+    await answer();
+    await settle(page);
+    await page.evaluate(() => {
+      document.querySelector("#drawer .arf-tabs").__mark = "the tabs";
+    });
+    await answer();
+    await settle(page);
+    const kept = await page.evaluate(
+      () => document.querySelector("#drawer .arf-tabs").__mark === "the tabs",
+    );
+    ok("an answer saying what the last one said rebuilds nothing", kept);
   });
 }
 

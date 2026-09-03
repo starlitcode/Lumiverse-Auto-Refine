@@ -2062,6 +2062,22 @@ export function setup(ctx, overrides) {
     // two are not the same thing to say.
     const cardless = new Set();
     const isTemporary = (id) => id != null && cardless.has(String(id));
+    // Everything the panel draws from the chat you are in, in one string. The
+    // address is watched on a timer and asks the backend where we are whenever
+    // the two disagree, and most of those answers say exactly what the last one
+    // said. Rebuilding for one of those is a rebuild nobody asked for, landing
+    // in the middle of whatever somebody was reading or typing, which is what a
+    // panel that jumps on its own looks like from the outside.
+    const chatShape = () => [
+        String(lastChatId),
+        String(lastMessageId),
+        noChatOpen ? "1" : "0",
+        String(character),
+        nameWithheld ? "1" : "0",
+        preview ? "1" : "0",
+        isTemporary(lastChatId) ? "1" : "0",
+        chatIsOff(lastChatId) ? "1" : "0",
+    ].join("|");
     function saveChatsOff() {
         // A temporary chat is filtered out of what gets written down, not out of
         // the list itself. The switch has to hold for the chat that is open, and
@@ -2403,16 +2419,13 @@ export function setup(ctx, overrides) {
         "animation:arf-fade 180ms ease-out}" +
         "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
         "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
-        // A dim behind it, so the eye goes to the card rather than hunting for
-        // what changed on the page under it. Light enough to read the chat
-        // through, since the card is about a message sitting right there, and it
-        // takes a tap anywhere to close, which is what everybody expects of a dim.
-        ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
-        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
-        "animation:arf-fade 180ms ease-out}" +
-        "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
-        "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
         "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
+        // A row switched on where somebody is already looking. It fades down into
+        // place rather than appearing between two frames, which is the difference
+        // between a row arriving and the page having flinched.
+        ".arf-arrive{animation:arf-arrive 180ms ease-out both}" +
+        "@keyframes arf-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}" +
+        "@media (prefers-reduced-motion: reduce){.arf-arrive{animation:none}}" +
         // On a phone it spans the width and sits above the input bar rather than on
         // top of it, since the whole point is to be readable while you carry on.
         "@media (max-width: 560px){.arf-pop{left:12px;right:12px;bottom:76px;" +
@@ -2802,12 +2815,29 @@ export function setup(ctx, overrides) {
     // Whether a built card answers what was typed. Read off the card itself, so
     // a label, a hint and the text of a block are all searchable without a second
     // list of keywords to keep in step with the panel.
+    // What a card actually says. Rows that hang off a switch are built whether or
+    // not their switch is on, so textContent would let the search find a setting
+    // that is not on the card to be found, and hand back a card that looks like
+    // it does not hold what was searched for.
+    function shownText(node) {
+        if (!node)
+            return "";
+        if (node.nodeType === 3)
+            return String(node.nodeValue || "");
+        if (node.nodeType !== 1 || node.hidden)
+            return "";
+        let out = "";
+        const kids = node.childNodes || [];
+        for (let i = 0; i < kids.length; i++)
+            out += shownText(kids[i]) + " ";
+        return out;
+    }
     function matches(c) {
         const want = hunt.trim().toLowerCase();
         if (!want)
             return true;
         try {
-            return String(c.textContent || "").toLowerCase().indexOf(want) >= 0;
+            return shownText(c).toLowerCase().indexOf(want) >= 0;
         }
         catch (_) {
             return false;
@@ -2883,18 +2913,99 @@ export function setup(ctx, overrides) {
         catch (_) { }
         return out;
     }
-    function putBack(held) {
+    // onlyShort is for the second and third attempts, a frame or two after the
+    // rebuild. By then the only thing worth correcting is a scroll that came up
+    // short because the panel was still growing when the first attempt ran.
+    // Anything else at that point is the reader moving the page themselves, and
+    // pulling them back is the jump this was written to stop.
+    function putBack(held, onlyShort) {
+        const w = globalThis;
         for (const one of held) {
             try {
-                if (one.node && one.node.scrollTo && one.node === globalThis)
-                    one.node.scrollTo(0, one.at);
-                else if (one.node)
-                    one.node.scrollTop = one.at;
+                const node = one.node;
+                if (!node)
+                    continue;
+                const now = node === w ? w.scrollY : node.scrollTop;
+                if (now === one.at)
+                    continue;
+                if (onlyShort && !(now < one.at))
+                    continue;
+                if (node === w && node.scrollTo)
+                    node.scrollTo(0, one.at);
+                else
+                    node.scrollTop = one.at;
             }
             catch (_) { }
         }
     }
+    // A switch is the one control here that has to look like it moved. The knob
+    // slides because CSS is watching the box change, and a box taken out of the
+    // page loses whatever it was animating, so a rebuild landing on the same
+    // gesture turns the slide into a jump.
+    //
+    // So a switch does two things instead of one. The rows hanging off it are
+    // shown and hidden where they stand, which is instant and moves nothing else,
+    // and the rebuild that catches everything else up - the count on the card,
+    // the warning that appears when the last check goes off, the greyed-out
+    // button - waits until the knob has arrived. Flicking three switches in a row
+    // is one rebuild rather than three.
+    const SETTLE_MS = 260;
+    let settleTimer = null;
+    function settle() {
+        if (settleTimer)
+            clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => {
+            settleTimer = null;
+            paint();
+        }, SETTLE_MS);
+    }
+    disposers.push(() => {
+        if (settleTimer)
+            clearTimeout(settleTimer);
+        settleTimer = null;
+    });
+    // Every row that hangs off a switch, shown or hidden where it stands. The row
+    // carries the field it was built from, so this cannot go looking for a list
+    // of which switches have children and be wrong about it, which is the mistake
+    // that kept being made when it did.
+    function reveal() {
+        if (!tab || !tab.root)
+            return;
+        try {
+            const rows = tab.root.querySelectorAll("[data-arf-row]");
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const f = row._arfField;
+                if (!f)
+                    continue;
+                const away = !fieldShows(f);
+                if (row.hidden === away)
+                    continue;
+                row.hidden = away;
+                if (!away)
+                    arrive(row);
+            }
+        }
+        catch (_) { }
+    }
+    // A row that has just been switched on, fading down into place. Reading the
+    // layout between taking the class off and putting it back is what makes the
+    // browser treat it as a new animation rather than one already finished.
+    function arrive(row) {
+        try {
+            row.classList.remove("arf-arrive");
+            void row.offsetWidth;
+            row.classList.add("arf-arrive");
+        }
+        catch (_) { }
+    }
     function paint() {
+        // A rebuild from any other cause has already done what the settle was
+        // waiting to do.
+        if (settleTimer) {
+            clearTimeout(settleTimer);
+            settleTimer = null;
+        }
         // The buttons on the messages show the same state this panel does, so they
         // are refreshed with it rather than on a timer of their own.
         if (cfg.msgButton && cfg.enabled)
@@ -2974,8 +3085,8 @@ export function setup(ctx, overrides) {
         try {
             requestAnimationFrame(() => {
                 sweepReadable(root);
-                putBack(held);
-                requestAnimationFrame(() => putBack(held));
+                putBack(held, true);
+                requestAnimationFrame(() => putBack(held, true));
             });
         }
         catch (_) {
@@ -3012,7 +3123,8 @@ export function setup(ctx, overrides) {
         sw.addEventListener("change", () => {
             cfg.enabled = !!sw.checked;
             persist(true);
-            paint();
+            reveal();
+            settle();
         });
         top.appendChild(mark);
         top.appendChild(name);
@@ -3095,7 +3207,8 @@ export function setup(ctx, overrides) {
         autoBox.addEventListener("change", () => {
             cfg.refineOn = !!autoBox.checked;
             persist(true);
-            paint();
+            reveal();
+            settle();
         });
         auto.appendChild(autoBox);
         auto.appendChild(el("span", "", "every reply, automatically"));
@@ -3581,18 +3694,17 @@ export function setup(ctx, overrides) {
     // The free scan: what it found, and which ask it belongs to.
     let scanWaiting = null;
     let scanSaid = null;
-    // Every switch repaints. There used to be a list of the ones with rows
-    // hanging off them, so only those paid for a rebuild, and the list was wrong
-    // twice: first by hand, then read off the field arrays, which still missed
-    // every row written inline in a card. Watch the rewrite arrive was one, so
-    // switching it off left Show me the words as they arrive sitting underneath
-    // it, doing nothing, until you left the tab and came back. The folded lists
-    // and the warnings that appear when a check is switched off were the same.
+    // No switch has a list of what hangs off it. There used to be one, so only
+    // the switches on it paid for a rebuild, and it was wrong twice: first by
+    // hand, then read off the field arrays, which still missed every row written
+    // inline in a card. Watch the rewrite arrive was one, so switching it off
+    // left Show me the words as they arrive sitting underneath it, doing nothing,
+    // until you left the tab and came back.
     //
-    // Working out which switches matter is the thing that keeps being got wrong,
-    // so nothing works it out any more. A repaint holds the scroll and the caret,
-    // and rebuilding one drawer is not work worth measuring next to a person
-    // moving their finger to the next switch.
+    // Working out which switches matter is the thing that kept being got wrong,
+    // so nothing works it out. Every row is built whether or not its switch is
+    // on, hidden when it is off, and a switch re-reads all of them; the rebuild
+    // that catches up the rest of the card is behind settle() above.
     // Whether a row has anything to do where it sits.
     function fieldShows(f) {
         if (!f.needs)
@@ -3608,16 +3720,15 @@ export function setup(ctx, overrides) {
         // a setting that could not do anything. Deciding it here means a row cannot
         // be added without its condition being read.
         //
-        // Hidden rather than left out, so a card is still one row per field to
-        // anything counting, and so the gap between rows is not drawn around
-        // nothing.
-        if (!fieldShows(f)) {
-            const gone = document.createElement("div");
-            gone.hidden = true;
-            gone.setAttribute("data-arf-hidden", f.key);
-            return gone;
-        }
+        // Built either way and hidden when it has nothing to do, rather than left
+        // out. A card is still one row per field to anything counting, the gap
+        // between rows is not drawn around nothing, and the row is already standing
+        // there when its switch goes on, so it appears without the panel being
+        // rebuilt underneath the finger that switched it.
         const wrap = el("div", "arf-col" + (f.under ? " arf-under" : ""));
+        wrap.setAttribute("data-arf-row", f.key);
+        wrap._arfField = f;
+        wrap.hidden = !fieldShows(f);
         if (f.type === "bool") {
             const lab = document.createElement("label");
             lab.className = "arf-between";
@@ -3631,7 +3742,8 @@ export function setup(ctx, overrides) {
             box.addEventListener("change", () => {
                 cfg[f.key] = !!box.checked;
                 persist(true);
-                paint();
+                reveal();
+                settle();
             });
             lab.appendChild(box);
             wrap.appendChild(lab);
@@ -3678,7 +3790,8 @@ export function setup(ctx, overrides) {
             sel.addEventListener("change", () => {
                 cfg[f.key] = sel.value;
                 persist(true);
-                paint();
+                reveal();
+                settle();
             });
             wrap.appendChild(sel);
         }
@@ -3829,7 +3942,14 @@ export function setup(ctx, overrides) {
         box.addEventListener("change", () => {
             const next = blockList();
             next[i].on = !!box.checked;
-            setBlocks(next);
+            // Saved without a rebuild. This tab holds the whole prompt, several
+            // boxes of it, and tearing all of that down to grey one block out was
+            // the heaviest thing any switch on the panel did. The greying is done
+            // here, and the count on the card and the warning about {{message}}
+            // catch up once the knob has finished moving.
+            setBlocks(next, false);
+            wrap.className = "arf-block" + (box.checked ? "" : " arf-hushed");
+            settle();
         });
         left.appendChild(box);
         const nameIn = document.createElement("input");
@@ -4119,11 +4239,8 @@ export function setup(ctx, overrides) {
     // ---- Model ----
     function buildConnectionCard() {
         const wrap = card("Which model refines", "A refine is a second model call on every reply, so these decide what it costs. They default to the cheap answer.");
-        for (const f of COST_FIELDS) {
-            if (!fieldShows(f))
-                continue;
+        for (const f of COST_FIELDS)
             wrap.appendChild(fieldRow(f));
-        }
         return wrap;
     }
     function buildSamplerCard() {
@@ -4194,13 +4311,13 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. If one does not come back, the rewrite is dropped: asking a model to preserve something and checking that it did are different things.",
         }));
-        if (cfg.protectOn)
-            wrap.appendChild(fieldRow({
-                key: "protectInline",
-                label: "Hide plain italic and bold too",
-                type: "bool",
-                hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it, which makes the rewrite worse to protect something it was unlikely to break. They stay visible and the prompt tells it to leave them alone. Anything carrying an attribute, like a colour, is hidden either way.",
-            }));
+        wrap.appendChild(fieldRow({
+            key: "protectInline",
+            label: "Hide plain italic and bold too",
+            type: "bool",
+            needs: { key: "protectOn" },
+            hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it, which makes the rewrite worse to protect something it was unlikely to break. They stay visible and the prompt tells it to leave them alone. Anything carrying an attribute, like a colour, is hidden either way.",
+        }));
         wrap.appendChild(fieldRow({
             key: "protectThinking",
             label: "Strip reasoning tags before it is sent",
@@ -4262,13 +4379,17 @@ export function setup(ctx, overrides) {
         // The switches stay in front. What each one measures by is a number and a
         // word list, which belong behind a fold with the rest of the tuning.
         for (const f of GUARD_FIELDS)
-            if (fieldShows(f) && !f.under)
+            if (!f.under)
                 wrap.appendChild(fieldRow(f));
         const tuning = GUARD_FIELDS.filter((f) => f.under && fieldShows(f));
         if (tuning.length)
             wrap.appendChild(fold("What counts as sanitising", (body) => {
+                // The condition is kept rather than stripped. The fold is only built
+                // for the checks that are on, so nothing in here is hidden the moment
+                // it is drawn, but switching one of those checks off should take its
+                // tuning with it there and then rather than a moment later.
                 for (const f of tuning)
-                    body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
+                    body.appendChild(fieldRow({ ...f, under: false }));
             }));
         if (!cfg.guardRefusal && !cfg.guardPreamble && !cfg.guardSoften)
             wrap.appendChild(warn("Every check on what the answer says is off. A refusal written by the model can now be saved over your reply, and the length limits are all that is left."));
@@ -4777,10 +4898,11 @@ export function setup(ctx, overrides) {
         }));
         if (cfg.widgetOn && widgetFailed)
             wrap.appendChild(bad("The floating button could not be created. Check that the interface panels permission is granted."));
-        // Its own settings, which only exist while it does.
-        if (cfg.widgetOn)
-            for (const f of WIDGET_FIELDS)
-                wrap.appendChild(fieldRow(f));
+        // Its own settings, which are only shown while it is on. Built either way,
+        // so switching the button on brings them out where they stand rather than
+        // waiting for the panel to be built again around them.
+        for (const f of WIDGET_FIELDS)
+            wrap.appendChild(fieldRow(f));
         wrap.appendChild(fieldRow({
             key: "msgButton",
             label: "A button on every message",
@@ -5124,7 +5246,7 @@ export function setup(ctx, overrides) {
             box.addEventListener("change", () => {
                 setPart(which, p.id, !!box.checked);
                 if (repaintOnChange !== false)
-                    paint();
+                    settle();
             });
             lab.appendChild(box);
             row.appendChild(lab);
@@ -6601,6 +6723,7 @@ export function setup(ctx, overrides) {
                         if (chatAsk && msg.requestId !== chatAsk)
                             return;
                         chatAsk = null;
+                        const shapeWas = chatShape();
                         if (msg.resolved && !msg.chatId) {
                             // It could look, and there is nothing open. The home screen, or a
                             // character page with no chat started yet.
@@ -6652,12 +6775,23 @@ export function setup(ctx, overrides) {
                                     cardless.add(String(msg.chatId));
                             }
                         }
-                        paint();
+                        // Only when the answer said something the panel is showing.
+                        if (chatShape() !== shapeWas)
+                            paint();
                         return;
                     }
                     if (msg.type === "connections") {
-                        connections = Array.isArray(msg.list) ? msg.list : [];
-                        paint();
+                        const list = Array.isArray(msg.list) ? msg.list : [];
+                        let same = list.length === connections.length;
+                        if (same)
+                            for (let i = 0; i < list.length; i++)
+                                if (JSON.stringify(list[i]) !== JSON.stringify(connections[i])) {
+                                    same = false;
+                                    break;
+                                }
+                        connections = list;
+                        if (!same)
+                            paint();
                         return;
                     }
                     if (msg.type === "refined") {
