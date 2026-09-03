@@ -2448,8 +2448,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-block{display:flex;flex-direction:column;gap:7px;padding:9px 10px;" +
     "border-radius:var(--lumiverse-radius-sm,5px);" +
     "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
-    "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+    "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
+    // A block being switched off fades rather than dropping, in step with the
+    // knob that did it. It could not before: the block was rebuilt on the way,
+    // so there was never one element for the fade to happen to.
+    "transition:opacity var(--lumiverse-transition-fast,150ms ease)}" +
     ".arf-block.arf-hushed{opacity:.55}" +
+    "@media (prefers-reduced-motion: reduce){.arf-block{transition:none}}" +
     ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
     ".arf-btn.arf-mini2{min-height:26px;padding:3px 10px;font-size:11.5px}" +
     // Two choices side by side, where a menu would be heavier than the choice.
