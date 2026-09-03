@@ -109,14 +109,14 @@ Two questions have different answers: does your model reason, and how much of th
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **Light touch** | The smallest that does the job: what to cut, what to mend, what to leave, a block each. | no |
-| **Line by line** | The same ground gone over properly, one block apiece for phrases, words, repetition, rhythm, speech, bodies and endings. | no |
-| **One good question** | Could this sentence sit in any story, or only in this one? That question and the room to answer it. Asks for its working in `<REFINE_NOTES>`. | yes |
-| **Read it twice** | The same question, the five places worth looking, keeping the writer's voice, and a pass back over its own answer. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A quick read** | What to cut, what to mend, what to leave, a block each. The one to start with. | no |
+| **A close read** | The same ground gone over properly, one block apiece for phrases, words, repetition, rhythm, speech, bodies and endings. | no |
+| **A quick read, for a model that thinks** | One question and the room to answer it: could this sentence sit in any story, or only in this one? Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A close read, for a model that thinks** | The same question, the five places worth looking, keeping the writer's voice, and a pass back over its own answer. Asks for its working in `<REFINE_NOTES>`. | yes |
 
-These were called Short and Detailed in two pairs, and the set did not keep that promise: **Read it twice** is barely longer than **Light touch**, because the two pairs are not the same size of thing. Naming them for what they do rather than for how big they are means the only claim left is the one each description makes.
+Each pair shares a name, so which two go together is visible without reading either, and the two that need a reasoning model say so where you pick them rather than leaving you to find out from a worse rewrite.
 
-Roughly, per refine: **One good question** is the smallest, **Light touch** about half again, **Read it twice** a shade above that, and **Line by line** the biggest at about half again on top.
+What the names deliberately do not claim is how the two pairs compare with each other. They were **Short** and **Detailed** in two pairs once, and the set could not keep that promise: a close read for a thinking model is about the size of a quick read for a plain one. Per refine, smallest first: **a quick read for a model that thinks**, then **a quick read**, then **a close read for a model that thinks** a shade above it, then **a close read** at about half again on top.
 
 The reasoning pair is the smaller one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 

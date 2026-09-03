@@ -69,7 +69,7 @@ A refine is a second model call on every reply, so three settings decide what th
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
 
-Four prompts ship with it and work as they stand. **Light touch** is the one to start with on any model, and **Line by line** goes over the same ground properly for a bit more prompt. **One good question** and **Read it twice** need a model that reasons: they hand it the standard and let it apply it, which is why they are the smaller pair, while a model that does not reason is given the list.
+Four prompts ship with it and work as they stand, in two pairs. **A quick read** is the one to start with and **a close read** goes over the same ground properly for a bit more prompt; both work on any model. The other two say **for a model that thinks** in their names: those hand the model the standard and let it apply it, which is why they are the smaller pair, while a model that does not reason is given the list.
 
 ## Seeing what gets sent
 

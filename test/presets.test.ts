@@ -20,38 +20,49 @@ describe("the prompts that ship with it", () => {
     rulesOf(p).reduce((n: number, b: any) => n + String(b.text).length, 0);
   const named = (n: string) => BUILT_IN_PROMPTS.find((p: any) => p.name === n);
 
-  test("there are four, and none of them is named for a size", () => {
+  test("there are four", () => {
     expect(BUILT_IN_PROMPTS.length).toBe(4);
-    for (const p of BUILT_IN_PROMPTS)
-      expect({ name: p.name, sized: /\b(short|detailed|long|brief|full)\b/i.test(p.name) })
-        .toEqual({ name: p.name, sized: false });
   });
 
-  test("the fuller one of each pair really is fuller", () => {
-    expect(sizeOf(named("Line by line"))).toBeGreaterThan(sizeOf(named("Light touch")) * 1.25);
-    expect(sizeOf(named("Read it twice"))).toBeGreaterThan(sizeOf(named("One good question")) * 1.25);
+  // One name for the quick pair and one for the thorough pair, so which two go
+  // together is visible without reading either.
+  test("each pair shares a name", () => {
+    const stems = BUILT_IN_PROMPTS.map((p: any) => p.name.split(",")[0].trim());
+    expect(stems.filter((n: string) => n === "A quick read").length).toBe(2);
+    expect(stems.filter((n: string) => n === "A close read").length).toBe(2);
   });
 
-  test("and the description of each says whether it needs a reasoning model", () => {
+  // And the two that need a reasoning model say so in the name, rather than
+  // leaving somebody to find out by getting a worse rewrite.
+  test("the ones that need a reasoning model say so in their name", () => {
     for (const p of BUILT_IN_PROMPTS) {
       const needs = p.thinking !== "off";
-      expect({ name: p.name, said: /reason/i.test(p.what) })
+      expect({ name: p.name, said: /model that thinks/i.test(p.name) })
         .toEqual({ name: p.name, said: needs });
     }
   });
 
-  // The one thing a refine must never do is decide what the passage means. It
-  // is said in the job block of all four, which is the block a reader is least
-  // likely to switch off and the first thing the model reads.
-  test("every one of them says the meaning is already settled", () => {
+  test("the fuller one of each pair really is fuller", () => {
+    expect(sizeOf(named("A close read"))).toBeGreaterThan(sizeOf(named("A quick read")) * 1.25);
+    expect(sizeOf(named("A close read, for a model that thinks")))
+      .toBeGreaterThan(sizeOf(named("A quick read, for a model that thinks")) * 1.25);
+  });
+
+  // What the names deliberately do not claim is how the two pairs compare with
+  // each other, because they cannot: a close read for a thinking model is about
+  // the size of a quick read for a plain one. That belongs in the description,
+  // where it can be said in words rather than implied by a label.
+  test("and the description of each says what it costs", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      expect({ name: p.name, said: /size|smallest|half again|prompt/i.test(p.what) })
+        .toEqual({ name: p.name, said: true });
+  });
+
+  test("the description also says whether it needs a reasoning model", () => {
     for (const p of BUILT_IN_PROMPTS) {
-      const job = p.blocks.find((b: any) => b.id === "job");
-      expect({ name: p.name, hasJob: !!job }).toEqual({ name: p.name, hasJob: true });
-      const t = String(job.text);
-      expect({ name: p.name, settled: /still happens/.test(t) && /still means it/.test(t) })
-        .toEqual({ name: p.name, settled: true });
-      expect({ name: p.name, ending: /ends on the moment it already ends on/.test(t) })
-        .toEqual({ name: p.name, ending: true });
+      const needs = p.thinking !== "off";
+      expect({ name: p.name, said: /reason/i.test(p.what) })
+        .toEqual({ name: p.name, said: needs });
     }
   });
 

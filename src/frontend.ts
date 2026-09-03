@@ -328,11 +328,16 @@ const TURN_MACRO = "{{message}}";
 // Two questions, four answers. Does your model reason, and how much of the
 // ground do you want covered.
 //
-// They were called Short and Detailed, in two pairs, and that was a promise the
-// set did not keep: the detailed reasoning one is barely longer than the plain
-// short one, because the two pairs are not the same size of thing at all. Named
-// for what they do instead, the sizes stop being a claim anybody can hold them
-// to, and the description says what each costs.
+// One name for the quick pair and one for the thorough pair, so the pairing is
+// visible at a glance, and the two that need a reasoning model say so in the
+// name rather than leaving somebody to find out by getting a worse rewrite.
+//
+// What the names deliberately do not claim is how the two pairs compare with
+// each other. They were Short and Detailed in two pairs, and that was a promise
+// the set could not keep: a close read for a thinking model is about the size
+// of a quick read for a plain one, because a model that reasons is handed less
+// on purpose. Each description says what it costs, which is the only place that
+// belongs.
 //
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
@@ -899,28 +904,28 @@ const DEFAULT_BLOCKS: Block[] = PLAIN_SHORT;
 
 const BUILT_IN_PROMPTS: Array<{ name: string; blocks: Block[]; thinking: string; what: string }> = [
   {
-    name: "Light touch",
+    name: "A quick read",
     blocks: PLAIN_SHORT,
     thinking: "off",
-    what: "The one to start with, and the smallest that does the job. What to cut, what to mend, what to leave, in a block each. Works on any model.",
+    what: "The one to start with. What to cut, what to mend, what to leave, a block each. The smaller of the two prompts that work on any model.",
   },
   {
-    name: "Line by line",
+    name: "A close read",
     blocks: PLAIN_LONG,
     thinking: "off",
-    what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt of Light touch on every refine, and followed more closely. Works on any model.",
+    what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt on every refine, and followed more closely. Works on any model.",
   },
   {
-    name: "One good question",
+    name: "A quick read, for a model that thinks",
     blocks: THINKS_SHORT,
     thinking: "inherit",
-    what: "Could this sentence sit in any story, or only in this one? Hands your model that question and the room to answer it. The smallest prompt here, and it needs a model that reasons.",
+    what: "One question, and the room to answer it: could this sentence sit in any story, or only in this one? The smallest prompt of the four, because a model that reasons works the rest out. Needs a model that reasons.",
   },
   {
-    name: "Read it twice",
+    name: "A close read, for a model that thinks",
     blocks: THINKS_LONG,
     thinking: "inherit",
-    what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer before it hands it over. Needs a model that reasons.",
+    what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer. About the size of a quick read on a plain model, and it goes deeper for it. Needs a model that reasons.",
   },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
