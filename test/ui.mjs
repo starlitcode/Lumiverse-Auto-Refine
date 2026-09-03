@@ -440,15 +440,34 @@ console.log("\ncolour on somebody else's theme");
     ":root{--lumiverse-primary:#e8d0ff;--lumiverse-primary-hover:#f0e0ff;" +
     "--lumiverse-primary-text:#e0c4ff;--lumiverse-primary-020:rgba(232,208,255,.2);" +
     "--lumiverse-primary-050:rgba(232,208,255,.5)}";
-  await inTab(browser, { css: paleAccent }, async (page) => {
-    const b = await page.evaluate(() => {
+  const loudButton = (page) =>
+    page.evaluate(() => {
       const el = document.querySelector("#drawer .arf-primary");
-      return el
-        ? { inline: el.style.color, painted: el.getAttribute("data-arf-painted"), text: el.textContent }
-        : null;
+      const quiet = [...document.querySelectorAll("#drawer .arf-btn")].find(
+        (n) => !n.classList.contains("arf-primary") && !n.classList.contains("arf-danger"),
+      );
+      if (!el || !quiet) return null;
+      const a = getComputedStyle(el);
+      const b = getComputedStyle(quiet);
+      return {
+        inline: el.style.color,
+        painted: el.getAttribute("data-arf-painted"),
+        fill: a.backgroundColor,
+        ink: a.color,
+        quietFill: b.backgroundColor,
+        quietInk: b.color,
+        weight: a.fontWeight,
+      };
     });
+
+  await inTab(browser, { css: paleAccent }, async (page) => {
+    const b = await loudButton(page);
     ok("the loud button is readable on a light accent without being repaired",
       !!b && !b.inline && !b.painted, JSON.stringify(b));
+    // Readable was bought once by tinting it, which cost it its loudness: it
+    // came out looking like every other button on the panel. It has to be both.
+    ok("and still looks nothing like the quiet ones",
+      !!b && b.fill !== b.quietFill && b.ink !== b.quietInk, JSON.stringify(b));
     const m = await worstText(page);
     ok(
       "and nothing else on the panel needs rescuing either",
