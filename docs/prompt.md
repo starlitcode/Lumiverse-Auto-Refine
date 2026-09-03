@@ -23,9 +23,10 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{message}}` | The turn being refined. |
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
-| `{{whose}}` | A line saying whether the character or the player wrote it. |
-| `{{refine_notes}}` | Where to keep its reasoning. Empty unless thinking is on. |
+| `{{whose}}` | A line saying whether the passage is the story's own voice or your co-author's. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
+
+There is no macro for the model's reasoning. Where it keeps that is `<REFINE_NOTES>`, a tag you write into your own prompt in your own words, covered in [Asking it what it changed](#asking-it-what-it-changed).
 
 **Lumiverse's**, which the host resolves: `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{user}}`, and anything else that works in a character card or a preset.
 

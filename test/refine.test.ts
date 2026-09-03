@@ -555,7 +555,8 @@ describe("what the model is told about the scene", () => {
     const h = await armed(["She stepped through and the cold hit her."]);
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).toContain("Player: i walk through it");
+    expect(said(h)).toContain("Co-author: i walk through it");
+    expect(said(h)).not.toContain("Player:");
     expect(said(h)).toContain("Wren: The gate stands open");
   });
 

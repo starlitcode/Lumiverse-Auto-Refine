@@ -289,7 +289,7 @@ const MACROS = [
     { tag: "{{message}}", what: "The turn being refined. Every prompt needs this one.", ours: true },
     { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
-    { tag: "{{whose}}", what: "A line saying whether the character or the player wrote it.", ours: true },
+    { tag: "{{whose}}", what: "A line saying whether the passage is the story's own voice or your co-author's.", ours: true },
     { tag: "{{protect_notes}}", what: "Tells it to leave the protection tokens alone. Only appears when there are some.", ours: true },
     { tag: "{{description}}", what: "The character card's description.", ours: false },
     { tag: "{{personality}}", what: "The card's personality.", ours: false },
@@ -5250,7 +5250,7 @@ export function setup(ctx, overrides) {
         log("refining what you are typing");
         // The same path the Try it box uses: nothing is saved to the chat, the
         // answer comes back and this puts it in the box. asUser is what tells the
-        // model it is looking at the player's own voice.
+        // model it is looking at your own hand rather than the story's voice.
         send({ type: "try_refine", requestId: id, text: text, asUser: true });
     }
     // ---- a button on each message ----

@@ -1015,7 +1015,9 @@ async function gatherHistory(msgs, at, charName, userId) {
         const body = String(m.content == null ? '' : m.content).trim();
         if (!body)
             continue;
-        out.push((m.role === 'user' ? 'Player' : them) + ': ' + body);
+        // The co-author's label matches what {{whose}} calls them, so a single
+        // refine never names the same person two ways.
+        out.push((m.role === 'user' ? 'Co-author' : them) + ': ' + body);
     }
     const kept = await fitToBudget(out, maxHistoryTokens, userId);
     return kept.reverse().join('\n\n');
