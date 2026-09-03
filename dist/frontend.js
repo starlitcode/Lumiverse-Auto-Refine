@@ -307,7 +307,7 @@ const TURN_MACRO = "{{message}}";
 // The tag a prompt puts the model's working in. What is inside it is streamed
 // back to the panel while the refine runs and never reaches the story, so a
 // prompt that does not ask for it has nothing to show while it writes.
-const NOTES_TAG = "<REFINE_NOTES>";
+const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // ---- the prompts that ship with it ----
 // Two questions, four answers. Does your model reason, and how much of the
 // ground do you want covered.
@@ -877,6 +877,13 @@ const promptShape = (raw) => (Array.isArray(raw) ? raw : [])
     .filter((b) => b && typeof b === "object" && b.on !== false)
     .map((b) => String(b.role || "system") + "\u0001" + String(b.text == null ? "" : b.text).trim())
     .join("\u0002");
+// The four never change, so their shapes are worked out once. Doing it on every
+// repaint meant rebuilding twenty thousand characters of prompt to answer a
+// question whose answer had not moved.
+const BUILT_IN_SHAPES = BUILT_IN_PROMPTS.map((p) => ({
+    name: p.name,
+    shape: promptShape(p.blocks),
+}));
 const ROLE_OPTIONS = [
     { value: "system", label: "System" },
     { value: "user", label: "User" },
@@ -2017,6 +2024,16 @@ export function setup(ctx, overrides) {
                 clearTimeout(deadman);
                 deadman = null;
             }
+            // The card showing the model's working is about a refine that is
+            // happening, so it goes when one stops happening. Only the card that
+            // lands with a refine used to replace it, which left it sitting there
+            // reading "Working it out" over a refine that had been stopped, dropped
+            // by a check, or saved with nothing to put back: three endings out of
+            // four, each leaving a card that could only be closed by hand. A card
+            // that is about to be replaced by the real one is replaced in the same
+            // turn, so nothing flickers.
+            if (popKey === "working")
+                dropPop();
         }
         if (!on && busy && runStartedAt)
             lastRunMs = Date.now() - runStartedAt;
@@ -4016,7 +4033,14 @@ export function setup(ctx, overrides) {
     // with the extension are looked at first, so the one it starts on is named as
     // itself rather than as whatever you later saved on top of it.
     function promptNamed(now, which) {
-        for (const p of allPresets()) {
+        // The four carry a reply prompt and nothing else, so there is nothing of
+        // theirs to match your own messages against. Their shapes are worked out
+        // once, at the top of this file, rather than on every repaint.
+        if (which === "blocks")
+            for (const p of BUILT_IN_SHAPES)
+                if (p.shape === now)
+                    return p.name;
+        for (const p of presets) {
             const got = p.settings[which];
             if (!Array.isArray(got))
                 continue;
@@ -4050,15 +4074,13 @@ export function setup(ctx, overrides) {
     // two for a model that thinks do, so on any of the others the card that shows
     // the working while it writes has nothing to show, and somebody waiting for
     // it has no way of knowing why. Said here, where the prompt is.
-    const asksForWorking = () => blockList().some((b) => b.on && /<\s*refine_notes\s*>/i.test(String(b.text || "")));
+    const asksForWorking = () => blockList().some((b) => b.on && NOTES_TAG.test(String(b.text || "")));
     function aboutWorking() {
         if (asksForWorking())
             return cfg.popup
-                ? "It asks the model to write down what it is doing as it goes, which comes up on screen while the refine runs."
-                : "It asks the model to write down what it is doing as it goes, but Show the before and after on screen is off, and that card is where the working is shown.";
-        return ("It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks ask for it, and so does any block of your own with " +
-            NOTES_TAG +
-            " in it.");
+                ? "It asks the model for its working, which comes up on screen while it writes."
+                : "It asks the model for its working, but Show the before and after on screen is off under When a refine lands, and that card is where the working appears.";
+        return "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks do.";
     }
     function buildBlocksCard() {
         const list = blockList();
@@ -4955,7 +4977,7 @@ export function setup(ctx, overrides) {
             key: "popup",
             label: "Show the before and after on screen",
             type: "bool",
-            hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+            hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. On a prompt that asks the model for its working it opens earlier than that, holding the working as it is written. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
         }));
         wrap.appendChild(fieldRow({
             key: "toast",
@@ -7248,7 +7270,6 @@ export function setup(ctx, overrides) {
                             after: String(msg.after || ""),
                             at: Date.now(),
                         };
-                        markBusy(false);
                         msgBusy = null;
                         setBadge("1");
                         log("a refine is waiting for you", true);

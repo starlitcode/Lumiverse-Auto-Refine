@@ -2408,6 +2408,40 @@ console.log("\na switch and the rows that hang off it");
   });
 }
 
+console.log("\nthe card that shows the working");
+{
+  // It is about a refine that is happening, so it goes when one stops
+  // happening. Only the card that lands with a refine used to replace it, which
+  // left it reading "Working it out" over a refine that had been stopped,
+  // dropped by a check, or saved with nothing to put back.
+  const endings = [
+    { what: "stopped", msg: { type: "refine_stopped", stopped: true } },
+    { what: "dropped by a check", msg: { type: "refine_skipped", why: "the rewrite grew by half" } },
+    {
+      what: "saved with nothing to put back",
+      msg: { type: "refined", chatId: "c1", messageId: "m1", canUndo: false },
+    },
+  ];
+  for (const one of endings) {
+    await inTab(browser, {}, async (page) => {
+      const up = await page.evaluate(() => {
+        window.__fromBackend({
+          type: "refine_progress",
+          stage: "writing",
+          chars: 40,
+          notes: "The second line could sit in any story.",
+        });
+        return !!document.querySelector("[data-arf-pop-working]");
+      });
+      ok(one.what + ": the working is on screen first", up);
+      await page.evaluate((m) => window.__fromBackend(m), one.msg);
+      await settle(page);
+      const gone = await page.evaluate(() => !document.querySelector("[data-arf-pop-working]"));
+      ok(one.what + ": and goes when the refine does", gone);
+    });
+  }
+}
+
 console.log("\nthe buttons on a message");
 {
   // The refine button used to turn into an undo once a refine landed, and the
