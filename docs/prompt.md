@@ -105,18 +105,20 @@ The names of those tags are yours. Nothing in the extension looks for `<cut>` or
 
 ## The four prompts that ship with it
 
-Two questions have different answers: does your model reason, and do you want the short version or the whole thing.
+Two questions have different answers: does your model reason, and how much of the ground do you want covered.
 
-| Prompt | What it is |
-| --- | --- |
-| **Short** | Everything Detailed says, in three rule blocks instead of nine. |
-| **Detailed** | The same rules, one to a block, each said at length: phrases, words, repetition, rhythm, speech, bodies, endings. |
-| **Short, for a thinking model** | The standard, and let it work out the rest. Asks for its working in `<REFINE_NOTES>`. |
-| **Detailed, for a thinking model** | The standard, the five places to point it, keeping the writer's voice, and a pass over its own answer. Asks for its working in `<REFINE_NOTES>`. |
+| Prompt | What it is | Needs a reasoning model |
+| --- | --- | --- |
+| **Light touch** | The smallest that does the job: what to cut, what to mend, what to leave, a block each. | no |
+| **Line by line** | The same ground gone over properly, one block apiece for phrases, words, repetition, rhythm, speech, bodies and endings. | no |
+| **One good question** | Could this sentence sit in any story, or only in this one? That question and the room to answer it. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **Read it twice** | The same question, the five places worth looking, keeping the writer's voice, and a pass back over its own answer. Asks for its working in `<REFINE_NOTES>`. | yes |
 
-**Short and Detailed cover the same ground.** Pick by how much prompt you want to pay for on every refine, not by what it catches. Detailed is followed more closely because it says each rule at length and gives it a heading of its own; Short costs a fraction as much per reply.
+These were called Short and Detailed in two pairs, and the set did not keep that promise: **Read it twice** is barely longer than **Light touch**, because the two pairs are not the same size of thing. Naming them for what they do rather than for how big they are means the only claim left is the one each description makes.
 
-The reasoning pair is the shorter one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
+Roughly, per refine: **One good question** is the smallest, **Light touch** about half again, **Read it twice** a shade above that, and **Line by line** the biggest at about half again on top.
+
+The reasoning pair is the smaller one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 
 The rules themselves are specific, not general. "Cut clichés" gives a model nothing to act on; the shipped prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
 

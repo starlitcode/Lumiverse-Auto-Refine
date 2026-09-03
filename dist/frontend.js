@@ -304,17 +304,18 @@ const MACROS = [
 ];
 const TURN_MACRO = "{{message}}";
 // ---- the prompts that ship with it ----
-// Two questions, four answers. Does your model reason, and do you want the
-// short version or the whole thing.
+// Two questions, four answers. Does your model reason, and how much of the
+// ground do you want covered.
 //
-// Short and Detailed are the same instructions. Detailed says each one at
-// length and gives it a block of its own; Short says all of it in three. Pick
-// by how much prompt you want to pay for on every refine, not by what it
-// covers, because they cover the same ground.
+// They were called Short and Detailed, in two pairs, and that was a promise the
+// set did not keep: the detailed reasoning one is barely longer than the plain
+// short one, because the two pairs are not the same size of thing at all. Named
+// for what they do instead, the sizes stop being a claim anybody can hold them
+// to, and the description says what each costs.
 //
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
-// one. That is why the thinking pair is the shorter pair.
+// one. That is why the reasoning pair is the smaller pair.
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
 // volatile ones for caching, which is explained where the presets are built.
@@ -442,8 +443,9 @@ const COPY_EXACTLY = {
     on: true,
     role: "system",
     text: "<copy_these_exactly>\n" +
-        "Some of what you are given is not prose. Copy each of these through " +
-        "character for character, in the place it already sits:\n\n" +
+        "Some of what you are given is not prose, and none of it is yours to " +
+        "improve. Each of these comes through character for character, in the " +
+        "place it already sits:\n\n" +
         "- HTML and XML tags, with everything inside the angle brackets\n" +
         "- tokens shaped like [[AR1]], standing in for formatting lifted out " +
         "before you saw it\n" +
@@ -468,9 +470,12 @@ const JOB_BLOCK = {
         "You are the second pair of eyes on a draft. Two authors are writing this " +
         "story between them, passing it back and forth, and the passage below has " +
         "just been written.\n\n" +
-        "Your work is on the writing. Every event, every line of speech and " +
-        "everything anyone means survives it, and the passage ends on the moment " +
-        "it already ends on.\n" +
+        "What it means is settled, and you are not the one deciding it. Whatever " +
+        "happens in the passage still happens. Whoever says something still says " +
+        "it, and still means it. It ends on the moment it already ends on. That " +
+        "holds however weak a line reads, and it holds when you cannot see why a " +
+        "line is there: it is there because your co-author put it there.\n\n" +
+        "Your half of this is how it reads. Same story, told better.\n" +
         "</your_job>",
 };
 const CUT_THESE = {
@@ -479,7 +484,7 @@ const CUT_THESE = {
     on: true,
     role: "system",
     text: "<what_to_cut>\n" +
-        "Take out every one of these you find:\n\n" +
+        "These are worth losing wherever they turn up:\n\n" +
         PHRASES +
         "\n\nTake out these words where the sentence still stands without them: " +
         FILLER +
@@ -519,9 +524,9 @@ const LEAVE_ALONE = {
         "Rewriting what did not need it costs the most of anything you can do " +
         "here: it takes away a line your co-author chose, and they cannot see what " +
         "moved.\n\n" +
-        "Your rewrite comes back no longer than what you were given. Where it is " +
-        "longer, you have added instead of mended.\n\n" +
-        "Where you find nothing worth changing, hand the passage back unchanged.\n" +
+        "A rewrite that came back longer has usually added rather than mended, so " +
+        "it is worth a second look before you hand it over.\n\n" +
+        "Finding nothing worth changing is a real answer. Hand it back as it is.\n" +
         "</what_to_leave>",
 };
 // ---- a model that does not reason, short ----
@@ -552,7 +557,7 @@ const PLAIN_LONG = [
         role: "system",
         text: "<phrases_to_cut>\n" +
             "These turn up in machine-written fiction several times a session and in " +
-            "published fiction almost never. Take out every one you find:\n\n" +
+            "published fiction almost never. Worth losing wherever they appear:\n\n" +
             PHRASES +
             "\n\nLet a phrase go instead of swapping it for a near neighbour. Where " +
             "the moment still needs carrying, carry it with what this person is " +
@@ -565,7 +570,7 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<words_to_cut>\n" +
-            "Take these out where the sentence still stands without them: " +
+            "These can go wherever the sentence still stands without them: " +
             FILLER +
             ".\n\n" +
             "Take out an adverb that repeats what its verb already said: whispered " +
@@ -664,9 +669,12 @@ const THINKS_JOB = {
     text: "<your_job>\n" +
         "You are the second pair of eyes on a draft. Two authors are writing this " +
         "story between them, and the passage below has just been written.\n\n" +
-        "Work out what is weak in how it is written, then mend that. Every event, " +
-        "every line of speech and everything anyone means survives it, and the " +
-        "passage ends on the moment it already ends on.\n" +
+        "Work out what is weak in how it is written, then mend that, and nothing " +
+        "else. What it means is settled: whatever happens still happens, whoever " +
+        "says something still says it and still means it, and it ends on the " +
+        "moment it already ends on. That holds however weak a line reads, and it " +
+        "holds when you cannot see why a line is there: it is there because your " +
+        "co-author put it there.\n" +
         "</your_job>",
 };
 const THE_STANDARD = {
@@ -823,28 +831,28 @@ const THINKS_LONG = [
 const DEFAULT_BLOCKS = PLAIN_SHORT;
 const BUILT_IN_PROMPTS = [
     {
-        name: "Short",
+        name: "Light touch",
         blocks: PLAIN_SHORT,
         thinking: "off",
-        what: "The one to start with. Everything the detailed version says, said in three blocks instead of nine. Same rules, less prompt to pay for on every refine.",
+        what: "The one to start with, and the smallest that does the job. What to cut, what to mend, what to leave, in a block each. Works on any model.",
     },
     {
-        name: "Detailed",
+        name: "Line by line",
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "The same rules, one to a block, each said at length: phrases, words, repetition, rhythm, speech, bodies, endings. Costs more per refine and is followed more closely.",
+        what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt of Light touch on every refine, and followed more closely. Works on any model.",
     },
     {
-        name: "Short, for a thinking model",
+        name: "One good question",
         blocks: THINKS_SHORT,
         thinking: "inherit",
-        what: "Gives your model the standard and lets it work out the rest. Shorter than the plain pair on purpose: a model that reasons does not need the list.",
+        what: "Could this sentence sit in any story, or only in this one? Hands your model that question and the room to answer it. The smallest prompt here, and it needs a model that reasons.",
     },
     {
-        name: "Detailed, for a thinking model",
+        name: "Read it twice",
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "The standard, the five places to point it, keeping the writer's voice, and a pass over its own answer before it hands it back.",
+        what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer before it hands it over. Needs a model that reasons.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);

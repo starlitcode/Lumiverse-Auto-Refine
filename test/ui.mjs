@@ -1148,7 +1148,9 @@ console.log("\nloading a preset from where you were reading");
       const s = document.getElementById("scroller");
       const was = s.scrollTop;
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const detailed = Array.from(pick.options).find((o) => /Detailed/.test(o.textContent));
+      // The biggest one, which is the one that grows the panel most when it
+      // loads and so the one most likely to throw the scroll.
+      const detailed = Array.from(pick.options).find((o) => /Line by line/.test(o.textContent));
       pick.value = detailed.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       document.querySelector('#drawer [data-arf-preset="load"]').click();
