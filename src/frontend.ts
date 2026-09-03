@@ -81,7 +81,6 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "skipWhenClean",
       "wrapOutput",
       "streamProgress",
-      "watchLive",
     ],
   },
   {
@@ -260,10 +259,6 @@ const CONFIG = {
   // phrase list in a reply. Off by default, because a clean scan means nothing
   // on the list, never nothing wrong.
   skipWhenClean: false,
-  // Show the rewrite arriving rather than only its length. Off by default: it
-  // is a thing to switch on when you want to watch one, not something to pay
-  // bridge traffic for on every reply.
-  watchLive: false,
   // Asking for the rewrite inside <REFINED> tags rather than on its own. A
   // model that cannot help adding a sentence of its own still puts the rewrite
   // between the tags, and taking what is between them is exact.
@@ -2304,6 +2299,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
     ".arf-well.arf-dim{color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+    // What changed, marked on the words rather than left for the reader to
+    // find by comparing two paragraphs. Taken out is struck through in the
+    // theme's danger colour, put in is the success colour, and anything the
+    // rewrite left alone is drawn exactly as the rest of the text: the point is
+    // that the changes stand out, and colouring the parts that did not change
+    // would be colouring nearly all of it.
+    //
+    // Colour is not the only mark on either. Somebody who cannot tell the two
+    // apart still has the line through one of them, and the words themselves.
+    ".arf-cut{color:var(--lumiverse-danger,#ef4444);text-decoration:line-through;" +
+    "text-decoration-thickness:1px;opacity:.85}" +
+    ".arf-add{color:var(--lumiverse-success,#22c55e)}" +
     ".arf-scroll{max-height:130px;overflow-y:auto}" +
     ".arf-well.arf-tall{max-height:340px}" +
     ".arf-dot{flex:none;width:7px;height:7px;border-radius:50%;" +
@@ -2440,6 +2447,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden;" +
     "animation:arf-rise 180ms ease-out}" +
     "@keyframes arf-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
+    // A dim behind it, so the eye goes to the card rather than hunting the page
+    // under it for what changed. Light enough to read the chat through, since
+    // the card is about a message sitting right there, and a tap anywhere on it
+    // closes, which is what everybody expects of a dim.
+    ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
+    "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
+    "animation:arf-fade 180ms ease-out}" +
+    "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
+    "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
+    // A dim behind it, so the eye goes to the card rather than hunting for
+    // what changed on the page under it. Light enough to read the chat
+    // through, since the card is about a message sitting right there, and it
+    // takes a tap anywhere to close, which is what everybody expects of a dim.
+    ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
+    "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
+    "animation:arf-fade 180ms ease-out}" +
+    "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
+    "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
     "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
     // On a phone it spans the width and sits above the input bar rather than on
     // top of it, since the whole point is to be readable while you carry on.
@@ -2827,13 +2852,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (id === "limits")
       return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
     if (id === "log") {
-      const out: HTMLElement[] = [buildLiveCard()];
-      const watch = buildWatchCard();
-      if (watch) out.push(watch);
-      const notes = buildNotesCard();
-      if (notes) out.push(notes);
-      out.push(buildActivityCard(), buildDebugCard());
-      return out;
+      return [buildLiveCard(), buildActivityCard(), buildDebugCard()];
     }
     return [
       buildPermsCard(),
@@ -2923,7 +2942,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     root.innerHTML = "";
     root.className = "arf";
     liveEls = null;
-    liveWatch = null;
 
     root.appendChild(buildHeader());
     // A refused permission that stops the whole thing is the answer to "why is
@@ -2935,7 +2953,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     // First, above everything. A refine waiting on an answer is the one thing on
     // this panel that is holding something up.
     if (pending) root.appendChild(buildPendingCard());
-    if (choices) root.appendChild(buildChoicesCard());
     const back = undoHere();
     if (back.length) root.appendChild(buildLastRefine(back));
     root.appendChild(buildSearch());
@@ -3044,17 +3061,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     now.addEventListener("click", () => refineNow());
     row.appendChild(now);
 
-    // Three answers to the same reply, to choose between. Spends three calls
-    // and says so, and only ever when it is pressed: nothing about the
-    // automatic pass changes.
-    const few = button("Give me three to pick from", false);
-    few.setAttribute("data-arf-many", "1");
-    few.disabled = busy || !!stop;
-    few.style.opacity = few.disabled ? "0.5" : "1";
-    few.style.cursor = few.disabled ? "not-allowed" : "pointer";
-    few.title = stop || "Refines the latest reply three times and shows you the answers. Three model calls, and nothing is saved until you pick one.";
-    few.addEventListener("click", () => refineMany());
-    row.appendChild(few);
+    // The whole chat, next to the one reply. A chat written before the
+    // extension was installed is the ordinary reason somebody opens this panel
+    // at all, so the button for it belongs where they are already looking
+    // rather than three cards down another tab.
+    const every = button("Refine every reply here", false);
+    every.setAttribute("data-arf-sweep", "1");
+    every.disabled = busy || !!stop || !!sweep || lastChatId == null;
+    every.style.opacity = every.disabled ? "0.5" : "1";
+    every.style.cursor = every.disabled ? "not-allowed" : "pointer";
+    every.title =
+      stop || "Goes through this chat oldest first, one model call per reply. It asks first.";
+    every.addEventListener("click", () => askSweep());
+    row.appendChild(every);
 
     const auto = document.createElement("label");
     auto.className = "arf-row arf-note";
@@ -3119,64 +3138,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       toast("Left as it was.", true);
     }
     paint();
-  }
-
-  // Several answers to the same reply, waiting to be chosen between. The same
-  // shape as a single one waiting on a yes, because it is the same decision
-  // with more than two answers.
-  let choices: { chatId: any; messageId: any; before: string; picks: string[]; at: number } | null =
-    null;
-
-  function takeChoice(which: number) {
-    const one = choices;
-    choices = null;
-    if (!undoHere().length) setBadge(null);
-    if (!one) return;
-    const text = one.picks[which];
-    if (text == null) {
-      log("left the reply as it was");
-      toast("Left as it was.", true);
-      paint();
-      return;
-    }
-    send({
-      type: "apply_refine",
-      requestId: newId(),
-      chatId: one.chatId,
-      messageId: one.messageId,
-      after: text,
-    });
-    log("picked one of " + one.picks.length + " rewrites", true);
-    paint();
-  }
-
-  function buildChoicesCard(): HTMLElement {
-    const one = choices as NonNullable<typeof choices>;
-    const wrap = card(
-      "Pick one",
-      one.picks.length +
-        " answers to the same reply. Nothing has been saved. Read them and take whichever reads best, or keep what you had.",
-      new Date(one.at).toTimeString().slice(0, 5),
-    );
-    wrap.appendChild(el("div", "arf-lab", "As it is now"));
-    wrap.appendChild(el("div", "arf-well arf-scroll", one.before));
-    one.picks.forEach((text, i) => {
-      wrap.appendChild(el("div", "arf-lab", "Rewrite " + (i + 1)));
-      wrap.appendChild(el("div", "arf-well arf-scroll", text));
-      const take = button("Take this one", i === 0);
-      take.setAttribute("data-arf-pick", String(i));
-      take.addEventListener("click", () => takeChoice(i));
-      const row = el("div", "arf-row");
-      row.appendChild(take);
-      wrap.appendChild(row);
-    });
-    const none = button("Keep what I had", false);
-    none.setAttribute("data-arf-pick", "none");
-    none.addEventListener("click", () => takeChoice(-1));
-    const last = el("div", "arf-row");
-    last.appendChild(none);
-    wrap.appendChild(last);
-    return wrap;
   }
 
   function buildPendingCard(): HTMLElement {
@@ -3245,23 +3206,104 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // ---- what actually changed ----
+  // Two paragraphs side by side leave the reader to find the difference
+  // themselves, which on a rewrite of one sentence in six is most of the work.
+  // This marks it: taken out is struck through, put in is not, and everything
+  // the rewrite left alone is drawn as ordinary text, because that is nearly
+  // all of it and colouring it would drown the part that matters.
+  //
+  // By word, not by character. A character diff on prose finds the letters two
+  // different words happen to share and marks half of each, which reads as
+  // noise; a line diff on a paragraph marks the whole paragraph. Whitespace
+  // travels with the word before it so the text still reads as text once the
+  // pieces are put back together.
+  function words(t: string): string[] {
+    return String(t == null ? "" : t).match(/\s*\S+\s*|\s+/g) || [];
+  }
+
+  // The longest run of words the two have in common, which is what tells a
+  // rewrite from a replacement. Bounded: the table is one row per word pair, so
+  // a pair of very long messages would be a big table and a slow frame. Past
+  // the cap it says so rather than freezing the panel, and the two texts are
+  // shown whole instead.
+  const DIFF_MAX = 1200;
+
+  function diffWords(a: string[], b: string[]): Array<{ how: -1 | 0 | 1; text: string }> {
+    const n = a.length;
+    const m = b.length;
+    // A table of common-run lengths, built from the end back.
+    const len: number[][] = [];
+    for (let i = 0; i <= n; i++) len.push(new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--)
+      for (let j = m - 1; j >= 0; j--)
+        len[i][j] =
+          a[i].trim() === b[j].trim() && a[i].trim()
+            ? len[i + 1][j + 1] + 1
+            : Math.max(len[i + 1][j], len[i][j + 1]);
+
+    const out: Array<{ how: -1 | 0 | 1; text: string }> = [];
+    const add = (how: -1 | 0 | 1, text: string) => {
+      const last = out[out.length - 1];
+      // Runs, not words. One span per word would be hundreds of elements and
+      // would break the line wherever a word boundary fell.
+      if (last && last.how === how) last.text += text;
+      else out.push({ how: how, text: text });
+    };
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (a[i].trim() === b[j].trim() && a[i].trim()) {
+        add(0, b[j]);
+        i++;
+        j++;
+      } else if (len[i + 1][j] >= len[i][j + 1]) {
+        add(-1, a[i]);
+        i++;
+      } else {
+        add(1, b[j]);
+        j++;
+      }
+    }
+    while (i < n) add(-1, a[i++]);
+    while (j < m) add(1, b[j++]);
+    return out;
+  }
+
+  function diffWell(before: string, after: string): HTMLElement {
+    const well = el("div", "arf-well arf-scroll");
+    well.setAttribute("data-arf-diff", "1");
+    const a = words(before);
+    const b = words(after);
+    if (a.length + b.length > DIFF_MAX) {
+      // Too big to mark word by word without a visible pause. Both are shown
+      // whole, which is what this replaced, rather than nothing.
+      well.appendChild(el("div", "arf-note", "Too long to mark up. Before:"));
+      well.appendChild(el("div", "arf-dim", before));
+      well.appendChild(el("div", "arf-note", "After:"));
+      well.appendChild(el("span", "", after));
+      return well;
+    }
+    const parts = diffWords(a, b);
+    // Nothing marked means the two are the same, which is worth saying rather
+    // than showing an unmarked paragraph that looks like a failed diff.
+    if (!parts.some((p) => p.how !== 0)) {
+      well.appendChild(el("span", "", after));
+      return well;
+    }
+    for (const p of parts)
+      well.appendChild(el("span", p.how === -1 ? "arf-cut" : p.how === 1 ? "arf-add" : "", p.text));
+    return well;
+  }
+
   function buildUndoRow(one: Undo): HTMLElement {
     const box = el("div", "arf-col");
-    const pane = (title: string, text: string, dim: boolean) => {
-      box.appendChild(el("div", "arf-note", title));
-      box.appendChild(el("div", "arf-well arf-scroll" + (dim ? " arf-dim" : ""), text));
-    };
-    pane("Before", one.before, true);
-    pane("After", one.after, false);
+    box.appendChild(el("div", "arf-note", "What changed"));
+    box.appendChild(diffWell(one.before, one.after));
     const row = el("div", "arf-row");
     const back = button("Put it back", false);
     back.addEventListener("click", () => {
-      send({
-        type: "undo_refine",
-        requestId: newId(),
-        chatId: one.chatId,
-        messageId: one.messageId,
-      });
+      askUndo(one.chatId, one.messageId);
     });
     const seen = button("Dismiss", false);
     seen.addEventListener("click", () => {
@@ -3283,13 +3325,31 @@ export function setup(ctx: Ctx, overrides?: any) {
   // button without saying so. This puts the before, the after and the way back
   // in front of them, on the page, where the change happened.
   let popEl: any = null;
+  let popShade: any = null;
   let popKey = "";
+
+  // Every undo goes through here, and every one is written down against its
+  // request. The answer used to be the only thing that said which message it
+  // was about, and it did not say: the panel's delete was skipped, so the reply
+  // came back restored while the panel went on offering to restore it.
+  const undoAsked = new Map<string, { chatId: any; messageId: any }>();
+  function askUndo(chatId: any, messageId: any) {
+    const id = newId();
+    undoAsked.set(id, { chatId: chatId, messageId: messageId });
+    // Bounded: an answer that never comes must not pile up for the session.
+    while (undoAsked.size > 20) undoAsked.delete(undoAsked.keys().next().value as string);
+    send({ type: "undo_refine", requestId: id, chatId: chatId, messageId: messageId });
+  }
 
   function dropPop() {
     try {
       popEl && popEl.remove && popEl.remove();
     } catch (_) {}
+    try {
+      popShade && popShade.remove && popShade.remove();
+    } catch (_) {}
     popEl = null;
+    popShade = null;
     popKey = "";
   }
   disposers.push(dropPop);
@@ -3304,6 +3364,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (popEl && popKey === key) return;
       dropPop();
       popKey = key;
+      const shade = document.createElement("div");
+      shade.className = "arf-shade";
+      shade.setAttribute("data-arf-shade", "1");
+      // A tap on the dim is the same as closing it, the way every sheet works.
+      shade.addEventListener("click", dropPop);
+      document.body.appendChild(shade);
+      popShade = shade;
+
       const box = document.createElement("div");
       box.className = "arf-pop arf";
       box.setAttribute("data-arf-pop", "1");
@@ -3321,22 +3389,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.appendChild(top);
 
       const body = el("div", "arf-pop-body");
-      body.appendChild(el("div", "arf-note", "Before"));
-      body.appendChild(el("div", "arf-well arf-scroll arf-dim", one.before));
-      body.appendChild(el("div", "arf-note", "After"));
-      body.appendChild(el("div", "arf-well arf-scroll", one.after));
+      body.appendChild(el("div", "arf-note", "What changed"));
+      body.appendChild(diffWell(one.before, one.after));
       box.appendChild(body);
 
       const row = el("div", "arf-row arf-pop-row");
       const back = button("Put it back", false);
       back.setAttribute("data-arf-pop-undo", "1");
       back.addEventListener("click", () => {
-        send({
-          type: "undo_refine",
-          requestId: newId(),
-          chatId: one.chatId,
-          messageId: one.messageId,
-        });
+        askUndo(one.chatId, one.messageId);
         dropPop();
       });
       const keep = button("Keep it", true);
@@ -4237,19 +4298,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "streamProgress",
-        label: "Watch the rewrite arrive",
+        label: "Say how much has come back",
         type: "bool",
-        hint: "On by default. Streams the refine so the panel can say what it is doing and how much has come back. The answer is judged when it is complete either way, so this changes nothing about what gets saved. A connection that cannot stream falls back on its own.",
-      }),
-    );
-    wrap.appendChild(
-      fieldRow({
-        key: "watchLive",
-        label: "Show me the words as they arrive",
-        type: "bool",
-        needs: { key: "streamProgress" },
-        under: true,
-        hint: "Off by default. Puts a Watch it happen card on the Log tab that fills in as the model writes, instead of only counting characters. On a reasoning prompt you see it work the edit out first and then write it, because the working comes back before the rewrite. It costs a little traffic between the panel and the server on every refine, which is why it is something to switch on when you want to watch one, not something to leave on.",
+        hint: "On by default. Streams the refine so the line under the switch can count what has arrived rather than sitting on one word for a minute. The answer is judged when it is complete either way, so this changes nothing about what gets saved, and a connection that cannot stream falls back on its own.",
       }),
     );
     return wrap;
@@ -4292,98 +4343,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // ---- Log ----
-  // What the model wrote around the <REFINED> tags on the last pass. Nothing
-  // outside those tags is ever saved into a chat, which is what makes it a safe
-  // place for a prompt to ask for a report: what was cut, what was added, what
-  // was left alone on purpose. Kept here so the report has somewhere to be
-  // read instead of being dropped on the floor.
   // Patterns the backend could not compile, named so a typo is visible instead
   // of being a region somebody believes is shielded and is not.
   let shieldBad: string[] = [];
 
-  let lastNotes = "";
-  let lastNotesAt = 0;
-
-  // ---- watching one arrive ----
-  // The rewrite as it is being written. Held here rather than in the log,
-  // because it is replaced several times a second and is gone the moment the
-  // refine lands.
-  // Split by the backend, which is the only side holding the whole answer.
-  let live: { notes: string; body: string } = { notes: "", body: "" };
-  const liveHasAnything = () => !!(live.notes || live.body);
   // Which try is running, for the line that says so.
   let retryAt = 0;
   let retryOf = 0;
-
-  // Written straight into the element rather than through paint(). A repaint
-  // five times a second would rebuild the whole panel under whoever is reading
-  // it, take the scroll with it, and drop focus from anything they were typing
-  // in. This is the same reason the status line writes itself in place.
-  // The tags are the plumbing and never the show. The backend splits on them
-  // and sends the two halves without them, so this only ever has work to do if
-  // something upstream sends a marker through anyway; it is here because a
-  // stray <REFINED> rendered on screen looks like the extension is broken, and
-  // the cost of being sure is one pass over a few thousand characters.
-  const TAG_MARKS = /<\s*\/?\s*(?:refined|refine_notes)\s*>/gi;
-  const noTags = (v: any) => String(v == null ? "" : v).replace(TAG_MARKS, "").trim();
-
-  function showLive(parts: { notes: string; body: string }): void {
-    live = parts;
-    try {
-      if (!liveWatch) {
-        paint();
-        return;
-      }
-      liveWatch.notes.textContent = parts.notes;
-      liveWatch.notesWrap.hidden = !parts.notes;
-      liveWatch.out.textContent = parts.body;
-      liveWatch.outWrap.hidden = !parts.body;
-      // Following the newest line, the way a terminal does.
-      liveWatch.notes.scrollTop = liveWatch.notes.scrollHeight;
-      liveWatch.out.scrollTop = liveWatch.out.scrollHeight;
-    } catch (_) {}
-  }
-
-  let liveWatch: { notes: any; notesWrap: any; out: any; outWrap: any } | null = null;
-
-  function buildWatchCard(): HTMLElement | null {
-    if (!cfg.watchLive || !cfg.streamProgress) return null;
-    const running = busy || msgBusy !== null;
-    if (!running && !liveHasAnything()) return null;
-    const wrap = card(
-      "Watch it happen",
-      undefined,
-      running ? "live" : "finished",
-    );
-    const parts = live;
-    const notesWrap = el("div", "arf-col");
-    notesWrap.appendChild(el("div", "arf-lab", "What it is working out"));
-    const notes = el("div", "arf-well arf-mono arf-scroll", parts.notes);
-    notesWrap.appendChild(notes);
-    notesWrap.hidden = !parts.notes;
-    wrap.appendChild(notesWrap);
-    const outWrap = el("div", "arf-col");
-    outWrap.appendChild(el("div", "arf-lab", "The rewrite, as it is written"));
-    const out = el("div", "arf-well arf-mono arf-scroll", parts.body);
-    outWrap.appendChild(out);
-    outWrap.hidden = !parts.body;
-    wrap.appendChild(outWrap);
-    if (!parts.notes && !parts.body)
-      wrap.appendChild(note("Waiting for the first words to come back."));
-    liveWatch = { notes: notes, notesWrap: notesWrap, out: out, outWrap: outWrap };
-    return wrap;
-  }
-
-  function takeNotes(msg: any): void {
-    try {
-      const t = String((msg && msg.notes) || "").trim();
-      if (!t) return;
-      lastNotes = t.length > 8000 ? t.slice(0, 8000) + "\u2026" : t;
-      lastNotesAt = Date.now();
-      log("the model sent a note back with the refine", true);
-    } catch (_) {}
-  }
 
   // What is happening right now, which the panel could not say before: it knew
   // it was busy and nothing else, so a refine that took forty seconds looked
@@ -4418,42 +4384,6 @@ export function setup(ctx: Ctx, overrides?: any) {
         wrap.appendChild(r);
       }
     }
-    return wrap;
-  }
-
-  // Only there when there is something to show. A prompt that never asks for a
-  // report should not carry an empty card about one.
-  function buildNotesCard(): HTMLElement | null {
-    if (!lastNotes) return null;
-    const wrap = card(
-      "What it said about the edit",
-      // Was a paragraph explaining where these come from and which prompts ask
-      // for them, which is the docs written out again above the thing itself.
-      // The card only shows when there is something in it, and by then the
-      // reader is looking at what it is.
-      "Written outside the tags, so none of it reached your chat.",
-      new Date(lastNotesAt).toTimeString().slice(0, 5),
-    );
-    const box = el("div", "arf-well arf-mono", lastNotes);
-    wrap.appendChild(box);
-    const row = el("div", "arf-row");
-    const copy = button("Copy", false);
-    copy.addEventListener("click", () => {
-      copyText(lastNotes);
-      toast("Copied.", true);
-    });
-    const big = button("Expand", false);
-    big.addEventListener("click", () => openBig("What it said about the edit", lastNotes));
-    const clear = button("Clear", false);
-    clear.addEventListener("click", () => {
-      lastNotes = "";
-      lastNotesAt = 0;
-      paint();
-    });
-    row.appendChild(copy);
-    row.appendChild(big);
-    row.appendChild(clear);
-    wrap.appendChild(row);
     return wrap;
   }
 
@@ -6170,7 +6100,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           e.stopPropagation();
         } catch (_) {}
         if (undoableHere(id)) {
-          send({ type: "undo_refine", requestId: newId(), chatId: lastChatId, messageId: id });
+          askUndo(lastChatId, id);
           return;
         }
         const why = whyNot();
@@ -6435,12 +6365,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (cfg.widgetUndo && undoHere().length) {
       const one = undoHere()[0];
-      send({
-        type: "undo_refine",
-        requestId: newId(),
-        chatId: one.chatId,
-        messageId: one.messageId,
-      });
+      askUndo(one.chatId, one.messageId);
       return;
     }
     refineNow();
@@ -6576,8 +6501,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     else if (picked === "stop") cancelRefine();
     else if (picked === "undo") {
       const one = undoHere()[0];
-      if (one)
-        send({ type: "undo_refine", requestId: newId(), chatId: one.chatId, messageId: one.messageId });
+      if (one) askUndo(one.chatId, one.messageId);
     } else if (picked === "draft") refineInput();
     else if (picked === "open") {
       try {
@@ -6697,8 +6621,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   function startSweep() {
     sweep = { at: 0, of: 0, saved: 0, skipped: 0 };
     sweepAsk = newId();
-    clearLive();
-    choices = null;
     // The same five-second watchdog every other request gets. A backend that is
     // not running answers nothing at all, and without this the card would sit
     // there counting nothing for the rest of the session.
@@ -6706,42 +6628,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     log("going through every reply in this chat");
     send({ type: "refine_all", requestId: sweepAsk, chatId: lastChatId });
     paint();
-  }
-
-  // A new refine starts on an empty screen rather than under the last one.
-  function clearLive() {
-    live = { notes: "", body: "" };
-    liveWatch = null;
-  }
-
-  // Best of three, asked for rather than assumed. The economics are the whole
-  // reason this is a button and not a setting: it costs three refines instead
-  // of one, so it happens when somebody decides a reply is worth that.
-  function refineMany() {
-    if (busy || msgBusy !== null) {
-      toast("A refine is already running. Press it again to stop that one.", true);
-      return;
-    }
-    const why = whyNot();
-    if (why) {
-      toast(why, true);
-      log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
-      return;
-    }
-    choices = null;
-    clearLive();
-    retryAt = 0;
-    retryOf = 0;
-    markBusy(true);
-    log("asking for three rewrites to choose between");
-    paint();
-    send({
-      type: "refine_many",
-      requestId: newId(),
-      count: 3,
-      chatId: lastChatId,
-      messageId: lastMessageId,
-    });
   }
 
   function refineNow() {
@@ -6757,8 +6643,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
       return;
     }
-    choices = null;
-    clearLive();
     retryAt = 0;
     retryOf = 0;
     markBusy(true);
@@ -6829,17 +6713,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           // still two states rather than one long silence.
           if (msg.type === "refine_progress") {
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
-            if (typeof msg.text === "string" || typeof msg.notes === "string")
-              showLive({
-                notes: noTags(msg.notes),
-                body: noTags(msg.text),
-              });
             if (msg.stage === "retrying") {
               retryAt = Number(msg.attempt) || 0;
               retryOf = Number(msg.of) || 0;
-              // A new answer is coming, so the last one stops being the thing
-              // on screen.
-              clearLive();
               log("an answer failed a check, asking again");
             }
             markBusy(true, msg.stage);
@@ -6970,30 +6846,6 @@ export function setup(ctx: Ctx, overrides?: any) {
             paint();
             return;
           }
-          if (msg.type === "refine_choices") {
-            const picks = (Array.isArray(msg.picks) ? msg.picks : []).map(String).filter(Boolean);
-            markBusy(false);
-            msgBusy = null;
-            takeNotes(msg);
-            if (!picks.length) {
-              log("nothing came back that was worth offering");
-              toast("None of those came back usable.", true);
-              paint();
-              return;
-            }
-            choices = {
-              chatId: msg.chatId,
-              messageId: msg.messageId,
-              before: String(msg.before || ""),
-              picks: picks,
-              at: Date.now(),
-            };
-            setBadge(String(picks.length));
-            log(picks.length + " rewrites are waiting for you to pick one", true);
-            ping();
-            paint();
-            return;
-          }
           if (msg.type === "scan_result") {
             if (scanWaiting && msg.requestId !== scanWaiting) return;
             scanWaiting = null;
@@ -7035,12 +6887,10 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "refine_notes") {
-            takeNotes(msg);
             paint();
             return;
           }
           if (msg.type === "refine_skipped") {
-            takeNotes(msg);
             markBusy(false);
             msgBusy = null;
             const why = String(msg.why || "no reason given");
@@ -7052,7 +6902,6 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "refine_result") {
-            takeNotes(msg);
             markBusy(false);
             msgBusy = null;
             previewBusy = false;
@@ -7109,7 +6958,6 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (tryWaiting !== msg.requestId) return;
             tryWaiting = null;
             tryBusy = false;
-            takeNotes(msg);
             tryResult = msg.ok
               ? { ok: true, text: String(msg.after || "") }
               : {
@@ -7123,13 +6971,21 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "undo_result") {
+            // What was asked about, which the panel wrote down when it asked.
+            // The answer says so too now, and either will do; taking ours
+            // first means a host that drops fields on the way through cannot
+            // leave the panel unable to tell which message came back.
+            const about =
+              undoAsked.get(String(msg.requestId)) ||
+              (msg.messageId != null ? { chatId: msg.chatId, messageId: msg.messageId } : null);
+            undoAsked.delete(String(msg.requestId));
             if (msg.ok) {
-              if (msg.messageId != null) undoable.delete(undoKey(msg.chatId, msg.messageId));
+              if (about) undoable.delete(undoKey(about.chatId, about.messageId));
               // The card on the page is about this refine, and this refine is
               // gone. Closed whichever way the undo was asked for, so putting
               // one back from the Log does not leave the card offering to do
               // it again.
-              if (msg.messageId != null && popKey === undoKey(msg.chatId, msg.messageId)) dropPop();
+              if (about && popKey === undoKey(about.chatId, about.messageId)) dropPop();
               if (!undoHere().length) setBadge(null);
               tally.undone++;
               log("put a reply back the way it was", true);

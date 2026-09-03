@@ -1116,70 +1116,6 @@ console.log("\nloading a preset from where you were reading");
   });
 }
 
-console.log("\npicking from a few");
-{
-  await inTab(browser, {}, async (page) => {
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "refine_choices",
-        chatId: "c1",
-        messageId: "m2",
-        before: "She stepped through and, suddenly, the cold just hit her.",
-        picks: [
-          "She stepped through, and the cold hit her hard.",
-          "She stepped through, and the cold took her at once.",
-        ],
-      });
-    });
-    await settle(page);
-    const shown = await page.evaluate(() => ({
-      card: /Pick one/.test(document.querySelector("#drawer").textContent),
-      both: /cold hit her hard/.test(document.querySelector("#drawer").textContent) &&
-        /cold took her at once/.test(document.querySelector("#drawer").textContent),
-      buttons: document.querySelectorAll("#drawer [data-arf-pick]").length,
-      badge: window.__badge,
-    }));
-    ok("the answers wait in the panel", shown.card && shown.both);
-    ok("with a button each and a way to keep what you had", shown.buttons === 3, String(shown.buttons));
-    ok("and the tab says how many", shown.badge === "2", String(shown.badge));
-
-    await page.evaluate(() => {
-      document.querySelector('#drawer [data-arf-pick="1"]').click();
-    });
-    await settle(page);
-    const took = await page.evaluate(() => ({
-      sent: window.__sent.filter((m) => m.type === "apply_refine").pop(),
-      gone: !/Pick one/.test(document.querySelector("#drawer").textContent),
-    }));
-    ok("picking one sends that one to be saved",
-      !!took.sent && took.sent.after === "She stepped through, and the cold took her at once.", took.sent);
-    ok("and the card goes", took.gone);
-  });
-
-  // Keeping what you had must save nothing at all.
-  await inTab(browser, {}, async (page) => {
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "refine_choices",
-        chatId: "c1",
-        messageId: "m2",
-        before: "before",
-        picks: ["one", "two"],
-      });
-    });
-    await settle(page);
-    await page.evaluate(() => {
-      document.querySelector('#drawer [data-arf-pick="none"]').click();
-    });
-    await settle(page);
-    const left = await page.evaluate(() => ({
-      saved: window.__sent.filter((m) => m.type === "apply_refine").length,
-      gone: !/Pick one/.test(document.querySelector("#drawer").textContent),
-    }));
-    ok("keeping what you had saves nothing", left.saved === 0 && left.gone, left);
-  });
-}
-
 console.log("\na free scan, with no model behind it");
 {
   await inTab(browser, {}, async (page) => {
@@ -1519,93 +1455,6 @@ console.log("\nwhen the backend is not there at all");
     await settle(page);
     const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
     ok("an acknowledged refine is left alone to take its time", !/backend did not answer/.test(said));
-  });
-}
-
-console.log("\nwatching one arrive");
-{
-  await inTab(browser, { saved: { watchLive: true, streamProgress: true } }, async (page) => {
-    await goTab(page, "Log");
-    const quiet = await page.evaluate(() =>
-      /Watch it happen/.test(document.querySelector("#drawer .arf-body").textContent),
-    );
-    ok("nothing to watch while nothing is running", !quiet);
-
-    // A refine starts, then the words come back in pieces the way a provider
-    // hands them over.
-    await page.evaluate(() => {
-      window.__fromBackend({ type: "refine_ack", requestId: "w1" });
-      window.__fromBackend({
-        type: "refine_progress",
-        stage: "writing",
-        chars: 40,
-        notes: "The second sentence restates the first.",
-        text: "She stepped",
-      });
-    });
-    await settle(page);
-    const mid = await page.evaluate(() => {
-      const body = document.querySelector("#drawer .arf-body").textContent;
-      return {
-        there: /Watch it happen/.test(body),
-        working: /restates the first/.test(body),
-        rewrite: /She stepped/.test(body),
-        // The tags themselves are the plumbing, not the show.
-        raw: /REFINE_NOTES/.test(body),
-      };
-    });
-    ok("the card appears once words are coming back", mid.there);
-    ok("what it is working out is shown", mid.working);
-    ok("and the rewrite as it is written", mid.rewrite);
-    ok("without the tags themselves", !mid.raw);
-
-    // And a marker that reaches the panel anyway is still never drawn: what is
-    // on screen is the writing, not the plumbing around it.
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "refine_progress",
-        stage: "writing",
-        chars: 60,
-        notes: "<REFINE_NOTES>The second sentence restates the first.</REFINE_NOTES>",
-        text: "<REFINED>She stepped through the gate",
-      });
-    });
-    await settle(page);
-    const stray = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
-    ok("nor one that slipped through anyway", !/REFINE_NOTES|<REFINED/.test(stray));
-    ok("and the writing is still there", /She stepped through the gate/.test(stray));
-
-    // More arrives. The panel must not be rebuilt under the reader five times a
-    // second, so the text is written into the element in place.
-    const inPlace = await page.evaluate(async () => {
-      const before = document.querySelector("#drawer .arf-body");
-      window.__fromBackend({
-        type: "refine_progress",
-        stage: "writing",
-        chars: 60,
-        text: "<REFINED>She stepped through and the cold hit her.</REFINED>",
-      });
-      await new Promise((r) => requestAnimationFrame(r));
-      return {
-        same: document.querySelector("#drawer .arf-body") === before,
-        shows: /the cold hit her/.test(document.querySelector("#drawer .arf-body").textContent),
-      };
-    });
-    ok("more words land without rebuilding the panel", inPlace.same);
-    ok("and the newest text is what is shown", inPlace.shows);
-  });
-
-  await inTab(browser, {}, async (page) => {
-    await goTab(page, "Log");
-    await page.evaluate(() => {
-      window.__fromBackend({ type: "refine_ack", requestId: "w1" });
-      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 9, text: "" });
-    });
-    await settle(page);
-    const off = await page.evaluate(() =>
-      /Watch it happen/.test(document.querySelector("#drawer .arf-body").textContent),
-    );
-    ok("switched off, there is no card and no text to send", !off);
   });
 }
 
@@ -1972,8 +1821,8 @@ console.log("\nthe card that comes up on the page");
         chatId: "c1",
         messageId: "m2",
         canUndo: true,
-        before: "The wet slide of it hit him like an electric shock straight up his spine.",
-        after: "It slid over him, and his whole upper body locked rigid.",
+        before: "It hit him like an electric shock, and his whole upper body went stiff.",
+        after: "It hit him hard, and his whole upper body locked rigid.",
       });
     });
     await settle(page);
@@ -1988,6 +1837,51 @@ console.log("\nthe card that comes up on the page");
       document.querySelector("[data-arf-pop]").textContent);
     ok("with what it said before", /electric shock/.test(said), said.slice(0, 80));
     ok("and what it says now", /locked rigid/.test(said), said.slice(0, 80));
+
+    // What changed is marked on the words, not left for the reader to find by
+    // comparing two paragraphs.
+    const marks = await page.evaluate(() => {
+      const w = document.querySelector("[data-arf-diff]");
+      const grab = (cls) => Array.from(w.querySelectorAll("." + cls)).map((n) => n.textContent).join("|");
+      const plain = Array.from(w.querySelectorAll("span"))
+        .filter((n) => !n.className)
+        .map((n) => n.textContent)
+        .join("|");
+      const cutStyle = w.querySelector(".arf-cut") && getComputedStyle(w.querySelector(".arf-cut"));
+      const addStyle = w.querySelector(".arf-add") && getComputedStyle(w.querySelector(".arf-add"));
+      return {
+        cut: grab("arf-cut"),
+        add: grab("arf-add"),
+        plain: plain,
+        struck: cutStyle ? cutStyle.textDecorationLine : "",
+        addStruck: addStyle ? addStyle.textDecorationLine : "",
+        cutColour: cutStyle ? cutStyle.color : "",
+        addColour: addStyle ? addStyle.color : "",
+      };
+    });
+    ok("words taken out are marked", /electric shock/.test(marks.cut), JSON.stringify(marks.cut));
+    ok("and struck through", /line-through/.test(marks.struck), marks.struck);
+    ok("words put in are marked", /locked rigid/.test(marks.add), JSON.stringify(marks.add));
+    ok("and not struck through", !/line-through/.test(marks.addStruck), marks.addStruck);
+    ok("the two are not the same colour", marks.cutColour !== marks.addColour,
+      marks.cutColour + " vs " + marks.addColour);
+    // "It" and "him" survive the rewrite in the fixture below, unmarked.
+    ok("and what did not change is left plain", marks.plain.trim().length > 0, JSON.stringify(marks.plain));
+
+    // A dim behind it, so the eye goes to the card.
+    const shade = await page.evaluate(() => {
+      const el = document.querySelector("[data-arf-shade]");
+      if (!el) return null;
+      const st = getComputedStyle(el);
+      return { z: Number(st.zIndex), bg: st.backgroundColor, fixed: st.position === "fixed" };
+    });
+    ok("with a dim behind it", !!shade && shade.fixed && /rgba?\(/.test(shade.bg), JSON.stringify(shade));
+    ok(
+      "under the card rather than over it",
+      shade &&
+        shade.z <
+          (await page.evaluate(() => Number(getComputedStyle(document.querySelector("[data-arf-pop]")).zIndex))),
+    );
 
     // Readable on the theme, measured the same way the panel is.
     const worst = await page.evaluate(() => {
@@ -2040,6 +1934,10 @@ console.log("\nthe card that comes up on the page");
     await page.evaluate(() => document.querySelector("[data-arf-pop-keep]").click());
     await settle(page);
     ok("keeping it closes the card", !(await pop(page)));
+    ok(
+      "and takes the dim with it",
+      await page.evaluate(() => !document.querySelector("[data-arf-shade]")),
+    );
     await goTab(page, "Log");
     ok(
       "and the refine is still there to put back",
@@ -2238,12 +2136,11 @@ console.log("\nhow much it is told");
 
 console.log("\na switch and the rows that hang off it");
 {
-  // Watch the rewrite arrive has Show me the words as they arrive under it, and
-  // that pair is written straight into its card rather than coming from a field
-  // list. Both halves of showing it were wrong: the row was drawn whatever the
-  // switch above it said, and flipping the switch did not repaint, so the panel
-  // only told the truth after you left the tab and came back. This drives the
-  // switch and reads the panel without leaving it.
+  // A row that hangs off a switch has to go when the switch does, on the spot.
+  // Both halves of that were once wrong: the row was drawn whatever the switch
+  // said, and flipping the switch did not repaint, so the panel only told the
+  // truth after you left the tab and came back. This drives the switch and
+  // reads the panel without leaving it.
   const there = (page, key) =>
     page.evaluate((k) => !!document.querySelector('[data-arf-field="' + k + '"]'), key);
   const flip = async (page, key) => {
@@ -2253,17 +2150,17 @@ console.log("\na switch and the rows that hang off it");
     await settle(page);
   };
 
-  await inTab(browser, {}, async (page) => {
-    await goTab(page, "Limits");
-    ok("the row is there while the switch above it is on", await there(page, "watchLive"));
-    await flip(page, "streamProgress");
-    ok("switching it off takes the row with it, on the spot", !(await there(page, "watchLive")));
-    await flip(page, "streamProgress");
-    ok("and switching it back on brings it back", await there(page, "watchLive"));
+  await inTab(browser, { saved: { widgetOn: true } }, async (page) => {
+    await goTab(page, "Setup");
+    ok("the row is there while the switch above it is on", await there(page, "widgetSize"));
+    await flip(page, "widgetOn");
+    ok("switching it off takes the row with it, on the spot", !(await there(page, "widgetSize")));
+    await flip(page, "widgetOn");
+    ok("and switching it back on brings it back", await there(page, "widgetSize"));
     // The switch itself has to survive its own repaint, or a second tap lands
     // on a box that was never redrawn.
     const state = await page.evaluate(
-      () => document.querySelector('[data-arf-field="streamProgress"]').checked,
+      () => document.querySelector('[data-arf-field="widgetOn"]').checked,
     );
     ok("the switch is left reading the way it was set", state === true);
   });

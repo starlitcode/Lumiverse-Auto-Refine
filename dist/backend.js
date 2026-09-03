@@ -298,43 +298,6 @@ const DEFAULT_BLOCKS = [
 // puts the rewrite between the tags, and taking what is between them is exact
 // where reading around a preamble is guesswork.
 let wrapOutput = true;
-// Whether the arriving text is sent to the panel to be watched, rather than
-// just its length. Off by default: it is a thing to turn on when you want to
-// see one happen, not something worth paying bridge traffic for on every reply.
-let watchLive = false;
-// Per part rather than for the answer as a whole, so a long piece of working
-// cannot push the rewrite out of what gets sent.
-const WATCH_TAIL = 4000;
-// The two halves of a part-written answer, for somebody watching it arrive.
-// Split where the whole text is: the panel is sent this and nothing else, so a
-// tag that has scrolled out of the traffic is a tag it can never find.
-//
-// The end of each half is what is sent, because that is where the writing is
-// happening and where a reader watching is looking.
-function watchParts(text) {
-    const t = String(text || '');
-    const tail = (s) => (s.length > WATCH_TAIL ? s.slice(-WATCH_TAIL) : s);
-    let notes = '';
-    let body = '';
-    const nOpen = /<\s*refine_notes\s*>/i.exec(t);
-    if (nOpen) {
-        const rest = t.slice(nOpen.index + nOpen[0].length);
-        const nClose = /<\s*\/\s*refine_notes\s*>/i.exec(rest);
-        notes = nClose ? rest.slice(0, nClose.index) : rest;
-    }
-    const bOpen = /<\s*refined\s*>/i.exec(t);
-    if (bOpen) {
-        const rest = t.slice(bOpen.index + bOpen[0].length);
-        const bClose = /<\s*\/\s*refined\s*>/i.exec(rest);
-        body = bClose ? rest.slice(0, bClose.index) : rest;
-    }
-    else if (!nOpen) {
-        // No tags yet, or a prompt that does not use them. Whatever has arrived is
-        // the rewrite as far as anybody watching is concerned.
-        body = t;
-    }
-    return { notes: tail(notes.trim()), body: tail(body.trim()) };
-}
 // Whether to stream the refine so the panel can show it arriving. The answer is
 // the same either way; this only decides whether anybody can watch it.
 let streamProgress = true;
@@ -1412,24 +1375,11 @@ async function askModel(text, isUser, scene, userId) {
                     const now = Date.now();
                     if (now - said > 300) {
                         said = now;
-                        const watch = watchLive ? watchParts(text) : null;
-                        tell(userId, {
-                            type: 'refine_progress',
-                            stage: 'writing',
-                            chars: text.length,
-                            // Split here, where the whole answer is, rather than in the
-                            // panel, which only ever sees what this sends.
-                            //
-                            // It used to send the last few thousand characters and leave the
-                            // panel to find the tags in them. On a reasoning prompt the
-                            // working comes back before the rewrite, so once the answer grew
-                            // past that tail the opening <REFINE_NOTES> had scrolled off the
-                            // front and could never be found again: the working simply
-                            // vanished from the card partway through, on exactly the prompts
-                            // that ask for it.
-                            notes: watch ? watch.notes : '',
-                            text: watch ? watch.body : '',
-                        });
+                        // The length, and nothing else. The panel counts what has arrived
+                        // so a slow refine reads as slow; sending the words themselves
+                        // several times a second was traffic paid on every reply for a
+                        // card nobody was watching.
+                        tell(userId, { type: 'refine_progress', stage: 'writing', chars: text.length });
                     }
                 }
                 return { content: text, error: '' };
@@ -1496,11 +1446,7 @@ function latestReply(msgs, greetingId) {
     }
     return null;
 }
-// collect turns this into "make me this many and hand them back", which is what
-// the panel's Try a few button asks for. Everything up to the point of writing
-// is the same work, so it is the same function rather than a second copy that
-// would drift: the same shield, the same checks, the same protection.
-async function refineMessage(chatId, messageId, userId, byHand, collect) {
+async function refineMessage(chatId, messageId, userId, byHand) {
     if (!masterOn)
         return { ok: false, why: 'Auto Refine is switched off' };
     if (chatsOff.has(String(chatId)))
@@ -1642,37 +1588,6 @@ async function refineMessage(chatId, messageId, userId, byHand, collect) {
         };
     // The thinking goes back exactly as it was, in front of the rewrite.
     const whole = split.head + back.text;
-    // Asked for several, so nothing is written: the reader picks one and the
-    // panel sends that back through the ordinary save.
-    if (collect && collect > 1) {
-        const picks = [whole];
-        for (let n = 1; n < Math.min(4, collect); n++) {
-            tell(userId, { type: 'refine_progress', stage: 'asking', attempt: n + 1, of: collect });
-            const more = await askModel(armed.text, m.role === 'user', scene, userId);
-            if (more.error)
-                break;
-            const v = judge(more.content, armed.text);
-            if (!v.ok)
-                continue;
-            const back2 = unshield(v.text, armed.parts);
-            if (back2.lost.length)
-                continue;
-            const text2 = split.head + back2.text;
-            // Two identical answers are one answer. Offering the same words twice
-            // reads as a broken feature rather than as a model that is sure.
-            if (picks.indexOf(text2) < 0)
-                picks.push(text2);
-        }
-        replyTo(userId, {
-            type: 'refine_choices',
-            chatId: chatId,
-            messageId: m.id,
-            before: original,
-            picks: picks,
-            notes: notes,
-        });
-        return { ok: false, why: 'waiting for you to pick one', notes: notes };
-    }
     if (confirmBeforeSave) {
         replyTo(userId, {
             type: 'confirm_refine',
@@ -1932,7 +1847,6 @@ spindle.onFrontendMessage(async (payload, userId) => {
             protectInline = !!s.protectInline;
             wrapOutput = s.wrapOutput !== false;
             streamProgress = s.streamProgress !== false;
-            watchLive = !!s.watchLive;
             skipWhenClean = !!s.skipWhenClean;
             // Written to the account as well as held here, so the next browser to
             // ask gets these rather than a fresh install. Failing to write is worth
@@ -1987,27 +1901,6 @@ spindle.onFrontendMessage(async (payload, userId) => {
         // stopped something.
         // A scan of pasted text, with no model call behind it. The whole point is
         // that this costs nothing: no tokens, no connection, no waiting.
-        // Several answers to the same reply, for the reader to choose between.
-        // Nothing is written: whichever they pick comes back as an ordinary save.
-        if (payload.type === 'refine_many') {
-            replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
-            const many = Math.min(4, Math.max(2, Number(payload.count) || 3));
-            const done = await refineMessage(payload.chatId, payload.messageId, userId, true, many);
-            // Only worth answering when it failed. A success has already sent the
-            // choices, and a second message would clear the panel's busy flag before
-            // the reader has seen them.
-            if (done.why !== 'waiting for you to pick one')
-                replyTo(userId, {
-                    type: 'refine_result',
-                    requestId: payload.requestId,
-                    chatId: payload.chatId,
-                    messageId: payload.messageId,
-                    ok: false,
-                    why: done.why,
-                    notes: done.notes || '',
-                });
-            return;
-        }
         // Every reply already in the chat, oldest first, one at a time.
         //
         // One at a time on purpose. Firing them together would be quicker and would
@@ -2146,15 +2039,23 @@ spindle.onFrontendMessage(async (payload, userId) => {
         if (payload.type === 'undo_refine') {
             const k = key(payload.chatId, payload.messageId);
             const kept = before.get(k);
+            // Which message this is about, on every answer, the failures included.
+            //
+            // It used to say only whether it worked. The panel keys what it can put
+            // back by chat and message, so with neither on the answer its delete was
+            // skipped every time: the reply really was restored, and the panel went
+            // on offering to restore it, the floating button stayed an undo button,
+            // and Put it back looked like a button that did nothing.
+            const about = { chatId: payload.chatId, messageId: payload.messageId };
             if (!kept) {
-                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ok: false, why: 'nothing was kept for that message' });
+                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, why: 'nothing was kept for that message' });
                 return;
             }
             try {
                 const msgs = await spindle.chat.getMessages(payload.chatId);
                 const m = Array.isArray(msgs) ? msgs.find((x) => x && x.id === payload.messageId) : null;
                 if (!m) {
-                    replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ok: false, why: 'that message is gone' });
+                    replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, why: 'that message is gone' });
                     return;
                 }
                 remember(ourWrites, k, kept.text, OURS_MAX);
@@ -2169,10 +2070,10 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 await spindle.chat.updateMessage(payload.chatId, m.id, patch);
                 before.delete(k);
                 refined.delete(String(payload.messageId));
-                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ok: true, text: kept.text });
+                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: true, text: kept.text });
             }
             catch (e) {
-                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ok: false, why: (e && e.message) || 'it could not be put back' });
+                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, why: (e && e.message) || 'it could not be put back' });
             }
             return;
         }
