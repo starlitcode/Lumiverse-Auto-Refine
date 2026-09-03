@@ -2207,12 +2207,11 @@ export function setup(ctx, overrides) {
         // a thing to stop depending on rather than to keep measuring. The floating
         // widget has been drawn this way from the start and has never needed
         // rescuing. Heavier letters and the edge are what make it the loud one now.
-        ".arf-btn.arf-primary{background:var(--lumiverse-primary,rgba(147,112,219,.9));" +
-        "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
-        "color:var(--arf-on-primary,#fff);font-weight:600}" +
+        ".arf-btn.arf-primary{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
+        "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
+        "color:var(--lumiverse-primary-text,rgba(186,135,255,.95));font-weight:600}" +
         ".arf-btn.arf-primary:hover:not(:disabled){" +
-        "background:var(--lumiverse-primary-hover,rgba(167,132,239,.95));" +
-        "border-color:var(--lumiverse-primary-hover,rgba(167,132,239,.95))}" +
+        "background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
         ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
         ".arf-btn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
         ".arf-box{-webkit-appearance:none;appearance:none;margin:0;flex:none;position:relative;" +
@@ -2618,53 +2617,6 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
-    // What colour reads on the theme's accent, handed to the stylesheet as a
-    // variable so the loud button can be filled with the accent and still be
-    // readable on a theme whose accent is light.
-    //
-    // Worked out once for the panel rather than per element after the fact. That
-    // is the whole difference: a label that gets its colour from CSS has it in
-    // the first frame it is drawn in, while one that gets it from a repair is
-    // white until the repair lands, on every repaint. Tinting the button instead
-    // fixed that too, and cost the button its loudness: it came out looking like
-    // every other button on the panel.
-    //
-    // Read from the panel, so it follows the theme the panel is actually sitting
-    // in, and again on every repaint, so switching theme is picked up.
-    function setAccentInk(root) {
-        try {
-            // Resolved by the browser, not read as text. A custom property comes back
-            // from getPropertyValue exactly as the theme wrote it, so a theme that
-            // writes its accent as #e8d0ff hands over a hex string that parseColor
-            // cannot read at all, and the whole thing quietly does nothing. Painting
-            // it onto something and reading the colour back gets rgb() every time,
-            // whatever the theme wrote: hex, a name, hsl, anything the browser takes.
-            const probe = document.createElement("span");
-            probe.style.cssText =
-                "position:absolute;width:0;height:0;overflow:hidden;" +
-                    "color:var(--lumiverse-primary,rgba(147,112,219,.9))";
-            root.appendChild(probe);
-            const raw = getComputedStyle(probe).color;
-            probe.remove();
-            const accent = parseColor(raw);
-            if (!accent)
-                return;
-            // Composited, because an accent with alpha sits on the card behind it.
-            const solid = blendColor(accent, backdropOf(root));
-            const ink = betterInk(solid, TEXT_FLOOR * CLEARANCE);
-            root.style.setProperty("--arf-on-primary", ink.color);
-            // And on the page, so it reaches the four things drawn outside the panel
-            // that use the same buttons: the card that comes up when a refine lands,
-            // the full-size editor, and the two questions asked in a modal, whose
-            // element the host owns. Naming each one here is a list that drifts;
-            // letting it inherit is one place. Taken off again on teardown.
-            try {
-                document.documentElement.style.setProperty("--arf-on-primary", ink.color);
-            }
-            catch (_) { }
-        }
-        catch (_) { }
-    }
     // Walk the panel and repair only what genuinely fails. Elements with no text
     // yet are included: a status line waiting for something to say has already
     // been given its colour, and it will not change when the text arrives.
@@ -2952,9 +2904,6 @@ export function setup(ctx, overrides) {
         const caret = document.activeElement?.selectionStart;
         root.innerHTML = "";
         root.className = "arf";
-        // Before anything is built, so every button drawn below already has the
-        // right ink on it rather than being corrected after the frame is on screen.
-        setAccentInk(root);
         liveEls = null;
         root.appendChild(buildHeader());
         // A refused permission that stops the whole thing is the answer to "why is
@@ -6989,12 +6938,6 @@ export function setup(ctx, overrides) {
         }
     }
     catch (_) { }
-    disposers.push(() => {
-        try {
-            document.documentElement.style.removeProperty("--arf-on-primary");
-        }
-        catch (_) { }
-    });
     injectStyle();
     armBackend();
     syncExtras();
