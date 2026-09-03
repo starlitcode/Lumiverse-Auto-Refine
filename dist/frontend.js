@@ -1582,6 +1582,40 @@ export function setup(ctx, overrides) {
     // the case where nothing comes back at all, which is what a crashed backend
     // or a dropped bridge message looks like from here. Without it the panel
     // spins until the page is reloaded.
+    // A backend that is not running answers nothing at all, and the deadman below
+    // only notices that a whole timeout later: with the default settings the
+    // panel spun for a hundred and five seconds before saying a word.
+    //
+    // The backend says it has the request the moment it arrives, before any work.
+    // That message was already being sent and thrown away here. Waiting a few
+    // seconds for it separates "the extension is not loaded" from "the model is
+    // slow", which are the two things a spinning panel could mean and the reader
+    // cannot tell apart.
+    let ackTimer = null;
+    const ACK_MS = 5000;
+    function armAck() {
+        if (ackTimer)
+            clearTimeout(ackTimer);
+        ackTimer = setTimeout(() => {
+            ackTimer = null;
+            if (!busy && msgBusy === null)
+                return;
+            markBusy(false);
+            msgBusy = null;
+            const why = "this extension's backend did not answer, so nothing was sent to a model";
+            tally.dropped++;
+            countDrop(why);
+            lastRun = { ms: lastRunMs, ok: false, why: why };
+            log("no answer from the backend. Check that Auto Refine is fully installed.");
+            toast("Auto Refine's backend is not answering. Nothing was refined.", true);
+            paint();
+        }, ACK_MS);
+    }
+    function clearAck() {
+        if (ackTimer)
+            clearTimeout(ackTimer);
+        ackTimer = null;
+    }
     let deadman = null;
     function armDeadman() {
         if (deadman)
@@ -1608,16 +1642,21 @@ export function setup(ctx, overrides) {
         if (deadman)
             clearTimeout(deadman);
         deadman = null;
+        clearAck();
     });
     function markBusy(on, why) {
         if (on && !busy) {
             runStartedAt = Date.now();
             streamed = 0;
             armDeadman();
+            armAck();
         }
-        if (!on && deadman) {
-            clearTimeout(deadman);
-            deadman = null;
+        if (!on) {
+            clearAck();
+            if (deadman) {
+                clearTimeout(deadman);
+                deadman = null;
+            }
         }
         if (!on && busy && runStartedAt)
             lastRunMs = Date.now() - runStartedAt;
@@ -2049,7 +2088,6 @@ export function setup(ctx, overrides) {
         b.textContent = label;
         return b;
     }
-    const rule = () => el("div", "arf-rule");
     // A line that says something is wrong, or is about to be, or went right.
     // Each carries a glyph as well as a colour, so the three are told apart
     // without relying on being able to tell the three colours apart.
@@ -2064,10 +2102,6 @@ export function setup(ctx, overrides) {
     // ---- the tab ----
     let tab = null;
     let badge = null;
-    // The sections that stay folded, remembered while the page is open so they do
-    // not close themselves every time the tab repaints.
-    let costOpen = false;
-    let shapeOpen = false;
     let transferSaid = null;
     function setBadge(v) {
         // Written only when it changes. This goes to the host on every call, and a
@@ -2673,29 +2707,6 @@ export function setup(ctx, overrides) {
         row.appendChild(seen);
         box.appendChild(row);
         return box;
-    }
-    function textBox(key, label, hint, rows) {
-        const wrap = el("div", "arf-col");
-        wrap.appendChild(el("div", "arf-lab", label));
-        const ta = document.createElement("textarea");
-        ta.rows = rows;
-        ta.value = String(cfg[key] == null ? "" : cfg[key]);
-        ta.setAttribute("data-arf-field", key);
-        ta.setAttribute("aria-label", label);
-        ta.className = "arf-field";
-        ta.addEventListener("input", () => {
-            cfg[key] = ta.value;
-            persist();
-        });
-        // Written at once on the way out, so wandering off mid-sentence keeps it.
-        ta.addEventListener("blur", () => {
-            cfg[key] = ta.value;
-            persist(true);
-            paint();
-        });
-        wrap.appendChild(ta);
-        wrap.appendChild(note(hint));
-        return wrap;
     }
     // ---- Prompt ----
     function buildTryCard() {
@@ -3401,17 +3412,23 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "On by default, and a different thing from the row above: that one is about working already in the reply, this one is about working the refining model adds when it answers. The tags catch most of it, since anything outside <REFINED> is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.",
         }));
-        wrap.appendChild(fieldRow({
-            key: "thinkTags",
-            label: "Extra thinking tag names",
-            type: "lines",
-            needs: { key: "protectThinking" },
-            under: true,
-            hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
-        }));
+        // Folded. Three lists of text that most readers never open, sitting in
+        // front of the switches everybody does. A search still reaches inside,
+        // because fold opens itself while one is running.
+        if (cfg.protectThinking)
+            wrap.appendChild(fold("Thinking tags your model uses", (body) => {
+                body.appendChild(fieldRow({
+                    key: "thinkTags",
+                    label: "Extra thinking tag names",
+                    type: "lines",
+                    hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
+                }));
+            }));
         if (cfg.protectOn)
-            for (const f of SHIELD_FIELDS)
-                wrap.appendChild(fieldRow(f));
+            wrap.appendChild(fold("Patterns of your own", (body) => {
+                for (const f of SHIELD_FIELDS)
+                    body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
+            }));
         if (shieldBad.length)
             wrap.appendChild(bad("These patterns could not be read and are doing nothing: " + shieldBad.join("; ")));
         if (!cfg.protectOn)
@@ -3422,9 +3439,17 @@ export function setup(ctx, overrides) {
         const wrap = card("What it refuses to save", "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired. Each is yours to switch off.");
         for (const f of LIMIT_FIELDS.filter((f) => f.key === "maxGrowthPct" || f.key === "minShrinkPct"))
             wrap.appendChild(fieldRow(f));
+        // The switches stay in front. What each one measures by is a number and a
+        // word list, which belong behind a fold with the rest of the tuning.
         for (const f of GUARD_FIELDS)
-            if (fieldShows(f))
+            if (fieldShows(f) && !f.under)
                 wrap.appendChild(fieldRow(f));
+        const tuning = GUARD_FIELDS.filter((f) => f.under && fieldShows(f));
+        if (tuning.length)
+            wrap.appendChild(fold("What counts as sanitising", (body) => {
+                for (const f of tuning)
+                    body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
+            }));
         if (!cfg.guardRefusal && !cfg.guardPreamble && !cfg.guardSoften)
             wrap.appendChild(warn("Every check on what the answer says is off. A refusal written by the model can now be saved over your reply, and the length limits are all that is left."));
         return wrap;
@@ -5904,6 +5929,12 @@ export function setup(ctx, overrides) {
                         log("your " + what + " could not be saved to your account. They are still saved in this browser.");
                         toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
                         paint();
+                        return;
+                    }
+                    if (msg.type === "refine_ack") {
+                        // The backend is there. From here on the deadman is the one
+                        // watching, because how long the model takes is its business.
+                        clearAck();
                         return;
                     }
                     if (msg.type === "refine_stopped") {

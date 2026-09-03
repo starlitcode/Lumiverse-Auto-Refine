@@ -1173,12 +1173,23 @@ console.log("\nthe checks are yours to switch off");
     );
     ok("each check has a switch of its own", on.every(Boolean), JSON.stringify(on));
 
-    // The two that belong to the softening check appear under it.
+    // The two that belong to the softening check are behind a fold, so the tab
+    // is a list of switches rather than a wall. Opening it brings them out.
+    const folded = await page.evaluate(() => {
+      const before = !!document.querySelector('#drawer [data-arf-field="softenPct"]');
+      const head = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
+        /What counts as sanitising/.test(h.textContent),
+      );
+      if (head) head.click();
+      return { before: before, hasFold: !!head };
+    });
+    await settle(page);
     const under = await page.evaluate(() => ({
       pct: !!document.querySelector('#drawer [data-arf-field="softenPct"]'),
       words: !!document.querySelector('#drawer [data-arf-field="softenWords"]'),
     }));
-    ok("its own settings sit under it while it is on", under.pct && under.words);
+    ok("its tuning is folded away rather than in the way", folded.hasFold && !folded.before);
+    ok("and opening it brings its own settings out", under.pct && under.words);
 
     await page.evaluate(() => {
       const sw = document.querySelector('#drawer [data-arf-field="guardSoften"]');
@@ -1204,6 +1215,78 @@ console.log("\nthe checks are yours to switch off");
       ok("switching every one off warns you", /can now be saved over your reply/.test(said));
     },
   );
+}
+
+console.log("\nwhen the backend is not there at all");
+{
+  // A chat has to be open, or the refine is refused before anything is sent and
+  // the watch never arms.
+  const inAChat = async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat",
+        requestId: id,
+        chatId: "c1",
+        character: "Wren",
+        hasCharacter: true,
+        resolved: true,
+      });
+    });
+    await settle(page);
+  };
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await inAChat(page);
+    // A refine is asked for and nothing answers, which is what a Lumiverse
+    // with the frontend loaded and the backend missing looks like from here.
+    await page.evaluate(() => {
+      window.__slept = [];
+      const real = window.setTimeout;
+      // Only the acknowledgement wait is shortened. The deadman is armed on the
+      // same call and is twenty times longer, so shortening both equally would
+      // race them and prove nothing about which one is meant to speak first.
+      window.setTimeout = (fn, ms) => {
+        window.__slept.push(ms);
+        return real(fn, ms >= 2000 && ms <= 10000 ? 5 : ms);
+      };
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Refine the latest reply/.test(b.textContent))
+        .click();
+    });
+    await new Promise((r) => setTimeout(r, 260));
+    await settle(page);
+    const said = await page.evaluate(() => ({
+      body: document.querySelector("#drawer .arf-body").textContent,
+      toasts: (window.__toasts || []).join(" | "),
+      // The panel must not still think something is running.
+      spinning: /Refining/.test(document.querySelector("#drawer").textContent),
+    }));
+    ok("it says the backend did not answer", /backend did not answer/.test(said.body), said.body.slice(0, 200));
+    ok("out loud, not only in the log", /backend is not answering/.test(said.toasts), said.toasts);
+    ok("and stops spinning", !said.spinning, said.spinning);
+  });
+
+  // And when the backend is there, the acknowledgement puts that watch away and
+  // leaves the timeout to do its job.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await inAChat(page);
+    await page.evaluate(() => {
+      const real = window.setTimeout;
+      window.setTimeout = (fn, ms) => real(fn, ms >= 2000 && ms <= 10000 ? 5 : ms);
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Refine the latest reply/.test(b.textContent))
+        .click();
+      const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+      window.__fromBackend({ type: "refine_ack", requestId: id });
+    });
+    await new Promise((r) => setTimeout(r, 260));
+    await settle(page);
+    const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("an acknowledged refine is left alone to take its time", !/backend did not answer/.test(said));
+  });
 }
 
 console.log("\nwatching one arrive");

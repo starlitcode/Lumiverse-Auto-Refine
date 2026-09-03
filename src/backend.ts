@@ -1275,9 +1275,6 @@ async function askModel(
   const secs = Number(timeoutSecs);
   const ms = Number.isFinite(secs) && secs > 0 ? Math.min(600, Math.max(5, secs)) * 1000 : 90000;
   let timer: any = null;
-  // Marked as the reader's own before it is aborted by anything, so a stop
-  // arriving while the timeout is also pending finds it either way.
-  let stopped = false;
   if (controller) {
     controller.__arfWhy = '';
     holdRun(userId, controller);
