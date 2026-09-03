@@ -3390,6 +3390,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // in front of them, on the page, where the change happened.
   let popEl: any = null;
   let popShade: any = null;
+  // The element the working is written into while it is being written.
+  let popNotes: any = null;
   let popKey = "";
 
   // Every undo goes through here, and every one is written down against its
@@ -3414,9 +3416,92 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
     popEl = null;
     popShade = null;
+    popNotes = null;
     popKey = "";
   }
   disposers.push(dropPop);
+
+  // The working, while it is being written.
+  //
+  // The card that says what a refine did is already on the page and already
+  // the place to look, so it opens as soon as the model starts working rather
+  // than only when it lands, and what it holds until then is the working
+  // itself. It is written straight into the element it is already in, four
+  // times a second, so it reads as writing rather than as a card redrawing.
+  //
+  // Only ever the working. The rewrite arrives on the card when it lands,
+  // marked against what was there before, and showing it twice would be
+  // showing it twice.
+  function showWorking(text: string) {
+    if (!cfg.popup) return;
+    const said = String(text || "").trim();
+    if (!said) return;
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      if (popNotes && popEl) {
+        popNotes.textContent = said;
+        // Following the newest line, the way a terminal does.
+        popNotes.scrollTop = popNotes.scrollHeight;
+        return;
+      }
+      // A card of its own while there is no refine to put back yet, so
+      // dropping it and drawing the real one when it lands is one swap.
+      dropPop();
+      popKey = "working";
+      const shade = document.createElement("div");
+      shade.className = "arf-shade";
+      shade.setAttribute("data-arf-shade", "1");
+      shade.addEventListener("click", dropPop);
+      document.body.appendChild(shade);
+      popShade = shade;
+
+      const box = document.createElement("div");
+      box.className = "arf-pop arf";
+      box.setAttribute("data-arf-pop", "1");
+      box.setAttribute("data-arf-pop-working", "1");
+      box.setAttribute("role", "status");
+
+      const top = el("div", "arf-between");
+      top.appendChild(el("span", "arf-h", "Working it out"));
+      const shut = document.createElement("button");
+      shut.type = "button";
+      shut.className = "arf-x";
+      shut.setAttribute("aria-label", "Close");
+      shut.textContent = "\u00d7";
+      shut.addEventListener("click", dropPop);
+      top.appendChild(shut);
+      box.appendChild(top);
+
+      const body = el("div", "arf-pop-body");
+      const well = el("div", "arf-well arf-scroll arf-mono", said);
+      well.setAttribute("data-arf-working", "1");
+      body.appendChild(well);
+      box.appendChild(body);
+      popNotes = well;
+
+      const row = el("div", "arf-row arf-pop-row");
+      const halt = button("Stop", false);
+      halt.addEventListener("click", () => {
+        cancelRefine();
+        dropPop();
+      });
+      row.appendChild(halt);
+      box.appendChild(row);
+
+      document.body.appendChild(box);
+      popEl = box;
+      try {
+        requestAnimationFrame(() => {
+          setScheme(box);
+          sweepReadable(box);
+        });
+      } catch (_) {}
+    } catch (_) {
+      popEl = null;
+      popNotes = null;
+      popKey = "";
+    }
+  }
 
   function showPop(one: Undo) {
     if (!cfg.popup) return;
@@ -3425,6 +3510,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const key = undoKey(one.chatId, one.messageId);
       // The same refine twice is one card. A repaint or a second message about
       // a refine already on screen must not stack another one on top of it.
+      // The working card is not the same refine and is always replaced.
       if (popEl && popKey === key) return;
       dropPop();
       popKey = key;
@@ -6742,6 +6828,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           // still two states rather than one long silence.
           if (msg.type === "refine_progress") {
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
+            // The working, as it is written. Empty on a prompt that does not
+            // ask for any, which is most of them, and then nothing opens.
+            if (typeof msg.notes === "string") showWorking(msg.notes);
             if (msg.stage === "retrying") {
               retryAt = Number(msg.attempt) || 0;
               retryOf = Number(msg.of) || 0;

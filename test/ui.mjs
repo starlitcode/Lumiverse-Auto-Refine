@@ -1900,6 +1900,69 @@ console.log("\nthe run through the chat");
   });
 }
 
+console.log("\nwatching it work");
+{
+  // The working is written before the rewrite and is gone by the time anything
+  // lands, so if it is not shown while it is happening it cannot be seen at
+  // all. The card that says what a refine did is already the place to look, so
+  // it opens early and holds the working until there is a rewrite to show.
+  const say = async (page, notes) => {
+    await page.evaluate((n) => {
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 400, notes: n });
+    }, notes);
+    await settle(page);
+  };
+  const card = (page) =>
+    page.evaluate(() => {
+      const el = document.querySelector("[data-arf-pop]");
+      if (!el) return null;
+      const well = el.querySelector("[data-arf-working]");
+      return {
+        working: el.hasAttribute("data-arf-pop-working"),
+        head: el.querySelector(".arf-h").textContent,
+        said: well ? well.textContent : null,
+        cards: document.querySelectorAll("[data-arf-pop]").length,
+        diff: !!el.querySelector("[data-arf-diff]"),
+      };
+    });
+
+  await inTab(browser, {}, async (page) => {
+    ok("nothing is up before the model says anything", !(await card(page)));
+    // A prompt that asks for no working sends none, and nothing opens.
+    await say(page, "");
+    ok("and none opens for a prompt that asks for no working", !(await card(page)));
+
+    await say(page, "What reads weakly:");
+    const first = await card(page);
+    ok("the working opens a card as it is written", !!first && first.working, JSON.stringify(first));
+    ok("headed as working rather than as done", !!first && /working/i.test(first.head), JSON.stringify(first));
+
+    await say(page, "What reads weakly:\n- the simile could sit in any story.");
+    const more = await card(page);
+    ok("and fills in as more arrives", !!more && /any story/.test(more.said), JSON.stringify(more));
+    ok("in the card already up, not a second one", !!more && more.cards === 1, JSON.stringify(more));
+
+    // Then the refine lands and the card becomes what it did.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined", chatId: "c1", messageId: "m2", canUndo: true,
+        before: "The cold hit her like an electric shock, and her body went stiff.",
+        after: "The cold met her, and her body locked.",
+      });
+    });
+    await settle(page);
+    const done = await card(page);
+    ok("landing turns it into what changed", !!done && !done.working && done.diff, JSON.stringify(done));
+    ok("and still one card", !!done && done.cards === 1, JSON.stringify(done));
+  });
+
+  // Switched off, the working stays off screen too.
+  await inTab(browser, { saved: { popup: false } }, async (page) => {
+    await say(page, "What reads weakly:");
+    ok("with the card switched off, nothing opens for the working either", !(await card(page)));
+  });
+}
+
 console.log("\nthe card that comes up on the page");
 {
   // A refine changes writing somebody was reading. The panel is behind a tab

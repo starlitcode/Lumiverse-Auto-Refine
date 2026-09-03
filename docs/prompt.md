@@ -77,7 +77,7 @@ the rewritten message
 </REFINED>
 ```
 
-`<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat: anything the model writes there is dropped, not saved. Nothing in the panel shows it any more, so asking for working is asking the model to think before it writes rather than asking to read the thinking afterwards. If you only wanted to read it, take the tags out of your prompt and stop paying for them.
+`<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat: anything the model writes there is dropped, never saved. You can watch it being written, though. The card that says what a refine did opens as soon as the working starts and fills in as the model writes, then turns into the before and after when the rewrite lands. A prompt that asks for no working opens nothing and costs nothing.
 
 **The two plain prompts do not ask for this**, and it is a choice, not an oversight. A model that does not reason, given a thinking tag, fills it with a summary of what it is about to do and then does something else: output spent on a paragraph nobody wanted.
 
@@ -99,7 +99,7 @@ Before the rewrite, list what you changed:
 Then give the rewrite between <REFINED> and </REFINED>.
 ```
 
-What comes back outside the tags is dropped rather than written into the message. What the refine did to your writing is on the card that comes up when it lands, marked word by word: struck through where the rewrite took something out, plain where it left it alone.
+What comes back outside the tags is dropped rather than written into the message. Anything between `<REFINE_NOTES>` and `</REFINE_NOTES>` is shown on the card while it is being written. What the refine did to your writing is on the same card once it lands, marked word by word: struck through where the rewrite took something out, plain where it left it alone.
 
 The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<REFINED>` and `</REFINED>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 

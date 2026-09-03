@@ -298,6 +298,24 @@ const DEFAULT_BLOCKS = [
 // puts the rewrite between the tags, and taking what is between them is exact
 // where reading around a preamble is guesswork.
 let wrapOutput = true;
+// The working so far, out of a half-written answer, without the tags around
+// it. Only what is inside REFINE_NOTES, so a prompt that does not ask for
+// working sends nothing at all and costs nothing.
+//
+// The end of it, because that is where the writing is happening, and capped so
+// a model that thinks at length cannot turn this into the traffic the whole
+// answer would have been.
+const NOTES_TAIL = 2000;
+function workingSoFar(text) {
+    const t = String(text || '');
+    const open = /<\s*refine_notes\s*>/i.exec(t);
+    if (!open)
+        return '';
+    const rest = t.slice(open.index + open[0].length);
+    const close = /<\s*\/\s*refine_notes\s*>/i.exec(rest);
+    const said = (close ? rest.slice(0, close.index) : rest).trim();
+    return said.length > NOTES_TAIL ? said.slice(-NOTES_TAIL) : said;
+}
 // Whether to stream the refine so the panel can show it arriving. The answer is
 // the same either way; this only decides whether anybody can watch it.
 let streamProgress = true;
@@ -1375,11 +1393,20 @@ async function askModel(text, isUser, scene, userId) {
                     const now = Date.now();
                     if (now - said > 300) {
                         said = now;
-                        // The length, and nothing else. The panel counts what has arrived
-                        // so a slow refine reads as slow; sending the words themselves
-                        // several times a second was traffic paid on every reply for a
-                        // card nobody was watching.
-                        tell(userId, { type: 'refine_progress', stage: 'writing', chars: text.length });
+                        // The length, and the working, and not the rewrite.
+                        //
+                        // The rewrite is what the card shows when the refine lands, marked
+                        // against what was there before, so streaming it as well would be
+                        // sending the same words twice. The working is different: it is
+                        // written before the rewrite and is gone by the time anything
+                        // lands, so if it is not sent while it is happening it cannot be
+                        // seen at all.
+                        tell(userId, {
+                            type: 'refine_progress',
+                            stage: 'writing',
+                            chars: text.length,
+                            notes: workingSoFar(text),
+                        });
                     }
                 }
                 return { content: text, error: '' };
