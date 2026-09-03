@@ -3117,8 +3117,26 @@ export function setup(ctx: Ctx, overrides?: any) {
       return wrap;
     }
 
+    // A refine that is running takes the place of the button that started it,
+    // the same way a run through the chat does.
+    //
+    // Stopping used to live on the floating button and nowhere else: a tap on
+    // the spinner, or a row in its hold menu. With the button switched off
+    // there was no way to call a refine off at all, and the panel answered a
+    // running refine by greying both buttons out, which says wait rather than
+    // saying there is a way out of this.
+    if (busy || msgBusy !== null) {
+      const halt = button("Stop this refine", true);
+      halt.setAttribute("data-arf-stop", "1");
+      halt.title = "Calls off the refine that is running. Nothing is saved and the reply is left as it is.";
+      halt.addEventListener("click", () => cancelRefine());
+      row.appendChild(halt);
+      wrap.appendChild(row);
+      return wrap;
+    }
+
     const now = button("Refine the latest reply", true);
-    now.disabled = busy || !!stop;
+    now.disabled = !!stop;
     now.style.opacity = now.disabled ? "0.5" : "1";
     now.style.cursor = now.disabled ? "not-allowed" : "pointer";
     if (stop) now.title = stop;
@@ -3131,7 +3149,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // already looking.
     const every = button("Refine every reply here", false);
     every.setAttribute("data-arf-sweep", "1");
-    every.disabled = busy || !!stop || lastChatId == null;
+    every.disabled = !!stop || lastChatId == null;
     every.style.opacity = every.disabled ? "0.5" : "1";
     every.style.cursor = every.disabled ? "not-allowed" : "pointer";
     every.title =
@@ -6180,10 +6198,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (btn.getAttribute("data-arf-state") === state) return;
     btn.setAttribute("data-arf-state", state);
     btn.innerHTML = busyHere ? spinIcon() : back ? undoIcon() : refineIcon();
-    btn.title = busyHere ? "Refining" : back ? "Put this message back" : "Refine this message";
+    // The spinner is a button, not a notice. Pressing the thing that is plainly
+    // working to call it off is what anybody tries first, and it used to be
+    // disabled: on a page with the floating button switched off there was
+    // nothing here to press and nothing anywhere else either.
+    btn.title = busyHere
+      ? "Refining this message. Press to stop."
+      : back
+        ? "Put this message back"
+        : "Refine this message";
     btn.setAttribute("aria-label", btn.title);
-    btn.disabled = busyHere;
-    btn.style.opacity = busyHere ? "0.6" : "1";
+    btn.disabled = false;
+    btn.style.opacity = "1";
   }
 
   let msgBusy: string | null = null;
@@ -6214,6 +6240,12 @@ export function setup(ctx: Ctx, overrides?: any) {
           e.preventDefault();
           e.stopPropagation();
         } catch (_) {}
+        // Pressing the spinner calls the refine off, which is what the icon
+        // says is happening and the only thing there is to want from it.
+        if (msgBusy === id || busy) {
+          cancelRefine();
+          return;
+        }
         if (undoableHere(id)) {
           askUndo(lastChatId, id);
           return;

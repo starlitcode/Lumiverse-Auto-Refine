@@ -1900,6 +1900,63 @@ console.log("\nthe run through the chat");
   });
 }
 
+console.log("\nstopping a refine without a floating button");
+{
+  // Stopping used to live on the floating button and nowhere else: a tap on the
+  // spinner, or a row in its hold menu. Switched off, there was no way to call
+  // a refine off at all, and the panel answered a running refine by greying
+  // both its buttons out, which says wait rather than saying there is a way
+  // out of this.
+  const running = async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat", requestId: id, chatId: "c1",
+        character: "Wren", hasCharacter: true, resolved: true,
+      });
+      for (const f of window.__handlers.GENERATION_ENDED || []) f({ chatId: "c1", messageId: "m2" });
+    });
+    await settle(page);
+  };
+
+  await inTab(browser, { saved: { widgetOn: false, refineOn: true } }, async (page) => {
+    ok(
+      "there is no stop while nothing is running",
+      await page.evaluate(() => !document.querySelector("[data-arf-stop]")),
+    );
+    await running(page);
+    const there = await page.evaluate(() => {
+      const b = document.querySelector("[data-arf-stop]");
+      return b ? { text: b.textContent, off: b.disabled, has: true } : { has: false };
+    });
+    ok("a running refine puts a stop where the button that started it was",
+      there.has && !there.off, JSON.stringify(there));
+    ok("named for what it does", there.has && /stop/i.test(there.text), JSON.stringify(there));
+    ok(
+      "with no floating button anywhere",
+      await page.evaluate(() => !document.querySelector("#float")),
+    );
+
+    await page.evaluate(() => document.querySelector("[data-arf-stop]").click());
+    await settle(page);
+    ok(
+      "and pressing it asks the backend to stop",
+      await page.evaluate(() => window.__sent.some((m) => m.type === "cancel_refine")),
+    );
+  });
+
+  // The button on each message is the other way in without a widget, and the
+  // spinner on it is a button rather than a notice.
+  await inTab(browser, { saved: { widgetOn: false, refineOn: true, msgButton: true } }, async (page) => {
+    await running(page);
+    const b = await page.evaluate(() => {
+      const el = document.querySelector("#drawer [data-arf-stop]");
+      return el ? { text: el.textContent } : null;
+    });
+    ok("the panel's stop is there too with message buttons on", !!b, JSON.stringify(b));
+  });
+}
+
 console.log("\nwatching it work");
 {
   // The working is written before the rewrite and is gone by the time anything
