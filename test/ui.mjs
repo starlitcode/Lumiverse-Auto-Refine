@@ -1961,6 +1961,93 @@ console.log("\nhow much it is told");
   });
 }
 
+console.log("\na switch and the rows that hang off it");
+{
+  // Watch the rewrite arrive has Show me the words as they arrive under it, and
+  // that pair is written straight into its card rather than coming from a field
+  // list. Both halves of showing it were wrong: the row was drawn whatever the
+  // switch above it said, and flipping the switch did not repaint, so the panel
+  // only told the truth after you left the tab and came back. This drives the
+  // switch and reads the panel without leaving it.
+  const there = (page, key) =>
+    page.evaluate((k) => !!document.querySelector('[data-arf-field="' + k + '"]'), key);
+  const flip = async (page, key) => {
+    await page.evaluate((k) => {
+      document.querySelector('[data-arf-field="' + k + '"]').click();
+    }, key);
+    await settle(page);
+  };
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Limits");
+    ok("the row is there while the switch above it is on", await there(page, "watchLive"));
+    await flip(page, "streamProgress");
+    ok("switching it off takes the row with it, on the spot", !(await there(page, "watchLive")));
+    await flip(page, "streamProgress");
+    ok("and switching it back on brings it back", await there(page, "watchLive"));
+    // The switch itself has to survive its own repaint, or a second tap lands
+    // on a box that was never redrawn.
+    const state = await page.evaluate(
+      () => document.querySelector('[data-arf-field="streamProgress"]').checked,
+    );
+    ok("the switch is left reading the way it was set", state === true);
+  });
+}
+
+console.log("\nwalking back into a chat");
+{
+  // Tapping a character opens a chat, and on some builds nothing says so. The
+  // watch used to stop the moment there was no chat to lose track of, so the
+  // panel sat on "No chat open" until a reply happened to arrive.
+  const answer = async (page, chatId) => {
+    await page.evaluate((id) => {
+      const req = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat",
+        requestId: req,
+        chatId: id,
+        character: id ? "Wren" : null,
+        hasCharacter: !!id,
+        resolved: true,
+      });
+    }, chatId);
+    await settle(page);
+  };
+  const asked = (page) =>
+    page.evaluate(() => window.__sent.filter((m) => m.type === "active_chat").length);
+  const saysNoChat = (page) =>
+    page.evaluate(() => document.querySelector("#drawer").textContent.indexOf("No chat") >= 0);
+  // The watch reads the address on a timer, so these have to wait for a tick.
+  const tick = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 1600)));
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await answer(page, null);
+    ok("the home screen says no chat is open", await saysNoChat(page));
+
+    const before = await asked(page);
+    await page.evaluate(() => history.pushState({}, "", "/chat/abcdef123456"));
+    await tick(page);
+    ok("an address that becomes a chat's is asked about", (await asked(page)) > before);
+
+    await answer(page, "abcdef123456");
+    ok("and the panel stops saying no chat is open", !(await saysNoChat(page)));
+    ok(
+      "and names the chat it is in",
+      await page.evaluate(
+        () => document.querySelector("#drawer").textContent.indexOf("You are in Wren's chat") >= 0,
+      ),
+    );
+
+    // Walking out again, with the backend still naming the chat just left.
+    // That one answer is the reason the address is read at all.
+    await page.evaluate(() => history.pushState({}, "", "/"));
+    await tick(page);
+    await answer(page, "abcdef123456");
+    ok("walking out reads as no chat, whatever the backend says", await saysNoChat(page));
+  });
+}
+
 console.log("\nreading the request at full size");
 {
   await inTab(browser, {}, async (page) => {

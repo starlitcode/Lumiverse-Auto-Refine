@@ -1507,12 +1507,20 @@ export function setup(ctx: Ctx, overrides?: any) {
   // chat is known, whoever forgot to clear it.
   const outsideAnyChat = (): boolean => noChatOpen && lastChatId == null;
 
-  // ---- knowing when the chat has been left ----
+  // ---- knowing which chat you are in ----
   // Walking out to the home screen, or onto a character page, is the move
   // nothing reliably announces. Some builds send CHAT_SWITCHED with a null id
   // and some say nothing at all, and asking the backend does not settle it
   // either: getActive answers with the account's most recent chat, which on the
   // home screen is the chat you just left.
+  //
+  // Walking back in is the same move in reverse and was not covered at all.
+  // This watch used to stop the moment there was no chat to lose track of, so
+  // tapping a character on the home screen opened a chat that nothing was
+  // looking for: no event named it on some builds, nothing was asking, and the
+  // panel went on saying no chat was open until a reply happened to arrive.
+  // The watch runs for as long as the panel does now, and an address that
+  // changes while no chat is known is the sign to ask again.
   //
   // The address bar is the one thing in reach that knows. It is read rather
   // than parsed: no assumption about the shape of a Lumiverse URL, only whether
@@ -1525,6 +1533,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   const URL_ID_MIN = 8;
   let urlNamesChats = false;
   let urlTimer: any = null;
+  // The address as of the last tick, so a change can be told from a poll.
+  let urlWas = "";
+  // The chat walked out of. The backend goes on naming it while you stand on
+  // the home screen, since it answers with the account's most recent chat, and
+  // this is what lets that one answer be recognised and dropped without
+  // dropping the answer for a chat you have genuinely just opened.
+  let leftBehind: any = null;
   const hereUrl = (): string => {
     try {
       return String(location.href || "");
@@ -1539,13 +1554,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
 
   // Everything that describes the chat you are in, told you are not in one.
+  // The watch is left running: it is now the thing that notices you walking
+  // back in.
   function leftTheChat() {
+    if (lastChatId != null) leftBehind = lastChatId;
     noChatOpen = true;
     lastChatId = null;
     lastMessageId = null;
     character = null;
     preview = null;
-    stopUrlWatch();
     paint();
   }
 
@@ -1556,19 +1573,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     // address without the id and prove nothing.
     if (urlHolds(lastChatId)) urlNamesChats = true;
     if (urlTimer) return;
+    urlWas = hereUrl();
     urlTimer = setInterval(() => {
-      if (lastChatId == null) {
-        stopUrlWatch();
+      const now = hereUrl();
+      if (lastChatId != null) {
+        if (urlHolds(lastChatId)) {
+          urlNamesChats = true;
+          urlWas = now;
+          return;
+        }
+        urlWas = now;
+        if (!urlNamesChats) return;
+        leftTheChat();
+        // Moving from one chat straight into another looks the same from here
+        // as walking out, so this asks where we ended up.
+        askActiveChat();
         return;
       }
-      if (urlHolds(lastChatId)) {
-        urlNamesChats = true;
-        return;
-      }
-      if (!urlNamesChats) return;
-      leftTheChat();
-      // Moving from one chat straight into another looks the same from here as
-      // walking out, so this asks where we ended up.
+      // No chat known. Tapping a character opens one and the address is what
+      // says so first, so a change here is the moment to ask. Only a change:
+      // standing still on the home screen asks nothing.
+      if (now === urlWas) return;
+      urlWas = now;
       askActiveChat();
     }, URL_TICK_MS);
   }
@@ -1593,6 +1619,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const changed = String(id) !== String(lastChatId);
     lastChatId = id;
     noChatOpen = false;
+    // Being in a chat means there is nothing left behind to mistake an answer
+    // for, including this chat itself if it is the one being walked back into.
+    leftBehind = null;
     if (messageId != null) lastMessageId = messageId;
     if (changed) {
       lastMessageId = messageId != null ? messageId : null;
@@ -3007,22 +3036,18 @@ export function setup(ctx: Ctx, overrides?: any) {
   let scanWaiting: string | null = null;
   let scanSaid: string | null = null;
 
-  // The settings other rows hang off. Changing one of these rebuilds the panel
-  // rather than only saving it, or its children stay on screen after the thing
-  // they belong to has been switched off.
+  // Every switch repaints. There used to be a list of the ones with rows
+  // hanging off them, so only those paid for a rebuild, and the list was wrong
+  // twice: first by hand, then read off the field arrays, which still missed
+  // every row written inline in a card. Watch the rewrite arrive was one, so
+  // switching it off left Show me the words as they arrive sitting underneath
+  // it, doing nothing, until you left the tab and came back. The folded lists
+  // and the warnings that appear when a check is switched off were the same.
   //
-  // Read off the rows themselves rather than kept as a list by hand. The hand
-  // written version was wrong within a day of being written: a new setting with
-  // children was added, its parent was not added here, and its children sat
-  // there doing nothing. A list that has to be maintained alongside the thing it
-  // describes is a list that drifts.
-  const PARENTS = (() => {
-    const out: string[] = ["thinkingMode"];
-    for (const list of [GUARD_FIELDS, WIDGET_FIELDS, COST_FIELDS, LIMIT_FIELDS, SHIELD_FIELDS])
-      for (const f of list) if (f.needs && out.indexOf(f.needs.key) < 0) out.push(f.needs.key);
-    return out;
-  })();
-  const hasChildren = (key: string) => PARENTS.indexOf(key) >= 0;
+  // Working out which switches matter is the thing that keeps being got wrong,
+  // so nothing works it out any more. A repaint holds the scroll and the caret,
+  // and rebuilding one drawer is not work worth measuring next to a person
+  // moving their finger to the next switch.
 
   // Whether a row has anything to do where it sits.
   function fieldShows(f: Field): boolean {
@@ -3032,6 +3057,22 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function fieldRow(f: Field): HTMLElement {
+    // A row that says what it hangs off does not get drawn when that thing is
+    // off, whoever asked for it. The lists filtered on the way in and the rows
+    // written straight into a card did not, so Show me the words as they arrive
+    // sat under Watch the rewrite arrive with the switch above it off, offering
+    // a setting that could not do anything. Deciding it here means a row cannot
+    // be added without its condition being read.
+    //
+    // Hidden rather than left out, so a card is still one row per field to
+    // anything counting, and so the gap between rows is not drawn around
+    // nothing.
+    if (!fieldShows(f)) {
+      const gone = document.createElement("div");
+      gone.hidden = true;
+      gone.setAttribute("data-arf-hidden", f.key);
+      return gone;
+    }
     const wrap = el("div", "arf-col" + (f.under ? " arf-under" : ""));
     if (f.type === "bool") {
       const lab = document.createElement("label");
@@ -3046,9 +3087,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.addEventListener("change", () => {
         cfg[f.key] = !!box.checked;
         persist(true);
-        // Rows hang off this one, so they have to go and come back with it
-        // rather than sit there doing nothing until the next repaint.
-        if (hasChildren(f.key)) paint();
+        paint();
       });
       lab.appendChild(box);
       wrap.appendChild(lab);
@@ -3097,7 +3136,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.addEventListener("change", () => {
         cfg[f.key] = sel.value;
         persist(true);
-        if (hasChildren(f.key)) paint();
+        paint();
       });
       wrap.appendChild(sel);
     } else {
@@ -6318,9 +6357,19 @@ export function setup(ctx: Ctx, overrides?: any) {
               return;
             }
             if (msg.chatId) {
-              // A chat the address bar has already moved on from is a stale
-              // answer, not news.
-              if (urlNamesChats && !urlHolds(msg.chatId)) return;
+              // The one stale answer worth dropping: the chat you just walked
+              // out of, which the backend goes on naming while you stand on the
+              // home screen. Anything else is taken, because a chat opened by
+              // tapping a character can be named here a moment before its id
+              // reaches the address bar, and refusing that answer was half of
+              // why the panel sat there saying no chat was open.
+              if (
+                urlNamesChats &&
+                leftBehind != null &&
+                String(msg.chatId) === String(leftBehind) &&
+                !urlHolds(msg.chatId)
+              )
+                return;
               sawChat(msg.chatId);
               character = msg.character ? String(msg.character) : null;
               // A chat with a card whose name did not come back is a chat the
@@ -6662,6 +6711,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   armBackend();
   syncExtras();
   askActiveChat();
+  // From here rather than from the first chat seen. A tab opened on the home
+  // screen has no chat to watch and used to have no watch either, so the one
+  // move it needed to notice, a character being tapped, was the one move
+  // nothing was looking for.
+  startUrlWatch();
   askPermissions();
   // After armBackend, so the replies have somewhere to land. Both are
   // fire and forget: the panel is already drawn from the browser's cache, and
