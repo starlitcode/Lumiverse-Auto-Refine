@@ -79,6 +79,8 @@ the rewritten message
 
 `<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat: anything the model writes there is dropped, never saved. You can watch it being written, though. The card that says what a refine did opens as soon as the working starts and fills in as the model writes, then turns into the before and after when the rewrite lands. A prompt that asks for no working opens nothing and costs nothing.
 
+The card is replaced by the before and after the moment the rewrite lands, so the working is also kept: it sits on the **Log** tab under **What the model worked out**, where you can read it at your own pace. Only a refine that finished replaces what is kept there, so starting one and changing your mind does not cost you the last lot.
+
 **The two plain prompts do not ask for this**, and it is a choice, not an oversight. A model that does not reason, given a thinking tag, fills it with a summary of what it is about to do and then does something else: output spent on a paragraph nobody wanted.
 
 Both tags are shouted. A model skimming a long prompt for the shape of the answer finds a run of capitals before it finds a word, and these are the only two things in the prompt that have to be got exactly right. The answer is read case-insensitively, so a prompt you wrote in lower case still works.

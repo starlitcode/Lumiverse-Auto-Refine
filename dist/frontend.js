@@ -1829,6 +1829,39 @@ export function setup(ctx, overrides) {
     // not "what did it do last week".
     const tally = { saved: 0, dropped: 0, undone: 0 };
     const drops = new Map();
+    // The model's working, in two places, because it is two different things.
+    //
+    // What is being written this second belongs on the card on screen, and it is
+    // gone the moment that card is replaced by what the refine did: a second of
+    // reading, and then the before and after lands on top of it. So the working
+    // is also kept, and the Log is where it is kept, which is a place you can go
+    // back to at your own pace rather than one you have to catch.
+    //
+    // Only a refine that finished replaces what is kept. Starting one and then
+    // changing your mind about it should not cost you the working from the refine
+    // before it, and a stop is exactly that.
+    let liveNotes = "";
+    let keptNotes = null;
+    // The whole of the working when the message carries it, rather than the tail
+    // the stream was trimmed to. The backend sends it on every ending that has
+    // one, and it is always the better copy of the same thing.
+    function tookNotes(msg) {
+        if (msg && typeof msg.notes === "string" && msg.notes.trim())
+            liveNotes = msg.notes;
+    }
+    function keepNotes(about) {
+        const said = liveNotes.trim();
+        if (!said)
+            return;
+        keptNotes = {
+            text: said,
+            at: Date.now(),
+            chatId: about.chatId,
+            messageId: about.messageId,
+            ok: about.ok,
+            why: String(about.why || ""),
+        };
+    }
     const DROPS_MAX = 20;
     function countDrop(why) {
         const k = String(why || "no reason given").slice(0, 80);
@@ -2015,6 +2048,10 @@ export function setup(ctx, overrides) {
         if (on && !busy) {
             runStartedAt = Date.now();
             streamed = 0;
+            // What is on screen belongs to the refine that is running. What the Log
+            // is holding belongs to the last one that finished, and stays until
+            // another one does.
+            liveNotes = "";
             armDeadman();
             armAck();
         }
@@ -2804,21 +2841,32 @@ export function setup(ctx, overrides) {
         head.type = "button";
         head.className = "arf-fold";
         head.setAttribute("aria-expanded", open ? "true" : "false");
-        head.appendChild(el("span", "arf-caret", open ? CARET_OPEN : CARET_SHUT));
+        const caret = el("span", "arf-caret", open ? CARET_OPEN : CARET_SHUT);
+        head.appendChild(caret);
         head.appendChild(el("span", "arf-grow", title));
-        head.addEventListener("click", () => {
-            if (openFolds.has(title))
-                openFolds.delete(title);
-            else
-                openFolds.add(title);
-            paint();
-        });
         wrap.appendChild(head);
-        if (open) {
-            const body = el("div", "arf-foldbody");
-            fill(body);
-            wrap.appendChild(body);
-        }
+        // Built either way and hidden while it is shut. Opening one used to repaint
+        // the whole drawer, which is a teardown and a rebuild to show a few rows
+        // that were already worked out: that is the flash. Now the body is standing
+        // there and the fold only stops hiding it.
+        const body = el("div", "arf-foldbody");
+        fill(body);
+        body.hidden = !open;
+        wrap.appendChild(body);
+        head.addEventListener("click", () => {
+            const now = !openFolds.has(title);
+            if (now)
+                openFolds.add(title);
+            else
+                openFolds.delete(title);
+            // A search holds every fold open, so a click during one records what you
+            // wanted without closing anything in front of you.
+            body.hidden = !(now || !!hunt.trim());
+            if (!body.hidden)
+                arrive(body);
+            caret.textContent = now ? CARET_OPEN : CARET_SHUT;
+            head.setAttribute("aria-expanded", now ? "true" : "false");
+        });
         return wrap;
     }
     let hunt = "";
@@ -2900,7 +2948,7 @@ export function setup(ctx, overrides) {
         if (id === "limits")
             return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
         if (id === "log") {
-            return [buildLiveCard(), buildActivityCard(), buildDebugCard()];
+            return [buildLiveCard(), buildNotesCard(), buildActivityCard(), buildDebugCard()];
         }
         return [
             buildPermsCard(),
@@ -3742,6 +3790,11 @@ export function setup(ctx, overrides) {
             const body = el("div", "arf-pop-body");
             body.appendChild(el("div", "arf-note", "What changed"));
             body.appendChild(diffWell(one.before, one.after));
+            // This card lands on top of the one that was showing the model's working,
+            // which is a second of reading for something worth more than that. Said
+            // rather than left to be missed twice.
+            if (keptNotes)
+                body.appendChild(el("div", "arf-note", "Its working is on the Log tab, under What the model worked out."));
             box.appendChild(body);
             const row = el("div", "arf-row arf-pop-row");
             const back = button("Put it back", false);
@@ -4660,6 +4713,41 @@ export function setup(ctx, overrides) {
                 wrap.appendChild(r);
             }
         }
+        return wrap;
+    }
+    // What the model worked out on the way to the last refine that finished.
+    //
+    // The card on the page shows this while it is being written and then the
+    // before and after lands on top of it, which is a second of reading for
+    // something worth more than a second. This is where it waits afterwards.
+    function buildNotesCard() {
+        const wrap = card("What the model worked out", undefined, keptNotes ? (keptNotes.ok ? "saved" : "dropped") : undefined);
+        if (!keptNotes) {
+            wrap.appendChild(note(asksForWorking()
+                ? "Nothing yet. The working from the last refine that finishes lands here, and a refine you stop leaves what is already here alone."
+                : "The prompt you are on does not ask the model for its working, so there is none to keep. The two for a model that thinks ask for it."));
+            return wrap;
+        }
+        const when = new Date(keptNotes.at).toTimeString().slice(0, 8);
+        wrap.appendChild(note(keptNotes.ok
+            ? "From the refine at " + when + "."
+            : "From the refine at " + when + ", whose rewrite was dropped: " + keptNotes.why + "."));
+        const well = el("div", "arf-well arf-mono arf-scroll");
+        well.textContent = keptNotes.text;
+        wrap.appendChild(well);
+        const row = el("div", "arf-row");
+        const copy = button("Copy", false);
+        copy.addEventListener("click", () => {
+            copyText(keptNotes ? keptNotes.text : "");
+        });
+        const clear = button("Clear", false);
+        clear.addEventListener("click", () => {
+            keptNotes = null;
+            paint();
+        });
+        row.appendChild(copy);
+        row.appendChild(clear);
+        wrap.appendChild(row);
         return wrap;
     }
     function buildActivityCard() {
@@ -6943,18 +7031,25 @@ export function setup(ctx, overrides) {
                     // goes; one that does not says asking and then checking, which is
                     // still two states rather than one long silence.
                     if (msg.type === "refine_progress") {
+                        // First, because this is what starts a run, and what starts a run
+                        // clears the counter and the working left over from the last one.
+                        // Reading them first meant the first progress message of a refine
+                        // wrote its working down and then wiped it a line later, so the
+                        // Log only ever kept what the second one carried.
+                        markBusy(true, msg.stage);
                         if (msg.stage === "writing" && typeof msg.chars === "number")
                             streamed = msg.chars;
                         // The working, as it is written. Empty on a prompt that does not
                         // ask for any, which is most of them, and then nothing opens.
-                        if (typeof msg.notes === "string")
+                        if (typeof msg.notes === "string") {
+                            tookNotes(msg);
                             showWorking(msg.notes);
+                        }
                         if (msg.stage === "retrying") {
                             retryAt = Number(msg.attempt) || 0;
                             retryOf = Number(msg.of) || 0;
                             log("an answer failed a check, asking again");
                         }
-                        markBusy(true, msg.stage);
                         return;
                     }
                     if (msg.type === "permissions") {
@@ -7051,6 +7146,7 @@ export function setup(ctx, overrides) {
                     if (msg.type === "refined") {
                         markBusy(false);
                         msgBusy = null;
+                        keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
                         tally.saved++;
                         lastRun = { ms: lastRunMs, ok: true, why: "" };
                         // A refine only happens in the chat the reader is in, so this is
@@ -7134,6 +7230,9 @@ export function setup(ctx, overrides) {
                             log("there was nothing running to stop");
                         markBusy(false);
                         msgBusy = null;
+                        // Half-written working for a refine that will not finish. The Log
+                        // keeps what the last finished one worked out, untouched.
+                        liveNotes = "";
                         paint();
                         return;
                     }
@@ -7145,6 +7244,12 @@ export function setup(ctx, overrides) {
                         return;
                     }
                     if (msg.type === "refine_notes") {
+                        // The whole of it, from the backend, rather than the tail the
+                        // stream was trimmed to. This lands just after the refine did, so
+                        // it replaces what was kept a moment ago rather than waiting for
+                        // the next one.
+                        tookNotes(msg);
+                        keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
                         paint();
                         return;
                     }
@@ -7152,6 +7257,8 @@ export function setup(ctx, overrides) {
                         markBusy(false);
                         msgBusy = null;
                         const why = String(msg.why || "no reason given");
+                        tookNotes(msg);
+                        keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: false, why: why });
                         tally.dropped++;
                         countDrop(why);
                         lastRun = { ms: lastRunMs, ok: false, why: why };
@@ -7163,6 +7270,15 @@ export function setup(ctx, overrides) {
                         markBusy(false);
                         msgBusy = null;
                         previewBusy = false;
+                        // A refine you asked for by hand ends here, and its working is
+                        // finished with it whichever way it went.
+                        tookNotes(msg);
+                        keepNotes({
+                            chatId: msg.chatId,
+                            messageId: msg.messageId,
+                            ok: !!msg.ok,
+                            why: String(msg.why || ""),
+                        });
                         if (msg.ok) {
                             lastRun = { ms: lastRunMs, ok: true, why: "" };
                             log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
@@ -7263,6 +7379,10 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "confirm_refine") {
                         markBusy(false);
+                        // The model has finished and is waiting on your yes, so its working
+                        // is finished with it and belongs in the Log whichever way you
+                        // answer.
+                        keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
                         pending = {
                             chatId: msg.chatId,
                             messageId: msg.messageId,

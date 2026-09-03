@@ -56,6 +56,7 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Log
 
 - **Right now** is the live view. It names the stage instead of just saying busy: asking, thinking, writing with a character count when your connection streams, then checking. The clock runs, and past eight seconds it also says how long is left before the timeout gives up. It writes into the line in place, so the panel never repaints under you, and the dot beside it breathes while something is running.
+- **What the model worked out** keeps the working from the last refine that finished. The card on the page shows it while it is being written and then the before and after lands on top of it, which is a second of reading; this is where it waits afterwards, with a **Copy** and a **Clear**. Only a refine that finished replaces it, so stopping one leaves the last lot alone. A prompt that does not ask the model for its working has none to keep, and the card says so.
 - **What it has been doing** is the running list, newest first.
 - **Reporting a problem** copies everything somebody would otherwise have to ask you for. **What it carries** decides which parts go in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser. What your blocks actually say is never in it, only their names, roles and macros, so it is safe to paste in public. **Read and edit it first** opens the whole thing so you can take out anything you would rather not post before it is copied.
 

@@ -1412,20 +1412,20 @@ console.log("\nthe checks are yours to switch off");
 
     // The two that belong to the softening check are behind a fold, so the tab
     // is a list of switches rather than a wall. Opening it brings them out.
+    const before = await onScreen(page, "softenPct");
     const folded = await page.evaluate(() => {
-      const before = !!document.querySelector('#drawer [data-arf-field="softenPct"]');
       const head = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
         /What counts as sanitising/.test(h.textContent),
       );
       if (head) head.click();
-      return { before: before, hasFold: !!head };
+      return { hasFold: !!head };
     });
     await settle(page);
     const under = {
       pct: await onScreen(page, "softenPct"),
       words: await onScreen(page, "softenWords"),
     };
-    ok("its tuning is folded away rather than in the way", folded.hasFold && !folded.before);
+    ok("its tuning is folded away rather than in the way", folded.hasFold && !before);
     ok("and opening it brings its own settings out", under.pct && under.words);
 
     await page.evaluate(() => {
@@ -2405,6 +2405,124 @@ console.log("\na switch and the rows that hang off it");
       () => document.querySelector('[data-arf-field="widgetOn"]').checked,
     );
     ok("the switch is left reading the way it was set", state === true);
+  });
+}
+
+console.log("\nopening a fold");
+{
+  // Opening one used to repaint the whole drawer to show rows that had already
+  // been worked out. That teardown and rebuild is what the flash was.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const before = await page.evaluate(() => {
+      const head = Array.from(document.querySelectorAll("#drawer .arf-fold"))[0];
+      if (!head) return null;
+      head.__mark = "the fold";
+      const card = head.closest(".arf-card");
+      card.__mark = "the card";
+      const body = head.nextElementSibling;
+      return { shut: !!body.hidden, expanded: head.getAttribute("aria-expanded") };
+    });
+    ok("a fold starts shut", before && before.shut && before.expanded === "false");
+
+    await page.evaluate(() => document.querySelectorAll("#drawer .arf-fold")[0].click());
+    const now = await page.evaluate(() => {
+      const head = document.querySelectorAll("#drawer .arf-fold")[0];
+      return {
+        open: !head.nextElementSibling.hidden,
+        expanded: head.getAttribute("aria-expanded"),
+        sameHead: head.__mark === "the fold",
+        sameCard: head.closest(".arf-card").__mark === "the card",
+      };
+    });
+    ok("clicking it opens the body", now.open && now.expanded === "true");
+    ok("without rebuilding the fold", now.sameHead);
+    ok("or the card around it", now.sameCard);
+
+    await page.evaluate(() => document.querySelectorAll("#drawer .arf-fold")[0].click());
+    const shut = await page.evaluate(() => {
+      const head = document.querySelectorAll("#drawer .arf-fold")[0];
+      return { shut: !!head.nextElementSibling.hidden, sameHead: head.__mark === "the fold" };
+    });
+    ok("and shutting it is the same one closing", shut.shut && shut.sameHead);
+  });
+}
+
+console.log("\nthe working the Log keeps");
+{
+  const notes = "The second line could sit in any story. Cutting the simile.";
+  const feed = (page, m) => page.evaluate((x) => window.__fromBackend(x), m);
+  const working = (page) =>
+    feed(page, { type: "refine_progress", stage: "writing", chars: 40, notes: notes });
+  const kept = (page) =>
+    page.evaluate(() => {
+      const card = document.querySelector('#drawer [data-arf-card="What the model worked out"]');
+      return card ? card.textContent : "";
+    });
+
+  // A refine that finished leaves its working where it can be read afterwards,
+  // since the card that lands on screen covers the one that was showing it.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    ok("nothing kept before a refine", !/could sit in any story/.test(await kept(page)));
+    await working(page);
+    await feed(page, {
+      type: "refined",
+      chatId: "c1",
+      messageId: "m1",
+      canUndo: true,
+      before: "a",
+      after: "b",
+    });
+    await settle(page);
+    ok("a refine that finished leaves its working in the Log", /could sit in any story/.test(await kept(page)));
+    ok("said to be from a refine that was saved", /saved/.test(await kept(page)));
+  });
+
+  // Changing your mind is not a finished refine, so it takes nothing away.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await working(page);
+    await feed(page, {
+      type: "refined",
+      chatId: "c1",
+      messageId: "m1",
+      canUndo: false,
+      before: "a",
+      after: "b",
+    });
+    await settle(page);
+    ok("one refine's working is kept", /could sit in any story/.test(await kept(page)));
+
+    await feed(page, {
+      type: "refine_progress",
+      stage: "writing",
+      chars: 5,
+      notes: "Halfway through a thought",
+    });
+    await feed(page, { type: "refine_stopped", stopped: true });
+    await settle(page);
+    const after = await kept(page);
+    ok("stopping the next one leaves it alone", /could sit in any story/.test(after));
+    ok("and does not keep what it had half written", !/Halfway through a thought/.test(after));
+  });
+
+  // A rewrite the checks threw out still finished, and its working is the most
+  // useful thing on the panel for working out why.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await working(page);
+    await feed(page, {
+      type: "refine_skipped",
+      chatId: "c1",
+      messageId: "m1",
+      why: "the rewrite grew by half",
+      notes: notes,
+    });
+    await settle(page);
+    const said = await kept(page);
+    ok("a dropped rewrite keeps its working too", /could sit in any story/.test(said));
+    ok("and says what happened to it", /grew by half/.test(said));
   });
 }
 
