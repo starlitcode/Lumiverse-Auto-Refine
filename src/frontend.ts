@@ -220,10 +220,11 @@ const CONFIG = {
   // the wrong way round.
   popup: true,
   // What one tap does when there is a refine to put back. On, the button turns
-  // into an undo the way the message button does; off, a tap always refines.
+  // into an undo; off, a tap always refines.
   //
-  // Off by default now. A button that silently becomes a different button is a
-  // button nobody can read, and the card above is where putting one back
+  // Off by default. A button that silently becomes a different button is a
+  // button nobody can read, and while it stands there is no tap left for
+  // starting a refine. The card that comes up is where putting one back
   // belongs: it says what it would be putting back.
   widgetUndo: false,
   // How big the floating button is, across. The same default and the same 28
@@ -323,6 +324,10 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
 type Block = { id: string; name: string; on: boolean; role: string; text: string };
 
 const TURN_MACRO = "{{message}}";
+// The tag a prompt puts the model's working in. What is inside it is streamed
+// back to the panel while the refine runs and never reaches the story, so a
+// prompt that does not ask for it has nothing to show while it writes.
+const NOTES_TAG = "<REFINE_NOTES>";
 
 // ---- the prompts that ship with it ----
 // Two questions, four answers. Does your model reason, and how much of the
@@ -930,6 +935,25 @@ const BUILT_IN_PROMPTS: Array<{ name: string; blocks: Block[]; thinking: string;
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
 
+// The prompt it starts on is one of the four, and which one is worth saying
+// out loud. Back to the default and a fresh install both land here, and
+// "the default" on its own does not tell you what you are about to get.
+const DEFAULT_PROMPT_NAME = (
+  BUILT_IN_PROMPTS.find((p) => p.blocks === DEFAULT_BLOCKS) || BUILT_IN_PROMPTS[0]
+).name;
+
+// What a prompt actually is, as one string, so two of them can be told apart.
+// Names are left out, since renaming a block changes nothing that is sent, and
+// so are blocks switched off, since those are not sent either.
+const promptShape = (raw: any): string =>
+  (Array.isArray(raw) ? raw : [])
+    .filter((b: any) => b && typeof b === "object" && b.on !== false)
+    .map(
+      (b: any) =>
+        String(b.role || "system") + "\u0001" + String(b.text == null ? "" : b.text).trim(),
+    )
+    .join("\u0002");
+
 const ROLE_OPTIONS = [
   { value: "system", label: "System" },
   { value: "user", label: "User" },
@@ -1038,7 +1062,7 @@ const WIDGET_FIELDS: Field[] = [
     type: "bool",
     needs: { key: "widgetOn" },
     under: true,
-    hint: "On by default. When there is a refine to put back, a tap does that instead of refining, the way the message button does. Off, a tap always refines.",
+    hint: "Off by default. On, a tap puts the last refine back whenever there is one to put back, which means it is not refining anything while that stands: hold the button for the menu to refine again, or switch this off and let a tap always refine. The undo is on the card that comes up and beside the message either way.",
   },
 ];
 
@@ -2667,6 +2691,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     b.type = "button";
     b.className = "arf-btn" + (primary ? " arf-primary" : "");
     b.textContent = label;
+    // Named after what it says, so a rebuild can find the same button again and
+    // leave it where your finger already is. A button whose press rewrites the
+    // whole prompt is exactly the one that used to be somewhere else by the
+    // time the panel came back.
+    b.setAttribute("data-arf-btn", label);
     return b;
   }
   // A line that says something is wrong, or is about to be, or went right.
@@ -2828,6 +2857,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // settings has an edge around it rather than being told apart by spacing.
   function card(title?: string, hint?: string, pill?: string): HTMLElement {
     const c = el("div", "arf-card");
+    if (title) c.setAttribute("data-arf-card", title);
     if (title) {
       const h = el("div", "arf-cardh");
       h.appendChild(el("span", "arf-grow", title));
@@ -3000,6 +3030,104 @@ export function setup(ctx: Ctx, overrides?: any) {
     return out;
   }
 
+  // Where you were reading, said as a thing rather than as a number. Putting a
+  // pixel count back only works while the panel is the same height it was, and
+  // the repaints that move you are exactly the ones that change it: a preset
+  // loaded over your prompt, the default put back, a block deleted. The pixel
+  // count is still put back first, because it is right most of the time and
+  // costs nothing; this then corrects it by however far the thing you were
+  // looking at actually moved.
+  type Anchor = { sel: string; nth: number; at: number };
+
+  // In the order they are worth holding on to. What you touched beats what
+  // happens to be on screen, and a named card outlives the blocks inside it.
+  const ANCHOR_MARKS = ["data-arf-field", "data-arf-btn", "data-arf-block", "data-arf-row", "data-arf-card"];
+
+  function anchorSel(n: any): string | null {
+    for (const name of ANCHOR_MARKS) {
+      const v = n && n.getAttribute && n.getAttribute(name);
+      // A value carrying a quote or a backslash would need escaping to go in a
+      // selector, and none of them do. Skipped rather than escaped.
+      if (v != null && !/["\\]/.test(v)) return "[" + name + '="' + v + '"]';
+    }
+    return null;
+  }
+
+  function anchorNow(root: any): Anchor | null {
+    try {
+      let node: any = null;
+      const on = document.activeElement as any;
+      // The button you just pressed, or the box you are typing in, or the
+      // nearest thing above it with a name.
+      if (on && root.contains && root.contains(on)) {
+        node = on;
+        while (node && node !== root && !anchorSel(node)) node = node.parentElement;
+        if (node === root) node = null;
+      }
+      if (!node) {
+        // Nothing touched, so the topmost card still on screen. A card and not
+        // whatever element happens to be highest: a block is given a new id by
+        // every preset load, so anchoring to one means anchoring to something
+        // that will not be there to find.
+        const marks = root.querySelectorAll("[data-arf-card]");
+        for (let i = 0; i < marks.length; i++) {
+          const m: any = marks[i];
+          if (m.hidden) continue;
+          const box = m.getBoundingClientRect();
+          if (!box.height || box.bottom <= 0) continue;
+          node = m;
+          break;
+        }
+      }
+      const sel = node && anchorSel(node);
+      if (!sel) return null;
+      // Which one, since Delete is on every block and Load is on more than one
+      // card.
+      const all = root.querySelectorAll(sel);
+      let nth = 0;
+      for (let i = 0; i < all.length; i++)
+        if (all[i] === node) {
+          nth = i;
+          break;
+        }
+      return { sel: sel, nth: nth, at: node.getBoundingClientRect().top };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Moves whichever box is doing the scrolling until the anchor is back where
+  // it was. Which box that is depends on the build, so this tries them and
+  // keeps the one that helped, and writes the result back into held so the
+  // later attempts at putting the scroll back do not undo it.
+  function reAnchor(root: any, a: Anchor | null, held: Array<{ node: any; at: number }>) {
+    if (!a) return;
+    try {
+      const all = root.querySelectorAll(a.sel);
+      // The same one or nothing. Settling for a different match is worse than
+      // not correcting at all: the blocks are given new ids by a preset load,
+      // and the next Delete along is somewhere else entirely.
+      const n: any = all[a.nth];
+      if (!n) return;
+      const w: any = globalThis as any;
+      for (const one of held) {
+        const drift = n.getBoundingClientRect().top - a.at;
+        if (Math.abs(drift) < 1) return;
+        const was = one.node === w ? w.scrollY : one.node.scrollTop;
+        const want = Math.max(0, was + drift);
+        if (one.node === w && one.node.scrollTo) one.node.scrollTo(0, want);
+        else one.node.scrollTop = want;
+        const now = one.node === w ? w.scrollY : one.node.scrollTop;
+        if (Math.abs(n.getBoundingClientRect().top - a.at) >= Math.abs(drift)) {
+          // Moving this one did not bring the anchor closer, so it is not the
+          // box the panel is scrolling in.
+          if (one.node === w && one.node.scrollTo) one.node.scrollTo(0, was);
+          else one.node.scrollTop = was;
+        } else one.at = now;
+      }
+    } catch (_) {}
+  }
+
   // onlyShort is for the second and third attempts, a frame or two after the
   // rebuild. By then the only thing worth correcting is a scroll that came up
   // short because the panel was still growing when the first attempt ran.
@@ -3097,6 +3225,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // repaint, which resets the scroll to the top, so saving a preset from the
     // bottom of a long tab threw you back to the switch. Held and put back.
     const held = scrollers(root);
+    // And what you were reading, so a panel that comes back a different height
+    // can be corrected by however far that moved rather than left where the
+    // pixel count lands.
+    const held2 = anchorNow(root);
     // The rule boxes are rebuilt with everything else, so a repaint while
     // somebody is typing would take the cursor with it. Held and put back.
     const focusKey = (document.activeElement as any)?.getAttribute?.("data-arf-field");
@@ -3148,6 +3280,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Put back before the frame is painted, or the panel visibly jumps to the
     // top and back down.
     putBack(held);
+    reAnchor(root, held2, held);
     // Colours only resolve once the tree is in the page and laid out, so the
     // repair runs a frame later rather than against a half-built panel. The
     // scroll is set again there and once more after: a panel that grew taller
@@ -3157,17 +3290,30 @@ export function setup(ctx: Ctx, overrides?: any) {
       requestAnimationFrame(() => {
         sweepReadable(root);
         putBack(held, true);
-        requestAnimationFrame(() => putBack(held, true));
+        reAnchor(root, held2, held);
+        requestAnimationFrame(() => {
+          putBack(held, true);
+          reAnchor(root, held2, held);
+        });
       });
     } catch (_) {
       sweepReadable(root);
       putBack(held);
+      reAnchor(root, held2, held);
     }
 
     if (focusKey) {
       const back = root.querySelector('[data-arf-field="' + focusKey + '"]') as any;
       if (back && typeof back.focus === "function") {
-        back.focus();
+        // Without preventScroll the browser brings the box it just focused into
+        // view, which on a panel that has changed height is a scroll nobody
+        // asked for, landing after everything above has finished putting the
+        // page back where it was.
+        try {
+          back.focus({ preventScroll: true });
+        } catch (_) {
+          back.focus();
+        }
         try {
           if (caret != null && back.setSelectionRange) back.setSelectionRange(caret, caret);
         } catch (_) {}
@@ -3975,6 +4121,61 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   const blockLabel = (b: Block) => String(b.name || "").trim() || "Untitled block";
 
+  // Which saved prompt this one is, if it is one of them. The four that ship
+  // with the extension are looked at first, so the one it starts on is named as
+  // itself rather than as whatever you later saved on top of it.
+  function promptNamed(now: string, which: "blocks" | "userBlocks"): string | null {
+    for (const p of allPresets()) {
+      const got = p.settings[which];
+      if (!Array.isArray(got)) continue;
+      if (promptShape(got) === now) return p.name;
+    }
+    return null;
+  }
+
+  // What is loaded, said where the prompt is rather than left to be worked out.
+  // The picker on the card below says what you last chose there, which is a
+  // different thing: loading a preset and then changing one line leaves the
+  // picker naming a prompt this no longer is. Read off the blocks themselves,
+  // so it cannot drift from them.
+  function whatThisIs(): string {
+    const yours = editingYours();
+    const now = promptShape(blockList());
+    const named = promptNamed(now, yours ? "userBlocks" : "blocks");
+    if (named)
+      return named === DEFAULT_PROMPT_NAME && !yours
+        ? "This is " + named + ", the one it starts on."
+        : "This is " + named + ".";
+    if (now === promptShape(yours ? YOURS_DEFAULT : DEFAULT_BLOCKS))
+      return yours
+        ? "This is the one it starts on."
+        : "This is " + DEFAULT_PROMPT_NAME + ", the one it starts on.";
+    return (
+      "This is your own, and nothing saved matches it. Back to the default puts " +
+      (yours ? "the one it starts on" : DEFAULT_PROMPT_NAME) +
+      " back."
+    );
+  }
+
+  // Whether this prompt asks the model to write down what it is doing. Only the
+  // two for a model that thinks do, so on any of the others the card that shows
+  // the working while it writes has nothing to show, and somebody waiting for
+  // it has no way of knowing why. Said here, where the prompt is.
+  const asksForWorking = () =>
+    blockList().some((b) => b.on && /<\s*refine_notes\s*>/i.test(String(b.text || "")));
+
+  function aboutWorking(): string {
+    if (asksForWorking())
+      return cfg.popup
+        ? "It asks the model to write down what it is doing as it goes, which comes up on screen while the refine runs."
+        : "It asks the model to write down what it is doing as it goes, but Show the before and after on screen is off, and that card is where the working is shown.";
+    return (
+      "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks ask for it, and so does any block of your own with " +
+      NOTES_TAG +
+      " in it."
+    );
+  }
+
   function buildBlocksCard(): HTMLElement {
     const list = blockList();
     const on = list.filter((b) => b.on).length;
@@ -4011,6 +4212,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           : "Used for every reply the character writes, by the automatic pass and by the refine button.",
       ),
     );
+    wrap.appendChild(note(whatThisIs() + " " + aboutWorking()));
 
     if (!holdsTurn(list))
       wrap.appendChild(
@@ -5229,7 +5431,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "msgButton",
         label: "A button on every message",
         type: "bool",
-        hint: "Puts a refine button in each message's own row of actions, next to Edit and Copy. After a refine the same button becomes an undo, so putting one back is where you are already looking.",
+        hint: "Puts a refine button in each message's own row of actions, next to Edit and Copy. After a refine an undo appears beside it, so putting one back is where you are already looking, and the refine button stays where it was: a message you have refined once is one you can refine again.",
       }),
     );
     wrap.appendChild(
@@ -6306,7 +6508,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // Whether this message has something to put back, which decides whether the
-  // button refines or undoes.
+  // undo button stands beside the refine one.
   function undoableHere(id: string): boolean {
     if (lastChatId == null) return false;
     return undoable.has(undoKey(lastChatId, id));
@@ -6319,22 +6521,23 @@ export function setup(ctx: Ctx, overrides?: any) {
   // for childList changes. Repainting a button that already said the right
   // thing scheduled another sweep, which repainted it again: the tab locked up
   // the moment the setting was switched on.
+  // This button refines, and goes on refining after it has. It used to turn
+  // into an undo once a refine landed, which read well for the ten seconds
+  // afterwards and then left the message with no way to refine it again: the
+  // undo does not expire, so the arrow stayed for good and the only way back to
+  // a refine was to put the last one back first. The undo is its own button
+  // now, beside this one, for as long as there is something to put back.
   function paintMsgBtn(btn: any, id: string) {
     const busyHere = msgBusy === id;
-    const back = undoableHere(id);
-    const state = busyHere ? "busy" : back ? "back" : "ready";
+    const state = busyHere ? "busy" : "ready";
     if (btn.getAttribute("data-arf-state") === state) return;
     btn.setAttribute("data-arf-state", state);
-    btn.innerHTML = busyHere ? spinIcon() : back ? undoIcon() : refineIcon();
+    btn.innerHTML = busyHere ? spinIcon() : refineIcon();
     // The spinner is a button, not a notice. Pressing the thing that is plainly
     // working to call it off is what anybody tries first, and it used to be
     // disabled: on a page with the floating button switched off there was
     // nothing here to press and nothing anywhere else either.
-    btn.title = busyHere
-      ? "Refining this message. Press to stop."
-      : back
-        ? "Put this message back"
-        : "Refine this message";
+    btn.title = busyHere ? "Refining this message. Press to stop." : "Refine this message";
     btn.setAttribute("aria-label", btn.title);
     btn.disabled = false;
     btn.style.opacity = "1";
@@ -6356,6 +6559,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const had = bar.querySelector("[data-arf-msg]");
       if (had) {
         paintMsgBtn(had, id);
+        addUndoButton(bar, id, had);
         return;
       }
       const b = document.createElement("button");
@@ -6374,10 +6578,6 @@ export function setup(ctx: Ctx, overrides?: any) {
           cancelRefine();
           return;
         }
-        if (undoableHere(id)) {
-          askUndo(lastChatId, id);
-          return;
-        }
         const why = whyNot();
         if (why) {
           toast(why, true);
@@ -6390,6 +6590,37 @@ export function setup(ctx: Ctx, overrides?: any) {
         send({ type: "refine_now", requestId: newId(), chatId: lastChatId, messageId: id });
       });
       bar.appendChild(b);
+      addUndoButton(bar, id, b);
+    } catch (_) {}
+  }
+
+  // The way back, beside the refine rather than instead of it, and only while
+  // there is a refine to put back. It goes when you put one back or dismiss it,
+  // which leaves the row as it was.
+  function addUndoButton(bar: Element, id: string, after: Element) {
+    try {
+      const had = bar.querySelector('[data-arf-undo="' + id + '"]') as any;
+      if (!undoableHere(id)) {
+        if (had) had.remove();
+        return;
+      }
+      if (had) return;
+      const u = document.createElement("button");
+      u.type = "button";
+      u.setAttribute("data-arf-undo", id);
+      u.className = "arf-msgbtn";
+      u.innerHTML = undoIcon();
+      u.title = "Put this message back the way it was";
+      u.setAttribute("aria-label", u.title);
+      u.addEventListener("click", (e: any) => {
+        try {
+          e.preventDefault();
+          e.stopPropagation();
+        } catch (_) {}
+        askUndo(lastChatId, id);
+      });
+      if (after.parentNode === bar && after.nextSibling) bar.insertBefore(u, after.nextSibling);
+      else bar.appendChild(u);
     } catch (_) {}
   }
 
@@ -6402,7 +6633,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function dropMsgButtons() {
     try {
-      const all = document.querySelectorAll("[data-arf-msg]");
+      const all = document.querySelectorAll("[data-arf-msg],[data-arf-undo]");
       for (let i = 0; i < all.length; i++) all[i].remove();
     } catch (_) {}
   }

@@ -1150,9 +1150,16 @@ console.log("\nloading a preset from where you were reading");
 
     // Load the longest preset that ships, which is the one that moves the
     // content height the most.
+    //
+    // Where you were reading is a thing on the screen, not a pixel count. The
+    // prompt above grows by thousands of pixels when this loads, so holding the
+    // number would leave the card you were looking at far below the fold. What
+    // has to hold still is the card.
     const after = await page.evaluate(async () => {
       const s = document.getElementById("scroller");
-      const was = s.scrollTop;
+      const seen = () =>
+        document.querySelector('#drawer [data-arf-card="Presets"]').getBoundingClientRect().top;
+      const was = { scroll: s.scrollTop, card: seen() };
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
       // The biggest one, which is the one that grows the panel most when it
       // loads and so the one most likely to throw the scroll.
@@ -1162,11 +1169,16 @@ console.log("\nloading a preset from where you were reading");
       document.querySelector('#drawer [data-arf-preset="load"]').click();
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       await new Promise((r) => setTimeout(r, 60));
-      return { was: was, now: s.scrollTop, name: detailed.textContent };
+      return { was: was, now: { scroll: s.scrollTop, card: seen() }, name: detailed.textContent };
     });
     ok(
-      "loading a preset leaves you where you were reading",
-      after.now > 0 && Math.abs(after.now - after.was) < 40,
+      "loading a preset leaves the card you were reading where it was",
+      Math.abs(after.now.card - after.was.card) < 8,
+      JSON.stringify(after),
+    );
+    ok(
+      "which means following the prompt down as it grows",
+      after.now.scroll > after.was.scroll,
       JSON.stringify(after),
     );
   });
@@ -2393,6 +2405,72 @@ console.log("\na switch and the rows that hang off it");
       () => document.querySelector('[data-arf-field="widgetOn"]').checked,
     );
     ok("the switch is left reading the way it was set", state === true);
+  });
+}
+
+console.log("\nthe buttons on a message");
+{
+  // The refine button used to turn into an undo once a refine landed, and the
+  // undo does not expire, so the arrow stayed for good: the only way to refine
+  // that message again was to put the last refine back first. They are two
+  // buttons now.
+  await inTab(browser, { saved: { msgButton: true, enabled: true } }, async (page) => {
+    await page.evaluate(() => {
+      const m = document.createElement("div");
+      m.setAttribute("data-message-id", "m1");
+      const bar = document.createElement("div");
+      bar.setAttribute("data-component", "BubbleActions");
+      m.appendChild(bar);
+      document.body.appendChild(m);
+      const id = window.__sent.filter((x) => x.type === "active_chat").pop().requestId;
+      window.__fromBackend({
+        type: "active_chat",
+        requestId: id,
+        chatId: "c1",
+        character: "Ada",
+        hasCharacter: true,
+        resolved: true,
+        found: true,
+      });
+    });
+    await settle(page);
+    const count = (page, sel) => page.evaluate((s) => document.querySelectorAll(s).length, sel);
+    ok("a refine button goes on the message", (await count(page, "[data-arf-msg]")) === 1);
+    ok("and nothing to put back yet", (await count(page, "[data-arf-undo]")) === 0);
+
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m1",
+        canUndo: true,
+        before: "She let out a breath she did not know she was holding.",
+        after: "She breathed out.",
+      });
+    });
+    await settle(page);
+    ok("after a refine there is an undo beside it", (await count(page, "[data-arf-undo]")) === 1);
+    ok("and the refine button is still there", (await count(page, "[data-arf-msg]")) === 1);
+    ok(
+      "still offering a refine rather than an undo",
+      await page.evaluate(() =>
+        /Refine this message/.test(document.querySelector("[data-arf-msg]").title),
+      ),
+    );
+
+    // Pressing the undo asks for it, and answering takes the button away again.
+    await page.evaluate(() => document.querySelector("[data-arf-undo]").click());
+    const asked = await page.evaluate(
+      () => (window.__sent.filter((m) => m.type === "undo_refine").pop() || {}).messageId,
+    );
+    ok("the undo asks about that message", asked === "m1");
+
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "undo_result", ok: true, chatId: "c1", messageId: "m1" });
+    });
+    await settle(page);
+    ok("and once it is put back the undo goes", (await count(page, "[data-arf-undo]")) === 0);
+    ok("leaving the refine button where it was", (await count(page, "[data-arf-msg]")) === 1);
   });
 }
 
