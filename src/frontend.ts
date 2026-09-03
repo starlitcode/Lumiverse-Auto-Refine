@@ -1221,9 +1221,26 @@ function contrastRatio(a: Rgb, b: Rgb): number {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
-// Below this, text is repainted near-white or near-black, whichever reads
-// better on what is behind it.
-const TEXT_FLOOR = 3.2;
+// Below this, text is repainted toward white or black, whichever reads better
+// on what is behind it.
+//
+// These are the two numbers the standard actually gives, and the panel used one
+// number for both: 3.2, which is the large-text figure applied to 12px labels.
+// Everything from 3.2 to 4.5 passed, and that band is exactly where a quiet
+// colour on a quiet surface lives, so a timestamp at 3.77 and a button label at
+// 4.33 were being called readable. Which number a line gets is decided by its
+// own size, since that is what the standard measures.
+const TEXT_FLOOR = 4.5;
+const BIG_TEXT_FLOOR = 3;
+// What counts as large: the standard's 18pt, or 14pt once it is bold.
+const BIG_PX = 24;
+const BIG_BOLD_PX = 18.66;
+function floorFor(cs: any): number {
+  const px = parseFloat(cs.fontSize) || 16;
+  const weight = parseInt(cs.fontWeight, 10) || 400;
+  const big = px >= BIG_PX || (weight >= 700 && px >= BIG_BOLD_PX);
+  return big ? BIG_TEXT_FLOOR : TEXT_FLOOR;
+}
 // A filled button whose fill is this close to the surface behind it reads as
 // plain text however legible its label is, so it is given an edge instead. Low
 // enough that a merely quiet accent is left alone.
@@ -1232,12 +1249,44 @@ const WHITE: Rgb = { r: 255, g: 255, b: 255, a: 1 };
 const BLACK: Rgb = { r: 0, g: 0, b: 0, a: 1 };
 const PAGE_FALLBACK: Rgb = { r: 24, g: 20, b: 34, a: 1 };
 
-function betterInk(back: Rgb): { color: string; ratio: number } {
+// The colour to repaint a failing line, given what is behind it, the ratio it
+// has to reach, and the colour it already has.
+//
+// The smallest step toward white or black that clears the floor, rather than a
+// jump to one of them. The panel says things at three volumes on purpose: a
+// heading, a label, and a quiet aside underneath. Repainting every failing line
+// to the same near-white flattened all three into one, so a hint that only
+// needed nudging came out shouting alongside the heading above it. Where the
+// existing colour is not known, or where nothing on this surface reaches the
+// floor, the most readable there is, which is the old behaviour.
+function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio: number } {
   const onWhite = contrastRatio(WHITE, back);
   const onBlack = contrastRatio(BLACK, back);
-  return onWhite >= onBlack
-    ? { color: "rgba(255,255,255,0.94)", ratio: onWhite }
-    : { color: "rgba(0,0,0,0.9)", ratio: onBlack };
+  const toward = onWhite >= onBlack ? WHITE : BLACK;
+  const most = Math.max(onWhite, onBlack);
+  const full =
+    toward === WHITE
+      ? { color: "rgba(255,255,255,0.94)", ratio: onWhite }
+      : { color: "rgba(0,0,0,0.9)", ratio: onBlack };
+  if (!from || !want || most <= want) return full;
+  const start = blendColor(from, back);
+  for (let i = 1; i <= 10; i++) {
+    const t = i / 10;
+    const mix: Rgb = {
+      r: start.r + (toward.r - start.r) * t,
+      g: start.g + (toward.g - start.g) * t,
+      b: start.b + (toward.b - start.b) * t,
+      a: 1,
+    };
+    const got = contrastRatio(mix, back);
+    if (got >= want)
+      return {
+        color:
+          "rgb(" + Math.round(mix.r) + "," + Math.round(mix.g) + "," + Math.round(mix.b) + ")",
+        ratio: got,
+      };
+  }
+  return full;
 }
 
 // What an element is really sitting on. A panel is usually a solid colour with
@@ -1535,6 +1584,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   let urlTimer: any = null;
   // The address as of the last tick, so a change can be told from a poll.
   let urlWas = "";
+  // How many more ticks to keep asking after the address moved. Four is about
+  // three seconds, which covers a chat the server has not caught up with
+  // without turning the home screen into a poll.
+  const CHASE_TICKS = 4;
+  let chasing = 0;
   // The chat walked out of. The backend goes on naming it while you stand on
   // the home screen, since it answers with the account's most recent chat, and
   // this is what lets that one answer be recognised and dropped without
@@ -1586,16 +1640,30 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (!urlNamesChats) return;
         leftTheChat();
         // Moving from one chat straight into another looks the same from here
-        // as walking out, so this asks where we ended up.
+        // as walking out, so this asks where we ended up, and keeps asking:
+        // the chat you moved into can be too new to be the active one.
+        chasing = CHASE_TICKS;
         askActiveChat();
         return;
       }
       // No chat known. Tapping a character opens one and the address is what
       // says so first, so a change here is the moment to ask. Only a change:
       // standing still on the home screen asks nothing.
-      if (now === urlWas) return;
-      urlWas = now;
-      askActiveChat();
+      if (now !== urlWas) {
+        urlWas = now;
+        chasing = CHASE_TICKS;
+        askActiveChat();
+        return;
+      }
+      // Asking once is not enough. Tapping a character makes the chat, and for
+      // a moment afterwards the server does not call it the active one yet, so
+      // the first answer is "nothing is open" and it is wrong. A few more asks
+      // over the next couple of seconds catch it, and then it stops: a person
+      // sitting on the home screen is not worth a question every tick.
+      if (chasing > 0) {
+        chasing--;
+        askActiveChat();
+      }
     }, URL_TICK_MS);
   }
   function stopUrlWatch() {
@@ -1606,10 +1674,18 @@ export function setup(ctx: Ctx, overrides?: any) {
   disposers.push(stopUrlWatch);
 
   let chatAsk: string | null = null;
-  function askActiveChat() {
+  // What was being asked, because the two questions do not take the same
+  // answer. "who" is about a chat already known: the id goes with it, so the
+  // backend looks that one up rather than guessing which chat is active, and an
+  // answer of "nobody is in a chat" is not about that chat and is ignored.
+  // "where" is the question of which chat is open at all, and is the only one
+  // whose answer is allowed to say there is none.
+  let chatAskWhy: "who" | "where" = "where";
+  function askActiveChat(about?: any) {
     const id = newId();
     chatAsk = id;
-    send({ type: "active_chat", requestId: id, chatId: null });
+    chatAskWhy = about == null ? "where" : "who";
+    send({ type: "active_chat", requestId: id, chatId: about == null ? null : about });
   }
 
   // The one place a chat id arrives, whichever event carried it, so the flag,
@@ -1620,14 +1696,20 @@ export function setup(ctx: Ctx, overrides?: any) {
     lastChatId = id;
     noChatOpen = false;
     // Being in a chat means there is nothing left behind to mistake an answer
-    // for, including this chat itself if it is the one being walked back into.
+    // for, including this chat itself if it is the one being walked back into,
+    // and nothing left to chase.
     leftBehind = null;
+    chasing = 0;
     if (messageId != null) lastMessageId = messageId;
     if (changed) {
       lastMessageId = messageId != null ? messageId : null;
       character = null;
       preview = null;
-      askActiveChat();
+      // About this chat by name. Asked without one, the backend answers with
+      // whichever chat the server thinks is active, which for a chat made a
+      // moment ago by tapping a character is none of them yet, and that answer
+      // then threw away the id the host had just handed us.
+      askActiveChat(id);
     }
     startUrlWatch();
   }
@@ -2344,8 +2426,11 @@ export function setup(ctx: Ctx, overrides?: any) {
         // as an unreadable button.
         const back = backdropOf(n);
         const shown = blendColor(fg, back);
-        if (contrastRatio(shown, back) < TEXT_FLOOR) {
-          const ink = betterInk(back);
+        // What this line has to reach depends on how big it is drawn, so it is
+        // read off the line rather than being one number for the whole panel.
+        const want = floorFor(cs);
+        if (contrastRatio(shown, back) < want) {
+          const ink = betterInk(back, want, fg);
           n.style.color = ink.color;
           // Marked so the next repaint re-measures it. Without the mark an
           // element the sweep already fixed reads as healthy the second time
@@ -6353,7 +6438,15 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (msg.resolved && !msg.chatId) {
               // It could look, and there is nothing open. The home screen, or a
               // character page with no chat started yet.
-              leftTheChat();
+              //
+              // Only the question of where you are takes that answer. Asked
+              // who is in a chat we were already told about, "nothing is open"
+              // is about the server's idea of the active chat and not about
+              // that one, and believing it was what put the panel back on "No
+              // chat open" the instant a character was tapped: on Lumiverse
+              // that is the move that creates a chat, and a chat made a moment
+              // ago is not the active one yet.
+              if (chatAskWhy === "where") leftTheChat();
               return;
             }
             if (msg.chatId) {
@@ -6761,5 +6854,6 @@ export const __testing = {
   contrastRatio,
   betterInk,
   TEXT_FLOOR,
+  BIG_TEXT_FLOOR,
   FILL_FLOOR,
 };

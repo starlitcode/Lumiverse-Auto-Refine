@@ -209,12 +209,70 @@ async function goTab(page, label) {
   await settle(page);
 }
 
-// What the sweep had to repair. Zero on the stock theme is the point: a panel
-// that repaints healthy colours is overriding a theme it should be inheriting.
+// What the sweep had to repair.
 async function repaired(page) {
   return page.evaluate(() =>
     document.querySelectorAll('#drawer [data-arf-painted="ink"]').length,
   );
+}
+
+// Every repair, measured against what the line looked like before it. A panel
+// that repaints healthy colours is overriding a theme it should be inheriting,
+// and this is how that shows: the inline colour is lifted off, the line is
+// measured as the theme drew it, and anything that was already above its own
+// floor should never have been touched.
+//
+// This replaced a check that the stock theme is repaired nought times. That was
+// true only while the floor was the large-text one applied to everything; the
+// stock theme does put a 12px button label at 4.33, and repairing it is the
+// sweep doing its job, not overreaching.
+async function overreached(page) {
+  return page.evaluate(() => {
+    const parse = (s) => {
+      const m = /rgba?\(([^)]+)\)/.exec(s || "");
+      if (!m) return null;
+      const p = m[1].split(",").map((x) => parseFloat(x.trim()));
+      return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    };
+    const over = (f, b) => ({
+      r: f.r * f.a + b.r * (1 - f.a), g: f.g * f.a + b.g * (1 - f.a),
+      b: f.b * f.a + b.b * (1 - f.a), a: 1,
+    });
+    const lum = (c) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const backdrop = (node) => {
+      const stack = []; let el = node;
+      while (el && el !== document.documentElement) {
+        const c = parse(getComputedStyle(el).backgroundColor);
+        if (c && c.a > 0) { stack.push(c); if (c.a >= 0.999) break; }
+        el = el.parentElement;
+      }
+      let base = { r: 255, g: 255, b: 255, a: 1 };
+      const pg = parse(getComputedStyle(document.body).backgroundColor);
+      if (pg && pg.a >= 0.999) base = pg;
+      for (let i = stack.length - 1; i >= 0; i--) base = over(stack[i], base);
+      return base;
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('#drawer [data-arf-painted="ink"]')) {
+      const put = el.style.color;
+      el.style.color = "";
+      const st = getComputedStyle(el);
+      const fg = parse(st.color);
+      const px = parseFloat(st.fontSize) || 16;
+      const big = px >= 24 || ((parseInt(st.fontWeight, 10) || 400) >= 700 && px >= 18.66);
+      const floor = big ? 3 : 4.5;
+      const bg = backdrop(el);
+      const was = fg ? ratio(over(fg, bg), bg) : 0;
+      el.style.color = put;
+      if (was >= floor)
+        out.push((el.className || el.tagName) + " was already " + was.toFixed(2) + " against " + floor);
+    }
+    return out;
+  });
 }
 
 // The measured contrast of every visible text node against what is behind it.
@@ -266,8 +324,14 @@ async function worstText(page) {
       return base;
     };
 
+    // Against each line's own floor, not one number for the panel. 4.5 is what
+    // the standard asks of body text and 3 is the concession for large text,
+    // and reading a 12px label against the large-text figure is how text at
+    // 3.77 was called readable while somebody was telling us it was not.
     let worst = 99;
     let where = "";
+    let want = 4.5;
+    let short = 99;
     const nodes = document.querySelectorAll("#drawer *");
     for (const el of nodes) {
       const text = Array.from(el.childNodes).some(
@@ -279,14 +343,22 @@ async function worstText(page) {
       const st = getComputedStyle(el);
       const fg = parse(st.color);
       if (!fg) continue;
+      const px = parseFloat(st.fontSize) || 16;
+      const big = px >= 24 || ((parseInt(st.fontWeight, 10) || 400) >= 700 && px >= 18.66);
+      const floor = big ? 3 : 4.5;
       const bg = backdrop(el);
       const r = ratio(over(fg, bg), bg);
-      if (r < worst) {
+      // The furthest short of what it needs, so a heading at 3.1 does not hide
+      // a 12px hint at 4.4.
+      if (r / floor < short) {
+        short = r / floor;
         worst = r;
-        where = (el.className || el.tagName) + ": " + el.textContent.trim().slice(0, 40);
+        want = floor;
+        where =
+          (el.className || el.tagName) + " at " + px + "px: " + el.textContent.trim().slice(0, 40);
       }
     }
-    return { worst: worst, where: where };
+    return { worst: worst, want: want, where: where, ok: worst >= want };
   });
 }
 
@@ -326,16 +398,17 @@ console.log("\nthe tab as the host mounts it");
 console.log("\ncolour on somebody else's theme");
 {
   await inTab(browser, {}, async (page) => {
+    const over = await overreached(page);
     ok(
-      "the stock theme is inherited, not repainted",
-      (await repaired(page)) === 0,
-      "repainted " + (await repaired(page)) + " elements that were already fine",
+      "the stock theme is inherited, and only what fails is repainted",
+      over.length === 0,
+      over.join("; "),
     );
     const m = await worstText(page);
     ok(
       "every label is readable as painted",
-      m.worst >= 3.2,
-      "worst was " + m.worst.toFixed(2) + " on " + m.where,
+      m.ok,
+      "worst was " + m.worst.toFixed(2) + " against " + m.want + " on " + m.where,
     );
   });
 
@@ -350,8 +423,8 @@ console.log("\ncolour on somebody else's theme");
     const m = await worstText(page);
     ok(
       "and the result is readable",
-      m.worst >= 3.2,
-      "worst was " + m.worst.toFixed(2) + " on " + m.where,
+      m.ok,
+      "worst was " + m.worst.toFixed(2) + " against " + m.want + " on " + m.where,
     );
   });
 
@@ -368,8 +441,8 @@ console.log("\ncolour on somebody else's theme");
     const m = await worstText(page);
     ok(
       "and the text is readable on it",
-      m.worst >= 3.2,
-      "worst was " + m.worst.toFixed(2) + " on " + m.where,
+      m.ok,
+      "worst was " + m.worst.toFixed(2) + " against " + m.want + " on " + m.where,
     );
   });
 }
@@ -1880,7 +1953,11 @@ console.log("\non a desktop");
       );
       ok("nothing pushes the page sideways", spill);
       const m = await worstText(page);
-      ok("every label is readable", m.worst >= 3.2, "worst " + m.worst.toFixed(2) + " on " + m.where);
+      ok(
+        "every label is readable",
+        m.ok,
+        "worst " + m.worst.toFixed(2) + " against " + m.want + " on " + m.where,
+      );
 
       // A mouse gets the smaller targets, which is the point of asking the
       // pointer rather than the width.
@@ -1929,7 +2006,7 @@ console.log("\nlight and dark, after every change");
         const m = await worstText(page);
         ok(
           name + ": " + label + " is readable",
-          m.worst >= 3.2,
+          m.ok,
           "worst " + m.worst.toFixed(2) + " on " + m.where,
         );
       }
@@ -2045,6 +2122,32 @@ console.log("\nwalking back into a chat");
     await tick(page);
     await answer(page, "abcdef123456");
     ok("walking out reads as no chat, whatever the backend says", await saysNoChat(page));
+  });
+
+  // Tapping a character on Lumiverse does not open a chat, it makes one, and
+  // that is the only way in. For a moment afterwards the server does not call
+  // the new chat the active one, so a question of "which chat is open" comes
+  // back "none" while you are plainly sitting in one. The panel used to ask
+  // exactly that question the instant the host named the chat, and then throw
+  // the id away on the answer.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await answer(page, null);
+
+    await page.evaluate(() => history.pushState({}, "", "/chat/madejustnow99"));
+    await page.evaluate(() => {
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "madejustnow99" });
+    });
+    await settle(page);
+    const ask = await page.evaluate(() => {
+      const m = window.__sent.filter((x) => x.type === "active_chat").pop();
+      return m ? m.chatId : null;
+    });
+    ok("a chat the host named is asked about by name", ask === "madejustnow99", "asked about " + ask);
+
+    // The server, still behind. This is the answer that used to undo everything.
+    await answer(page, null);
+    ok("and an answer about no active chat does not undo it", !(await saysNoChat(page)));
   });
 }
 
