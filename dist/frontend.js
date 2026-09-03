@@ -70,6 +70,7 @@ const PARTS = [
             "softenPct",
             "softenWords",
             "retryRefine",
+            "skipWhenClean",
             "wrapOutput",
             "streamProgress",
             "watchLive",
@@ -230,6 +231,10 @@ const CONFIG = {
     // Extra asks after a failed check. None by default: somebody who never opened
     // this has not agreed to pay for three refines where they asked for one.
     retryRefine: 0,
+    // Let a plain scan call off the automatic pass when there is nothing on the
+    // phrase list in a reply. Off by default, because a clean scan means nothing
+    // on the list, never nothing wrong.
+    skipWhenClean: false,
     // Show the rewrite arriving rather than only its length. Off by default: it
     // is a thing to switch on when you want to watch one, not something to pay
     // bridge traffic for on every reply.
@@ -909,6 +914,12 @@ const GUARD_FIELDS = [
         needs: { key: "guardSoften" },
         under: true,
         hint: "Optional, one per line, added to the built-in list. That list is short and holds only words that are hard to use innocently, because everyday words like hit, skin or pain would fire on any refine that tightened a description. Add what softening looks like in what you write.",
+    },
+    {
+        key: "skipWhenClean",
+        label: "Skip the automatic pass when a scan finds nothing",
+        type: "bool",
+        hint: "Off by default. Before the automatic pass calls a model, the reply is scanned here, in the extension, for the phrases and filler words on the built-in list. Nothing found means no call and nothing spent. Pressing a refine button always runs whatever the scan thinks, because that is you asking for this one. Worth knowing before you switch it on: the scan only sees what a plain match can see. Rhythm, repetition and whether a line could sit in any story are the model's half, so a reply it calls clean can still have work in it. Try the Scan it button under Context to see what it does and does not catch.",
     },
     {
         key: "retryRefine",
@@ -2461,6 +2472,8 @@ export function setup(ctx, overrides) {
         // this panel that is holding something up.
         if (pending)
             root.appendChild(buildPendingCard());
+        if (choices)
+            root.appendChild(buildChoicesCard());
         const back = undoHere();
         if (back.length)
             root.appendChild(buildLastRefine(back));
@@ -2571,6 +2584,17 @@ export function setup(ctx, overrides) {
             now.title = stop;
         now.addEventListener("click", () => refineNow());
         row.appendChild(now);
+        // Three answers to the same reply, to choose between. Spends three calls
+        // and says so, and only ever when it is pressed: nothing about the
+        // automatic pass changes.
+        const few = button("Try a few", false);
+        few.setAttribute("data-arf-many", "1");
+        few.disabled = busy || !!stop;
+        few.style.opacity = few.disabled ? "0.5" : "1";
+        few.style.cursor = few.disabled ? "not-allowed" : "pointer";
+        few.title = stop || "Refine the latest reply three times and pick from the answers. Three calls.";
+        few.addEventListener("click", () => refineMany());
+        row.appendChild(few);
         const auto = document.createElement("label");
         auto.className = "arf-row arf-note";
         auto.style.cursor = "pointer";
@@ -2626,6 +2650,58 @@ export function setup(ctx, overrides) {
             toast("Left as it was.", true);
         }
         paint();
+    }
+    // Several answers to the same reply, waiting to be chosen between. The same
+    // shape as a single one waiting on a yes, because it is the same decision
+    // with more than two answers.
+    let choices = null;
+    function takeChoice(which) {
+        const one = choices;
+        choices = null;
+        if (!undoHere().length)
+            setBadge(null);
+        if (!one)
+            return;
+        const text = one.picks[which];
+        if (text == null) {
+            log("left the reply as it was");
+            toast("Left as it was.", true);
+            paint();
+            return;
+        }
+        send({
+            type: "apply_refine",
+            requestId: newId(),
+            chatId: one.chatId,
+            messageId: one.messageId,
+            after: text,
+        });
+        log("picked one of " + one.picks.length + " rewrites", true);
+        paint();
+    }
+    function buildChoicesCard() {
+        const one = choices;
+        const wrap = card("Pick one", one.picks.length +
+            " answers to the same reply. Nothing has been saved. Read them and take whichever reads best, or keep what you had.", new Date(one.at).toTimeString().slice(0, 5));
+        wrap.appendChild(el("div", "arf-lab", "As it is now"));
+        wrap.appendChild(el("div", "arf-well arf-scroll", one.before));
+        one.picks.forEach((text, i) => {
+            wrap.appendChild(el("div", "arf-lab", "Rewrite " + (i + 1)));
+            wrap.appendChild(el("div", "arf-well arf-scroll", text));
+            const take = button("Take this one", i === 0);
+            take.setAttribute("data-arf-pick", String(i));
+            take.addEventListener("click", () => takeChoice(i));
+            const row = el("div", "arf-row");
+            row.appendChild(take);
+            wrap.appendChild(row);
+        });
+        const none = button("Keep what I had", false);
+        none.setAttribute("data-arf-pick", "none");
+        none.addEventListener("click", () => takeChoice(-1));
+        const last = el("div", "arf-row");
+        last.appendChild(none);
+        wrap.appendChild(last);
+        return wrap;
     }
     function buildPendingCard() {
         const one = pending;
@@ -2756,9 +2832,29 @@ export function setup(ctx, overrides) {
             send({ type: "try_refine", requestId: id, text: text, asUser: false });
             paint();
         });
+        // No model behind this one. It is the half of the standard a plain scan can
+        // judge, and it answers "is this reply worth a call" for nothing.
+        const look = button("Scan it, free", false);
+        look.addEventListener("click", () => {
+            const text = String(ta.value || "").trim();
+            if (!text) {
+                scanSaid = "Put some text in the box first.";
+                paint();
+                return;
+            }
+            persist(true);
+            const id = newId();
+            scanWaiting = id;
+            scanSaid = "Looking...";
+            send({ type: "scan_text", requestId: id, text: text });
+            paint();
+        });
         row.appendChild(grab);
         row.appendChild(go);
+        row.appendChild(look);
         wrap.appendChild(row);
+        if (scanSaid)
+            wrap.appendChild(note(scanSaid));
         if (tryBusy)
             wrap.appendChild(note("Working..."));
         else if (tryResult)
@@ -2766,6 +2862,9 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     let tryWaiting = null;
+    // The free scan: what it found, and which ask it belongs to.
+    let scanWaiting = null;
+    let scanSaid = null;
     // The settings other rows hang off. Changing one of these rebuilds the panel
     // rather than only saving it, or its children stay on screen after the thing
     // they belong to has been switched off.
@@ -5717,6 +5816,35 @@ export function setup(ctx, overrides) {
         live = "";
         liveWatch = null;
     }
+    // Best of three, asked for rather than assumed. The economics are the whole
+    // reason this is a button and not a setting: it costs three refines instead
+    // of one, so it happens when somebody decides a reply is worth that.
+    function refineMany() {
+        if (busy || msgBusy !== null) {
+            toast("A refine is already running. Press it again to stop that one.", true);
+            return;
+        }
+        const why = whyNot();
+        if (why) {
+            toast(why, true);
+            log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
+            return;
+        }
+        choices = null;
+        clearLive();
+        retryAt = 0;
+        retryOf = 0;
+        markBusy(true);
+        log("asking for three rewrites to choose between");
+        paint();
+        send({
+            type: "refine_many",
+            requestId: newId(),
+            count: 3,
+            chatId: lastChatId,
+            messageId: lastMessageId,
+        });
+    }
     function refineNow() {
         // Pressing refine while one is already running used to queue a second
         // against the same reply, and whichever finished last won. One at a time.
@@ -5730,6 +5858,7 @@ export function setup(ctx, overrides) {
             log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
+        choices = null;
         clearLive();
         retryAt = 0;
         retryOf = 0;
@@ -5928,6 +6057,51 @@ export function setup(ctx, overrides) {
                         const what = String(msg.what || "settings");
                         log("your " + what + " could not be saved to your account. They are still saved in this browser.");
                         toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "refine_choices") {
+                        const picks = (Array.isArray(msg.picks) ? msg.picks : []).map(String).filter(Boolean);
+                        markBusy(false);
+                        msgBusy = null;
+                        takeNotes(msg);
+                        if (!picks.length) {
+                            log("nothing came back that was worth offering");
+                            toast("None of those came back usable.", true);
+                            paint();
+                            return;
+                        }
+                        choices = {
+                            chatId: msg.chatId,
+                            messageId: msg.messageId,
+                            before: String(msg.before || ""),
+                            picks: picks,
+                            at: Date.now(),
+                        };
+                        setBadge(String(picks.length));
+                        log(picks.length + " rewrites are waiting for you to pick one", true);
+                        ping();
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "scan_result") {
+                        if (scanWaiting && msg.requestId !== scanWaiting)
+                            return;
+                        scanWaiting = null;
+                        const cl = Array.isArray(msg.cliches) ? msg.cliches : [];
+                        const fi = Array.isArray(msg.fillers) ? msg.fillers : [];
+                        if (!cl.length && !fi.length) {
+                            scanSaid =
+                                "Nothing on the phrase list is in this text. That is not the same as nothing to fix: rhythm, repetition and whether a line could sit in any story are what the model is for.";
+                        }
+                        else {
+                            const parts = [];
+                            if (cl.length)
+                                parts.push("phrases: " + cl.join(", "));
+                            if (fi.length)
+                                parts.push("filler: " + fi.join(", "));
+                            scanSaid = "Found " + parts.join(". ") + ".";
+                        }
                         paint();
                         return;
                     }

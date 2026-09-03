@@ -17,7 +17,7 @@ The search box above the tabs looks across every one of them, not just the one y
 Three things never move, whichever tab you left open, because they are what you came for.
 
 - **The switch** is the master switch. Off, nothing is refined and no model call is made, by any path.
-- **Refine the latest reply** does one, now. **every reply, automatically** is the automatic pass, off by default. The greeting is never included either way.
+- **Refine the latest reply** does one, now. **Try a few** does it three times and shows you the answers to pick between, which costs three calls and only ever happens when you press it. **every reply, automatically** is the automatic pass, off by default. The greeting is never included either way.
 - **Refines you can put back** shows what changed, with **Put it back** next to each one. Every refine in this chat is in there, newest first, not just the most recent: a second refine used to take away the way back from the first without saying so. The tab carries a badge with the count.
 
 ## Prompt
@@ -30,7 +30,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 - **How much it is told** is the message count and the two token budgets, for the run-up and the lorebook. In [How much it is told](prompt.md#how-much-it-is-told).
 - **See what gets sent** builds the real request and shows it to you, message by message, without calling a model. **Raw** shows the same thing as the JSON that goes over the wire, and **Expand** opens either at the size of the screen.
-- **Try it** runs one refine on pasted text and shows what comes back, without writing anything to your chat.
+- **Try it** runs one refine on pasted text and shows what comes back, without writing anything to your chat. **Scan it, free** looks at the same text here in the extension, with no model behind it, and names the phrases and filler words it found. It is the half of the standard a plain match can judge, and it costs nothing.
 
 ## Model
 
@@ -48,6 +48,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits, in [What it refuses to save](guardrails.md).
 - **Refuse an answer that declines the job**, **Refuse an answer that talks about the edit** and **Refuse a rewrite that sanitised the reply** are the three checks on what an answer says, each with a switch of its own. The last compares the rewrite against the original and has its own threshold and word list under it. Switching all three off is said out loud, because a refusal written by the model could then be saved over your reply.
 - **Ask again when a check fails** retries a refine that failed one of the checks a second try could fix, 0 times by default.
+- **Skip the automatic pass when a scan finds nothing** checks a reply here, with no model, before the automatic pass spends anything. Off by default, and worth reading [What a scan can see](guardrails.md#what-a-scan-can-see) before switching it on: a clean scan means nothing on the list, never nothing wrong.
 - **Keep what a refine replaced** holds the original so you can put it back.
 - **Ask before saving a refine** holds every refine until you say. Both versions appear in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**, and the tab carries a badge until you answer. Where Lumiverse can draw one, the same question also opens as a window; answering either settles both. The floating button's menu can answer it too, though a tap on the button only opens the tab, since accepting a rewrite of your writing on a stray tap is the one thing it must not do.
 - **Let the button refine your own messages** keeps your voice, not the character's. The automatic pass never touches what you wrote whatever this says.

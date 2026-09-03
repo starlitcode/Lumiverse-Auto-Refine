@@ -1043,6 +1043,105 @@ console.log("\nloading a preset from where you were reading");
   });
 }
 
+console.log("\npicking from a few");
+{
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refine_choices",
+        chatId: "c1",
+        messageId: "m2",
+        before: "She stepped through and, suddenly, the cold just hit her.",
+        picks: [
+          "She stepped through, and the cold hit her hard.",
+          "She stepped through, and the cold took her at once.",
+        ],
+      });
+    });
+    await settle(page);
+    const shown = await page.evaluate(() => ({
+      card: /Pick one/.test(document.querySelector("#drawer").textContent),
+      both: /cold hit her hard/.test(document.querySelector("#drawer").textContent) &&
+        /cold took her at once/.test(document.querySelector("#drawer").textContent),
+      buttons: document.querySelectorAll("#drawer [data-arf-pick]").length,
+      badge: window.__badge,
+    }));
+    ok("the answers wait in the panel", shown.card && shown.both);
+    ok("with a button each and a way to keep what you had", shown.buttons === 3, String(shown.buttons));
+    ok("and the tab says how many", shown.badge === "2", String(shown.badge));
+
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-pick="1"]').click();
+    });
+    await settle(page);
+    const took = await page.evaluate(() => ({
+      sent: window.__sent.filter((m) => m.type === "apply_refine").pop(),
+      gone: !/Pick one/.test(document.querySelector("#drawer").textContent),
+    }));
+    ok("picking one sends that one to be saved",
+      !!took.sent && took.sent.after === "She stepped through, and the cold took her at once.", took.sent);
+    ok("and the card goes", took.gone);
+  });
+
+  // Keeping what you had must save nothing at all.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refine_choices",
+        chatId: "c1",
+        messageId: "m2",
+        before: "before",
+        picks: ["one", "two"],
+      });
+    });
+    await settle(page);
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-pick="none"]').click();
+    });
+    await settle(page);
+    const left = await page.evaluate(() => ({
+      saved: window.__sent.filter((m) => m.type === "apply_refine").length,
+      gone: !/Pick one/.test(document.querySelector("#drawer").textContent),
+    }));
+    ok("keeping what you had saves nothing", left.saved === 0 && left.gone, left);
+  });
+}
+
+console.log("\na free scan, with no model behind it");
+{
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="tryText"]');
+      ta.value = "She let out a breath she didn't know she was holding, suddenly.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Scan it, free/.test(b.textContent))
+        .click();
+    });
+    await settle(page);
+    const asked = await page.evaluate(() => ({
+      scans: window.__sent.filter((m) => m.type === "scan_text").length,
+      refines: window.__sent.filter((m) => m.type === "try_refine").length,
+      id: (window.__sent.filter((m) => m.type === "scan_text").pop() || {}).requestId,
+    }));
+    ok("it asks for a scan and never for a refine", asked.scans === 1 && asked.refines === 0, asked);
+
+    await page.evaluate((id) => {
+      window.__fromBackend({
+        type: "scan_result",
+        requestId: id,
+        cliches: ["a held breath"],
+        fillers: ["suddenly"],
+        total: 2,
+      });
+    }, asked.id);
+    await settle(page);
+    const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+    ok("and says what it found", /a held breath/.test(said) && /suddenly/.test(said), said.slice(0, 160));
+  });
+}
+
 console.log("\naccepting or turning one down");
 {
   // The panel holds the decision itself, so it exists whether or not the host

@@ -1787,3 +1787,162 @@ describe("the refiner's own thinking in its answer", () => {
     expect(h.body("m2")).toContain("<think>");
   });
 });
+
+// The whole point of the extension is keeping a long list of rules out of the
+// chat prompt. The other half of that is not paying a model to look at a reply
+// with nothing on the list in it.
+describe("what a plain scan can do without a model", () => {
+  const reply = (body: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: body },
+  ];
+
+  test("a scan costs no model call at all", async () => {
+    const h = await armed(["<REFINED>x</REFINED>"]);
+    await h.front({
+      type: "scan_text",
+      requestId: "s1",
+      text: "She let out a breath she didn't know she was holding, suddenly.",
+    });
+    await wait(10);
+    expect(h.asked.length).toBe(0);
+    const got = h.sent.find((m: any) => m.type === "scan_result" && m.requestId === "s1");
+    expect(got.cliches.join(" ")).toMatch(/held breath/i);
+    expect(got.fillers).toContain("suddenly");
+  });
+
+  test("and says so plainly when it finds nothing", async () => {
+    const h = await armed(["<REFINED>x</REFINED>"]);
+    await h.front({ type: "scan_text", requestId: "s1", text: "She crossed the yard and knocked." });
+    await wait(10);
+    const got = h.sent.find((m: any) => m.type === "scan_result" && m.requestId === "s1");
+    expect(got.total).toBe(0);
+  });
+
+  test("the automatic pass spends nothing on a reply the scan calls clean", async () => {
+    const h = await armed(
+      ["<REFINED>She crossed the yard.</REFINED>"],
+      { skipWhenClean: true },
+      reply("She crossed the yard and knocked twice on the weathered door."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/nothing on the phrase list/i);
+  });
+
+  test("and still runs on one it does not", async () => {
+    const h = await armed(
+      ["<REFINED>She crossed the yard and knocked twice on the door.</REFINED>"],
+      { skipWhenClean: true },
+      reply("She let out a breath she didn't know she was holding, and suddenly knocked."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+
+  // Pressing a button is the reader asking for this one. A list of phrases is
+  // in no position to overrule that.
+  test("asking by hand runs whatever the scan thinks", async () => {
+    const h = await armed(
+      ["<REFINED>She crossed the yard and knocked twice on the door.</REFINED>"],
+      { skipWhenClean: true },
+      reply("She crossed the yard and knocked twice on the weathered door."),
+    );
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("switched off, the automatic pass runs on anything", async () => {
+    const h = await armed(
+      ["<REFINED>She crossed the yard and knocked twice on the door.</REFINED>"],
+      {},
+      reply("She crossed the yard and knocked twice on the weathered door."),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+});
+
+// Best of three, asked for rather than assumed. Three calls instead of one, so
+// it is a button somebody presses and never something the automatic pass does.
+describe("several answers to choose between", () => {
+  // Three of a length the checks are happy with. An earlier draft of this had a
+  // short third one, which the shrink limit refused, and the check that caught
+  // that was doing its job.
+  const three = [
+    "<REFINED>She stepped through, and the cold hit her hard.</REFINED>",
+    "<REFINED>She stepped through, and the cold took her at once.</REFINED>",
+    "<REFINED>She stepped through, and the cold was waiting for her.</REFINED>",
+  ];
+
+  test("it asks as many times as it was told", async () => {
+    const h = await armed(three);
+    await h.front({ type: "refine_many", requestId: "m1", count: 3, chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(3);
+  });
+
+  test("and hands them all back without saving one", async () => {
+    const h = await armed(three);
+    await h.front({ type: "refine_many", requestId: "m1", count: 3, chatId: "c1", messageId: "m2" });
+    await wait(80);
+    const got = h.sent.find((m: any) => m.type === "refine_choices");
+    expect(got.picks.length).toBe(3);
+    expect(h.writes.length).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+  });
+
+  // Offering the same words twice reads as broken rather than as a model that
+  // is sure of itself.
+  test("two identical answers are offered once", async () => {
+    const same = "<REFINED>She stepped through and the cold hit her hard.</REFINED>";
+    const h = await armed([same, same, same]);
+    await h.front({ type: "refine_many", requestId: "m1", count: 3, chatId: "c1", messageId: "m2" });
+    await wait(80);
+    const got = h.sent.find((m: any) => m.type === "refine_choices");
+    expect(got.picks.length).toBe(1);
+  });
+
+  test("one that fails a check is left out rather than offered", async () => {
+    const h = await armed([
+      three[0],
+      "I'm sorry, but I can't help with that.",
+      three[2],
+    ]);
+    await h.front({ type: "refine_many", requestId: "m1", count: 3, chatId: "c1", messageId: "m2" });
+    await wait(80);
+    const got = h.sent.find((m: any) => m.type === "refine_choices");
+    expect(got.picks.length).toBe(2);
+    expect(got.picks.join(" ")).not.toMatch(/sorry/i);
+  });
+
+  // Picking one is an ordinary save, which is what keeps undo and the checks
+  // working the same way they do for a single refine.
+  test("picking one saves it through the ordinary path", async () => {
+    const h = await armed(three);
+    await h.front({ type: "refine_many", requestId: "m1", count: 3, chatId: "c1", messageId: "m2" });
+    await wait(80);
+    const got = h.sent.find((m: any) => m.type === "refine_choices");
+    await h.front({
+      type: "apply_refine",
+      requestId: "a1",
+      chatId: "c1",
+      messageId: "m2",
+      after: got.picks[1],
+    });
+    await wait(30);
+    expect(h.body("m2")).toBe("She stepped through, and the cold took her at once.");
+  });
+
+  test("the automatic pass never asks for several", async () => {
+    const h = await armed(three);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+});

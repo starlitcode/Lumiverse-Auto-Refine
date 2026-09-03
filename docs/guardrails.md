@@ -28,6 +28,16 @@ It is built to stay quiet. The built-in list holds only words that are hard to u
 
 That narrowness misses some real softening, and it is the right way round: a missed one leaves you where you already were, while a false one throws away a good rewrite and teaches you to distrust the feature. **Words of your own to watch** is there because you know better than any list what softening looks like in what you write.
 
+## What a scan can see
+
+The extension can look at a reply itself, with no model involved, and it does this in two places: the **Scan it, free** button under Context, and the **Skip the automatic pass when a scan finds nothing** setting under Limits.
+
+What it can judge honestly is what a plain match can judge: a phrase from the built-in list, and a filler word. That is it. Rhythm, repetition, whether a line could sit in any story, whether a passage keeps its writer's voice, none of those are on the list, because a rule that guessed at them would call a reply clean that needed the work.
+
+So **a clean scan means nothing on the list, never nothing wrong.** That is why the skip is off until you ask for it, and why it only ever decides the automatic pass. Pressing a refine button runs whatever the scan thinks, because that is you asking for this one.
+
+What it buys, when it fits how you write, is the thing the extension is for: a model that works in the background on the replies that need it, and stays out of the way, and off your bill, on the ones that do not.
+
 ## Asking again
 
 **Ask again when a check fails** is 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn, not a settled answer, and the same request often comes back clean.

@@ -1211,6 +1211,70 @@ function cleanSamplers(): Record<string, number> | null {
   return any ? out : null;
 }
 
+// ---- what a plain scan can see, with no model at all ----
+// The point of this extension is to keep a long list of rules out of the chat
+// prompt, where it eats context and the model forgets it anyway. The other half
+// of that is not paying a model to look at a reply that has nothing wrong with
+// it.
+//
+// These are the parts of the standard a regular expression can judge honestly:
+// a phrase from the list, and a filler word. Rhythm, repetition and whether a
+// sentence could sit in any story are not on here, because a rule that guessed
+// at those would skip replies that needed the work.
+//
+// So a clean scan means "nothing on the list", never "nothing wrong". That is
+// why it only decides the automatic pass, and why asking by hand always runs.
+const CLICHES: Array<[string, RegExp]> = [
+  ['a held breath', /\b(?:breath|breaths)\b[^.!?]{0,40}\b(?:did ?n[o']t know|had ?n[o']t (?:known|realised)|was holding)\b/i],
+  ['a breath that hitches', /\bbreath\b[^.!?]{0,20}\b(?:hitch(?:es|ed|ing)?|catch(?:es|ing)?|caught)\b/i],
+  ['a hammering heart', /\b(?:heart|pulse)\b[^.!?]{0,30}\b(?:hammer|pound|race|thunder|slam)(?:s|ed|ing)?\b/i],
+  ['a voice barely above a whisper', /\bbarely above a whisper\b/i],
+  ['darkening eyes', /\beyes?\b[^.!?]{0,20}\b(?:darken(?:s|ed|ing)?|flick(?:s|ed|ing)?|trac(?:e|es|ed|ing))\b/i],
+  ['a shiver down a spine', /\bshiver\b[^.!?]{0,30}\bspine\b/i],
+  ['the ghost of a smile', /\bghost of a (?:smile|grin)\b/i],
+  ['air thick with something', /\bair\b[^.!?]{0,15}\bthick with\b/i],
+  ['something in the air', /\b(?:shift(?:s|ed|ing)?|hang(?:s|ing)?|hung|crackl(?:e|es|ed|ing))\b[^.!?]{0,20}\bin the air\b/i],
+  ['not knowing whether to', /\bnot (?:sure|knowing) whether to\b/i],
+  ['before they could stop themselves', /\bbefore (?:he|she|they|it) could stop (?:him|her|them)sel(?:f|ves)\b/i],
+  ['closing the distance', /\bclos(?:e|es|ed|ing) the distance\b/i],
+  ['swallowing hard', /\bswallow(?:s|ed|ing)? hard\b/i],
+  ['time slowing', /\b(?:time (?:slow(?:s|ed|ing)?|seemed to slow)|the world (?:fell|falling) away)\b/i],
+];
+
+const FILLERS = [
+  'suddenly', 'slowly', 'slightly', 'just', 'really', 'very', 'almost', 'somehow',
+];
+
+// Named so the panel can say what it found rather than only how much.
+interface Scan {
+  cliches: string[];
+  fillers: string[];
+  total: number;
+}
+
+function scanText(text: string): Scan {
+  const t = String(text == null ? '' : text);
+  const cliches: string[] = [];
+  for (const [name, re] of CLICHES) {
+    try {
+      if (re.test(t)) cliches.push(name);
+    } catch (_) {}
+  }
+  const fillers: string[] = [];
+  for (const w of FILLERS) {
+    try {
+      const re = new RegExp('\\b' + w + '\\b', 'i');
+      if (re.test(t)) fillers.push(w);
+    } catch (_) {}
+  }
+  return { cliches: cliches, fillers: fillers, total: cliches.length + fillers.length };
+}
+
+// Off unless asked for. Skipping is the right call for most people and the
+// wrong one for anybody whose prompt is about rhythm or continuity, which no
+// regular expression here can see.
+let skipWhenClean = false;
+
 // ---- stopping one ----
 // The refines in flight, per reader, so a stop can reach the one that is
 // running. The controller was only ever wired to the timeout, which meant a
@@ -1406,11 +1470,16 @@ function latestReply(msgs: any[], greetingId: any): any {
   return null;
 }
 
+// collect turns this into "make me this many and hand them back", which is what
+// the panel's Try a few button asks for. Everything up to the point of writing
+// is the same work, so it is the same function rather than a second copy that
+// would drift: the same shield, the same checks, the same protection.
 async function refineMessage(
   chatId: string,
   messageId: any,
   userId?: string,
   byHand?: boolean,
+  collect?: number,
 ): Promise<RefineOutcome> {
   if (!masterOn) return { ok: false, why: 'Auto Refine is switched off' };
   if (chatsOff.has(String(chatId)))
@@ -1472,6 +1541,18 @@ async function refineMessage(
 
   const original = String(m.content == null ? '' : m.content);
   if (!original.trim()) return { ok: false, why: 'that message is empty' };
+
+  // Nothing a plain scan can see, so nothing is spent. Only on the automatic
+  // pass: pressing the button is the reader saying they want this one looked
+  // at, and a list of phrases is in no position to argue with that.
+  if (skipWhenClean && !byHand) {
+    const found = scanText(original);
+    if (!found.total)
+      return {
+        ok: false,
+        why: 'nothing on the phrase list is in this reply, so no model was called',
+      };
+  }
 
   // Who this is and what led up to it. Both are best-effort: a chat with no
   // card, or a reader who has not granted the two read permissions, refines
@@ -1544,6 +1625,34 @@ async function refineMessage(
     };
   // The thinking goes back exactly as it was, in front of the rewrite.
   const whole = split.head + back.text;
+
+  // Asked for several, so nothing is written: the reader picks one and the
+  // panel sends that back through the ordinary save.
+  if (collect && collect > 1) {
+    const picks: string[] = [whole];
+    for (let n = 1; n < Math.min(4, collect); n++) {
+      tell(userId, { type: 'refine_progress', stage: 'asking', attempt: n + 1, of: collect });
+      const more = await askModel(armed.text, m.role === 'user', scene, userId);
+      if (more.error) break;
+      const v = judge(more.content, armed.text);
+      if (!v.ok) continue;
+      const back2 = unshield(v.text, armed.parts);
+      if (back2.lost.length) continue;
+      const text2 = split.head + back2.text;
+      // Two identical answers are one answer. Offering the same words twice
+      // reads as a broken feature rather than as a model that is sure.
+      if (picks.indexOf(text2) < 0) picks.push(text2);
+    }
+    replyTo(userId, {
+      type: 'refine_choices',
+      chatId: chatId,
+      messageId: m.id,
+      before: original,
+      picks: picks,
+      notes: notes,
+    });
+    return { ok: false, why: 'waiting for you to pick one', notes: notes };
+  }
 
   if (confirmBeforeSave) {
     replyTo(userId, {
@@ -1790,6 +1899,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
       watchLive = !!s.watchLive;
+      skipWhenClean = !!s.skipWhenClean;
       // Written to the account as well as held here, so the next browser to
       // ask gets these rather than a fresh install. Failing to write is worth
       // saying out loud: settings that look saved and are not is the worst
@@ -1841,6 +1951,42 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
     // Stopping whatever is in flight for this reader. Answered even when there
     // was nothing to stop, so the panel can say so rather than claiming it
     // stopped something.
+    // A scan of pasted text, with no model call behind it. The whole point is
+    // that this costs nothing: no tokens, no connection, no waiting.
+    // Several answers to the same reply, for the reader to choose between.
+    // Nothing is written: whichever they pick comes back as an ordinary save.
+    if (payload.type === 'refine_many') {
+      replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
+      const many = Math.min(4, Math.max(2, Number(payload.count) || 3));
+      const done = await refineMessage(payload.chatId, payload.messageId, userId, true, many);
+      // Only worth answering when it failed. A success has already sent the
+      // choices, and a second message would clear the panel's busy flag before
+      // the reader has seen them.
+      if (done.why !== 'waiting for you to pick one')
+        replyTo(userId, {
+          type: 'refine_result',
+          requestId: payload.requestId,
+          chatId: payload.chatId,
+          messageId: payload.messageId,
+          ok: false,
+          why: done.why,
+          notes: done.notes || '',
+        });
+      return;
+    }
+
+    if (payload.type === 'scan_text') {
+      const found = scanText(String(payload.text == null ? '' : payload.text));
+      replyTo(userId, {
+        type: 'scan_result',
+        requestId: payload.requestId,
+        cliches: found.cliches,
+        fillers: found.fillers,
+        total: found.total,
+      });
+      return;
+    }
+
     if (payload.type === 'cancel_refine') {
       const n = stopRuns(userId);
       replyTo(userId, { type: 'refine_stopped', requestId: payload.requestId, stopped: n });
