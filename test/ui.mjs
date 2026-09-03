@@ -428,6 +428,35 @@ console.log("\ncolour on somebody else's theme");
     );
   });
 
+  // A theme whose accent is light, which is where a filled button goes wrong.
+  //
+  // The loud button used to be the accent at full strength with its label
+  // hardcoded white, which on a light accent is white on lavender. The contrast
+  // sweep rescued it a moment after every repaint, and a rescue that has to
+  // happen on a timer is a rescue that can be seen happening: the label read
+  // correct, then white, then correct. So the check is not that it ends up
+  // readable, it is that nothing had to touch it.
+  const paleAccent =
+    ":root{--lumiverse-primary:#e8d0ff;--lumiverse-primary-hover:#f0e0ff;" +
+    "--lumiverse-primary-text:#e0c4ff;--lumiverse-primary-020:rgba(232,208,255,.2);" +
+    "--lumiverse-primary-050:rgba(232,208,255,.5)}";
+  await inTab(browser, { css: paleAccent }, async (page) => {
+    const b = await page.evaluate(() => {
+      const el = document.querySelector("#drawer .arf-primary");
+      return el
+        ? { inline: el.style.color, painted: el.getAttribute("data-arf-painted"), text: el.textContent }
+        : null;
+    });
+    ok("the loud button is readable on a light accent without being repaired",
+      !!b && !b.inline && !b.painted, JSON.stringify(b));
+    const m = await worstText(page);
+    ok(
+      "and nothing else on the panel needs rescuing either",
+      m.ok,
+      "worst was " + m.worst.toFixed(2) + " against " + m.want + " on " + m.where,
+    );
+  });
+
   // A light theme, which is where a panel written dark-first goes wrong.
   const light =
     ":root{--lumiverse-bg:#fff;--lumiverse-bg-elevated:#f4f2f8;" +

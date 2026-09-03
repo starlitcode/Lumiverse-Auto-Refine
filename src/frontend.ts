@@ -2293,8 +2293,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
     ".arf-btn:hover:not(:disabled){background:var(--lumiverse-secondary-hover,rgba(128,128,128,.25))}" +
-    ".arf-btn.arf-primary{background:var(--lumiverse-primary,rgba(147,112,219,.9));color:#fff}" +
-    ".arf-btn.arf-primary:hover:not(:disabled){background:var(--lumiverse-primary-hover,rgba(167,132,239,.95))}" +
+    // Filled with the accent at a tint, edged with it, and lettered in the
+    // theme's own accent text colour, which is the one token a theme defines
+    // for exactly this: accent-coloured words on the panel's own background.
+    //
+    // It used to be the accent at full strength with the label hardcoded white.
+    // That is only readable on a theme whose accent is dark, and on a theme
+    // whose accent is light it was white on lavender, left for the contrast
+    // sweep to rescue a moment after every repaint. Rescuing it worked and
+    // still put the panel one timing accident away from a white label, which is
+    // a thing to stop depending on rather than to keep measuring. The floating
+    // widget has been drawn this way from the start and has never needed
+    // rescuing. Heavier letters and the edge are what make it the loud one now.
+    ".arf-btn.arf-primary{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
+    "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
+    "color:var(--lumiverse-primary-text,rgba(186,135,255,.95));font-weight:600}" +
+    ".arf-btn.arf-primary:hover:not(:disabled){" +
+    "background:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
     ".arf-btn:disabled{opacity:.5;cursor:not-allowed}" +
     ".arf-btn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
     ".arf-box{-webkit-appearance:none;appearance:none;margin:0;flex:none;position:relative;" +
