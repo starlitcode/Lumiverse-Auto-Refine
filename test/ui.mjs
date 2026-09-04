@@ -3478,6 +3478,68 @@ console.log("\nrefining the draft from the panel");
         document.querySelector('[data-component="InputArea"] textarea').value));
     ok("and closes the card", !(await page.$("[data-arf-pop]")));
   });
+
+  // ---- and its working reaches the Log, the same as a reply's ----
+  // The backend sends the working on the draft's answer as well as on a
+  // reply's. It was read off the progress messages and then dropped here, so
+  // the draft was the one kind of refine whose working never reached the Log.
+  const WORKING = "<REFINE_NOTES>\nThe simile is doing no work. Cutting it.\n</REFINE_NOTES>";
+  const draftRun = async (page, answer) => {
+    await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
+    await settle(page);
+    const id = await page.evaluate(
+      () => window.__sent.filter((x) => x.type === "try_refine").pop().requestId);
+    await page.evaluate((a) => {
+      window.__fromBackend({ type: "refine_ack", requestId: a.id });
+      window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      window.__fromBackend(Object.assign({ type: "try_result", requestId: a.id }, a.body));
+    }, { id: id, body: answer });
+    await settle(page);
+  };
+  const kept = (page) =>
+    page.evaluate(() => {
+      const w = document.querySelector("[data-arf-kept]");
+      const card = w && w.closest(".arf-card");
+      return w && { text: w.textContent, said: card ? card.textContent : "" };
+    });
+
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    await draftRun(page, { ok: true, after: "I walk through it.", notes: WORKING });
+    await goTab(page, "Log");
+    const got = await kept(page);
+    ok("a draft refine's working lands under What the model worked out",
+      !!got && /simile is doing no work/.test(got.text), got);
+    ok("read as prose, with its tags off, the same as a reply's",
+      !!got && !/[<>]/.test(got.text), got && got.text);
+    ok("and the card says which refine it came from",
+      !!got && /From the refine of your draft at/.test(got.said),
+      got && got.said.slice(0, 90));
+  });
+
+  // The working is worth most on the refine that was refused, so it is kept
+  // whether the rewrite was saved or not.
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    await draftRun(page, { ok: false, why: "it read as a refusal", notes: WORKING });
+    await goTab(page, "Log");
+    const got = await kept(page);
+    ok("a draft refine that was turned down still keeps its working",
+      !!got && /simile is doing no work/.test(got.text), got);
+    ok("and says the rewrite was dropped, with the reason",
+      !!got && /whose rewrite was dropped: it read as a refusal/.test(got.said),
+      got && got.said.slice(0, 120));
+  });
+
+  // A reply refine keeps saying it was a reply, so the two are told apart.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate((w) => {
+      window.__fromBackend({ type: "refine_notes", chatId: "c1", messageId: "m1", notes: w });
+    }, WORKING);
+    await goTab(page, "Log");
+    const got = await kept(page);
+    ok("a reply's working says it came from a reply",
+      !!got && /From the refine of a reply at/.test(got.said), got && got.said.slice(0, 90));
+  });
 }
 
 

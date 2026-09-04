@@ -1959,6 +1959,7 @@ export function setup(ctx, overrides) {
             messageId: about.messageId,
             ok: about.ok,
             why: String(about.why || ""),
+            mine: !!about.mine,
         };
     }
     const DROPS_MAX = 20;
@@ -5100,9 +5101,11 @@ export function setup(ctx, overrides) {
             return wrap;
         }
         const when = new Date(keptNotes.at).toTimeString().slice(0, 8);
+        const whose = keptNotes.mine ? "your draft" : "a reply";
         wrap.appendChild(note(keptNotes.ok
-            ? "From the refine at " + when + "."
-            : "From the refine at " + when + ", whose rewrite was dropped: " + keptNotes.why + "."));
+            ? "From the refine of " + whose + " at " + when + "."
+            : "From the refine of " + whose + " at " + when +
+                ", whose rewrite was dropped: " + keptNotes.why + "."));
         const well = el("div", "arf-well arf-mono arf-scroll");
         well.setAttribute("data-arf-kept", "1");
         well.textContent = readable(keptNotes.text);
@@ -7718,6 +7721,14 @@ export function setup(ctx, overrides) {
                             inputWaiting = null;
                             const node = inputNode || composer();
                             inputNode = null;
+                            // The working, kept the same way a reply's is. The backend sends
+                            // it on this message as well, and it was being read off the
+                            // progress messages and then dropped here, so a draft refine was
+                            // the one kind whose working reached the panel and never reached
+                            // the Log. Kept whether the rewrite was saved or not, since the
+                            // working is most worth reading on the one that was refused.
+                            tookNotes(msg);
+                            keepNotes({ chatId: lastChatId, ok: !!msg.ok, why: String(msg.why || ""), mine: true });
                             if (!msg.ok) {
                                 const why = String(msg.why || "no reason given");
                                 countDrop(why);

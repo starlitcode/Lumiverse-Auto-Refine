@@ -2023,6 +2023,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     messageId: any;
     ok: boolean;
     why: string;
+    // Whose writing it was working on. A refine of a reply and a refine of your
+    // draft land in the same card minutes apart, and the card is the only
+    // record of either, so it says which one this was.
+    mine: boolean;
   } | null = null;
 
   // The whole answer, when the message carries one. Every ending sends it, and
@@ -2064,7 +2068,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       .trim();
   }
 
-  function keepNotes(about: { chatId?: any; messageId?: any; ok: boolean; why?: string }) {
+  function keepNotes(about: {
+    chatId?: any;
+    messageId?: any;
+    ok: boolean;
+    why?: string;
+    mine?: boolean;
+  }) {
     const said = liveNotes.trim();
     if (!said) return;
     keptNotes = {
@@ -2074,6 +2084,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       messageId: about.messageId,
       ok: about.ok,
       why: String(about.why || ""),
+      mine: !!about.mine,
     };
   }
   const DROPS_MAX = 20;
@@ -5372,11 +5383,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       return wrap;
     }
     const when = new Date(keptNotes.at).toTimeString().slice(0, 8);
+    const whose = keptNotes.mine ? "your draft" : "a reply";
     wrap.appendChild(
       note(
         keptNotes.ok
-          ? "From the refine at " + when + "."
-          : "From the refine at " + when + ", whose rewrite was dropped: " + keptNotes.why + ".",
+          ? "From the refine of " + whose + " at " + when + "."
+          : "From the refine of " + whose + " at " + when +
+            ", whose rewrite was dropped: " + keptNotes.why + ".",
       ),
     );
     const well = el("div", "arf-well arf-mono arf-scroll");
@@ -8056,6 +8069,14 @@ export function setup(ctx: Ctx, overrides?: any) {
               inputWaiting = null;
               const node = inputNode || composer();
               inputNode = null;
+              // The working, kept the same way a reply's is. The backend sends
+              // it on this message as well, and it was being read off the
+              // progress messages and then dropped here, so a draft refine was
+              // the one kind whose working reached the panel and never reached
+              // the Log. Kept whether the rewrite was saved or not, since the
+              // working is most worth reading on the one that was refused.
+              tookNotes(msg);
+              keepNotes({ chatId: lastChatId, ok: !!msg.ok, why: String(msg.why || ""), mine: true });
               if (!msg.ok) {
                 const why = String(msg.why || "no reason given");
                 countDrop(why);
