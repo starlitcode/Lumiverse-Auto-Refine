@@ -140,6 +140,20 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
         toast: (t) => {
           (window.__toasts = window.__toasts || []).push(t);
         },
+        // The host's own modal. It is a second thing on the screen, and a check
+        // that wants to know whether two ever show at once has to be able to
+        // see it.
+        showModal: (spec) => {
+          window.__modalSpec = spec || null;
+          const host = document.createElement("div");
+          host.id = "hostmodal";
+          document.body.appendChild(host);
+          return {
+            root: host,
+            onDismiss: () => {},
+            dismiss: () => host.remove(),
+          };
+        },
         // Only present when a check asks for it. A host without it is a host
         // whose floating button has no menu, which is the case that decides
         // whether the Extras row hides for the button or stays put.
@@ -2617,6 +2631,88 @@ console.log("\nthe working card becoming the refined one");
     ok("which is showing the working again", again.working);
     ok("without fading in from nothing either way", again.lit === 100, String(again.lit));
     ok("and starting from the height it was", again.tall === done, done + " -> " + again.tall);
+  });
+}
+
+console.log("\nnever two things on the screen at once");
+{
+  // Ending a refine leaves the card showing the working standing for one frame,
+  // so the card saying what the refine did can fill the same box rather than a
+  // second one arriving beside it. One ending fills nothing: a refine waiting on
+  // your yes hands the screen to the host's own question instead, and waiting a
+  // frame there had the question painted on top of the working card. Two cards
+  // at once, which is one popping up under another.
+  const NOTES = Array.from({ length: 14 }, (_, i) => "line " + i + " of the working").join("\n");
+  const worst = async (page, msgs) =>
+    page.evaluate(async (list) => {
+      const look = () => ({
+        cards: document.querySelectorAll("[data-arf-pop]").length,
+        dims: document.querySelectorAll(".arf-shade").length,
+        host: document.getElementById("hostmodal") ? 1 : 0,
+      });
+      let cards = 0;
+      let dims = 0;
+      let both = 0;
+      const take = () => {
+        const n = look();
+        cards = Math.max(cards, n.cards);
+        dims = Math.max(dims, n.dims);
+        if (n.cards && n.host) both = 1;
+      };
+      for (const m of list) {
+        if (m.__wait) {
+          for (let i = 0; i < m.__wait; i++) {
+            await new Promise((r) => requestAnimationFrame(r));
+            take();
+          }
+          continue;
+        }
+        window.__fromBackend(m);
+        take();
+      }
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        take();
+      }
+      return { cards, dims, both };
+    }, msgs);
+
+  const prog = { type: "refine_progress", stage: "writing", chars: 40, notes: NOTES };
+  const landed = {
+    type: "refined",
+    chatId: "c1",
+    messageId: "m1",
+    canUndo: true,
+    before: "She let out a breath she did not know she was holding, then turned away.",
+    after: "She breathed out and turned away.",
+  };
+  const wait = { __wait: 14 };
+  const one = (got) => got.cards <= 1 && got.dims <= 1 && !got.both;
+
+  await inTab(browser, {}, async (page) => {
+    ok("working, then it lands", one(await worst(page, [prog, wait, landed])), JSON.stringify(await worst(page, [])));
+    ok("a second refine over the card the first left", one(await worst(page, [prog, wait, landed])));
+    ok("two back to back with no gap at all", one(await worst(page, [prog, landed, prog, landed])));
+    ok(
+      "one that is stopped, then one that lands",
+      one(await worst(page, [prog, wait, { type: "refine_stopped", stopped: true }, prog, wait, landed])),
+    );
+  });
+
+  await inTab(browser, { saved: { confirmBeforeSave: true } }, async (page) => {
+    const got = await worst(page, [
+      prog,
+      wait,
+      {
+        type: "confirm_refine",
+        chatId: "c1",
+        messageId: "m1",
+        before: "a long line that was there before",
+        after: "short now",
+      },
+    ]);
+    ok("a refine waiting on your yes never shows two", one(got), JSON.stringify(got));
+    ok("and the host's question is what is left", await page.evaluate(() => !!document.getElementById("hostmodal")));
   });
 }
 

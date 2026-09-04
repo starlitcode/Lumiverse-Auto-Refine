@@ -8360,6 +8360,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   function askToSave(msg: any) {
     try {
       if (!ctx.ui || typeof ctx.ui.showModal !== "function") return;
+      // The card showing the working goes first, and now rather than on the
+      // next frame. Ending a refine leaves that card standing for one frame so
+      // the card saying what the refine did can fill the same box, but this
+      // ending fills nothing: the host puts its own question on the screen
+      // instead. Waiting a frame here meant the question was painted on top of
+      // the working card, which is two cards at once and reads as one popping
+      // up under another.
+      if (popKey === "working") dropPop();
       const modal = ctx.ui.showModal({ title: "Save this refine?" });
       const root = modal.root as HTMLElement;
       root.innerHTML = "";
