@@ -626,6 +626,55 @@ console.log("\ncolour on somebody else's theme");
     );
   });
 
+  // A description open at the moment the theme changes. It hangs off the page
+  // rather than off the panel, so the walk that re-measures the panel does not
+  // reach it, and it would sit there in the colours of the theme that has gone.
+  // Opened on a theme that has made its own text invisible, so the sweep really
+  // does write a colour onto it, and then swapped to light underneath. Starting
+  // on a theme that needs no repair proves nothing: there would be nothing left
+  // behind to be wrong.
+  await inTab(browser, { css: cruel, viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    await goTab(page, "Limits");
+    await page.evaluate(() => {
+      const q = document.querySelector("#drawer .arf-q");
+      q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      q.click();
+    });
+    await settle(page);
+    const repaired = await page.evaluate(() => {
+      const pop = document.querySelector('[role="tooltip"]');
+      return !!(pop && pop.getAttribute("data-arf-painted"));
+    });
+    ok("the theme made the description unreadable and it was repaired", repaired);
+    await page.addStyleTag({ content: light });
+    await page.waitForTimeout(600);
+    await settle(page);
+    const r = await page.evaluate(() => {
+      const parse = (c) => (c.match(/[\d.]+/g) || []).map(Number);
+      const lum = (n) => {
+        const f = (v) => {
+          v /= 255;
+          return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * f(n[0]) + 0.7152 * f(n[1]) + 0.0722 * f(n[2]);
+      };
+      const pop = document.querySelector('[role="tooltip"]');
+      if (!pop) return { open: false };
+      const cs = getComputedStyle(pop);
+      const fg = parse(cs.color);
+      // The surface is a flat tint laid as a gradient over a solid colour, so
+      // backgroundColor alone reports the solid underneath and not what was
+      // painted. The first stop is the whole tint.
+      const stop = (cs.backgroundImage || "").match(/rgba?\([^)]*\)/);
+      const bg = parse(stop ? stop[0] : cs.backgroundColor);
+      const a = lum(fg) + 0.05;
+      const b = lum(bg) + 0.05;
+      return { open: true, ratio: Math.round((a > b ? a / b : b / a) * 100) / 100 };
+    });
+    ok("a description open across a theme change is still open", r.open, r);
+    ok("and readable on the theme that is on the screen now", r.open && r.ratio >= 4.5, JSON.stringify(r));
+  });
+
   // And back, since a repair written for the light theme is just as wrong on
   // the dark one.
   await inTab(browser, { css: light }, async (page) => {

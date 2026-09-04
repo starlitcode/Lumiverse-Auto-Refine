@@ -3446,6 +3446,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       setScheme(root);
       sweepReadable(root);
     }
+    // A description open at the moment the theme changes. It hangs off the page
+    // rather than off the panel, so the walk above never reaches it, and it
+    // would sit there in the colours of the theme that has just gone.
+    if (hintPop) {
+      clearInk(hintPop);
+      setScheme(hintPop);
+      sweepReadable(hintPop);
+    }
     // The floating button is drawn against the page rather than the panel, and
     // it is repaired the same way, so it moves with the theme too.
     paintFloat();
