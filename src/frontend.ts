@@ -5986,15 +5986,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "msgButton",
         label: "A button on every message",
         type: "bool",
-        hint: "Puts a refine button in each message's own row of actions, next to Edit and Copy. After a refine an undo appears beside it, so putting one back is where you are already looking, and the refine button stays where it was: a message you have refined once is one you can refine again.",
+        hint: "Puts an undo in a message's own row of actions, next to Edit and Copy, for as long as that refine can be put back, and a stop there while that message is being refined. Only then: a row of Lumiverse's own actions is not the place for a button with nothing to do. Asking for a refine is on the floating button's menu and in the Extras rows, where it can be named in words.",
       }),
     );
     wrap.appendChild(
       fieldRow({
         key: "inputRefine",
-        label: "Refine what I am typing",
+        label: "Rows in the chat input's Extras menu",
         type: "bool",
-        hint: "Rewrites the text sitting in your input box, before you send it. It changes the box you are typing in, so it is off until you ask for it. It lives in one place at a time: while the floating button is on screen this is in that button's menu, and it is a row in the chat input's Extras menu only when there is no button to hold it.",
+        hint: "Puts two rows in the chat input's Extras menu: one that refines the latest reply, and one that rewrites the text sitting in your input box before you send it. Off until you ask for it, since it changes the box you are typing in. They live in one place at a time: while the floating button is on screen its menu holds them, and Extras holds them only when there is no button to.",
       }),
     );
     if (cfg.inputRefine || cfg.msgButton)
@@ -7242,23 +7242,29 @@ export function setup(ctx: Ctx, overrides?: any) {
   // for childList changes. Repainting a button that already said the right
   // thing scheduled another sweep, which repainted it again: the tab locked up
   // the moment the setting was switched on.
-  // This button refines, and goes on refining after it has. It used to turn
-  // into an undo once a refine landed, which read well for the ten seconds
-  // afterwards and then left the message with no way to refine it again: the
-  // undo does not expire, so the arrow stayed for good and the only way back to
-  // a refine was to put the last one back first. The undo is its own button
-  // now, beside this one, for as long as there is something to put back.
+  // The way back, and while a refine is running the way to stop it. Nothing
+  // else: the row belongs to Lumiverse and every extension wants a place in it,
+  // so this takes one seat rather than two.
+  //
+  // It used to be a refine button that turned into an undo, which left a
+  // message with no way to refine it a second time, since the undo does not
+  // expire. Then it was both at once, which was correct and took two seats.
+  // Starting a refine is on the floating button's menu and in the Extras row
+  // now, where it can be named in words rather than guessed from an icon, and
+  // this holds only the thing that has to be next to the writing it changed.
   function paintMsgBtn(btn: any, id: string) {
     const busyHere = msgBusy === id;
-    const state = busyHere ? "busy" : "ready";
+    const state = busyHere ? "busy" : "back";
     if (btn.getAttribute("data-arf-state") === state) return;
     btn.setAttribute("data-arf-state", state);
-    btn.innerHTML = busyHere ? spinIcon() : refineIcon();
+    btn.innerHTML = busyHere ? spinIcon() : undoIcon();
     // The spinner is a button, not a notice. Pressing the thing that is plainly
     // working to call it off is what anybody tries first, and it used to be
     // disabled: on a page with the floating button switched off there was
     // nothing here to press and nothing anywhere else either.
-    btn.title = busyHere ? "Refining this message. Press to stop." : "Refine this message";
+    btn.title = busyHere
+      ? "Refining this message. Press to stop."
+      : "Put this message back the way it was";
     btn.setAttribute("aria-label", btn.title);
     btn.disabled = false;
     btn.style.opacity = "1";
@@ -7277,12 +7283,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (part === "streaming") return;
       const bar = actionBarIn(msg);
       if (!bar) return;
+      // Only while this message has something to put back, or while it is the
+      // one being refined. A row of Lumiverse's own actions is not the place to
+      // keep a button that has nothing to do.
+      const wanted = undoableHere(id) || msgBusy === id;
       const had = bar.querySelector("[data-arf-msg]");
       if (had) {
+        if (!wanted) {
+          had.remove();
+          return;
+        }
         paintMsgBtn(had, id);
-        addUndoButton(bar, id, had);
         return;
       }
+      if (!wanted) return;
       const b = document.createElement("button");
       b.type = "button";
       b.setAttribute("data-arf-msg", id);
@@ -7299,49 +7313,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           cancelRefine();
           return;
         }
-        const why = whyNot();
-        if (why) {
-          toast(why, true);
-          return;
-        }
-        msgBusy = id;
-        markBusy(true);
-        sweepMsgButtons();
-        paint();
-        send({ type: "refine_now", requestId: newId(), chatId: lastChatId, messageId: id });
-      });
-      bar.appendChild(b);
-      addUndoButton(bar, id, b);
-    } catch (_) {}
-  }
-
-  // The way back, beside the refine rather than instead of it, and only while
-  // there is a refine to put back. It goes when you put one back or dismiss it,
-  // which leaves the row as it was.
-  function addUndoButton(bar: Element, id: string, after: Element) {
-    try {
-      const had = bar.querySelector('[data-arf-undo="' + id + '"]') as any;
-      if (!undoableHere(id)) {
-        if (had) had.remove();
-        return;
-      }
-      if (had) return;
-      const u = document.createElement("button");
-      u.type = "button";
-      u.setAttribute("data-arf-undo", id);
-      u.className = "arf-msgbtn";
-      u.innerHTML = undoIcon();
-      u.title = "Put this message back the way it was";
-      u.setAttribute("aria-label", u.title);
-      u.addEventListener("click", (e: any) => {
-        try {
-          e.preventDefault();
-          e.stopPropagation();
-        } catch (_) {}
         askUndo(lastChatId, id);
       });
-      if (after.parentNode === bar && after.nextSibling) bar.insertBefore(u, after.nextSibling);
-      else bar.appendChild(u);
+      bar.appendChild(b);
     } catch (_) {}
   }
 
@@ -7393,7 +7367,6 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // ---- the floating button and the input bar row ----
   let widget: any = null;
-  let inputAction: any = null;
 
   // Runs the listeners off the last button that was built. Null when there is
   // none to take down.
@@ -7671,13 +7644,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (menuToken) return;
 
-    // Only what the button cannot already do, and nothing that is a setting.
+    // Nothing that is a setting. The automatic pass and the per chat switch are
+    // not here: they belong on the tab with their explanations next to them,
+    // not in a menu opened over the chat where the label is all you get.
     //
-    // Refining the latest reply is not here because that is what a tap does,
-    // and a menu entry for the thing the button already is reads as a second
-    // button. The automatic pass and the per chat switch are not here because
-    // they are settings: they belong on the tab with their explanations next to
-    // them, not in a menu opened over the chat where the label is all you get.
+    // Starting a refine is here, though a tap does it too. The row on a message
+    // holds only the way back, so this menu and the Extras row are where a
+    // refine is asked for, and a tap is not a label anybody can read.
     const items: Array<{ key: string; label: string }> = [];
     // The panel first. It is what somebody holding the button is most likely
     // after, and everything taken out of this list is in it.
@@ -7691,6 +7664,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // First while it is running, because it is the only thing anybody opens
     // this menu for mid-refine and the reason they are in a hurry.
     if (busy || msgBusy !== null) items.push({ key: "stop", label: "Stop this refine" });
+    else {
+      // Starting one, named rather than left to the tap. A tap does the first
+      // of these, but a tap is not a label anybody can read, and the row on a
+      // message holds only the way back now: this is where a refine is asked
+      // for.
+      items.push({ key: "now", label: "Refine the latest reply" });
+      items.push({ key: "all", label: "Refine every reply in this chat" });
+    }
     if (undoHere().length) items.push({ key: "undo", label: "Put the last refine back" });
     // On the same terms as the panel entry: its setting puts it in the Extras
     // menu, and this menu takes it over while the button is on screen.
@@ -7726,6 +7707,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (picked === "accept") takePending(true);
     else if (picked === "decline") takePending(false);
     else if (picked === "stop") cancelRefine();
+    else if (picked === "now") refineNow();
+    else if (picked === "all") startSweep();
     else if (picked === "undo") {
       const one = undoHere()[0];
       if (one) askUndo(one.chatId, one.messageId);
@@ -7754,42 +7737,57 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The button on each message.
     watchMessages(!!cfg.msgButton && !!cfg.enabled);
 
-    // The Extras row that refines what you are typing.
+    // The Extras row.
     //
     // In one place at a time. While the floating button is on screen its menu
-    // holds this, and the Extras menu holds it only when there is no button to.
-    // Two ways to reach one thing is one more than anybody needs, and it
-    // clutters a menu that was opened for something else. With the button off,
-    // or refused because ui_panels was not granted, Extras is the only way to
-    // reach it on a phone, so it comes back.
-    const want = !!cfg.inputRefine && !!cfg.enabled && !widgetCarriesEntries();
-    if (want && !inputAction) {
+    // holds these, and Extras holds them only when there is no button to. Two
+    // ways to reach one thing is one more than anybody needs, and it clutters a
+    // menu that was opened for something else. With the button off, or refused
+    // because ui_panels was not granted, Extras is the only way to reach them
+    // on a phone, so they come back.
+    //
+    // Refining the latest reply rides along with the row rather than arriving
+    // on its own. The row on a message holds only the way back now, so somebody
+    // without the floating button needs this to be somewhere, and it is not
+    // worth a second switch: anybody who has asked for a row in Extras has
+    // asked for the row, not for one particular entry in it. Nothing appears on
+    // a fresh install either way, which is the rule this extension keeps: it
+    // does not redecorate a screen because it was installed.
+    const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
+    extra("auto-refine-now", "Refine the latest reply", inExtras, () => refineNow());
+    extra("auto-refine-input", "Refine what I am typing", inExtras, () => refineInput());
+  }
+
+  // One Extras entry, put up or taken down to match. Registered by id, so the
+  // host is never handed two of the same one.
+  const extras = new Map<string, any>();
+  function extra(id: string, label: string, want: boolean, run: () => void) {
+    const had = extras.get(id);
+    if (want && !had) {
       try {
         if (ctx.ui && typeof ctx.ui.registerInputBarAction === "function") {
-          inputAction = ctx.ui.registerInputBarAction({
-            id: "auto-refine-input",
-            label: "Refine what I am typing",
-            iconSvg: refineIcon(),
-          });
-          if (inputAction && typeof inputAction.onClick === "function")
-            inputAction.onClick(() => refineInput());
+          const made = ctx.ui.registerInputBarAction({ id: id, label: label, iconSvg: refineIcon() });
+          if (made && typeof made.onClick === "function") made.onClick(run);
+          extras.set(id, made);
         }
       } catch (_) {
-        inputAction = null;
+        extras.delete(id);
       }
-    } else if (!want && inputAction) {
+    } else if (!want && had) {
       try {
-        inputAction.destroy && inputAction.destroy();
+        had.destroy && had.destroy();
       } catch (_) {}
-      inputAction = null;
+      extras.delete(id);
     }
   }
   disposers.push(() => {
     dropWidget();
-    try {
-      inputAction && inputAction.destroy && inputAction.destroy();
-    } catch (_) {}
-    inputAction = null;
+    extras.forEach((one) => {
+      try {
+        one && one.destroy && one.destroy();
+      } catch (_) {}
+    });
+    extras.clear();
   });
 
   function lastRenderedReply(): string {

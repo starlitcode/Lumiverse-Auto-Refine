@@ -189,14 +189,25 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
           };
         },
         registerInputBarAction: (spec) => {
+          // There is more than one of these now, so they are kept by id.
+          // __inputAction stays as "is there a row at all", which is what the
+          // checks about the row appearing and going away are asking.
+          window.__inputActions = window.__inputActions || {};
+          window.__inputActions[spec.id] = spec;
           window.__inputAction = spec;
           return {
             onClick: (fn) => {
-              window.__inputClick = fn;
+              window.__inputClicks = window.__inputClicks || {};
+              window.__inputClicks[spec.id] = fn;
+              // The one that rewrites what you are typing, which the older
+              // checks reach for by name.
+              if (spec.id === "auto-refine-input") window.__inputClick = fn;
               return () => {};
             },
             destroy: () => {
-              window.__inputAction = null;
+              delete window.__inputActions[spec.id];
+              const left = Object.keys(window.__inputActions);
+              window.__inputAction = left.length ? window.__inputActions[left[0]] : null;
             },
           };
         },
@@ -1330,6 +1341,60 @@ console.log("\naccepting or turning one down");
     await settle(page);
     const tapped = await page.evaluate(() => window.__sent.filter((m) => m.type === "apply_refine").length);
     ok("but a tap alone accepts nothing", tapped === 0);
+  });
+}
+
+console.log("\nasking for a refine from the button's menu");
+{
+  // The row on a message holds only the way back, so this menu and the Extras
+  // rows are where a refine is asked for. A tap does the first of them, but a
+  // tap is not a label anybody can read.
+  await inTab(browser, { saved: { widgetOn: true, enabled: true } }, async (page) => {
+    const open = async () => {
+      await page.evaluate(() => {
+        window.__menuPick = null;
+        document.querySelector("#float .arf-float").dispatchEvent(
+          new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+        );
+      });
+      await settle(page);
+      return page.evaluate(() => ((window.__menu || {}).items || []).map((i) => i.key));
+    };
+    const keys = await open();
+    ok("it offers the latest reply", keys.indexOf("now") >= 0, keys.join(","));
+    ok("and every reply in the chat", keys.indexOf("all") >= 0, keys.join(","));
+
+    await page.evaluate(() => {
+      window.__menuPick = "all";
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle(page);
+    ok(
+      "picking every reply asks the backend for exactly that",
+      await page.evaluate(() => window.__sent.some((m) => m.type === "refine_all")),
+    );
+
+    // While one is running, stopping it is what the menu is opened for, and
+    // starting another is not offered.
+    const mid = await page.evaluate(async () => {
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 5 });
+      window.__menuPick = null;
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return ((window.__menu || {}).items || []).map((i) => i.key);
+    });
+    ok("mid-refine it offers stopping instead", mid.indexOf("stop") >= 0, mid.join(","));
+    ok("and does not offer starting another", mid.indexOf("now") < 0 && mid.indexOf("all") < 0, mid.join(","));
+  });
+
+  // With the button on screen, the Extras rows stand down: one place at a time.
+  await inTab(browser, { saved: { widgetOn: true, enabled: true, inputRefine: true } }, async (page) => {
+    const rows = await page.evaluate(() => Object.keys(window.__inputActions || {}));
+    ok("the button's menu takes the Extras rows over", rows.length === 0, JSON.stringify(rows));
   });
 }
 
@@ -2796,12 +2861,13 @@ console.log("\nthe card that shows the working");
   }
 }
 
-console.log("\nthe buttons on a message");
+console.log("\nthe button on a message");
 {
-  // The refine button used to turn into an undo once a refine landed, and the
-  // undo does not expire, so the arrow stayed for good: the only way to refine
-  // that message again was to put the last refine back first. They are two
-  // buttons now.
+  // One seat in Lumiverse's own row of actions, not two, and only while there
+  // is something for it to do. It held a refine that turned into an undo, which
+  // left a message with no way to refine it again; then both at once, which was
+  // right and took two seats. Asking for a refine moved to the floating
+  // button's menu and the Extras rows, where it can be named in words.
   await inTab(browser, { saved: { msgButton: true, enabled: true } }, async (page) => {
     await page.evaluate(() => {
       const m = document.createElement("div");
@@ -2822,9 +2888,8 @@ console.log("\nthe buttons on a message");
       });
     });
     await settle(page);
-    const count = (page, sel) => page.evaluate((s) => document.querySelectorAll(s).length, sel);
-    ok("a refine button goes on the message", (await count(page, "[data-arf-msg]")) === 1);
-    ok("and nothing to put back yet", (await count(page, "[data-arf-undo]")) === 0);
+    const count = (sel) => page.evaluate((s) => document.querySelectorAll(s).length, sel);
+    ok("nothing sits in the row with nothing to do", (await count("[data-arf-msg]")) === 0);
 
     await page.evaluate(() => {
       window.__fromBackend({
@@ -2837,224 +2902,35 @@ console.log("\nthe buttons on a message");
       });
     });
     await settle(page);
-    ok("after a refine there is an undo beside it", (await count(page, "[data-arf-undo]")) === 1);
-    ok("and the refine button is still there", (await count(page, "[data-arf-msg]")) === 1);
+    ok("a refine puts the way back there", (await count("[data-arf-msg]")) === 1);
+    ok("and only that", (await count("[data-arf-undo]")) === 0);
     ok(
-      "still offering a refine rather than an undo",
-      await page.evaluate(() =>
-        /Refine this message/.test(document.querySelector("[data-arf-msg]").title),
-      ),
+      "it is an undo and says so",
+      await page.evaluate(() => /Put this message back/.test(document.querySelector("[data-arf-msg]").title)),
     );
 
-    // Pressing the undo asks for it, and answering takes the button away again.
-    await page.evaluate(() => document.querySelector("[data-arf-undo]").click());
+    await page.evaluate(() => document.querySelector("[data-arf-msg]").click());
     const asked = await page.evaluate(
       () => (window.__sent.filter((m) => m.type === "undo_refine").pop() || {}).messageId,
     );
-    ok("the undo asks about that message", asked === "m1");
+    ok("pressing it asks about that message", asked === "m1");
 
     await page.evaluate(() => {
       window.__fromBackend({ type: "undo_result", ok: true, chatId: "c1", messageId: "m1" });
     });
     await settle(page);
-    ok("and once it is put back the undo goes", (await count(page, "[data-arf-undo]")) === 0);
-    ok("leaving the refine button where it was", (await count(page, "[data-arf-msg]")) === 1);
-  });
-}
-
-console.log("\na connection the account does not have any more");
-{
-  // A select handed a value none of its options carry shows nothing chosen at
-  // all, so the box read as though the default were picked while the backend
-  // went on being told the missing id. Every refine went somewhere that was not
-  // there and the panel looked right.
-  await inTab(browser, { saved: { connectionId: "gone-for-good" } }, async (page) => {
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "connections",
-        list: [{ id: "alive", name: "Still here", provider: "p", model: "m", isDefault: true }],
-      });
-    });
-    await goTab(page, "Model");
-    const out = await page.evaluate(() => {
-      const sel = document.querySelector('#drawer [data-arf-field="connectionId"]');
-      return {
-        picked: sel.value,
-        index: sel.selectedIndex,
-        label: sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent : "",
-        card: document.querySelector('#drawer [data-arf-card="Which model refines"]').textContent,
-        told: (window.__sent.filter((m) => m.type === "set_settings").pop() || { settings: {} }).settings
-          .connectionId,
-      };
-    });
-    ok("the box shows what it is really pointed at", out.index >= 0 && out.picked === "gone-for-good", JSON.stringify(out).slice(0, 160));
-    ok("and names it for what it is", /A connection that is gone/.test(out.label));
-    ok("the card says nothing can be refined until it is changed", /not on your account any more/.test(out.card));
-    ok("and the panel has not quietly changed it", out.told === undefined || out.told === "gone-for-good");
+    ok("and once it is put back the row is its own again", (await count("[data-arf-msg]")) === 0);
   });
 
-  // Before the list has arrived, not knowing is not the same as knowing it is
-  // gone, and the panel says neither.
-  await inTab(browser, { saved: { connectionId: "maybe" } }, async (page) => {
-    await goTab(page, "Model");
-    const said = await page.evaluate(
-      () => document.querySelector('#drawer [data-arf-card="Which model refines"]').textContent,
-    );
-    ok("with no list yet, nothing is claimed about it", !/not on your account any more/.test(said));
-  });
-}
-
-console.log("\nsaved model setups");
-{
-  // A named set of the Model tab, so somebody running more than one custom
-  // connection can move between them in one go. Presets keep the prompt; these
-  // keep what runs it, and the two must not reach into each other.
-  await inTab(browser, {}, async (page) => {
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "connections",
-        list: [
-          { id: "cheap", name: "Fast one", provider: "p", model: "small", isDefault: false },
-          { id: "good", name: "Careful one", provider: "p", model: "big", isDefault: false },
-        ],
-      });
-    });
-    await goTab(page, "Model");
-    ok("nothing is saved to begin with", await page.evaluate(() =>
-      /Nothing saved yet/.test(document.querySelector('[data-arf-field="setupPick"]').textContent)));
-
-    // Point the tab at the cheap connection with no thinking, and keep it.
-    const put = (key, value) =>
-      page.evaluate(([k, v]) => {
-        const f = document.querySelector('[data-arf-field="' + k + '"]');
-        f.value = v;
-        f.dispatchEvent(new Event("change", { bubbles: true }));
-      }, [key, value]);
-    await put("connectionId", "cheap");
-    await put("thinkingMode", "off");
-    await page.evaluate(() => {
-      const n = document.querySelector('[data-arf-field="setupName"]');
-      n.value = "Cheap and quick";
-      n.dispatchEvent(new Event("input", { bubbles: true }));
-      document.querySelector('[data-arf-setup="new"]').click();
-    });
-    await settle(page);
-    ok("saving one puts it in the picker", await page.evaluate(() =>
-      Array.from(document.querySelectorAll('[data-arf-field="setupPick"] option')).some(
-        (o) => o.textContent === "Cheap and quick")));
-
-    // Now change the tab, and load the setup back.
-    await put("connectionId", "good");
-    await put("thinkingMode", "custom");
-    const moved = await page.evaluate(() => {
-      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
-      return last.settings;
-    });
-    ok("the tab moved off it", moved.connectionId === "good" && moved.thinkingMode === "custom");
-
-    await page.evaluate(() => {
-      const s = document.querySelector('[data-arf-field="setupPick"]');
-      s.value = "Cheap and quick";
-      s.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await settle(page);
-    await page.evaluate(() => document.querySelector('[data-arf-setup="load"]').click());
-    await settle(page);
-    const back = await page.evaluate(() => {
-      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
-      return last.settings;
-    });
-    ok("loading it puts the connection back", back.connectionId === "cheap");
-    ok("and the thinking with it", back.thinkingMode === "off");
+  // Asking for a refine has two homes, and they are never both up at once.
+  await inTab(browser, { saved: { enabled: true, inputRefine: true } }, async (page) => {
+    const rows = () => page.evaluate(() => Object.keys(window.__inputActions || {}));
+    ok("with no floating button, Extras carries both", (await rows()).length === 2, JSON.stringify(await rows()));
     ok(
-      "the prompt is not in a setup",
-      JSON.stringify(back.blocks) === JSON.stringify(moved.blocks),
+      "one of them refines the latest reply",
+      (await rows()).indexOf("auto-refine-now") >= 0,
+      JSON.stringify(await rows()),
     );
-
-    // The account gets a copy, the way presets do.
-    const up = await page.evaluate(() => window.__sent.filter((m) => m.type === "save_setups").pop());
-    ok("it goes up to the account", !!up && up.setups.length === 1 && up.setups[0].name === "Cheap and quick");
-    ok("carrying the connection a preset refuses to carry", up.setups[0].settings.connectionId === "cheap");
-  });
-
-  // A setup naming a connection the account no longer has says so rather than
-  // leaving the refine pointed at nothing.
-  await inTab(browser, {}, async (page) => {
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "connections",
-        list: [{ id: "cheap", name: "Fast one", provider: "p", model: "small", isDefault: false }],
-      });
-    });
-    await goTab(page, "Model");
-    await page.evaluate(() => {
-      const f = document.querySelector('[data-arf-field="connectionId"]');
-      f.value = "cheap";
-      f.dispatchEvent(new Event("change", { bubbles: true }));
-      const n = document.querySelector('[data-arf-field="setupName"]');
-      n.value = "Points at cheap";
-      n.dispatchEvent(new Event("input", { bubbles: true }));
-      document.querySelector('[data-arf-setup="new"]').click();
-    });
-    await settle(page);
-    const fine = await page.evaluate(() =>
-      /not on your account any more/.test(
-        document.querySelector('[data-arf-card="Saved model setups"]').textContent,
-      ),
-    );
-    ok("a setup whose connection is there says nothing", !fine);
-
-    // That connection goes away.
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "connections",
-        list: [{ id: "other", name: "A different one", provider: "p", model: "x", isDefault: false }],
-      });
-    });
-    await settle(page);
-    const said = await page.evaluate(() =>
-      document.querySelector('[data-arf-card="Saved model setups"]').textContent,
-    );
-    ok("one whose connection has gone says so", /not on your account any more/.test(said));
-    ok("and names what it would refine with", /a connection that is gone/.test(said), said.slice(0, 200));
-  });
-}
-
-console.log("\na switch that turns a host component on and off");
-{
-  // The floating button, the buttons on each message and the Extras row are the
-  // host's own components, and creating or destroying one is the host's own
-  // render. Doing that in the frame the switch was clicked in held the knob
-  // still while it happened, so the three switches that turn those components
-  // on and off were the only ones that felt slow. Measured here against a host
-  // that takes 25ms to mount its button: before, the master switch blocked the
-  // page for 26ms and the knob stood still for two frames.
-  await inTab(browser, { saved: { enabled: true, widgetOn: true, msgButton: true } }, async (page) => {
-    await page.evaluate(() => {
-      window.__slowHost = () => {
-        const t = performance.now();
-        while (performance.now() - t < 25) {}
-      };
-    });
-    const blocked = (sel) =>
-      page.evaluate((s) => {
-        const box = document.querySelector(s);
-        const t0 = performance.now();
-        box.click();
-        return Math.round((performance.now() - t0) * 10) / 10;
-      }, sel);
-    const MASTER = '#drawer .arf-box[aria-label="Turn Auto Refine on"]';
-
-    const master = await blocked(MASTER);
-    ok("the master switch does not block the page", master < 10, master + "ms");
-    // The host work still happens, just not on that frame.
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
-    ok("and the floating button has gone by the time it settles", !(await page.evaluate(() => window.__widget)));
-
-    const back = await blocked(MASTER);
-    ok("nor does switching it back on", back < 10, back + "ms");
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
-    ok("with the button back", (await page.evaluate(() => !!window.__widget)) === true);
   });
 }
 
