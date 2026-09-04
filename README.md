@@ -73,7 +73,7 @@ Four prompts ship with it and work as they stand, in two pairs. **A quick read**
 
 ## Seeing what gets sent
 
-Under **Context**, **Show me the request** builds the real request for the reply you are looking at and shows it message by message, with roles and sizes, without calling a model or charging anything. It is built by the same code a real refine uses, so it cannot drift into being a nice description of something else.
+Under **Context**, **Show me the request** builds the real request for the reply you are looking at and shows it message by message, with roles and sizes, without calling a model or charging anything. It is built by the same code a real refine uses, on a passage that has been through the same protection first, so it cannot drift into being a nice description of something else.
 
 ## Documentation
 

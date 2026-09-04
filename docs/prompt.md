@@ -193,7 +193,7 @@ Under **Model**, **Let it think first** has three answers:
 
 **Show me the request** builds the request for the reply you are looking at and shows it, message by message, with the role and size of each. No model is called and nothing is charged; it costs one read of your chat.
 
-It is built by the same function a real refine uses, so it cannot become a nice description of something the extension does not actually send. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
+It is built by the same function a real refine uses, and the passage goes through the same two steps first, so it cannot become a nice description of something the extension does not actually send. That is why the passage may read oddly: markup shows as `[[AR1]]` tokens, the model's own reasoning is already cut off it, and `{{protect_notes}}` has become the sentence that explains the tokens. That is what the model gets. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
 
 If no reply can be found it still builds, with a stand-in where your message would go, and says so. That is the useful case for checking a layout before there is a chat to try it on.
 

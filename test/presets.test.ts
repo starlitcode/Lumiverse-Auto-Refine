@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // The prompts that ship with it, held to what they promise.
 //
 // Run with: bun test
@@ -96,5 +97,57 @@ describe("the prompts that ship with it", () => {
         expect({ block: p.name + "/" + b.id, shouts: hit ? String(hit) : "" })
           .toEqual({ block: p.name + "/" + b.id, shouts: "" });
       }
+  });
+});
+
+// The list of macros the panel shows and the list the backend answers are two
+// lists in two files, and a macro in one but not the other is invisible until
+// somebody's prompt quietly stops working. {{whose}} was taken out of both,
+// and this is what says so next time.
+describe("the macros offered and the macros answered", () => {
+  const FE = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+  const BE = readFileSync(new URL("../src/backend.ts", import.meta.url), "utf8");
+
+  // Every entry in the panel's list, with whether it says this extension
+  // answers it. The description in between can run to several lines.
+  const listed = () => {
+    const out = new Map<string, boolean>();
+    const block = FE.slice(FE.indexOf("const MACROS"), FE.indexOf("type Block ="));
+    for (const m of block.matchAll(/tag:\s*"\{\{([a-z_]+)\}\}"([\s\S]*?)ours:\s*(true|false)/g))
+      out.set(m[1], m[3] === "true");
+    return out;
+  };
+  const answered = () => {
+    const m = /const OURS = \[([^\]]*)\]/.exec(BE);
+    return new Set([...(m ? m[1] : "").matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
+  };
+
+  test("everything the panel calls ours is answered by the backend", () => {
+    const ours = [...listed()].filter(([, mine]) => mine).map(([tag]) => tag);
+    expect(ours.length).toBeGreaterThan(0);
+    for (const tag of ours) expect([...answered()]).toContain(tag);
+  });
+
+  test("and everything the backend answers is offered by the panel", () => {
+    for (const tag of answered()) expect([...listed().keys()]).toContain(tag);
+  });
+
+  test("a macro the panel leaves to Lumiverse is not answered here", () => {
+    const theirs = [...listed()].filter(([, mine]) => !mine).map(([tag]) => tag);
+    expect(theirs).toContain("persona");
+    for (const tag of theirs) expect([...answered()]).not.toContain(tag);
+  });
+
+  // The one macro that puts words rather than chat into a prompt writes them
+  // out where the macros are listed, so nothing reaches a model unread.
+  test("the macro that carries words says which words", () => {
+    const note = /const SHIELD_NOTE =\s*([\s\S]*?);\n/.exec(BE);
+    const words = (note ? note[1] : "").match(/'([^']*)'/g) || [];
+    const sentence = words.map((w) => w.slice(1, -1)).join("");
+    expect(sentence.length).toBeGreaterThan(40);
+    const block = FE.slice(FE.indexOf("const MACROS"), FE.indexOf("type Block ="));
+    const shown = block.replace(/"\s*\+\s*\n\s*"/g, "").replace(/\\"/g, '"');
+    for (const part of sentence.split(". ").filter((x) => x.length > 20))
+      expect(shown).toContain(part.slice(0, 40));
   });
 });

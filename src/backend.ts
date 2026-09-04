@@ -2238,8 +2238,18 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
             };
           }
         }
-        const messages = await buildPrompt(text, isUser, scene, userId);
-        const whichPrompt = isUser && userBlocks.length ? 'yours' : 'replies';
+        // The same two steps a real refine takes before it builds anything, in
+        // the same order, because this is the card that claims to show what
+        // gets sent. Without them it showed the passage with its markup still
+        // in it and its reasoning still on it, neither of which a model ever
+        // sees, and {{protect_notes}} resolved to nothing and vanished: the one
+        // macro that puts words in the prompt was the one the preview never
+        // showed.
+        const split = splitThinking(text);
+        const armed = shield(split.body);
+        if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
+        const messages = await buildPrompt(armed.text, isUser, scene, userId);
+        const whichPrompt = isUser ? 'yours' : 'replies';
         replyTo(userId, {
           type: 'prompt_preview',
           requestId: payload.requestId,

@@ -734,6 +734,83 @@ describe("seeing what gets sent", () => {
     expect(got.messages[got.messages.length - 1].role).toBe("user");
   });
 
+  // The card says it shows what gets sent, and it is the only place anybody can
+  // check what a prompt actually costs or carries. It skipped the two steps a
+  // real refine takes on the passage first, so it showed markup that never
+  // reaches a model, reasoning that is cut off before the call, and no
+  // {{protect_notes}} at all: the one macro that puts words rather than chat
+  // into the prompt was the one the preview never showed.
+  test("the preview shows the passage protected, the way the model gets it", async () => {
+    const h = await armed(["x"], {}, [
+      { id: "m1", role: "user", content: "i walk through it" },
+      {
+        id: "m2",
+        role: "assistant",
+        content: 'She stepped <font color="#ff0000">through</font> it, suddenly.',
+      },
+    ]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.sent
+      .find((m) => m.type === "prompt_preview")
+      .messages.map((m: any) => m.content)
+      .join("\n");
+    expect(whole).toContain("[[AR1]]");
+    expect(whole).not.toContain('<font color="#ff0000">');
+  });
+
+  test("and shows the words that go with the tokens", async () => {
+    const h = await armed(["x"], {}, [
+      { id: "m1", role: "user", content: "i walk through it" },
+      {
+        id: "m2",
+        role: "assistant",
+        content: 'She stepped <font color="#ff0000">through</font> it, suddenly.',
+      },
+    ]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.sent
+      .find((m) => m.type === "prompt_preview")
+      .messages.map((m: any) => m.content)
+      .join("\n");
+    expect(whole).toContain("tokens shaped like");
+    expect(whole).toContain("unchanged and in the same place");
+  });
+
+  // Nothing to protect, nothing to say about protecting it.
+  test("and says nothing about tokens when there are none", async () => {
+    const h = await armed(["x"]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.sent
+      .find((m) => m.type === "prompt_preview")
+      .messages.map((m: any) => m.content)
+      .join("\n");
+    expect(whole).not.toContain("tokens shaped like");
+  });
+
+  // A reasoning model's working is cut off before the call, so a preview that
+  // showed it was showing a passage no model is given.
+  test("and leaves the model's own working out, as the call does", async () => {
+    const h = await armed(["x"], {}, [
+      { id: "m1", role: "user", content: "i walk through it" },
+      {
+        id: "m2",
+        role: "assistant",
+        content: "<think>weighing how to open</think>She stepped through it.",
+      },
+    ]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.sent
+      .find((m) => m.type === "prompt_preview")
+      .messages.map((m: any) => m.content)
+      .join("\n");
+    expect(whole).not.toContain("weighing how to open");
+    expect(whole).toContain("She stepped through it.");
+  });
+
   test("it writes nothing to the chat", async () => {
     const h = await armed(["x"]);
     await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
