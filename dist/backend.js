@@ -339,12 +339,24 @@ const OUT_OPEN = new RegExp('<' + OUT_TAG + '[^>]*>', 'i');
 // the chat, and it used to be dropped unread. A prompt is free to ask for a
 // note on what was cut and what was left alone, and that note lands here, so it
 // is carried back to the panel to be shown rather than thrown away.
+//
+// The rewrite's own tags are kept, with the rewrite itself standing in for
+// rather than repeated: the panel can be asked to show the answer's markup, and
+// an answer missing the one pair of tags the whole thing is built around does
+// not show how the model laid it out. The rewrite is on the same card already,
+// marked against what it replaced, so writing it out twice would be writing it
+// out twice. Nothing downstream reads this but the panel.
+const OUT_STANDIN = '<REFINED>\n...\n</REFINED>';
 function unwrapOutput(answer) {
     const hit = OUT_RE.exec(answer);
     if (hit && typeof hit[1] === 'string') {
         const before = answer.slice(0, hit.index);
         const after = answer.slice(hit.index + hit[0].length);
-        return { text: hit[1].trim(), tagged: true, outside: (before + '\n' + after).trim() };
+        return {
+            text: hit[1].trim(),
+            tagged: true,
+            outside: (before + '\n' + OUT_STANDIN + '\n' + after).trim(),
+        };
     }
     // An opening tag with nothing closing it: the answer was cut off mid-write.
     if (OUT_OPEN.test(answer))

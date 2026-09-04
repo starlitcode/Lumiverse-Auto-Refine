@@ -2082,15 +2082,16 @@ console.log("\nstopping a refine without a floating button");
     );
   });
 
-  // The button on each message is the other way in without a widget, and the
-  // spinner on it is a button rather than a notice.
-  await inTab(browser, { saved: { widgetOn: false, refineOn: true, msgButton: true } }, async (page) => {
+  // And with no floating button at all, the panel's own stop is the one that
+  // has to be there: it is the only way to call a refine off from a screen
+  // where nothing else of ours is drawn.
+  await inTab(browser, { saved: { widgetOn: false, refineOn: true } }, async (page) => {
     await running(page);
     const b = await page.evaluate(() => {
       const el = document.querySelector("#drawer [data-arf-stop]");
       return el ? { text: el.textContent } : null;
     });
-    ok("the panel's stop is there too with message buttons on", !!b, JSON.stringify(b));
+    ok("the panel's stop is there with no button on screen", !!b, JSON.stringify(b));
   });
 }
 
@@ -2571,8 +2572,11 @@ console.log("\nthe working, read as prose");
   // the backend already. What comes back at the end is everything outside
   // <REFINED>, tags and all, so the same working read as prose on the card and
   // as markup in the Log.
+  // What the backend hands over at the end: the working with its tags, and the
+  // rewrite's tags with the rewrite itself stood in for, since that is on the
+  // same card already.
   const RAW =
-    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>";
+    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>\n<REFINED>\n...\n</REFINED>";
   await inTab(browser, {}, async (page) => {
     await page.evaluate((raw) => {
       window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes: raw });
@@ -2602,6 +2606,11 @@ console.log("\nthe working, read as prose");
     const raw = await kept();
     ok("switching the tags on shows them exactly as they came back", /<REFINE_NOTES>/.test(raw) && /<plan>/.test(raw), raw.slice(0, 120));
     ok("and nothing was thrown away to hide them", raw.indexOf("Cut the simile") > 0);
+    ok(
+      "the rewrite's own tags are there too, not only the working's",
+      /<REFINED>/.test(raw) && /<\/REFINED>/.test(raw),
+      raw.slice(0, 200),
+    );
 
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-field="notesTags"]').click();
@@ -2772,6 +2781,55 @@ console.log("\nthe working card becoming the refined one");
   });
 }
 
+console.log("\nthe card is handed over, never swapped");
+{
+  // Counting what is on the page cannot catch this: the swap happens inside one
+  // task, so there is never a frame with two cards in it. What reads as a
+  // second card is a new element fading up from nothing where the old one was,
+  // at a different height, with the dim behind it restarting its own fade. So
+  // what is measured is whether the card survived.
+  await inTab(browser, {}, async (page) => {
+    const out = await page.evaluate(async () => {
+      const notes = Array.from({ length: 14 }, (_, i) => "line " + i).join("\n");
+      const card = () => document.querySelector("[data-arf-pop]");
+      const settle = () => new Promise((r) => setTimeout(r, 450));
+      const read = () => {
+        const c = card();
+        if (!c) return { gone: true };
+        return {
+          same: c.__id === "A",
+          lit: Math.round(getComputedStyle(c).opacity * 100),
+          dims: document.querySelectorAll(".arf-shade").length,
+        };
+      };
+      const land = (id, before, after) =>
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: id, canUndo: true, before, after });
+      const steps = {};
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes });
+      card().__id = "A";
+      await settle();
+      land("m1", "She let out a breath she did not know she was holding, then turned.", "She breathed out.");
+      steps.toRefined = read();
+      await settle();
+      // The automatic pass lands one after another. A card for the second
+      // replacing the card for the first is the same two elements swapping.
+      land("m2", "A different sentence entirely, rather longer than the last one.", "Shorter.");
+      steps.refinedAgain = read();
+      await settle();
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 5, notes });
+      steps.backToWorking = read();
+      await settle();
+      steps.settled = read();
+      return steps;
+    });
+    const kept = (r) => r && !r.gone && r.same && r.lit === 100 && r.dims === 1;
+    ok("the working card becomes the refined one", kept(out.toRefined), JSON.stringify(out.toRefined));
+    ok("a second refine fills the same card", kept(out.refinedAgain), JSON.stringify(out.refinedAgain));
+    ok("and so does the next refine starting", kept(out.backToWorking), JSON.stringify(out.backToWorking));
+    ok("it is still the card it started as", kept(out.settled), JSON.stringify(out.settled));
+  });
+}
+
 console.log("\nnever two things on the screen at once");
 {
   // Ending a refine leaves the card showing the working standing for one frame,
@@ -2886,79 +2944,6 @@ console.log("\nthe card that shows the working");
       ok(one.what + ": and goes when the refine does", gone);
     });
   }
-}
-
-console.log("\nthe button on a message");
-{
-  // One seat in Lumiverse's own row of actions, not two, and only while there
-  // is something for it to do. It held a refine that turned into an undo, which
-  // left a message with no way to refine it again; then both at once, which was
-  // right and took two seats. Asking for a refine moved to the floating
-  // button's menu and the Extras rows, where it can be named in words.
-  await inTab(browser, { saved: { msgButton: true, enabled: true } }, async (page) => {
-    await page.evaluate(() => {
-      const m = document.createElement("div");
-      m.setAttribute("data-message-id", "m1");
-      const bar = document.createElement("div");
-      bar.setAttribute("data-component", "BubbleActions");
-      m.appendChild(bar);
-      document.body.appendChild(m);
-      const id = window.__sent.filter((x) => x.type === "active_chat").pop().requestId;
-      window.__fromBackend({
-        type: "active_chat",
-        requestId: id,
-        chatId: "c1",
-        character: "Ada",
-        hasCharacter: true,
-        resolved: true,
-        found: true,
-      });
-    });
-    await settle(page);
-    const count = (sel) => page.evaluate((s) => document.querySelectorAll(s).length, sel);
-    ok("nothing sits in the row with nothing to do", (await count("[data-arf-msg]")) === 0);
-
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "refined",
-        chatId: "c1",
-        messageId: "m1",
-        canUndo: true,
-        before: "She let out a breath she did not know she was holding.",
-        after: "She breathed out.",
-      });
-    });
-    await settle(page);
-    ok("a refine puts the way back there", (await count("[data-arf-msg]")) === 1);
-    ok("and only that", (await count("[data-arf-undo]")) === 0);
-    ok(
-      "it is an undo and says so",
-      await page.evaluate(() => /Put this message back/.test(document.querySelector("[data-arf-msg]").title)),
-    );
-
-    await page.evaluate(() => document.querySelector("[data-arf-msg]").click());
-    const asked = await page.evaluate(
-      () => (window.__sent.filter((m) => m.type === "undo_refine").pop() || {}).messageId,
-    );
-    ok("pressing it asks about that message", asked === "m1");
-
-    await page.evaluate(() => {
-      window.__fromBackend({ type: "undo_result", ok: true, chatId: "c1", messageId: "m1" });
-    });
-    await settle(page);
-    ok("and once it is put back the row is its own again", (await count("[data-arf-msg]")) === 0);
-  });
-
-  // Asking for a refine has two homes, and they are never both up at once.
-  await inTab(browser, { saved: { enabled: true, inputRefine: true } }, async (page) => {
-    const rows = () => page.evaluate(() => Object.keys(window.__inputActions || {}));
-    ok("with no floating button, Extras carries both", (await rows()).length === 2, JSON.stringify(await rows()));
-    ok(
-      "one of them refines the latest reply",
-      (await rows()).indexOf("auto-refine-now") >= 0,
-      JSON.stringify(await rows()),
-    );
-  });
 }
 
 console.log("\nswitching without the panel jumping");

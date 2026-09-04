@@ -85,7 +85,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The message button, the floating button, and the input bar row.",
-        keys: ["msgButton", "widgetOn", "inputRefine"],
+        keys: ["widgetOn", "inputRefine"],
     },
     {
         id: "switches",
@@ -273,10 +273,15 @@ const CONFIG = {
     // Streaming the refine so the panel can show it arriving. The answer is the
     // same either way; this only decides whether you can watch it.
     streamProgress: true,
-    // A button on every message, and one in the input bar. Both off until asked
-    // for: they reach into the page, and an extension that redecorates somebody's
-    // chat on install is one they uninstall.
-    msgButton: false,
+    // Rows in the chat input's Extras menu. Off until asked for: they reach into
+    // the page, and an extension that redecorates somebody's chat on install is
+    // one they uninstall.
+    //
+    // There was a button on every message too, put into Lumiverse's own row of
+    // actions. It is gone. That row belongs to the app and every extension wants
+    // a seat in it, the floating button and Extras both reach everything it
+    // reached, and it was the one part of this that had to guess at the page's
+    // shape twice over: the message wrapper and the action bar inside it.
     // Refining what you are about to send, from the input bar, before it is sent.
     // Off by default: it edits the box you are typing in, which is not something
     // to start doing unasked.
@@ -2031,7 +2036,7 @@ export function setup(ctx, overrides) {
             clearTimeout(ackTimer);
         ackTimer = setTimeout(() => {
             ackTimer = null;
-            if (!busy && msgBusy === null && !sweep)
+            if (!busy && !sweep)
                 return;
             // A sweep that never got its first word back is the same fault and needs
             // the same clearing up, or its counter sits at nought of nought with a
@@ -2039,7 +2044,6 @@ export function setup(ctx, overrides) {
             sweep = null;
             sweepAsk = null;
             markBusy(false);
-            msgBusy = null;
             const why = "this extension's backend did not answer, so nothing was sent to a model";
             tally.dropped++;
             countDrop(why);
@@ -2103,7 +2107,6 @@ export function setup(ctx, overrides) {
             if (!busy)
                 return;
             markBusy(false);
-            msgBusy = null;
             const why = "nothing came back within " + Math.round(cap + 15) + "s";
             tally.dropped++;
             countDrop(why);
@@ -2206,8 +2209,6 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
         paintFloat();
-        if (cfg.msgButton && cfg.enabled)
-            sweepMsgButtons();
     }
     let lastRunMs = 0;
     disposers.push(() => {
@@ -2633,13 +2634,6 @@ export function setup(ctx, overrides) {
         // The button this extension puts on a message and in the input bar. Styled
         // to sit with the host's own icon buttons rather than to stand out: it is
         // one more action in a row of them, not a badge.
-        ".arf-msgbtn{display:inline-flex;align-items:center;justify-content:center;" +
-        "background:none;border:0;padding:4px;cursor:pointer;border-radius:var(--lumiverse-radius-sm,5px);" +
-        "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
-        "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
-        ".arf-msgbtn:hover:not(:disabled){color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
-        ".arf-msgbtn:disabled{cursor:default}" +
-        ".arf-msgbtn:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
         "@keyframes arf-turn{to{transform:rotate(360deg)}}" +
         ".arf-spin{animation:arf-turn 900ms linear infinite;transform-origin:50% 50%}" +
         // A reader who has asked for less movement gets a still icon rather than a
@@ -3293,8 +3287,6 @@ export function setup(ctx, overrides) {
         }
         // The buttons on the messages show the same state this panel does, so they
         // are refreshed with it rather than on a timer of their own.
-        if (cfg.msgButton && cfg.enabled)
-            sweepMsgButtons();
         // And the floating button, which used to be painted only by the live clock.
         // That clock runs while a refine is running, so walking out to the home
         // screen left the button sitting there looking ready to refine something
@@ -3474,7 +3466,7 @@ export function setup(ctx, overrides) {
         // there was no way to call a refine off at all, and the panel answered a
         // running refine by greying both buttons out, which says wait rather than
         // saying there is a way out of this.
-        if (busy || msgBusy !== null) {
+        if (busy) {
             const halt = button("Stop this refine", true);
             halt.setAttribute("data-arf-stop", "1");
             halt.title = "Calls off the refine that is running. Nothing is saved and the reply is left as it is.";
@@ -3915,8 +3907,11 @@ export function setup(ctx, overrides) {
             // The working card is not the same refine and is always replaced.
             if (popEl && popKey === key)
                 return;
-            // The card showing the working is this card, so it is filled in rather
-            // than taken down and put back up.
+            // Whatever card is up is this card, so it is filled in rather than taken
+            // down and put back up. Any card, not only the one showing the working:
+            // the automatic pass lands one refine after another, and a card for the
+            // second replacing the card for the first is the same two elements
+            // swapping, with the same flash.
             //
             // Both cards are pinned to the bottom of the screen and they are not the
             // same height: the working one runs to about 370 pixels and this one to
@@ -3925,7 +3920,7 @@ export function setup(ctx, overrides) {
             // behind them restarting its own fade, which reads as a second card
             // coming out from under the first. Keeping the box and the dim makes it
             // one card whose contents changed.
-            const held = popEl && popKey === "working" ? popEl : null;
+            const held = popEl;
             if (!held)
                 dropPop();
             popKey = key;
@@ -5290,9 +5285,7 @@ export function setup(ctx, overrides) {
                 ", answer in tags: " +
                 (cfg.wrapOutput ? "yes" : "no"));
             lines.push("your own messages: refined only when you ask, never automatically");
-            lines.push("message button: " +
-                (cfg.msgButton ? "on" : "off") +
-                ", widget: " +
+            lines.push("widget: " +
                 (cfg.widgetOn ? (widgetFailed ? "on but refused" : "on") : "off") +
                 ", input bar: " +
                 (cfg.inputRefine ? "on" : "off") +
@@ -5638,19 +5631,13 @@ export function setup(ctx, overrides) {
         for (const f of WIDGET_FIELDS)
             wrap.appendChild(fieldRow(f));
         wrap.appendChild(fieldRow({
-            key: "msgButton",
-            label: "A button on every message",
-            type: "bool",
-            hint: "Puts an undo in a message's own row of actions, next to Edit and Copy, for as long as that refine can be put back, and a stop there while that message is being refined. Only then: a row of Lumiverse's own actions is not the place for a button with nothing to do. Asking for a refine is on the floating button's menu and in the Extras rows, where it can be named in words.",
-        }));
-        wrap.appendChild(fieldRow({
             key: "inputRefine",
             label: "Rows in the chat input's Extras menu",
             type: "bool",
             hint: "Puts two rows in the chat input's Extras menu: one that refines the latest reply, and one that rewrites the text sitting in your input box before you send it. Off until you ask for it, since it changes the box you are typing in. They live in one place at a time: while the floating button is on screen its menu holds them, and Extras holds them only when there is no button to.",
         }));
-        if (cfg.inputRefine || cfg.msgButton)
-            wrap.appendChild(note("These two reach into the page rather than going through an API, because Lumiverse does not offer one for the message row or the input box. They are the only parts of this extension that depend on how Lumiverse is laid out. If an update ever moves either, these stop working and nothing else does."));
+        if (cfg.inputRefine)
+            wrap.appendChild(note("Refining what you are typing reaches into the page rather than going through an API, because Lumiverse does not offer one for the input box. It is the only part of this extension that depends on how Lumiverse is laid out. If an update ever moves that box, it stops working and nothing else does."));
         return wrap;
     }
     // ---- carrying a setup somewhere else ----
@@ -6841,178 +6828,6 @@ export function setup(ctx, overrides) {
         // model it is looking at your own hand rather than the story's voice.
         send({ type: "try_refine", requestId: id, text: text, asUser: true });
     }
-    // ---- a button on each message ----
-    // Lumiverse has no API for adding one yet, so this finds the action row and
-    // puts a button in it. That makes it the second thing in the extension that
-    // depends on the page's shape, and it is off until asked for.
-    //
-    // Rather than matching a CSS module class, which changes on every build, this
-    // looks for the message wrapper by its data attribute and then for the action
-    // bar by the one button that has always been in it. If a Lumiverse update
-    // moves either, this quietly does nothing instead of throwing on every render.
-    const MSG_SEL = "[data-message-id]";
-    let msgWatch = null;
-    function actionBarIn(msg) {
-        const named = msg.querySelector('[data-component="BubbleActions"]');
-        if (named)
-            return named;
-        // Every layout has an Edit button, and it sits in the row we want.
-        const edit = msg.querySelector('button[title="Edit"]');
-        return edit && edit.parentElement ? edit.parentElement : null;
-    }
-    function messageIdOf(msg) {
-        try {
-            return String(msg.getAttribute("data-message-id") || "");
-        }
-        catch (_) {
-            return "";
-        }
-    }
-    // Whether this message has something to put back, which decides whether the
-    // undo button stands beside the refine one.
-    function undoableHere(id) {
-        if (lastChatId == null)
-            return false;
-        return undoable.has(undoKey(lastChatId, id));
-    }
-    // Only touches the button when it would actually say something different.
-    //
-    // This is not a tidiness point. Painting rewrites innerHTML, which is a
-    // childList change, and this runs from an observer watching the whole body
-    // for childList changes. Repainting a button that already said the right
-    // thing scheduled another sweep, which repainted it again: the tab locked up
-    // the moment the setting was switched on.
-    // The way back, and while a refine is running the way to stop it. Nothing
-    // else: the row belongs to Lumiverse and every extension wants a place in it,
-    // so this takes one seat rather than two.
-    //
-    // It used to be a refine button that turned into an undo, which left a
-    // message with no way to refine it a second time, since the undo does not
-    // expire. Then it was both at once, which was correct and took two seats.
-    // Starting a refine is on the floating button's menu and in the Extras row
-    // now, where it can be named in words rather than guessed from an icon, and
-    // this holds only the thing that has to be next to the writing it changed.
-    function paintMsgBtn(btn, id) {
-        const busyHere = msgBusy === id;
-        const state = busyHere ? "busy" : "back";
-        if (btn.getAttribute("data-arf-state") === state)
-            return;
-        btn.setAttribute("data-arf-state", state);
-        btn.innerHTML = busyHere ? spinIcon() : undoIcon();
-        // The spinner is a button, not a notice. Pressing the thing that is plainly
-        // working to call it off is what anybody tries first, and it used to be
-        // disabled: on a page with the floating button switched off there was
-        // nothing here to press and nothing anywhere else either.
-        btn.title = busyHere
-            ? "Refining this message. Press to stop."
-            : "Put this message back the way it was";
-        btn.setAttribute("aria-label", btn.title);
-        btn.disabled = false;
-        btn.style.opacity = "1";
-    }
-    let msgBusy = null;
-    function addMsgButton(msg) {
-        try {
-            if (!cfg.msgButton || !cfg.enabled)
-                return;
-            const id = messageIdOf(msg);
-            if (!id)
-                return;
-            // Still streaming: the action row is not there yet, and a later pass
-            // catches it.
-            const part = msg.getAttribute("data-part");
-            if (part === "streaming")
-                return;
-            const bar = actionBarIn(msg);
-            if (!bar)
-                return;
-            // Only while this message has something to put back, or while it is the
-            // one being refined. A row of Lumiverse's own actions is not the place to
-            // keep a button that has nothing to do.
-            const wanted = undoableHere(id) || msgBusy === id;
-            const had = bar.querySelector("[data-arf-msg]");
-            if (had) {
-                if (!wanted) {
-                    had.remove();
-                    return;
-                }
-                paintMsgBtn(had, id);
-                return;
-            }
-            if (!wanted)
-                return;
-            const b = document.createElement("button");
-            b.type = "button";
-            b.setAttribute("data-arf-msg", id);
-            b.className = "arf-msgbtn";
-            paintMsgBtn(b, id);
-            b.addEventListener("click", (e) => {
-                try {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-                catch (_) { }
-                // Pressing the spinner calls the refine off, which is what the icon
-                // says is happening and the only thing there is to want from it.
-                if (msgBusy === id || busy) {
-                    cancelRefine();
-                    return;
-                }
-                askUndo(lastChatId, id);
-            });
-            bar.appendChild(b);
-        }
-        catch (_) { }
-    }
-    function sweepMsgButtons() {
-        try {
-            const all = document.querySelectorAll(MSG_SEL);
-            for (let i = 0; i < all.length; i++)
-                addMsgButton(all[i]);
-        }
-        catch (_) { }
-    }
-    function dropMsgButtons() {
-        try {
-            const all = document.querySelectorAll("[data-arf-msg],[data-arf-undo]");
-            for (let i = 0; i < all.length; i++)
-                all[i].remove();
-        }
-        catch (_) { }
-    }
-    function watchMessages(on) {
-        if (!on) {
-            if (msgWatch) {
-                try {
-                    msgWatch.disconnect();
-                }
-                catch (_) { }
-                msgWatch = null;
-            }
-            dropMsgButtons();
-            return;
-        }
-        if (msgWatch) {
-            sweepMsgButtons();
-            return;
-        }
-        try {
-            msgWatch = new MutationObserver(() => sweepMsgButtons());
-            msgWatch.observe(document.body, {
-                childList: true,
-                subtree: true,
-                // A message is staged before it streams and the same element flips
-                // data-part when streaming ends, with no child change to notice.
-                attributes: true,
-                attributeFilter: ["data-part"],
-            });
-            sweepMsgButtons();
-        }
-        catch (_) {
-            msgWatch = null;
-        }
-    }
-    disposers.push(() => watchMessages(false));
     // ---- the floating button and the input bar row ----
     let widget = null;
     // Runs the listeners off the last button that was built. Null when there is
@@ -7201,7 +7016,7 @@ export function setup(ctx, overrides) {
         // A refine is running, so the tap stops it. The button is showing a
         // spinner: tapping the spinner to call it off is the thing anybody would
         // try first, and it used to start a second refine on top of the first.
-        if (busy || msgBusy !== null) {
+        if (busy) {
             cancelRefine();
             return;
         }
@@ -7231,7 +7046,7 @@ export function setup(ctx, overrides) {
             return;
         try {
             const back = cfg.widgetUndo && undoHere().length > 0;
-            const working = busy || msgBusy !== null;
+            const working = busy;
             // Why a tap would do nothing, when that is the answer. On the home screen
             // there is no chat to refine, and the button was still drawn ready for
             // one: the tap explained itself in a toast, but only after you had
@@ -7310,7 +7125,7 @@ export function setup(ctx, overrides) {
         const doing = [];
         // While it is running, stopping it is the only thing anybody opens this
         // menu for, and starting another is not offered at all.
-        if (busy || msgBusy !== null)
+        if (busy)
             doing.push({ key: "stop", label: "Stop this refine" });
         else {
             doing.push({ key: "now", label: "Refine the latest reply" });
@@ -7407,8 +7222,6 @@ export function setup(ctx, overrides) {
             dropWidget();
         // The button is settled before the Extras row is decided, because that
         // decision is "is there a button to hold this instead".
-        // The button on each message.
-        watchMessages(!!cfg.msgButton && !!cfg.enabled);
         // The Extras row.
         //
         // In one place at a time. While the floating button is on screen its menu
@@ -7486,7 +7299,7 @@ export function setup(ctx, overrides) {
     // flight and busy is false. Without that, Stop on a sweep did nothing at the
     // one moment it was most likely to be pressed.
     function cancelRefine() {
-        if (!busy && msgBusy === null && !sweep)
+        if (!busy && !sweep)
             return;
         send({ type: "cancel_refine", requestId: newId() });
         log("asked it to stop");
@@ -7504,7 +7317,7 @@ export function setup(ctx, overrides) {
             toast(why, true);
             return;
         }
-        if (busy || msgBusy !== null) {
+        if (busy) {
             toast("A refine is already running. Let it finish first.", true);
             return;
         }
@@ -7532,7 +7345,7 @@ export function setup(ctx, overrides) {
     function refineNow() {
         // Pressing refine while one is already running used to queue a second
         // against the same reply, and whichever finished last won. One at a time.
-        if (busy || msgBusy !== null) {
+        if (busy) {
             toast("A refine is already running. Press it again to stop that one.", true);
             return;
         }
@@ -7736,7 +7549,6 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "refined") {
                         markBusy(false);
-                        msgBusy = null;
                         keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
                         tally.saved++;
                         lastRun = { ms: lastRunMs, ok: true, why: "" };
@@ -7824,7 +7636,6 @@ export function setup(ctx, overrides) {
                         if (!msg.stopped)
                             log("there was nothing running to stop");
                         markBusy(false);
-                        msgBusy = null;
                         // Half-written working for a refine that will not finish. The Log
                         // keeps what the last finished one worked out, untouched.
                         liveNotes = "";
@@ -7850,7 +7661,6 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "refine_skipped") {
                         markBusy(false);
-                        msgBusy = null;
                         const why = String(msg.why || "no reason given");
                         tookNotes(msg);
                         keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: false, why: why });
@@ -7863,7 +7673,6 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "refine_result") {
                         markBusy(false);
-                        msgBusy = null;
                         previewBusy = false;
                         // A refine you asked for by hand ends here, and its working is
                         // finished with it whichever way it went.
@@ -7985,7 +7794,6 @@ export function setup(ctx, overrides) {
                             after: String(msg.after || ""),
                             at: Date.now(),
                         };
-                        msgBusy = null;
                         setBadge("1");
                         log("a refine is waiting for you", true);
                         ping();

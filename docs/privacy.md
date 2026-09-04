@@ -41,7 +41,6 @@ The three that read rather than write are why a rewrite sounds like the characte
 
 Lumiverse has no API for either of these, so they read the page directly. Both are off until you turn them on.
 
-**A button on every message** finds each message's row of actions and puts a button in it. It reads nothing but the message's own id.
 
 **Refine what I am typing** reads and writes the chat input box. It only ever reads the box you are typing in, and the text goes to the same place a refine goes: your provider, on your connection. It is not sent anywhere else and it is not saved to your chat, since you have not sent it yet.
 
