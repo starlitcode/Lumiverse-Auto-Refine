@@ -1604,9 +1604,12 @@ function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio
 // reports only the colour underneath. So the first stop of a gradient is read
 // too: these tints are one colour repeated, so the first stop is the whole
 // story.
-function surfaceOf(el: any): Rgb | null {
+// The caller usually has the computed style in hand already, and reading it a
+// second time for the same element is the single most repeated thing the
+// readability sweep does.
+function surfaceOf(el: any, style?: any): Rgb | null {
   try {
-    const cs = getComputedStyle(el);
+    const cs = style || getComputedStyle(el);
     const base = parseColor(cs.backgroundColor);
     const img = String(cs.backgroundImage || "");
     if (img && img !== "none") {
@@ -1620,24 +1623,34 @@ function surfaceOf(el: any): Rgb | null {
   }
 }
 
-// Walk up collecting surfaces until one is opaque, then blend them back down.
-function backdropOf(el: any): Rgb {
-  const stack: Rgb[] = [];
-  let node: any = el;
-  let hops = 0;
-  while (node && hops < 24) {
-    const c = surfaceOf(node);
-    if (c && c.a > 0) {
-      stack.push(c);
-      if (c.a >= 0.999) break;
-    }
-    node = node.parentElement;
-    hops++;
+// Set while the panel is being measured and empty the rest of the time. An
+// element's backdrop is its own surface over its parent's, so the parent's
+// answer is nearly all of the work. Without this, measuring three hundred
+// elements ten deep read the computed style four and a half thousand times,
+// which was most of the delay between pressing something and the panel coming
+// back.
+//
+// Only surface colours go in here. The sweep writes text colour and border
+// colour and nothing else, so nothing cached can go stale while it runs.
+let backdropSeen: Map<any, Rgb> | null = null;
+
+// An element's own surface over whatever is behind it, down to the first opaque
+// one.
+function backdropOf(el: any, style?: any): Rgb {
+  const seen = backdropSeen;
+  if (seen) {
+    const had = seen.get(el);
+    if (had) return had;
   }
-  let out: Rgb = stack.length && stack[stack.length - 1].a >= 0.999
-    ? stack.pop() as Rgb
-    : PAGE_FALLBACK;
-  for (let i = stack.length - 1; i >= 0; i--) out = blendColor(stack[i], out);
+  let out: Rgb;
+  const c = surfaceOf(el, style);
+  if (c && c.a >= 0.999) out = c;
+  else {
+    const up = el && el.parentElement;
+    const under = up ? backdropOf(up) : PAGE_FALLBACK;
+    out = c && c.a > 0 ? blendColor(c, under) : under;
+  }
+  if (seen) seen.set(el, out);
   return out;
 }
 
@@ -1753,6 +1766,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // happens. Two things wait on it: the rebuild that catches the rest of the
   // card up, and the host components below.
   const SETTLE_MS = 260;
+
+  // How often the theme is read, for the one kind of change nothing announces:
+  // a stylesheet rewritten in place. One computed style a second, against a
+  // panel that is unreadable until it notices.
+  const THEME_TICK_MS = 1000;
 
   // The floating button, the buttons on each message and the Extras row are all
   // reconciled from here, and all three are the host's own components, so
@@ -3278,6 +3296,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // yet are included: a status line waiting for something to say has already
   // been given its colour, and it will not change when the text arrives.
   function sweepReadable(root: any) {
+    // Document order, so a parent is measured before its children and the
+    // cache is warm by the time they ask.
+    backdropSeen = new Map();
     try {
       const nodes: any[] = [root].concat(Array.prototype.slice.call(root.querySelectorAll("*")));
       for (const n of nodes) {
@@ -3293,7 +3314,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // on the button's own colour, and measuring it against the card behind
         // instead is how white-on-lavender passed a contrast check and shipped
         // as an unreadable button.
-        const back = backdropOf(n);
+        const back = backdropOf(n, cs);
         const shown = blendColor(fg, back);
         // What this line has to reach depends on how big it is drawn, so it is
         // read off the line rather than being one number for the whole panel.
@@ -3326,7 +3347,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // plain text, however legible the label is. It gets an edge instead of
         // having its label repainted, which would fix the wrong half.
         if (tag === "button") {
-          const fill = surfaceOf(n);
+          const fill = surfaceOf(n, cs);
           const behind = backdropOf((n.parentElement || root).parentElement || root);
           if (fill && fill.a > 0.05) {
             const solid = blendColor(fill, behind);
@@ -3341,7 +3362,135 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
       }
     } catch (_) {}
+    backdropSeen = null;
   }
+
+  // The sweep writes onto the elements themselves, and what it writes is only
+  // right for the theme it measured. A theme swapped underneath the panel, dark
+  // to light or back, leaves all of it behind: text repainted white to survive a
+  // dark card, still white once that card is white. Measured on the stock light
+  // theme after a switch, the worst line on the panel came out at 1.06 against
+  // its background, which is invisible.
+  //
+  // So the repairs are taken off and the panel measured again. Taking them off
+  // first is the whole point: leaving them on means the second measurement reads
+  // the first one's answer and finds nothing wrong.
+  function clearInk(root: any) {
+    try {
+      const marked = root.querySelectorAll("[data-arf-painted]");
+      for (let i = 0; i < marked.length; i++) {
+        const n: any = marked[i];
+        n.style.color = "";
+        n.style.borderColor = "";
+        n.removeAttribute("data-arf-painted");
+      }
+      if (root.getAttribute && root.getAttribute("data-arf-painted") != null) {
+        root.style.color = "";
+        root.style.borderColor = "";
+        root.removeAttribute("data-arf-painted");
+      }
+    } catch (_) {}
+  }
+
+  function reInk() {
+    if (tab && tab.root) {
+      const root = tab.root as HTMLElement;
+      clearInk(root);
+      setScheme(root);
+      sweepReadable(root);
+    }
+    // The floating button is drawn against the page rather than the panel, and
+    // it is repaired the same way, so it moves with the theme too.
+    paintFloat();
+  }
+
+  // What the theme resolves to, as a string to compare against the last one.
+  // The variables the panel is drawn from, plus the two surfaces behind it: a
+  // theme that swaps only the page colour and leaves the variables alone still
+  // changes every answer the sweep gives.
+  const THEME_VARS = [
+    "--lumiverse-bg",
+    "--lumiverse-bg-elevated",
+    "--lumiverse-text",
+    "--lumiverse-text-muted",
+    "--lumiverse-primary",
+    "--lumiverse-secondary",
+    "--lumiverse-border",
+  ];
+  function themeMark(): string {
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      let out = "";
+      for (const v of THEME_VARS) out += cs.getPropertyValue(v).trim() + "|";
+      out += cs.backgroundColor + "|";
+      if (document.body) out += getComputedStyle(document.body).backgroundColor;
+      return out;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  let themeWas = "";
+  function themeMoved() {
+    const now = themeMark();
+    if (now === themeWas) return;
+    themeWas = now;
+    reInk();
+  }
+
+  // Three ways a theme changes and none of them covers the others. The reader
+  // switching their system between light and dark fires the media query and
+  // touches nothing in the page. Lumiverse's own switch writes a class or an
+  // attribute on the page, which the observer catches. A theme that rewrites the
+  // contents of a stylesheet does neither, so the mark is also read on a slow
+  // timer, which costs one computed style a second and is the only thing that
+  // catches that case at all.
+  function watchTheme() {
+    themeWas = themeMark();
+    try {
+      const q = matchMedia("(prefers-color-scheme: dark)");
+      const said = () => themeSoon();
+      if (typeof q.addEventListener === "function") {
+        q.addEventListener("change", said);
+        disposers.push(() => {
+          try {
+            q.removeEventListener("change", said);
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+    try {
+      const eye = new MutationObserver(() => themeSoon());
+      eye.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+      if (document.body)
+        eye.observe(document.body, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+      if (document.head) eye.observe(document.head, { childList: true });
+      disposers.push(() => {
+        try {
+          eye.disconnect();
+        } catch (_) {}
+      });
+    } catch (_) {}
+    const beat = setInterval(themeMoved, THEME_TICK_MS);
+    disposers.push(() => clearInterval(beat));
+  }
+
+  // A theme switch is several attribute writes in a row, and re-measuring the
+  // panel on each one is the same work three times over. Held until they stop,
+  // and the styles have to have resolved anyway before there is anything new to
+  // measure.
+  let themeTimer: any = null;
+  function themeSoon() {
+    if (themeTimer) clearTimeout(themeTimer);
+    themeTimer = setTimeout(() => {
+      themeTimer = null;
+      themeMoved();
+    }, SETTLE_MS);
+  }
+  disposers.push(() => {
+    if (themeTimer) clearTimeout(themeTimer);
+    themeTimer = null;
+  });
 
   // ---- the tabs ----
   // Six boxes, and everything belongs in exactly one of them. The panel was one
@@ -8920,6 +9069,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   injectStyle();
   armBackend();
+  watchTheme();
   syncExtras();
   askWhereWeAre();
   // And keep asking for the next few seconds. A backend asked the instant it

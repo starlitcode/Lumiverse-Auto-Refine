@@ -574,6 +574,61 @@ console.log("\ncolour on somebody else's theme");
       "worst was " + m.worst.toFixed(2) + " against " + m.want + " on " + m.where,
     );
   });
+
+  // The theme swapped underneath a panel that is already drawn, which is what
+  // happens when somebody moves their phone from dark to light. What the sweep
+  // wrote is only right for the theme it measured, and nothing repaints on a
+  // theme change, so every repair it made is still sitting on the elements
+  // afterwards: text repainted white to survive a dark card, still white once
+  // that card is white. Measured before this was watched for, the worst line on
+  // the panel came out at 1.06, which is invisible.
+  await inTab(browser, {}, async (page) => {
+    const before = await worstText(page);
+    ok(
+      "readable on the dark theme it was drawn on",
+      before.ok,
+      "worst was " + before.worst.toFixed(2),
+    );
+    await page.addStyleTag({ content: light });
+    // The watch settles before it re-measures, so this waits for that and a
+    // frame after it.
+    await page.waitForTimeout(600);
+    await settle(page);
+    const after = await worstText(page);
+    ok(
+      "and readable again once the theme is swapped to light under it",
+      after.ok,
+      "worst was " + after.worst.toFixed(2) + " against " + after.want + " on " + after.where,
+    );
+    const scheme = await page.evaluate(
+      () => getComputedStyle(document.querySelector("#drawer .arf, #drawer")).colorScheme,
+    );
+    ok(
+      "and the browser is told the panel is light now",
+      /light/.test(scheme),
+      "colorScheme was " + scheme,
+    );
+  });
+
+  // And back, since a repair written for the light theme is just as wrong on
+  // the dark one.
+  await inTab(browser, { css: light }, async (page) => {
+    await page.addStyleTag({
+      content:
+        ":root{--lumiverse-bg:rgba(28,24,38,.95);--lumiverse-bg-elevated:rgba(35,30,48,.9);" +
+        "--lumiverse-text:rgba(255,255,255,.9);--lumiverse-text-muted:rgba(255,255,255,.65);" +
+        "--lumiverse-fill:rgba(0,0,0,.15)}body{background:rgb(10,8,18)}" +
+        "#drawer{background:rgb(35,30,48)}",
+    });
+    await page.waitForTimeout(600);
+    await settle(page);
+    const after = await worstText(page);
+    ok(
+      "and readable again going the other way, light to dark",
+      after.ok,
+      "worst was " + after.worst.toFixed(2) + " against " + after.want + " on " + after.where,
+    );
+  });
 }
 
 console.log("\non a phone");
