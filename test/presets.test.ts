@@ -21,16 +21,41 @@ describe("the prompts that ship with it", () => {
     rulesOf(p).reduce((n: number, b: any) => n + String(b.text).length, 0);
   const named = (n: string) => BUILT_IN_PROMPTS.find((p: any) => p.name === n);
 
-  test("there are four", () => {
-    expect(BUILT_IN_PROMPTS.length).toBe(4);
+  const forReplies = () => BUILT_IN_PROMPTS.filter((p: any) => !p.mine);
+  const forMine = () => BUILT_IN_PROMPTS.filter((p: any) => p.mine);
+
+  test("there are four for each of the two prompts", () => {
+    expect(forReplies().length).toBe(4);
+    expect(forMine().length).toBe(4);
+  });
+
+  // Stored under a name of its own, shown under the heading's. Two entries
+  // sharing a stored name would overwrite each other; two sharing a shown one
+  // read fine, because the heading above says which prompt it is for.
+  test("every one is stored under a name of its own", () => {
+    const names = BUILT_IN_PROMPTS.map((p: any) => p.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  test("and the two sets read the same, since the heading says which is which", () => {
+    expect(forMine().map((p: any) => p.label).sort())
+      .toEqual(forReplies().map((p: any) => p.label).sort());
+  });
+
+  // A prompt for your own turn loaded over the prompt for replies would be the
+  // wrong job asked of every reply in the chat.
+  test("each carries the one list it was written for", () => {
+    for (const p of BUILT_IN_PROMPTS) expect(typeof p.mine).toBe("boolean");
   });
 
   // One name for the quick pair and one for the thorough pair, so which two go
   // together is visible without reading either.
   test("each pair shares a name", () => {
-    const stems = BUILT_IN_PROMPTS.map((p: any) => p.name.split(",")[0].trim());
-    expect(stems.filter((n: string) => n === "A quick read").length).toBe(2);
-    expect(stems.filter((n: string) => n === "A close read").length).toBe(2);
+    for (const set of [forReplies(), forMine()]) {
+      const stems = set.map((p: any) => p.label.split(",")[0].trim());
+      expect(stems.filter((n: string) => n === "A quick read").length).toBe(2);
+      expect(stems.filter((n: string) => n === "A close read").length).toBe(2);
+    }
   });
 
   // And the two that need a reasoning model say so in the name, rather than
@@ -44,9 +69,27 @@ describe("the prompts that ship with it", () => {
   });
 
   test("the fuller one of each pair really is fuller", () => {
-    expect(sizeOf(named("A close read"))).toBeGreaterThan(sizeOf(named("A quick read")) * 1.25);
-    expect(sizeOf(named("A close read, for a model that thinks")))
-      .toBeGreaterThan(sizeOf(named("A quick read, for a model that thinks")) * 1.25);
+    const pairs = [
+      ["A close read", "A quick read"],
+      ["A close read, for a model that thinks", "A quick read, for a model that thinks"],
+      ["Your writing, a close read", "Your writing, a quick read"],
+      [
+        "Your writing, a close read, for a model that thinks",
+        "Your writing, a quick read, for a model that thinks",
+      ],
+    ];
+    for (const [big, small] of pairs)
+      expect(sizeOf(named(big))).toBeGreaterThan(sizeOf(named(small)) * 1.25);
+  });
+
+  // The whole reason there is a second set. A prompt for your own turn is about
+  // repairing what is there; one for a reply is about improving it. If the two
+  // said the same thing there would be no reason to ship both.
+  test("the prompts for your own writing are about leaving it alone", () => {
+    for (const p of forMine()) {
+      const whole = rulesOf(p).map((b: any) => b.text).join(" ");
+      expect(whole).toMatch(/co-author|their hand|not yours|what I meant to type/i);
+    }
   });
 
   // What the names deliberately do not claim is how the two pairs compare with

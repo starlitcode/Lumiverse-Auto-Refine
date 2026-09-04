@@ -803,61 +803,194 @@ const RESTRAINT: Block = {
 // The prompt for your own passages. A different job: your writing is already in
 // your hand, and the failure to watch for is a refine that hands it back in the
 // narrator's.
-const YOURS_DEFAULT: Block[] = [
-  {
-    id: "job",
-    name: "The job",
-    on: true,
-    role: "system",
-    text:
-      "<your_job>\n" +
-      "Your co-author has written the passage below. Tidy how it reads and " +
-      "leave the writing to them.\n\n" +
-      "Everything they did, said and meant stays. Where you find yourself " +
-      "about to add an action, a line of speech or a reaction they left out, " +
-      "that is the moment to stop: their turn belongs to them.\n" +
-      "</your_job>",
-  },
-  {
-    id: "voice",
-    name: "Their hand",
-    on: true,
-    role: "system",
-    text:
-      "<their_hand>\n" +
-      "This is your co-author writing, and their hand is not the narrator's. " +
-      "Keep it.\n\n" +
-      "Short plain lines stay short and plain. Lower case stays lower case. " +
-      "Present tense stays present tense, and first person stays first person. " +
-      "A passage handed back in polished third person is one they will read as " +
-      "somebody else's.\n\n" +
-      "Their length is their choice: a one line passage stays a one line " +
-      "passage.\n" +
-      "</their_hand>",
-  },
-  {
-    id: "fix",
-    name: "What to mend",
-    on: true,
-    role: "system",
-    text:
-      "<what_to_mend>\n" +
-      "Typing slips, missing words, and a word plainly meant to be another " +
-      "one.\n\n" +
-      "Punctuation and capitalisation, where they came out that way by " +
-      "accident. Where lower case is the style, it stays.\n\n" +
-      "A sentence tangled enough to be hard to follow: say the same thing in " +
-      "the same hand, more clearly.\n\n" +
-      "That is the whole list. Their word choice, their level of detail and " +
-      "their plain lines are theirs, and they come back as they went in.\n" +
-      "</what_to_mend>",
-  },
+// ---- refining what you wrote yourself ----
+// A different job from refining a reply, and the difference is restraint. A
+// reply is prose to improve; your own turn is writing to leave alone except
+// where it went wrong. So these say what to mend and then say to stop, where
+// the reply prompts say what to look for and how to do it better.
+const YOURS_JOB: Block = {
+  id: "job",
+  name: "The job",
+  on: true,
+  role: "system",
+  text:
+    "<your_job>\n" +
+    "Your co-author has written the passage below. Tidy how it reads and " +
+    "leave the writing to them.\n\n" +
+    "Everything they did, said and meant stays. Where you find yourself " +
+    "about to add an action, a line of speech or a reaction they left out, " +
+    "that is the moment to stop: their turn belongs to them.\n" +
+    "</your_job>",
+};
+
+const YOURS_HAND: Block = {
+  id: "voice",
+  name: "Their hand",
+  on: true,
+  role: "system",
+  text:
+    "<their_hand>\n" +
+    "This is your co-author writing, and their hand is not the narrator's. " +
+    "Keep it.\n\n" +
+    "Short plain lines stay short and plain. Lower case stays lower case. " +
+    "Present tense stays present tense, and first person stays first person. " +
+    "A passage handed back in polished third person is one they will read as " +
+    "somebody else's.\n\n" +
+    "Their length is their choice: a one line passage stays a one line " +
+    "passage.\n" +
+    "</their_hand>",
+};
+
+const YOURS_MEND: Block = {
+  id: "fix",
+  name: "What to mend",
+  on: true,
+  role: "system",
+  text:
+    "<what_to_mend>\n" +
+    "Typing slips, missing words, and a word plainly meant to be another " +
+    "one.\n\n" +
+    "Punctuation and capitalisation, where they came out that way by " +
+    "accident. Where lower case is the style, it stays.\n\n" +
+    "A sentence tangled enough to be hard to follow: say the same thing in " +
+    "the same hand, more clearly.\n\n" +
+    "That is the whole list. Their word choice, their level of detail and " +
+    "their plain lines are theirs, and they come back as they went in.\n" +
+    "</what_to_mend>",
+};
+
+// The same list, gone through properly. Every entry is still a repair rather
+// than an improvement: the long version is longer about what counts as one.
+const YOURS_MEND_LONG: Block = {
+  id: "fix",
+  name: "What to mend",
+  on: true,
+  role: "system",
+  text:
+    "<what_to_mend>\n" +
+    "A typing slip. Letters swapped, a doubled word, a word plainly meant to " +
+    "be its neighbour: form for from, breath for breathe.\n\n" +
+    "A missing word. Where a line cannot be read as written and one small " +
+    "word puts it right, put it in.\n\n" +
+    "Punctuation that came out wrong by accident: a sentence with no stop, a " +
+    "quotation mark opened and not closed, a comma splice long enough to lose " +
+    "the thread. Where the punctuation is the style, and lower case usually " +
+    "is, it stays exactly as it is.\n\n" +
+    "A sentence tangled enough that it has to be read twice. Say the same " +
+    "thing, in the same hand, in an order that reads once.\n\n" +
+    "A word repeated close enough to itself to trip on. Change the second one " +
+    "for a word they would have used, or drop it.\n\n" +
+    "That is the list, and it ends there. Their word choice, their level of " +
+    "detail, their plain lines and their rhythm are theirs.\n" +
+    "</what_to_mend>",
+};
+
+// What the mend list cannot say without becoming a style guide. It is here to
+// name the temptations rather than to describe good writing, because on
+// somebody's own turn every one of these is a way of taking it off them.
+const YOURS_NOT_YOURS: Block = {
+  id: "leave",
+  name: "Not yours to change",
+  on: true,
+  role: "system",
+  text:
+    "<not_yours>\n" +
+    "Not a repair, and not to be done here:\n\n" +
+    "Adding a gesture, a glance, a breath or a beat they did not write.\n\n" +
+    "Making a plain line vivid. If they wrote she left, she left.\n\n" +
+    "Giving a line more feeling than it was written with. Understatement is a " +
+    "choice and reads as one.\n\n" +
+    "Finishing a thought they left unfinished, or answering a question they " +
+    "left open.\n\n" +
+    "Tidying a fragment into a sentence, where the fragment is how they " +
+    "write.\n\n" +
+    "Where you are unsure whether something is a slip or a choice, it is a " +
+    "choice. Leave it.\n" +
+    "</not_yours>",
+};
+
+const YOURS_THINKS_JOB: Block = {
+  id: "job",
+  name: "The job",
+  on: true,
+  role: "system",
+  text:
+    "<your_job>\n" +
+    "Your co-author has written the passage below. You are proofreading it, " +
+    "not rewriting it.\n\n" +
+    "Everything they did, said and meant stays, and their hand stays: the " +
+    "tense, the person, the capitalisation, the length, the plainness. Work " +
+    "the standard below and change nothing it does not name.\n" +
+    "</your_job>",
+};
+
+// The reply prompts hand a reasoning model one question about the writing.
+// This hands it one question about the reader, which is a different one: not
+// could this be better, but did this go wrong.
+const YOURS_TEST: Block = {
+  id: "standard",
+  name: "The test",
+  on: true,
+  role: "system",
+  text:
+    "<the_test>\n" +
+    "One question, asked of every line: would the person who wrote this read " +
+    "the change and say yes, that is what I meant to type?\n\n" +
+    "A slip they would have caught themselves passes it. A word you preferred " +
+    "does not. A sentence untangled so it reads once passes it, as long as it " +
+    "is untangled into their words and not yours.\n\n" +
+    "Where the answer is anything but a clear yes, the line comes back as it " +
+    "went in. A passage you found nothing wrong with comes back unchanged, " +
+    "and that is a correct answer.\n" +
+    "</the_test>",
+};
+
+const YOURS_WHERE: Block = {
+  id: "where",
+  name: "Where to look",
+  on: true,
+  role: "system",
+  text:
+    "<where_to_look>\n" +
+    "Where a passage typed at speed goes wrong. Check each, and hold each to " +
+    "the test above.\n\n" +
+    "The word that is nearly the right word. Typed quickly, one letter out, " +
+    "and it reads as a real word so nothing flags it.\n\n" +
+    "The sentence that lost a word on the way. Usually small: a, to, of, not. " +
+    "The line still scans and means the opposite.\n\n" +
+    "The run-on. Two thoughts joined by a comma where the second one started " +
+    "somewhere new.\n\n" +
+    "The quotation mark or bracket opened and never closed.\n\n" +
+    "The word used twice in a breath, where the second one was meant to be " +
+    "something else.\n\n" +
+    "None of these is a matter of taste, which is why they are the list.\n" +
+    "</where_to_look>",
+};
+
+const YOURS_SHORT: Block[] = [
+  YOURS_JOB,
+  YOURS_HAND,
+  YOURS_MEND,
   COPY_EXACTLY,
   HOW_TO_ANSWER,
   ...SCENE_BLOCKS,
   RECENT_BLOCK,
   TURN_BLOCK,
 ];
+
+const YOURS_LONG: Block[] = [
+  YOURS_JOB,
+  YOURS_HAND,
+  YOURS_MEND_LONG,
+  YOURS_NOT_YOURS,
+  COPY_EXACTLY,
+  HOW_TO_ANSWER,
+  ...SCENE_BLOCKS,
+  RECENT_BLOCK,
+  TURN_BLOCK,
+];
+
+const YOURS_DEFAULT: Block[] = YOURS_SHORT;
 
 // ---- a model that reasons, short ----
 const THINKS_SHORT: Block[] = [
@@ -934,32 +1067,111 @@ const THINKS_LONG: Block[] = [
   TURN_BLOCK,
 ];
 
+// The same two, for a model that reasons. It is given the test and left to
+// apply it, which is what makes these the smaller pair: the plain ones have to
+// spell out what counts as a repair, and a model that reasons works that out
+// from the question itself.
+const YOURS_THINKS_SHORT: Block[] = [
+  YOURS_THINKS_JOB,
+  YOURS_TEST,
+  COPY_EXACTLY,
+  THINKS_ANSWER,
+  ...SCENE_BLOCKS,
+  RECENT_BLOCK,
+  TURN_BLOCK,
+];
+
+const YOURS_THINKS_LONG: Block[] = [
+  YOURS_THINKS_JOB,
+  YOURS_TEST,
+  YOURS_WHERE,
+  YOURS_NOT_YOURS,
+  COPY_EXACTLY,
+  THINKS_ANSWER,
+  ...SCENE_BLOCKS,
+  RECENT_BLOCK,
+  TURN_BLOCK,
+];
+
 const DEFAULT_BLOCKS: Block[] = PLAIN_SHORT;
 
-const BUILT_IN_PROMPTS: Array<{ name: string; blocks: Block[]; thinking: string; what: string }> = [
+// Eight that ship with it: the same four shapes, once for a reply and once for
+// your own turn. name is what it is stored and looked up as and has to be
+// unique across both sets; label is what the list shows, which can repeat
+// because the heading above it already says which prompt it is for.
+type Shipped = {
+  name: string;
+  label: string;
+  mine: boolean;
+  blocks: Block[];
+  thinking: string;
+  what: string;
+};
+
+const BUILT_IN_PROMPTS: Shipped[] = [
   {
     name: "A quick read",
+    label: "A quick read",
+    mine: false,
     blocks: PLAIN_SHORT,
     thinking: "off",
     what: "The one to start with. What to cut, what to mend, what to leave, a block each. The smaller of the two prompts that work on any model.",
   },
   {
     name: "A close read",
+    label: "A close read",
+    mine: false,
     blocks: PLAIN_LONG,
     thinking: "off",
     what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt on every refine, and followed more closely. Works on any model.",
   },
   {
     name: "A quick read, for a model that thinks",
+    label: "A quick read, for a model that thinks",
+    mine: false,
     blocks: THINKS_SHORT,
     thinking: "inherit",
     what: "One question, and the room to answer it: could this sentence sit in any story, or only in this one? The smallest prompt of the four, because a model that reasons works the rest out. Needs a model that reasons.",
   },
   {
     name: "A close read, for a model that thinks",
+    label: "A close read, for a model that thinks",
+    mine: false,
     blocks: THINKS_LONG,
     thinking: "inherit",
     what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer. About the size of a quick read on a plain model, and it goes deeper for it. Needs a model that reasons.",
+  },
+  {
+    name: "Your writing, a quick read",
+    label: "A quick read",
+    mine: true,
+    blocks: YOURS_SHORT,
+    thinking: "off",
+    what: "The one to start with. What to mend, and then a full stop: slips, missing words, punctuation that came out wrong. Your word choice, your length and your plain lines come back as they went in. The smaller of the two prompts that work on any model.",
+  },
+  {
+    name: "Your writing, a close read",
+    label: "A close read",
+    mine: true,
+    blocks: YOURS_LONG,
+    thinking: "off",
+    what: "The same list, gone through properly, and a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. About half again the prompt, and more careful about the line between a slip and a choice. Works on any model.",
+  },
+  {
+    name: "Your writing, a quick read, for a model that thinks",
+    label: "A quick read, for a model that thinks",
+    mine: true,
+    blocks: YOURS_THINKS_SHORT,
+    thinking: "inherit",
+    what: "One question, and the room to answer it: would you read the change and say yes, that is what I meant to type? The smallest of the four, because a model that reasons works out what counts as a slip from the question. Needs a model that reasons.",
+  },
+  {
+    name: "Your writing, a close read, for a model that thinks",
+    label: "A close read, for a model that thinks",
+    mine: true,
+    blocks: YOURS_THINKS_LONG,
+    thinking: "inherit",
+    what: "The same question, plus where a passage typed at speed actually goes wrong and what is not a repair. None of it is a matter of taste, which is the point of the longer list. About the size of a quick read on a plain model. Needs a model that reasons.",
   },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
@@ -988,6 +1200,7 @@ const promptShape = (raw: any): string =>
 // question whose answer had not moved.
 const BUILT_IN_SHAPES = BUILT_IN_PROMPTS.map((p) => ({
   name: p.name,
+  mine: p.mine,
   shape: promptShape(p.blocks),
 }));
 
@@ -4374,7 +4587,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.className = "arf-field";
       const opts =
         f.key === "connectionId"
-          ? [{ value: "", label: "The model I am chatting with" }]
+          ? [{ value: "", label: "The model I am chatting with", group: "" }]
               .concat(
                 connections.map((c) => ({
                   value: c.id,
@@ -4382,6 +4595,11 @@ export function setup(ctx: Ctx, overrides?: any) {
                     (c.name || c.provider || "Connection") +
                     (c.model ? " (" + c.model + ")" : "") +
                     (c.isDefault ? " - default" : ""),
+                  // Sorted under whoever serves it. A list of profiles is a
+                  // list of one provider's models several times over, so the
+                  // provider is the thing that tells one run of them from the
+                  // next.
+                  group: String(c.provider || "Other"),
                 })),
               )
               // A connection the settings name that the account does not have.
@@ -4390,13 +4608,41 @@ export function setup(ctx: Ctx, overrides?: any) {
               // the box read as though the default were picked while the
               // backend went on being handed the missing id, so every refine
               // went somewhere that was not there and the panel looked right.
-              .concat(lostConnection() ? [{ value: String(cfg.connectionId), label: "A connection that is gone" }] : [])
-          : f.options || [];
+              .concat(
+                lostConnection()
+                  ? [
+                      {
+                        value: String(cfg.connectionId),
+                        label: "A connection that is gone",
+                        group: "Not on this account",
+                      },
+                    ]
+                  : [],
+              )
+          : (f.options || []).map((o: any) => ({ value: o.value, label: o.label, group: "" }));
+      // Under headings, but only where there is more than one heading to draw.
+      // A single one over the whole list names nothing the list does not
+      // already say, and is a row of chrome on a phone for no reason.
+      const heads: string[] = [];
+      for (const o of opts)
+        if (o.group && heads.indexOf(o.group) < 0) heads.push(o.group);
+      const grouped = heads.length > 1;
+      const boxes: Record<string, any> = {};
       for (const o of opts) {
         const op = document.createElement("option");
         op.value = o.value;
         op.textContent = o.label;
-        sel.appendChild(op);
+        if (!grouped || !o.group) {
+          sel.appendChild(op);
+          continue;
+        }
+        if (!boxes[o.group]) {
+          const head = document.createElement("optgroup");
+          head.label = o.group;
+          boxes[o.group] = head;
+          sel.appendChild(head);
+        }
+        boxes[o.group].appendChild(op);
       }
       sel.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       sel.addEventListener("change", () => {
@@ -4476,10 +4722,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // with the extension are looked at first, so the one it starts on is named as
   // itself rather than as whatever you later saved on top of it.
   function promptNamed(now: string, which: "blocks" | "userBlocks"): string | null {
-    // The four carry a reply prompt and nothing else, so there is nothing of
-    // theirs to match your own messages against. Their shapes are worked out
-    // once, at the top of this file, rather than on every repaint.
-    if (which === "blocks") for (const p of BUILT_IN_SHAPES) if (p.shape === now) return p.name;
+    // Each shipped prompt is for one of the two lists, so only its own half is
+    // worth comparing against: the four for replies and the four for your own
+    // messages are different prompts and a match across the two would be
+    // wrong. Their shapes are worked out once, at the top of this file, rather
+    // than on every repaint.
+    const mine = which === "userBlocks";
+    for (const p of BUILT_IN_SHAPES) if (p.mine === mine && p.shape === now) return p.name;
     for (const p of presets) {
       const got = p.settings[which];
       if (!Array.isArray(got)) continue;
@@ -6585,7 +6834,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     return BUILT_IN_PROMPTS.map((p) => ({
       name: p.name,
       at: 0,
-      settings: { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
+      // Into the list it was written for, and only that one. A prompt for your
+      // own turn loaded over the prompt for replies would be the wrong job
+      // asked of every reply in the chat.
+      settings: p.mine
+        ? { userBlocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking }
+        : { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
     }));
   }
   const isBuiltIn = (name: string) => BUILT_IN.indexOf(name) >= 0;
@@ -6858,7 +7112,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildPresetCard(): HTMLElement {
     const wrap = card(
       "Presets",
-      "Four prompts ship with the extension and work as they stand: a short one and a detailed one, each in a version for a plain model and a version for a model that reasons. Saving your own keeps your prompt, your run-up count and your samplers under a name. Everything else stays as you have it, whichever you load. A connection is not saved, since an id from another account names nothing here.",
+      "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your samplers under a name. A connection is not saved, since an id from another account names nothing here.",
       presets.length ? presets.length + " yours" : BUILT_IN.length + " built in",
     );
 
@@ -6870,11 +7124,39 @@ export function setup(ctx: Ctx, overrides?: any) {
     none.value = "";
     none.textContent = "Pick a preset";
     sel.appendChild(none);
-    for (const p of allPresets()) {
-      const op = document.createElement("option");
-      op.value = p.name;
-      op.textContent = p.name;
-      sel.appendChild(op);
+    // Under headings, because eight that ship with it and however many of your
+    // own is a column nobody can read. A heading is not an option: the browser
+    // draws it greyed and will not let it be picked, which is what makes it a
+    // heading rather than an entry that does nothing.
+    //
+    // The two halves are told apart by which prompt they carry, not by name, so
+    // one of yours goes under the heading it belongs to whichever list you were
+    // editing when you saved it.
+    const shipped = new Map(BUILT_IN_PROMPTS.map((p) => [p.name, p]));
+    const groups: Array<{ head: string; of: Preset[] }> = [
+      { head: "For replies", of: [] },
+      { head: "For your messages", of: [] },
+      { head: "Yours", of: [] },
+    ];
+    for (const one of allPresets()) {
+      const ship = shipped.get(one.name);
+      if (ship) groups[ship.mine ? 1 : 0].of.push(one);
+      else groups[2].of.push(one);
+    }
+    for (const group of groups) {
+      if (!group.of.length) continue;
+      const head = document.createElement("optgroup");
+      head.label = group.head;
+      for (const one of group.of) {
+        const op = document.createElement("option");
+        op.value = one.name;
+        // The heading says which prompt it is for, so the entry under it does
+        // not have to say it again.
+        const ship = shipped.get(one.name);
+        op.textContent = ship ? ship.label : one.name;
+        head.appendChild(op);
+      }
+      sel.appendChild(head);
     }
     sel.value = presetPick;
     sel.addEventListener("change", () => {

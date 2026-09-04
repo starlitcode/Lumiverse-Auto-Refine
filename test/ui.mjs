@@ -3877,6 +3877,112 @@ console.log("\nthe prompt on screen is the prompt that runs");
   });
 }
 
+
+console.log("\nlists with headings on them");
+{
+  // A dropdown of eight shipped prompts and however many of your own is a
+  // column nobody reads. A heading is a real optgroup rather than an entry that
+  // does nothing: the browser draws it greyed and refuses to select it, which
+  // is what makes it a heading.
+  const shape = (page, field) =>
+    page.evaluate((f) => {
+      const sel = document.querySelector('#drawer [data-arf-field="' + f + '"]');
+      if (!sel) return null;
+      return {
+        heads: [...sel.querySelectorAll("optgroup")].map((g) => g.label),
+        loose: [...sel.children].filter((c) => c.tagName === "OPTION").map((o) => o.textContent),
+        under: [...sel.querySelectorAll("optgroup")].map((g) => ({
+          head: g.label,
+          items: [...g.children].map((o) => o.textContent),
+        })),
+        all: [...sel.querySelectorAll("option")].length,
+      };
+    }, field);
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const got = await shape(page, "presetPick");
+    ok("the presets are under headings", got.heads.length >= 2, got && got.heads);
+    ok("one for replies and one for your own messages",
+      got.heads.indexOf("For replies") >= 0 && got.heads.indexOf("For your messages") >= 0,
+      got.heads);
+    ok("four under each", got.under.every((g) => g.items.length === 4), got.under);
+    // The heading says which prompt it is for, so the entry does not repeat it.
+    ok("and the entries under them do not repeat the heading",
+      got.under.every((g) => g.items.every((t) => !/your writing/i.test(t))), got.under);
+    ok("with only the placeholder left loose", got.loose.length === 1, got.loose);
+
+    // A heading cannot be chosen, which is the whole reason to use one rather
+    // than an entry that looks like a heading and does nothing when tapped.
+    const picked = await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const head = sel.querySelector("optgroup").label;
+      const before = sel.value;
+      sel.value = head;
+      const after = sel.value;
+      sel.value = before;
+      return { head: head, took: after === head, options: [...sel.options].map((o) => o.text) };
+    });
+    ok("because a heading is not something that can be chosen", !picked.took, picked.head);
+    ok("and is not one of the entries either",
+      picked.options.indexOf(picked.head) < 0, picked.head);
+  });
+
+  // Saving one of your own puts it under a heading of its own rather than in
+  // among the shipped ones.
+  await inTab(browser, { saved: { } }, async (page) => {
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const name = document.querySelector('#drawer [data-arf-field="presetName"]');
+      name.value = "Mine";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
+    });
+    await settle(page);
+    const got = await shape(page, "presetPick");
+    ok("your own go under a heading of their own", got.heads.indexOf("Yours") >= 0, got.heads);
+    ok("and not in among the ones that ship with it",
+      (got.under.find((g) => g.head === "Yours") || {}).items.join() === "Mine", got.under);
+  });
+
+  // The connection picker groups by whoever serves the model, and only when
+  // there is more than one of them to tell apart.
+  const withConnections = async (page, list) => {
+    await page.evaluate((l) => {
+      window.__fromBackend({ type: "connections", list: l });
+    }, list);
+    await settle(page);
+    await goTab(page, "Model");
+  };
+
+  await inTab(browser, {}, async (page) => {
+    await withConnections(page, [
+      { id: "a1", name: "Fast", provider: "OpenAI", model: "gpt-4o", isDefault: false },
+      { id: "a2", name: "Careful", provider: "OpenAI", model: "o3", isDefault: false },
+      { id: "b1", name: "Local", provider: "Ollama", model: "qwen", isDefault: false },
+    ]);
+    const got = await shape(page, "connectionId");
+    ok("connections are grouped by provider",
+      got.heads.indexOf("OpenAI") >= 0 && got.heads.indexOf("Ollama") >= 0, got.heads);
+    ok("with two under the one that has two",
+      (got.under.find((g) => g.head === "OpenAI") || {}).items.length === 2, got.under);
+    ok("and the chat's own model left above the headings",
+      got.loose.length === 1 && /chatting with/.test(got.loose[0]), got.loose);
+  });
+
+  // One provider is one heading, which names nothing the list does not already
+  // say, so it is not drawn.
+  await inTab(browser, {}, async (page) => {
+    await withConnections(page, [
+      { id: "a1", name: "Fast", provider: "OpenAI", model: "gpt-4o", isDefault: false },
+      { id: "a2", name: "Careful", provider: "OpenAI", model: "o3", isDefault: false },
+    ]);
+    const got = await shape(page, "connectionId");
+    ok("one provider gets no heading at all", got.heads.length === 0, got.heads);
+    ok("and every connection is still there", got.all === 3, got.all);
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

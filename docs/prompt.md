@@ -112,9 +112,11 @@ What comes back outside the tags is dropped rather than written into the message
 
 The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<REFINED>` and `</REFINED>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 
-## The four prompts that ship with it
+## The prompts that ship with it
 
-Two questions have different answers: does your model reason, and how much of the ground do you want covered.
+Eight, which is the same four shapes twice: once for refining a reply, and once for refining what you wrote yourself. Two questions decide which of the four you want: does your model reason, and how much of the ground do you want covered.
+
+### For replies
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
@@ -132,6 +134,21 @@ The reasoning pair is the smaller one on purpose. A model that reasons is given 
 The rules themselves are specific, not general. "Cut clichés" gives a model nothing to act on; the shipped prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
 
 All four work as they stand. Load one, change whatever you like, save it under a name of your own.
+
+### For your own messages
+
+The same four shapes, written for a different job. A reply is prose to improve; your own turn is writing to leave alone except where it went wrong, so these say what to mend and then stop.
+
+| Prompt | What it is | Needs a reasoning model |
+| --- | --- | --- |
+| **A quick read** | What to mend, and then a full stop: slips, missing words, punctuation that came out wrong by accident. | no |
+| **A close read** | The same list gone through properly, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. | no |
+| **A quick read, for a model that thinks** | One question and the room to answer it: would you read the change and say yes, that is what I meant to type? Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A close read, for a model that thinks** | The same question, plus where a passage typed at speed actually goes wrong. None of that list is a matter of taste, which is the point of it. Asks for its working in `<REFINE_NOTES>`. | yes |
+
+Where the two sets differ is restraint. Every one of these ends by saying that where you cannot tell a slip from a choice, it is a choice: understatement is a decision, a fragment can be how somebody writes, and a plain line that says she left means she left.
+
+They are picked from the same list as the others, under a heading of their own, and loading one changes the prompt for your own messages and leaves the prompt for replies alone.
 
 ## How much it is told
 
