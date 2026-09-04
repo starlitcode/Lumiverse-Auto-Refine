@@ -2526,6 +2526,67 @@ console.log("\nthe working the Log keeps");
   });
 }
 
+console.log("\nthe working card becoming the refined one");
+{
+  // One card, filled in. Both are pinned to the bottom of the screen and they
+  // are not the same height, so swapping the elements made the tall one vanish
+  // and a shorter one fade up from nothing somewhere lower, with the dim behind
+  // them restarting its own fade. That reads as a second card coming out from
+  // under the first, which is what it was.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      const notes = Array.from({ length: 14 }, (_, i) => "line " + i + " of the working").join("\n");
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes: notes });
+      document.querySelector("[data-arf-pop]").__mark = "the card";
+      document.querySelector(".arf-shade").__mark = "the dim";
+    });
+    // Let its own way in finish, so what is measured next is the swap and not
+    // the arrival.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
+    const was = await page.evaluate(() => {
+      const box = document.querySelector("[data-arf-pop]");
+      return { tall: Math.round(box.getBoundingClientRect().height), working: !!box.getAttribute("data-arf-pop-working") };
+    });
+    ok("the working card is up and the taller of the two", was.working && was.tall > 300);
+
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m1",
+        canUndo: true,
+        before: "She let out a breath she did not know she was holding, then turned away.",
+        after: "She breathed out and turned away.",
+      });
+    });
+    const now = await page.evaluate(() => {
+      const boxes = document.querySelectorAll("[data-arf-pop]");
+      const box = boxes[0];
+      return {
+        cards: boxes.length,
+        dims: document.querySelectorAll(".arf-shade").length,
+        same: box.__mark === "the card",
+        sameDim: document.querySelector(".arf-shade").__mark === "the dim",
+        working: !!box.getAttribute("data-arf-pop-working"),
+        says: /What changed/.test(box.textContent),
+        tall: Math.round(box.getBoundingClientRect().height),
+        lit: Math.round(getComputedStyle(box).opacity * 100),
+      };
+    });
+    ok("there is still one card and one dim", now.cards === 1 && now.dims === 1);
+    ok("and they are the same two", now.same && now.sameDim);
+    ok("the card now says what the refine did", now.says && !now.working);
+    ok("it does not fade in again from nothing", now.lit === 100, String(now.lit));
+    ok("and is still at its old height, on its way down", now.tall === was.tall, was.tall + " -> " + now.tall);
+
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
+    const done = await page.evaluate(() =>
+      Math.round(document.querySelector("[data-arf-pop]").getBoundingClientRect().height),
+    );
+    ok("then it has settled at the shorter height", done < was.tall - 50, was.tall + " -> " + done);
+  });
+}
+
 console.log("\nthe card that shows the working");
 {
   // It is about a refine that is happening, so it goes when one stops

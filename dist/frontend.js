@@ -2066,11 +2066,27 @@ export function setup(ctx, overrides) {
             // lands with a refine used to replace it, which left it sitting there
             // reading "Working it out" over a refine that had been stopped, dropped
             // by a check, or saved with nothing to put back: three endings out of
-            // four, each leaving a card that could only be closed by hand. A card
-            // that is about to be replaced by the real one is replaced in the same
-            // turn, so nothing flickers.
-            if (popKey === "working")
-                dropPop();
+            // four, each leaving a card that could only be closed by hand.
+            //
+            // Not this instant, though. On the one ending that does have something to
+            // show, the card saying what the refine did fills this same box a moment
+            // later, and taking the box down first is what turned one card into two.
+            // A frame is long enough for that to have happened and short enough that
+            // nothing is drawn in between: this runs before the frame is painted, so
+            // an ending with nothing to show never gets one more frame of the card.
+            if (popKey === "working") {
+                const mine = popEl;
+                const go = () => {
+                    if (popEl === mine && popKey === "working")
+                        dropPop();
+                };
+                try {
+                    requestAnimationFrame(go);
+                }
+                catch (_) {
+                    go();
+                }
+            }
         }
         if (!on && busy && runStartedAt)
             lastRunMs = Date.now() - runStartedAt;
@@ -3752,6 +3768,41 @@ export function setup(ctx, overrides) {
             popKey = "";
         }
     }
+    // The card is pinned to the bottom of the screen, so a card that gets shorter
+    // moves its top edge down by the difference, all at once. Held at the height
+    // it had and let down to the one it wants, so the edge travels instead.
+    function settleHeight(box, was) {
+        try {
+            if (!(was > 0) || !box || !box.style)
+                return;
+            const now = box.getBoundingClientRect().height;
+            if (!(now > 0) || Math.abs(now - was) < 2)
+                return;
+            box.style.height = was + "px";
+            box.style.overflow = "hidden";
+            // Read the layout between the two, or the browser sees one value being
+            // set and nothing to travel between.
+            void box.offsetWidth;
+            box.style.transition = "height var(--lumiverse-transition-fast,180ms) ease-out";
+            box.style.height = now + "px";
+            const done = (e) => {
+                if (e && e.target !== box)
+                    return;
+                box.style.height = "";
+                box.style.overflow = "";
+                box.style.transition = "";
+                try {
+                    box.removeEventListener("transitionend", done);
+                }
+                catch (_) { }
+            };
+            box.addEventListener("transitionend", done);
+            // A transition that never runs, on a page that will not animate, must
+            // still give the card its own height back.
+            setTimeout(() => done(), 500);
+        }
+        catch (_) { }
+    }
     function showPop(one) {
         if (!cfg.popup)
             return;
@@ -3764,16 +3815,39 @@ export function setup(ctx, overrides) {
             // The working card is not the same refine and is always replaced.
             if (popEl && popKey === key)
                 return;
-            dropPop();
+            // The card showing the working is this card, so it is filled in rather
+            // than taken down and put back up.
+            //
+            // Both cards are pinned to the bottom of the screen and they are not the
+            // same height: the working one runs to about 370 pixels and this one to
+            // about 220. Swapping the elements made the tall one vanish and a shorter
+            // one fade up from nothing a hundred and fifty pixels lower, with the dim
+            // behind them restarting its own fade, which reads as a second card
+            // coming out from under the first. Keeping the box and the dim makes it
+            // one card whose contents changed.
+            const held = popEl && popKey === "working" ? popEl : null;
+            if (!held)
+                dropPop();
             popKey = key;
-            const shade = document.createElement("div");
-            shade.className = "arf-shade";
-            shade.setAttribute("data-arf-shade", "1");
-            // A tap on the dim is the same as closing it, the way every sheet works.
-            shade.addEventListener("click", dropPop);
-            document.body.appendChild(shade);
-            popShade = shade;
-            const box = document.createElement("div");
+            if (!held) {
+                const shade = document.createElement("div");
+                shade.className = "arf-shade";
+                shade.setAttribute("data-arf-shade", "1");
+                // A tap on the dim is the same as closing it, the way every sheet
+                // works.
+                shade.addEventListener("click", dropPop);
+                document.body.appendChild(shade);
+                popShade = shade;
+            }
+            const box = held || document.createElement("div");
+            const wasTall = held ? held.getBoundingClientRect().height : 0;
+            if (held) {
+                box.innerHTML = "";
+                // It is not the working card any more, and nothing is being written
+                // into it.
+                box.removeAttribute("data-arf-pop-working");
+                popNotes = null;
+            }
             box.className = "arf-pop arf";
             box.setAttribute("data-arf-pop", "1");
             box.setAttribute("role", "status");
@@ -3788,6 +3862,10 @@ export function setup(ctx, overrides) {
             top.appendChild(shut);
             box.appendChild(top);
             const body = el("div", "arf-pop-body");
+            // Filling a card that was already standing there is a change of contents
+            // rather than an arrival, so the contents are what fades.
+            if (held)
+                body.className += " arf-arrive";
             body.appendChild(el("div", "arf-note", "What changed"));
             body.appendChild(diffWell(one.before, one.after));
             // This card lands on top of the one that was showing the model's working,
@@ -3813,7 +3891,10 @@ export function setup(ctx, overrides) {
             row.appendChild(keep);
             row.appendChild(back);
             box.appendChild(row);
-            document.body.appendChild(box);
+            if (!held)
+                document.body.appendChild(box);
+            else
+                settleHeight(box, wasTall);
             popEl = box;
             // Painted a frame later, once it is in the page and has a colour behind
             // it to measure against, the same as the panel.
