@@ -2017,11 +2017,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     why: string;
   } | null = null;
 
-  // The whole of the working when the message carries it, rather than the tail
-  // the stream was trimmed to. The backend sends it on every ending that has
-  // one, and it is always the better copy of the same thing.
+  // The whole answer, when the message carries one. Every ending sends it, and
+  // it is the better copy of what the stream was showing a trimmed tail of.
+  //
+  // Only if there is working in it. A prompt that asks for none still gets an
+  // answer, and that answer is the rewrite: taking it would put the rewrite
+  // itself under What the model worked out, which is not what it says on the
+  // card and not what anybody is looking for there. The streamed notes are the
+  // working already, cut out of the tags by the backend, so they are taken
+  // where they arrive rather than here.
   function tookNotes(msg: any) {
-    if (msg && typeof msg.notes === "string" && msg.notes.trim()) liveNotes = msg.notes;
+    if (!msg || typeof msg.notes !== "string" || !msg.notes.trim()) return;
+    if (!NOTES_TAG.test(msg.notes)) return;
+    liveNotes = msg.notes;
   }
 
   // The working as it reads, rather than as it was written.
@@ -5712,7 +5720,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "popup",
         label: "Show the before and after on screen",
         type: "bool",
-        hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. On a prompt that asks the model for its working it opens earlier than that, holding the working as it is written. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+        hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
       }),
     );
     wrap.appendChild(
@@ -7685,12 +7693,13 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
-            // The working is kept for the Log and shown there. It used to open a
-            // card on the page as well, which then had to hand that card over
+            // The working as it is written, already cut out of its tags by the
+            // backend. It is kept for the Log and shown there. It used to open
+            // a card on the page as well, which then had to hand that card over
             // to the one saying what the refine did, and the hand-over is what
-            // read as a second card popping up. The Log is where it is read,
-            // at whatever pace suits, and nothing has to be caught.
-            tookNotes(msg);
+            // read as a second card popping up. The Log is where it is read, at
+            // whatever pace suits, and nothing has to be caught.
+            if (typeof msg.notes === "string" && msg.notes.trim()) liveNotes = msg.notes;
             if (msg.stage === "retrying") {
               retryAt = Number(msg.attempt) || 0;
               retryOf = Number(msg.of) || 0;

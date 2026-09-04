@@ -2595,6 +2595,43 @@ console.log("\nthe working, read as prose");
     await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
     ok("switching them off takes them away again", !/[<>]/.test(await kept()));
   });
+
+  // A prompt that asks for no working still gets an answer, and that answer is
+  // the rewrite. Taking it would put the rewrite itself under What the model
+  // worked out, which is neither what the card says nor what anybody is looking
+  // for there.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m1",
+        canUndo: true,
+        before: "She let out a breath she did not know she was holding.",
+        after: "She breathed out and turned away.",
+      });
+      window.__fromBackend({
+        type: "refine_notes",
+        chatId: "c1",
+        messageId: "m1",
+        notes: "Here you go.\n<REFINED>\nShe breathed out and turned away.\n</REFINED>",
+      });
+    });
+    await goTab(page, "Log");
+    const said = await page.evaluate(() => {
+      const well = document.querySelector("[data-arf-kept]");
+      return {
+        well: well ? well.textContent : null,
+        card: document.querySelector('[data-arf-card="What the model worked out"]').textContent,
+      };
+    });
+    ok("an answer with no working in it keeps nothing", said.well === null, String(said.well));
+    ok(
+      "and the card says why rather than showing the rewrite",
+      /does not ask the model for its working/.test(said.card),
+      said.card.slice(0, 120),
+    );
+  });
 }
 
 console.log("\nthe working the Log keeps");
