@@ -3440,22 +3440,11 @@ export function setup(ctx, overrides) {
     }
     // How long the description takes to arrive and to leave.
     const HINT_FADE = 140;
-    // The ones still fading out, so teardown does not leave a box on the page
-    // waiting on a timer that will never be allowed to run.
+    // The ones still fading out. Cleared in the same disposer that closes the open
+    // one, straight after it, since teardown runs these in the order they were
+    // added: emptying this first and closing after would put a box back in and
+    // leave it there on a timer nothing is left to run.
     const hintGoing = new Set();
-    disposers.push(() => {
-        hintGoing.forEach((one) => {
-            try {
-                clearTimeout(one.timer);
-            }
-            catch (_) { }
-            try {
-                one.box.remove();
-            }
-            catch (_) { }
-        });
-        hintGoing.clear();
-    });
     function hideHint() {
         const going = hintPop;
         const was = hintAnchor;
@@ -3725,10 +3714,6 @@ export function setup(ctx, overrides) {
             document.addEventListener("click", eat, true);
             timer = setTimeout(drop, 700);
         }
-        disposers.push(() => {
-            if (eatClick)
-                eatClick();
-        });
         const onDown = (e) => {
             noteKind(e);
             // A guard left over from a gesture that never produced a click, a drag or
@@ -3799,7 +3784,22 @@ export function setup(ctx, overrides) {
                     window.removeEventListener("resize", onResize);
             }
             catch (_) { }
+            if (eatClick)
+                eatClick();
             hideHint();
+            // Whatever is fading goes now rather than on its own timer, which teardown
+            // would never let run.
+            hintGoing.forEach((one) => {
+                try {
+                    clearTimeout(one.timer);
+                }
+                catch (_) { }
+                try {
+                    one.box.remove();
+                }
+                catch (_) { }
+            });
+            hintGoing.clear();
         });
     }
     // ---- the tabs ----

@@ -4278,6 +4278,49 @@ console.log("\nnothing is thrown away on one tap");
   );
 }
 
+// ---- teardown leaves the page as it found it ----
+console.log("\nteardown");
+{
+  // The panel hangs three things off the page rather than off its own root: the
+  // stylesheet, the card that comes up when a refine lands, and a setting's
+  // description. None of them goes when the drawer is emptied, so teardown is
+  // the only thing that can take them away, and an update in the extensions
+  // panel is a teardown and a fresh setup in place.
+  await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    await goTab(page, "Limits");
+    const left = await page.evaluate(async () => {
+      const frame = () =>
+        new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const q = document.querySelector("#drawer .arf-q");
+      q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      q.click();
+      await frame();
+      const opened = document.querySelectorAll(".arf-hint").length;
+      // Torn down with a description open and another one mid-fade, which is
+      // the state a timer is holding rather than a listener.
+      const q2 = [...document.querySelectorAll("#drawer .arf-q")][1];
+      q2.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      q2.click();
+      await frame();
+      window.__teardown();
+      // Read straight away rather than after the fade. Everything here is taken
+      // down by the teardown itself, and waiting out the fade would pass just as
+      // well on a teardown that left the work to a timer still running after it.
+      await frame();
+      return {
+        opened: opened,
+        hints: document.querySelectorAll(".arf-hint").length,
+        styles: document.querySelectorAll("style[data-arf-style]").length,
+        cards: document.querySelectorAll(".arf-pop, .arf-shade").length,
+      };
+    });
+    ok("a description was open when it was torn down", left.opened === 1, left);
+    ok("and nothing is left on the page after it", left.hints === 0, left);
+    ok("nor the stylesheet", left.styles === 0, left);
+    ok("nor a card over the chat", left.cards === 0, left);
+  });
+}
+
 // ---- saving a model setup, which is the preset card's twin ----
 console.log("\nmodel setups");
 {
