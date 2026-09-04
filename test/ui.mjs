@@ -82,6 +82,18 @@ const settle = (page) =>
 
 // Boots the extension in a page with the tab mounted, and hands the callback the
 // page plus whatever the stub host recorded.
+// The chat input as Lumiverse renders it: a textarea named chat-message inside
+// the input area, with the mirror div beside it that measures its height and is
+// not a textarea. Built here so the checks look for the box the extension looks
+// for, rather than for a shape invented to match a selector.
+const COMPOSER_HTML =
+  '<div data-component="InputArea">' +
+  '<div class="_inputRow"><div class="_inputWrapper">' +
+  '<div class="_textareaMirror" aria-hidden="true">&#8203;</div>' +
+  '<textarea name="chat-message" aria-label="Message" rows="1" ' +
+  'style="width:200px;height:40px"></textarea>' +
+  "</div></div></div>";
+
 async function inTab(browser, { css = "", viewport, touch = false, saved = null, noMenu = false } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
@@ -112,6 +124,16 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
   }
   await page.addScriptTag({ content: SOURCE, type: "module" });
   await page.waitForFunction(() => !!window.__setup);
+  await page.evaluate((html) => {
+    window.__makeComposer = (text) => {
+      const host = document.createElement("div");
+      host.innerHTML = html;
+      document.body.appendChild(host.firstElementChild);
+      const box = document.querySelector('[data-component="InputArea"] textarea');
+      box.value = text;
+      return box;
+    };
+  }, COMPOSER_HTML);
   if (noMenu) await page.evaluate(() => { window.__noMenu = true; });
 
   await page.evaluate(() => {
@@ -967,11 +989,7 @@ console.log("\nthe extras, which are off until asked for");
     // Refining the draft reads the input box, sends it, and writes the answer
     // back through the setter the framework is listening to.
     await page.evaluate(() => {
-      const box = document.createElement("textarea");
-      box.setAttribute("data-component", "ChatInput");
-      box.value = "i walk through it, suddenly";
-      box.style.cssText = "width:200px;height:40px";
-      document.body.appendChild(box);
+      const box = window.__makeComposer("i walk through it, suddenly");
       window.__saw = [];
       box.addEventListener("input", () => window.__saw.push(box.value));
       window.__inputClick();
@@ -988,7 +1006,7 @@ console.log("\nthe extras, which are off until asked for");
     }, askedAsUser.id);
     await settle(page);
     const wrote = await page.evaluate(() => ({
-      value: document.querySelector('textarea[data-component="ChatInput"]').value,
+      value: document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]').value,
       events: window.__saw.length,
     }));
     ok("the answer goes back in the box", wrote.value === "I walk through it.", wrote.value);
@@ -1008,11 +1026,7 @@ console.log("\nthe extras, which are off until asked for");
     },
     async (page) => {
     await page.evaluate(() => {
-      const box = document.createElement("textarea");
-      box.setAttribute("data-component", "ChatInput");
-      box.value = "i walk through it";
-      box.style.cssText = "width:200px;height:40px";
-      document.body.appendChild(box);
+      window.__makeComposer("i walk through it");
       window.__inputClick();
     });
     const asked = await page.evaluate(
@@ -3374,6 +3388,141 @@ console.log("\nreading the request at full size");
     ok("the preview opens at full size", /the whole instruction, at length/.test(view.text));
     ok("as something to read rather than edit", view.readOnly, view.labels.join(","));
     ok("with Copy and Close, and no Done", view.labels.indexOf("Done") < 0 && view.labels.indexOf("Close") >= 0);
+  });
+}
+
+
+console.log("\nrefining the draft from the panel");
+{
+  // The draft is the third thing a refine can be pointed at, and the only one
+  // whose way in used to be a menu or a row inside Extras. It stands with the
+  // other two above the tabs, on the same terms: its own setting puts it there.
+  await inTab(browser, {}, async (page) => {
+    ok("no draft button until the setting asks for it",
+      !(await page.$('#drawer [data-arf-draft]')));
+  });
+
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    ok("the draft button stands with the other two", !!(await page.$('#drawer [data-arf-draft]')));
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll("#drawer button")]
+        .map((b) => b.textContent.trim())
+        .filter((t) => /^Refine /.test(t)));
+    ok("in the order they are reached for", order[0] === "Refine the latest reply"
+      && order[2] === "Refine what I am typing", JSON.stringify(order));
+
+    // It reads the real box, the same one every other way in reads.
+    await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
+    await settle(page);
+    const asked = await page.evaluate(() => {
+      const m = window.__sent.filter((x) => x.type === "try_refine").pop();
+      return m && { text: m.text, asUser: m.asUser, id: m.requestId };
+    });
+    ok("pressing it sends the draft, marked as yours",
+      asked && asked.asUser === true && /i walk through it/.test(asked.text), asked);
+    ok("and it greys out while that one runs",
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').disabled));
+
+    // A refine that takes longer than the backend watchdog. The backend says it
+    // has the request, then reports progress, and a progress message is proof
+    // it is answering. The watchdog used to be armed by that very message with
+    // nothing left to clear it, so a draft refine slower than five seconds
+    // reported a backend that is not installed.
+    await page.evaluate((id) => {
+      window.__fromBackend({ type: "refine_ack", requestId: id });
+      window.__fromBackend({ type: "refine_progress", stage: "asking" });
+    }, asked.id);
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 6000)));
+    // The complaint would arrive as a toast and as a line in the Log, so both
+    // are read: a check that looked at only one of them passed with the fault
+    // still in place.
+    const cried = await page.evaluate(async () => {
+      const tabs = [...document.querySelectorAll("#drawer .arf-tab, #drawer [role=tab]")];
+      const log = tabs.find((t) => (t.textContent || "").trim() === "Log");
+      if (log) log.click();
+      await new Promise((r) => requestAnimationFrame(r));
+      return {
+        toasts: (window.__toasts || []).map((t) => (t && t.text) || String(t)).join(" | "),
+        panel: document.querySelector("#drawer").textContent,
+      };
+    });
+    ok("a slow draft refine is not called a missing backend",
+      cried.toasts.indexOf("not answering") < 0 && cried.panel.indexOf("fully installed") < 0,
+      cried.toasts.slice(0, 160));
+
+    // And when it lands, the same card the replies get.
+    await page.evaluate((id) => {
+      window.__fromBackend({ type: "try_result", requestId: id, ok: true,
+                            after: "I walk through it." });
+    }, asked.id);
+    await settle(page);
+    const card = await page.evaluate(() => {
+      const el = document.querySelector("[data-arf-pop]");
+      return el && { text: el.textContent, back: !!el.querySelector("[data-arf-pop-undo]") };
+    });
+    ok("a card comes up saying what changed", !!card && /What changed/.test(card.text), card);
+    ok("titled for the draft rather than for a reply",
+      !!card && /Your draft, refined/.test(card.text), card && card.text.slice(0, 60));
+    ok("with a way back on it", !!card && card.back);
+
+    // The way back writes the old draft into the box, since a draft was never
+    // saved anywhere for the backend to hold.
+    await page.evaluate(() => document.querySelector("[data-arf-pop-undo]").click());
+    await settle(page);
+    ok("which puts the draft back as it was",
+      await page.evaluate(() =>
+        document.querySelector('[data-component="InputArea"] textarea').value
+          === "i walk through it, suddenly"),
+      await page.evaluate(() =>
+        document.querySelector('[data-component="InputArea"] textarea').value));
+    ok("and closes the card", !(await page.$("[data-arf-pop]")));
+  });
+}
+
+
+console.log("\nthe button and its menu do not say the same thing twice");
+{
+  // With the button set to turn into an undo, the arrow is in front of you and
+  // one tap does it. An entry underneath saying the same thing is a second way
+  // to reach something already in reach, and it costs a line in a menu that has
+  // to be read on a phone.
+  const openMenu = async (page) => {
+    await page.evaluate(() => {
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle(page);
+    return page.evaluate(() => ((window.__menu || {}).items || []).map((i) => i.key));
+  };
+  const landOne = (page) =>
+    page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined", chatId: "c1", messageId: "m1", canUndo: true,
+        before: "She let out a breath she did not know she was holding.",
+        after: "She breathed out.",
+      });
+    });
+
+  // The button always refines, so the menu is the only way back.
+  await inTab(browser, { saved: { widgetOn: true, widgetUndo: false } }, async (page) => {
+    await landOne(page);
+    await settle(page);
+    const keys = await openMenu(page);
+    ok("with the button always refining, the menu carries the way back",
+      keys.indexOf("undo") >= 0, keys.join(","));
+  });
+
+  // The button becomes the way back, so the menu does not repeat it.
+  await inTab(browser, { saved: { widgetOn: true, widgetUndo: true } }, async (page) => {
+    await landOne(page);
+    await settle(page);
+    const keys = await openMenu(page);
+    ok("with the button turning into the way back, the menu does not repeat it",
+      keys.indexOf("undo") < 0, keys.join(","));
+    ok("and still offers a refine, which the button no longer does",
+      keys.indexOf("now") >= 0, keys.join(","));
   });
 }
 

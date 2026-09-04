@@ -2903,6 +2903,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     return "";
   }
 
+  // The draft is not a reply, and what stops one does not all stop the other. A
+  // refine of the input box carries no chat id and asks the chat for nothing,
+  // so it works while the panel is still working out which chat you are in, and
+  // it is not held up by there being no chat at all. Being switched off, here
+  // or everywhere, still stops it, and so does a prompt with nowhere to put the
+  // text.
+  function whyNotDraft(): string {
+    if (!cfg.enabled) return "Auto Refine is switched off.";
+    if (lastChatId != null && chatIsOff(lastChatId))
+      return "Auto Refine is switched off in this chat.";
+    if (noTurn())
+      return "No block in your prompt has {{message}} in it, so there is nothing to rewrite. Add it under Prompt.";
+    return "";
+  }
+
   // Browser-drawn controls are painted from the page's colour scheme, and with
   // none set the browser assumes light, which is why a checkbox comes out as a
   // white block on a dark panel. Measured rather than assumed, so a light theme
@@ -3578,6 +3593,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     every.addEventListener("click", () => askSweep());
     row.appendChild(every);
 
+    // The third thing a refine can be pointed at, standing next to the other
+    // two rather than living only in a menu over the chat or a row inside
+    // Extras. Both of those are a hunt, and this is the one people reach for
+    // while the panel is already open in front of them.
+    if (cfg.inputRefine) {
+      const draft = button("Refine what I am typing", false);
+      const noDraft = whyNotDraft();
+      draft.setAttribute("data-arf-draft", "1");
+      draft.disabled = !!noDraft || !!inputWaiting;
+      draft.style.opacity = draft.disabled ? "0.5" : "1";
+      draft.style.cursor = draft.disabled ? "not-allowed" : "pointer";
+      draft.title = inputWaiting
+        ? "Already refining your draft."
+        : noDraft ||
+          "Rewrites what is in the chat's input box, before you send it. Nothing is written to the chat.";
+      draft.addEventListener("click", () => refineInput());
+      row.appendChild(draft);
+    }
+
     const auto = document.createElement("label");
     auto.className = "arf-row arf-note";
     auto.style.cursor = "pointer";
@@ -3899,10 +3933,45 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function showPop(one: Undo) {
+    showCard({
+      key: undoKey(one.chatId, one.messageId),
+      title: "Refined",
+      before: one.before,
+      after: one.after,
+      back: () => askUndo(one.chatId, one.messageId),
+    });
+  }
+
+  // The same card for the draft in the input box. It is the same event from the
+  // reader's side, a piece of their writing replaced by a rewrite, so it is the
+  // same card: what changed, marked, with a way back on it. Putting this one
+  // back is writing the old text into the box rather than asking the backend,
+  // since the draft was never saved anywhere for the backend to hold.
+  function showDraftPop(before: string, after: string, node: any) {
+    showCard({
+      key: "draft:" + Date.now(),
+      title: "Your draft, refined",
+      before: before,
+      after: after,
+      back: () => {
+        const box = node || composer();
+        if (box && setComposer(box, before)) log("put your draft back", true);
+        else toast("Could not write to the input box.", true);
+      },
+    });
+  }
+
+  function showCard(spec: {
+    key: string;
+    title: string;
+    before: string;
+    after: string;
+    back: () => void;
+  }) {
     if (!cfg.popup) return;
     try {
       if (typeof document === "undefined" || !document.body) return;
-      const key = undoKey(one.chatId, one.messageId);
+      const key = spec.key;
       // The same refine twice is one card. A repaint or a second message about
       // a refine already on screen must not stack another one on top of it.
       // The working card is not the same refine and is always replaced.
@@ -3942,7 +4011,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.setAttribute("role", "status");
 
       const top = el("div", "arf-between");
-      top.appendChild(el("span", "arf-h", "Refined"));
+      top.appendChild(el("span", "arf-h", spec.title));
       const shut = document.createElement("button");
       shut.type = "button";
       shut.className = "arf-x";
@@ -3957,7 +4026,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // rather than an arrival, so the contents are what fades.
       if (held) body.className += " arf-arrive";
       body.appendChild(el("div", "arf-note", "What changed"));
-      body.appendChild(diffWell(one.before, one.after));
+      body.appendChild(diffWell(spec.before, spec.after));
       // This card lands on top of the one that was showing the model's working,
       // which is a second of reading for something worth more than that. Said
       // rather than left to be missed twice.
@@ -3969,7 +4038,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const back = button("Put it back", false);
       back.setAttribute("data-arf-pop-undo", "1");
       back.addEventListener("click", () => {
-        askUndo(one.chatId, one.messageId);
+        spec.back();
         dropPop();
       });
       const keep = button("Keep it", true);
@@ -5875,9 +5944,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "inputRefine",
-        label: "Rows in the chat input's Extras menu",
+        label: "Refining the draft in your input box",
         type: "bool",
-        hint: "Puts two rows in the chat input's Extras menu: one that refines the latest reply, and one that rewrites the text in your input box before you send it. While the floating button is on screen its menu holds them instead.",
+        hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs, and a row for it appears in the chat input's Extras menu or in the floating button's menu, whichever is on screen.",
       }),
     );
     if (cfg.inputRefine)
@@ -7010,11 +7079,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The one part of this extension that reaches into the page. Everything else
   // goes through the host's own APIs; there is no API for the input box, so
   // this finds it, and this is what breaks if Lumiverse ever moves it.
+  // Tried in order, most specific first, and every one of them describes the
+  // box Lumiverse actually renders: a textarea named chat-message inside the
+  // input area. The container and the name are two independent facts, so a
+  // build that changes one is still found by the entry that leans on the other.
+  //
+  // The bare textarea at the end is the last resort and is meant to be one: it
+  // takes the last textarea on the page, which is right only because the chat
+  // input sits below everything it could be confused with. Anything above it
+  // has to be a shape somebody has actually seen. Three entries here named a
+  // ChatInput and an InputBar component, and no such component exists; they
+  // matched nothing but the stub written to match them.
   const INPUT_PICKS = [
-    'textarea[data-component="ChatInput"]',
-    '[data-component="ChatInput"] textarea',
-    '[data-component="InputBar"] textarea',
-    'form textarea',
+    '[data-component="InputArea"] textarea[name="chat-message"]',
+    'textarea[name="chat-message"]',
+    '[data-component="InputArea"] textarea',
     "textarea",
   ];
 
@@ -7056,6 +7135,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   let inputWaiting: string | null = null;
   let inputNode: any = null;
+  // The draft as it stood before the refine, so the card can put it back. It is
+  // held here and nowhere else: a draft is not a saved message, so the backend
+  // has no copy of it and there is nothing to ask for.
+  let inputBefore = "";
   function refineInput() {
     const node = composer();
     if (!node) {
@@ -7074,6 +7157,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (inputWaiting) return;
     inputNode = node;
+    inputBefore = text;
     const id = newId();
     inputWaiting = id;
     log("refining what you are typing");
@@ -7081,6 +7165,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // answer comes back and this puts it in the box. asUser is what tells the
     // model it is looking at your own hand rather than the story's voice.
     send({ type: "try_refine", requestId: id, text: text, asUser: true });
+    // The button in the panel greys out while this runs, so the panel has to be
+    // told. Every other way in is a menu that has already closed.
+    paint();
   }
 
   // ---- the floating button and the input bar row ----
@@ -7394,7 +7481,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       doing.push({ key: "now", label: "Refine the latest reply" });
       doing.push({ key: "all", label: "Refine every reply in this chat" });
     }
-    if (undoHere().length) doing.push({ key: "undo", label: "Put the last refine back" });
+    // Unless the button itself is the undo, which is what widgetUndo makes it.
+    // Then the arrow is in front of you and the entry underneath it does the
+    // same thing twice.
+    if (undoHere().length && !cfg.widgetUndo)
+      doing.push({ key: "undo", label: "Put the last refine back" });
     // On the same terms as the Extras rows: their setting puts them there, and
     // this menu takes them over while the button is on screen.
     if (cfg.inputRefine) doing.push({ key: "draft", label: "Refine what I am typing" });
@@ -7676,6 +7767,17 @@ export function setup(ctx: Ctx, overrides?: any) {
             // wrote its working down and then wiped it a line later, so the
             // Log only ever kept what the second one carried.
             markBusy(true, msg.stage);
+            // A backend reporting its progress is a backend that is answering,
+            // which is the whole question the ack watchdog asks. It has to be
+            // said here as well as on the ack, because markBusy arms the
+            // watchdog whenever it turns busy on, and this is the line that
+            // turns it on for a refine the panel did not start itself: the
+            // draft in the input box, and the Try it card. Their ack arrived
+            // and was cleared before there was anything to clear, so the one
+            // armed here had nothing left to answer it and fired five seconds
+            // later, calling a refine that was running perfectly well a backend
+            // that is not installed.
+            clearAck();
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
@@ -7965,6 +8067,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               } else if (setComposer(node, String(msg.after || ""))) {
                 log("refined what you were typing", true);
                 toast("Your draft was refined.");
+                showDraftPop(inputBefore, String(msg.after || ""), node);
                 ping();
               } else {
                 log("could not write to the input box");

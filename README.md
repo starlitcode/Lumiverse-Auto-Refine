@@ -20,7 +20,7 @@ Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt ships wi
 
 Each finished reply is sent to a model along with the prompt you wrote, and what comes back is saved into the chat, so the wording sticks and the model reads it as context on later turns.
 
-Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, and one that refines what you are still typing.
+Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, one that goes through every reply in the chat, and one that rewrites what you are still typing before you send it.
 
 It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
 
