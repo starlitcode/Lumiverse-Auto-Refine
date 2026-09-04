@@ -1454,9 +1454,20 @@ describe("the working a reasoning prompt asks for", () => {
     expect(carried[0].notes).toContain("Leaving the dialogue alone");
   });
 
-  // The tags are shouted now. A prompt written before that still works, because
+  // The rewrite is on the card already, marked against what it replaced, so
+  // carrying it back under the working would be sending it twice.
+  test("and the rewrite is not carried back with it", async () => {
+    const h = await armed([answer]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const carried = h.sent.filter((m: any) => m && typeof m.notes === "string" && m.notes);
+    expect(carried[0].notes).not.toContain("the cold hit her");
+    expect(carried[0].notes).not.toContain("REFINED");
+  });
+
+  // The tags are shouted. A prompt asking in lower case still works, because
   // the answer is read case-insensitively.
-  test("a prompt still asking in lower case is not broken by the change", async () => {
+  test("a prompt asking in lower case reads the same", async () => {
     const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);

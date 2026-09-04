@@ -340,20 +340,22 @@ const OUT_OPEN = new RegExp('<' + OUT_TAG + '[^>]*>', 'i');
 // left alone, and that note lands here, so it is carried back to the panel to
 // be shown rather than dropped unread.
 //
-// It carries the whole answer, tags and rewrite and all, not only the part
-// around the rewrite. The panel can be asked to show the answer as the model
-// wrote it, and an answer with the rewrite cut out of the middle is not that.
-// What it shows by default is the working alone, which it reads back out of the
-// tags itself, so nothing has to be sent twice. Capped, since a long reasoning
-// answer is not worth pushing across the bridge in full.
+// The rewrite itself is left out of it. That is on the same card already,
+// marked against what it replaced, so sending it a second time would be sending
+// it twice. Capped, since a long reasoning answer is not worth pushing across
+// the bridge in full.
 //
 // Nothing downstream reads this but the panel.
 const NOTES_MAX = 20000;
 function unwrapOutput(answer) {
-    const whole = answer.length > NOTES_MAX ? answer.slice(0, NOTES_MAX) : answer;
     const hit = OUT_RE.exec(answer);
     if (hit && typeof hit[1] === 'string') {
-        return { text: hit[1].trim(), tagged: true, outside: whole.trim() };
+        const around = (answer.slice(0, hit.index) + '\n' + answer.slice(hit.index + hit[0].length)).trim();
+        return {
+            text: hit[1].trim(),
+            tagged: true,
+            outside: around.length > NOTES_MAX ? around.slice(0, NOTES_MAX) : around,
+        };
     }
     // An opening tag with nothing closing it: the answer was cut off mid-write.
     if (OUT_OPEN.test(answer))

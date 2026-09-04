@@ -2556,12 +2556,10 @@ console.log("\nthe working, read as prose");
 {
   // What comes back while the model is writing has had the tags taken off by
   // the backend already. What comes back at the end is everything outside
-  // <REFINED>, tags and all, so the same working read as prose on the card and
-  // The whole answer as the model wrote it: the working in its own tags, and the
-  // rewrite in its own. Both pairs, since the question the switch answers is how
-  // the model laid its answer out.
+  // <REFINED>, which is the same working with its own tags still round it. Both
+  // read as prose on the card, and neither reads as markup.
   const RAW =
-    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>\n<REFINED>\nShe breathed out.\n</REFINED>";
+    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>";
   await inTab(browser, {}, async (page) => {
     await page.evaluate((raw) => {
       window.__fromBackend({ type: "refine_notes", chatId: "c1", messageId: "m1", notes: raw });
@@ -2569,31 +2567,30 @@ console.log("\nthe working, read as prose");
     await goTab(page, "Log");
     const kept = () => page.evaluate(() => document.querySelector("[data-arf-kept]").textContent);
     const clean = await kept();
-    ok("with the switch off the Log shows no tags", !/[<>]/.test(clean), clean);
+    ok("the Log shows no tags", !/[<>]/.test(clean), clean);
     ok("and reads as the working alone", /could sit in any story/.test(clean) && /Cut the simile/.test(clean));
-    ok("with the rewrite left on the card where it belongs", !/She breathed out/.test(clean), clean);
-
-    // The switch is on the card, where somebody wondering about the markup is
-    // already looking.
-    await page.evaluate(() => {
-      document.querySelector('#drawer [data-arf-field="notesTags"]').click();
-    });
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
-    const raw = await kept();
-    ok("switching the tags on shows them exactly as they came back", /<REFINE_NOTES>/.test(raw) && /<plan>/.test(raw), raw.slice(0, 120));
-    ok("and nothing was thrown away to hide them", raw.indexOf("Cut the simile") > 0);
+    ok("with no blank left behind where a tag was", !/\n\n\n/.test(clean), JSON.stringify(clean));
     ok(
-      "the rewrite's own tags are there too, not only the working's",
-      /<REFINED>/.test(raw) && /<\/REFINED>/.test(raw),
-      raw.slice(0, 200),
+      "and no switch on the card offering to put them back",
+      await page.evaluate(() => !document.querySelector('#drawer [data-arf-field="notesTags"]')),
     );
-    ok("and the rewrite itself, as it came back", /She breathed out/.test(raw), raw.slice(0, 200));
+  });
 
+  // A model that leaves the working's closing tag off, which is what a call cut
+  // short looks like. Everything after the opening tag is the working, and
+  // showing it beats showing nothing.
+  await inTab(browser, {}, async (page) => {
     await page.evaluate(() => {
-      document.querySelector('#drawer [data-arf-field="notesTags"]').click();
+      window.__fromBackend({
+        type: "refine_notes",
+        chatId: "c1",
+        messageId: "m1",
+        notes: "<REFINE_NOTES>\nThe simile is doing no work.",
+      });
     });
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
-    ok("switching them off takes them away again", !/[<>]/.test(await kept()));
+    await goTab(page, "Log");
+    const cut = await page.evaluate(() => document.querySelector("[data-arf-kept]").textContent);
+    ok("working with no closing tag still reads", /simile is doing no work/.test(cut) && !/[<>]/.test(cut), cut);
   });
 
   // A prompt that asks for no working still gets an answer, and that answer is

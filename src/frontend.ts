@@ -233,15 +233,6 @@ const CONFIG = {
   // somebody was reading, and making them find a tab to see what changed is
   // the wrong way round.
   popup: true,
-  // Whether the model's working is shown with the tags it wrote around it.
-  //
-  // Off by default. What comes back while it is being written has the tags
-  // taken off already, but what the backend hands over at the end is
-  // everything outside <REFINED>, tags and all, so the Log read as markup where
-  // the card on the page read as prose. The tags are worth seeing when you are
-  // working on a prompt and want to know how the model laid its answer out, and
-  // they are noise every other time.
-  notesTags: false,
   // What one tap does when there is a refine to put back. On, the button turns
   // into an undo; off, a tap always refines.
   //
@@ -1010,7 +1001,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional, one regular expression per line, matched without case. Already covered: fenced and inline code, both fence styles, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, the bracket trackers use, and any tag carrying an attribute. Add a line for whatever your cards print that none of those catch. Yours are tried before the built-in ones, so a pattern written for one card wins over the general rules. Anything that will not compile is named under this box instead of failing quietly.",
+    hint: "Optional, one regular expression per line, matched without case. Code, links, images, comments, entities, wiki brackets, spoiler bars, table rows and any tag carrying an attribute are covered already. Yours are tried first, and one that will not compile is named under this box.",
   },
   {
     key: "shieldKeep",
@@ -1018,7 +1009,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional, one per line. A region matching one of these stays in front of the model even when a rule above would have hidden it. This is how you narrow a built-in rule without losing it: the tag rule is broad on purpose, and a tag your prose reads around, like a colour span in the middle of a sentence, is better left where the model can see it.",
+    hint: "Optional, one per line. A region matching one of these stays in front of the model even when a rule above would have hidden it, which is how you narrow a built-in rule without losing it.",
   },
 ];
 
@@ -1043,7 +1034,7 @@ const GUARD_FIELDS: Field[] = [
     key: "guardSoften",
     label: "Refuse a rewrite that sanitised the reply",
     type: "bool",
-    hint: "On by default, and the only check that reads the original as well as the rewrite. A softened reply is not a refusal, is the right length, and keeps every protected token: it just came back with the edge taken off, which nothing else here can see. This compares the charged language in the two and refuses a rewrite that dropped most of it. It needs at least three such words in the reply before it can fire, so it stays quiet on prose that never had that register.",
+    hint: "On by default, and the only check that reads the original as well as the rewrite. It compares the charged language in the two and refuses a rewrite that dropped most of it.",
   },
   {
     key: "softenPct",
@@ -1061,13 +1052,13 @@ const GUARD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "guardSoften" },
     under: true,
-    hint: "Optional, one per line, added to the built-in list. That list is short and holds only words that are hard to use innocently, because everyday words like hit, skin or pain would fire on any refine that tightened a description. Add what softening looks like in what you write.",
+    hint: "Optional, one per line, added to the built-in list. That list holds only words that are hard to use innocently, so add what softening looks like in what you write.",
   },
   {
     key: "skipWhenClean",
     label: "Skip the automatic pass when a scan finds nothing",
     type: "bool",
-    hint: "Off by default. Before the automatic pass calls a model, the reply is scanned here, in the extension, for the phrases and filler words on the built-in list. Nothing found means no call and nothing spent. Pressing a refine button always runs whatever the scan thinks, because that is you asking for this one. Worth knowing before you switch it on: the scan only sees what a plain match can see. Rhythm, repetition and whether a line could sit in any story are the model's half, so a reply it calls clean can still have work in it. Try the Scan it button under Context to see what it does and does not catch.",
+    hint: "Off by default. The reply is scanned here in the extension before the automatic pass calls a model, and nothing on the list means no call. A clean scan means nothing on the list, never nothing wrong.",
   },
   {
     key: "retryRefine",
@@ -1075,7 +1066,7 @@ const GUARD_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 3,
-    hint: "How many extra times to ask, and 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn, not a settled answer, and asking again often comes back clean. Only the failures a second try could fix are retried: a rewrite refused for its length is one the model meant, so asking again buys the same answer at the same price. Every retry is another call on your bill.",
+    hint: "How many extra times to ask, and 0 by default. Only the failures a second try could fix are retried, and every retry is another call on your bill.",
   },
 ];
 
@@ -1098,7 +1089,7 @@ const WIDGET_FIELDS: Field[] = [
     type: "bool",
     needs: { key: "widgetOn" },
     under: true,
-    hint: "Off by default. On, a tap puts the last refine back whenever there is one to put back, which means it is not refining anything while that stands: hold the button for the menu to refine again, or switch this off and let a tap always refine. The undo is on the card that comes up and beside the message either way.",
+    hint: "Off by default. On, a tap puts the last refine back whenever there is one, so refining again means holding the button for the menu. The undo is on the card and beside the message either way.",
   },
 ];
 
@@ -1120,7 +1111,7 @@ const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: numbe
     min: 512,
     max: 2000000,
     step: "1",
-    hint: "How much the provider is told it may read. Blank leaves that to the connection, which is nearly always right: this refine sends one message, its run-up and your rules, so it is a small request next to a chat. Worth setting only if your connection's own window is larger than you want to pay for on a refine.",
+    hint: "How much the provider is told it may read. Blank leaves that to the connection, which is nearly always right: a refine is a small request next to a chat.",
   },
   {
     id: "max_tokens",
@@ -1197,7 +1188,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 3600,
-    hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up. Worth raising for a reasoning model on a high effort level, which can think for a long time before it writes anything: a cap that fires mid-thought throws away work that was about to arrive. Turning it off does not leave you stuck, since Stop is always there and a backend that is not running still says so within a few seconds.",
+    hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up.",
   },
 ];
 
@@ -2037,20 +2028,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // around it taken off by the backend. What arrives at the end is everything
   // outside <REFINED>, which is the same working with <REFINE_NOTES> still
   // wrapped round it, so the same notes read as prose in one place and as
-  // markup in the other. Taken off here, for both, and kept underneath so the
-  // switch can put them back without the notes having to be fetched again.
+  // markup in the other. Taken off here, for both, so the working reads the
+  // same wherever it is shown.
   const TAG = /<\/?[A-Za-z][\w:.-]*(?:\s[^>]*?)?\/?>/g;
   const NOTES_BODY = /<\s*refine_notes\s*>([\s\S]*?)(?:<\s*\/\s*refine_notes\s*>|$)/i;
 
   function readable(text: string): string {
     const said = String(text || "");
-    // As the model wrote it: the working, the rewrite, and every tag around
-    // both. Nothing is left out, because the question this answers is how the
-    // model laid its answer out.
-    if (cfg.notesTags) return said.trim();
-    // Otherwise the working alone, read back out of its own tags, with the
-    // rewrite left where it belongs: on the card, marked against what it
-    // replaced. An answer with no working in it has nothing to show.
+    // The working alone, read back out of its own tags, with the rewrite left
+    // where it belongs: on the card, marked against what it replaced.
     const hit = NOTES_BODY.exec(said);
     return String(hit ? hit[1] : said)
       .replace(TAG, "")
@@ -5103,7 +5089,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "protectOn",
         label: "Hide markup from the model",
         type: "bool",
-        hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. If one does not come back, the rewrite is dropped: asking a model to preserve something and checking that it did are different things.",
+        hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. A rewrite that lost one is dropped.",
       }),
     );
     wrap.appendChild(
@@ -5112,7 +5098,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         label: "Hide plain italic and bold too",
         type: "bool",
         needs: { key: "protectOn" },
-        hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it, which makes the rewrite worse to protect something it was unlikely to break. They stay visible and the prompt tells it to leave them alone. Anything carrying an attribute, like a colour, is hidden either way.",
+        hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it. Anything carrying an attribute is hidden either way.",
       }),
     );
     wrap.appendChild(
@@ -5142,7 +5128,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               key: "thinkTags",
               label: "Extra reasoning tag names",
               type: "lines",
-              hint: "Optional, one per line. The common ones are already handled: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model wraps its working in an unusual one. Just the name, with no brackets or pipes, and a name you add is recognised in all four wrappers. This is worth getting right: working that is not recognised is handed to the refiner as if it were your prose, rewritten, and saved over the reply.",
+              hint: "Optional, one per line, just the name with no brackets or pipes. The eight common wrappers are known already. Working that is not recognised is rewritten and saved over the reply.",
             }),
           );
         }),
@@ -5180,7 +5166,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "wrapOutput",
         label: "Take the answer from between the tags",
         type: "bool",
-        hint: "On by default. This is the reading rule, not the asking: when the answer carries <REFINED> and </REFINED>, only what is between them is saved, and an opening tag with nothing closing it means the rewrite was cut off and is dropped rather than saved half written. Asking for the tags is your prompt's job. The one that ships with it asks in the How to answer block, in plain words you can reword, move or delete. Off, the whole answer is taken as the rewrite.",
+        hint: "On by default. When the answer carries <REFINED> and </REFINED>, only what is between them is saved. Asking for the tags is your prompt's job, and off, the whole answer is taken as the rewrite.",
       }),
     );
     wrap.appendChild(
@@ -5188,7 +5174,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "streamProgress",
         label: "Say how much has come back",
         type: "bool",
-        hint: "On by default. Streams the refine so the line under the switch can count what has arrived rather than sitting on one word for a minute. The answer is judged when it is complete either way, so this changes nothing about what gets saved, and a connection that cannot stream falls back on its own.",
+        hint: "On by default. Streams the refine so the line under the switch can count what has arrived. The answer is judged when it is complete either way.",
       }),
     );
     return wrap;
@@ -5310,19 +5296,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     well.setAttribute("data-arf-kept", "1");
     well.textContent = readable(keptNotes.text);
     wrap.appendChild(well);
-    // Where somebody would be looking when they wonder about the markup, so it
-    // is the switch's home rather than a setting on another tab.
-    wrap.appendChild(
-      fieldRow({
-        key: "notesTags",
-        label: "Show the tags the model wrote",
-        type: "bool",
-        hint: "Off by default, showing the model's working as prose with the tags taken off. On, the whole answer as it came back: the working, the rewrite, and every tag around both, which is what you want while you are working on a prompt and wondering how the model laid its answer out. Nothing is thrown away either way, and this only decides what is drawn.",
-      }),
-    );
     const row = el("div", "arf-row");
     const copy = button("Copy", false);
-    // What is on the screen. Copying the tags out of a card that is not showing
+    // What is on the screen. Copying the tags out of a card that does not show
     // them would be handing over something else.
     copy.addEventListener("click", () => {
       copyText(keptNotes ? readable(keptNotes.text) : "");
@@ -5865,7 +5841,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "widgetOn",
         label: "A floating button",
         type: "bool",
-        hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Hold it, or right click it, for a menu with the tab, the automatic pass, the per chat switch and a way to hide it again. While it is on screen its menu also holds anything that would otherwise be a row in the chat input's Extras menu. Needs the interface panels permission.",
+        hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Hold it, or right click it, for the menu. Needs the interface panels permission.",
       }),
     );
     if (cfg.widgetOn && widgetFailed)
@@ -5883,7 +5859,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "inputRefine",
         label: "Rows in the chat input's Extras menu",
         type: "bool",
-        hint: "Puts two rows in the chat input's Extras menu: one that refines the latest reply, and one that rewrites the text sitting in your input box before you send it. Off until you ask for it, since it changes the box you are typing in. They live in one place at a time: while the floating button is on screen its menu holds them, and Extras holds them only when there is no button to.",
+        hint: "Puts two rows in the chat input's Extras menu: one that refines the latest reply, and one that rewrites the text in your input box before you send it. While the floating button is on screen its menu holds them instead.",
       }),
     );
     if (cfg.inputRefine)
