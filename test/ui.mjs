@@ -175,7 +175,23 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
           : {
               showConfirm: (spec) => {
                 (window.__confirms = window.__confirms || []).push(spec);
-                return Promise.resolve({ confirmed: window.__confirmSay !== false });
+                if (!window.__confirmLocks)
+                  return Promise.resolve({ confirmed: window.__confirmSay !== false });
+                // A host modal as one really behaves: it stops the page behind
+                // it scrolling while it is up, which is done by stopping the
+                // page scrolling at all, and lets go when it closes. The lock
+                // sets the scroll to nought and letting go does not put it
+                // back.
+                const html = document.documentElement;
+                html.style.overflow = "hidden";
+                document.body.style.overflow = "hidden";
+                return new Promise((r) =>
+                  setTimeout(() => {
+                    html.style.overflow = "";
+                    document.body.style.overflow = "";
+                    r({ confirmed: window.__confirmSay !== false });
+                  }, 120),
+                );
               },
             }),
         showModal: (spec) => {
@@ -4142,6 +4158,56 @@ console.log("\nnothing is thrown away on one tap");
     await settle(page);
     ok("and the second press does", (await blocks(page)) === had - 1, { had: had });
   });
+
+  // A dialog stops the page behind it scrolling, and the way a host does that is
+  // to stop the page scrolling at all, which sets its scroll to nought. Letting
+  // go afterwards does not put it back. So on a build where the page is what
+  // scrolls, and that is the phone, pressing Delete threw the reader from
+  // wherever they were to the top and left them there. Held across the dialog
+  // and put back.
+  //
+  // The page is made the scroller here on purpose: the check above runs with the
+  // drawer scrolling inside itself, where a body lock changes nothing, which is
+  // exactly why this went unseen.
+  await inTab(
+    browser,
+    // The page as a host lays it out for a full-height drawer: the document is
+    // the fixed-height box and the drawer grows inside it, so the page is what
+    // carries the scroll. That is also what makes a body lock throw the scroll
+    // away rather than merely freeze it.
+    { css: "html,body{height:100%}#drawer{height:auto;overflow:visible}" },
+    async (page) => {
+    await goTab(page, "Prompt");
+    const where = await page.evaluate(async () => {
+      const page$ = document.scrollingElement || document.documentElement;
+      const b = document.querySelectorAll("#drawer [data-arf-block]")[3];
+      page$.scrollTop = b.getBoundingClientRect().top + page$.scrollTop - 300;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const before = page$.scrollTop;
+      window.__confirmLocks = true;
+      window.__confirmSay = true;
+      document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click();
+      await new Promise((r) => setTimeout(r, 60));
+      const during = page$.scrollTop;
+      await new Promise((r) => setTimeout(r, 500));
+      return {
+        before: Math.round(before),
+        during: Math.round(during),
+        after: Math.round(page$.scrollTop),
+      };
+    });
+    ok(
+      "the page really was scrolled, or this check proves nothing",
+      where.before > 200,
+      JSON.stringify(where),
+    );
+    ok(
+      "a dialog that holds the page still does not cost you your place",
+      Math.abs(where.after - where.before) < 8,
+      JSON.stringify(where),
+    );
+  },
+  );
 }
 
 await browser.close();

@@ -4478,6 +4478,49 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Deletes on the same tab are two different questions and arming one must not
   // arm the other. The arming lapses, or a second press somewhere else would
   // land on a button that had been waiting since yesterday.
+  // The host's own dialog, with the reader's place in the panel held across it.
+  // Yes and no come back as true and false; null means there was no dialog to
+  // ask in, which is a different answer and has its own way out below.
+  //
+  // A dialog stops the page behind it scrolling, and the way that is done is to
+  // stop the page scrolling at all, which sets its scroll to nought. Letting go
+  // afterwards does not put it back, because by then nothing is left saying
+  // where it was. So on a build where the page is what scrolls, and that is the
+  // phone, pressing Delete threw the panel from wherever you were reading to the
+  // top before the dialog had finished opening, and the deletion then landed
+  // somewhere else again. Measured at thirteen hundred pixels on a full-length
+  // prompt.
+  async function askHost(spec: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+  }): Promise<boolean | null> {
+    if (!(ctx && ctx.ui && typeof ctx.ui.showConfirm === "function")) return null;
+    const held = scrollers(tab && tab.root);
+    let answer: any;
+    try {
+      answer = await ctx.ui.showConfirm({
+        title: spec.title,
+        message: spec.message,
+        variant: "danger",
+        confirmLabel: spec.confirmLabel,
+      });
+    } catch (_) {
+      return null;
+    }
+    // Before anything is thrown away, so the repaint that follows works out
+    // where you were from the right place. Twice more over the next two frames,
+    // since the dialog's hold on the page can outlast its answer.
+    putBack(held);
+    try {
+      requestAnimationFrame(() => {
+        putBack(held);
+        requestAnimationFrame(() => putBack(held));
+      });
+    } catch (_) {}
+    return !!(answer && answer.confirmed);
+  }
+
   const ARM_MS = 4000;
   const armedFor = new Map<string, any>();
   disposers.push(() => {
@@ -4494,24 +4537,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     armSays: string,
     go: () => void,
   ) {
-    let asked = false;
-    let yes = false;
-    try {
-      if (ctx && ctx.ui && typeof ctx.ui.showConfirm === "function") {
-        const answer = await ctx.ui.showConfirm({
-          title: spec.title,
-          message: spec.message,
-          variant: "danger",
-          confirmLabel: spec.confirmLabel,
-        });
-        asked = true;
-        yes = !!(answer && answer.confirmed);
-      }
-    } catch (_) {
-      asked = false;
-    }
-    if (asked) {
-      if (yes) go();
+    const said = await askHost(spec);
+    if (said !== null) {
+      if (said) go();
       return;
     }
     const waiting = armedFor.get(key);
@@ -7636,22 +7664,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       "This puts back the defaults for: " +
       names +
       ". There is no undo, and your prompt is not recoverable unless you exported it.";
-    let yes = false;
-    let asked = false;
-    try {
-      if (ctx.ui && typeof ctx.ui.showConfirm === "function") {
-        const answer = await ctx.ui.showConfirm({
-          title: title,
-          message: message,
-          variant: "danger",
-          confirmLabel: "Reset",
-        });
-        asked = true;
-        yes = !!(answer && answer.confirmed);
-      }
-    } catch (_) {
-      asked = false;
-    }
+    const said = await askHost({ title: title, message: message, confirmLabel: "Reset" });
+    const asked = said !== null;
+    let yes = said === true;
     if (!asked) {
       // A host with no confirm dialog, or one that refused. Ask in the panel
       // rather than resetting on a single tap, which is the outcome this whole
