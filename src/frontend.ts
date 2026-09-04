@@ -2786,7 +2786,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     // empty box under it on a refine that had no working to show. Said here,
     // once, rather than at each of the places that hide something.
     ".arf [hidden]{display:none!important}" +
-    ".arf-sec{display:flex;flex-direction:column;gap:9px}" +
     ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
     ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
     // Inputs sit on a fill rather than an invented black, and take a neutral
@@ -2795,7 +2794,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-    "font:13px/1.5 var(--lumiverse-font-family,system-ui)}" +
+    "font:13px/1.5 var(--lumiverse-font-family,system-ui);" +
+    // The mark below fades up as the box is reached and back down as it is
+    // left. On the base rule rather than on :focus, or it would only ever fade
+    // one way: a transition written on the focused state is not there to run
+    // once focus has gone.
+    "transition:border-color var(--lumiverse-transition-fast,150ms ease)," +
+    "box-shadow var(--lumiverse-transition-fast,150ms ease)}" +
+    "@media (prefers-reduced-motion: reduce){.arf-field{transition:none}}" +
     // The mark on a field reached by keyboard. A soft ring in the accent at low
     // alpha, sitting on the field's own edge: a solid 2px outline with an
     // offset draws a second rounded rectangle around every box, which is a halo
@@ -3045,8 +3051,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border-radius:50%;border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:transparent;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
     "cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" +
-    "font-family:inherit;transition:color var(--lumiverse-transition,200ms ease)," +
-    "border-color var(--lumiverse-transition,200ms ease)}" +
+    // The border only. The text colour is the readability sweep's to write, and
+    // a theme that makes its own muted colour unreadable has that rewritten a
+    // frame after the panel is built: animating it means the repair can be
+    // watched happening, which is the label reading correct, then wrong, then
+    // correct.
+    "font-family:inherit;" +
+    "transition:border-color var(--lumiverse-transition-fast,150ms ease)}" +
     '.arf-q:hover,.arf-q[aria-expanded="true"]{' +
     "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
     "color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
@@ -3066,7 +3077,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-    "font:12px/1.45 var(--lumiverse-font-family,system-ui)}" +
+    "font:12px/1.45 var(--lumiverse-font-family,system-ui);" +
+    // Fades in where it opens and out where it stood, rather than appearing and
+    // vanishing between two frames. It arrives over the rows below the one it
+    // belongs to, and something landing on top of what you were reading with no
+    // travel at all reads as the page having flinched.
+    "opacity:0;transition:opacity 140ms ease-out}" +
+    '.arf-hint[data-arf-open]{opacity:1}' +
+    "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none}}" +
     // The card that comes up on the page when a refine lands, so the answer to
     // "what did it change" is in front of you rather than behind a tab you have
     // to know to open. Bottom right on a desktop, across the bottom on a phone,
@@ -3557,19 +3575,51 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // How long the description takes to arrive and to leave.
+  const HINT_FADE = 140;
+  // The ones still fading out, so teardown does not leave a box on the page
+  // waiting on a timer that will never be allowed to run.
+  const hintGoing = new Set<any>();
+  disposers.push(() => {
+    hintGoing.forEach((one) => {
+      try {
+        clearTimeout(one.timer);
+      } catch (_) {}
+      try {
+        one.box.remove();
+      } catch (_) {}
+    });
+    hintGoing.clear();
+  });
+
   function hideHint() {
-    if (hintPop) {
-      try {
-        hintPop.remove();
-      } catch (_) {}
-    }
-    if (hintAnchor && hintAnchor.setAttribute) {
-      try {
-        hintAnchor.setAttribute("aria-expanded", "false");
-      } catch (_) {}
-    }
+    const going: any = hintPop;
+    const was: any = hintAnchor;
+    // Cleared before the fade, not after. What is on its way out is no longer
+    // the open description: a second press during the fade must open a new one
+    // rather than find this still standing and decide it is already open.
     hintPop = null;
     hintAnchor = null;
+    if (was && was.setAttribute) {
+      try {
+        was.setAttribute("aria-expanded", "false");
+      } catch (_) {}
+    }
+    if (!going) return;
+    // And it stops being a tooltip to anything reading the page, which is what
+    // it is: a box finishing its fade is not something to announce.
+    try {
+      going.removeAttribute("role");
+      going.removeAttribute("data-arf-open");
+    } catch (_) {}
+    const one: any = { box: going, timer: null };
+    one.timer = setTimeout(() => {
+      hintGoing.delete(one);
+      try {
+        going.remove();
+      } catch (_) {}
+    }, HINT_FADE + 40);
+    hintGoing.add(one);
   }
 
   function showHint(anchor: any, text: string) {
@@ -3639,6 +3689,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (room <= 0) box.style.display = "none";
 
     placeFixed(box, left, top);
+    // Reading the layout between building it and marking it open is what makes
+    // the browser treat this as a fade rather than as a value that was always
+    // one. The read is the placement above, which has already asked for the
+    // box's rect.
+    try {
+      box.setAttribute("data-arf-open", "1");
+    } catch (_) {}
 
     // Tapping the description closes it. On a phone that is the first thing a
     // thumb reaches for.
@@ -3758,6 +3815,41 @@ export function setup(ctx: Ctx, overrides?: any) {
     const noteKind = (e: any) => {
       if (e && e.pointerType) lastPointer = String(e.pointerType);
     };
+    // The press that closes a description does only that.
+    //
+    // Closing happens on the way down, and the click that follows lands on
+    // whatever was under the finger, so dismissing a description by tapping the
+    // page also flipped whichever tick or button it happened to land on. The
+    // next click is eaten, once, and only when a description was open to close.
+    // A gesture that never produces one, a drag or a scroll, drops the guard on
+    // its own rather than leaving it armed for the next real press.
+    let eatClick: (() => void) | null = null;
+    function swallowNext() {
+      if (eatClick) eatClick();
+      const eat = (e: any) => {
+        drop();
+        if (!e) return;
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      let timer: any = null;
+      const drop = () => {
+        eatClick = null;
+        try {
+          clearTimeout(timer);
+        } catch (_) {}
+        try {
+          document.removeEventListener("click", eat, true);
+        } catch (_) {}
+      };
+      eatClick = drop;
+      document.addEventListener("click", eat, true);
+      timer = setTimeout(drop, 700);
+    }
+    disposers.push(() => {
+      if (eatClick) eatClick();
+    });
+
     const onDown = (e: any) => {
       noteKind(e);
       if (!hintPop) return;
@@ -3769,6 +3861,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (t && hintPop.contains && hintPop.contains(t)) return;
       } catch (_) {}
       hideHint();
+      swallowNext();
     };
     // A long description scrolls inside itself. That scroll is somebody reading
     // it, not the row moving, so it is the one scroll that leaves it open.

@@ -1592,15 +1592,34 @@ console.log("\nthe mark on a focused box");
 {
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Context");
-    const ring = await page.evaluate(() => {
+    const ring = await page.evaluate(async () => {
       const box = document.querySelector('#drawer input.arf-field[type="number"]');
       if (!box) return null;
       box.focus();
+      // The ring fades up rather than switching on, so reading it in the same
+      // breath as the focus reads it partway there.
+      await new Promise((r) => setTimeout(r, 220));
       const cs = getComputedStyle(box);
       return { shadow: cs.boxShadow, outline: cs.outlineStyle };
     });
     // Auto Retry's ring: a 2px band plus a short halo behind it.
     ok("a focused box takes the glow", !!ring && /rgba?\([^)]*\)/.test(ring.shadow), JSON.stringify(ring));
+    // And it fades up as the box is reached rather than switching on, which is
+    // what Auto Retry's fields already did.
+    const fade = await page.evaluate(() => {
+      const box = document.querySelector('#drawer input.arf-field[type="number"]');
+      box.blur();
+      const cs = getComputedStyle(box);
+      return {
+        says: cs.transitionProperty,
+        secs: cs.transitionDuration,
+      };
+    });
+    ok(
+      "and it fades up rather than switching on",
+      /box-shadow/.test(fade.says) && /border-color/.test(fade.says) && !/^0s/.test(fade.secs),
+      JSON.stringify(fade),
+    );
     ok(
       "with two layers, the band and the halo",
       !!ring && (ring.shadow.match(/rgba?\(/g) || []).length === 2 && / 8px /.test(ring.shadow),
@@ -4210,6 +4229,90 @@ console.log("\nnothing is thrown away on one tap");
   );
 }
 
+// ---- saving a model setup, which is the preset card's twin ----
+console.log("\nmodel setups");
+{
+  // The presets card holds a whole prompt under a name; this one holds a
+  // connection, the thinking settings and the samplers under a name. They are
+  // built the same way and sit one tab apart, and every check written so far was
+  // for the first of them.
+  const named = (page) =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('#drawer [data-arf-field="setupPick"] option')]
+        .map((o) => o.textContent)
+        .filter((t) => t !== "Pick a setup" && t !== "Nothing saved yet"),
+    );
+  const type = (page, key, value) =>
+    page.evaluate(
+      ({ key, value }) => {
+        const n = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+        n.value = value;
+        n.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      { key, value },
+    );
+  const press = (page, what) =>
+    page.evaluate((w) => document.querySelector('#drawer [data-arf-setup="' + w + '"]').click(), what);
+  const said = (page) =>
+    page.evaluate(() => {
+      const card = [...document.querySelectorAll("#drawer [data-arf-card]")].find(
+        (c) => c.getAttribute("data-arf-card") === "Saved model setups",
+      );
+      return card ? (card.textContent || "") : "";
+    });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+    ok("there are no setups to begin with", (await named(page)).length === 0);
+
+    // Saving with nothing typed says so rather than saving something unnamed.
+    await press(page, "new");
+    await settle(page);
+    ok("saving without a name asks for one", /give it a name first/i.test(await said(page)), await said(page));
+
+    await type(page, "setupName", "Cheap");
+    await press(page, "new");
+    await settle(page);
+    ok("and with a name it saves", (await named(page)).indexOf("Cheap") >= 0, await named(page));
+
+    // The same name twice is the one mistake this card makes possible.
+    await type(page, "setupName", "Cheap");
+    await press(page, "new");
+    await settle(page);
+    ok("the same name twice is refused", /already a setup/i.test(await said(page)), await said(page));
+    ok("and nothing was saved over it", (await named(page)).length === 1, await named(page));
+
+    await type(page, "setupName", "Cheaper");
+    await press(page, "rename");
+    await settle(page);
+    const after = await named(page);
+    ok("renaming keeps one setup, under the new name", after.length === 1 && after[0] === "Cheaper", after);
+
+    // Load and the three below it act on whatever the picker names, and saving
+    // a new one is what puts it there.
+    await press(page, "load");
+    await settle(page);
+    ok("loading it says what it did", /loaded|nothing in that setup/i.test(await said(page)), await said(page));
+
+    // Deleting throws work away, so it asks first, the same as a preset.
+    await page.evaluate(() => {
+      window.__confirms = [];
+      window.__confirmSay = false;
+    });
+    await press(page, "delete");
+    await settle(page);
+    ok("deleting a setup asks first", (await page.evaluate(() => window.__confirms.length)) === 1);
+    ok("and saying no keeps it", (await named(page)).length === 1, await named(page));
+
+    await page.evaluate(() => {
+      window.__confirmSay = true;
+    });
+    await press(page, "delete");
+    await settle(page);
+    ok("saying yes removes it", (await named(page)).length === 0, await named(page));
+  });
+}
+
 // ---- a setting's description sits behind a "?" ----
 console.log("\ndescriptions behind a ?");
 {
@@ -4273,7 +4376,7 @@ console.log("\ndescriptions behind a ?");
             q.click();
             await frame();
             out.n++;
-            const pop = document.querySelector(".arf-hint");
+            const pop = document.querySelector('[role="tooltip"]');
             if (!pop) {
               out.covering.push("nothing opened");
               continue;
@@ -4313,12 +4416,19 @@ console.log("\ndescriptions behind a ?");
         q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
         q.click();
       };
-      const up = () => document.querySelectorAll(".arf-hint").length;
+      // What is open. A box on its way out keeps its class while it fades but
+      // stops being a tooltip, which is what it is: not something to announce,
+      // and not something a press should find and treat as already open.
+      const up = () => document.querySelectorAll('[role="tooltip"]').length;
       const qs = [...document.querySelectorAll("#drawer .arf-q")];
       open(qs[0]);
+      // Straight after the press, before the fade has run.
+      const early = document.querySelector('[role="tooltip"]');
+      const faded = !!early && Number(getComputedStyle(early).opacity) < 1;
       await frame();
+      await new Promise((r) => setTimeout(r, 200));
       const first = up();
-      const pop = document.querySelector(".arf-hint");
+      const pop = document.querySelector('[role="tooltip"]');
       const bg = pop && getComputedStyle(pop).backgroundColor;
       const parts = bg && bg.match(/[\d.]+/g);
       const opaque = !!parts && (parts[3] === undefined || Number(parts[3]) === 1);
@@ -4330,25 +4440,30 @@ console.log("\ndescriptions behind a ?");
       const second = up();
       open(qs[1]);
       await frame();
+      await new Promise((r) => setTimeout(r, 200));
       const retap = up();
       open(qs[0]);
       await frame();
       document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
       await frame();
+      await new Promise((r) => setTimeout(r, 200));
       const elsewhere = up();
       open(qs[0]);
       await frame();
       document.getElementById("drawer").dispatchEvent(new Event("scroll", { bubbles: true }));
       await frame();
+      await new Promise((r) => setTimeout(r, 200));
       const scrolled = up();
       open(qs[0]);
       await frame();
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await frame();
+      await new Promise((r) => setTimeout(r, 200));
       const escaped = up();
-      return { first, opaque, outside, second, retap, elsewhere, scrolled, escaped };
+      return { first, faded, opaque, outside, second, retap, elsewhere, scrolled, escaped };
     });
     ok("a press opens the description", r.first === 1, r);
+    ok("and it fades in rather than appearing", r.faded, r);
     ok("and it is opaque, since it sits over the rows below", r.opaque, r);
     ok("and hangs off the page, so the panel cannot clip it", r.outside, r);
     ok("only one is ever open", r.second === 1, r);
@@ -4356,6 +4471,45 @@ console.log("\ndescriptions behind a ?");
     ok("a press anywhere else closes it", r.elsewhere === 0, r);
     ok("scrolling closes it, since the row it points at has moved", r.scrolled === 0, r);
     ok("and so does Escape", r.escaped === 0, r);
+  });
+
+  // The press that closes a description does only that. Closing happens on the
+  // way down and the click that follows lands on whatever was under the finger,
+  // so dismissing one by tapping the panel also flipped whichever tick it
+  // landed on.
+  await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    await goTab(page, "Limits");
+    const r = await page.evaluate(async () => {
+      const frame = () =>
+        new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // A tick that is nowhere near the "?" being pressed, so the press that
+      // closes the description is a press on this and nothing else.
+      const tick = [...document.querySelectorAll('#drawer input[type="checkbox"]')].pop();
+      const q = document.querySelector("#drawer .arf-q");
+      const was = tick.checked;
+      q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      q.click();
+      await frame();
+      const opened = document.querySelectorAll('[role="tooltip"]').length;
+      // A finger landing on the tick, the whole gesture, the way a browser
+      // sends it: down, then the click.
+      tick.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      tick.click();
+      await frame();
+      await new Promise((r) => setTimeout(r, 220));
+      const after = tick.checked;
+      const stillOpen = document.querySelectorAll('[role="tooltip"]').length;
+      // And the next press works normally, or the guard has outstayed the
+      // gesture it was armed for.
+      tick.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      tick.click();
+      await frame();
+      return { opened, was, after, stillOpen, then: tick.checked };
+    });
+    ok("a description was open to close", r.opened === 1, r);
+    ok("the press that closes it does not flip the setting under it", r.after === r.was, r);
+    ok("and it did close", r.stillOpen === 0, r);
+    ok("while the press after it works normally", r.then !== r.was, r);
   });
 
   // The search reads the panel as it is drawn, and a description is no longer
