@@ -83,9 +83,9 @@ function note(set: Set<string>, v: string, cap: number) {
 }
 
 // ---- storage that follows the account ----
-// Settings used to live only in the browser, which meant opening Lumiverse on a
-// different browser, or a different machine, presented a fresh install: every
-// rule, preset and sampler gone. They belong to the account.
+// Settings belong to the account, not to the browser. Kept only in the browser,
+// opening Lumiverse on a different one, or a different machine, presents a
+// fresh install: every rule, preset and sampler gone.
 //
 // One backend process can serve every account on a server, and spindle.storage
 // resolves to a single shared directory in that case, so writing through it
@@ -359,9 +359,9 @@ const OUT_OPEN = new RegExp('<' + OUT_TAG + '[^>]*>', 'i');
 // exact, and every check downstream then runs on the rewrite rather than on the
 // rewrite plus whatever was said around it.
 // outside is whatever the model wrote around the tags. It is never saved into
-// the chat, and it used to be dropped unread. A prompt is free to ask for a
-// note on what was cut and what was left alone, and that note lands here, so it
-// is carried back to the panel to be shown rather than thrown away.
+// the chat. A prompt is free to ask for a note on what was cut and what was
+// left alone, and that note lands here, so it is carried back to the panel to
+// be shown rather than dropped unread.
 //
 // It carries the whole answer, tags and rewrite and all, not only the part
 // around the rewrite. The panel can be asked to show the answer as the model
@@ -1062,8 +1062,6 @@ const CARD_FIELDS: Array<[string, string]> = [
   ['scenario', 'Scenario'],
 ];
 const CARD_MAX = 4000;      // per field, in characters
-const CONTEXT_MSG_MAX = 1200;
-const CONTEXT_TOTAL_MAX = 12000;
 
 function clip(s: any, max: number): string {
   const t = String(s == null ? '' : s).trim();
@@ -1566,9 +1564,9 @@ async function refineMessage(
   // No id means "the latest reply", which is what the panel's button and the
   // floating button are both named. They send no id whenever nothing has
   // rendered since the page loaded, which on a chat you opened and did not add
-  // to is every time. That used to fall through the lookup below and come back
-  // as "that message is not in this chat any more", so the button did nothing
-  // and said something untrue about why.
+  // to is every time. Left to fall through the lookup below it comes back as
+  // "that message is not in this chat any more", so the button does nothing and
+  // says something untrue about why.
   //
   // Resolved here rather than in the panel because this is the side holding the
   // messages. The panel only knows what it happened to watch arrive.
@@ -1829,8 +1827,8 @@ try {
       try {
         done = await refineMessage(p.chatId, messageId, p.userId, false);
       } catch (e: any) {
-        // A throw here used to end the whole handler, so the panel sat busy
-        // until the page was reloaded.
+        // Caught here, because a throw that escapes ends the whole handler and
+        // leaves the panel sitting busy until the page is reloaded.
         done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
         say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
       }
@@ -2015,8 +2013,8 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
     // Stopping whatever is in flight for this reader. Answered even when there
     // was nothing to stop, so the panel can say so rather than claiming it
     // stopped something.
-    // A scan of pasted text, with no model call behind it. The whole point is
-    // that this costs nothing: no tokens, no connection, no waiting.
+    // A scan of pasted text, with no model call behind it, so it costs nothing
+    // to run and answers at once.
     // Every reply already in the chat, oldest first, one at a time.
     //
     // One at a time on purpose. Firing them together would be quicker and would
@@ -2167,11 +2165,11 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       const kept = before.get(k);
       // Which message this is about, on every answer, the failures included.
       //
-      // It used to say only whether it worked. The panel keys what it can put
-      // back by chat and message, so with neither on the answer its delete was
-      // skipped every time: the reply really was restored, and the panel went
-      // on offering to restore it, the floating button stayed an undo button,
-      // and Put it back looked like a button that did nothing.
+      // The panel keys what it can put back by chat and message, so an answer
+      // carrying neither leaves its delete skipped: the reply really is
+      // restored, and the panel goes on offering to restore it, the floating
+      // button stays an undo button, and Put it back looks like a button that
+      // does nothing.
       const about = { chatId: payload.chatId, messageId: payload.messageId };
       if (!kept) {
         replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, why: 'nothing was kept for that message' });

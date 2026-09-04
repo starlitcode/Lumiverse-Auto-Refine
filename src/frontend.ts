@@ -1698,12 +1698,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // either: getActive answers with the account's most recent chat, which on the
   // home screen is the chat you just left.
   //
-  // Walking back in is the same move in reverse and was not covered at all.
-  // This watch used to stop the moment there was no chat to lose track of, so
-  // tapping a character on the home screen opened a chat that nothing was
-  // looking for: no event named it on some builds, nothing was asking, and the
-  // panel went on saying no chat was open until a reply happened to arrive.
-  // The watch runs for as long as the panel does now, and an address that
+  // Walking back in is the same move in reverse. The watch runs for as long as
+  // the panel does, including with no chat open: tapping a character on the
+  // home screen opens one, no event names it on some builds, and a watch that
+  // stopped when there was nothing to lose track of would miss the one move it
+  // is there for. An address that
   // changes while no chat is known is the sign to ask again.
   //
   // The address bar is the one thing in reach that knows. It is read rather
@@ -1967,8 +1966,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The refine that can still be undone, per chat. What the tab is really for:
   // seeing what happened to your prose and disagreeing with it.
   // Every refine that can still be put back, newest last, keyed by the chat and
-  // the message together. It was one per chat, which meant a second refine in
-  // the same chat quietly took away the way back from the first. The backend
+  // the message together, not one per chat: a second refine in the same chat
+  // must not take away the way back from the first. The backend
   // keeps the text for thirty of them, so the panel keeps the same number.
   const undoable = new Map<string, { chatId: any; messageId: any; before: string; after: string; at: number }>();
   const UNDO_MAX = 30;
@@ -2022,10 +2021,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   //
   // Only if there is working in it. A prompt that asks for none still gets an
   // answer, and that answer is the rewrite: taking it would put the rewrite
-  // itself under What the model worked out, which is not what it says on the
-  // card and not what anybody is looking for there. The streamed notes are the
-  // working already, cut out of the tags by the backend, so they are taken
-  // where they arrive rather than here.
+  // itself under What the model worked out, which is neither what the card says
+  // nor what anybody is looking for there. The streamed notes are the working
+  // already, cut out of the tags by the backend, so they are taken where they
+  // arrive rather than here.
   function tookNotes(msg: any) {
     if (!msg || typeof msg.notes !== "string" || !msg.notes.trim()) return;
     if (!NOTES_TAG.test(msg.notes)) return;
@@ -2106,9 +2105,9 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // The clock under the status line. Runs only while something is in flight,
   // and writes one number rather than rebuilding the panel.
-  // What the run is doing right now. The panel used to know only "busy", so a
-  // refine that took forty seconds looked the same as one that had quietly
-  // failed, and a model that streams looked the same as one that had not
+  // What the run is doing right now, named rather than left at "busy". Without
+  // a stage a refine that takes forty seconds looks the same as one that has
+  // quietly failed, and a model that streams looks the same as one that has not
   // started.
   let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" = "";
   let streamed = 0;
@@ -2289,11 +2288,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // by the clock that writes it four times a second and by the panel that
   // builds it from nothing.
   //
-  // They used to work it out separately, and they disagreed while a refine was
-  // running: the clock wrote "Thinking, 12s" and a repaint wrote "Refining a
-  // reply". So switching tabs mid-refine flipped the line back to the flat
-  // wording and the count started again from whatever the next tick said, which
-  // reads exactly like the thing stopping and restarting.
+  // One definition and not two. Worked out separately they disagree while a
+  // refine is running, the clock writing "Thinking, 12s" and a repaint writing
+  // "Refining a reply", so switching tabs mid-refine flips the line back to the
+  // flat wording and the count starts again from whatever the next tick says,
+  // which reads as the thing stopping and restarting.
   function liveNow(): { text: string; dot: string } {
     const st = statusLine();
     return {
@@ -2500,12 +2499,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     // theme's own accent text colour, which is the one token a theme defines
     // for exactly this: accent-coloured words on the panel's own background.
     //
-    // It used to be the accent at full strength with the label hardcoded white.
-    // That is only readable on a theme whose accent is dark, and on a theme
-    // whose accent is light it was white on lavender, left for the contrast
-    // sweep to rescue a moment after every repaint. Rescuing it worked and
-    // still put the panel one timing accident away from a white label, which is
-    // a thing to stop depending on rather than to keep measuring. The floating
+    // Not the accent at full strength with the label hardcoded white. That is
+    // readable only on a theme whose accent is dark; on one whose accent is
+    // light it is white on lavender, left for the contrast sweep to rescue a
+    // moment after every repaint. Rescuing it works and still leaves the panel
+    // one timing accident from a white label, which is a thing to stop
+    // depending on rather than to keep measuring. The floating
     // widget has been drawn this way from the start and has never needed
     // rescuing. Heavier letters and the edge are what make it the loud one now.
     ".arf-btn.arf-primary{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
@@ -2621,13 +2620,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border-radius:var(--lumiverse-radius-sm,5px);" +
     "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
-    // Dimmed the moment it is switched off, not faded.
-    //
-    // A block holds a box of prose, thousands of characters of it, and animating
-    // the opacity of anything holding text makes the browser composite the whole
-    // of it for the duration: the text is rasterised a different way while it
-    // travels and then put back, which reads as the words shivering. The fade
-    // was worth less than that costs.
+    // Dimmed the moment it is switched off, and not faded. A block holds a box
+    // of prose, thousands of characters of it, and animating the opacity of
+    // anything holding text has the browser composite the whole of it for the
+    // duration: the text is rasterised a different way while it travels and
+    // then put back, which reads as the words shivering.
     ".arf-block.arf-hushed{opacity:.55}" +
     ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
     ".arf-btn.arf-mini2{min-height:26px;padding:3px 10px;font-size:11.5px}" +
@@ -2708,14 +2705,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@keyframes arf-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}" +
     "@media (prefers-reduced-motion: reduce){.arf-arrive{animation:none}}" +
     // On a phone it spans the width and sits above the input bar rather than on
-    // top of it, since the whole point is to be readable while you carry on.
+    // top of it, so it can be read while you carry on.
     "@media (max-width: 560px){.arf-pop{left:12px;right:12px;bottom:76px;" +
     "width:auto;max-height:68vh}}" +
-    // One scroll region, not three. The card used to be a fixed header over two
-    // wells that each scrolled on their own, which on a 320px phone meant two
-    // boxes clipped mid-sentence with nothing to say they had more in them, and
-    // a scroll inside a scroll inside a page to get at it. The header and the
-    // buttons stay put, and everything between them scrolls together.
+    // One scroll region, not three. A fixed header over two wells that each
+    // scroll on their own means, on a 320px phone, two boxes clipped
+    // mid-sentence with nothing to say they hold more, and a scroll inside a
+    // scroll inside a page to reach it. The header and the buttons stay put and
+    // everything between them scrolls together.
     ".arf-pop-body{flex:1;min-height:0;overflow-y:auto;display:flex;" +
     "flex-direction:column;gap:6px}" +
     ".arf-pop .arf-scroll{max-height:none;overflow:visible}" +
@@ -2754,10 +2751,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // spinner, and the button's title still says it is working.
     "@media (prefers-reduced-motion: reduce){.arf-spin{animation:none}}" +
     // ---- saying something is wrong, in the theme's own colours ----
-    // Lumiverse has a danger and a success colour and this had been using
-    // neither, so a warning read as another muted paragraph. Tinted background,
-    // matching edge, text left at full strength so the colour is the signal and
-    // not the thing you have to read through.
+    // Lumiverse has a danger colour and a success colour, and a warning drawn
+    // in neither reads as one more muted paragraph. Tinted background, matching
+    // edge, text left at full strength so the colour is the signal rather than
+    // the thing you have to read through.
     ".arf-warn,.arf-bad,.arf-good{display:flex;gap:8px;align-items:flex-start;" +
     "font-size:12px;line-height:1.45;padding:8px 10px;" +
     "border-radius:var(--lumiverse-radius-sm,5px);border:1px solid;" +
@@ -2836,8 +2833,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     b.textContent = label;
     // Named after what it says, so a rebuild can find the same button again and
     // leave it where your finger already is. A button whose press rewrites the
-    // whole prompt is exactly the one that used to be somewhere else by the
-    // time the panel came back.
+    // whole prompt is the one that would otherwise be somewhere else by the
+    // time the panel comes back.
     b.setAttribute("data-arf-btn", label);
     return b;
   }
@@ -3030,10 +3027,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     head.appendChild(caret);
     head.appendChild(el("span", "arf-grow", title));
     wrap.appendChild(head);
-    // Built either way and hidden while it is shut. Opening one used to repaint
-    // the whole drawer, which is a teardown and a rebuild to show a few rows
-    // that were already worked out: that is the flash. Now the body is standing
-    // there and the fold only stops hiding it.
+    // Built either way and hidden while it is shut, so opening one is the body
+    // it already has being shown. Repainting the drawer for it would be a
+    // teardown and a rebuild to show rows that are already worked out, which
+    // is a flash on screen for nothing.
     const body = el("div", "arf-foldbody");
     fill(body);
     body.hidden = !open;
@@ -3365,10 +3362,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     // The buttons on the messages show the same state this panel does, so they
     // are refreshed with it rather than on a timer of their own.
-    // And the floating button, which used to be painted only by the live clock.
-    // That clock runs while a refine is running, so walking out to the home
-    // screen left the button sitting there looking ready to refine something
-    // that was no longer on the page.
+    // And the floating button. Painting it only from the live clock is not
+    // enough: that clock runs while a refine runs, so walking out to the home
+    // screen would leave the button looking ready to refine something that is
+    // not on the page.
     paintFloat();
     if (!tab || !tab.root) return;
     const root = tab.root as HTMLElement;
@@ -3541,11 +3538,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A refine that is running takes the place of the button that started it,
     // the same way a run through the chat does.
     //
-    // Stopping used to live on the floating button and nowhere else: a tap on
-    // the spinner, or a row in its hold menu. With the button switched off
-    // there was no way to call a refine off at all, and the panel answered a
-    // running refine by greying both buttons out, which says wait rather than
-    // saying there is a way out of this.
+    // Stopping belongs here as well as on the floating button, since that
+    // button can be switched off and a panel that answers a running refine by
+    // greying its buttons out says wait rather than saying there is a way out
+    // of it.
     if (busy) {
       const halt = button("Stop this refine", true);
       halt.setAttribute("data-arf-stop", "1");
@@ -3834,9 +3830,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   let popKey = "";
 
   // Every undo goes through here, and every one is written down against its
-  // request. The answer used to be the only thing that said which message it
-  // was about, and it did not say: the panel's delete was skipped, so the reply
-  // came back restored while the panel went on offering to restore it.
+  // request. Reading the message out of the answer alone is not enough, since
+  // an answer that does not name one leaves the panel's delete skipped: the
+  // reply comes back restored while the panel goes on offering to restore it.
   const undoAsked = new Map<string, { chatId: any; messageId: any }>();
   function askUndo(chatId: any, messageId: any) {
     const id = newId();
@@ -3907,11 +3903,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       // a refine already on screen must not stack another one on top of it.
       // The working card is not the same refine and is always replaced.
       if (popEl && popKey === key) return;
-      // Whatever card is up is this card, so it is filled in rather than taken
-      // down and put back up. The automatic pass lands one refine after
-      // another, and a card for the second replacing the card for the first is
-      // two elements swapping: the old one vanishes and a new one fades up from
-      // nothing at a different height, which is what reads as a second card.
+      // Whatever card is up is this card, filled in rather than taken down and
+      // put back up. The automatic pass lands one refine after another, and
+      // swapping two elements for that means the old one vanishing and a new
+      // one fading up from nothing at a different height, which reads as a
+      // second card rather than as one card changing.
       //
       // Both cards are pinned to the bottom of the screen and they are not the
       // same height: the working one runs to about 370 pixels and this one to
@@ -4090,17 +4086,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   let scanWaiting: string | null = null;
   let scanSaid: string | null = null;
 
-  // No switch has a list of what hangs off it. There used to be one, so only
-  // the switches on it paid for a rebuild, and it was wrong twice: first by
-  // hand, then read off the field arrays, which still missed every row written
-  // inline in a card. Watch the rewrite arrive was one, so switching it off
-  // left Show me the words as they arrive sitting underneath it, doing nothing,
-  // until you left the tab and came back.
+  // No switch carries a list of what hangs off it. Every row is built whether
+  // or not its switch is on, hidden when it is off, and a switch re-reads all
+  // of them; the rebuild that catches up the rest of the card is behind
+  // settle() above.
   //
-  // Working out which switches matter is the thing that kept being got wrong,
-  // so nothing works it out. Every row is built whether or not its switch is
-  // on, hidden when it is off, and a switch re-reads all of them; the rebuild
-  // that catches up the rest of the card is behind settle() above.
+  // A list is the thing to avoid here. Kept by hand it goes stale, and derived
+  // from the field arrays it misses every row written inline in a card, which
+  // leaves a row sitting under a switch that is off, offering a setting that
+  // cannot do anything until you leave the tab and come back.
 
   // Whether a row has anything to do where it sits.
   function fieldShows(f: Field): boolean {
@@ -4353,9 +4347,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const line = root.querySelector("[data-arf-whatthisis]") as any;
       if (line) line.textContent = whatThisIs() + " " + aboutWorking();
       // Only when the header would say something different. Switching a block
-      // can only change one thing up there, which is whether a refine can
-      // happen at all, and swapping the header for every toggle threw away the
-      // master switch mid-slide and restarted the live dot's pulse each time.
+      // can change one thing up there, whether a refine can happen at all, and
+      // swapping the header for every toggle takes the master switch down
+      // mid-slide and restarts the live dot's pulse.
       const turn = holdsTurn(list);
       if (turn !== headerHeldTurn) {
         headerHeldTurn = turn;
@@ -4592,9 +4586,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // What a block can say, and who answers it. Worth having on screen rather
-  // than in a document: the whole point of the block editor is writing these,
-  // and a macro you cannot remember the name of is a macro you do not use.
+  // What a block can say, and who answers it. On screen rather than in a
+  // document, because the block editor is for writing these, and a macro whose
+  // name you cannot remember is a macro you do not use.
   function buildMacroCard(): HTMLElement {
     const wrap = card(
       "Macros you can use",
@@ -7157,13 +7151,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       // One tap does the main thing. A press and hold, or a right click, opens
       // the menu.
       //
-      // The hold used to be armed on pointerdown and disarmed on the button's
-      // own pointerup, and the host captures the pointer to drag the widget, so
-      // that pointerup never arrived. Every tap became a hold, and the click
-      // that followed was swallowed by a flag nothing ever cleared: the button
-      // did nothing at all. Now the disarm listens on the window, in the
-      // capture phase, where a captured pointer still reports, and a drag of
-      // more than a few pixels cancels it as well.
+      // The disarm listens on the window, in the capture phase, and a drag of
+      // more than a few pixels cancels it too. Waiting for the button's own
+      // pointerup does not work: the host captures the pointer to drag the
+      // widget, so that pointerup never arrives, every tap becomes a hold, and
+      // the click behind it is swallowed by a flag nothing clears.
       let held: any = null;
       let downAt: { x: number; y: number } | null = null;
       let menuOpened = false;
@@ -7187,11 +7179,11 @@ export function setup(ctx: Ctx, overrides?: any) {
         (globalThis as any).addEventListener("pointerup", onUp, true);
         (globalThis as any).addEventListener("pointercancel", onUp, true);
         (globalThis as any).addEventListener("pointermove", onMove, true);
-        // Held against this button rather than the session. The button is
-        // rebuilt every time its size changes and every time it is switched off
-        // and on, and these used to be dropped only at teardown: three more
-        // window listeners per rebuild, each holding a button that is no longer
-        // on screen, all of them running on every pointermove across the page.
+        // Held against this button rather than the session. It is rebuilt every
+        // time its size changes and every time it is switched off and on, and
+        // dropping these only at teardown would leave three more window
+        // listeners per rebuild, each holding a button that is off screen, all
+        // of them running on every pointermove across the page.
         widgetOff = () => {
           try {
             (globalThis as any).removeEventListener("pointerup", onUp, true);
@@ -7277,8 +7269,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // for that, otherwise refine.
   function widgetTap() {
     // A refine is running, so the tap stops it. The button is showing a
-    // spinner: tapping the spinner to call it off is the thing anybody would
-    // try first, and it used to start a second refine on top of the first.
+    // spinner, and tapping the spinner to call it off is the thing anybody
+    // tries first. Starting a second refine on top of the first is not.
     if (busy) {
       cancelRefine();
       return;
@@ -7603,8 +7595,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function refineNow() {
-    // Pressing refine while one is already running used to queue a second
-    // against the same reply, and whichever finished last won. One at a time.
+    // One at a time. Two against the same reply means whichever finishes last
+    // wins, which is not a thing anybody asked for.
     if (busy) {
       toast("A refine is already running. Press it again to stop that one.", true);
       return;
@@ -7694,11 +7686,10 @@ export function setup(ctx: Ctx, overrides?: any) {
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
             // The working as it is written, already cut out of its tags by the
-            // backend. It is kept for the Log and shown there. It used to open
-            // a card on the page as well, which then had to hand that card over
-            // to the one saying what the refine did, and the hand-over is what
-            // read as a second card popping up. The Log is where it is read, at
-            // whatever pace suits, and nothing has to be caught.
+            // backend, kept for the Log rather than put on the page. A card of
+            // its own would have to be handed over to the card saying what the
+            // refine did, and a hand-over between two cards reads as a second
+            // one popping up. The Log holds it at whatever pace suits.
             if (typeof msg.notes === "string" && msg.notes.trim()) liveNotes = msg.notes;
             if (msg.stage === "retrying") {
               retryAt = Number(msg.attempt) || 0;
@@ -8207,9 +8198,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   syncExtras();
   askWhereWeAre();
   // From here rather than from the first chat seen. A tab opened on the home
-  // screen has no chat to watch and used to have no watch either, so the one
-  // move it needed to notice, a character being tapped, was the one move
-  // nothing was looking for.
+  // screen has no chat to watch, and waiting for one would leave the move it
+  // most needs to notice, a character being tapped, as the one move nothing is
+  // looking for.
   startUrlWatch();
   askPermissions();
   // After armBackend, so the replies have somewhere to land. Both are
