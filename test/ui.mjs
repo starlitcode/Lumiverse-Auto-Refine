@@ -4604,6 +4604,107 @@ console.log("\ndescriptions behind a ?");
     ok("while the press after it works normally", r.then !== r.was, r);
   });
 
+  // What each part of a tick row answers to.
+  //
+  // A label with no `for` names the first labelable element inside it, and a
+  // button is one, so a "?" put in there took the label off the switch: pressing
+  // a setting's own words opened its description instead of flipping it, and the
+  // switch was left with only its own small box to press. Invisible from the "?"
+  // alone, which is why this presses the words too.
+  await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    // Every tick row on every tab, read rather than pressed. Pressing one
+    // rebuilds the panel a moment later, so a loop that presses its way down a
+    // list it collected first ends up measuring rows that have been thrown away.
+    let rows = 0;
+    const wrong = [];
+    for (const t of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+      await goTab(page, t);
+      const r = await page.evaluate(() => {
+        const out = { n: 0, wrong: [] };
+        for (const row of document.querySelectorAll("#drawer [data-arf-row]")) {
+          const tick = row.querySelector('input[type="checkbox"]');
+          if (!tick || !row.querySelector(".arf-q")) continue;
+          out.n++;
+          const words = row.querySelector("label.arf-lab");
+          const name = ((words && words.textContent) || row.getAttribute("data-arf-row") || "").trim().slice(0, 26);
+          if (!words) out.wrong.push("no words: " + name);
+          else if (words.control !== tick) out.wrong.push("names the wrong control: " + name);
+        }
+        return out;
+      });
+      rows += r.n;
+      wrong.push(...r.wrong);
+    }
+    ok("there are tick rows with a ? to check", rows >= 10, "found " + rows);
+    ok(
+      "on all " + rows + ", the words name the switch and not the ?",
+      wrong.length === 0,
+      wrong.slice(0, 4).join(" | "),
+    );
+  });
+
+  // And the two presses, on one row at a time, looked up again after each one
+  // since the press rebuilds the panel underneath it.
+  await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    await goTab(page, "Limits");
+    const keys = await page.evaluate(() =>
+      [...document.querySelectorAll("#drawer [data-arf-row]")]
+        .filter((r) => r.querySelector(".arf-q") && r.querySelector('input[type="checkbox"]') && !r.hidden)
+        .map((r) => r.getAttribute("data-arf-row"))
+        .slice(0, 6),
+    );
+    ok("there are rows to press", keys.length >= 4, keys);
+    const bad = [];
+    for (const key of keys) {
+      const r = await page.evaluate(async (key) => {
+        const frame = () =>
+          new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const press = (n) => {
+          n.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+          n.click();
+        };
+        const find = () => document.querySelector('#drawer [data-arf-row="' + key + '"]');
+        const out = [];
+        let row = find();
+        let tick = row.querySelector('input[type="checkbox"]');
+        const was = tick.checked;
+        row.scrollIntoView({ block: "center" });
+        await frame();
+        press(row.querySelector("label.arf-lab"));
+        // Past the rebuild the press sets off, so what is read next is the panel
+        // as it ends up rather than the one that was there when it started.
+        await new Promise((r) => setTimeout(r, 400));
+        row = find();
+        tick = row.querySelector('input[type="checkbox"]');
+        if (tick.checked === was) out.push("the words did not flip it: " + key);
+        if (document.querySelector('[role="tooltip"]'))
+          out.push("the words opened the description: " + key);
+        // Back where it was, then the "?".
+        press(row.querySelector("label.arf-lab"));
+        await new Promise((r) => setTimeout(r, 400));
+        row = find();
+        tick = row.querySelector('input[type="checkbox"]');
+        const now = tick.checked;
+        press(row.querySelector(".arf-q"));
+        await new Promise((r) => setTimeout(r, 300));
+        row = find();
+        tick = row.querySelector('input[type="checkbox"]');
+        if (tick.checked !== now) out.push("the ? flipped it: " + key);
+        if (!document.querySelector('[role="tooltip"]')) out.push("the ? opened nothing: " + key);
+        const pop = document.querySelector('[role="tooltip"]');
+        if (pop) press(pop);
+        await new Promise((r) => setTimeout(r, 250));
+        return out;
+      }, key);
+      bad.push(...r);
+    }
+    ok(
+      "pressing the words flips the switch, pressing the ? opens the description",
+      bad.length === 0,
+      bad.slice(0, 4).join(" | "),
+    );
+  });
+
   // A gesture that closes a description without ever producing a click, which
   // is what a drag or a scroll is. The guard must not still be sitting there
   // waiting to eat the next real press.

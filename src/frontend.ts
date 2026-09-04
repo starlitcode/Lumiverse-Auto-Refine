@@ -3798,6 +3798,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     return q;
   }
 
+  // A name for one control on the panel, so the words beside it can say which
+  // one they belong to. Only ever has to be unique among what is on screen, and
+  // a repaint throws away everything that came before.
+  let idAt = 0;
+  const nextId = () => "arf-i" + ++idAt;
+
   // A label with its "?" beside it, which is every row that has a description.
   function labelRow(f: Field): HTMLElement {
     const row = el("div", "arf-labrow");
@@ -5249,11 +5255,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     (wrap as any)._arfField = f;
     wrap.hidden = !fieldShows(f);
     if (f.type === "bool") {
+      // The "?" sits beside the words rather than inside the label.
+      //
+      // A label with no `for` names the first labelable element inside it, and a
+      // button is one, so a "?" placed in there took the label off the switch:
+      // pressing the words opened the description instead of flipping the
+      // switch, and the switch was left with only its own small box to press.
+      // Named by id instead, which says which control the words belong to
+      // whatever else ends up standing next to them.
+      const row = el("div", "arf-between");
+      const left = el("div", "arf-labrow arf-grow");
+      const id = nextId();
       const lab = document.createElement("label");
-      lab.className = "arf-between";
+      lab.className = "arf-lab";
       lab.style.cursor = "pointer";
-      lab.appendChild(labelRow(f));
+      lab.htmlFor = id;
+      lab.textContent = f.label;
+      left.appendChild(lab);
+      const q = hintButton(f.hint, f.label);
+      if (q) left.appendChild(q);
+      row.appendChild(left);
       const box = document.createElement("input");
+      box.id = id;
       box.type = "checkbox";
       box.checked = !!cfg[f.key];
       box.setAttribute("data-arf-field", f.key);
@@ -5264,8 +5287,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         reveal();
         settle();
       });
-      lab.appendChild(box);
-      wrap.appendChild(lab);
+      row.appendChild(box);
+      wrap.appendChild(row);
     } else if (f.type === "lines") {
       wrap.appendChild(labelRow(f));
       const ta = document.createElement("textarea");
