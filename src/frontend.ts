@@ -1990,6 +1990,87 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     return out.sort((a, b) => b.at - a.at);
   }
+  // The last refine of your own draft, which the widget can put back the same
+  // way it puts a reply back. It is not in undoable with the replies because it
+  // has no message to be keyed by: a draft is not saved anywhere, and the only
+  // copy of what it said is the one held here.
+  //
+  // Offered only while the box still holds what the refine wrote. Once you have
+  // typed over it, putting it back would throw away newer writing than the
+  // refine it is undoing, which is the one thing a way back must not do.
+  let lastDraft: { before: string; after: string; at: number; node: any } | null = null;
+
+  // Typing in the box is the one thing that takes the way back away, and
+  // nothing else would redraw the button to say so: the clock that repaints it
+  // runs only while a refine is in flight, and this is the state after one has
+  // finished. Watched rather than polled, on the box the refine wrote to, and
+  // the listener comes off the moment there is nothing left to watch for.
+  let draftWatch: (() => void) | null = null;
+  function unwatchDraft() {
+    if (!draftWatch) return;
+    try {
+      draftWatch();
+    } catch (_) {}
+    draftWatch = null;
+  }
+  disposers.push(unwatchDraft);
+  function watchDraft(node: any) {
+    unwatchDraft();
+    if (!node || typeof node.addEventListener !== "function") return;
+    const onType = () => {
+      // Asking rather than comparing here: draftBack is the one place that
+      // decides whether the way back still stands, and it clears itself.
+      if (!draftBack()) {
+        unwatchDraft();
+        paintFloat();
+        paint();
+      }
+    };
+    node.addEventListener("input", onType);
+    draftWatch = () => {
+      try {
+        node.removeEventListener("input", onType);
+      } catch (_) {}
+    };
+  }
+
+  function draftBack(): { before: string; after: string; at: number; node: any } | null {
+    if (!lastDraft) return null;
+    const box = lastDraft.node || composer();
+    if (!box) return null;
+    if (String(box.value == null ? "" : box.value) !== lastDraft.after) {
+      lastDraft = null;
+      unwatchDraft();
+      return null;
+    }
+    return lastDraft;
+  }
+
+  // The newest thing there is to put back, whichever kind it was. One button
+  // cannot mean two things, and "the last refine" is one thing: a reply's or
+  // your own, whichever happened last.
+  function newestBack(): { kind: "reply" | "draft"; at: number; one?: any } | null {
+    const reply = undoHere()[0];
+    const mine = draftBack();
+    if (mine && (!reply || mine.at >= reply.at)) return { kind: "draft", at: mine.at };
+    if (reply) return { kind: "reply", at: reply.at, one: reply };
+    return null;
+  }
+
+  function putDraftBack() {
+    const mine = draftBack();
+    if (!mine) return;
+    const box = mine.node || composer();
+    if (box && setComposer(box, mine.before)) {
+      lastDraft = null;
+      unwatchDraft();
+      log("put your draft back", true);
+      toast("Your draft is back as it was.");
+    } else toast("Could not write to the input box.", true);
+    paintFloat();
+    paint();
+  }
+
   let connections: Array<{ id: string; name: string; provider: string; model: string; isDefault: boolean }> = [];
   let tryResult: { ok: boolean; text: string } | null = null;
   let tryBusy = false;
@@ -3958,17 +4039,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // same card: what changed, marked, with a way back on it. Putting this one
   // back is writing the old text into the box rather than asking the backend,
   // since the draft was never saved anywhere for the backend to hold.
-  function showDraftPop(before: string, after: string, node: any) {
+  function showDraftPop(before: string, after: string) {
     showCard({
       key: "draft:" + Date.now(),
       title: "Your draft, refined",
       before: before,
       after: after,
-      back: () => {
-        const box = node || composer();
-        if (box && setComposer(box, before)) log("put your draft back", true);
-        else toast("Could not write to the input box.", true);
-      },
+      // The same way back the widget uses, so putting it back from the card
+      // also takes the arrow off the button. Two of these drifted apart is how
+      // a button ends up offering to undo something already undone.
+      back: putDraftBack,
     });
   }
 
@@ -7178,8 +7258,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     // answer comes back and this puts it in the box. asUser is what tells the
     // model it is looking at your own hand rather than the story's voice.
     send({ type: "try_refine", requestId: id, text: text, asUser: true });
-    // The button in the panel greys out while this runs, so the panel has to be
-    // told. Every other way in is a menu that has already closed.
+    // Running, from this moment, rather than from whenever the backend's first
+    // progress message happens to land. Everything that shows a refine in
+    // flight reads this: the status line, the clock, and the widget, which is
+    // often the only part of the extension on screen. Setting it here rather
+    // than there is the difference between the widget turning while the model
+    // is working and it starting to turn as the answer arrives.
+    markBusy(true, "asking");
     paint();
   }
 
@@ -7379,10 +7464,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       toast("A refine is waiting for you in the Auto Refine tab.", true);
       return;
     }
-    if (cfg.widgetUndo && undoHere().length) {
-      const one = undoHere()[0];
-      askUndo(one.chatId, one.messageId);
-      return;
+    if (cfg.widgetUndo) {
+      const back = newestBack();
+      if (back) {
+        if (back.kind === "draft") putDraftBack();
+        else askUndo(back.one.chatId, back.one.messageId);
+        return;
+      }
     }
     refineNow();
   }
@@ -7393,7 +7481,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const el2 = b || floatBtn;
     if (!el2) return;
     try {
-      const back = cfg.widgetUndo && undoHere().length > 0;
+      const back = cfg.widgetUndo && !!newestBack();
       const working = busy;
       // Why a tap would do nothing, when that is the answer. On the home screen
       // there is no chat to refine, and the button was still drawn ready for
@@ -7497,8 +7585,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Unless the button itself is the undo, which is what widgetUndo makes it.
     // Then the arrow is in front of you and the entry underneath it does the
     // same thing twice.
-    if (undoHere().length && !cfg.widgetUndo)
-      doing.push({ key: "undo", label: "Put the last refine back" });
+    if (!cfg.widgetUndo) {
+      const back = newestBack();
+      if (back)
+        doing.push({
+          key: "undo",
+          label: back.kind === "draft" ? "Put your draft back" : "Put the last refine back",
+        });
+    }
     // On the same terms as the Extras rows: their setting puts them there, and
     // this menu takes them over while the button is on screen.
     if (cfg.inputRefine) doing.push({ key: "draft", label: "Refine what I am typing" });
@@ -7549,8 +7643,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     else if (picked === "now") refineNow();
     else if (picked === "all") startSweep();
     else if (picked === "undo") {
-      const one = undoHere()[0];
-      if (one) askUndo(one.chatId, one.messageId);
+      const back = newestBack();
+      if (back && back.kind === "draft") putDraftBack();
+      else if (back) askUndo(back.one.chatId, back.one.messageId);
     } else if (picked === "draft") refineInput();
     else if (picked === "open") {
       try {
@@ -8055,6 +8150,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
           if (msg.type === "try_result" && !msg.requestId) {
             // Same: an answer from the net rather than from the handler.
+            markBusy(false);
             tryBusy = false;
             tryWaiting = null;
             inputWaiting = null;
@@ -8063,6 +8159,11 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "try_result") {
+            // Whichever of the two asked, the run is over. Nothing else clears
+            // this for them: the endings that do belong to a refine of a saved
+            // reply, so a draft refine turned the widget on and left it turning
+            // until the deadman timer came due a minute and a half later.
+            markBusy(false);
             // The input bar and the Try it box use the same request, so the
             // waiting id is what says where the answer goes.
             if (inputWaiting === msg.requestId) {
@@ -8088,7 +8189,14 @@ export function setup(ctx: Ctx, overrides?: any) {
               } else if (setComposer(node, String(msg.after || ""))) {
                 log("refined what you were typing", true);
                 toast("Your draft was refined.");
-                showDraftPop(inputBefore, String(msg.after || ""), node);
+                lastDraft = {
+                  before: inputBefore,
+                  after: String(msg.after || ""),
+                  at: Date.now(),
+                  node: node,
+                };
+                watchDraft(node);
+                showDraftPop(inputBefore, String(msg.after || ""));
                 ping();
               } else {
                 log("could not write to the input box");

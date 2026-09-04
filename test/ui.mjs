@@ -3421,8 +3421,18 @@ console.log("\nrefining the draft from the panel");
     });
     ok("pressing it sends the draft, marked as yours",
       asked && asked.asUser === true && /i walk through it/.test(asked.text), asked);
-    ok("and it greys out while that one runs",
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').disabled));
+    // The panel says a refine is running from the moment it is sent, the same
+    // as it does for a reply: the three buttons give way to Stop. A draft
+    // refine is a stoppable run on the backend, so the offer is a real one.
+    const running = await page.evaluate(() => ({
+      stop: !!document.querySelector("#drawer [data-arf-stop]"),
+      gone: !document.querySelector("#drawer [data-arf-draft]"),
+      dot: !!document.querySelector("#drawer .arf-dot.arf-busy"),
+    }));
+    ok("the panel says it is running from the moment it is sent",
+      running.stop && running.gone, running);
+    ok("with the live dot turning, which is what the widget follows",
+      running.dot, running);
 
     // A refine that takes longer than the backend watchdog. The backend says it
     // has the request, then reports progress, and a progress message is proof
@@ -3586,6 +3596,103 @@ console.log("\nthe button and its menu do not say the same thing twice");
     ok("and still offers a refine, which the button no longer does",
       keys.indexOf("now") >= 0, keys.join(","));
   });
+}
+
+
+console.log("\nthe widget, while your draft is being refined");
+{
+  // The button follows the same running state the panel does. It used to be
+  // turned on by the backend's first progress message and turned off by
+  // nothing, so it began turning as the answer arrived and went on turning for
+  // a minute and a half after it had landed.
+  const face = (page) =>
+    page.evaluate(() => {
+      const b = document.querySelector("#float .arf-float");
+      return b && {
+        working: b.classList.contains("arf-working"),
+        back: b.classList.contains("arf-back"),
+        icon: b.getAttribute("data-arf-icon") || "",
+        title: b.title,
+      };
+    });
+
+  await inTab(
+    browser,
+    { saved: { inputRefine: true, widgetOn: true, widgetUndo: true } },
+    async (page) => {
+      await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+      ok("the button is not turning before anything is asked",
+        !(await face(page)).working);
+
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
+      await settle(page);
+      const mid = await face(page);
+      ok("it turns from the moment the draft is sent, not when the answer lands",
+        mid.working && /^working:/.test(mid.icon), mid);
+      ok("and says a tap would stop it", /stop it/i.test(mid.title), mid.title);
+
+      const id = await page.evaluate(
+        () => window.__sent.filter((x) => x.type === "try_refine").pop().requestId);
+      await page.evaluate((i) => {
+        window.__fromBackend({ type: "refine_ack", requestId: i });
+        window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      }, id);
+      await settle(page);
+      ok("still turning while the model works", (await face(page)).working);
+
+      await page.evaluate((i) => {
+        window.__fromBackend({ type: "try_result", requestId: i, ok: true,
+                              after: "I walk through it." });
+      }, id);
+      await settle(page);
+      const done = await face(page);
+      ok("and stops the moment the answer lands", !done.working, done);
+
+      // The green arrow, the same one a reply's refine puts there.
+      ok("the button offers to put your draft back", done.back, done);
+      ok("with the arrow rather than the refine mark", /^back:/.test(done.icon), done.icon);
+      ok("and says so", /put the last refine back/i.test(done.title), done.title);
+
+      // A tap takes the draft back to what you wrote.
+      await page.evaluate(() => document.querySelector("#float .arf-float").click());
+      await settle(page);
+      ok("tapping it puts your draft back",
+        await page.evaluate(() =>
+          document.querySelector('[data-component="InputArea"] textarea').value
+            === "i walk through it, suddenly"));
+      ok("and the arrow goes, because there is nothing left to put back",
+        !(await face(page)).back);
+    },
+  );
+
+  // Typing over the refine is newer writing than the refine it would undo, so
+  // the way back stands down rather than throwing it away.
+  await inTab(
+    browser,
+    { saved: { inputRefine: true, widgetOn: true, widgetUndo: true } },
+    async (page) => {
+      await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
+      await settle(page);
+      const id = await page.evaluate(
+        () => window.__sent.filter((x) => x.type === "try_refine").pop().requestId);
+      await page.evaluate((i) => {
+        window.__fromBackend({ type: "try_result", requestId: i, ok: true,
+                              after: "I walk through it." });
+      }, id);
+      await settle(page);
+      ok("the arrow is there while the box still holds the rewrite",
+        (await face(page)).back);
+
+      await page.evaluate(() => {
+        const box = document.querySelector('[data-component="InputArea"] textarea');
+        box.value = "I walk through it, and the cold hits me.";
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await settle(page);
+      ok("and goes once you have typed over it", !(await face(page)).back);
+    },
+  );
 }
 
 await browser.close();
