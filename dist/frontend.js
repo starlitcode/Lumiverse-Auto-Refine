@@ -2877,6 +2877,35 @@ export function setup(ctx, overrides) {
         ".arf-float.arf-working{animation:arf-pulse 1400ms ease-out infinite}" +
         "@media (prefers-reduced-motion: reduce){.arf-float.arf-working{animation:none}}" +
         "@media (pointer: coarse){.arf-btn.arf-mini2{min-height:34px;padding:6px 12px}}" +
+        // A setting's label with the "?" that holds its description, so the two sit
+        // on one line and the row keeps its height whether or not it has one.
+        ".arf-labrow{display:flex;align-items:center;gap:6px;min-width:0}" +
+        ".arf-q{flex:none;width:18px;height:18px;padding:0;line-height:1;font-size:11px;" +
+        "border-radius:50%;border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "background:transparent;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
+        "cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" +
+        "font-family:inherit;transition:color var(--lumiverse-transition,200ms ease)," +
+        "border-color var(--lumiverse-transition,200ms ease)}" +
+        '.arf-q:hover,.arf-q[aria-expanded="true"]{' +
+        "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
+        "color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
+        // A finger needs a bigger target than a cursor does, and this is the
+        // smallest control on the panel.
+        "@media (pointer: coarse){.arf-q{width:28px;height:28px;font-size:14px}}" +
+        // The description itself, parented to the page rather than to the row: the
+        // panel is a scroll box and anything inside it would be clipped at the edge.
+        // Opaque, since it sits directly over the rows below the one it belongs to:
+        // the theme's solid surface is painted first and the elevated colour laid
+        // over it, so the tint follows the theme and nothing shows through.
+        ".arf-hint{position:fixed;z-index:2147483300;box-sizing:border-box;padding:8px 10px;" +
+        "border-radius:var(--lumiverse-radius,8px);" +
+        "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+        "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
+        "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));" +
+        "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "font:12px/1.45 var(--lumiverse-font-family,system-ui)}" +
         // The card that comes up on the page when a refine lands, so the answer to
         // "what did it change" is in front of you rather than behind a tab you have
         // to know to open. Bottom right on a desktop, across the bottom on a phone,
@@ -3350,6 +3379,315 @@ export function setup(ctx, overrides) {
             clearTimeout(themeTimer);
         themeTimer = null;
     });
+    // ---- a setting's description, behind a "?" ----
+    // Forty-eight settings each carrying a line of explanation under it made the
+    // panel a wall: every row was two rows tall whether or not you needed the
+    // second one, and scrolling past the ones you already know is the whole cost
+    // of finding the one you do not. The explanation moves behind a "?" beside the
+    // label, which is where Auto Retry keeps its own.
+    //
+    // Fixed position, parented to the page rather than to the row. The panel is a
+    // scroll box, and anything inside it would be clipped at the edge. Only ever
+    // one open, since there is only ever one of these.
+    let hintPop = null;
+    let hintAnchor = null;
+    const vpW = () => (typeof window !== "undefined" && window.innerWidth) || 360;
+    const vpH = () => (typeof window !== "undefined" && window.innerHeight) || 640;
+    // Put a fixed element at a viewport position and check it got there. Where it
+    // is told to go is not always where it lands: Lumiverse's UI Scale is applied
+    // as a zoom, and anything parented to the page is zoomed with it, so at 0.9 an
+    // element set to 800 arrives at 720. Rather than guess at how a host applies
+    // its scale, put it somewhere, ask the browser where it went, and correct by
+    // the difference. That holds for a zoom, a transform, or anything else that
+    // moves it, because it is measured rather than assumed.
+    function placeFixed(el2, left, top) {
+        el2.style.left = Math.round(left) + "px";
+        el2.style.top = Math.round(top) + "px";
+        const got = el2.getBoundingClientRect();
+        const scale = el2.offsetWidth > 0 ? got.width / el2.offsetWidth : 1;
+        const dx = left - got.left;
+        const dy = top - got.top;
+        if (scale > 0.01 && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
+            el2.style.left = Math.round(left + dx / scale) + "px";
+            el2.style.top = Math.round(top + dy / scale) + "px";
+        }
+    }
+    function hideHint() {
+        if (hintPop) {
+            try {
+                hintPop.remove();
+            }
+            catch (_) { }
+        }
+        if (hintAnchor && hintAnchor.setAttribute) {
+            try {
+                hintAnchor.setAttribute("aria-expanded", "false");
+            }
+            catch (_) { }
+        }
+        hintPop = null;
+        hintAnchor = null;
+    }
+    function showHint(anchor, text) {
+        hideHint();
+        if (typeof document === "undefined" || !anchor || !anchor.getBoundingClientRect)
+            return;
+        const box = el("div", "arf-hint", text);
+        box.setAttribute("role", "tooltip");
+        // Off screen until it has been measured, so it is never seen in the wrong
+        // place for a frame.
+        box.style.left = "0";
+        box.style.top = "-9999px";
+        (document.body || document.documentElement).appendChild(box);
+        const vw = vpW();
+        const vh = vpH();
+        // The cap is room on the screen; width is written in the element's own
+        // units, and under a host applying its UI Scale as a zoom those are not the
+        // same. At 1.5 a cap of 300 rendered as 450 and ran off the side of a phone.
+        // So it is set once, measured, and set again against however much the host
+        // is scaling. Without a zoom the second pass divides by one and changes
+        // nothing.
+        const want = Math.min(300, vw - 24);
+        box.style.width = want + "px";
+        const first = box.getBoundingClientRect();
+        const zoom = box.offsetWidth > 0 ? first.width / box.offsetWidth : 1;
+        if (zoom > 0.01 && Math.abs(zoom - 1) > 0.01)
+            box.style.width = Math.floor(want / zoom) + "px";
+        // Measured from the whole row, not from the "?" inside it. The button is
+        // 18px tall and sits partway down a row that can be two lines high, so
+        // hanging the description off the button would cover the setting it is
+        // describing. The row's own rendered box also has any scaling the host
+        // applies already in it, since it is what was painted rather than a size
+        // assumed in advance.
+        const row = (anchor.closest && anchor.closest("[data-arf-row]")) || anchor;
+        const r = row.getBoundingClientRect();
+        // Measured as it lands on screen, in the same units as the row's rect.
+        const got = box.getBoundingClientRect();
+        const h = got.height || box.offsetHeight || 0;
+        const w = got.width || box.offsetWidth || 0;
+        const GAP = 6;
+        const EDGE = 12;
+        // Lined up with the row's left edge rather than centred on the "?", which
+        // reads as belonging to the row, and nudged back inside a narrow screen.
+        const left = Math.max(EDGE, Math.min(r.left, vw - w - EDGE));
+        // Below the row unless there is more room above it. Whichever side it lands
+        // on, a description too tall for the room there is capped and scrolls rather
+        // than moving over the row: covering the setting is the one thing this
+        // exists not to do.
+        const under = Math.max(0, vh - EDGE - (r.bottom + GAP));
+        const over = Math.max(0, r.top - GAP - EDGE);
+        const above = under < Math.min(h, over);
+        const room = above ? over : under;
+        const top = above ? Math.max(EDGE, r.top - GAP - Math.min(h, room)) : r.bottom + GAP;
+        if (h > room) {
+            // The same correction as the width above, for the same reason.
+            const tall = box.offsetHeight > 0 ? h / box.offsetHeight : zoom;
+            box.style.maxHeight = Math.floor(room / (tall > 0.01 ? tall : 1)) + "px";
+            box.style.overflowY = "auto";
+            // Reaching the end of the description must not start scrolling the panel
+            // behind it, because a scroll out there is what closes it.
+            box.style.overscrollBehavior = "contain";
+        }
+        // With no room at all a capped description is a box of padding sitting over
+        // the row. Nothing is a better answer than an empty frame, and this only
+        // happens when the host has pushed the row off the top of the screen, where
+        // the "?" is half gone too.
+        if (room <= 0)
+            box.style.display = "none";
+        placeFixed(box, left, top);
+        // Tapping the description closes it. On a phone that is the first thing a
+        // thumb reaches for.
+        box.addEventListener("click", () => hideHint());
+        hintPop = box;
+        hintAnchor = anchor;
+        try {
+            anchor.setAttribute("aria-expanded", "true");
+        }
+        catch (_) { }
+        setScheme(box);
+        sweepReadable(box);
+    }
+    // What last touched the page. Pointer events carry pointerType, which says
+    // "touch" for a finger whatever the screen claims about hovering, so this is
+    // the answer rather than the media query. Kept because mouseenter and click
+    // carry no pointerType of their own; each follows a pointer event from the
+    // same gesture, so the kind is already written down by the time one arrives.
+    let lastPointer = "";
+    const canHover = () => {
+        try {
+            return (typeof window !== "undefined" &&
+                !!window.matchMedia &&
+                window.matchMedia("(hover: hover)").matches);
+        }
+        catch (_) {
+            return false;
+        }
+    };
+    const fromMouse = (e) => {
+        const t = e && e.pointerType;
+        if (t)
+            return t === "mouse";
+        if (lastPointer)
+            return lastPointer === "mouse";
+        // Nothing has touched the page yet, so the screen is all there is to go on.
+        // One touch corrects it for good.
+        return canHover();
+    };
+    // A setting's "?", or nothing when the setting has no description. The button
+    // carries the text itself rather than looking it up, so a row cannot be built
+    // with a description that belongs to another one.
+    function hintButton(text, label) {
+        const say = String(text || "").trim();
+        if (!say)
+            return null;
+        const q = document.createElement("button");
+        q.type = "button";
+        q.className = "arf-q";
+        q.textContent = "?";
+        q.setAttribute("aria-label", "What " + label + " does");
+        q.setAttribute("aria-expanded", "false");
+        q.setAttribute("data-arf-hint", "1");
+        const mine = () => hintAnchor === q;
+        const open = () => showHint(q, say);
+        const shut = () => {
+            if (mine())
+                hideHint();
+        };
+        // A mouse reveals on hover, a keyboard on focus, a finger on tap. Which one
+        // is happening is read off each event rather than decided once from the
+        // screen: a phone showing the desktop site says it can hover, and taking
+        // that answer wires up the hover pair and switches the tap off, leaving a
+        // description that opens on a tap with nothing able to close it.
+        q.addEventListener("mouseenter", (e) => {
+            if (fromMouse(e))
+                open();
+        });
+        q.addEventListener("mouseleave", (e) => {
+            if (fromMouse(e))
+                shut();
+        });
+        // Focus opens it only when a key put you there. A tap focuses the button
+        // too, and opening from that as well would fight the tap below. Blur closes
+        // only what focus opened: a finger reading a long description touches the
+        // popover, which takes focus off the button, and closing on that would shut
+        // the thing being read.
+        let byFocus = false;
+        q.addEventListener("focus", () => {
+            let byKey = true;
+            try {
+                byKey = q.matches(":focus-visible");
+            }
+            catch (_) { }
+            if (!byKey)
+                return;
+            byFocus = true;
+            open();
+        });
+        q.addEventListener("blur", () => {
+            if (!byFocus)
+                return;
+            byFocus = false;
+            shut();
+        });
+        q.addEventListener("click", (e) => {
+            // A tick's label wraps its box, so a press on the "?" inside one would
+            // otherwise flip the setting it is describing.
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            // On touch the press toggles. On a mouse, hover has it already.
+            if (fromMouse(e))
+                return;
+            if (mine())
+                hideHint();
+            else
+                open();
+        });
+        return q;
+    }
+    // A label with its "?" beside it, which is every row that has a description.
+    function labelRow(f) {
+        const row = el("div", "arf-labrow");
+        row.appendChild(el("span", "arf-lab arf-grow", f.label));
+        const q = hintButton(f.hint, f.label);
+        if (q)
+            row.appendChild(q);
+        return row;
+    }
+    // Anything meaning the row has moved, or attention has gone elsewhere, closes
+    // the description. Scroll is captured, since it is the panel that scrolls
+    // rather than the page.
+    if (typeof document !== "undefined") {
+        const noteKind = (e) => {
+            if (e && e.pointerType)
+                lastPointer = String(e.pointerType);
+        };
+        const onDown = (e) => {
+            noteKind(e);
+            if (!hintPop)
+                return;
+            const t = e && e.target;
+            try {
+                // The "?" itself is left alone so its own handler can close it, rather
+                // than this closing it and the press reopening it.
+                if (t && t.closest && (t === hintAnchor || t.closest("[data-arf-hint]")))
+                    return;
+                if (t && hintPop.contains && hintPop.contains(t))
+                    return;
+            }
+            catch (_) { }
+            hideHint();
+        };
+        // A long description scrolls inside itself. That scroll is somebody reading
+        // it, not the row moving, so it is the one scroll that leaves it open.
+        const onScroll = (e) => {
+            if (!hintPop)
+                return;
+            try {
+                const t = e && e.target;
+                if (t && hintPop.contains && hintPop.contains(t))
+                    return;
+            }
+            catch (_) { }
+            hideHint();
+        };
+        const onResize = () => hideHint();
+        const onKey = (e) => {
+            if (e && e.key === "Escape")
+                hideHint();
+        };
+        document.addEventListener("pointermove", noteKind, true);
+        document.addEventListener("pointerdown", onDown, true);
+        document.addEventListener("scroll", onScroll, true);
+        document.addEventListener("keydown", onKey, true);
+        if (typeof window !== "undefined")
+            window.addEventListener("resize", onResize);
+        disposers.push(() => {
+            try {
+                document.removeEventListener("pointermove", noteKind, true);
+            }
+            catch (_) { }
+            try {
+                document.removeEventListener("pointerdown", onDown, true);
+            }
+            catch (_) { }
+            try {
+                document.removeEventListener("scroll", onScroll, true);
+            }
+            catch (_) { }
+            try {
+                document.removeEventListener("keydown", onKey, true);
+            }
+            catch (_) { }
+            try {
+                if (typeof window !== "undefined")
+                    window.removeEventListener("resize", onResize);
+            }
+            catch (_) { }
+            hideHint();
+        });
+    }
     // ---- the tabs ----
     // Six boxes, and everything belongs in exactly one of them. The panel was one
     // column with every setting in it, which reads as a wall however carefully
@@ -3476,7 +3814,10 @@ export function setup(ctx, overrides) {
             return String(node.nodeValue || "");
         if (node.nodeType !== 1 || node.hidden)
             return "";
-        let out = "";
+        // A row's description is behind its "?" rather than under it, so it is not
+        // among the children to walk. Read off the row, which is where fieldRow
+        // leaves it.
+        let out = String(node._arfHint || "") + " ";
         const kids = node.childNodes || [];
         for (let i = 0; i < kids.length; i++)
             out += shownText(kids[i]) + " ";
@@ -4668,7 +5009,7 @@ export function setup(ctx, overrides) {
             const lab = document.createElement("label");
             lab.className = "arf-between";
             lab.style.cursor = "pointer";
-            lab.appendChild(el("span", "arf-lab", f.label));
+            lab.appendChild(labelRow(f));
             const box = document.createElement("input");
             box.type = "checkbox";
             box.checked = !!cfg[f.key];
@@ -4684,7 +5025,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(lab);
         }
         else if (f.type === "lines") {
-            wrap.appendChild(el("div", "arf-lab", f.label));
+            wrap.appendChild(labelRow(f));
             const ta = document.createElement("textarea");
             ta.setAttribute("data-arf-field", f.key);
             ta.setAttribute("aria-label", f.label);
@@ -4702,7 +5043,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(ta);
         }
         else if (f.type === "pick") {
-            wrap.appendChild(el("div", "arf-lab", f.label));
+            wrap.appendChild(labelRow(f));
             const sel = document.createElement("select");
             sel.setAttribute("data-arf-field", f.key);
             sel.setAttribute("aria-label", f.label);
@@ -4771,7 +5112,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(sel);
         }
         else {
-            wrap.appendChild(el("div", "arf-lab", f.label));
+            wrap.appendChild(labelRow(f));
             const num = document.createElement("input");
             num.type = "number";
             if (f.min != null)
@@ -4796,8 +5137,12 @@ export function setup(ctx, overrides) {
             });
             wrap.appendChild(num);
         }
+        // The description lives behind the "?" now, so it is no longer in the page
+        // for the search to walk. Hung off the row instead, where shownText picks
+        // it up: a setting you can only describe is exactly the one you are
+        // searching for, and losing that would be the whole point of the search.
         if (f.hint)
-            wrap.appendChild(note(f.hint));
+            wrap._arfHint = f.hint;
         return wrap;
     }
     // ---- Prompt ----
@@ -5545,7 +5890,10 @@ export function setup(ctx, overrides) {
     }
     function samplerRow(s) {
         const wrap = el("div", "arf-col");
-        wrap.appendChild(el("div", "arf-lab", s.label));
+        // A sampler is a field like any other from here, so its description sits
+        // behind the same "?" and its row is findable by the same search.
+        wrap.setAttribute("data-arf-row", "sampler:" + s.id);
+        wrap.appendChild(labelRow({ key: "sampler:" + s.id, label: s.label, type: "num", hint: s.hint }));
         const box = document.createElement("input");
         box.type = "number";
         box.min = String(s.min);
@@ -5581,7 +5929,7 @@ export function setup(ctx, overrides) {
         });
         wrap.appendChild(box);
         if (s.hint)
-            wrap.appendChild(note(s.hint));
+            wrap._arfHint = s.hint;
         return wrap;
     }
     // ---- Limits ----

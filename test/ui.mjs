@@ -4210,6 +4210,182 @@ console.log("\nnothing is thrown away on one tap");
   );
 }
 
+// ---- a setting's description sits behind a "?" ----
+console.log("\ndescriptions behind a ?");
+{
+  // Every description used to sit under the row it belonged to, which made each
+  // one two rows tall whether or not you needed the second, and scrolling past
+  // the ones you know is the whole cost of finding the one you do not.
+  const TABS = ["Prompt", "Context", "Model", "Limits", "Log", "Setup"];
+
+  await inTab(browser, {}, async (page) => {
+    let hints = 0;
+    for (const t of TABS) {
+      await goTab(page, t);
+      hints += await page.evaluate(() => document.querySelectorAll("#drawer .arf-q").length);
+    }
+    ok("the settings carry a ? rather than a line each", hints >= 30, "found " + hints);
+    // Nothing is left carrying a description under it. A row that still drew one
+    // would be the one row on the panel behaving differently, which is worse
+    // than either answer applied everywhere.
+    const under = await page.evaluate(() => {
+      const out = [];
+      for (const row of document.querySelectorAll("#drawer [data-arf-row]")) {
+        if (!row.querySelector(".arf-q")) continue;
+        for (const n of row.querySelectorAll(".arf-note"))
+          out.push((n.textContent || "").trim().slice(0, 30));
+      }
+      return out;
+    });
+    ok("and none of them draws one under the row as well", under.length === 0, under.slice(0, 3));
+  });
+
+  // A description opens where it can be read, without pushing the panel around
+  // or covering the setting it is describing. Checked on every row of every tab,
+  // since which side it opens on depends on where the row happens to sit.
+  for (const [label, css, viewport] of [
+    ["phone", "", { width: 380, height: 720 }],
+    ["desktop", "", { width: 420, height: 1000 }],
+    ["UI Scale 0.8", "body{zoom:0.8}", { width: 420, height: 900 }],
+    ["UI Scale 1.5", "body{zoom:1.5}", { width: 420, height: 900 }],
+    ["larger host text", "#drawer{font-size:19px}", { width: 420, height: 900 }],
+  ]) {
+    await inTab(browser, { css: css, viewport: viewport, touch: true }, async (page) => {
+      let checked = 0;
+      const covering = [];
+      let offscreen = 0;
+      let moved = 0;
+      for (const t of TABS) {
+        await goTab(page, t);
+        const r = await page.evaluate(async () => {
+          const frame = () =>
+            new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const over = (a, b) =>
+            !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right);
+          const qs = [...document.querySelectorAll("#drawer .arf-q")];
+          const out = { n: 0, covering: [], offscreen: 0, moved: 0 };
+          for (const q of qs) {
+            q.scrollIntoView({ block: "center" });
+            await frame();
+            const row = q.closest("[data-arf-row]");
+            const was = row.getBoundingClientRect().top;
+            q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+            q.click();
+            await frame();
+            out.n++;
+            const pop = document.querySelector(".arf-hint");
+            if (!pop) {
+              out.covering.push("nothing opened");
+              continue;
+            }
+            // Nothing below it may move: the description is parented to the page,
+            // so opening one must not reflow the panel under the finger.
+            out.moved = Math.max(out.moved, Math.abs(Math.round(row.getBoundingClientRect().top - was)));
+            const pr = pop.getBoundingClientRect();
+            if (getComputedStyle(pop).display !== "none") {
+              if (over(pr, row.getBoundingClientRect()))
+                out.covering.push((row.textContent || "").trim().slice(0, 28));
+              if (pr.left < -1 || pr.right > innerWidth + 1 || pr.top < -1 || pr.bottom > innerHeight + 1)
+                out.offscreen++;
+            }
+            pop.click();
+            await frame();
+          }
+          return out;
+        });
+        checked += r.n;
+        covering.push(...r.covering);
+        offscreen += r.offscreen;
+        moved = Math.max(moved, r.moved);
+      }
+      ok(label + ": none of " + checked + " descriptions cover their row", covering.length === 0, covering.slice(0, 4));
+      ok(label + ": none open off the screen", offscreen === 0, "off screen " + offscreen);
+      ok(label + ": opening one moves nothing", moved === 0, "moved " + moved);
+    });
+  }
+
+  await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    await goTab(page, "Limits");
+    const r = await page.evaluate(async () => {
+      const frame = () =>
+        new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const open = (q) => {
+        q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+        q.click();
+      };
+      const up = () => document.querySelectorAll(".arf-hint").length;
+      const qs = [...document.querySelectorAll("#drawer .arf-q")];
+      open(qs[0]);
+      await frame();
+      const first = up();
+      const pop = document.querySelector(".arf-hint");
+      const bg = pop && getComputedStyle(pop).backgroundColor;
+      const parts = bg && bg.match(/[\d.]+/g);
+      const opaque = !!parts && (parts[3] === undefined || Number(parts[3]) === 1);
+      // The description is parented to the page, not to the panel, or the panel's
+      // own scroll box would clip it at the edge.
+      const outside = !!pop && !document.getElementById("drawer").contains(pop);
+      open(qs[1]);
+      await frame();
+      const second = up();
+      open(qs[1]);
+      await frame();
+      const retap = up();
+      open(qs[0]);
+      await frame();
+      document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      await frame();
+      const elsewhere = up();
+      open(qs[0]);
+      await frame();
+      document.getElementById("drawer").dispatchEvent(new Event("scroll", { bubbles: true }));
+      await frame();
+      const scrolled = up();
+      open(qs[0]);
+      await frame();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await frame();
+      const escaped = up();
+      return { first, opaque, outside, second, retap, elsewhere, scrolled, escaped };
+    });
+    ok("a press opens the description", r.first === 1, r);
+    ok("and it is opaque, since it sits over the rows below", r.opaque, r);
+    ok("and hangs off the page, so the panel cannot clip it", r.outside, r);
+    ok("only one is ever open", r.second === 1, r);
+    ok("a second press closes it", r.retap === 0, r);
+    ok("a press anywhere else closes it", r.elsewhere === 0, r);
+    ok("scrolling closes it, since the row it points at has moved", r.scrolled === 0, r);
+    ok("and so does Escape", r.escaped === 0, r);
+  });
+
+  // The search reads the panel as it is drawn, and a description is no longer
+  // drawn. A setting you can only describe is exactly the one you are searching
+  // for, so losing this would be most of what the search is for.
+  await inTab(browser, {}, async (page) => {
+    const hit = await page.evaluate(async () => {
+      // A phrase that appears in one description and nowhere else on the panel,
+      // so a search that finds it can only have read the description.
+      const q = document.querySelector('#drawer input[type="search"]');
+      const say = (v) => {
+        q.value = v;
+        q.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      const wait = () =>
+        new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      say("three in five");
+      await wait();
+      const body = document.getElementById("drawer").textContent || "";
+      const none = /nothing matched/i.test(body);
+      const rows = document.querySelectorAll("#drawer [data-arf-row]").length;
+      say("");
+      await wait();
+      return { none: none, rows: rows };
+    });
+    ok("a setting is still findable by its description", !hit.none, hit);
+    ok("and the search narrows to it rather than showing everything", hit.rows > 0 && hit.rows < 20, hit);
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
