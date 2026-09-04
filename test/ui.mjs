@@ -3150,6 +3150,101 @@ console.log("\nwalking back into a chat");
       ),
     );
   });
+
+  // ---- and the same question asked the moment the panel is built ----
+  // Pressing Update in the extensions panel tears the panel down and sets it up
+  // again in place, with no reload. It comes back knowing nothing: no chat, and
+  // nothing walked out of. Asked which chat is open, the backend answers with
+  // the account's most recent one, which on the home screen is the chat you
+  // were in before the update.
+  const rebuild = (page, url) =>
+    page.evaluate((u) => {
+      try { window.__teardown && window.__teardown(); } catch (_) {}
+      document.getElementById("drawer").innerHTML = "";
+      history.pushState({}, "", u);
+      window.__sent = [];
+      window.__handlers = {};
+      window.__teardown = window.__setup({
+        events: {
+          on: (n, f) => {
+            (window.__handlers[n] = window.__handlers[n] || []).push(f);
+            return () => {};
+          },
+        },
+        ui: {
+          registerDrawerTab: () => ({
+            root: document.getElementById("drawer"),
+            setBadge: () => {}, activate: () => {}, destroy: () => {},
+          }),
+          registerInputBarAction: () => ({ onClick: () => () => {}, destroy: () => {} }),
+          toast: () => {},
+        },
+        dom: { addStyle: () => () => {}, inject: () => {}, cleanup: () => {} },
+        storage: { get: async () => null, set: async () => {} },
+        sendToBackend: (m) => window.__sent.push(m),
+        onBackendMessage: (cb) => { window.__fromBackend = cb; return () => {}; },
+      });
+    }, url);
+  // Every question outstanding, answered the same way. The panel asks more than
+  // once on purpose after a rebuild, and answering only the last one would
+  // leave the earlier ones hanging.
+  const answerAll = (page, body) =>
+    page.evaluate((b) => {
+      const asks = window.__sent.filter((x) => x.type === "active_chat");
+      for (const one of asks)
+        window.__fromBackend(Object.assign({ type: "active_chat", requestId: one.requestId }, b));
+      return asks.length;
+    }, body);
+  const readyToRefine = (page) =>
+    page.evaluate(
+      () => document.querySelector("#drawer").textContent.indexOf("waiting for you to press") >= 0,
+    );
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    // A chat first, so the address has taught the panel where an id sits. That
+    // is remembered in this browser, which is why it survives the rebuild.
+    await page.evaluate(() => history.pushState({}, "", "/chat/oldchat00001"));
+    await reply(page, {
+      chatId: "oldchat00001", character: "Wren", hasCharacter: true, resolved: true, found: true,
+    });
+    await tick(page);
+
+    await rebuild(page, "/");
+    await settle(page);
+    await answerAll(page, {
+      chatId: "oldchat00001", character: "Wren", hasCharacter: true, resolved: true, found: true,
+    });
+    await settle(page);
+    ok("rebuilt on the home screen, the last chat is not taken for this one",
+      await saysNoChat(page));
+    ok("and it does not offer to refine there", !(await readyToRefine(page)));
+  });
+
+  // The other way round, on a build whose addresses name no chats: the backend
+  // has just restarted with the panel and does not know yet. One answer of
+  // "nobody is in a chat" used to be the last word, and the panel sat on it in
+  // a chat somebody was reading.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await rebuild(page, "/");
+    await settle(page);
+    await answerAll(page, { chatId: null, resolved: true, found: false });
+    await settle(page);
+    ok("a backend still starting up says no chat, and is believed for now",
+      await saysNoChat(page));
+
+    // It comes up, and is asked again without anybody navigating.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 6500)));
+    const asks = await page.evaluate(
+      () => window.__sent.filter((x) => x.type === "active_chat").length);
+    ok("but it is asked again rather than taken as final", asks > 1, "asked " + asks);
+    await answerAll(page, {
+      chatId: "warmchat00001", character: "Wren", hasCharacter: true, resolved: true, found: true,
+    });
+    await settle(page);
+    ok("and the panel lands in the chat once it answers", !(await saysNoChat(page)));
+  });
 }
 
 console.log("\nthe live line while a refine is running");

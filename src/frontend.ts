@@ -1801,6 +1801,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     return got;
   }
 
+  // Whether the address in front of you names this chat. The slot is asked
+  // first and the whole address second, so a build that has moved its ids
+  // somewhere else is not called wrong for it while the slot catches up.
+  function addressHas(id: any): boolean {
+    const want = id == null ? "" : String(id);
+    if (!want) return false;
+    const slotted = idInUrl();
+    return (slotted != null && String(slotted) === want) || urlHolds(id);
+  }
+
   // Everything that describes the chat you are in, told you are not in one.
   // The watch is left running: it is now the thing that notices you walking
   // back in.
@@ -1877,8 +1887,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       // up on it is how a slow server turns into a panel that stays wrong until
       // you walk out and back in. Slowly, since it is a disagreement to resolve
       // rather than a change to catch.
+      //
+      // A build whose addresses name no chats gets the same slow asking with
+      // nothing to disagree with, because there the backend is the only source
+      // there is. It answers "nobody is in a chat" while it is still starting
+      // up, which is what it has just done if the extension was updated a
+      // second ago, and one such answer used to be the last word: the panel sat
+      // on "No chat open" in a chat somebody was reading, and nothing asked
+      // again.
       slow++;
-      if (slow >= SLOW_EVERY && idInUrl() != null) {
+      if (slow >= SLOW_EVERY && (idInUrl() != null || urlSlot == null)) {
         slow = 0;
         askWhereWeAre();
       }
@@ -7727,6 +7745,22 @@ export function setup(ctx: Ctx, overrides?: any) {
                 !urlHolds(msg.chatId)
               )
                 return;
+              // The same answer with nothing walked out of yet, which is where
+              // the panel stands the moment it is set up: the extension being
+              // updated rebuilds it in place, and it comes back knowing
+              // nothing. Asked which chat is open, the backend answers with the
+              // account's most recent one, and on the home screen that is the
+              // chat you left before the update. leftBehind is empty, so the
+              // check above has nothing to recognise it by, and the panel came
+              // back saying it was ready to refine in a chat nobody was in.
+              //
+              // The address settles it on any build whose addresses name chats.
+              // One that names none has only the backend to go on and cannot
+              // tell the two apart; the asking below is what it has instead.
+              if (chatAskWhy === "where" && urlSlot != null && !addressHas(msg.chatId)) {
+                if (idInUrl() == null) leftTheChat();
+                return;
+              }
               sawChat(msg.chatId);
               character = msg.character ? String(msg.character) : null;
               // A chat with a card whose name did not come back is a chat the
@@ -8173,6 +8207,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   armBackend();
   syncExtras();
   askWhereWeAre();
+  // And keep asking for the next few seconds. A backend asked the instant it
+  // came up answers with what it knows then, which after the extension is
+  // updated is nothing, and a single answer taken as final leaves the panel
+  // wrong about the chat somebody is sitting in until they walk out and back
+  // in. The chase stops the moment an answer names a chat.
+  chasing = CHASE_TICKS;
   // From here rather than from the first chat seen. A tab opened on the home
   // screen has no chat to watch, and waiting for one would leave the move it
   // most needs to notice, a character being tapped, as the one move nothing is
