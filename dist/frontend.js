@@ -97,6 +97,7 @@ const PARTS = [
 // The two that are not settings. Named here so a picker can offer them beside
 // the rest rather than as a separate afterthought.
 const PART_PRESETS = "presets";
+const PART_SETUPS = "setups";
 const PART_CHATS = "chats";
 // What a bug report can carry. Separate from the parts above because these are
 // about the report rather than about the settings: what is in the panel, what
@@ -156,6 +157,18 @@ const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
 const PRESETS_KEY = "lv-auto-refine:presets:v1";
+const SETUPS_KEY = "lv-auto-refine:setups:v1";
+// What a model setup carries: which connection refines, how much it thinks, how
+// long to wait for it, and the samplers. Nothing about the prompt, because the
+// point of keeping them apart is being able to run the same prompt through a
+// cheap model and an expensive one without editing anything.
+//
+// A connection id is in here, which is the one thing a preset refuses to carry.
+// The reason a preset refuses is that presets go into files people share, and
+// an id from somebody else's account names nothing on yours. A setup is not
+// offered as a file: it lives in this browser and in your own account, where
+// the id means what it says.
+const SETUP_KEYS = ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "samplers"];
 // What a preset carries: everything that decides how a refine reads. The rest
 // stays yours whichever preset you load, which is the split that makes a preset
 // worth having. A connection is not in here on purpose: an id from somebody
@@ -1390,6 +1403,38 @@ export function setup(ctx, overrides) {
     // is no Save button here: a drawer tab has no moment where it closes, so a
     // "nothing sticks until you press Save" contract would have nothing to hang
     // on and would only ever surprise somebody who walked away mid-edit.
+    //
+    // How long a switch is given to finish moving before anything heavier
+    // happens. Two things wait on it: the rebuild that catches the rest of the
+    // card up, and the host components below.
+    const SETTLE_MS = 260;
+    // The floating button, the buttons on each message and the Extras row are all
+    // reconciled from here, and all three are the host's own components, so
+    // creating or destroying one is the host's own render. Doing that in the
+    // frame a switch was clicked in is what makes that switch look slow, and the
+    // three switches that turn those components on and off are the only ones
+    // that ever pay for it, which is why the master switch lagged and nothing
+    // else did. Measured against a host taking 25ms to mount its button: the
+    // master switch's knob stood still for two frames and then jumped, while
+    // every other switch started moving in six milliseconds.
+    //
+    // So it happens once the switch has finished moving, and once for however
+    // many settings changed together. Nothing is waiting on it: it brings the
+    // page into line with settings that are already saved.
+    let extrasTimer = null;
+    function syncExtrasSoon() {
+        if (extrasTimer)
+            return;
+        extrasTimer = setTimeout(() => {
+            extrasTimer = null;
+            syncExtras();
+        }, SETTLE_MS);
+    }
+    disposers.push(() => {
+        if (extrasTimer)
+            clearTimeout(extrasTimer);
+        extrasTimer = null;
+    });
     let saveTimer = null;
     function persist(now) {
         const write = () => {
@@ -1401,8 +1446,9 @@ export function setup(ctx, overrides) {
             catch (_) { }
             send({ type: "set_settings", settings: cfg });
             // The floating button and the Extras row follow the settings that turn
-            // them on, and this is the one place every change passes through.
-            syncExtras();
+            // them on, and this is the one place every change passes through. Off
+            // this frame, so a switch is not paying for the host's render.
+            syncExtrasSoon();
         };
         if (now) {
             if (saveTimer)
@@ -2960,7 +3006,7 @@ export function setup(ctx, overrides) {
         if (id === "context")
             return [buildContextCard(), buildPreviewCard(), buildTryCard()];
         if (id === "model")
-            return [buildConnectionCard(), buildSamplerCard()];
+            return [buildConnectionCard(), buildSamplerCard(), buildSetupCard()];
         if (id === "limits")
             return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
         if (id === "log") {
@@ -3160,7 +3206,6 @@ export function setup(ctx, overrides) {
     // the warning that appears when the last check goes off, the greyed-out
     // button - waits until the knob has arrived. Flicking three switches in a row
     // is one rebuild rather than three.
-    const SETTLE_MS = 260;
     let settleTimer = null;
     function settle() {
         if (settleTimer)
@@ -3341,6 +3386,9 @@ export function setup(ctx, overrides) {
     // the thing that makes a tabbed panel worse than a list.
     function buildHeader() {
         const wrap = card();
+        // Findable, so it can be swapped on its own by something that has no reason
+        // to rebuild the rest of the panel.
+        wrap.setAttribute("data-arf-header", "1");
         const top = el("div", "arf-row");
         const mark = el("span", "arf-mark");
         mark.innerHTML = refineIcon();
@@ -4239,10 +4287,64 @@ export function setup(ctx, overrides) {
                 : "It asks the model for its working, but Show the before and after on screen is off under When a refine lands, and that card is where the working appears.";
         return "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks do.";
     }
+    // A block switched on or off, taken in where it stands.
+    //
+    // Rebuilding the tab for this meant tearing down every box of prompt on it
+    // and building them again, which is the flicker: the boxes hold thousands of
+    // characters and they are the tallest thing on the panel. Switching a block
+    // changes four things and nothing else, so those four are done by hand.
+    //
+    //   how the block is drawn      the switch does that itself
+    //   how many are on             the count on the card
+    //   whether the message is sent the warning under it, and with it whether a
+    //                               refine can happen at all, which is the header
+    //                               and the floating button
+    //   which prompt this now is    the line naming it, since a block switched
+    //                               off is a prompt no preset matches
+    function refreshBlocks() {
+        if (!tab || !tab.root)
+            return;
+        try {
+            const root = tab.root;
+            const list = blockList();
+            const on = list.filter((b) => b.on).length;
+            const pill = root.querySelector("[data-arf-blockcount]");
+            if (pill)
+                pill.textContent = on + " of " + list.length + " on";
+            const said = root.querySelector("[data-arf-noturn]");
+            if (said)
+                said.hidden = holdsTurn(list);
+            const line = root.querySelector("[data-arf-whatthisis]");
+            if (line)
+                line.textContent = whatThisIs() + " " + aboutWorking();
+            swapHeader();
+            paintFloat();
+        }
+        catch (_) { }
+    }
+    // The header on its own. It says whether a refine can happen and why not,
+    // which a block switched off can change, and it is the one part of the panel
+    // holding nothing anybody is part-way through typing into.
+    function swapHeader() {
+        if (!tab || !tab.root)
+            return;
+        try {
+            const root = tab.root;
+            const was = root.querySelector("[data-arf-header]");
+            if (!was || !was.parentNode)
+                return;
+            was.parentNode.replaceChild(buildHeader(), was);
+        }
+        catch (_) { }
+    }
     function buildBlocksCard() {
         const list = blockList();
         const on = list.filter((b) => b.on).length;
         const wrap = card("Your prompt", "The refine is one request, and this is it. Blocks are sent top to bottom, and two next to each other with the same role are joined into one message. A block that comes out empty is left out.", on + " of " + list.length + " on");
+        // Marked so switching a block off can bring it up to date where it stands.
+        const pillEl = wrap.querySelector(".arf-cardh .arf-pill");
+        if (pillEl)
+            pillEl.setAttribute("data-arf-blockcount", "1");
         // Two prompts, because refining a reply and tidying your own message are
         // different jobs. One prompt hedged to do both does neither well.
         const pick = el("div", "arf-seg");
@@ -4266,11 +4368,20 @@ export function setup(ctx, overrides) {
         wrap.appendChild(note(editingYours()
             ? "Used when you refine one of your own messages, or the draft in your input box. Your own messages are never refined automatically, whatever else is switched on: it takes you asking."
             : "Used for every reply the character writes, by the automatic pass and by the refine button."));
-        wrap.appendChild(note(whatThisIs() + " " + aboutWorking()));
-        if (!holdsTurn(list))
-            wrap.appendChild(bad("No block has " +
+        const isLine = note(whatThisIs() + " " + aboutWorking());
+        isLine.setAttribute("data-arf-whatthisis", "1");
+        wrap.appendChild(isLine);
+        // Built either way and hidden while the prompt is fine, so switching the
+        // block that carries the message off can show it without the card being
+        // rebuilt around it.
+        {
+            const noTurnSaid = bad("No block has " +
                 TURN_MACRO +
-                " in it, so the model would never see the message it is meant to rewrite. Nothing here will be refined until one does."));
+                " in it, so the model would never see the message it is meant to rewrite. Nothing here will be refined until one does.");
+            noTurnSaid.setAttribute("data-arf-noturn", "1");
+            noTurnSaid.hidden = holdsTurn(list);
+            wrap.appendChild(noTurnSaid);
+        }
         for (let i = 0; i < list.length; i++)
             wrap.appendChild(buildBlockRow(list, i));
         const acts = el("div", "arf-row");
@@ -4321,12 +4432,13 @@ export function setup(ctx, overrides) {
             next[i].on = !!box.checked;
             // Saved without a rebuild. This tab holds the whole prompt, several
             // boxes of it, and tearing all of that down to grey one block out was
-            // the heaviest thing any switch on the panel did. The greying is done
-            // here, and the count on the card and the warning about {{message}}
-            // catch up once the knob has finished moving.
+            // the heaviest thing any switch on the panel did, and the flicker that
+            // came with it. The greying is done here and the rest by refreshBlocks,
+            // which brings the card's count, its warning, the line naming the prompt
+            // and the header up to date without touching a single box of prompt.
             setBlocks(next, false);
             wrap.className = "arf-block" + (box.checked ? "" : " arf-hushed");
-            settle();
+            refreshBlocks();
         });
         left.appendChild(box);
         const nameIn = document.createElement("input");
@@ -4618,6 +4730,166 @@ export function setup(ctx, overrides) {
         const wrap = card("Which model refines", "A refine is a second model call on every reply, so these decide what it costs. They default to the cheap answer.");
         for (const f of COST_FIELDS)
             wrap.appendChild(fieldRow(f));
+        return wrap;
+    }
+    // Named setups for the Model tab, so somebody running more than one custom
+    // connection can move between them in one go rather than resetting five
+    // fields by hand every time.
+    function buildSetupCard() {
+        const wrap = card("Saved model setups", "Everything on this tab under one name: the connection, the thinking, how long to wait, and the samplers. Your prompt is not in here, so loading one changes what runs the refine and nothing about how it reads. Kept in this browser and in your account, and not offered as a file: a connection id names nothing on anybody else's account.", setups.length ? String(setups.length) : undefined);
+        const chosen = () => setups.find((x) => x.name === setupPick) || null;
+        const sel = document.createElement("select");
+        sel.className = "arf-field";
+        sel.setAttribute("aria-label", "Saved model setups");
+        sel.setAttribute("data-arf-field", "setupPick");
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = setups.length ? "Pick a setup" : "Nothing saved yet";
+        sel.appendChild(none);
+        for (const one of setups) {
+            const op = document.createElement("option");
+            op.value = one.name;
+            op.textContent = one.name;
+            sel.appendChild(op);
+        }
+        sel.value = setupPick;
+        sel.addEventListener("change", () => {
+            setupPick = sel.value;
+            setupName = sel.value;
+            setupSaid = null;
+            paint();
+        });
+        wrap.appendChild(sel);
+        const nameIn = document.createElement("input");
+        nameIn.type = "text";
+        nameIn.className = "arf-field";
+        nameIn.placeholder = "A name for this setup";
+        nameIn.value = setupName;
+        nameIn.setAttribute("aria-label", "Setup name");
+        nameIn.setAttribute("data-arf-field", "setupName");
+        nameIn.addEventListener("input", () => {
+            setupName = nameIn.value;
+        });
+        wrap.appendChild(nameIn);
+        const row = el("div", "arf-row");
+        const load = button("Load", false);
+        load.setAttribute("data-arf-setup", "load");
+        load.disabled = !chosen();
+        load.style.opacity = load.disabled ? "0.45" : "1";
+        load.addEventListener("click", () => {
+            const one = chosen();
+            if (!one)
+                return;
+            const took = applySetup(one);
+            setupSaid = took ? "Loaded " + one.name + "." : "There was nothing in that setup to load.";
+            log("loaded the model setup " + one.name, true);
+            paint();
+        });
+        const asNew = button("Save as new", false);
+        asNew.setAttribute("data-arf-setup", "new");
+        asNew.addEventListener("click", () => {
+            const name = String(setupName || "").trim();
+            if (!name) {
+                setupSaid = "Give it a name first.";
+                paint();
+                return;
+            }
+            if (setups.some((x) => x.name === name)) {
+                setupSaid = "There is already a setup called that. Use Update selected, or pick another name.";
+                paint();
+                return;
+            }
+            setups.push({ name: name, at: Date.now(), settings: setupFromNow() });
+            setups = setups.slice(-40);
+            saveSetups();
+            setupPick = name;
+            setupSaid = "Saved " + name + ".";
+            paint();
+        });
+        const update = button("Update selected", false);
+        update.setAttribute("data-arf-setup", "update");
+        update.disabled = !chosen();
+        update.style.opacity = update.disabled ? "0.45" : "1";
+        update.addEventListener("click", () => {
+            const one = chosen();
+            if (!one)
+                return;
+            one.settings = setupFromNow();
+            one.at = Date.now();
+            saveSetups();
+            setupSaid = "Updated " + one.name + ".";
+            paint();
+        });
+        const rename = button("Rename selected", false);
+        rename.setAttribute("data-arf-setup", "rename");
+        rename.disabled = !chosen();
+        rename.style.opacity = rename.disabled ? "0.45" : "1";
+        rename.addEventListener("click", () => {
+            const one = chosen();
+            const name = String(setupName || "").trim();
+            if (!one)
+                return;
+            if (!name) {
+                setupSaid = "Put the new name in the box first.";
+                paint();
+                return;
+            }
+            if (name !== one.name && setups.some((x) => x.name === name)) {
+                setupSaid = "There is already a setup called that.";
+                paint();
+                return;
+            }
+            one.name = name;
+            saveSetups();
+            setupPick = name;
+            setupSaid = "Renamed.";
+            paint();
+        });
+        const drop = button("Delete", false);
+        drop.className += " arf-danger";
+        drop.setAttribute("data-arf-setup", "delete");
+        drop.disabled = !chosen();
+        drop.style.opacity = drop.disabled ? "0.45" : "1";
+        drop.addEventListener("click", () => {
+            const one = chosen();
+            if (!one)
+                return;
+            setups = setups.filter((x) => x !== one);
+            saveSetups();
+            setupPick = "";
+            setupName = "";
+            setupSaid = "Deleted " + one.name + ".";
+            paint();
+        });
+        row.appendChild(load);
+        row.appendChild(asNew);
+        row.appendChild(update);
+        row.appendChild(rename);
+        row.appendChild(drop);
+        wrap.appendChild(row);
+        // What the chosen one would actually do, since the fields below are what
+        // is loaded now and not what is about to be.
+        const one = chosen();
+        if (one) {
+            const named = (id) => {
+                if (!id)
+                    return "the model you are chatting with";
+                const c = connections.find((x) => x.id === id);
+                return c ? (c.name || c.provider || "a connection") + (c.model ? " (" + c.model + ")" : "") : "a connection that is gone";
+            };
+            const set = SAMPLER_FIELDS.filter((f) => one.settings.samplers && one.settings.samplers[f.id] != null).length;
+            wrap.appendChild(note("Refines with " + named(String(one.settings.connectionId || "")) + ". " +
+                (one.settings.thinkingMode === "off"
+                    ? "No thinking."
+                    : one.settings.thinkingMode === "custom"
+                        ? "Thinking on " + String(one.settings.thinkingEffort || "medium") + "."
+                        : "Thinking left to the connection.") +
+                (set ? " " + set + (set === 1 ? " sampler" : " samplers") + " set." : " Samplers left alone.")));
+            if (setupLost(one))
+                wrap.appendChild(warn("The connection this setup names is not on your account any more. Loading it would leave the refine pointed at nothing, so pick another connection above and update the setup."));
+        }
+        if (setupSaid)
+            wrap.appendChild(note(setupSaid));
         return wrap;
     }
     function buildSamplerCard() {
@@ -5359,6 +5631,8 @@ export function setup(ctx, overrides) {
             };
             if (partOn("exportParts", PART_PRESETS))
                 body.presets = presets;
+            if (partOn("exportParts", PART_SETUPS))
+                body.setups = setups;
             if (partOn("exportParts", PART_CHATS))
                 body.chatsOff = chatsOff.slice();
             if (!Object.keys(settings).length && !body.presets && !body.chatsOff) {
@@ -5524,6 +5798,22 @@ export function setup(ctx, overrides) {
                 extra.push(clean.length + " preset" + (clean.length === 1 ? "" : "s"));
             }
         }
+        if (partOn("importParts", PART_SETUPS) && Array.isArray(body.setups)) {
+            const clean = cleanSetups(body.setups);
+            if (clean.length) {
+                // Added rather than replacing, the same as presets.
+                const names = setups.map((x) => x.name);
+                for (const one of clean) {
+                    while (names.indexOf(one.name) >= 0)
+                        one.name = one.name + " (copy)";
+                    names.push(one.name);
+                    setups.push(one);
+                }
+                setups = setups.slice(-40);
+                saveSetups();
+                extra.push(clean.length + " model setup" + (clean.length === 1 ? "" : "s"));
+            }
+        }
         if (partOn("importParts", PART_CHATS) && Array.isArray(body.chatsOff)) {
             const ids = body.chatsOff.map((x) => String(x)).slice(0, 500);
             for (const id of ids)
@@ -5675,6 +5965,11 @@ export function setup(ctx, overrides) {
                 id: PART_PRESETS,
                 label: "Saved presets",
                 what: "The ones you saved. The four that ship with the extension are always there and are never in a file.",
+            },
+            {
+                id: PART_SETUPS,
+                label: "Saved model setups",
+                what: "Which connection refines, and the thinking and samplers with it. A connection id names nothing on another account, so a setup that crosses one needs its connection picked again.",
             },
             {
                 id: PART_CHATS,
@@ -5834,6 +6129,132 @@ export function setup(ctx, overrides) {
             send({ type: "save_presets", presets: presets });
         }
         catch (_) { }
+    }
+    let setups = [];
+    let setupPick = "";
+    let setupName = "";
+    let setupSaid = null;
+    function cleanSetups(list) {
+        return (Array.isArray(list) ? list : [])
+            .filter((x) => x && typeof x === "object" && x.name)
+            .slice(0, 40)
+            .map((x) => ({
+            name: String(x.name),
+            at: Number(x.at) || 0,
+            settings: x.settings && typeof x.settings === "object" ? x.settings : {},
+        }));
+    }
+    function loadSetups() {
+        try {
+            if (typeof localStorage === "undefined")
+                return;
+            const raw = localStorage.getItem(SETUPS_KEY);
+            setups = cleanSetups(raw ? JSON.parse(raw) : []);
+        }
+        catch (_) {
+            setups = [];
+        }
+    }
+    loadSetups();
+    function saveSetups() {
+        try {
+            if (typeof localStorage !== "undefined")
+                localStorage.setItem(SETUPS_KEY, JSON.stringify(setups));
+        }
+        catch (_) { }
+        try {
+            send({ type: "save_setups", setups: setups });
+        }
+        catch (_) { }
+    }
+    let setupAsk = "";
+    function loadSetupsFromAccount() {
+        setupAsk = "arf-setups-" + newId();
+        send({ type: "load_setups", requestId: setupAsk });
+    }
+    function tookAccountSetups(msg) {
+        if (!msg || msg.requestId !== setupAsk)
+            return;
+        setupAsk = "";
+        const clean = Array.isArray(msg.setups) ? cleanSetups(msg.setups) : [];
+        if (clean.length) {
+            setups = clean;
+            try {
+                if (typeof localStorage !== "undefined")
+                    localStorage.setItem(SETUPS_KEY, JSON.stringify(setups));
+            }
+            catch (_) { }
+            log("brought " + clean.length + (clean.length === 1 ? " model setup" : " model setups") + " down from your account", true);
+            paint();
+        }
+        else if (setups.length) {
+            saveSetups();
+            log("sent " + setups.length + (setups.length === 1 ? " model setup" : " model setups") + " up to your account", true);
+        }
+    }
+    // What the Model tab says right now, copied rather than referenced so that
+    // changing a sampler afterwards does not quietly edit the setup it came from.
+    function setupFromNow() {
+        const out = {};
+        for (const k of SETUP_KEYS)
+            out[k] = k === "samplers" ? Object.assign({}, cfg.samplers || {}) : cfg[k];
+        return out;
+    }
+    // A setup, put on. Every value is checked on the way in the same way the
+    // fields themselves check it, so a hand-edited or out-of-date one cannot put
+    // the panel into a state its own controls could not reach.
+    function applySetup(one) {
+        let took = 0;
+        for (const k of SETUP_KEYS) {
+            if (!(k in one.settings))
+                continue;
+            const got = one.settings[k];
+            if (k === "samplers") {
+                if (!got || typeof got !== "object" || Array.isArray(got))
+                    continue;
+                const clean = {};
+                for (const f of SAMPLER_FIELDS) {
+                    const v = Number(got[f.id]);
+                    if (got[f.id] === "" || got[f.id] == null || !Number.isFinite(v))
+                        continue;
+                    clean[f.id] = Math.min(f.max, Math.max(f.min, v));
+                }
+                cfg.samplers = clean;
+                took++;
+            }
+            else if (k === "timeoutSecs") {
+                const v = Number(got);
+                if (!Number.isFinite(v))
+                    continue;
+                cfg.timeoutSecs = Math.min(3600, Math.max(0, Math.round(v)));
+                took++;
+            }
+            else if (typeof got === "string") {
+                // A pick can only be given something it offers. A connection is the
+                // exception: the list is the account's, not this file's, and a setup
+                // saved before a connection was deleted still names it. That is said on
+                // the card rather than silently corrected, since the alternative is
+                // quietly refining with the wrong model.
+                const field = COST_FIELDS.find((f) => f.key === k);
+                const opts = field && field.options;
+                if (k !== "connectionId" && opts && !opts.some((o) => o.value === got))
+                    continue;
+                cfg[k] = got;
+                took++;
+            }
+        }
+        if (took)
+            persist(true);
+        return took;
+    }
+    // Whether a saved setup names a connection this account no longer has.
+    function setupLost(one) {
+        const id = String(one.settings.connectionId || "");
+        if (!id)
+            return false;
+        if (!connections.length)
+            return false;
+        return !connections.some((c) => c.id === id);
     }
     // The account's presets on load. The account wins when it has any; when it
     // has none and this browser does, this browser's go up. Same rule the
@@ -6178,6 +6599,12 @@ export function setup(ctx, overrides) {
             presetPick = "";
             presetName = "";
             savePresets();
+        }
+        if (partOn("resetParts", PART_SETUPS)) {
+            setups = [];
+            setupPick = "";
+            setupName = "";
+            saveSetups();
         }
         if (partOn("resetParts", PART_CHATS)) {
             chatsOff = [];
@@ -7289,6 +7716,10 @@ export function setup(ctx, overrides) {
                         tookAccountPresets(msg);
                         return;
                     }
+                    if (msg.type === "loaded_setups") {
+                        tookAccountSetups(msg);
+                        return;
+                    }
                     if (msg.type === "account_save_failed") {
                         // Settings that look saved and are not is the worst shape this can
                         // take, so it is said plainly rather than logged quietly.
@@ -7697,6 +8128,7 @@ export function setup(ctx, overrides) {
     // the account copy repaints it when it arrives.
     loadFromAccount();
     loadPresetsFromAccount();
+    loadSetupsFromAccount();
     send({ type: "list_connections", requestId: newId() });
     log("ready v" + VERSION);
     paint();

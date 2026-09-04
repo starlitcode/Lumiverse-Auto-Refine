@@ -38,6 +38,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **Let it think first** is off by default, and can be left at whatever your connection is set to, or given an effort level of its own. In [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** cancels a refine that has not come back. The default is 90 seconds. A hung call is cancelled, not left running.
 - **Samplers** are blank to begin with, and blank means the connection's own preset decides. In [Sampler settings](prompt.md#sampler-settings).
+- **Saved model setups** keeps everything on this tab under a name: the connection, the thinking, the wait and the samplers. Your prompt is not in one, so loading a setup changes what runs the refine and nothing about how it reads, which is the point of keeping the two apart. Save one for a cheap model and one for a careful one and move between them in a tap. They are kept in this browser and in your account, and a setup carries a connection id, which a preset refuses to: presets go into files people share and an id names nothing on somebody else's account. A setup whose connection you have since deleted says so on the card rather than leaving the refine pointed at nothing.
 
 ## Limits
 

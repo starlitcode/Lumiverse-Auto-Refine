@@ -152,6 +152,10 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
               },
             }),
         createFloatWidget: (spec) => {
+          // Mounting a component costs the real host something, and a check
+          // that wants to know whether the extension does host work in the
+          // frame somebody clicked in has to be able to say so.
+          window.__slowHost && window.__slowHost();
           const host = document.createElement("div");
           host.id = "float";
           // The host owns the box the button is drawn in, so what it was asked
@@ -161,7 +165,14 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
           host.style.height = ((spec && spec.height) || 0) + "px";
           document.body.appendChild(host);
           window.__widget = true;
-          return { root: host, destroy: () => { window.__widget = false; host.remove(); } };
+          return {
+            root: host,
+            destroy: () => {
+              window.__slowHost && window.__slowHost();
+              window.__widget = false;
+              host.remove();
+            },
+          };
         },
         registerInputBarAction: (spec) => {
           window.__inputAction = spec;
@@ -2709,6 +2720,160 @@ console.log("\nthe buttons on a message");
   });
 }
 
+console.log("\nsaved model setups");
+{
+  // A named set of the Model tab, so somebody running more than one custom
+  // connection can move between them in one go. Presets keep the prompt; these
+  // keep what runs it, and the two must not reach into each other.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "connections",
+        list: [
+          { id: "cheap", name: "Fast one", provider: "p", model: "small", isDefault: false },
+          { id: "good", name: "Careful one", provider: "p", model: "big", isDefault: false },
+        ],
+      });
+    });
+    await goTab(page, "Model");
+    ok("nothing is saved to begin with", await page.evaluate(() =>
+      /Nothing saved yet/.test(document.querySelector('[data-arf-field="setupPick"]').textContent)));
+
+    // Point the tab at the cheap connection with no thinking, and keep it.
+    const put = (key, value) =>
+      page.evaluate(([k, v]) => {
+        const f = document.querySelector('[data-arf-field="' + k + '"]');
+        f.value = v;
+        f.dispatchEvent(new Event("change", { bubbles: true }));
+      }, [key, value]);
+    await put("connectionId", "cheap");
+    await put("thinkingMode", "off");
+    await page.evaluate(() => {
+      const n = document.querySelector('[data-arf-field="setupName"]');
+      n.value = "Cheap and quick";
+      n.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('[data-arf-setup="new"]').click();
+    });
+    await settle(page);
+    ok("saving one puts it in the picker", await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-arf-field="setupPick"] option')).some(
+        (o) => o.textContent === "Cheap and quick")));
+
+    // Now change the tab, and load the setup back.
+    await put("connectionId", "good");
+    await put("thinkingMode", "custom");
+    const moved = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings;
+    });
+    ok("the tab moved off it", moved.connectionId === "good" && moved.thinkingMode === "custom");
+
+    await page.evaluate(() => {
+      const s = document.querySelector('[data-arf-field="setupPick"]');
+      s.value = "Cheap and quick";
+      s.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    await page.evaluate(() => document.querySelector('[data-arf-setup="load"]').click());
+    await settle(page);
+    const back = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last.settings;
+    });
+    ok("loading it puts the connection back", back.connectionId === "cheap");
+    ok("and the thinking with it", back.thinkingMode === "off");
+    ok(
+      "the prompt is not in a setup",
+      JSON.stringify(back.blocks) === JSON.stringify(moved.blocks),
+    );
+
+    // The account gets a copy, the way presets do.
+    const up = await page.evaluate(() => window.__sent.filter((m) => m.type === "save_setups").pop());
+    ok("it goes up to the account", !!up && up.setups.length === 1 && up.setups[0].name === "Cheap and quick");
+    ok("carrying the connection a preset refuses to carry", up.setups[0].settings.connectionId === "cheap");
+  });
+
+  // A setup naming a connection the account no longer has says so rather than
+  // leaving the refine pointed at nothing.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "connections",
+        list: [{ id: "cheap", name: "Fast one", provider: "p", model: "small", isDefault: false }],
+      });
+    });
+    await goTab(page, "Model");
+    await page.evaluate(() => {
+      const f = document.querySelector('[data-arf-field="connectionId"]');
+      f.value = "cheap";
+      f.dispatchEvent(new Event("change", { bubbles: true }));
+      const n = document.querySelector('[data-arf-field="setupName"]');
+      n.value = "Points at cheap";
+      n.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('[data-arf-setup="new"]').click();
+    });
+    await settle(page);
+    const fine = await page.evaluate(() =>
+      /not on your account any more/.test(
+        document.querySelector('[data-arf-card="Saved model setups"]').textContent,
+      ),
+    );
+    ok("a setup whose connection is there says nothing", !fine);
+
+    // That connection goes away.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "connections",
+        list: [{ id: "other", name: "A different one", provider: "p", model: "x", isDefault: false }],
+      });
+    });
+    await settle(page);
+    const said = await page.evaluate(() =>
+      document.querySelector('[data-arf-card="Saved model setups"]').textContent,
+    );
+    ok("one whose connection has gone says so", /not on your account any more/.test(said));
+    ok("and names what it would refine with", /a connection that is gone/.test(said), said.slice(0, 200));
+  });
+}
+
+console.log("\na switch that turns a host component on and off");
+{
+  // The floating button, the buttons on each message and the Extras row are the
+  // host's own components, and creating or destroying one is the host's own
+  // render. Doing that in the frame the switch was clicked in held the knob
+  // still while it happened, so the three switches that turn those components
+  // on and off were the only ones that felt slow. Measured here against a host
+  // that takes 25ms to mount its button: before, the master switch blocked the
+  // page for 26ms and the knob stood still for two frames.
+  await inTab(browser, { saved: { enabled: true, widgetOn: true, msgButton: true } }, async (page) => {
+    await page.evaluate(() => {
+      window.__slowHost = () => {
+        const t = performance.now();
+        while (performance.now() - t < 25) {}
+      };
+    });
+    const blocked = (sel) =>
+      page.evaluate((s) => {
+        const box = document.querySelector(s);
+        const t0 = performance.now();
+        box.click();
+        return Math.round((performance.now() - t0) * 10) / 10;
+      }, sel);
+    const MASTER = '#drawer .arf-box[aria-label="Turn Auto Refine on"]';
+
+    const master = await blocked(MASTER);
+    ok("the master switch does not block the page", master < 10, master + "ms");
+    // The host work still happens, just not on that frame.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    ok("and the floating button has gone by the time it settles", !(await page.evaluate(() => window.__widget)));
+
+    const back = await blocked(MASTER);
+    ok("nor does switching it back on", back < 10, back + "ms");
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    ok("with the button back", (await page.evaluate(() => !!window.__widget)) === true);
+  });
+}
+
 console.log("\nswitching without the panel jumping");
 {
   // A switch that rebuilds the panel takes its own knob down with it, so the
@@ -2750,18 +2915,25 @@ console.log("\nswitching without the panel jumping");
     ok("the block greys out on the spot", now.off && now.hushed);
     ok("and the page has not moved", now.at === before.at, before.at + " -> " + now.at);
 
-    // The count on the card and the warning about {{message}} are what the
-    // rebuild is for, and it happens once the knob has arrived.
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
-    const after = await page.evaluate(() => {
+    // The count on the card, the warning about {{message}} and the header all
+    // catch up, and none of it is a rebuild: the boxes of prompt are the
+    // tallest thing on the tab, and tearing them down to change a count was
+    // the flicker.
+    const at = await page.evaluate(() => {
       const head = Array.from(document.querySelectorAll("#drawer .arf-cardh")).find((h) =>
         / on$/.test(h.textContent.trim()),
       );
-      const ta = document.querySelector("#drawer .arf-block textarea");
-      return { count: head && head.textContent.trim(), rebuilt: ta.__mark === undefined, at: window.scrollY };
+      return head && head.textContent.trim();
     });
-    ok("then the card catches up with what is on", after.count !== before.count, before.count + " -> " + after.count);
-    ok("which is a rebuild, arriving after the switch has moved", after.rebuilt);
+    ok("the card catches up with what is on, at once", at !== before.count, before.count + " -> " + at);
+
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    const after = await page.evaluate(() => {
+      const ta = document.querySelector("#drawer .arf-block textarea");
+      return { rebuilt: ta.__mark === undefined, at: window.scrollY, count: (Array.from(document.querySelectorAll("#drawer .arf-cardh")).find((h) => / on$/.test(h.textContent.trim())) || {}).textContent };
+    });
+    ok("and the boxes of prompt are never rebuilt for it", !after.rebuilt);
+    ok("the count stays right after everything has settled", (after.count || "").trim() === at);
     ok("and it lands where you were reading", after.at === before.at, before.at + " -> " + after.at);
   });
 

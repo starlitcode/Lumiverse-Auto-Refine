@@ -94,6 +94,10 @@ function note(set: Set<string>, v: string, cap: number) {
 // id is inferred and this behaves exactly as the shared store did.
 const SETTINGS_FILE = 'settings.json';
 const PRESETS_FILE = 'presets.json';
+// Named sets of the Model tab. Kept apart from presets because they are a
+// different thing to want: which model runs the refine, rather than how it
+// reads.
+const SETUPS_FILE = 'setups.json';
 
 function hasUserStorage(): boolean {
   try {
@@ -1975,6 +1979,27 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         saved = null;
       }
       replyTo(userId, { type: 'loaded_presets', requestId: payload.requestId, presets: saved });
+      return;
+    }
+
+    if (payload.type === 'save_setups') {
+      try {
+        await writeUserJson(SETUPS_FILE, payload.setups, userId);
+      } catch (e: any) {
+        say('warn', 'model setups could not be saved to the account: ' + ((e && e.message) || String(e)));
+        replyTo(userId, { type: 'account_save_failed', what: 'model setups' });
+      }
+      return;
+    }
+
+    if (payload.type === 'load_setups') {
+      let saved: any = null;
+      try {
+        saved = await readUserJson(SETUPS_FILE, userId);
+      } catch (_) {
+        saved = null;
+      }
+      replyTo(userId, { type: 'loaded_setups', requestId: payload.requestId, setups: saved });
       return;
     }
 
