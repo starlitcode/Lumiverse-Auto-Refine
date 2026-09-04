@@ -3983,6 +3983,87 @@ console.log("\nlists with headings on them");
   });
 }
 
+
+console.log("\nthe panel keeps its place");
+{
+  // Adding or removing something rebuilds the panel, and the height it gains or
+  // loses arrives in one frame: everything below moves by that much with no
+  // travel between the two positions. A prompt block is about a quarter of a
+  // screen, which is the one people notice.
+  //
+  // Measured as the panel's own height one frame after the press. Small there
+  // and different once it has rested means it travelled; the same at both means
+  // it snapped.
+  const press = (page, sel, text) =>
+    page.evaluate(async (a) => {
+      const hit = a.text
+        ? [...document.querySelectorAll(a.sel)].find((b) => (b.textContent || "").trim() === a.text)
+        : document.querySelector(a.sel);
+      if (!hit) return { err: "no button" };
+      const root = document.querySelector("#drawer");
+      const before = root.getBoundingClientRect().height;
+      hit.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const after = root.getBoundingClientRect().height;
+      await new Promise((r) => setTimeout(r, 600));
+      const rested = root.getBoundingClientRect().height;
+      return {
+        moved: Math.abs(Math.round(after - before)),
+        settled: Math.abs(Math.round(rested - before)),
+      };
+    }, { sel: sel, text: text || null });
+
+  // Measured against how far it had to travel rather than against a fixed
+  // number of pixels, so the rule means the same thing for a block a quarter of
+  // a screen tall and for one line of text. A frame is 16ms of a 160ms travel:
+  // a third of the way is generous, and nowhere near all of it at once.
+  const smooth = (got) => got.moved < Math.max(6, got.settled / 3);
+
+  for (const yours of [false, true]) {
+    await inTab(browser, {}, async (page) => {
+      await goTab(page, "Prompt");
+      if (yours)
+        await page.evaluate(() => {
+          const b = [...document.querySelectorAll("#drawer button")]
+            .find((x) => /For your messages/.test(x.textContent || ""));
+          if (b) b.click();
+        });
+      const where = yours ? "your own messages" : "replies";
+      const got = await press(page, '#drawer [data-arf-block] [aria-label^="Delete"]');
+      ok("deleting a block from " + where + " does not jump the panel",
+        smooth(got), got);
+      ok("and the block really is gone by the end", got.settled > 100, got);
+    });
+  }
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const got = await press(page, "#drawer button", "Add a block");
+    ok("adding one does not jump it either", smooth(got), got);
+    ok("and the block really is there by the end", got.settled > 100, got);
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Limits");
+    const got = await press(page, "#drawer .arf-fold");
+    ok("opening a fold does not jump it", smooth(got), got);
+    ok("and the fold really is open by the end", got.settled > 100, got);
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refine_notes", chatId: "c1", messageId: "m1",
+        notes: "<REFINE_NOTES>\nThe simile is doing no work here at all.\n</REFINE_NOTES>",
+      });
+    });
+    await goTab(page, "Log");
+    const got = await press(page, "#drawer button", "Clear");
+    ok("clearing the working does not jump it", smooth(got), got);
+    ok("and the working really is cleared by the end", got.settled > 20, got);
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

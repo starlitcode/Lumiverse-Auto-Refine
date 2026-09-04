@@ -3406,7 +3406,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       // A search holds every fold open, so a click during one records what you
       // wanted without closing anything in front of you.
       body.hidden = !(now || !!hunt.trim());
-      if (!body.hidden) arrive(body);
+      // Its height as well as its opacity. A fold's body is most of a screen on
+      // the longer cards, and appearing at full height moved everything under
+      // it that far in one frame.
+      if (!body.hidden) growIn(body);
       caret.textContent = now ? CARET_OPEN : CARET_SHUT;
       head.setAttribute("aria-expanded", now ? "true" : "false");
     });
@@ -4277,6 +4280,96 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
+  // Something leaving the panel, taken down rather than cut out from under
+  // whatever is below it. A repaint drops the element and its height in the
+  // same frame, so everything under it moves up by however tall it was, which
+  // for a prompt block is about a quarter of a screen and reads as the panel
+  // losing its place. This walks the height to nothing first and repaints when
+  // there is nothing left to move.
+  //
+  // The work still happens if the animation never runs. A page that will not
+  // animate, an element already gone, a browser with motion turned down: each
+  // ends with the same call, so pressing Delete always deletes.
+  function foldAway(node: any, then: () => void) {
+    let ran = false;
+    const once = () => {
+      if (ran) return;
+      ran = true;
+      try {
+        then();
+      } catch (_) {}
+    };
+    try {
+      if (!node || !node.style || typeof node.getBoundingClientRect !== "function") return once();
+      const tall = node.getBoundingClientRect().height;
+      if (!(tall > 0)) return once();
+      const still =
+        typeof matchMedia === "function" &&
+        matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (still) return once();
+      node.style.overflow = "hidden";
+      node.style.height = tall + "px";
+      // Read the layout between the two values, or the browser sees one number
+      // set and nothing to travel between.
+      void node.offsetWidth;
+      node.style.transition =
+        "height 160ms ease-in, opacity 160ms ease-in, margin 160ms ease-in";
+      node.style.height = "0px";
+      node.style.opacity = "0";
+      node.style.marginTop = "0px";
+      node.style.marginBottom = "0px";
+      node.addEventListener("transitionend", (e: any) => {
+        if (e && e.target !== node) return;
+        once();
+      });
+      // A transition that never fires still has to end in the delete.
+      setTimeout(once, 400);
+    } catch (_) {
+      once();
+    }
+  }
+
+  // The other direction. Something arriving takes its full height in one frame
+  // and pushes everything below it down by that much, which reads the same way
+  // the collapse did: the panel losing its place under whatever you were
+  // reading. This walks the height up from nothing instead.
+  //
+  // arrive() fades a row in where it already stands, which is right for a row
+  // that was only hidden. This is for a row that was not there at all and whose
+  // height is the thing that moves.
+  function growIn(node: any) {
+    try {
+      if (!node || !node.style || typeof node.getBoundingClientRect !== "function") return;
+      const still =
+        typeof matchMedia === "function" &&
+        matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (still) return;
+      const tall = node.getBoundingClientRect().height;
+      if (!(tall > 0)) return;
+      node.style.overflow = "hidden";
+      node.style.height = "0px";
+      node.style.opacity = "0";
+      void node.offsetWidth;
+      node.style.transition = "height 180ms ease-out, opacity 180ms ease-out";
+      node.style.height = tall + "px";
+      node.style.opacity = "1";
+      const done = (e?: any) => {
+        if (e && e.target !== node) return;
+        // Its own height back, or a block that grows as you type into it would
+        // be held at whatever it measured on arrival.
+        node.style.height = "";
+        node.style.overflow = "";
+        node.style.opacity = "";
+        node.style.transition = "";
+        try {
+          node.removeEventListener("transitionend", done);
+        } catch (_) {}
+      };
+      node.addEventListener("transitionend", done);
+      setTimeout(() => done(), 500);
+    } catch (_) {}
+  }
+
   function showPop(one: Undo) {
     showCard({
       key: undoKey(one.chatId, one.messageId),
@@ -4909,6 +5002,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       const turnAt = next.findIndex((b) => String(b.text || "").indexOf(TURN_MACRO) >= 0);
       next.splice(turnAt < 0 ? next.length : turnAt, 0, made);
       setBlocks(next);
+      // Found after the repaint that draws it, since the block does not exist
+      // until then, and grown from nothing so the blocks under it are pushed
+      // down rather than jumped down.
+      try {
+        const root = tab && (tab.root as HTMLElement);
+        if (root) growIn(root.querySelector('[data-arf-block="' + made.id + '"]'));
+      } catch (_) {}
     });
     const reset = button("Back to the default", false);
     reset.className += " arf-danger";
@@ -5037,9 +5137,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     drop.className += " arf-danger";
     drop.setAttribute("aria-label", "Delete " + blockLabel(b));
     drop.addEventListener("click", () => {
-      const next = blockList();
-      next.splice(i, 1);
-      setBlocks(next);
+      // The block goes down first, then the panel is rebuilt without it. A
+      // block is the tallest thing on this tab, so dropping one and repainting
+      // in the same frame moves everything below it by about a quarter of a
+      // screen.
+      foldAway(wrap, () => {
+        const next = blockList();
+        next.splice(i, 1);
+        setBlocks(next);
+      });
     });
     foot.appendChild(drop);
     wrap.appendChild(foot);
@@ -5431,12 +5537,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     drop.addEventListener("click", () => {
       const one = chosen();
       if (!one) return;
-      setups = setups.filter((x) => x !== one);
-      saveSetups();
-      setupPick = "";
-      setupName = "";
-      setupSaid = "Deleted " + one.name + ".";
-      paint();
+      // What goes with it is the line underneath saying what the chosen setup
+      // would do, which is the height everything below moves by.
+      foldAway(wrap.querySelector("[data-arf-setup-what]"), () => {
+        setups = setups.filter((x) => x !== one);
+        saveSetups();
+        setupPick = "";
+        setupName = "";
+        setupSaid = "Deleted " + one.name + ".";
+        paint();
+      });
     });
 
     row.appendChild(load);
@@ -5458,8 +5568,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const set = SAMPLER_FIELDS.filter(
         (f) => one.settings.samplers && one.settings.samplers[f.id] != null,
       ).length;
-      wrap.appendChild(
-        note(
+      const what = note(
           "Refines with " + named(String(one.settings.connectionId || "")) + ". " +
             (one.settings.thinkingMode === "off"
               ? "No thinking."
@@ -5467,8 +5576,9 @@ export function setup(ctx: Ctx, overrides?: any) {
                 ? "Thinking on " + String(one.settings.thinkingEffort || "medium") + "."
                 : "Thinking left to the connection.") +
             (set ? " " + set + (set === 1 ? " sampler" : " samplers") + " set." : " Samplers left alone."),
-        ),
       );
+      what.setAttribute("data-arf-setup-what", "1");
+      wrap.appendChild(what);
       if (setupLost(one))
         wrap.appendChild(
           warn(
@@ -5781,8 +5891,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
-      keptNotes = null;
-      paint();
+      // The working goes down before the card is rebuilt without it, the same
+      // as a block does.
+      foldAway(well, () => {
+        keptNotes = null;
+        paint();
+      });
     });
     row.appendChild(copy);
     row.appendChild(clear);
