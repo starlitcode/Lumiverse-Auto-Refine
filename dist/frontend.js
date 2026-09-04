@@ -216,6 +216,15 @@ const CONFIG = {
     // somebody was reading, and making them find a tab to see what changed is
     // the wrong way round.
     popup: true,
+    // Whether the model's working is shown with the tags it wrote around it.
+    //
+    // Off by default. What comes back while it is being written has the tags
+    // taken off already, but what the backend hands over at the end is
+    // everything outside <REFINED>, tags and all, so the Log read as markup where
+    // the card on the page read as prose. The tags are worth seeing when you are
+    // working on a prompt and want to know how the model laid its answer out, and
+    // they are noise every other time.
+    notesTags: false,
     // What one tap does when there is a refine to put back. On, the button turns
     // into an undo; off, a tap always refines.
     //
@@ -1894,6 +1903,26 @@ export function setup(ctx, overrides) {
     function tookNotes(msg) {
         if (msg && typeof msg.notes === "string" && msg.notes.trim())
             liveNotes = msg.notes;
+    }
+    // The working as it reads, rather than as it was written.
+    //
+    // What arrives while the model is still writing has already had the tags
+    // around it taken off by the backend. What arrives at the end is everything
+    // outside <REFINED>, which is the same working with <REFINE_NOTES> still
+    // wrapped round it, so the same notes read as prose in one place and as
+    // markup in the other. Taken off here, for both, and kept underneath so the
+    // switch can put them back without the notes having to be fetched again.
+    const TAG = /<\/?[A-Za-z][\w:.-]*(?:\s[^>]*?)?\/?>/g;
+    function readable(text) {
+        const said = String(text || "");
+        if (cfg.notesTags)
+            return said;
+        return said
+            .replace(TAG, "")
+            // A tag on a line of its own leaves the line behind it.
+            .replace(/[ \t]+$/gm, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
     }
     function keepNotes(about) {
         const said = liveNotes.trim();
@@ -3756,7 +3785,7 @@ export function setup(ctx, overrides) {
             if (typeof document === "undefined" || !document.body)
                 return;
             if (popNotes && popEl) {
-                popNotes.textContent = said;
+                popNotes.textContent = readable(said);
                 // Following the newest line, the way a terminal does.
                 popNotes.scrollTop = popNotes.scrollHeight;
                 return;
@@ -3799,7 +3828,7 @@ export function setup(ctx, overrides) {
             // rather than an arrival, so the contents are what fades.
             if (held)
                 body.className += " arf-arrive";
-            const well = el("div", "arf-well arf-scroll arf-mono", said);
+            const well = el("div", "arf-well arf-scroll arf-mono", readable(said));
             well.setAttribute("data-arf-working", "1");
             body.appendChild(well);
             box.appendChild(body);
@@ -5119,12 +5148,23 @@ export function setup(ctx, overrides) {
             ? "From the refine at " + when + "."
             : "From the refine at " + when + ", whose rewrite was dropped: " + keptNotes.why + "."));
         const well = el("div", "arf-well arf-mono arf-scroll");
-        well.textContent = keptNotes.text;
+        well.setAttribute("data-arf-kept", "1");
+        well.textContent = readable(keptNotes.text);
         wrap.appendChild(well);
+        // Where somebody would be looking when they wonder about the markup, so it
+        // is the switch's home rather than a setting on another tab.
+        wrap.appendChild(fieldRow({
+            key: "notesTags",
+            label: "Show the tags the model wrote",
+            type: "bool",
+            hint: "Off by default. The working is shown as prose, with the tags the model wrapped it in taken off. On, it is shown exactly as it came back, which is what you want while you are working on a prompt and wondering how the model laid its answer out. Nothing is thrown away either way: this only decides what is drawn.",
+        }));
         const row = el("div", "arf-row");
         const copy = button("Copy", false);
+        // What is on the screen. Copying the tags out of a card that is not showing
+        // them would be handing over something else.
         copy.addEventListener("click", () => {
-            copyText(keptNotes ? keptNotes.text : "");
+            copyText(keptNotes ? readable(keptNotes.text) : "");
         });
         const clear = button("Clear", false);
         clear.addEventListener("click", () => {
@@ -8080,6 +8120,8 @@ export function setup(ctx, overrides) {
             // instead. Waiting a frame here meant the question was painted on top of
             // the working card, which is two cards at once and reads as one popping
             // up under another.
+            if (popKey === "working")
+                dropPop();
             const modal = ctx.ui.showModal({ title: "Save this refine?" });
             const root = modal.root;
             root.innerHTML = "";

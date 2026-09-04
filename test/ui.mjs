@@ -2473,6 +2473,52 @@ console.log("\nopening a fold");
   });
 }
 
+console.log("\nthe working, read as prose");
+{
+  // What comes back while the model is writing has had the tags taken off by
+  // the backend already. What comes back at the end is everything outside
+  // <REFINED>, tags and all, so the same working read as prose on the card and
+  // as markup in the Log.
+  const RAW =
+    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>";
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate((raw) => {
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes: raw });
+    }, RAW);
+    const onCard = await page.evaluate(
+      () => document.querySelector("[data-arf-working]").textContent,
+    );
+    ok("the card on the page shows no tags", !/[<>]/.test(onCard), onCard);
+    ok("and still says what it worked out", /could sit in any story/.test(onCard));
+    ok("including what was inside a tag of its own", /Cut the simile/.test(onCard), onCard);
+
+    await page.evaluate((raw) => {
+      window.__fromBackend({ type: "refine_notes", chatId: "c1", messageId: "m1", notes: raw });
+    }, RAW);
+    await goTab(page, "Log");
+    const kept = () => page.evaluate(() => document.querySelector("[data-arf-kept]").textContent);
+    const clean = await kept();
+    ok("the Log shows no tags either", !/[<>]/.test(clean), clean);
+    ok("and reads as the same working", /could sit in any story/.test(clean) && /Cut the simile/.test(clean));
+
+    // The switch is on the card, where somebody wondering about the markup is
+    // already looking.
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-field="notesTags"]').click();
+    });
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    const raw = await kept();
+    ok("switching the tags on shows them exactly as they came back", /<REFINE_NOTES>/.test(raw) && /<plan>/.test(raw), raw.slice(0, 120));
+    ok("and nothing was thrown away to hide them", raw.indexOf("Cut the simile") > 0);
+
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-field="notesTags"]').click();
+    });
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    ok("switching them off takes them away again", !/[<>]/.test(await kept()));
+  });
+}
+
 console.log("\nthe working the Log keeps");
 {
   const notes = "The second line could sit in any story. Cutting the simile.";
