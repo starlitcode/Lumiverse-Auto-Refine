@@ -158,7 +158,7 @@ Braces are left alone on purpose. A macro sitting in a reply is already safe, be
 
 **Bare inline formatting stays visible.** `<i>`, `<b>`, `<em>` and the rest wrap words in the middle of a sentence, and replacing them with tokens hands the model a sentence with holes in it. That made the rewrite worse to protect something the model was unlikely to break. They stay where they are, and the prompt tells it to leave them alone. **Hide plain italic and bold too** puts them behind tokens as well if you would rather. A tag carrying an attribute, a colour span for instance, is hidden either way: the attribute is the part a rewrite is likely to lose.
 
-Protection catches what it can find. The prompts that ship with it also carry a **What not to touch** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
+Protection catches what it can find. The prompts that ship with it also carry a **What to leave** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
 **Keep the reply's own reasoning out of the refine** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra reasoning tag names** is under it, for a model that wraps its working in something the built-in eight do not cover. Write just the name, with no brackets or pipes; a name you add is recognised in all four wrappers.
 
@@ -229,7 +229,7 @@ Every value in a file is checked against what it is supposed to be before it is 
 
 ## Starting again
 
-**Reset all settings**, under Setup, puts every setting back to the value a fresh install has and keeps your presets. **Reset everything, presets too** takes those as well. Both ask first, and neither can be undone.
+**Start again**, under Setup, puts settings back to the values a fresh install has. It works on the same list of parts as import and export, under **What to put back**, so you can start your prompt again without losing your connection, or reset everything including your presets. The button says which it is about to do. It asks first, and it cannot be undone.
 
 Whichever tab you were on stays where it was. That is not a setting anybody means to reset, and being thrown back to the first tab reads as the panel breaking.
 

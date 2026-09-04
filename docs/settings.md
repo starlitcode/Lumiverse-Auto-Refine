@@ -42,7 +42,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Limits
 
-- **Thinking tags your model uses** folds away under **Never send the model's thinking**, and **Patterns of your own** folds away under the markup switch. Both are lists of text most people never open, and a search reaches inside a fold anyway. The common wrappers are already known: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model uses an unusual one. This is worth getting right, because working that is not recognised is handed to the refiner as prose, rewritten, and saved over the reply.
+- **Extra reasoning tag names** folds away under **Keep the reply's own reasoning out of the refine**, and **Patterns of your own to hide** folds away under the markup switch. Both are lists of text most people never open, and a search reaches inside a fold anyway. The common wrappers are already known: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Add a name only if your model uses an unusual one. This is worth getting right, because working that is not recognised is handed to the refiner as prose, rewritten, and saved over the reply.
 - **Hide markup from the model**, **Hide plain italic and bold too** and the two switches that keep reasoning out of the way keep a rewrite away from what is not prose, in [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
 - **Reading the answer** is its own card. **Take the answer from between the tags** is what makes a model's preamble harmless instead of fatal, in [The answer it asks for](prompt.md#the-answer-it-asks-for). Asking for the tags is your prompt's job; this decides what is done with the answer.
 - **Say how much has come back** streams the refine so the line under the switch can count what has arrived rather than sitting on one word for a minute. The answer is judged when it is complete either way, so this changes nothing about what gets saved, and a connection that cannot stream falls back on its own.
@@ -52,7 +52,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **Skip the automatic pass when a scan finds nothing** checks a reply here, with no model, before the automatic pass spends anything. Off by default, and worth reading [What a scan can see](guardrails.md#what-a-scan-can-see) before switching it on: a clean scan means nothing on the list, never nothing wrong.
 - **Keep what a refine replaced** holds the original so you can put it back.
 - **Ask before saving a refine** holds every refine until you say. Both versions appear in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**, and the tab carries a badge until you answer. Where Lumiverse can draw one, the same question also opens as a window; answering either settles both. The floating button's menu can answer it too, though a tap on the button only opens the tab, since accepting a rewrite of your writing on a stray tap is the one thing it must not do.
-- **Let the button refine your own messages** keeps your voice, not the character's. The automatic pass never touches what you wrote whatever this says.
+- **Your own messages** are refined only when you press a button on one, and never by the automatic pass. They get their own prompt if you wrote one, under **For your messages** on the Prompt tab, so tidying your own line does not turn it into the narrator's.
 
 ## Log
 

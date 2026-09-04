@@ -61,7 +61,7 @@ Six tabs, and everything belongs to exactly one of them. The switch, the refine 
 
 A refine is a second model call on every reply, so three settings decide what that costs.
 
-- **Refine using this connection.** A rewrite does not need the model you roleplay with. Point this at a cheaper or faster connection and the whole feature costs a fraction of what it would otherwise.
+- **Refine using.** A rewrite does not need the model you roleplay with. Point this at a cheaper or faster connection and the whole feature costs a fraction of what it would otherwise.
 - **Let it think first.** Off by default. Rewriting a paragraph is not a reasoning problem. You can also leave it at whatever your connection is already set to, or pick an effort level yourself.
 - **How much it is told.** How many messages of run-up go in, and the token ceilings on that and on the lorebook. More context makes a better rewrite and costs more on every one.
 
