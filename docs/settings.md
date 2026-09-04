@@ -52,7 +52,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **Skip the automatic pass when a scan finds nothing** checks a reply here, with no model, before the automatic pass spends anything. Off by default, and worth reading [What a scan can see](guardrails.md#what-a-scan-can-see) before switching it on: a clean scan means nothing on the list, never nothing wrong.
 - **Keep what a refine replaced** holds the original so you can put it back.
 - **Ask before saving a refine** holds every refine until you say. Both versions appear in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**, and the tab carries a badge until you answer. Where Lumiverse can draw one, the same question also opens as a window; answering either settles both. The floating button's menu can answer it too, though a tap on the button only opens the tab, since accepting a rewrite of your writing on a stray tap is the one thing it must not do.
-- **Your own messages** are refined only when you press a button on one, and never by the automatic pass. They get their own prompt if you wrote one, under **For your messages** on the Prompt tab, so tidying your own line does not turn it into the narrator's.
+- **Your own messages** are refined only when you press a button on one, and never by the automatic pass. They get their own prompt, under **For your messages** on the Prompt tab, so tidying your own line does not turn it into the narrator's. It ships written and runs as it stands; edit it and yours runs instead.
 
 ## Log
 

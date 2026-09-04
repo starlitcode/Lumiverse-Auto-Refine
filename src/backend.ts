@@ -194,7 +194,7 @@ const TURN_MACRO = '{{message}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'whose', 'protect_notes'];
+const OURS = ['message', 'history', 'lore', 'protect_notes'];
 
 interface Scene {
   character: string;
@@ -312,7 +312,7 @@ const DEFAULT_BLOCKS: Block[] = [
     name: 'The passage to refine',
     on: true,
     role: 'user',
-    text: '{{whose}}\n\n<passage_to_refine>\n{{message}}\n</passage_to_refine>',
+    text: '<passage_to_refine>\n{{message}}\n</passage_to_refine>',
   },
 ];
 
@@ -735,7 +735,7 @@ function maskOurs(text: string): { text: string } {
 // Pass three: our masks, filled in with content that is never scanned again.
 function fillOurs(
   text: string,
-  p: { message: string; history: string; lore: string; isUser: boolean; shieldNote?: string },
+  p: { message: string; history: string; lore: string; shieldNote?: string },
 ): string {
   return String(text).replace(/\u0000ARF:([a-z_]+)\u0000/g, (whole, name) => {
     const id = String(name).toLowerCase();
@@ -743,12 +743,6 @@ function fillOurs(
     if (id === 'message') return p.message;
     if (id === 'history') return p.history;
     if (id === 'lore') return p.lore;
-    if (id === 'whose')
-      return p.isUser
-        ? 'Your co-author wrote this passage, in their own hand. Keep their ' +
-          'hand: it belongs to them, and the story is written in more than one.'
-        : 'This passage is the story in its own voice, the narrator and the ' +
-          'characters.';
     if (id === 'protect_notes') return p.shieldNote || '';
     return '';
   });
@@ -798,7 +792,6 @@ async function buildPrompt(
     message: text,
     history: scene.context,
     lore: scene.lore,
-    isUser: isUser,
     shieldNote: scene.shieldNote,
   };
   const out: any[] = [];
@@ -1123,8 +1116,8 @@ async function gatherHistory(
     if (!m || (m.role !== 'assistant' && m.role !== 'user')) continue;
     const body = String(m.content == null ? '' : m.content).trim();
     if (!body) continue;
-    // The co-author's label matches what {{whose}} calls them, so a single
-    // refine never names the same person two ways.
+    // The label the prompts use for the reader, so the run-up and the prompt
+    // above it never name the same person two ways.
     out.push((m.role === 'user' ? 'Co-author' : them) + ': ' + body);
   }
   const kept = await fitToBudget(out, maxHistoryTokens, userId);

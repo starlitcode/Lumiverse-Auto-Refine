@@ -302,6 +302,7 @@ async function armed(answers: string[], over: any = {}, messages = chat(), opts 
   return h;
 }
 
+
 describe("refining a reply", () => {
   test("the rewrite is saved over the reply", async () => {
     const h = await armed(["She stepped through and the cold hit her."]);
@@ -535,6 +536,46 @@ describe("trying it before turning it on", () => {
 // Everything the model was told, flattened, for the assertions that only care
 // that a thing was said and not which block said it.
 const said = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
+
+// A macro is for dropping what is already in the chat into the prompt: the
+// passage, the pages before it, the lorebook, the card. One of them was not
+// doing that. {{whose}} expanded into two sentences of the extension's own
+// writing, chosen by the extension, and slid into a prompt the reader wrote
+// without appearing anywhere they could read it, let alone reword it. The
+// same words are in the shipped prompt for your own messages, where they can
+// be read, reworded or deleted.
+describe("what a macro is allowed to put in the prompt", () => {
+  const MINE = ["in their own hand", "the story is written in more than one", "the story in its own voice"];
+
+  test("no macro writes prose of its own into a reply's prompt", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    for (const words of MINE) expect(said(h)).not.toContain(words);
+  });
+
+  test("nor into your own message's prompt", async () => {
+    const h = await armed(["<refined>I walk through it.</refined>"]);
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m1" });
+    await wait(50);
+    for (const words of MINE) expect(said(h)).not.toContain(words);
+  });
+
+  // Written out by hand, the way somebody's saved prompt might still have it.
+  // An unknown macro is left alone rather than filled in with words nobody
+  // asked for.
+  test("and a macro that no longer exists puts nothing in", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"], {
+      blocks: [
+        { id: "turn", name: "The passage", on: true, role: "user", text: "{{whose}}\n{{message}}" },
+      ],
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    for (const words of MINE) expect(said(h)).not.toContain(words);
+  });
+});
+
 
 describe("what the model is told about the scene", () => {
   test("the character card is in the prompt", async () => {

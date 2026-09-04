@@ -3804,6 +3804,65 @@ console.log("\nthe live line, for a draft as for a reply");
   });
 }
 
+
+console.log("\nthe prompt on screen is the prompt that runs");
+{
+  // An untouched prompt is stored as nothing, so that a later change to the
+  // shipped one reaches anybody who never edited theirs. What was sent was that
+  // nothing, and the backend filled the gap with a copy of its own, which is
+  // shorter than the one the panel draws. So the blocks under Prompt were not
+  // the blocks that ran, on the install where somebody is most likely to be
+  // reading them.
+  const settingsSent = (page) =>
+    page.evaluate(() => {
+      const m = window.__sent.filter((x) => x.type === "set_settings").pop();
+      return m ? m.settings : null;
+    });
+  const shown = (page, which) =>
+    page.evaluate(async (w) => {
+      const tabs = [...document.querySelectorAll("#drawer .arf-tab, #drawer [role=tab]")];
+      const t = tabs.find((x) => (x.textContent || "").trim() === "Prompt");
+      if (t) t.click();
+      await new Promise((r) => requestAnimationFrame(r));
+      if (w === "yours") {
+        const pick = [...document.querySelectorAll("#drawer button, #drawer [role=tab]")]
+          .find((b) => /For your messages/.test(b.textContent || ""));
+        if (pick) pick.click();
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return [...document.querySelectorAll("#drawer [data-arf-block]")].length;
+    }, which);
+
+  await inTab(browser, {}, async (page) => {
+    const sent = await settingsSent(page);
+    ok("a fresh install sends a prompt rather than nothing",
+      !!sent && Array.isArray(sent.blocks) && sent.blocks.length > 0,
+      sent && sent.blocks && sent.blocks.length);
+    ok("and a prompt for your own messages too",
+      !!sent && Array.isArray(sent.userBlocks) && sent.userBlocks.length > 0,
+      sent && sent.userBlocks && sent.userBlocks.length);
+    // The two are different prompts. Sending the reply one for both is the
+    // fault this is here to catch.
+    ok("and they are not the same prompt",
+      JSON.stringify(sent.blocks) !== JSON.stringify(sent.userBlocks));
+
+    // What is sent is what is drawn.
+    const drawn = await shown(page, "replies");
+    ok("as many blocks as the panel draws", sent.blocks.length === drawn,
+      sent.blocks.length + " sent, " + drawn + " drawn");
+  });
+
+  // Editing yours still sends yours.
+  await inTab(browser, { saved: { userBlocks: [
+    { id: "job", name: "Mine", on: true, role: "system", text: "Leave my hand alone. {{message}}" },
+  ] } }, async (page) => {
+    const sent = await settingsSent(page);
+    ok("a prompt you wrote is sent as you wrote it",
+      sent.userBlocks.length === 1 && /Leave my hand alone/.test(sent.userBlocks[0].text),
+      sent.userBlocks);
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

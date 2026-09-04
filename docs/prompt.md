@@ -23,8 +23,13 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{message}}` | The turn being refined. |
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
-| `{{whose}}` | A line saying whether the passage is the story's own voice or your co-author's. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
+
+**A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that quietly added its own would mean the request that ran was not the one on the screen.
+
+`{{protect_notes}}` is the one exception and is written out here so nothing goes unread. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
+
+Whether the passage is a reply or something you wrote is not a macro either. It is which prompt runs: your own messages have a set of blocks of their own, under **For your messages**, and those say it in words you can read and change. A macro said it before, in words nobody could see.
 
 There is no macro for the model's reasoning. Where it keeps that is `<REFINE_NOTES>`, a tag you write into your own prompt in your own words, covered in [Asking it what it changed](#asking-it-what-it-changed).
 

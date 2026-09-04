@@ -330,8 +330,18 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
   { tag: "{{message}}", what: "The turn being refined. Every prompt needs this one.", ours: true },
   { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
   { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
-  { tag: "{{whose}}", what: "A line saying whether the passage is the story's own voice or your co-author's.", ours: true },
-  { tag: "{{protect_notes}}", what: "Tells it to leave the protection tokens alone. Only appears when there are some.", ours: true },
+  {
+    tag: "{{protect_notes}}",
+    what:
+      "Only when protection is on and it found something. Puts in: \"Parts of this passage " +
+      "have been replaced with tokens shaped like [[AR1]], [[AR2]] and so on. Each stands in " +
+      "for formatting that has to survive the edit exactly as it is. Copy every one into your " +
+      "answer unchanged and in the same place, treating each as a single character you cannot " +
+      "spell.\" It is the one macro that puts words rather than your chat into the prompt, and " +
+      "they are here so you can read them: the tokens are this extension's own invention and " +
+      "nothing in your chat could describe them.",
+    ours: true,
+  },
   { tag: "{{description}}", what: "The character card's description.", ours: false },
   { tag: "{{personality}}", what: "The card's personality.", ours: false },
   { tag: "{{scenario}}", what: "The card's scenario.", ours: false },
@@ -409,7 +419,7 @@ const TURN_BLOCK: Block = {
   name: "The passage to refine",
   on: true,
   role: "user",
-  text: "{{whose}}\n\n<passage_to_refine>\n{{message}}\n</passage_to_refine>",
+  text: "<passage_to_refine>\n{{message}}\n</passage_to_refine>",
 };
 
 // The shape of the answer, drawn out as a template. A model matching a shape it
@@ -1557,6 +1567,27 @@ export function setup(ctx: Ctx, overrides?: any) {
     extrasTimer = null;
   });
 
+  // The settings as the backend needs them, which is not quite as they are
+  // stored. An untouched prompt is stored as nothing, because writing the whole
+  // shipped prompt into storage on a fresh install would make every later
+  // change to it invisible to anybody who never edited theirs. The backend
+  // cannot work with nothing, so it filled the gap with a copy of its own, and
+  // that copy is shorter than the one the panel draws: on a fresh install the
+  // prompt shown under Prompt was not the prompt that ran.
+  //
+  // Resolved here instead. What is sent is what the panel is showing, and the
+  // backend's own copy goes back to being what it says it is, the last resort
+  // for settings that never arrived at all.
+  function forBackend(): any {
+    const out: any = {};
+    for (const k of Object.keys(cfg)) out[k] = (cfg as any)[k];
+    const mine = Array.isArray(cfg.blocks) ? cfg.blocks : [];
+    const yours = Array.isArray(cfg.userBlocks) ? cfg.userBlocks : [];
+    out.blocks = mine.length ? mine : DEFAULT_BLOCKS.map((b) => ({ ...b }));
+    out.userBlocks = yours.length ? yours : YOURS_DEFAULT.map((b) => ({ ...b }));
+    return out;
+  }
+
   let saveTimer: any = null;
   function persist(now?: boolean) {
     const write = () => {
@@ -1565,7 +1596,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (typeof localStorage !== "undefined")
           localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
       } catch (_) {}
-      send({ type: "set_settings", settings: cfg });
+      send({ type: "set_settings", settings: forBackend() });
       // The floating button and the Extras row follow the settings that turn
       // them on, and this is the one place every change passes through. Off
       // this frame, so a switch is not paying for the host's render.
@@ -1614,7 +1645,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (typeof localStorage !== "undefined")
           localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
       } catch (_) {}
-      send({ type: "set_settings", settings: cfg });
+      send({ type: "set_settings", settings: forBackend() });
       syncExtras();
       log("settings loaded from your account", true);
       paint();
@@ -1622,7 +1653,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     try {
       if (typeof localStorage !== "undefined" && localStorage.getItem(STORE_KEY)) {
-        send({ type: "set_settings", settings: cfg });
+        send({ type: "set_settings", settings: forBackend() });
         log("settings moved up to your account", true);
       }
     } catch (_) {}
@@ -1650,7 +1681,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // either: that read runs before any user is known. So this says it all again
   // whenever the backend announces itself.
   function armBackend() {
-    send({ type: "set_settings", settings: cfg });
+    send({ type: "set_settings", settings: forBackend() });
     send({ type: "set_chats_off", chats: chatsOff.slice() });
   }
 

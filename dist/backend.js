@@ -199,7 +199,7 @@ const TURN_MACRO = '{{message}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'whose', 'protect_notes'];
+const OURS = ['message', 'history', 'lore', 'protect_notes'];
 const NO_SCENE = { character: '', context: '', lore: '', name: '' };
 // The prompt a fresh install ships with, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
@@ -292,7 +292,7 @@ const DEFAULT_BLOCKS = [
         name: 'The passage to refine',
         on: true,
         role: 'user',
-        text: '{{whose}}\n\n<passage_to_refine>\n{{message}}\n</passage_to_refine>',
+        text: '<passage_to_refine>\n{{message}}\n</passage_to_refine>',
     },
 ];
 // Reasoning models are told where to put their working. Sent as its own block
@@ -713,12 +713,6 @@ function fillOurs(text, p) {
             return p.history;
         if (id === 'lore')
             return p.lore;
-        if (id === 'whose')
-            return p.isUser
-                ? 'Your co-author wrote this passage, in their own hand. Keep their ' +
-                    'hand: it belongs to them, and the story is written in more than one.'
-                : 'This passage is the story in its own voice, the narrator and the ' +
-                    'characters.';
         if (id === 'protect_notes')
             return p.shieldNote || '';
         return '';
@@ -767,7 +761,6 @@ async function buildPrompt(text, isUser, scene, userId) {
         message: text,
         history: scene.context,
         lore: scene.lore,
-        isUser: isUser,
         shieldNote: scene.shieldNote,
     };
     const out = [];
@@ -1067,8 +1060,8 @@ async function gatherHistory(msgs, at, charName, userId) {
         const body = String(m.content == null ? '' : m.content).trim();
         if (!body)
             continue;
-        // The co-author's label matches what {{whose}} calls them, so a single
-        // refine never names the same person two ways.
+        // The label the prompts use for the reader, so the run-up and the prompt
+        // above it never name the same person two ways.
         out.push((m.role === 'user' ? 'Co-author' : them) + ': ' + body);
     }
     const kept = await fitToBudget(out, maxHistoryTokens, userId);
