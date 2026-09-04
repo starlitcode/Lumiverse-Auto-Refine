@@ -4144,12 +4144,20 @@ export function setup(ctx, overrides) {
             sel.setAttribute("aria-label", f.label);
             sel.className = "arf-field";
             const opts = f.key === "connectionId"
-                ? [{ value: "", label: "The model I am chatting with" }].concat(connections.map((c) => ({
+                ? [{ value: "", label: "The model I am chatting with" }]
+                    .concat(connections.map((c) => ({
                     value: c.id,
                     label: (c.name || c.provider || "Connection") +
                         (c.model ? " (" + c.model + ")" : "") +
                         (c.isDefault ? " - default" : ""),
                 })))
+                    // A connection the settings name that the account does not have.
+                    // Kept in the list and said out loud, because a select given a
+                    // value none of its options carry shows nothing chosen at all:
+                    // the box read as though the default were picked while the
+                    // backend went on being handed the missing id, so every refine
+                    // went somewhere that was not there and the panel looked right.
+                    .concat(lostConnection() ? [{ value: String(cfg.connectionId), label: "A connection that is gone" }] : [])
                 : f.options || [];
             for (const o of opts) {
                 const op = document.createElement("option");
@@ -4730,6 +4738,8 @@ export function setup(ctx, overrides) {
         const wrap = card("Which model refines", "A refine is a second model call on every reply, so these decide what it costs. They default to the cheap answer.");
         for (const f of COST_FIELDS)
             wrap.appendChild(fieldRow(f));
+        if (lostConnection())
+            wrap.appendChild(bad("The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above."));
         return wrap;
     }
     // Named setups for the Model tab, so somebody running more than one custom
@@ -6246,6 +6256,15 @@ export function setup(ctx, overrides) {
         if (took)
             persist(true);
         return took;
+    }
+    // Whether the connection the settings are pointed at is one the account still
+    // has. Not asked before the list has arrived, since not knowing yet and
+    // knowing it is gone are different things to say.
+    function lostConnection() {
+        const id = String(cfg.connectionId || "");
+        if (!id || !connections.length)
+            return false;
+        return !connections.some((c) => c.id === id);
     }
     // Whether a saved setup names a connection this account no longer has.
     function setupLost(one) {

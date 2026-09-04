@@ -2720,6 +2720,48 @@ console.log("\nthe buttons on a message");
   });
 }
 
+console.log("\na connection the account does not have any more");
+{
+  // A select handed a value none of its options carry shows nothing chosen at
+  // all, so the box read as though the default were picked while the backend
+  // went on being told the missing id. Every refine went somewhere that was not
+  // there and the panel looked right.
+  await inTab(browser, { saved: { connectionId: "gone-for-good" } }, async (page) => {
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "connections",
+        list: [{ id: "alive", name: "Still here", provider: "p", model: "m", isDefault: true }],
+      });
+    });
+    await goTab(page, "Model");
+    const out = await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="connectionId"]');
+      return {
+        picked: sel.value,
+        index: sel.selectedIndex,
+        label: sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent : "",
+        card: document.querySelector('#drawer [data-arf-card="Which model refines"]').textContent,
+        told: (window.__sent.filter((m) => m.type === "set_settings").pop() || { settings: {} }).settings
+          .connectionId,
+      };
+    });
+    ok("the box shows what it is really pointed at", out.index >= 0 && out.picked === "gone-for-good", JSON.stringify(out).slice(0, 160));
+    ok("and names it for what it is", /A connection that is gone/.test(out.label));
+    ok("the card says nothing can be refined until it is changed", /not on your account any more/.test(out.card));
+    ok("and the panel has not quietly changed it", out.told === undefined || out.told === "gone-for-good");
+  });
+
+  // Before the list has arrived, not knowing is not the same as knowing it is
+  // gone, and the panel says neither.
+  await inTab(browser, { saved: { connectionId: "maybe" } }, async (page) => {
+    await goTab(page, "Model");
+    const said = await page.evaluate(
+      () => document.querySelector('#drawer [data-arf-card="Which model refines"]').textContent,
+    );
+    ok("with no list yet, nothing is claimed about it", !/not on your account any more/.test(said));
+  });
+}
+
 console.log("\nsaved model setups");
 {
   // A named set of the Model tab, so somebody running more than one custom
