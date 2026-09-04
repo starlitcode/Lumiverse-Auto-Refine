@@ -77,7 +77,7 @@ the rewritten message
 </REFINED>
 ```
 
-`<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat: anything the model writes there is dropped, never saved. You can watch it being written, though. The card that says what a refine did opens as soon as the working starts and fills in as the model writes, then turns into the before and after when the rewrite lands. A prompt that asks for no working opens nothing and costs nothing.
+`<REFINE_NOTES>` sits outside `<REFINED>`, so none of it can reach your chat: anything the model writes there is dropped, never saved. It is kept for you to read, though, on the **Log** tab under **What the model worked out**. Nothing about it goes on the page while the refine runs: the working is worth more than the second of reading a card would give it, and a card that had to hand itself over to the one saying what the refine did read as a second card popping up. A prompt that asks for no working keeps nothing and costs nothing.
 
 The card is replaced by the before and after the moment the rewrite lands, so the working is also kept: it sits on the **Log** tab under **What the model worked out**, where you can read it at your own pace. Only a refine that finished replaces what is kept there, so starting one and changing your mind does not cost you the last lot.
 
@@ -101,7 +101,7 @@ Before the rewrite, list what you changed:
 Then give the rewrite between <REFINED> and </REFINED>.
 ```
 
-What comes back outside the tags is dropped rather than written into the message. Anything between `<REFINE_NOTES>` and `</REFINE_NOTES>` is shown on the card while it is being written. What the refine did to your writing is on the same card once it lands, marked word by word: struck through where the rewrite took something out, plain where it left it alone.
+What comes back outside the tags is dropped rather than written into the message. Anything between `<REFINE_NOTES>` and `</REFINE_NOTES>` is kept on the **Log** tab, as prose by default and as the whole answer with every tag when you ask for that. What the refine did to your writing is on the card that comes up when it lands, marked word by word: struck through where the rewrite took something out, plain where it left it alone.
 
 The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<REFINED>` and `</REFINED>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 
@@ -158,9 +158,9 @@ Braces are left alone on purpose. A macro sitting in a reply is already safe, be
 
 Protection catches what it can find. The prompts that ship with it also carry a **What not to touch** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
-**Strip reasoning tags before it is sent** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra reasoning tag names** is under it, for a model that wraps its working in something the built-in eight do not cover.
+**Keep the reply's own reasoning out of the refine** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra reasoning tag names** is under it, for a model that wraps its working in something the built-in eight do not cover.
 
-**Strip reasoning tags out of the answer** is the other side of the same coin: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
+**Keep the refiner's own reasoning out of your chat** is the other direction: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
 
 ## Sampler settings
 

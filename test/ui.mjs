@@ -2097,47 +2097,30 @@ console.log("\nstopping a refine without a floating button");
 
 console.log("\nwatching it work");
 {
-  // The working is written before the rewrite and is gone by the time anything
-  // lands, so if it is not shown while it is happening it cannot be seen at
-  // all. The card that says what a refine did is already the place to look, so
-  // it opens early and holds the working until there is a rewrite to show.
+  // The working is not put on the page at all. It used to open a card of its
+  // own, which then had to hand that card over to the one saying what the
+  // refine did, and the hand-over is what read as a second card popping up. It
+  // goes to the Log, where it can be read at whatever pace suits and nothing
+  // has to be caught.
   const say = async (page, notes) => {
     await page.evaluate((n) => {
       window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 400, notes: n });
     }, notes);
     await settle(page);
   };
-  const card = (page) =>
-    page.evaluate(() => {
-      const el = document.querySelector("[data-arf-pop]");
-      if (!el) return null;
-      const well = el.querySelector("[data-arf-working]");
-      return {
-        working: el.hasAttribute("data-arf-pop-working"),
-        head: el.querySelector(".arf-h").textContent,
-        said: well ? well.textContent : null,
-        cards: document.querySelectorAll("[data-arf-pop]").length,
-        diff: !!el.querySelector("[data-arf-diff]"),
-      };
-    });
+  const onScreen = (page) =>
+    page.evaluate(() => ({
+      cards: document.querySelectorAll("[data-arf-pop]").length,
+      dims: document.querySelectorAll(".arf-shade").length,
+    }));
 
   await inTab(browser, {}, async (page) => {
-    ok("nothing is up before the model says anything", !(await card(page)));
-    // A prompt that asks for no working sends none, and nothing opens.
-    await say(page, "");
-    ok("and none opens for a prompt that asks for no working", !(await card(page)));
+    ok("nothing is up before the model says anything", JSON.stringify(await onScreen(page)) === '{"cards":0,"dims":0}');
+    await say(page, "<REFINE_NOTES>\nWhat reads weakly: the simile could sit in any story.\n</REFINE_NOTES>");
+    const mid = await onScreen(page);
+    ok("and nothing opens while it is working", mid.cards === 0 && mid.dims === 0, JSON.stringify(mid));
 
-    await say(page, "What reads weakly:");
-    const first = await card(page);
-    ok("the working opens a card as it is written", !!first && first.working, JSON.stringify(first));
-    ok("headed as working rather than as done", !!first && /working/i.test(first.head), JSON.stringify(first));
-
-    await say(page, "What reads weakly:\n- the simile could sit in any story.");
-    const more = await card(page);
-    ok("and fills in as more arrives", !!more && /any story/.test(more.said), JSON.stringify(more));
-    ok("in the card already up, not a second one", !!more && more.cards === 1, JSON.stringify(more));
-
-    // Then the refine lands and the card becomes what it did.
+    // The refine lands, and that is the one card there is.
     await page.evaluate(() => {
       window.__fromBackend({
         type: "refined", chatId: "c1", messageId: "m2", canUndo: true,
@@ -2146,15 +2129,18 @@ console.log("\nwatching it work");
       });
     });
     await settle(page);
-    const done = await card(page);
-    ok("landing turns it into what changed", !!done && !done.working && done.diff, JSON.stringify(done));
-    ok("and still one card", !!done && done.cards === 1, JSON.stringify(done));
-  });
+    const done = await page.evaluate(() => {
+      const el = document.querySelector("[data-arf-pop]");
+      return el
+        ? { cards: document.querySelectorAll("[data-arf-pop]").length, diff: !!el.querySelector("[data-arf-diff]") }
+        : null;
+    });
+    ok("landing opens one card, and it says what changed", !!done && done.cards === 1 && done.diff, JSON.stringify(done));
 
-  // Switched off, the working stays off screen too.
-  await inTab(browser, { saved: { popup: false } }, async (page) => {
-    await say(page, "What reads weakly:");
-    ok("with the card switched off, nothing opens for the working either", !(await card(page)));
+    // And the working that never went on screen is in the Log.
+    await goTab(page, "Log");
+    const kept = await page.evaluate(() => document.querySelector("[data-arf-kept]").textContent);
+    ok("the working it never showed is in the Log", /could sit in any story/.test(kept), kept);
   });
 }
 
@@ -2571,31 +2557,21 @@ console.log("\nthe working, read as prose");
   // What comes back while the model is writing has had the tags taken off by
   // the backend already. What comes back at the end is everything outside
   // <REFINED>, tags and all, so the same working read as prose on the card and
-  // as markup in the Log.
-  // What the backend hands over at the end: the working with its tags, and the
-  // rewrite's tags with the rewrite itself stood in for, since that is on the
-  // same card already.
+  // The whole answer as the model wrote it: the working in its own tags, and the
+  // rewrite in its own. Both pairs, since the question the switch answers is how
+  // the model laid its answer out.
   const RAW =
-    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>\n<REFINED>\n...\n</REFINED>";
+    "<REFINE_NOTES>\nThe second line could sit in any story.\n<plan>Cut the simile.</plan>\n</REFINE_NOTES>\n<REFINED>\nShe breathed out.\n</REFINED>";
   await inTab(browser, {}, async (page) => {
-    await page.evaluate((raw) => {
-      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes: raw });
-    }, RAW);
-    const onCard = await page.evaluate(
-      () => document.querySelector("[data-arf-working]").textContent,
-    );
-    ok("the card on the page shows no tags", !/[<>]/.test(onCard), onCard);
-    ok("and still says what it worked out", /could sit in any story/.test(onCard));
-    ok("including what was inside a tag of its own", /Cut the simile/.test(onCard), onCard);
-
     await page.evaluate((raw) => {
       window.__fromBackend({ type: "refine_notes", chatId: "c1", messageId: "m1", notes: raw });
     }, RAW);
     await goTab(page, "Log");
     const kept = () => page.evaluate(() => document.querySelector("[data-arf-kept]").textContent);
     const clean = await kept();
-    ok("the Log shows no tags either", !/[<>]/.test(clean), clean);
-    ok("and reads as the same working", /could sit in any story/.test(clean) && /Cut the simile/.test(clean));
+    ok("with the switch off the Log shows no tags", !/[<>]/.test(clean), clean);
+    ok("and reads as the working alone", /could sit in any story/.test(clean) && /Cut the simile/.test(clean));
+    ok("with the rewrite left on the card where it belongs", !/She breathed out/.test(clean), clean);
 
     // The switch is on the card, where somebody wondering about the markup is
     // already looking.
@@ -2611,6 +2587,7 @@ console.log("\nthe working, read as prose");
       /<REFINED>/.test(raw) && /<\/REFINED>/.test(raw),
       raw.slice(0, 200),
     );
+    ok("and the rewrite itself, as it came back", /She breathed out/.test(raw), raw.slice(0, 200));
 
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-field="notesTags"]').click();
@@ -2698,89 +2675,6 @@ console.log("\nthe working the Log keeps");
   });
 }
 
-console.log("\nthe working card becoming the refined one");
-{
-  // One card, filled in. Both are pinned to the bottom of the screen and they
-  // are not the same height, so swapping the elements made the tall one vanish
-  // and a shorter one fade up from nothing somewhere lower, with the dim behind
-  // them restarting its own fade. That reads as a second card coming out from
-  // under the first, which is what it was.
-  await inTab(browser, {}, async (page) => {
-    await page.evaluate(() => {
-      const notes = Array.from({ length: 14 }, (_, i) => "line " + i + " of the working").join("\n");
-      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes: notes });
-      document.querySelector("[data-arf-pop]").__mark = "the card";
-      document.querySelector(".arf-shade").__mark = "the dim";
-    });
-    // Let its own way in finish, so what is measured next is the swap and not
-    // the arrival.
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
-    const was = await page.evaluate(() => {
-      const box = document.querySelector("[data-arf-pop]");
-      return { tall: Math.round(box.getBoundingClientRect().height), working: !!box.getAttribute("data-arf-pop-working") };
-    });
-    ok("the working card is up and the taller of the two", was.working && was.tall > 300);
-
-    await page.evaluate(() => {
-      window.__fromBackend({
-        type: "refined",
-        chatId: "c1",
-        messageId: "m1",
-        canUndo: true,
-        before: "She let out a breath she did not know she was holding, then turned away.",
-        after: "She breathed out and turned away.",
-      });
-    });
-    const now = await page.evaluate(() => {
-      const boxes = document.querySelectorAll("[data-arf-pop]");
-      const box = boxes[0];
-      return {
-        cards: boxes.length,
-        dims: document.querySelectorAll(".arf-shade").length,
-        same: box.__mark === "the card",
-        sameDim: document.querySelector(".arf-shade").__mark === "the dim",
-        working: !!box.getAttribute("data-arf-pop-working"),
-        says: /What changed/.test(box.textContent),
-        tall: Math.round(box.getBoundingClientRect().height),
-        lit: Math.round(getComputedStyle(box).opacity * 100),
-      };
-    });
-    ok("there is still one card and one dim", now.cards === 1 && now.dims === 1);
-    ok("and they are the same two", now.same && now.sameDim);
-    ok("the card now says what the refine did", now.says && !now.working);
-    ok("it does not fade in again from nothing", now.lit === 100, String(now.lit));
-    ok("and is still at its old height, on its way down", now.tall === was.tall, was.tall + " -> " + now.tall);
-
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
-    const done = await page.evaluate(() =>
-      Math.round(document.querySelector("[data-arf-pop]").getBoundingClientRect().height),
-    );
-    ok("then it has settled at the shorter height", done < was.tall - 50, was.tall + " -> " + done);
-
-    // And the other way round: the next refine starting while that card is
-    // still up is the same swap in reverse, and the same card filling in.
-    await page.evaluate(() => {
-      const notes = Array.from({ length: 14 }, (_, i) => "line " + i + " of the working").join("\n");
-      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 10, notes: notes });
-    });
-    const again = await page.evaluate(() => {
-      const box = document.querySelector("[data-arf-pop]");
-      return {
-        cards: document.querySelectorAll("[data-arf-pop]").length,
-        same: box.__mark === "the card",
-        sameDim: document.querySelector(".arf-shade").__mark === "the dim",
-        working: !!box.getAttribute("data-arf-pop-working"),
-        lit: Math.round(getComputedStyle(box).opacity * 100),
-        tall: Math.round(box.getBoundingClientRect().height),
-      };
-    });
-    ok("the next refine fills the same card", again.cards === 1 && again.same && again.sameDim);
-    ok("which is showing the working again", again.working);
-    ok("without fading in from nothing either way", again.lit === 100, String(again.lit));
-    ok("and starting from the height it was", again.tall === done, done + " -> " + again.tall);
-  });
-}
-
 console.log("\nthe card is handed over, never swapped");
 {
   // Counting what is on the page cannot catch this: the swap happens inside one
@@ -2788,11 +2682,13 @@ console.log("\nthe card is handed over, never swapped");
   // second card is a new element fading up from nothing where the old one was,
   // at a different height, with the dim behind it restarting its own fade. So
   // what is measured is whether the card survived.
+  //
+  // The automatic pass lands one reply after another, which is where this
+  // happens: a card for the second refine replacing the card for the first.
   await inTab(browser, {}, async (page) => {
     const out = await page.evaluate(async () => {
-      const notes = Array.from({ length: 14 }, (_, i) => "line " + i).join("\n");
       const card = () => document.querySelector("[data-arf-pop]");
-      const settle = () => new Promise((r) => setTimeout(r, 450));
+      const rest = () => new Promise((r) => setTimeout(r, 450));
       const read = () => {
         const c = card();
         if (!c) return { gone: true };
@@ -2805,28 +2701,24 @@ console.log("\nthe card is handed over, never swapped");
       const land = (id, before, after) =>
         window.__fromBackend({ type: "refined", chatId: "c1", messageId: id, canUndo: true, before, after });
       const steps = {};
-      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40, notes });
-      card().__id = "A";
-      await settle();
       land("m1", "She let out a breath she did not know she was holding, then turned.", "She breathed out.");
-      steps.toRefined = read();
-      await settle();
-      // The automatic pass lands one after another. A card for the second
-      // replacing the card for the first is the same two elements swapping.
-      land("m2", "A different sentence entirely, rather longer than the last one.", "Shorter.");
-      steps.refinedAgain = read();
-      await settle();
-      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 5, notes });
-      steps.backToWorking = read();
-      await settle();
+      card().__id = "A";
+      await rest();
+      steps.first = read();
+      land("m2", "A different sentence entirely, rather longer than the last one was.", "Shorter.");
+      steps.second = read();
+      await rest();
       steps.settled = read();
+      land("m3", "And a third, shorter.", "Third.");
+      steps.third = read();
+      await rest();
       return steps;
     });
     const kept = (r) => r && !r.gone && r.same && r.lit === 100 && r.dims === 1;
-    ok("the working card becomes the refined one", kept(out.toRefined), JSON.stringify(out.toRefined));
-    ok("a second refine fills the same card", kept(out.refinedAgain), JSON.stringify(out.refinedAgain));
-    ok("and so does the next refine starting", kept(out.backToWorking), JSON.stringify(out.backToWorking));
-    ok("it is still the card it started as", kept(out.settled), JSON.stringify(out.settled));
+    ok("the first refine opens the card", kept(out.first), JSON.stringify(out.first));
+    ok("the next one fills the same card", kept(out.second), JSON.stringify(out.second));
+    ok("and it settles as the same card", kept(out.settled), JSON.stringify(out.settled));
+    ok("and so does the one after that", kept(out.third), JSON.stringify(out.third));
   });
 }
 
@@ -2912,17 +2804,25 @@ console.log("\nnever two things on the screen at once");
   });
 }
 
-console.log("\nthe card that shows the working");
+console.log("\nno card while it is working");
 {
-  // It is about a refine that is happening, so it goes when one stops
-  // happening. Only the card that lands with a refine used to replace it, which
-  // left it reading "Working it out" over a refine that had been stopped,
-  // dropped by a check, or saved with nothing to put back.
+  // The working never goes on the page. It used to open a card of its own that
+  // then had to be handed over, or taken down, depending on how the refine
+  // ended; four endings, each with its own way to leave a card behind. There is
+  // nothing to leave behind now.
+  // keeps says whether that ending is a refine that finished. A stop is not, so
+  // it leaves the Log holding whatever the last finished one worked out, which
+  // here is nothing.
   const endings = [
-    { what: "stopped", msg: { type: "refine_stopped", stopped: true } },
-    { what: "dropped by a check", msg: { type: "refine_skipped", why: "the rewrite grew by half" } },
+    { what: "stopped", keeps: false, msg: { type: "refine_stopped", stopped: true } },
+    {
+      what: "dropped by a check",
+      keeps: true,
+      msg: { type: "refine_skipped", why: "the rewrite grew by half" },
+    },
     {
       what: "saved with nothing to put back",
+      keeps: true,
       msg: { type: "refined", chatId: "c1", messageId: "m1", canUndo: false },
     },
   ];
@@ -2933,15 +2833,26 @@ console.log("\nthe card that shows the working");
           type: "refine_progress",
           stage: "writing",
           chars: 40,
-          notes: "The second line could sit in any story.",
+          notes: "<REFINE_NOTES>The second line could sit in any story.</REFINE_NOTES>",
         });
-        return !!document.querySelector("[data-arf-pop-working]");
+        return document.querySelectorAll("[data-arf-pop],.arf-shade").length;
       });
-      ok(one.what + ": the working is on screen first", up);
+      ok(one.what + ": nothing is on screen while it works", up === 0, String(up));
       await page.evaluate((m) => window.__fromBackend(m), one.msg);
       await settle(page);
-      const gone = await page.evaluate(() => !document.querySelector("[data-arf-pop-working]"));
-      ok(one.what + ": and goes when the refine does", gone);
+      const after = await page.evaluate(
+        () => document.querySelectorAll("[data-arf-pop],.arf-shade").length,
+      );
+      ok(one.what + ": and nothing is left behind by the ending", after === 0, String(after));
+      await goTab(page, "Log");
+      const kept = await page.evaluate(() => {
+        const well = document.querySelector("[data-arf-kept]");
+        return well ? well.textContent : null;
+      });
+      if (one.keeps)
+        ok(one.what + ": the working is in the Log", /could sit in any story/.test(kept || ""), String(kept));
+      else
+        ok(one.what + ": nothing is kept, since it never finished", kept === null, String(kept));
     });
   }
 }

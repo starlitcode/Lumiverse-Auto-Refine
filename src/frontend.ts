@@ -2033,10 +2033,19 @@ export function setup(ctx: Ctx, overrides?: any) {
   // markup in the other. Taken off here, for both, and kept underneath so the
   // switch can put them back without the notes having to be fetched again.
   const TAG = /<\/?[A-Za-z][\w:.-]*(?:\s[^>]*?)?\/?>/g;
+  const NOTES_BODY = /<\s*refine_notes\s*>([\s\S]*?)(?:<\s*\/\s*refine_notes\s*>|$)/i;
+
   function readable(text: string): string {
     const said = String(text || "");
-    if (cfg.notesTags) return said;
-    return said
+    // As the model wrote it: the working, the rewrite, and every tag around
+    // both. Nothing is left out, because the question this answers is how the
+    // model laid its answer out.
+    if (cfg.notesTags) return said.trim();
+    // Otherwise the working alone, read back out of its own tags, with the
+    // rewrite left where it belongs: on the card, marked against what it
+    // replaced. An answer with no working in it has nothing to show.
+    const hit = NOTES_BODY.exec(said);
+    return String(hit ? hit[1] : said)
       .replace(TAG, "")
       // A tag on a line of its own leaves the line behind it.
       .replace(/[ \t]+$/gm, "")
@@ -2254,30 +2263,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (deadman) {
         clearTimeout(deadman);
         deadman = null;
-      }
-      // The card showing the model's working is about a refine that is
-      // happening, so it goes when one stops happening. Only the card that
-      // lands with a refine used to replace it, which left it sitting there
-      // reading "Working it out" over a refine that had been stopped, dropped
-      // by a check, or saved with nothing to put back: three endings out of
-      // four, each leaving a card that could only be closed by hand.
-      //
-      // Not this instant, though. On the one ending that does have something to
-      // show, the card saying what the refine did fills this same box a moment
-      // later, and taking the box down first is what turned one card into two.
-      // A frame is long enough for that to have happened and short enough that
-      // nothing is drawn in between: this runs before the frame is painted, so
-      // an ending with nothing to show never gets one more frame of the card.
-      if (popKey === "working") {
-        const mine = popEl;
-        const go = () => {
-          if (popEl === mine && popKey === "working") dropPop();
-        };
-        try {
-          requestAnimationFrame(go);
-        } catch (_) {
-          go();
-        }
       }
     }
     if (!on && busy && runStartedAt) lastRunMs = Date.now() - runStartedAt;
@@ -2627,13 +2612,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-block{display:flex;flex-direction:column;gap:7px;padding:9px 10px;" +
     "border-radius:var(--lumiverse-radius-sm,5px);" +
     "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
-    "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
-    // A block being switched off fades rather than dropping, in step with the
-    // knob that did it. It could not before: the block was rebuilt on the way,
-    // so there was never one element for the fade to happen to.
-    "transition:opacity var(--lumiverse-transition-fast,150ms ease)}" +
+    "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+    // Dimmed the moment it is switched off, not faded.
+    //
+    // A block holds a box of prose, thousands of characters of it, and animating
+    // the opacity of anything holding text makes the browser composite the whole
+    // of it for the duration: the text is rasterised a different way while it
+    // travels and then put back, which reads as the words shivering. The fade
+    // was worth less than that costs.
     ".arf-block.arf-hushed{opacity:.55}" +
-    "@media (prefers-reduced-motion: reduce){.arf-block{transition:none}}" +
     ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
     ".arf-btn.arf-mini2{min-height:26px;padding:3px 10px;font-size:11.5px}" +
     // Two choices side by side, where a menu would be heavier than the choice.
@@ -3482,6 +3469,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // for, and hunting for the master switch on the tab it happens to live on is
   // the thing that makes a tabbed panel worse than a list.
   function buildHeader(): HTMLElement {
+    headerHeldTurn = holdsTurn(blockList("blocks"));
     const wrap = card();
     // Findable, so it can be swapped on its own by something that has no reason
     // to rebuild the rest of the panel.
@@ -3835,7 +3823,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   let popEl: any = null;
   let popShade: any = null;
   // The element the working is written into while it is being written.
-  let popNotes: any = null;
   let popKey = "";
 
   // Every undo goes through here, and every one is written down against its
@@ -3860,102 +3847,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
     popEl = null;
     popShade = null;
-    popNotes = null;
     popKey = "";
   }
   disposers.push(dropPop);
-
-  // The working, while it is being written.
-  //
-  // The card that says what a refine did is already on the page and already
-  // the place to look, so it opens as soon as the model starts working rather
-  // than only when it lands, and what it holds until then is the working
-  // itself. It is written straight into the element it is already in, four
-  // times a second, so it reads as writing rather than as a card redrawing.
-  //
-  // Only ever the working. The rewrite arrives on the card when it lands,
-  // marked against what was there before, and showing it twice would be
-  // showing it twice.
-  function showWorking(text: string) {
-    if (!cfg.popup) return;
-    const said = String(text || "").trim();
-    if (!said) return;
-    try {
-      if (typeof document === "undefined" || !document.body) return;
-      if (popNotes && popEl) {
-        popNotes.textContent = readable(said);
-        // Following the newest line, the way a terminal does.
-        popNotes.scrollTop = popNotes.scrollHeight;
-        return;
-      }
-      // The card from the refine before this one is this card, so it is filled
-      // in rather than taken down and put back up. The same reason as the other
-      // way round, in showPop: two elements of different heights, both pinned to
-      // the bottom, swapping is what looks like a second card.
-      const held: any = popEl;
-      const wasTall = held ? held.getBoundingClientRect().height : 0;
-      if (!held) {
-        dropPop();
-        const shade = document.createElement("div");
-        shade.className = "arf-shade";
-        shade.setAttribute("data-arf-shade", "1");
-        shade.addEventListener("click", dropPop);
-        document.body.appendChild(shade);
-        popShade = shade;
-      } else held.innerHTML = "";
-      popKey = "working";
-
-      const box = held || document.createElement("div");
-      box.className = "arf-pop arf";
-      box.setAttribute("data-arf-pop", "1");
-      box.setAttribute("data-arf-pop-working", "1");
-      box.setAttribute("role", "status");
-
-      const top = el("div", "arf-between");
-      top.appendChild(el("span", "arf-h", "Working it out"));
-      const shut = document.createElement("button");
-      shut.type = "button";
-      shut.className = "arf-x";
-      shut.setAttribute("aria-label", "Close");
-      shut.textContent = "\u00d7";
-      shut.addEventListener("click", dropPop);
-      top.appendChild(shut);
-      box.appendChild(top);
-
-      const body = el("div", "arf-pop-body");
-      // Filling a card that was already standing there is a change of contents
-      // rather than an arrival, so the contents are what fades.
-      if (held) body.className += " arf-arrive";
-      const well = el("div", "arf-well arf-scroll arf-mono", readable(said));
-      well.setAttribute("data-arf-working", "1");
-      body.appendChild(well);
-      box.appendChild(body);
-      popNotes = well;
-
-      const row = el("div", "arf-row arf-pop-row");
-      const halt = button("Stop", false);
-      halt.addEventListener("click", () => {
-        cancelRefine();
-        dropPop();
-      });
-      row.appendChild(halt);
-      box.appendChild(row);
-
-      if (!held) document.body.appendChild(box);
-      else settleHeight(box, wasTall);
-      popEl = box;
-      try {
-        requestAnimationFrame(() => {
-          setScheme(box);
-          sweepReadable(box);
-        });
-      } catch (_) {}
-    } catch (_) {
-      popEl = null;
-      popNotes = null;
-      popKey = "";
-    }
-  }
 
   // The card is pinned to the bottom of the screen, so a card that gets shorter
   // moves its top edge down by the difference, all at once. Held at the height
@@ -4006,10 +3900,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       // The working card is not the same refine and is always replaced.
       if (popEl && popKey === key) return;
       // Whatever card is up is this card, so it is filled in rather than taken
-      // down and put back up. Any card, not only the one showing the working:
-      // the automatic pass lands one refine after another, and a card for the
-      // second replacing the card for the first is the same two elements
-      // swapping, with the same flash.
+      // down and put back up. The automatic pass lands one refine after
+      // another, and a card for the second replacing the card for the first is
+      // two elements swapping: the old one vanishes and a new one fades up from
+      // nothing at a different height, which is what reads as a second card.
       //
       // Both cards are pinned to the bottom of the screen and they are not the
       // same height: the working one runs to about 370 pixels and this one to
@@ -4034,13 +3928,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
       const box = held || document.createElement("div");
       const wasTall = held ? held.getBoundingClientRect().height : 0;
-      if (held) {
-        box.innerHTML = "";
-        // It is not the working card any more, and nothing is being written
-        // into it.
-        box.removeAttribute("data-arf-pop-working");
-        popNotes = null;
-      }
+      if (held) box.innerHTML = "";
       box.className = "arf-pop arf";
       box.setAttribute("data-arf-pop", "1");
       box.setAttribute("role", "status");
@@ -4440,6 +4328,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   //                               and the floating button
   //   which prompt this now is    the line naming it, since a block switched
   //                               off is a prompt no preset matches
+  // What the header was last built believing. Compared rather than assumed, so
+  // the header is left alone unless a block switch has actually changed it.
+  let headerHeldTurn = true;
+
   function refreshBlocks() {
     if (!tab || !tab.root) return;
     try {
@@ -4452,7 +4344,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (said) said.hidden = holdsTurn(list);
       const line = root.querySelector("[data-arf-whatthisis]") as any;
       if (line) line.textContent = whatThisIs() + " " + aboutWorking();
-      swapHeader();
+      // Only when the header would say something different. Switching a block
+      // can only change one thing up there, which is whether a refine can
+      // happen at all, and swapping the header for every toggle threw away the
+      // master switch mid-slide and restarted the live dot's pulse each time.
+      const turn = holdsTurn(list);
+      if (turn !== headerHeldTurn) {
+        headerHeldTurn = turn;
+        swapHeader();
+      }
       paintFloat();
     } catch (_) {}
   }
@@ -5216,17 +5116,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "protectThinking",
-        label: "Strip reasoning tags before it is sent",
+        label: "Keep the reply's own reasoning out of the refine",
         type: "bool",
-        hint: "On by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back after.",
+        hint: "On by default. Working the character's model left in the reply is not your writing, so it is cut out before the refine and put back after rather than being rewritten.",
       }),
     );
     wrap.appendChild(
       fieldRow({
         key: "stripAnswerThinking",
-        label: "Strip reasoning tags out of the answer",
+        label: "Keep the refiner's own reasoning out of your chat",
         type: "bool",
-        hint: "On by default, and a different thing from the row above: that one is about working already in the reply, this one is about working the refining model adds when it answers. The tags catch most of it, since anything outside <REFINED> is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.",
+        hint: "On by default, and the other direction from the row above. A refining model that thinks out loud can have that working saved into your chat as part of the rewrite, which this stops.",
       }),
     );
     // Folded. Three lists of text that most readers never open, sitting in
@@ -5415,7 +5315,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "notesTags",
         label: "Show the tags the model wrote",
         type: "bool",
-        hint: "Off by default. The working is shown as prose, with the tags the model wrapped it in taken off. On, it is shown exactly as it came back, which is what you want while you are working on a prompt and wondering how the model laid its answer out. Nothing is thrown away either way: this only decides what is drawn.",
+        hint: "Off by default, showing the model's working as prose with the tags taken off. On, the whole answer as it came back: the working, the rewrite, and every tag around both, which is what you want while you are working on a prompt and wondering how the model laid its answer out. Nothing is thrown away either way, and this only decides what is drawn.",
       }),
     );
     const row = el("div", "arf-row");
@@ -7785,10 +7685,12 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
-            if (typeof msg.notes === "string") {
-              tookNotes(msg);
-              showWorking(msg.notes);
-            }
+            // The working is kept for the Log and shown there. It used to open a
+            // card on the page as well, which then had to hand that card over
+            // to the one saying what the refine did, and the hand-over is what
+            // read as a second card popping up. The Log is where it is read,
+            // at whatever pace suits, and nothing has to be caught.
+            tookNotes(msg);
             if (msg.stage === "retrying") {
               retryAt = Number(msg.attempt) || 0;
               retryOf = Number(msg.of) || 0;
@@ -8234,14 +8136,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   function askToSave(msg: any) {
     try {
       if (!ctx.ui || typeof ctx.ui.showModal !== "function") return;
-      // The card showing the working goes first, and now rather than on the
-      // next frame. Ending a refine leaves that card standing for one frame so
-      // the card saying what the refine did can fill the same box, but this
-      // ending fills nothing: the host puts its own question on the screen
-      // instead. Waiting a frame here meant the question was painted on top of
-      // the working card, which is two cards at once and reads as one popping
-      // up under another.
-      if (popKey === "working") dropPop();
       const modal = ctx.ui.showModal({ title: "Save this refine?" });
       const root = modal.root as HTMLElement;
       root.innerHTML = "";
