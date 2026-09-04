@@ -3852,6 +3852,20 @@ console.log("\nthe prompt on screen is the prompt that runs");
       sent.blocks.length + " sent, " + drawn + " drawn");
   });
 
+  // A stored list holding nothing usable is a list of none. Counting it as some
+  // sent the backend a list it filtered down to nothing itself, and the two
+  // then fell back to different prompts.
+  await inTab(browser, { saved: { blocks: [{}, { name: "no id" }] } }, async (page) => {
+    const sent = await settingsSent(page);
+    ok("a stored prompt with nothing usable in it falls back like the panel does",
+      Array.isArray(sent.blocks) && sent.blocks.length > 1
+        && sent.blocks.every((b) => b && b.id),
+      sent.blocks);
+    const drawn = await shown(page, "replies");
+    ok("and the two still agree on how many blocks that is",
+      sent.blocks.length === drawn, sent.blocks.length + " sent, " + drawn + " drawn");
+  });
+
   // Editing yours still sends yours.
   await inTab(browser, { saved: { userBlocks: [
     { id: "job", name: "Mine", on: true, role: "system", text: "Leave my hand alone. {{message}}" },

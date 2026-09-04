@@ -1581,8 +1581,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   function forBackend(): any {
     const out: any = {};
     for (const k of Object.keys(cfg)) out[k] = (cfg as any)[k];
-    const mine = Array.isArray(cfg.blocks) ? cfg.blocks : [];
-    const yours = Array.isArray(cfg.userBlocks) ? cfg.userBlocks : [];
+    // Counted the same way the panel counts them, which is after the ones that
+    // are not blocks at all have been dropped. A stored list holding nothing
+    // usable is a list of none: counting it as some sent the backend a list it
+    // then filtered down to nothing itself, and the two of them fell back to
+    // different prompts, which is the thing this whole function exists to stop.
+    const usable = (list: any): any[] =>
+      (Array.isArray(list) ? list : []).filter(
+        (b: any) => b && typeof b === "object" && b.id,
+      );
+    const mine = usable(cfg.blocks);
+    const yours = usable(cfg.userBlocks);
     out.blocks = mine.length ? mine : DEFAULT_BLOCKS.map((b) => ({ ...b }));
     out.userBlocks = yours.length ? yours : YOURS_DEFAULT.map((b) => ({ ...b }));
     return out;
