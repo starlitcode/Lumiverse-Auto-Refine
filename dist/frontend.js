@@ -3713,17 +3713,25 @@ export function setup(ctx, overrides) {
                 popNotes.scrollTop = popNotes.scrollHeight;
                 return;
             }
-            // A card of its own while there is no refine to put back yet, so
-            // dropping it and drawing the real one when it lands is one swap.
-            dropPop();
+            // The card from the refine before this one is this card, so it is filled
+            // in rather than taken down and put back up. The same reason as the other
+            // way round, in showPop: two elements of different heights, both pinned to
+            // the bottom, swapping is what looks like a second card.
+            const held = popEl;
+            const wasTall = held ? held.getBoundingClientRect().height : 0;
+            if (!held) {
+                dropPop();
+                const shade = document.createElement("div");
+                shade.className = "arf-shade";
+                shade.setAttribute("data-arf-shade", "1");
+                shade.addEventListener("click", dropPop);
+                document.body.appendChild(shade);
+                popShade = shade;
+            }
+            else
+                held.innerHTML = "";
             popKey = "working";
-            const shade = document.createElement("div");
-            shade.className = "arf-shade";
-            shade.setAttribute("data-arf-shade", "1");
-            shade.addEventListener("click", dropPop);
-            document.body.appendChild(shade);
-            popShade = shade;
-            const box = document.createElement("div");
+            const box = held || document.createElement("div");
             box.className = "arf-pop arf";
             box.setAttribute("data-arf-pop", "1");
             box.setAttribute("data-arf-pop-working", "1");
@@ -3739,6 +3747,10 @@ export function setup(ctx, overrides) {
             top.appendChild(shut);
             box.appendChild(top);
             const body = el("div", "arf-pop-body");
+            // Filling a card that was already standing there is a change of contents
+            // rather than an arrival, so the contents are what fades.
+            if (held)
+                body.className += " arf-arrive";
             const well = el("div", "arf-well arf-scroll arf-mono", said);
             well.setAttribute("data-arf-working", "1");
             body.appendChild(well);
@@ -3752,7 +3764,10 @@ export function setup(ctx, overrides) {
             });
             row.appendChild(halt);
             box.appendChild(row);
-            document.body.appendChild(box);
+            if (!held)
+                document.body.appendChild(box);
+            else
+                settleHeight(box, wasTall);
             popEl = box;
             try {
                 requestAnimationFrame(() => {
@@ -3771,6 +3786,11 @@ export function setup(ctx, overrides) {
     // The card is pinned to the bottom of the screen, so a card that gets shorter
     // moves its top edge down by the difference, all at once. Held at the height
     // it had and let down to the one it wants, so the edge travels instead.
+    // Which run of this is the current one. Two refines close together resize the
+    // same card twice, and the first run's fallback timer coming due in the middle
+    // of the second would hand the card its own height back mid-travel, which is
+    // the jump this exists to avoid.
+    let settleTick = 0;
     function settleHeight(box, was) {
         try {
             if (!(was > 0) || !box || !box.style)
@@ -3778,6 +3798,7 @@ export function setup(ctx, overrides) {
             const now = box.getBoundingClientRect().height;
             if (!(now > 0) || Math.abs(now - was) < 2)
                 return;
+            const mine = ++settleTick;
             box.style.height = was + "px";
             box.style.overflow = "hidden";
             // Read the layout between the two, or the browser sees one value being
@@ -3787,6 +3808,8 @@ export function setup(ctx, overrides) {
             box.style.height = now + "px";
             const done = (e) => {
                 if (e && e.target !== box)
+                    return;
+                if (mine !== settleTick)
                     return;
                 box.style.height = "";
                 box.style.overflow = "";

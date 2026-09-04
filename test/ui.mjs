@@ -2584,6 +2584,28 @@ console.log("\nthe working card becoming the refined one");
       Math.round(document.querySelector("[data-arf-pop]").getBoundingClientRect().height),
     );
     ok("then it has settled at the shorter height", done < was.tall - 50, was.tall + " -> " + done);
+
+    // And the other way round: the next refine starting while that card is
+    // still up is the same swap in reverse, and the same card filling in.
+    await page.evaluate(() => {
+      const notes = Array.from({ length: 14 }, (_, i) => "line " + i + " of the working").join("\n");
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 10, notes: notes });
+    });
+    const again = await page.evaluate(() => {
+      const box = document.querySelector("[data-arf-pop]");
+      return {
+        cards: document.querySelectorAll("[data-arf-pop]").length,
+        same: box.__mark === "the card",
+        sameDim: document.querySelector(".arf-shade").__mark === "the dim",
+        working: !!box.getAttribute("data-arf-pop-working"),
+        lit: Math.round(getComputedStyle(box).opacity * 100),
+        tall: Math.round(box.getBoundingClientRect().height),
+      };
+    });
+    ok("the next refine fills the same card", again.cards === 1 && again.same && again.sameDim);
+    ok("which is showing the working again", again.working);
+    ok("without fading in from nothing either way", again.lit === 100, String(again.lit));
+    ok("and starting from the height it was", again.tall === done, done + " -> " + again.tall);
   });
 }
 
