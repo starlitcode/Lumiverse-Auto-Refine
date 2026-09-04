@@ -94,7 +94,7 @@ const COMPOSER_HTML =
   'style="width:200px;height:40px"></textarea>' +
   "</div></div></div>";
 
-async function inTab(browser, { css = "", viewport, touch = false, saved = null, noMenu = false } = {}, fn) {
+async function inTab(browser, { css = "", viewport, touch = false, saved = null, noMenu = false, noConfirm = false } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
   );
@@ -135,6 +135,9 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
     };
   }, COMPOSER_HTML);
   if (noMenu) await page.evaluate(() => { window.__noMenu = true; });
+  // A Lumiverse with no confirm dialog of its own, which is what the armed
+  // fallback is for.
+  if (noConfirm) await page.evaluate(() => { window.__noConfirm = true; });
 
   await page.evaluate(() => {
     window.__sent = [];
@@ -165,6 +168,16 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
         // The host's own modal. It is a second thing on the screen, and a check
         // that wants to know whether two ever show at once has to be able to
         // see it.
+        // The host's own confirm dialog. Recorded so a check can read what it
+        // was asked, and answered with whatever the check set beforehand.
+        ...(window.__noConfirm
+          ? {}
+          : {
+              showConfirm: (spec) => {
+                (window.__confirms = window.__confirms || []).push(spec);
+                return Promise.resolve({ confirmed: window.__confirmSay !== false });
+              },
+            }),
         showModal: (spec) => {
           window.__modalSpec = spec || null;
           const host = document.createElement("div");
@@ -938,10 +951,13 @@ console.log("\npresets");
 
 console.log("\nstarting again");
 {
-  await inTab(browser, { saved: { contextMessages: 9, timeoutSecs: 45 } }, async (page) => {
+  await inTab(
+    browser,
+    { saved: { contextMessages: 9, timeoutSecs: 45 }, noConfirm: true },
+    async (page) => {
     await goTab(page, "Setup");
-    // The stub host has no confirm dialog, which is the path that asks in the
-    // panel instead. One press arms it, the second does it.
+    // A host with no confirm dialog, which is the path that asks in the panel
+    // instead. One press arms it, the second does it.
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-reset]').click();
     });
@@ -961,7 +977,8 @@ console.log("\nstarting again");
       JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
     );
     ok("the second press puts the defaults back", after.contextMessages === 4 && after.timeoutSecs === 90);
-  });
+    },
+  );
 }
 
 console.log("\nthe extras, which are off until asked for");
@@ -3984,83 +4001,91 @@ console.log("\nlists with headings on them");
 }
 
 
-console.log("\nthe panel keeps its place");
+console.log("\nnothing is thrown away on one tap");
 {
-  // Adding or removing something rebuilds the panel, and the height it gains or
-  // loses arrives in one frame: everything below moves by that much with no
-  // travel between the two positions. A prompt block is about a quarter of a
-  // screen, which is the one people notice.
-  //
-  // Measured as the panel's own height one frame after the press. Small there
-  // and different once it has rested means it travelled; the same at both means
-  // it snapped.
-  const press = (page, sel, text) =>
-    page.evaluate(async (a) => {
-      const hit = a.text
-        ? [...document.querySelectorAll(a.sel)].find((b) => (b.textContent || "").trim() === a.text)
-        : document.querySelector(a.sel);
-      if (!hit) return { err: "no button" };
-      const root = document.querySelector("#drawer");
-      const before = root.getBoundingClientRect().height;
-      hit.click();
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const after = root.getBoundingClientRect().height;
-      await new Promise((r) => setTimeout(r, 600));
-      const rested = root.getBoundingClientRect().height;
-      return {
-        moved: Math.abs(Math.round(after - before)),
-        settled: Math.abs(Math.round(rested - before)),
-      };
-    }, { sel: sel, text: text || null });
-
-  // Measured against how far it had to travel rather than against a fixed
-  // number of pixels, so the rule means the same thing for a block a quarter of
-  // a screen tall and for one line of text. A frame is 16ms of a 160ms travel:
-  // a third of the way is generous, and nowhere near all of it at once.
-  const smooth = (got) => got.moved < Math.max(6, got.settled / 3);
-
-  for (const yours of [false, true]) {
-    await inTab(browser, {}, async (page) => {
-      await goTab(page, "Prompt");
-      if (yours)
-        await page.evaluate(() => {
-          const b = [...document.querySelectorAll("#drawer button")]
-            .find((x) => /For your messages/.test(x.textContent || ""));
-          if (b) b.click();
-        });
-      const where = yours ? "your own messages" : "replies";
-      const got = await press(page, '#drawer [data-arf-block] [aria-label^="Delete"]');
-      ok("deleting a block from " + where + " does not jump the panel",
-        smooth(got), got);
-      ok("and the block really is gone by the end", got.settled > 100, got);
-    });
-  }
+  // A block holds whatever you wrote in it and a preset holds a whole prompt.
+  // Neither comes back, so neither goes on a single press: the host is asked to
+  // put the question up, the same dialog the reset uses.
+  const asked = (page) => page.evaluate(() => window.__confirms || []);
+  const blocks = (page) =>
+    page.evaluate(() => document.querySelectorAll("#drawer [data-arf-block]").length);
 
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
-    const got = await press(page, "#drawer button", "Add a block");
-    ok("adding one does not jump it either", smooth(got), got);
-    ok("and the block really is there by the end", got.settled > 100, got);
-  });
-
-  await inTab(browser, {}, async (page) => {
-    await goTab(page, "Limits");
-    const got = await press(page, "#drawer .arf-fold");
-    ok("opening a fold does not jump it", smooth(got), got);
-    ok("and the fold really is open by the end", got.settled > 100, got);
-  });
-
-  await inTab(browser, {}, async (page) => {
+    const had = await blocks(page);
     await page.evaluate(() => {
-      window.__fromBackend({
-        type: "refine_notes", chatId: "c1", messageId: "m1",
-        notes: "<REFINE_NOTES>\nThe simile is doing no work here at all.\n</REFINE_NOTES>",
-      });
+      window.__confirmSay = false;
+      document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click();
     });
-    await goTab(page, "Log");
-    const got = await press(page, "#drawer button", "Clear");
-    ok("clearing the working does not jump it", smooth(got), got);
-    ok("and the working really is cleared by the end", got.settled > 20, got);
+    await settle(page);
+    const said = await asked(page);
+    ok("deleting a block asks first", said.length === 1, said);
+    ok("in the host's own dialog, named for what it is doing",
+      said[0] && /delete/i.test(said[0].title) && said[0].variant === "danger", said[0]);
+    ok("and says which block, since there are several",
+      said[0] && said[0].message.length > 20, said[0] && said[0].message);
+    ok("saying no keeps the block", (await blocks(page)) === had, { had: had });
+
+    await page.evaluate(() => {
+      window.__confirmSay = true;
+      document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click();
+    });
+    await settle(page);
+    ok("and saying yes removes it", (await blocks(page)) === had - 1, { had: had });
+  });
+
+  // The same for a preset, which is a whole prompt rather than one block of it.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-field="presetName"]');
+      n.value = "Mine";
+      n.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
+    });
+    await settle(page);
+    const mine = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#drawer [data-arf-field="presetPick"] option')]
+          .some((o) => o.textContent === "Mine"));
+    ok("the preset is there to begin with", await mine());
+
+    await page.evaluate(() => {
+      window.__confirms = [];
+      window.__confirmSay = false;
+      document.querySelector('#drawer [data-arf-preset="delete"]').click();
+    });
+    await settle(page);
+    ok("deleting a preset asks first", (await asked(page)).length === 1);
+    ok("and saying no keeps it", await mine());
+
+    await page.evaluate(() => {
+      window.__confirmSay = true;
+      document.querySelector('#drawer [data-arf-preset="delete"]').click();
+    });
+    await settle(page);
+    ok("saying yes removes it", !(await mine()));
+  });
+
+  // A host with no dialog of its own is not a reason to delete on one tap. The
+  // button arms itself and says so, and the second press does it.
+  await inTab(browser, { noConfirm: true }, async (page) => {
+    await goTab(page, "Prompt");
+    const had = await blocks(page);
+    await page.evaluate(() =>
+      document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click());
+    await settle(page);
+    ok("with no dialog to put up, one press deletes nothing",
+      (await blocks(page)) === had, { had: had });
+    ok("and it says what a second press would do",
+      await page.evaluate(() =>
+        (window.__toasts || []).some((t) => /press delete again/i.test((t && t.text) || String(t)))),
+      await page.evaluate(() => window.__toasts));
+
+    await page.evaluate(() =>
+      document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click());
+    await settle(page);
+    ok("and the second press does", (await blocks(page)) === had - 1, { had: had });
   });
 }
 

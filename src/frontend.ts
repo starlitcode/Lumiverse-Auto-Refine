@@ -2774,7 +2774,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Inputs sit on a fill rather than an invented black, and take a neutral
     // border so a theme with a strong accent does not tint every box.
     ".arf-field{width:100%;padding:8px 10px;border-radius:var(--lumiverse-radius,8px);" +
-    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "font:13px/1.5 var(--lumiverse-font-family,system-ui)}" +
@@ -2798,7 +2798,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // the first thing on the panel and it is focused the moment anybody uses
     // it, so a mark on it is lit most of the time it is on screen.
     ".arf-field[type=search]:focus,.arf-field[type=search]:focus-visible{outline:none;" +
-    "box-shadow:none;border-color:var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
+    "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The browser draws its own clear button inside a search field and takes
     // its colour from the page's colour scheme rather than from any CSS, so on
     // a dark panel it arrives as a white cross: the one thing here that does
@@ -2826,7 +2826,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // no glow, and not even a border change, because the menu opening is
     // already the whole of the feedback.
     "select.arf-field:focus,select.arf-field:focus-visible{outline:none;" +
-    "box-shadow:none;border-color:var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
+    "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The browser's own up and down arrows on a number box are drawn by the
     // browser rather than the theme, so on a dark panel they arrive as grey
     // chevrons belonging to no design here. The value is typed, and a focused
@@ -2866,7 +2866,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-box{-webkit-appearance:none;appearance:none;margin:0;flex:none;position:relative;" +
     "width:38px;height:22px;border-radius:11px;cursor:pointer;" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
-    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.25));" +
+    "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
     "transition:background-color var(--lumiverse-transition-fast,150ms ease)," +
     "border-color var(--lumiverse-transition-fast,150ms ease)}" +
     ".arf-box::after{content:\"\";position:absolute;top:50%;left:3px;transform:translateY(-50%);" +
@@ -2881,7 +2881,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@media (prefers-reduced-motion: reduce){.arf-box,.arf-box::after{transition:none}}" +
     ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
     "border-radius:var(--lumiverse-radius,8px);" +
-    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
     ".arf-well.arf-dim{color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     // What changed, marked on the words rather than left for the reader to
@@ -2916,7 +2916,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-fold{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;" +
     "width:100%;text-align:left;min-height:34px;padding:7px 10px;" +
     "border-radius:var(--lumiverse-radius-sm,5px);" +
-    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "font:12.5px var(--lumiverse-font-family,system-ui);" +
@@ -2967,7 +2967,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // a list of things rather than as twenty-four loose rows.
     ".arf-block{display:flex;flex-direction:column;gap:7px;padding:9px 10px;" +
     "border-radius:var(--lumiverse-radius-sm,5px);" +
-    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15));" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
     // Dimmed the moment it is switched off, and not faded. A block holds a box
     // of prose, thousands of characters of it, and animating the opacity of
@@ -2983,7 +2983,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-under{padding-left:11px;margin-left:3px;" +
     "border-left:2px solid var(--lumiverse-border,rgba(147,112,219,.12))}" +
     ".arf-seg{display:flex;gap:0;border-radius:var(--lumiverse-radius,8px);overflow:hidden;" +
-    "border:1px solid var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12))}" +
     ".arf-segbtn{flex:1;min-height:32px;padding:7px 10px;cursor:pointer;border:0;" +
     "font:12.5px var(--lumiverse-font-family,system-ui);background:transparent;" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -3090,7 +3090,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // question nobody was asking, and at this size it draws a line down the
     // whole window.
     "textarea.arf-bigta:focus,textarea.arf-bigta:focus-visible{outline:none;box-shadow:none;" +
-    "border-color:var(--lumiverse-border-neutral,rgba(128,128,128,.15))}" +
+    "border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The button this extension puts on a message and in the input bar. Styled
     // to sit with the host's own icon buttons rather than to stand out: it is
     // one more action in a row of them, not a badge.
@@ -4280,55 +4280,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
-  // Something leaving the panel, taken down rather than cut out from under
-  // whatever is below it. A repaint drops the element and its height in the
-  // same frame, so everything under it moves up by however tall it was, which
-  // for a prompt block is about a quarter of a screen and reads as the panel
-  // losing its place. This walks the height to nothing first and repaints when
-  // there is nothing left to move.
-  //
-  // The work still happens if the animation never runs. A page that will not
-  // animate, an element already gone, a browser with motion turned down: each
-  // ends with the same call, so pressing Delete always deletes.
-  function foldAway(node: any, then: () => void) {
-    let ran = false;
-    const once = () => {
-      if (ran) return;
-      ran = true;
-      try {
-        then();
-      } catch (_) {}
-    };
-    try {
-      if (!node || !node.style || typeof node.getBoundingClientRect !== "function") return once();
-      const tall = node.getBoundingClientRect().height;
-      if (!(tall > 0)) return once();
-      const still =
-        typeof matchMedia === "function" &&
-        matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (still) return once();
-      node.style.overflow = "hidden";
-      node.style.height = tall + "px";
-      // Read the layout between the two values, or the browser sees one number
-      // set and nothing to travel between.
-      void node.offsetWidth;
-      node.style.transition =
-        "height 160ms ease-in, opacity 160ms ease-in, margin 160ms ease-in";
-      node.style.height = "0px";
-      node.style.opacity = "0";
-      node.style.marginTop = "0px";
-      node.style.marginBottom = "0px";
-      node.addEventListener("transitionend", (e: any) => {
-        if (e && e.target !== node) return;
-        once();
-      });
-      // A transition that never fires still has to end in the delete.
-      setTimeout(once, 400);
-    } catch (_) {
-      once();
-    }
-  }
-
   // The other direction. Something arriving takes its full height in one frame
   // and pushes everything below it down by that much, which reads the same way
   // the collapse did: the panel losing its place under whatever you were
@@ -4368,6 +4319,64 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.addEventListener("transitionend", done);
       setTimeout(() => done(), 500);
     } catch (_) {}
+  }
+
+  // Anything that throws writing away asks first, in the host's own dialog, the
+  // same one the reset uses and the same one Auto Retry uses for its presets.
+  //
+  // A host without that dialog is not a reason to delete on one tap, so the
+  // button arms itself instead and says so. Keyed per button, because two
+  // Deletes on the same tab are two different questions and arming one must not
+  // arm the other. The arming lapses, or a second press somewhere else would
+  // land on a button that had been waiting since yesterday.
+  const ARM_MS = 4000;
+  const armedFor = new Map<string, any>();
+  disposers.push(() => {
+    armedFor.forEach((t) => {
+      try {
+        clearTimeout(t);
+      } catch (_) {}
+    });
+    armedFor.clear();
+  });
+  async function askFirst(
+    key: string,
+    spec: { title: string; message: string; confirmLabel: string },
+    armSays: string,
+    go: () => void,
+  ) {
+    let asked = false;
+    let yes = false;
+    try {
+      if (ctx && ctx.ui && typeof ctx.ui.showConfirm === "function") {
+        const answer = await ctx.ui.showConfirm({
+          title: spec.title,
+          message: spec.message,
+          variant: "danger",
+          confirmLabel: spec.confirmLabel,
+        });
+        asked = true;
+        yes = !!(answer && answer.confirmed);
+      }
+    } catch (_) {
+      asked = false;
+    }
+    if (asked) {
+      if (yes) go();
+      return;
+    }
+    const waiting = armedFor.get(key);
+    if (waiting) {
+      clearTimeout(waiting);
+      armedFor.delete(key);
+      go();
+      return;
+    }
+    toast(armSays, true);
+    armedFor.set(
+      key,
+      setTimeout(() => armedFor.delete(key), ARM_MS),
+    );
   }
 
   function showPop(one: Undo) {
@@ -5002,13 +5011,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       const turnAt = next.findIndex((b) => String(b.text || "").indexOf(TURN_MACRO) >= 0);
       next.splice(turnAt < 0 ? next.length : turnAt, 0, made);
       setBlocks(next);
-      // Found after the repaint that draws it, since the block does not exist
-      // until then, and grown from nothing so the blocks under it are pushed
-      // down rather than jumped down.
-      try {
-        const root = tab && (tab.root as HTMLElement);
-        if (root) growIn(root.querySelector('[data-arf-block="' + made.id + '"]'));
-      } catch (_) {}
     });
     const reset = button("Back to the default", false);
     reset.className += " arf-danger";
@@ -5137,15 +5139,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     drop.className += " arf-danger";
     drop.setAttribute("aria-label", "Delete " + blockLabel(b));
     drop.addEventListener("click", () => {
-      // The block goes down first, then the panel is rebuilt without it. A
-      // block is the tallest thing on this tab, so dropping one and repainting
-      // in the same frame moves everything below it by about a quarter of a
-      // screen.
-      foldAway(wrap, () => {
-        const next = blockList();
-        next.splice(i, 1);
-        setBlocks(next);
-      });
+      askFirst(
+        "block:" + b.id,
+        {
+          title: "Delete block",
+          message:
+            "Delete " + blockLabel(b) + " from this prompt? There is no undo, and what it says goes with it.",
+          confirmLabel: "Delete",
+        },
+        "Press Delete again to remove this block.",
+        () => {
+          const next = blockList();
+          next.splice(i, 1);
+          setBlocks(next);
+        },
+      );
     });
     foot.appendChild(drop);
     wrap.appendChild(foot);
@@ -5537,16 +5545,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     drop.addEventListener("click", () => {
       const one = chosen();
       if (!one) return;
-      // What goes with it is the line underneath saying what the chosen setup
-      // would do, which is the height everything below moves by.
-      foldAway(wrap.querySelector("[data-arf-setup-what]"), () => {
-        setups = setups.filter((x) => x !== one);
-        saveSetups();
-        setupPick = "";
-        setupName = "";
-        setupSaid = "Deleted " + one.name + ".";
-        paint();
-      });
+      askFirst(
+        "setup:" + one.name,
+        {
+          title: "Delete setup",
+          message: "Delete the setup " + one.name + "? There is no undo.",
+          confirmLabel: "Delete",
+        },
+        "Press Delete again to remove " + one.name + ".",
+        () => {
+          setups = setups.filter((x) => x !== one);
+          saveSetups();
+          setupPick = "";
+          setupName = "";
+          setupSaid = "Deleted " + one.name + ".";
+          paint();
+        },
+      );
     });
 
     row.appendChild(load);
@@ -5891,12 +5906,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
-      // The working goes down before the card is rebuilt without it, the same
-      // as a block does.
-      foldAway(well, () => {
-        keptNotes = null;
-        paint();
-      });
+      keptNotes = null;
+      paint();
     });
     row.appendChild(copy);
     row.appendChild(clear);
@@ -7386,12 +7397,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     drop.addEventListener("click", () => {
       const p = chosen();
       if (!p || isBuiltIn(p.name)) return;
-      presets = presets.filter((x) => x !== p);
-      savePresets();
-      presetPick = "";
-      presetName = "";
-      presetSaid = "Deleted " + p.name + ".";
-      paint();
+      askFirst(
+        "preset:" + p.name,
+        {
+          title: "Delete preset",
+          message:
+            "Delete the preset " + p.name + "? It holds a whole prompt, and there is no undo.",
+          confirmLabel: "Delete",
+        },
+        "Press Delete again to remove " + p.name + ".",
+        () => {
+          presets = presets.filter((x) => x !== p);
+          savePresets();
+          presetPick = "";
+          presetName = "";
+          presetSaid = "Deleted " + p.name + ".";
+          paint();
+        },
+      );
     });
 
     row.appendChild(load);
