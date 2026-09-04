@@ -4512,6 +4512,36 @@ console.log("\ndescriptions behind a ?");
     ok("while the press after it works normally", r.then !== r.was, r);
   });
 
+  // A gesture that closes a description without ever producing a click, which
+  // is what a drag or a scroll is. The guard must not still be sitting there
+  // waiting to eat the next real press.
+  await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
+    await goTab(page, "Limits");
+    const r = await page.evaluate(async () => {
+      const frame = () =>
+        new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const tick = [...document.querySelectorAll('#drawer input[type="checkbox"]')].pop();
+      const q = document.querySelector("#drawer .arf-q");
+      q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      q.click();
+      await frame();
+      // A finger going down on the panel and dragging away. No click follows a
+      // drag, so nothing arrives to spend the guard on.
+      document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      await frame();
+      await new Promise((r) => setTimeout(r, 220));
+      const closed = document.querySelectorAll('[role="tooltip"]').length === 0;
+      const was = tick.checked;
+      // And now a real press, well inside the window the guard would have sat in.
+      tick.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      tick.click();
+      await frame();
+      return { closed, was, then: tick.checked };
+    });
+    ok("a drag closes the description", r.closed, r);
+    ok("and the press after a drag is not eaten", r.then !== r.was, r);
+  });
+
   // The search reads the panel as it is drawn, and a description is no longer
   // drawn. A setting you can only describe is exactly the one you are searching
   // for, so losing this would be most of what the search is for.

@@ -3825,7 +3825,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     // its own rather than leaving it armed for the next real press.
     let eatClick: (() => void) | null = null;
     function swallowNext() {
-      if (eatClick) eatClick();
       const eat = (e: any) => {
         drop();
         if (!e) return;
@@ -3852,6 +3851,12 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const onDown = (e: any) => {
       noteKind(e);
+      // A guard left over from a gesture that never produced a click, a drag or
+      // a scroll, goes now. Its click is not coming, and a press is the proof:
+      // the click for the gesture before this one would already have arrived.
+      // Left armed it would eat the next real press instead of the one it was
+      // put there for.
+      if (eatClick) eatClick();
       if (!hintPop) return;
       const t = e && e.target;
       try {
