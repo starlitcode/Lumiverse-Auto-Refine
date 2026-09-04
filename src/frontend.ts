@@ -4206,6 +4206,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
         return;
       }
+      // For the same reason as the draft above: this ends in the same message,
+      // and that message clears the running state.
+      if (busy) {
+        tryResult = { ok: false, text: "A refine is already running. Wait for it, or stop it first." };
+        paint();
+        return;
+      }
       tryBusy = true;
       tryResult = null;
       persist(true);
@@ -7248,6 +7255,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       toast("Your prompt has no {{message}} block, so there is nothing to rewrite.", true);
       return;
     }
+    // One at a time, the same rule the reply button follows. Not only because
+    // two model calls at once is not what anybody asked for: everything on
+    // screen that says a refine is running is one state, and a second refine
+    // ending would clear it out from under the first while that one was still
+    // going, taking the live line, the countdown and both watchdogs with it.
+    if (busy) {
+      toast("A refine is already running. Wait for it, or stop it first.", true);
+      return;
+    }
     if (inputWaiting) return;
     inputNode = node;
     inputBefore = text;
@@ -7900,6 +7916,14 @@ export function setup(ctx: Ctx, overrides?: any) {
               retryOf = Number(msg.of) || 0;
               log("an answer failed a check, asking again");
             }
+            // Written again now everything this message carried has been read.
+            // markBusy above writes the line as its last act, which is before
+            // the count, the working and the try number have been taken off the
+            // message, so the line showed the numbers from the message before
+            // this one until the clock came round four hundred milliseconds
+            // later. On a model that reports once rather than streaming, that
+            // was the whole of what the reader saw.
+            tickLive();
             return;
           }
           if (msg.type === "permissions") {

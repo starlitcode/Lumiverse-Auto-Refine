@@ -3695,6 +3695,115 @@ console.log("\nthe widget, while your draft is being refined");
   );
 }
 
+
+console.log("\nthe live line, for a draft as for a reply");
+{
+  // The Log's Right now line and the clock beside it are driven by the one
+  // running state. A draft refine reached that state late and left it set, so
+  // this walks the whole of one and watches the line the reader watches.
+  const line = (page) =>
+    page.evaluate(() => {
+      const dot = document.querySelector("#drawer .arf-dot");
+      return dot && dot.parentElement ? dot.parentElement.textContent.trim() : "";
+    });
+  const secs = (t) => {
+    const m = /(\d+)s/.exec(t || "");
+    return m ? Number(m[1]) : null;
+  };
+
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+    const idle = await line(page);
+    ok("the line is not claiming a refine before one is asked for",
+      !/Refining|Thinking|Writing/.test(idle), idle);
+
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
+    await settle(page);
+    ok("it says a refine is running the moment the draft is sent",
+      /Refining/.test(await line(page)), await line(page));
+
+    const id = await page.evaluate(
+      () => window.__sent.filter((x) => x.type === "try_refine").pop().requestId);
+
+    // The stages a draft goes through are the ones a reply goes through, and
+    // the line names each rather than saying busy for the whole of it.
+    await page.evaluate((i) => {
+      window.__fromBackend({ type: "refine_ack", requestId: i });
+      window.__fromBackend({ type: "refine_progress", stage: "thinking" });
+    }, id);
+    await settle(page);
+    ok("and names the stage as it changes", /Thinking/.test(await line(page)), await line(page));
+
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 128 });
+    });
+    await settle(page);
+    const writing = await line(page);
+    ok("counting what has come back while it streams",
+      /Writing/.test(writing) && /128/.test(writing), writing);
+
+    // The clock is the part that has to move on its own. A line that has not
+    // changed in ten seconds reads exactly like a hang. Read once it has
+    // started, since it says nothing for the first second on purpose.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 1300)));
+    const first = secs(await line(page));
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 2200)));
+    const later = secs(await line(page));
+    ok("with a clock that climbs on its own",
+      first !== null && later !== null && later > first, first + " then " + later);
+
+    // Switching away and back must not restart the count, the same as a reply.
+    await goTab(page, "Prompt");
+    await goTab(page, "Log");
+    const back = secs(await line(page));
+    ok("and keeps the count across a tab switch", back !== null && back >= later, back);
+
+    await page.evaluate((i) => {
+      window.__fromBackend({ type: "try_result", requestId: i, ok: true,
+                            after: "I walk through it." });
+    }, id);
+    await settle(page);
+    const done = await line(page);
+    ok("and stops saying it is refining when the answer lands",
+      !/Refining|Thinking|Writing/.test(done), done);
+  });
+
+  // Two refines cannot run at once, because there is one running state between
+  // them: a second one ending would clear the line out from under the first
+  // while that one was still going.
+  await inTab(browser, { saved: { inputRefine: true, widgetOn: true } }, async (page) => {
+    await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "active_chat", requestId:
+        window.__sent.filter((m) => m.type === "active_chat").pop().requestId,
+        chatId: "c1", character: "Wren", hasCharacter: true, resolved: true, found: true });
+    });
+    await settle(page);
+    // A reply refine, running.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_progress", stage: "writing", chars: 40 });
+    });
+    await settle(page);
+    ok("a reply refine is running", /Writing/.test(await line(page)), await line(page));
+
+    // The draft, asked for from the widget's menu, which stays reachable.
+    const before = await page.evaluate(
+      () => window.__sent.filter((x) => x.type === "try_refine").length);
+    await page.evaluate(() => {
+      window.__menuPick = "draft";
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle(page);
+    const after = await page.evaluate(
+      () => window.__sent.filter((x) => x.type === "try_refine").length);
+    ok("a draft refine is turned away while one is running", after === before, after);
+    ok("and the running one still says so", /Writing/.test(await line(page)), await line(page));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
