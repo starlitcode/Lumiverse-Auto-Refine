@@ -1364,6 +1364,33 @@ console.log("\nasking for a refine from the button's menu");
     ok("it offers the latest reply", keys.indexOf("now") >= 0, keys.join(","));
     ok("and every reply in the chat", keys.indexOf("all") >= 0, keys.join(","));
 
+    // Grouped, with a line drawn between. A menu of eight things in one column
+    // is eight things to read.
+    const shape = await page.evaluate(() =>
+      ((window.__menu || {}).items || []).map((i) => (i.type === "divider" ? "|" : i.key)),
+    );
+    ok("the entries are grouped, not one long column", shape.indexOf("|") > 0, shape.join(" "));
+    ok(
+      "a line never opens or closes the menu",
+      shape[0] !== "|" && shape[shape.length - 1] !== "|",
+      shape.join(" "),
+    );
+    ok("and two lines never sit together", !/\|\s\|/.test(shape.join(" ")), shape.join(" "));
+    ok(
+      "the way in comes before the things to do",
+      shape.indexOf("open") < shape.indexOf("now"),
+      shape.join(" "),
+    );
+    ok(
+      "and taking it off the screen is last, behind a line of its own",
+      shape[shape.length - 1] === "off" && shape[shape.length - 3] === "|",
+      shape.join(" "),
+    );
+    ok("every line carries a key of its own", await page.evaluate(() => {
+      const seen = ((window.__menu || {}).items || []).map((i) => i.key);
+      return new Set(seen).size === seen.length;
+    }));
+
     await page.evaluate(() => {
       window.__menuPick = "all";
       document.querySelector("#float .arf-float").dispatchEvent(

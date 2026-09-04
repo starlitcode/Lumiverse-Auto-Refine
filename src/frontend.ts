@@ -7649,37 +7649,56 @@ export function setup(ctx: Ctx, overrides?: any) {
     // not in a menu opened over the chat where the label is all you get.
     //
     // Starting a refine is here, though a tap does it too. The row on a message
-    // holds only the way back, so this menu and the Extras row are where a
+    // holds only the way back, so this menu and the Extras rows are where a
     // refine is asked for, and a tap is not a label anybody can read.
-    const items: Array<{ key: string; label: string }> = [];
-    // The panel first. It is what somebody holding the button is most likely
-    // after, and everything taken out of this list is in it.
+    //
+    // Built in groups, with a line drawn between them. A menu of eight things
+    // in one column is eight things to read; the same eight in three groups is
+    // a decision to make, some things to do, and a way to put it away.
+    type Item = { key: string; label: string; type?: string };
+    const groups: Item[][] = [];
+
     // A refine holding for an answer comes before everything, because nothing
     // else is going to happen until it is settled.
-    if (pending) {
-      items.push({ key: "accept", label: "Accept the refine that is waiting" });
-      items.push({ key: "decline", label: "Turn it down and keep the reply" });
-    }
-    items.push({ key: "open", label: "Open the Auto Refine tab" });
-    // First while it is running, because it is the only thing anybody opens
-    // this menu for mid-refine and the reason they are in a hurry.
-    if (busy || msgBusy !== null) items.push({ key: "stop", label: "Stop this refine" });
+    if (pending)
+      groups.push([
+        { key: "accept", label: "Accept the refine that is waiting" },
+        { key: "decline", label: "Turn it down and keep the reply" },
+      ]);
+
+    // The panel. It is what somebody holding the button is most likely after,
+    // and everything taken out of this list is in it.
+    groups.push([{ key: "open", label: "Open the Auto Refine tab" }]);
+
+    const doing: Item[] = [];
+    // While it is running, stopping it is the only thing anybody opens this
+    // menu for, and starting another is not offered at all.
+    if (busy || msgBusy !== null) doing.push({ key: "stop", label: "Stop this refine" });
     else {
-      // Starting one, named rather than left to the tap. A tap does the first
-      // of these, but a tap is not a label anybody can read, and the row on a
-      // message holds only the way back now: this is where a refine is asked
-      // for.
-      items.push({ key: "now", label: "Refine the latest reply" });
-      items.push({ key: "all", label: "Refine every reply in this chat" });
+      doing.push({ key: "now", label: "Refine the latest reply" });
+      doing.push({ key: "all", label: "Refine every reply in this chat" });
     }
-    if (undoHere().length) items.push({ key: "undo", label: "Put the last refine back" });
-    // On the same terms as the panel entry: its setting puts it in the Extras
-    // menu, and this menu takes it over while the button is on screen.
-    if (cfg.inputRefine) items.push({ key: "draft", label: "Refine what I am typing" });
+    if (undoHere().length) doing.push({ key: "undo", label: "Put the last refine back" });
+    // On the same terms as the Extras rows: their setting puts them there, and
+    // this menu takes them over while the button is on screen.
+    if (cfg.inputRefine) doing.push({ key: "draft", label: "Refine what I am typing" });
+    groups.push(doing);
+
     // Last, under everything else, because these two are the only entries that
     // take the button off the screen.
-    items.push({ key: "hide", label: "Hide this button" });
-    items.push({ key: "off", label: "Turn Auto Refine off" });
+    groups.push([
+      { key: "hide", label: "Hide this button" },
+      { key: "off", label: "Turn Auto Refine off" },
+    ]);
+
+    // A line between one group and the next, and never above the first or below
+    // the last: a menu that opens on a rule looks like it lost an entry.
+    const items: Item[] = [];
+    for (const group of groups) {
+      if (!group.length) continue;
+      if (items.length) items.push({ key: "line" + items.length, label: "", type: "divider" });
+      for (const one of group) items.push(one);
+    }
 
     const token = {};
     menuToken = token;
