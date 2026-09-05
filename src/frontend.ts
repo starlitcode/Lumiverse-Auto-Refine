@@ -7349,7 +7349,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
 
     const row = el("div", "arf-row");
-    const out = button("Export to a file", false);
+    const out = button("Export to file", false);
     out.addEventListener("click", () => {
       const settings: Record<string, any> = {};
       for (const k of keysFor("exportParts"))
@@ -7396,7 +7396,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
       });
     });
-    const inBtn = button("Import a file", false);
+    const inBtn = button("Import from file", false);
     inBtn.addEventListener("click", () => {
       try {
         picker.click();

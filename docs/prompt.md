@@ -243,7 +243,7 @@ Presets live in your browser. To move them to another device, use the export bel
 
 ## Import and export
 
-**Export to a file** writes one JSON file with your rules, your prompt layout and your sampler settings in it. **Import a file** reads one back.
+**Export to file** writes one JSON file with your rules, your prompt layout and your sampler settings in it. **Import from file** reads one back.
 
 Importing replaces what you have, so export first if you want a way back. The chats you switched off are not in the file: they name chats that do not exist on the machine reading it.
 

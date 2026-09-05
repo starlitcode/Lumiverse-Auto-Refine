@@ -6959,7 +6959,7 @@ export function setup(ctx, overrides) {
     function buildTransferCard() {
         const wrap = card("Your whole setup", "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back.");
         const row = el("div", "arf-row");
-        const out = button("Export to a file", false);
+        const out = button("Export to file", false);
         out.addEventListener("click", () => {
             const settings = {};
             for (const k of keysFor("exportParts"))
@@ -7009,7 +7009,7 @@ export function setup(ctx, overrides) {
                 paint();
             });
         });
-        const inBtn = button("Import a file", false);
+        const inBtn = button("Import from file", false);
         inBtn.addEventListener("click", () => {
             try {
                 picker.click();
