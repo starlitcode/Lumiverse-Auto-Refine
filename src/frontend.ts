@@ -186,18 +186,20 @@ const SETUP_KEYS = ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSe
 
 // What a preset carries: everything that decides how a refine reads. The rest
 // stays yours whichever preset you load, which is the split that makes a preset
-// worth having. A connection is not in here on purpose: an id from somebody
-// else's account names nothing on yours, so a shared preset that carried one
-// would quietly point at nothing.
+// worth having.
+//
+// Nothing from the Model tab is in here. Which model runs the refine, how much
+// it thinks, how long to wait and the samplers are all properties of the
+// account and the machine, not of a way of reading, and a preset that stamped
+// over them would undo a model choice every time somebody tried a prompt. A
+// preset can name a saved setup to load alongside it instead, which is the same
+// convenience without the surprise.
 const PRESET_KEYS = [
   "blocks",
   "userBlocks",
   "contextMessages",
   "maxHistoryTokens",
   "maxLoreTokens",
-  "samplers",
-  "thinkingMode",
-  "thinkingEffort",
 ];
 
 // Where the input box is, tried in this order: the first names it exactly, and
@@ -6775,12 +6777,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     copy.addEventListener("click", () => {
       copyText(keptNotes ? readable(keptNotes.text) : "");
     });
+    // Working runs long, and a drawer is narrow. This is the same text at the
+    // size of the screen, to read rather than to edit.
+    const big = button("Expand", false);
+    big.setAttribute("aria-label", "Read the working at full size");
+    big.setAttribute("data-arf-btn", "Expand");
+    big.addEventListener("click", () => {
+      openBig("What the model worked out", keptNotes ? readable(keptNotes.text) : "");
+    });
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
       keptNotes = null;
       paint();
     });
     row.appendChild(copy);
+    row.appendChild(big);
     row.appendChild(clear);
     wrap.appendChild(row);
     return wrap;
@@ -7512,6 +7523,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           name: String(x.name),
           at: Number(x.at) || Date.now(),
           settings: x.settings && typeof x.settings === "object" ? x.settings : {},
+          setup: typeof x.setup === "string" ? x.setup : undefined,
         }));
       if (clean.length) {
         // Added to yours rather than replacing them: a file of somebody else's
@@ -7813,10 +7825,19 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A named copy of the refining setup, so somebody who writes one set of rules
   // for prose and another for dialogue can move between them without keeping
   // both in a text file somewhere.
-  type Preset = { name: string; at: number; settings: Record<string, any> };
+  // setup is the name of a saved model setup to load with it, when one is
+  // chosen. Held as a name rather than as the setup's values: a setup carries a
+  // connection id, which names nothing on anybody else's account, so a preset
+  // that carried the values could not be shared. A name that matches nothing on
+  // the machine reading it is simply not loaded, and the card says so.
+  type Preset = { name: string; at: number; settings: Record<string, any>; setup?: string };
   let presets: Preset[] = [];
   let presetPick = "";
   let presetName = "";
+  // The setup the picker is showing. Follows whichever preset is selected, so
+  // choosing one in the list shows what that preset asks for rather than what
+  // was left in the box from the last one looked at.
+  let presetSetup = "";
   let presetSaid: string | null = null;
 
   // The two that ship with it, offered alongside your own. They are not stored
@@ -7849,6 +7870,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             name: String(x.name),
             at: Number(x.at) || 0,
             settings: x.settings && typeof x.settings === "object" ? x.settings : {},
+            setup: typeof x.setup === "string" ? x.setup : undefined,
           }));
     } catch (_) {
       presets = [];
@@ -8028,6 +8050,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             name: String(x.name),
             at: Number(x.at) || 0,
             settings: x.settings && typeof x.settings === "object" ? x.settings : {},
+            setup: typeof x.setup === "string" ? x.setup : undefined,
           }))
       : [];
     if (clean.length) {
@@ -8103,7 +8126,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildPresetCard(): HTMLElement {
     const wrap = card(
       "Presets",
-      "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your samplers under a name. A connection is not saved, since an id from another account names nothing here.",
+      "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.",
       presets.length ? presets.length + " yours" : BUILT_IN.length + " built in",
     );
 
@@ -8153,6 +8176,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     sel.addEventListener("change", () => {
       presetPick = sel.value;
       presetName = sel.value;
+      const now = allPresets().find((p) => p.name === sel.value);
+      presetSetup = String((now && now.setup) || "");
       presetSaid = null;
       paint();
     });
@@ -8172,6 +8197,50 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const chosen = () => allPresets().find((p) => p.name === presetPick) || null;
     const chosenIsYours = () => !!presetPick && !isBuiltIn(presetPick);
+
+    // Which saved model setup, if any, loads with this preset. Sits above the
+    // buttons because it is part of what Save as new and Update selected write
+    // down, not a thing you do to the preset afterwards.
+    const withSetup = el("div", "arf-col arf-under");
+    withSetup.setAttribute("data-arf-row", "presetSetup");
+    withSetup.appendChild(
+      labelRow({
+        key: "presetSetup",
+        label: "Model setup to load with it",
+        type: "pick",
+        hint: "Optional. Loading the preset then loads this setup as well, so a way of reading and the model that runs it arrive together. Left at none, loading a preset leaves the Model tab alone.",
+      }),
+    );
+    const setupSel = document.createElement("select");
+    setupSel.className = "arf-field";
+    setupSel.setAttribute("aria-label", "Model setup to load with it");
+    setupSel.setAttribute("data-arf-field", "presetSetup");
+    const noSetup = document.createElement("option");
+    noSetup.value = "";
+    noSetup.textContent = setups.length ? "None" : "No setups saved yet";
+    setupSel.appendChild(noSetup);
+    for (const one of setups) {
+      const o = document.createElement("option");
+      o.value = one.name;
+      o.textContent = one.name;
+      setupSel.appendChild(o);
+    }
+    // A preset saved on another machine can name a setup this one has never
+    // had. Kept in the list rather than silently reset to none, so updating the
+    // preset here does not quietly throw the link away.
+    if (presetSetup && !setups.some((x) => x.name === presetSetup)) {
+      const o = document.createElement("option");
+      o.value = presetSetup;
+      o.textContent = presetSetup + " (not on this device)";
+      setupSel.appendChild(o);
+    }
+    setupSel.value = presetSetup;
+    setupSel.addEventListener("change", () => {
+      presetSetup = setupSel.value;
+    });
+    withSetup.appendChild(setupSel);
+    wrap.appendChild(withSetup);
+
     const row = el("div", "arf-row");
 
     const load = button("Load", false);
@@ -8182,9 +8251,26 @@ export function setup(ctx: Ctx, overrides?: any) {
       const p = chosen();
       if (!p) return;
       const took = applyPreset(p);
+      let alsoSaid = "";
+      const wants = String(p.setup || "");
+      if (wants) {
+        const one = setups.find((x) => x.name === wants);
+        if (one) {
+          applySetup(one);
+          alsoSaid = " Model setup " + wants + " went on with it.";
+          log("loaded the model setup " + wants + " with the preset", true);
+        } else {
+          // Named but not here, which is what a shared preset looks like. Said
+          // out loud rather than passed over: the reader picked a preset that
+          // expects a particular model, and is now running it on whatever was
+          // already set.
+          alsoSaid =
+            " It asks for the model setup " + wants + ", which is not saved on this device.";
+        }
+      }
       presetSaid = took
-        ? "Loaded " + p.name + "."
-        : "There was nothing in that preset to load.";
+        ? "Loaded " + p.name + "." + alsoSaid
+        : "There was nothing in that preset to load." + alsoSaid;
       log("loaded the preset " + p.name, true);
       paint();
     });
@@ -8208,7 +8294,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
         return;
       }
-      presets.push({ name: name, at: Date.now(), settings: presetFromNow() });
+      presets.push({ name: name, at: Date.now(), settings: presetFromNow(), setup: presetSetup || undefined });
       presets = presets.slice(-60);
       savePresets();
       presetPick = name;
@@ -8224,6 +8310,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const p = chosen();
       if (!p || isBuiltIn(p.name)) return;
       p.settings = presetFromNow();
+      p.setup = presetSetup || undefined;
       p.at = Date.now();
       savePresets();
       presetSaid = "Updated " + p.name + ".";
@@ -8277,6 +8364,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           savePresets();
           presetPick = "";
           presetName = "";
+          presetSetup = "";
           presetSaid = "Deleted " + p.name + ".";
           paint();
         },
@@ -8298,7 +8386,11 @@ export function setup(ctx: Ctx, overrides?: any) {
         ),
       );
     }
-    if (presetSaid) wrap.appendChild(note(presetSaid));
+    if (presetSaid) {
+      const said = note(presetSaid);
+      said.setAttribute("data-arf-said", "preset");
+      wrap.appendChild(said);
+    }
     return wrap;
   }
 
@@ -8389,6 +8481,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       presets = [];
       presetPick = "";
       presetName = "";
+      presetSetup = "";
       savePresets();
     }
     if (partOn("resetParts", PART_SETUPS)) {

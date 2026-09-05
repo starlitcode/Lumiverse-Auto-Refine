@@ -1134,11 +1134,20 @@ console.log("\npresets");
     );
     ok("loading it brings the prompt back", back === "<my_rule>Cut filler words.</my_rule>", back);
 
-    // A preset carries the rules and not the switches.
+    // A preset carries the rules, not the switches, and nothing off the Model
+    // tab. Which model runs a refine belongs to the account and the machine, so
+    // a preset that carried it would undo a model choice every time somebody
+    // tried a different way of reading.
     const carried = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1")));
     const keys = Object.keys(carried[0].settings).sort();
-    ok("it saves what shapes a refine", keys.indexOf("blocks") >= 0 && keys.indexOf("samplers") >= 0);
-    ok("and not the switches that are yours", keys.indexOf("enabled") < 0 && keys.indexOf("connectionId") < 0, keys.join(","));
+    ok("it saves what shapes a refine", keys.indexOf("blocks") >= 0 && keys.indexOf("contextMessages") >= 0, keys.join(","));
+    ok("and not the switches that are yours", keys.indexOf("enabled") < 0, keys.join(","));
+    const MODEL_KEYS = ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "samplers"];
+    ok(
+      "and nothing from the Model tab",
+      MODEL_KEYS.every((k) => keys.indexOf(k) < 0),
+      keys.join(","),
+    );
 
     // Twice. This harness gives the drawer no scroll box of its own, so the page
     // carries the scroll and the question is asked in the panel rather than in
@@ -1156,6 +1165,157 @@ console.log("\npresets");
     ok("and deleting one removes it", gone === 0);
   });
   ok("no errors working with presets", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- a preset leaves the Model tab where it found it ----
+// A way of reading and the model that runs it are two choices, and loading the
+// first used to overwrite the second.
+console.log("\nloading a preset and the Model tab");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    const setModel = (mode, effort) =>
+      page.evaluate(
+        (v) => {
+          const pick = (key, value) => {
+            const n = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+            if (!n) return false;
+            n.value = value;
+            n.dispatchEvent(new Event("change", { bubbles: true }));
+            return true;
+          };
+          return { mode: pick("thinkingMode", v.mode), effort: pick("thinkingEffort", v.effort) };
+        },
+        { mode, effort },
+      );
+    const modelNow = () =>
+      page.evaluate(() => {
+        const s = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}");
+        return { thinkingMode: s.thinkingMode, thinkingEffort: s.thinkingEffort };
+      });
+
+    await goTab(page, "Model");
+    const put = await setModel("custom", "high");
+    ok("the Model tab has a thinking setting to move", put.mode, JSON.stringify(put));
+    await settle(page);
+    const before = await modelNow();
+
+    // Save a preset while that is on.
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const name = document.querySelector('#drawer [data-arf-field="presetName"]');
+      name.value = "Reading only";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
+    });
+    await settle(page);
+
+    // Change the model, then load the preset back.
+    await goTab(page, "Model");
+    await setModel("inherit", "low");
+    await settle(page);
+    const changed = await modelNow();
+    ok(
+      "and the model really was changed, or this proves nothing",
+      changed.thinkingMode !== before.thinkingMode,
+      JSON.stringify({ before, changed }),
+    );
+
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      sel.value = "Reading only";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-preset="load"]').click());
+    await settle(page);
+    const after = await modelNow();
+    ok(
+      "loading a preset leaves the thinking setting alone",
+      after.thinkingMode === changed.thinkingMode && after.thinkingEffort === changed.thinkingEffort,
+      JSON.stringify({ changed, after }),
+    );
+  });
+  ok("no errors loading a preset", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- a preset can bring a model setup with it ----
+// The other half of keeping them apart: they can still be used together, by
+// naming the setup rather than by copying its values into the preset.
+console.log("\na preset that names a model setup");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    const thinking = () =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").thinkingMode,
+      );
+    const setThinking = (v) =>
+      page.evaluate((val) => {
+        const n = document.querySelector('#drawer [data-arf-field="thinkingMode"]');
+        n.value = val;
+        n.dispatchEvent(new Event("change", { bubbles: true }));
+      }, v);
+
+    // A setup saved with thinking on.
+    await goTab(page, "Model");
+    await setThinking("custom");
+    await settle(page);
+    await page.evaluate(() => {
+      const name = document.querySelector('#drawer [data-arf-field="setupName"]');
+      name.value = "Careful model";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-setup="new"]').click();
+    });
+    await settle(page);
+
+    // A preset that asks for it.
+    await goTab(page, "Prompt");
+    const offered = await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
+      return sel ? [...sel.options].map((o) => o.value) : null;
+    });
+    ok("the preset card offers the saved setups", !!offered && offered.indexOf("Careful model") >= 0, JSON.stringify(offered));
+
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
+      sel.value = "Careful model";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      const name = document.querySelector('#drawer [data-arf-field="presetName"]');
+      name.value = "Close read";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
+    });
+    await settle(page);
+    const written = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").map((p) => [p.name, p.setup]),
+    );
+    ok("the preset is saved with the setup it asks for", JSON.stringify(written).indexOf("Careful model") >= 0, JSON.stringify(written));
+
+    // Turn thinking off, then load the preset. The setup should put it back.
+    await goTab(page, "Model");
+    await setThinking("off");
+    await settle(page);
+    ok("thinking is back off before the preset is loaded", (await thinking()) === "off", await thinking());
+
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      sel.value = "Close read";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-preset="load"]').click());
+    await settle(page);
+    ok("loading the preset puts its model setup on too", (await thinking()) === "custom", await thinking());
+    // The card carries its own description and a picker holding that name, so
+    // the status line is read on its own rather than the whole card.
+    const said = await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-said="preset"]');
+      return box ? box.textContent : "";
+    });
+    ok("and says the setup went on with it", /went on with it/.test(said), said.slice(0, 160));
+  });
+  ok("no errors loading a preset with a setup", errors.length === 0, errors.join("\n         "));
 }
 
 console.log("\nstarting again");
@@ -2770,9 +2930,9 @@ console.log("\nhow much it is told");
 console.log("\na switch and the rows that hang off it");
 {
   // A row that hangs off a switch has to go when the switch does, on the spot.
-  // Both halves of that were once wrong: the row was drawn whatever the switch
-  // said, and flipping the switch did not repaint, so the panel only told the
-  // truth after you left the tab and came back. This drives the switch and
+  // Two things have to hold for that: the row is drawn only while the switch is
+  // on, and flipping the switch repaints. Miss either and the panel only tells
+  // the truth after you leave the tab and come back. This drives the switch and
   // reads the panel without leaving it.
   //
   // Nothing here waits for the rebuild that follows a switch. The row has to be
@@ -2950,6 +3110,20 @@ console.log("\nthe working the Log keeps");
     await settle(page);
     ok("a refine that finished leaves its working in the Log", /could sit in any story/.test(await kept(page)));
     ok("said to be from a refine that was saved", /saved/.test(await kept(page)));
+
+    // Working runs long and a drawer is narrow, so it opens at the size of the
+    // screen the same way the request preview does.
+    const opened = await page.evaluate(() => {
+      const card = document.querySelector('#drawer [data-arf-card="What the model worked out"]');
+      const big = [...card.querySelectorAll("button")].find((b) => b.textContent.trim() === "Expand");
+      if (!big) return { there: false };
+      big.click();
+      // It opens into a textarea, so the text is its value and not its content.
+      const ta = document.querySelector("textarea.arf-bigta");
+      return { there: true, shown: !!ta && /could sit in any story/.test(ta.value) };
+    });
+    ok("the working has an Expand of its own", opened.there, JSON.stringify(opened));
+    ok("and it opens carrying the working", opened.shown, JSON.stringify(opened));
   });
 
   // Changing your mind is not a finished refine, so it takes nothing away.

@@ -230,12 +230,15 @@ What a preset carries is everything that decides how a refine reads:
 
 - every block: its name, its text, its role and its place in the order
 - how many messages of run-up go in
-- your sampler values
-- how much thinking it does
+- how much of the history and the lore it is allowed
 
-What stays yours whichever preset you load is everything else: whether refining is on at all, which connection does it, the length limits, whether it asks before saving, the sounds, and the chats you switched off.
+What stays yours whichever preset you load is everything else: whether refining is on at all, the length limits, whether it asks before saving, the sounds, and the chats you switched off.
 
-**A connection is not saved.** A connection id from another account names nothing on yours, so a shared preset carrying one would quietly point at nothing. Pick your connection once under Model and it stays put through every preset.
+**Nothing from the Model tab is in a preset.** Which model refines, **Let it think first**, how much it thinks, the wait and the samplers all stay exactly as you left them when you load one. Those are choices about your account and what you are willing to spend, not about how a refine reads, and a preset that changed them would undo your model every time you tried a different way of reading.
+
+**Model setup to load with it** is how to use the two together anyway. Pick one of your saved model setups on the preset card and loading that preset loads that setup as well, so a way of reading and the model that runs it arrive in one press. Leave it at **None** and the Model tab is left alone.
+
+It is stored as the setup's name rather than its values, which is what lets a preset still be shared: a setup holds a connection id, and an id from another account names nothing on yours. If you load a preset that asks for a setup this device does not have, the preset still loads and the card tells you which setup it wanted.
 
 The buttons work the way you would expect: **Load** switches to the preset in the list, **Save as new** stores the current setup under the name in the box, **Update selected** overwrites the chosen one, **Rename selected** renames it, and **Delete** removes it. Loading takes effect at once and is saved, so there is no separate Save step.
 
