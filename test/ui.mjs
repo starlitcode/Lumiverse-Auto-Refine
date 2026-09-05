@@ -4680,6 +4680,47 @@ console.log("\nwhere the input box is");
     ok("and says which one", /set to /i.test(await said(page)), await said(page));
   });
 
+  // The browser's own long press is the same gesture, recognised by something
+  // else first. On a phone it raises a callout and takes the press away at
+  // about the moment the hold completes, so the picker has to count it as the
+  // pick rather than compete with it.
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    await page.evaluate(() => window.__makeComposer(""));
+    await press(page, "Pick it for me");
+    await settle(page);
+    const armed = await page.evaluate(() => ({
+      // Selection is off while the mode is up, so the callout never starts.
+      quiet: getComputedStyle(document.documentElement).userSelect === "none",
+    }));
+    ok("selecting text is off while the picker is up", armed.quiet, JSON.stringify(armed));
+
+    const out = await page.evaluate(async () => {
+      const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
+      const opt = { bubbles: true, cancelable: true, pointerType: "touch", clientX: 40, clientY: 40 };
+      box.dispatchEvent(new PointerEvent("pointerdown", opt));
+      // The press taken away by the browser, the way a long press does, with
+      // the menu raised in its place.
+      const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 });
+      const fired = box.dispatchEvent(menu);
+      box.dispatchEvent(new PointerEvent("pointercancel", opt));
+      await new Promise((r) => setTimeout(r, 120));
+      return {
+        menuAllowed: fired,
+        held: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector,
+      };
+    });
+    await settle(page);
+    ok("the browser's own menu is not left to open over it", !out.menuAllowed, JSON.stringify(out));
+    ok(
+      "and that press still counts as the pick",
+      /^textarea|^\[data-component/.test(String(out.held || "")) &&
+        String(out.held).split(",").length === 1,
+      JSON.stringify(out),
+    );
+    ok("and it says which one", /set to /i.test(await said(page)), await said(page));
+  });
+
   // The picker must not shut the reader in.
   //
   // The box is on the chat screen and this panel is a drawer over it, so closing

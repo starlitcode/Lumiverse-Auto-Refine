@@ -2885,6 +2885,13 @@ export function setup(ctx, overrides) {
         // transitions above start running: a rebuild that should be invisible
         // instead fades. Held off until the rebuild has been on the screen for a
         // frame, after which the only changes left are ones somebody asked for.
+        // While the picker is armed. A long press is also how the browser starts
+        // selecting text and raises its own callout, and it decides that at about
+        // the same moment the picker does, so the press was being taken away
+        // before the hold completed. Off for as long as the mode lasts, and only
+        // for that long.
+        ".arf-picking,.arf-picking *{-webkit-touch-callout:none!important;" +
+        "-webkit-user-select:none!important;user-select:none!important}" +
         ".arf-settling,.arf-settling *{transition:none!important}" +
         ".arf-tab{flex:none;cursor:pointer;background:none;border:0;border-bottom:2px solid transparent;" +
         "padding:9px 11px;margin-bottom:-1px;white-space:nowrap;" +
@@ -7018,9 +7025,9 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs, and a row for it appears in the chat input's Extras menu or in the floating button's menu, whichever is on screen.",
         }));
-        // Shown whether or not the setting above is on, so the selector can be read
-        // and changed before it is needed rather than only after something breaks.
-        wrap.appendChild(note("Refining what you are typing reaches into the page rather than going through an API, because Lumiverse does not offer one for the input box. It is the only part of this extension that depends on how Lumiverse is laid out. If an update ever moves that box, it stops working and nothing else does."));
+        // Under the setting it belongs to, indented with it, and there whether or
+        // not that setting is on: the list can be read and changed before it is
+        // needed rather than only after something breaks.
         wrap.appendChild(buildInputBox());
         return wrap;
     }
@@ -7137,12 +7144,17 @@ export function setup(ctx, overrides) {
                 ["pointermove", onMove],
                 ["pointerup", onUp],
                 ["pointercancel", onUp],
+                ["contextmenu", onMenu],
             ]) {
                 try {
                     document.removeEventListener(type, fn, true);
                 }
                 catch (_) { }
             }
+            try {
+                document.documentElement.classList.remove("arf-picking");
+            }
+            catch (_) { }
             letGo();
             if (sel) {
                 cfg.inputSelector = sel;
@@ -7202,15 +7214,34 @@ export function setup(ctx, overrides) {
                 letGo();
         };
         const onUp = () => letGo();
+        // The browser raising its own menu on a long press is that same press,
+        // recognised by something else first. Taken as the pick rather than
+        // competed with, which also covers a right click on a desktop.
+        const onMenu = (e) => {
+            const box = held ? held.box : aimedAt(e && e.target);
+            if (!box || ours(e && e.target))
+                return;
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            catch (_) { }
+            take(box);
+        };
         const onKey = (e) => {
             if (e && e.key === "Escape")
                 stop(null, "Picking stopped.", false);
         };
         picking = () => stop(null, "Picking stopped.", false);
+        try {
+            document.documentElement.classList.add("arf-picking");
+        }
+        catch (_) { }
         document.addEventListener("pointerdown", onDown, true);
         document.addEventListener("pointermove", onMove, true);
         document.addEventListener("pointerup", onUp, true);
         document.addEventListener("pointercancel", onUp, true);
+        document.addEventListener("contextmenu", onMenu, true);
         document.addEventListener("keydown", onKey, true);
         giveUp = setTimeout(() => stop(null, "Stopped waiting. Press Pick it for me again when you are ready.", false), PICK_MS);
         boxSaid = {
@@ -7222,8 +7253,11 @@ export function setup(ctx, overrides) {
     function buildInputBox() {
         const wrap = el("div", "arf-col arf-under");
         wrap.setAttribute("data-arf-row", "inputSelector");
+        // Everything this needs to say is behind its "?", the way every other row
+        // on the panel says it. A line drawn under the row as well would make this
+        // the one row that reads differently.
         wrap._arfHint =
-            "The list it looks for, in order, and the one part of this that depends on somebody else's layout. Edit it when an update has moved the box: yours is tried first and the built-in list still runs after it, so an edit that stops matching falls back rather than taking the feature down.";
+            "The list it looks for, in order. Refining a draft reaches into the page rather than going through an API, because Lumiverse offers none for the input box, so this is the one part of the extension that depends on how Lumiverse is laid out. Edit it when an update has moved the box: yours is tried first and the built-in list still runs after it, so an edit that stops matching falls back rather than taking the feature down.";
         wrap.appendChild(labelRow({
             key: "inputSelector",
             label: "Where the input box is",
