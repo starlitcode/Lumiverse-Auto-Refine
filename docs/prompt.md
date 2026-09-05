@@ -224,7 +224,7 @@ A new block is empty. The prompts that ship with it use XML tags because that is
 
 ## Presets
 
-At the bottom of the **Prompt** tab, presets save a whole setup under a name and switch between them without copying anything by hand. The four that ship with it are always in the list and cannot be renamed or deleted, so there is always something to go back to.
+At the bottom of the **Prompt** tab, presets save a whole setup under a name and switch between them without copying anything by hand. The eight that ship with it are always in the list and cannot be renamed or deleted, so there is always something to go back to.
 
 What a preset carries is everything that decides how a refine reads:
 

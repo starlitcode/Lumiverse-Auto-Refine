@@ -1168,8 +1168,8 @@ console.log("\npresets");
 }
 
 // ---- a preset leaves the Model tab where it found it ----
-// A way of reading and the model that runs it are two choices, and loading the
-// first used to overwrite the second.
+// A way of reading and the model that runs it are two separate choices, so
+// loading the first has to leave the second exactly where it was.
 console.log("\nloading a preset and the Model tab");
 {
   const errors = await inTab(browser, {}, async (page) => {

@@ -24,7 +24,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 - **Your prompt** is the whole request, block by block. Rename them, reorder them, switch them off, change the role each is sent as, write your own. **Expand** opens one in an editor the size of the screen, and does not focus the box, so no keyboard jumps up on a phone. In [How the prompt is built](prompt.md).
 - **Macros you can use** is the list of what a block can carry, with a tap to copy each one.
-- **Presets** save a whole setup under a name. Four ship with the extension and work as they stand, in [Presets](prompt.md#presets).
+- **Presets** save how a refine reads under a name, and can name a model setup to load with them. Eight ship with the extension and work as they stand, in [Presets](prompt.md#presets).
 
 ## Context
 
@@ -41,7 +41,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   Your prompt is not in one, so loading a setup changes what runs the refine and nothing about how it reads. That is the point of keeping the two apart.
 
-  They are kept in this browser and in your account. A setup carries a connection id, which a preset refuses to: presets go into files people share, and an id names nothing on somebody else's account. A setup whose connection you have since deleted says so on the card rather than leaving the refine pointed at nothing.
+  They are kept in this browser and in your account. A setup carries a connection id, which a preset refuses to: presets go into files people share, and an id names nothing on somebody else's account. A preset can still point at a setup by name, so the two load together. A setup whose connection you have since deleted says so on the card rather than leaving the refine pointed at nothing.
 
 ## Limits
 
@@ -59,7 +59,11 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Log
 
 - **Right now** is the live view. It names the stage instead of just saying busy: asking, thinking, writing with a character count when your connection streams, then checking. The clock runs, and past eight seconds it also says how long is left before the timeout gives up. It writes into the line in place, so the panel never repaints under you, and the dot beside it pulses while something is running.
-- **What the model worked out** keeps the working from the last refine that finished, whether that was a reply or the draft in your input box, and says which. It has a **Copy**, an **Expand** that opens it at the size of the screen, and a **Clear**. It reads as prose: the tags the model wrapped it in are taken off, on this card and everywhere else, so the working reads the same wherever you see it. Only a refine that finished replaces it, so stopping one leaves the last lot alone. A prompt that does not ask the model for its working has none to keep, and the card says so.
+- **What the model worked out** keeps the working from the last refine that finished, whether that was a reply or the draft in your input box, and says which. It has a **Copy**, an **Expand** that opens it at the size of the screen, and a **Clear**.
+
+  It reads as prose: the tags the model wrapped it in are taken off here and everywhere else, so the working reads the same wherever you see it.
+
+  Only a refine that finished replaces it, so stopping one leaves the last lot alone. A prompt that does not ask the model for its working has none to keep, and the card says so.
 - **What it has been doing** is the running list, newest first.
 - **Reporting a problem** copies everything somebody would otherwise have to ask you for. **What it carries** decides which parts go in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser. What your blocks actually say is never in it, only their names, roles and macros, so it is safe to paste in public. **Read and edit it first** opens the whole thing so you can take out anything you would rather not post before it is copied.
 

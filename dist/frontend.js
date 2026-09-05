@@ -3684,6 +3684,8 @@ export function setup(ctx, overrides) {
     let idAt = 0;
     const nextId = () => "arf-i" + ++idAt;
     // A label with its "?" beside it, which is every row that has a description.
+    // A setting's name with its "?" beside it. Takes only what it draws, so a
+    // row that is not a stored setting does not have to invent a key to get one.
     function labelRow(f) {
         const row = el("div", "arf-labrow");
         row.appendChild(el("span", "arf-lab arf-grow", f.label));
@@ -5470,7 +5472,7 @@ export function setup(ctx, overrides) {
             paint();
     }
     const blockLabel = (b) => String(b.name || "").trim() || "Untitled block";
-    // Which saved prompt this one is, if it is one of them. The four that ship
+    // Which saved prompt this one is, if it is one of them. The eight that ship
     // with the extension are looked at first, so the one it starts on is named as
     // itself rather than as whatever you later saved on top of it.
     function promptNamed(now, which) {
@@ -6201,7 +6203,7 @@ export function setup(ctx, overrides) {
         // A sampler is a field like any other from here, so its description sits
         // behind the same "?" and its row is findable by the same search.
         wrap.setAttribute("data-arf-row", "sampler:" + s.id);
-        wrap.appendChild(labelRow({ key: "sampler:" + s.id, label: s.label, type: "num", hint: s.hint }));
+        wrap.appendChild(labelRow({ label: s.label, hint: s.hint }));
         const box = document.createElement("input");
         box.type = "number";
         box.min = String(s.min);
@@ -7258,7 +7260,7 @@ export function setup(ctx, overrides) {
             {
                 id: PART_PRESETS,
                 label: "Saved presets",
-                what: "The ones you saved. The four that ship with the extension are always there and are never in a file.",
+                what: "The ones you saved. The eight that ship with the extension are always there and are never in a file.",
             },
             {
                 id: PART_SETUPS,
@@ -7750,9 +7752,7 @@ export function setup(ctx, overrides) {
         const withSetup = el("div", "arf-col arf-under");
         withSetup.setAttribute("data-arf-row", "presetSetup");
         withSetup.appendChild(labelRow({
-            key: "presetSetup",
             label: "Model setup to load with it",
-            type: "pick",
             hint: "Optional. Loading the preset then loads this setup as well, so a way of reading and the model that runs it arrive together. Left at none, loading a preset leaves the Model tab alone.",
         }));
         const setupSel = document.createElement("select");
