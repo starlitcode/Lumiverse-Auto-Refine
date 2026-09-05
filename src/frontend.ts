@@ -78,7 +78,6 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "softenPct",
       "softenWords",
       "retryRefine",
-      "skipWhenClean",
       "wrapOutput",
       "streamProgress",
     ],
@@ -270,10 +269,6 @@ const CONFIG = {
   // Extra asks after a failed check. None by default: somebody who never opened
   // this has not agreed to pay for three refines where they asked for one.
   retryRefine: 0,
-  // Let a plain scan call off the automatic pass when there is nothing on the
-  // phrase list in a reply. Off by default, because a clean scan means nothing
-  // on the list, never nothing wrong.
-  skipWhenClean: false,
   // Asking for the rewrite inside <REFINED> tags rather than on its own. A
   // model that cannot help adding a sentence of its own still puts the rewrite
   // between the tags, and taking what is between them is exact.
@@ -1276,12 +1271,6 @@ const GUARD_FIELDS: Field[] = [
     needs: { key: "guardSoften" },
     under: true,
     hint: "Optional, one per line, added to the built-in list. That list holds only words that are hard to use innocently, so add what softening looks like in what you write.",
-  },
-  {
-    key: "skipWhenClean",
-    label: "Skip the automatic pass when a scan finds nothing",
-    type: "bool",
-    hint: "Off by default. The reply is scanned here in the extension before the automatic pass calls a model, and nothing on the list means no call. A clean scan means nothing on the list, never nothing wrong.",
   },
   {
     key: "retryRefine",
@@ -5342,28 +5331,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       send({ type: "try_refine", requestId: id, text: text, asUser: false });
       paint();
     });
-    // No model behind this one. It is the half of the standard a plain scan can
-    // judge, and it answers "is this reply worth a call" for nothing.
-    const look = button("Scan it, free", false);
-    look.addEventListener("click", () => {
-      const text = String(ta.value || "").trim();
-      if (!text) {
-        scanSaid = "Put some text in the box first.";
-        paint();
-        return;
-      }
-      persist(true);
-      const id = newId();
-      scanWaiting = id;
-      scanSaid = "Looking...";
-      send({ type: "scan_text", requestId: id, text: text });
-      paint();
-    });
     row.appendChild(grab);
     row.appendChild(go);
-    row.appendChild(look);
     wrap.appendChild(row);
-    if (scanSaid) wrap.appendChild(note(scanSaid));
 
     if (tryBusy) wrap.appendChild(note("Working..."));
     else if (tryResult)
@@ -5375,8 +5345,6 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   let tryWaiting: string | null = null;
   // The free scan: what it found, and which ask it belongs to.
-  let scanWaiting: string | null = null;
-  let scanSaid: string | null = null;
 
   // No switch carries a list of what hangs off it. Every row is built whether
   // or not its switch is on, hidden when it is off, and a switch re-reads all
@@ -9338,23 +9306,6 @@ export function setup(ctx: Ctx, overrides?: any) {
             const what = String(msg.what || "settings");
             log("your " + what + " could not be saved to your account. They are still saved in this browser.");
             toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
-            paint();
-            return;
-          }
-          if (msg.type === "scan_result") {
-            if (scanWaiting && msg.requestId !== scanWaiting) return;
-            scanWaiting = null;
-            const cl = Array.isArray(msg.cliches) ? msg.cliches : [];
-            const fi = Array.isArray(msg.fillers) ? msg.fillers : [];
-            if (!cl.length && !fi.length) {
-              scanSaid =
-                "Nothing on the phrase list is in this text. That is not the same as nothing to fix: rhythm, repetition and whether a line could sit in any story are what the model is for.";
-            } else {
-              const parts: string[] = [];
-              if (cl.length) parts.push("phrases: " + cl.join(", "));
-              if (fi.length) parts.push("filler: " + fi.join(", "));
-              scanSaid = "Found " + parts.join(". ") + ".";
-            }
             paint();
             return;
           }

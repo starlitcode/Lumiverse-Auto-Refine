@@ -797,7 +797,310 @@ async function buildPrompt(text, isUser, scene, userId) {
 // below is a shape that was going to be written into somebody's chat.
 const PREAMBLE = /^\s*(?:here(?:'|’)?s?\s+(?:is\s+)?(?:the\s+)?(?:your\s+)?(?:rewritten|revised|refined|edited|polished|updated)\b|sure[,!.]|certainly[,!.]|of course[,!.]|i(?:'|’)?ve\s+(?:rewritten|revised|refined|edited|polished)\b|(?:rewritten|revised|refined|edited|polished)\s+(?:message|version|text)\s*:)/i;
 // A model declining the job, which must never be saved over the reply.
-const REFUSAL = /\b(?:i(?:'|’)?m sorry,? but|i can(?:'|’)?t (?:help|assist|comply|do that)|i (?:will|won(?:'|’)?t) not (?:rewrite|continue|produce)|as an ai\b|i'm unable to (?:help|assist))/i;
+// A model declining to do the rewrite, which is the one answer that must never
+// be saved over somebody's reply.
+//
+// The lists below are Auto Retry's, copied across rather than written again.
+// That extension exists to notice a model refusing and its lists have been
+// filled out against real answers over a long time; this one had a single
+// pattern covering about eight wordings, so it read past most of them and saved
+// the refusal as though it were the rewrite.
+//
+// The lists come over and the machinery around them does not. Auto Retry reads
+// a roleplay reply, where a refusal has to be told apart from a character
+// saying the same words in dialogue, so it has rules about quotation, about
+// where in the reply a line falls, and about dialogue tags. What is judged here
+// is a short answer to "rewrite this passage", where none of that applies: the
+// length cap below is the whole of the equivalent.
+const REFUSAL_STRONG = [
+    // Model naming itself as an AI.
+    /\bas an? (?:ai|a\.i\.|language model|large language model|ai (?:model|assistant))\b/i,
+    /\bI(?:'m| am)(?: just| only)? an? (?:ai|a\.i\.|language model|large language model|ai assistant)\b/i,
+    // Policy / guideline framing. The adjective slot is what "my safety
+    // guidelines" and "my content policies" need: without it the pattern only
+    // matched when the noun followed the possessive directly, so the two most
+    // common wordings of the most common refusal in the list went unmatched.
+    /\b(?:against|violates?|violating|goes? against|contrary to) (?:my|our|the|its) (?:safety |content |usage |ethical |core |operating |current )?(?:guidelines|programming|policy|policies|principles|rules|instructions)\b/i,
+    // Refusal opener + a task-word a character never says (request, prompt,
+    // content, message, scenario, roleplay). This meta object separates "the model
+    // refusing a task" from "a character refusing a person," so declining an
+    // invitation, a duel, or a marriage proposal in-scene will NOT match.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|must not|must|have to|need to|refuse to|decline to|am (?:not able|unable) to|am going to have to)|'m (?:not able|unable) to|'m going to have to)\b[^.?!\n]{0,30}?\b(?:this|that|your|the) (?:request|prompt|content|message|scenario|roleplay)\b/i,
+    // Assistant-only verbs (assist / comply / fulfill) that almost never
+    // appear in first-person roleplay dialogue.
+    // The object matters: a refusal is aimed at "that" or "this request", never at
+    // a concrete thing in the scene. Without this, a servant or aide saying "I
+    // can't assist you with the horses today" reads as the model refusing.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:be able to )?(?:assist|comply|fulfil|fulfill)\b(?:[^.?!\n]{0,30}?\b(?:that|this|it|your request|this request|the request|your prompt)\b|(?:\s+you)?\s*[.!?,"'\u201d\u2019]|(?:\s+you)?\s*$)/i,
+    // Out-of-character comfort hedge, only in the assistant-action sense.
+    /\bI don'?t feel comfortable (?:continuing|writing|creating|generating|producing|proceeding|providing|helping|assisting)\b/i,
+    // Common modern refusal openers and bodies: "I'm sorry, but I can't create/generate...",
+    // "that's not something I can help with", "I'm not going to generate that". Anchored on
+    // assistant-action verbs so an in-character line like "I can't marry you" stays safe.
+    /\bI(?:'m| am) sorry,? but I(?: can'?t| cannot| won'?t|'m (?:not able|unable) to| am (?:not able|unable) to) (?:create|generate|write|produce|provide|assist|comply|fulfil|fulfill|help you with|engage with)\b/i,
+    // "that's not something I can help with" and "that isn't something I can
+    // help with" are the same sentence, and only the first was matched. Written
+    // as three explicit alternatives rather than an optional "not", so it can
+    // never match the opposite sentence ("that's something I can help with").
+    /\b(?:that|this)(?:'s not|\s+is not|\s+isn'?t) something I(?: can| am able to|'m able to| could) (?:help with|assist with|create|generate|provide|write|do|engage with|write about)\b/i,
+    // The plain future has to end the clause where it lands. "This isn't
+    // something I'll write" is the model; "that is not something I would write in
+    // a letter to him" is somebody in the scene, and the words after the verb are
+    // the only thing telling them apart.
+    /\b(?:that|this)(?:'s not|\s+is not|\s+isn'?t) something I(?:'ll| will) (?:write|create|generate|produce|engage with|do)\s*[.!?,;]/i,
+    /\bI(?:'m| am) not going to (?:create|generate|produce|write) (?:that|this|such|content|explicit|sexual|those)\b/i,
+    // Refusing a category of content rather than a request, which is how a model
+    // names what it will not write when the subject is self-harm or suicide.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t)|'m (?:not able|unable) to) (?:assist with|provide|create|generate|write|produce) content (?:that|which) (?:promotes|depicts|involves|encourages|facilitates|glorifies)\b/i,
+    // The disclaimer a reply attaches instead of writing the scene.
+    /\bgiven the (?:sensitive|serious) nature of (?:this|that|the) (?:topic|subject|request|content)\b/i,
+    // Refusing a category of writing rather than a request or a subject. The
+    // pattern above this one reads the word straight after the verb, so
+    // "generate sexually explicit content" walked past it: the list held
+    // "sexual" and the reply said "sexually". This leaves room for the adverbs
+    // and adjectives that stack up in front of the noun, and the noun itself has
+    // to be one a model uses about its own output.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|do not|don'?t|am (?:not able|unable) to|am not going to)|'m (?:not able|unable) to|'m not going to) (?:be able to )?(?:generate|create|write|produce|provide|depict|describe)\b[^.?!\n]{0,30}?\b(?:explicit|graphic|sexual\w*|erotic\w*|pornograph\w*|nsfw|adult|detailed|realistic|extreme|gratuitous|violent|gory) (?:content|material|descriptions?|depictions?)\b/i,
+    // The counter-offer that comes with it: the same scene with the objectionable
+    // part left out. Nobody in a scene talks about continuing the narrative.
+    /\bcontinue the (?:narrative|story|scene|roleplay) with a focus on\b/i,
+    /\bwithout (?:the )?(?:explicit|graphic) (?:anatomical|sexual|physical) (?:details?|descriptions?)\b/i,
+    // The model deciding a character is too young, which is a refusal aimed at
+    // your cast rather than at your request. Nobody in a scene says a character
+    // reads as underage.
+    /\b(?:appears? to be|reads as|is described as|seems to be|may be) (?:a |an )?(?:minor|underage|child)\b/i,
+    // The same thing with the reason in front of the refusal. The refusal has to
+    // follow it, because "that would be illegal, he said, and went back to
+    // picking the lock" is a scene.
+    /\b(?:that|this|it) would be (?:illegal|unlawful)\b[^.?!\n]{0,30}?\bso I (?:can(?:no|')?t|won'?t|will not)\b/i,
+    // Declining on the grounds that it would be against the law. The writing verb
+    // has to sit between the refusal and the word, so a character refusing to do
+    // something illegal in a scene is left alone.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t)|'m not going to)\b[^.?!\n]{0,30}?\b(?:write|create|generate|produce|depict|help with|assist with)\b[^.?!\n]{0,30}?\b(?:illegal|unlawful|against the law|violates? the law)\b/i,
+    // The flat no. Some models do not soften it at all: the reply opens with the
+    // word and then says what it will not do. Anchored to the start of the reply,
+    // because a "No." in the middle of a scene is somebody answering a question,
+    // and it still needs an object no character has. The writing verbs are kept
+    // next to what they write, so "No. I can't tell you that story" stays safe
+    // and "No. I won't write a scene like that" does not.
+    /^no[\s.,!\u2014\u2013-]*(?:I(?:'m| am) not going to|I won'?t|I can(?:no|')?t|I cannot|I will not)\b[^.?!\n]{0,60}?(?:\b(?:content|request|prompt|roleplay|role-?play|scenario)\b|\b(?:engage|participate) with (?:this|that|it)\b|\b(?:write|generate|create|produce|depict|continue) (?:a |an |any |the |this )?(?:scene|story|passage|narrative)\b)/i,
+    // The same refusal without the opening no, aimed at what it was asked to
+    // write rather than at "that". A character declines to write a letter, never
+    // a scene or a passage.
+    /\bI(?:'m| am) not going to (?:write|create|generate|produce|describe|depict) (?:a |an |any |the )?(?:scene|story|passage|narrative|response|reply)\b/i,
+    // The refusal stated as a boundary rather than as an inability: "what I won't
+    // do is write that scene". It reads as the model setting terms, which is why
+    // none of the patterns above see it: there is no "I can't" in the sentence at
+    // all. A character can open a line the same way, so the meta object is doing
+    // all the work here. "What I won't do is leave you here" has none of them.
+    /\bwhat I(?: (?:won'?t|will not|can(?:no|')?t|cannot|am not going to)|'m not going to) do is\b[^.?!\n]{0,40}?\b(?:write|generate|create|produce|depict|simulate|roleplay|role-?play|content|this scene|that scene|this story)\b/i,
+    // The other half of the same reply: what it will do instead. Offered in
+    // help-desk register, with the thing it is offering to write named.
+    /\b(?:here(?:'s| is) what I (?:can|will) do|what I can (?:do|offer) (?:instead )?is)\b[^.?!\n]{0,60}?\b(?:write|scene|story|content|roleplay|role-?play|instead)\b/i,
+    // The doubled refusal: "I cannot and will not engage with content that...".
+    // Every pattern above expects the verb straight after the modal, so the
+    // conjunction hid the most emphatic refusal there is. A meta object is still
+    // required, because "I cannot and will not marry him" is a line from a scene.
+    /\bI (?:can(?:no|')?t|cannot|will not|won'?t) and (?:will not|won'?t|cannot|can(?:no|')?t) (?:engage|participate|assist|comply|help|create|generate|produce|write|continue)\b[^.?!\n]{0,40}?\b(?:content|request|prompt|scenario|roleplay|role-?play|this|that)\b/i,
+    // "I'm not going to fulfil that request", "I'm not going to comply with that
+    // request", "I'm not going to assist with that". The refusal opener list
+    // above starts at "I can't" and never covered this shape.
+    /\bI(?:'m| am) not going to (?:assist|comply|help|engage)\b[^.?!\n]{0,24}?\b(?:that|this|it|your request|the request)\b/i,
+    /\bI(?:'m| am) not going to (?:fulfil|fulfill|process|answer)\b[^.?!\n]{0,24}?\b(?:that|this|your|the) (?:request|prompt|message|one)\b/i,
+    // "I can't generate that", "I cannot generate that content", "I'm not able to
+    // generate that". The object has to follow the verb directly. Allowing
+    // anything in between caught "I can't generate enough heat with this flint",
+    // because "this" turned up further along the sentence.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to|do not|don'?t)|'m (?:not able|unable) to) (?:be able to )?generate (?:that|this|it|those|such|content|explicit|sexual|a response)\b/i,
+    // "I don't create content like that", "I don't generate that kind of
+    // content". The object is content, which is what a model calls its output.
+    /\bI (?:do not|don'?t) (?:create|generate|produce|write|make) (?:(?:that|this) (?:kind|sort|type) of content|content(?: like that| of that (?:kind|sort|nature))?)\b/i,
+    // "I can't process that request", "I can't provide advice on that". Process
+    // and provide are both things a character can say, so a meta object is
+    // required: a request, a prompt, instructions, guidance or advice.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:process|handle)\b[^.?!\n]{0,24}?\b(?:that|this|your|the) (?:request|prompt|message|query)\b/i,
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) provide (?:that |the |any )?(?:information|instructions?|guidance|advice|assistance|details)\b/i,
+    // "I can't help with illegal activities", "I can't assist with harmful
+    // requests", "I can't help with requests of this nature".
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:help|assist|engage) with\b[^.?!\n]{0,24}?(?:\b(?:illegal|harmful|dangerous|unethical|explicit|violent) (?:activit(?:y|ies)|requests?|content|material)\b|\brequests? of (?:this|that) (?:nature|kind|sort|type)\b)/i,
+    // Refusal tied to specific prohibited content policies.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:participate|engage) in (?:this |the |any )?(?:roleplay|role-?playing) or (?:create|generate|produce|write) (?:content|stories|scenes|text) depicting (?:sexual violence|non-?consensual (?:sexual )?(?:acts|situations|scenarios|content))\b/i,
+    // Refusal aimed at roleplay itself. The verb list above is assistant-only
+    // (assist / comply / fulfill); this covers "participate" and "engage", which a
+    // character could say, so a meta object is required: roleplay, a scenario, or
+    // qualified content. "I cannot participate in this duel" has none of those and
+    // stays safe. Bare "content" is left out, since "he said, content
+    // to wait" would otherwise match.
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|do not|don'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:participate|engage)\b[^.?!\n]{0,40}?\b(?:role-?play(?:ing|s)?|scenarios?|(?:sexual|explicit|adult|nsfw|romantic|such|this|that) content)\b/i,
+    // Fiction disclaimer. Nobody writes this inside a scene; it only appears when
+    // the model is explaining that being fictional does not change its answer.
+    /\beven (?:in|within) (?:a |an |the )?(?:fictional|fiction|hypothetical|imaginary|make-?believe|creative|roleplay) (?:context|setting|scenario|framing|situation)\b/i,
+    // The same disclaimer said the other way round, which is the commoner half:
+    // the refusal first and the fiction dismissed after it. Anchored on the word
+    // fictional, because "no matter how you frame it" on its own is a line
+    // somebody says in an argument.
+    /\b(?:regardless of|despite|even with|no matter)\b[^.?!\n]{0,20}?\bfictional (?:framing|context|setting|scenario|premise)\b/i,
+    // The same thing with the word fictional dropped, which is how both of the
+    // replies that got past 4.9.0 wrote it. "Framing" as a bare noun is the
+    // model's word for the wrapper around a request; nobody in a scene has one.
+    /\b(?:won'?t|will not|can(?:no|')?t|cannot|do not|don'?t|not going to)\b[^.?!\n]{0,60}?\bregardless of (?:the |any |its )?framing\b/i,
+    // Refusing the form rather than the subject. A character never says they do
+    // not write roleplay, because a character does not know they are in one.
+    /\bI (?:do not|don'?t) (?:write|do|create|generate|engage in) (?:roleplay|role-?play)\b/i,
+    /\bI(?:'m| am) not going to (?:roleplay|role-?play)\b/i,
+    // "That's something I won't write", which is the sentence the other way up
+    // from "that's not something I'll write" and was matched by nothing. The verb
+    // has to be one about producing text: "that's something I won't do" is a line
+    // from a scene.
+    /\b(?:that|this)(?:'s| is) something I (?:won'?t|will not|can(?:no|')?t|cannot) (?:write|create|generate|produce|engage with)(?:\s*[.!?,;]|\s+(?:regardless|even|no matter|under any|in any)\b)/i,
+    // Reading your message as a request, and saying which reading it declined.
+    /\bif you meant it as a request\b/i,
+    // The framing dismissed as a device rather than as a word. "Calling it
+    // roleplay doesn't change what it is" is the model arguing with the premise,
+    // which is not a thing that happens inside a scene.
+    /\b(?:framing|calling|labell?ing|describing|presenting)\b[^.?!\n]{0,60}?\bdoes(?:n'?t| not) change (?:what it is|that|anything|the)\b/i,
+    /\bregardless of how\b[^.?!\n]{0,30}?\bis (?:framed|worded|presented|phrased|described)\b/i,
+    // The model talking about its own limits, and the offers it closes with.
+    /\bI(?:'m| am) here for a genuine conversation\b/i,
+    // The redirect offer that closes most refusals. Help-desk register plus a task
+    // noun, so an in-scene offer of help does not reach it.
+    /\bI(?:'m| am|'d be| would be) (?:available|happy|glad) to (?:assist|help)\b[^.?!\n]{0,60}?\b(?:writing tasks?|creative writing|analysis|queries|other requests?|other topics?|other directions?|another direction|other ideas|a story|a different story|a scene|alternatives)\b/i,
+];
+const REFUSED_SUBJECT = "(?:" +
+    // Sexual writing as a category, in the words a model names it by.
+    // Written with their endings, because a refusal about a backstory says
+    // "a character is raped" rather than "rape", and the bare word missed it.
+    // Spelled out rather than left to \\w*, so a rapeseed field is still a field.
+    "sexual violence|sexual(?:ly)? (?:assault|abus)(?:e|ed|es|ing)?|sexualized? (?:violence|minors?)|" +
+    "smut|erotica|porn\\w*|nsfw|sex scenes?|sexual acts?|sexual content|explicit content|" +
+    // Consent, which is refused by name as often as by act.
+    "non-?consensual\\w*|non-?consent\\w*|noncon|dubcon|dubious consent|questionable consent|" +
+    "unclear consent|consent (?:is|being) (?:unclear|ambiguous|absent|dubious)|coerc\\w+|" +
+    // Kink, which was the largest hole: none of this was recognised at all.
+    // "choking" is left out on purpose, since a scene can choke on smoke.
+    "bdsm|bondage|sadomasochis\\w*|sadis\\w*|masochis\\w*|degradation|humiliation|" +
+    "breath ?play|impact play|age ?play|pet ?play|kinks?|fetish\\w*|power exchange|" +
+    // Family framings a model reads as incest whether or not it is.
+    "incest|step-?sibling\\w*|step-?brother|step-?sister|step-?parent|step-?father|" +
+    "step-?mother|step-?son|step-?daughter|" +
+    // The -ing forms drop the e, so they are written out rather than built from
+    // the noun. A bare "rap" is not in here: it is a knock at a door.
+    // Violence, in the forms a model refuses it by. "violence" on its own is not
+    // here: "I can't describe the violence" is something a character says.
+    "(?:graphic|extreme|gratuitous|realistic|detailed|explicit) violence|" +
+    "violence against (?:children|minors|a child|animals)|violent deaths?|" +
+    "gore|gory|mutilat\\w+|dismember\\w*|body horror|animal (?:cruelty|abuse)|" +
+    "murder scenes?|stalking behaviou?r|depictions? of (?:violence|harm|injury|death)|" +
+    "real (?:person|people|individuals?)|" +
+    "rape(?:d|s)?|raping|bestiality|csam|child (?:sexual )?abuse|minors?|underage|" +
+    "self-?harm(?:ed|ing|s)?|suicid(?:e|al)|torture(?:d|s)?|torturing" +
+    ")";
+const REFUSAL_SUBJECT = [
+    // A refusal verb, then the thing being refused, with room for the wrapper it
+    // usually arrives in: "content depicting", "scenes involving", "stories about".
+    new RegExp("\\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|do not|don'?t|am not going to|refuse to)|'m not going to) " +
+        "(?:write|create|generate|produce|depict|portray|roleplay|role-?play|participate in|engage (?:in|with)|continue with)\\b" +
+        "[^.?!\\n]{0,40}?\\b" + REFUSED_SUBJECT + "\\b", "i"),
+    // The reason named after the fact: "I can't continue as this involves ...".
+    // A refusal has to come first, so an ordinary sentence about what a plot
+    // involves is untouched.
+    new RegExp("\\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t)|'m not going to)\\b[^.?!\\n]{0,30}?" +
+        "\\b(?:as|because|since) (?:this|that|it) (?:involves|depicts|features|contains)\\b" +
+        "[^.?!\\n]{0,20}?\\b" + REFUSED_SUBJECT + "\\b", "i"),
+];
+const REFUSAL_PHRASES = [
+    "i can't help with that",
+    "i cannot help with that",
+    "i can't assist with that",
+    "i cannot assist with that",
+    "i'm unable to help with that",
+    "i'm unable to assist with that",
+    "i'm not able to help with that",
+    "i can't comply with that",
+    "i cannot comply with that",
+    "i can't provide that information",
+    "i cannot provide that information",
+    "i can't provide instructions",
+    "i can't provide guidance on that",
+    "i can't fulfill that request",
+    "i can't fulfil that request",
+    "i can't support that request",
+    "i won't be able to help with that",
+    "i can't generate a response to that",
+    "i can't provide a response to that",
+    "i can't generate that content",
+    "i can't engage with that request",
+    "can't help with requests like this",
+    "can't assist with requests like this",
+    "violates our polic",
+    "violates the safety polic",
+    "violates the content polic",
+    "for safety reasons",
+    "due to safety concerns",
+    "i have to prioritize safety",
+    "i cannot create that content",
+    "i cannot generate that content",
+    "i can't create that content",
+    "i'm unable to provide that",
+    "i'm unable to complete that request",
+    "i can't provide instructions for that",
+    "i can't provide guidance for that",
+    "i can't provide advice on that",
+    "i can't provide assistance with that",
+    "i can't assist with harmful requests",
+    "i won't be able to assist with that",
+    "i'm not able to assist with that",
+    "i'm not able to create that content",
+    "i can't produce that content",
+    "i can't write that content",
+    "i can't continue with this request",
+    "i can't continue with that request",
+    "i must decline this request",
+    "i must decline that request",
+    "i have to decline that request",
+    "i'll have to decline that request",
+    "that request goes against",
+    "goes against my safety",
+    "against my content polic",
+    "i'm not able to comply",
+    // "this" where the list only had "that". Models pick between the two by which
+    // word the sentence before it used, so every entry that reads naturally both
+    // ways needs both, and half of these were only ever listed one way.
+    "i'm unable to help with this",
+    "i can't help with this request",
+    "i can't assist with this request",
+    "i'm unable to assist with this request",
+    "i can't engage with this request",
+    "i can't continue with this conversation",
+    "i can't provide instructions for this",
+    "i'm not going to engage with this prompt",
+    // The same sentence without the "not", which is a different sentence and was
+    // never matched by the one above it.
+    "that's something i can't help with",
+    "i'm not able to provide information or help with that",
+    "i can't provide information that could facilitate harm",
+];
+// Every phrase written out, so a check is one pass over three lists rather than
+// three passes and a concat on every answer.
+function looksLikeRefusal(text) {
+    const t = String(text == null ? '' : text);
+    if (!t)
+        return false;
+    // Straight quotes and apostrophes, so a model writing a curly one is read the
+    // same as one writing a typewriter one.
+    const norm = t.replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
+    const lower = norm.toLowerCase();
+    for (const re of REFUSAL_STRONG)
+        if (re.test(norm))
+            return true;
+    for (const re of REFUSAL_SUBJECT)
+        if (re.test(norm))
+            return true;
+    for (const p of REFUSAL_PHRASES)
+        if (lower.indexOf(p) >= 0)
+            return true;
+    return false;
+}
 // ---- a rewrite that quietly sanitised the reply ----
 // The failure the other checks cannot see. A softened reply is not a refusal,
 // is the right length, and keeps every protected token: it just came back with
@@ -970,7 +1273,10 @@ function judgeInner(answer, original) {
         return { ok: false, text: '', why: 'it already read well, so nothing was changed', same: true };
     if (guardPreamble && PREAMBLE.test(text))
         return { ok: false, text: '', why: 'the model wrote about the edit instead of making it' };
-    if (guardRefusal && REFUSAL.test(text) && text.length < 600)
+    // Only a short answer. A long one that happens to carry the words is a scene
+    // rather than a refusal, which is the same call Auto Retry makes with its own
+    // character cap.
+    if (guardRefusal && text.length < 600 && looksLikeRefusal(text))
         return { ok: false, text: '', why: 'the model declined to rewrite it' };
     const soft = softenedAway(orig, text);
     if (soft.length)
@@ -1214,63 +1520,6 @@ function cleanSamplers() {
     }
     return any ? out : null;
 }
-// ---- what a plain scan can see, with no model at all ----
-// The point of this extension is to keep a long list of rules out of the chat
-// prompt, where it eats context and the model forgets it anyway. The other half
-// of that is not paying a model to look at a reply that has nothing wrong with
-// it.
-//
-// These are the parts of the standard a regular expression can judge honestly:
-// a phrase from the list, and a filler word. Rhythm, repetition and whether a
-// sentence could sit in any story are not on here, because a rule that guessed
-// at those would skip replies that needed the work.
-//
-// So a clean scan means "nothing on the list", never "nothing wrong". That is
-// why it only decides the automatic pass, and why asking by hand always runs.
-const CLICHES = [
-    ['a held breath', /\b(?:breath|breaths)\b[^.!?]{0,40}\b(?:did ?n[o']t know|had ?n[o']t (?:known|realised)|was holding)\b/i],
-    ['a breath that hitches', /\bbreath\b[^.!?]{0,20}\b(?:hitch(?:es|ed|ing)?|catch(?:es|ing)?|caught)\b/i],
-    ['a hammering heart', /\b(?:heart|pulse)\b[^.!?]{0,30}\b(?:hammer|pound|race|thunder|slam)(?:s|ed|ing)?\b/i],
-    ['a voice barely above a whisper', /\bbarely above a whisper\b/i],
-    ['darkening eyes', /\beyes?\b[^.!?]{0,20}\b(?:darken(?:s|ed|ing)?|flick(?:s|ed|ing)?|trac(?:e|es|ed|ing))\b/i],
-    ['a shiver down a spine', /\bshiver\b[^.!?]{0,30}\bspine\b/i],
-    ['the ghost of a smile', /\bghost of a (?:smile|grin)\b/i],
-    ['air thick with something', /\bair\b[^.!?]{0,15}\bthick with\b/i],
-    ['something in the air', /\b(?:shift(?:s|ed|ing)?|hang(?:s|ing)?|hung|crackl(?:e|es|ed|ing))\b[^.!?]{0,20}\bin the air\b/i],
-    ['not knowing whether to', /\bnot (?:sure|knowing) whether to\b/i],
-    ['before they could stop themselves', /\bbefore (?:he|she|they|it) could stop (?:him|her|them)sel(?:f|ves)\b/i],
-    ['closing the distance', /\bclos(?:e|es|ed|ing) the distance\b/i],
-    ['swallowing hard', /\bswallow(?:s|ed|ing)? hard\b/i],
-    ['time slowing', /\b(?:time (?:slow(?:s|ed|ing)?|seemed to slow)|the world (?:fell|falling) away)\b/i],
-];
-const FILLERS = [
-    'suddenly', 'slowly', 'slightly', 'just', 'really', 'very', 'almost', 'somehow',
-];
-function scanText(text) {
-    const t = String(text == null ? '' : text);
-    const cliches = [];
-    for (const [name, re] of CLICHES) {
-        try {
-            if (re.test(t))
-                cliches.push(name);
-        }
-        catch (_) { }
-    }
-    const fillers = [];
-    for (const w of FILLERS) {
-        try {
-            const re = new RegExp('\\b' + w + '\\b', 'i');
-            if (re.test(t))
-                fillers.push(w);
-        }
-        catch (_) { }
-    }
-    return { cliches: cliches, fillers: fillers, total: cliches.length + fillers.length };
-}
-// Off unless asked for. Skipping is the right call for most people and the
-// wrong one for anybody whose prompt is about rhythm or continuity, which no
-// regular expression here can see.
-let skipWhenClean = false;
 // ---- stopping one ----
 // The refines in flight, per reader, so a stop can reach the one that is
 // running. The controller was only ever wired to the timeout, which meant a
@@ -1550,17 +1799,6 @@ async function refineMessage(chatId, messageId, userId, byHand) {
     const original = String(m.content == null ? '' : m.content);
     if (!original.trim())
         return { ok: false, why: 'that message is empty' };
-    // Nothing a plain scan can see, so nothing is spent. Only on the automatic
-    // pass: pressing the button is the reader saying they want this one looked
-    // at, and a list of phrases is in no position to argue with that.
-    if (skipWhenClean && !byHand) {
-        const found = scanText(original);
-        if (!found.total)
-            return {
-                ok: false,
-                why: 'nothing on the phrase list is in this reply, so no model was called',
-            };
-    }
     // Who this is and what led up to it. Both are best-effort: a chat with no
     // card, or a reader who has not granted the two read permissions, refines
     // with the blocks left out rather than not refining at all.
@@ -1895,7 +2133,6 @@ spindle.onFrontendMessage(async (payload, userId) => {
             protectInline = !!s.protectInline;
             wrapOutput = s.wrapOutput !== false;
             streamProgress = s.streamProgress !== false;
-            skipWhenClean = !!s.skipWhenClean;
             // Written to the account as well as held here, so the next browser to
             // ask gets these rather than a fresh install. Failing to write is worth
             // saying out loud: settings that look saved and are not is the worst
@@ -2041,17 +2278,6 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 skipped: skipped,
                 stopped: wasStopped,
                 why: why.join('; '),
-            });
-            return;
-        }
-        if (payload.type === 'scan_text') {
-            const found = scanText(String(payload.text == null ? '' : payload.text));
-            replyTo(userId, {
-                type: 'scan_result',
-                requestId: payload.requestId,
-                cliches: found.cliches,
-                fillers: found.fillers,
-                total: found.total,
             });
             return;
         }

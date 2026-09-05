@@ -1379,41 +1379,6 @@ console.log("\nloading a preset from where you were reading");
   });
 }
 
-console.log("\na free scan, with no model behind it");
-{
-  await inTab(browser, {}, async (page) => {
-    await goTab(page, "Context");
-    await page.evaluate(() => {
-      const ta = document.querySelector('#drawer [data-arf-field="tryText"]');
-      ta.value = "She let out a breath she didn't know she was holding, suddenly.";
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-      Array.from(document.querySelectorAll("#drawer button"))
-        .find((b) => /Scan it, free/.test(b.textContent))
-        .click();
-    });
-    await settle(page);
-    const asked = await page.evaluate(() => ({
-      scans: window.__sent.filter((m) => m.type === "scan_text").length,
-      refines: window.__sent.filter((m) => m.type === "try_refine").length,
-      id: (window.__sent.filter((m) => m.type === "scan_text").pop() || {}).requestId,
-    }));
-    ok("it asks for a scan and never for a refine", asked.scans === 1 && asked.refines === 0, asked);
-
-    await page.evaluate((id) => {
-      window.__fromBackend({
-        type: "scan_result",
-        requestId: id,
-        cliches: ["a held breath"],
-        fillers: ["suddenly"],
-        total: 2,
-      });
-    }, asked.id);
-    await settle(page);
-    const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
-    ok("and says what it found", /a held breath/.test(said) && /suddenly/.test(said), said.slice(0, 160));
-  });
-}
-
 console.log("\naccepting or turning one down");
 {
   // The panel holds the decision itself, so it exists whether or not the host

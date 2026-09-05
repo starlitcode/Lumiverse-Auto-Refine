@@ -420,6 +420,46 @@ describe("answers that must not be saved", () => {
     expect(h.asked.length).toBe(1);
   });
 
+  // Auto Retry's refusal lists, copied across. This extension had one pattern
+  // covering about eight wordings, so it read past most of a model declining and
+  // saved the refusal over the reply, which is the one thing that must never
+  // happen. Every wording below went through before.
+  for (const [name, answer] of [
+    ["a policy refusal", "I won't write that, as it goes against my content policies."],
+    ["naming itself", "I am an AI assistant and cannot continue this scene."],
+    ["refusing the subject", "I can't write content depicting non-consensual acts."],
+    ["a plain phrase", "I can't help with that."],
+  ] as Array<[string, string]>) {
+    test(name + " is caught rather than saved over the reply", async () => {
+      const h = await armed([answer]);
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(original);
+      expect(h.writes.length).toBe(0);
+      expect(h.skipped().join(" ")).toMatch(/declined/i);
+    });
+  }
+
+  // A long answer carrying the same words is a scene rather than a refusal.
+  test("a long rewrite that happens to say it is an AI is still saved", async () => {
+    const long =
+      "The machine spoke without inflection. \"I am an AI,\" it said, and the words " +
+      "landed in the room like a dropped tool. " +
+      "She had heard it say so before, in the yard, in the rain, in the hour before " +
+      "the power went, and each time it had meant something different. " +
+      "Now it meant only that the thing in front of her would not lie about what it was. " +
+      "She sat down on the crate and let the silence run on, because there was nothing " +
+      "to say back to a sentence like that, and because the rain had not stopped, and " +
+      "because the yard was going to be there in the morning whatever either of them said about it, " +
+      "and because saying it out loud would have made it smaller than it was.";
+    // Length allowed, or the growth check refuses it first and this would pass
+    // without the refusal check ever being reached.
+    const h = await armed([long], { maxGrowthPct: 0 });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(long);
+  });
+
   test("a rewrite wrapped in quotes is unwrapped rather than dropped", async () => {
     const h = await armed(['"She stepped through and the cold hit her."']);
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -2066,86 +2106,6 @@ describe("the refiner's own thinking in its answer", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.body("m2")).toContain("<think>");
-  });
-});
-
-// The whole point of the extension is keeping a long list of rules out of the
-// chat prompt. The other half of that is not paying a model to look at a reply
-// with nothing on the list in it.
-describe("what a plain scan can do without a model", () => {
-  const reply = (body: string): Msg[] => [
-    { id: "m0", role: "assistant", content: "The gate stands open." },
-    { id: "m1", role: "user", content: "i go in" },
-    { id: "m2", role: "assistant", content: body },
-  ];
-
-  test("a scan costs no model call at all", async () => {
-    const h = await armed(["<REFINED>x</REFINED>"]);
-    await h.front({
-      type: "scan_text",
-      requestId: "s1",
-      text: "She let out a breath she didn't know she was holding, suddenly.",
-    });
-    await wait(10);
-    expect(h.asked.length).toBe(0);
-    const got = h.sent.find((m: any) => m.type === "scan_result" && m.requestId === "s1");
-    expect(got.cliches.join(" ")).toMatch(/held breath/i);
-    expect(got.fillers).toContain("suddenly");
-  });
-
-  test("and says so plainly when it finds nothing", async () => {
-    const h = await armed(["<REFINED>x</REFINED>"]);
-    await h.front({ type: "scan_text", requestId: "s1", text: "She crossed the yard and knocked." });
-    await wait(10);
-    const got = h.sent.find((m: any) => m.type === "scan_result" && m.requestId === "s1");
-    expect(got.total).toBe(0);
-  });
-
-  test("the automatic pass spends nothing on a reply the scan calls clean", async () => {
-    const h = await armed(
-      ["<REFINED>She crossed the yard.</REFINED>"],
-      { skipWhenClean: true },
-      reply("She crossed the yard and knocked twice on the weathered door."),
-    );
-    await h.ended({ chatId: "c1", messageId: "m2" });
-    await wait(50);
-    expect(h.asked.length).toBe(0);
-    expect(h.skipped().join(" ")).toMatch(/nothing on the phrase list/i);
-  });
-
-  test("and still runs on one it does not", async () => {
-    const h = await armed(
-      ["<REFINED>She crossed the yard and knocked twice on the door.</REFINED>"],
-      { skipWhenClean: true },
-      reply("She let out a breath she didn't know she was holding, and suddenly knocked."),
-    );
-    await h.ended({ chatId: "c1", messageId: "m2" });
-    await wait(50);
-    expect(h.asked.length).toBe(1);
-  });
-
-  // Pressing a button is the reader asking for this one. A list of phrases is
-  // in no position to overrule that.
-  test("asking by hand runs whatever the scan thinks", async () => {
-    const h = await armed(
-      ["<REFINED>She crossed the yard and knocked twice on the door.</REFINED>"],
-      { skipWhenClean: true },
-      reply("She crossed the yard and knocked twice on the weathered door."),
-    );
-    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" });
-    await wait(50);
-    expect(h.asked.length).toBe(1);
-  });
-
-  test("switched off, the automatic pass runs on anything", async () => {
-    const h = await armed(
-      ["<REFINED>She crossed the yard and knocked twice on the door.</REFINED>"],
-      {},
-      reply("She crossed the yard and knocked twice on the weathered door."),
-    );
-    await h.ended({ chatId: "c1", messageId: "m2" });
-    await wait(50);
-    expect(h.asked.length).toBe(1);
   });
 });
 
