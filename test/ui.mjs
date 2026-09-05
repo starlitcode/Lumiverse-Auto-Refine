@@ -4495,16 +4495,31 @@ console.log("\nwhere the input box is");
     );
   });
 
+  // The card does not wait for the feature to be switched on, so the selector
+  // can be read and changed before anything has gone wrong.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    await settle(page);
+    ok("the card is there with refining a draft off", (await said(page)).length > 0);
+    ok(
+      "and it really is off, or that proves nothing",
+      await page.evaluate(() => {
+        const row = document.querySelector('#drawer [data-arf-row="inputRefine"]');
+        return !row.querySelector('input[type="checkbox"]').checked;
+      }),
+    );
+  });
+
   await inTab(browser, {}, async (page) => {
     await open(page);
-    ok("the card is only there once refining a draft is on", (await said(page)).length > 0);
+    ok("and it is still there with it on", (await said(page)).length > 0);
 
     // With no box on the page at all.
     await press(page, "Test it");
     await settle(page);
     ok(
       "with nothing to find, it says so rather than claiming it works",
-      /did not find it/i.test(await said(page)),
+      /not finding it right now/i.test(await said(page)),
       await said(page),
     );
 
@@ -4532,7 +4547,14 @@ console.log("\nwhere the input box is");
     await settle(page);
     ok(
       "one that matches nothing says the built-in way is being used instead",
-      /nothing matched/i.test(await said(page)),
+      /being used instead/i.test(await said(page)),
+      await said(page),
+    );
+    // A miss is put as a miss right now. The box may simply not be open yet, so
+    // a flat "nothing matched" would be claiming more than the test can see.
+    ok(
+      "and it puts that as a miss right now, not as the box being gone",
+      /right now/i.test(await said(page)),
       await said(page),
     );
 

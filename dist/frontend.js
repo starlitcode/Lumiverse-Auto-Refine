@@ -6964,10 +6964,10 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs, and a row for it appears in the chat input's Extras menu or in the floating button's menu, whichever is on screen.",
         }));
-        if (cfg.inputRefine) {
-            wrap.appendChild(note("Refining what you are typing reaches into the page rather than going through an API, because Lumiverse does not offer one for the input box. It is the only part of this extension that depends on how Lumiverse is laid out. If an update ever moves that box, it stops working and nothing else does."));
-            wrap.appendChild(buildInputBox());
-        }
+        // Shown whether or not the setting above is on, so the selector can be read
+        // and changed before it is needed rather than only after something breaks.
+        wrap.appendChild(note("Refining what you are typing reaches into the page rather than going through an API, because Lumiverse does not offer one for the input box. It is the only part of this extension that depends on how Lumiverse is laid out. If an update ever moves that box, it stops working and nothing else does."));
+        wrap.appendChild(buildInputBox());
         return wrap;
     }
     // Where the input box is, for the day the built-in way of finding it stops
@@ -7200,10 +7200,16 @@ export function setup(ctx, overrides) {
             const found = composer();
             const mine = String(box.value || "").trim();
             const state = boxState(mine);
+            // A miss is reported as a miss right now. The test only looks at what is on
+            // screen at the moment it runs, and a box that has not been opened yet
+            // misses for the same reason a box that has moved does.
             if (!mine)
                 boxSaid = found
                     ? { text: "Found the box the built-in way. Nothing here is needed.", ok: true }
-                    : { text: "The built-in way did not find it. Point at it below.", ok: false };
+                    : {
+                        text: "The built-in way is not finding it right now. Open a chat and test again, or point at it below.",
+                        ok: false,
+                    };
             else if (state === "invalid selector")
                 boxSaid = { text: "That is not a selector the browser understands.", ok: false };
             else if (state === "match")
@@ -7211,15 +7217,15 @@ export function setup(ctx, overrides) {
             else if (state === "match, not a box you can type in")
                 boxSaid = {
                     text: found
-                        ? "That names something, but not a box you can type in, so the built-in way is being used instead."
-                        : "That names something, but not a box you can type in.",
+                        ? "That names something on screen, but not a box you can type in right now, so the built-in way is being used instead."
+                        : "That names something on screen, but not a box you can type in right now.",
                     ok: false,
                 };
             else
                 boxSaid = {
                     text: found
-                        ? "Nothing matched, so the built-in way is being used instead."
-                        : "Nothing matched, and the built-in way did not find it either.",
+                        ? "Nothing matches it on screen right now, so the built-in way is being used instead."
+                        : "Nothing matches it on screen right now, and the built-in way is not finding it either. Open a chat and test again.",
                     ok: false,
                 };
             paint();
