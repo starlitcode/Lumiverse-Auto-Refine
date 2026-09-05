@@ -8652,9 +8652,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   // has to be a shape somebody has actually seen. Three entries here named a
   // ChatInput and an InputBar component, and no such component exists; they
   // matched nothing but the stub written to match them.
+  // Named attributes first, then the shape of the thing, then anything at all.
+  // Every class Lumiverse puts on that box carries a per-build hash on it
+  // (_textarea_1unc0_788), so none of them is worth naming: they change on
+  // every release. name and aria-label are what the markup states about it.
   const INPUT_PICKS = [
     '[data-component="InputArea"] textarea[name="chat-message"]',
     'textarea[name="chat-message"]',
+    '[data-component="InputArea"] textarea[aria-label="Message"]',
     '[data-component="InputArea"] textarea',
     "textarea",
   ];
@@ -8679,18 +8684,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     return null;
   }
 
-  // What a selector is doing right now, in the words the card puts on screen.
-  function boxState(sel: string): "unset" | "bad" | "none" | "hidden" | "found" {
+  // What a selector is doing right now. The same five answers Auto Retry's
+  // selectors give, for the same question asked of a different thing.
+  function boxState(sel: string): string {
     const raw = String(sel || "").trim();
-    if (!raw) return "unset";
+    if (!raw) return "not set";
     let any = false;
     try {
       any = !!document.querySelector(raw);
     } catch (_) {
-      return "bad";
+      return "invalid selector";
     }
-    if (boxFor(raw)) return "found";
-    return any ? "hidden" : "none";
+    if (boxFor(raw)) return "match";
+    return any ? "match, not a box you can type in" : "no match";
   }
 
   function composer(): any | null {

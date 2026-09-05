@@ -82,17 +82,15 @@ const settle = (page) =>
 
 // Boots the extension in a page with the tab mounted, and hands the callback the
 // page plus whatever the stub host recorded.
-// The chat input as Lumiverse renders it: a textarea named chat-message inside
-// the input area, with the mirror div beside it that measures its height and is
-// not a textarea. Built here so the checks look for the box the extension looks
-// for, rather than for a shape invented to match a selector.
-const COMPOSER_HTML =
-  '<div data-component="InputArea">' +
-  '<div class="_inputRow"><div class="_inputWrapper">' +
-  '<div class="_textareaMirror" aria-hidden="true">&#8203;</div>' +
-  '<textarea name="chat-message" aria-label="Message" rows="1" ' +
-  'style="width:200px;height:40px"></textarea>' +
-  "</div></div></div>";
+// The chat input as Lumiverse actually renders it, kept beside this file and
+// copied from a running install rather than written here. A shape invented to
+// match the selector being checked can only ever agree with itself: this one
+// carries the action bar, the attachment input, the mirror div, the send button
+// and the spindle mounts, so anything the real markup would trip over trips over
+// this first.
+const COMPOSER_HTML = readFileSync(join(root, "test", "input-area.html"), "utf8")
+  .replace(/^<!--[\s\S]*?-->\s*/, "")
+  .trim();
 
 async function inTab(browser, { css = "", viewport, touch = false, saved = null, noMenu = false, noConfirm = false } = {}, fn) {
   const page = await browser.newPage(
@@ -129,7 +127,16 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
       const host = document.createElement("div");
       host.innerHTML = html;
       document.body.appendChild(host.firstElementChild);
-      const box = document.querySelector('[data-component="InputArea"] textarea');
+      // By name, not by tag: the real markup has a mirror div beside it and an
+      // attachment input above it, and "the first textarea in there" would be a
+      // guess that happens to be right today.
+      const box = document.querySelector(
+        '[data-component="InputArea"] textarea[name="chat-message"]',
+      );
+      // The real box is sized by the app's own stylesheet, which is not here, so
+      // it is given a size: the extension will not take a box with no box.
+      box.style.width = "200px";
+      box.style.height = "40px";
       box.value = text;
       return box;
     };
@@ -4376,6 +4383,64 @@ console.log("\nwhere the input box is");
       n.value = v;
       n.dispatchEvent(new Event("input", { bubbles: true }));
     }, v);
+
+  // What the built-in list lands on in the real markup, which holds a mirror div
+  // beside the box, an attachment input above it, and a send button after it.
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    // Asked of the thing itself rather than of a hook: text is put in the real
+    // message box, a refine of the draft is asked for, and what went to the
+    // backend says which element was read.
+    const found = await page.evaluate(async () => {
+      window.__makeComposer("the message box");
+      window.__sent = [];
+      window.__inputClick();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const asked = window.__sent.filter((m) => m.type === "try_refine");
+      return { text: asked.length ? asked[0].text : null, asUser: asked.length ? asked[0].asUser : null };
+    });
+    ok(
+      "it reads the box in the markup Lumiverse really renders",
+      found.text === "the message box",
+      JSON.stringify(found),
+    );
+    ok("and sends it as your own writing rather than as a reply", found.asUser === true, JSON.stringify(found));
+    // Every class on that box carries a per-build hash, so a selector written on
+    // one stops matching at the next release. Picking has to reach for a named
+    // attribute instead.
+    const wrote = await page.evaluate(async () => {
+      const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
+      const row = document.querySelector('#drawer [data-arf-row="inputSelector"]');
+      [...row.querySelectorAll("button")].find((b) => /pick/i.test(b.textContent)).click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      box.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector;
+    });
+    ok(
+      "picking it writes a selector on a named attribute, not a class with a build hash in it",
+      !!wrote && !/_[a-z0-9]{4,}_\d+/.test(wrote),
+      String(wrote),
+    );
+    ok(
+      "and a class with a build hash in it would have been refused",
+      await page.evaluate(() => {
+        const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
+        const cls = String(box.className || "");
+        // The box really does carry one, or this proves nothing.
+        return /_[a-z0-9]{4,}_\d+/.test(cls);
+      }),
+      "the box's classes",
+    );
+    ok(
+      "and that selector finds the same box",
+      await page.evaluate((sel) => {
+        const n = document.querySelector(sel);
+        return !!n && n.getAttribute("name") === "chat-message";
+      }, wrote),
+      String(wrote),
+    );
+  });
 
   await inTab(browser, {}, async (page) => {
     await open(page);
