@@ -92,7 +92,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The message button, the floating button, and the input bar row.",
-    keys: ["widgetOn", "inputRefine"],
+    keys: ["widgetOn", "inputRefine", "inputSelector"],
   },
   {
     id: "switches",
@@ -289,6 +289,11 @@ const CONFIG = {
   // Off by default: it edits the box you are typing in, which is not something
   // to start doing unasked.
   inputRefine: false,
+  // Where the input box is, when the built-in way of finding it stops working.
+  // Empty means the built-in way, which is what nearly everybody wants: this is
+  // here for the day a Lumiverse update moves the box, so it can be pointed at
+  // by hand rather than waiting for a release of this.
+  inputSelector: "",
   // How many messages of the run-up go in the prompt. A rewrite that cannot see
   // what just happened flattens a scene into general prose, which is the
   // failure people blame on the model.
@@ -1452,6 +1457,47 @@ const LIMIT_FIELDS: Field[] = [
 // the browser actually painted and steps in only when two colours are genuinely
 // too close. A theme that already reads well keeps its own colours exactly.
 //
+// ---- naming something on the page from a click on it ----
+// Auto Retry's, copied across. Both extensions have to point at something
+// somebody else's layout owns, and this is the half of that job with a right
+// answer: an attribute saying what a thing is beats a class name a bundler made
+// up this morning.
+// Class and id names Lumiverse generates per build (like _card_19912_336).
+// They change on every release, so a selector built on one quietly stops
+// matching after an app update. Skipped when building a selector from a click.
+const UNSTABLE_NAME = /(^_)|(_[a-z0-9]{4,}_\d+$)|(_[a-z0-9]{6,}$)|([-_][a-f0-9]{6,}$)/i;
+const SAFE_NAME = /^[A-Za-z_-][\w-]*$/;
+
+function deriveSelector(start: any): string | null {
+  let el: any = start;
+  let hops = 0;
+  // Clicks usually land on an icon or a span inside the control, so walk up to
+  // the thing that actually behaves like a button.
+  while (el && hops < 6) {
+    const tag = String(el.tagName || "").toLowerCase();
+    const role = el.getAttribute ? el.getAttribute("role") : null;
+    if (tag === "button" || tag === "a" || role === "button") break;
+    el = el.parentElement;
+    hops++;
+  }
+  if (!el || !el.getAttribute) el = start;
+  if (!el || !el.getAttribute) return null;
+  const tag = String(el.tagName || "").toLowerCase() || "*";
+  const q = (v: string) =>
+    '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  for (const attr of ["data-testid", "data-test-id", "data-test", "data-action", "aria-label", "title", "name"]) {
+    const v = el.getAttribute(attr);
+    if (v && String(v).trim()) return tag + "[" + attr + "=" + q(String(v).trim()) + "]";
+  }
+  const id = el.getAttribute("id");
+  if (id && SAFE_NAME.test(id) && !UNSTABLE_NAME.test(id)) return "#" + id;
+  const cls = String(el.className || "")
+    .split(/\s+/)
+    .filter((c) => c && SAFE_NAME.test(c) && !UNSTABLE_NAME.test(c));
+  if (cls.length) return tag + "." + cls.slice(0, 2).join(".");
+  return null;
+}
+
 // The four below are pure, so a theme with a light accent can be checked
 // without a browser.
 interface Rgb { r: number; g: number; b: number; a: number }
@@ -4968,6 +5014,16 @@ export function setup(ctx: Ctx, overrides?: any) {
         finish();
         return;
       }
+      // The gap its parent puts under it, which is not the block's to shrink: a
+      // box at no height with its padding and edge gone was still a gap tall,
+      // and that last stretch went in one step at the end of the travel. Taken
+      // off as a negative margin, which cancels it.
+      let gap = 0;
+      try {
+        const owner = node.parentElement;
+        const how = owner ? getComputedStyle(owner) : null;
+        if (how) gap = parseFloat(how.rowGap || how.gap || "0") || 0;
+      } catch (_) {}
       node.style.height = tall + "px";
       node.style.overflow = "hidden";
       // Read the layout between the two, or the browser sees one value being set
@@ -4976,7 +5032,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       // Out rather than in. Easing in puts the longest step at the end, so the
       // panel travels gently and then stops dead, which is the part that reads
       // as a jump; easing out spends the distance early and lands softly.
-      const ease = "150ms ease-out";
+      //
+      // The curve eases in a little as well as out. A pure ease-out spends its
+      // distance at the very start, so the first frame was the largest step of
+      // the whole travel; this leans into it over two or three frames and then
+      // has a long tail to land on. Longer than the panel's other movements
+      // because this one carries the page with it, and the same distance over
+      // more frames is a smaller step in each.
+      const ease = "240ms cubic-bezier(.4,0,.2,1)";
       node.style.transition =
         "height " + ease + ",opacity " + ease + ",margin-bottom " + ease +
         ",padding-top " + ease + ",padding-bottom " + ease +
@@ -4984,7 +5047,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.height = "0px";
       node.style.opacity = "0";
       // The gap under it closes too, or the last few pixels go all at once.
-      node.style.marginBottom = "0px";
+      node.style.marginBottom = gap > 0 ? -gap + "px" : "0px";
       // And its own padding and edge. A height of nothing still leaves those
       // standing, so a block let down to zero was thirty pixels tall and the
       // last thirty went in one frame at the end of the travel.
@@ -5002,7 +5065,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.addEventListener("transitionend", end);
       // A transition that never runs, on a page that will not animate, must
       // still hand the block over.
-      setTimeout(finish, 400);
+      setTimeout(finish, 600);
     } catch (_) {
       finish();
     }
@@ -7245,12 +7308,183 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs, and a row for it appears in the chat input's Extras menu or in the floating button's menu, whichever is on screen.",
       }),
     );
-    if (cfg.inputRefine)
+    if (cfg.inputRefine) {
       wrap.appendChild(
         note(
           "Refining what you are typing reaches into the page rather than going through an API, because Lumiverse does not offer one for the input box. It is the only part of this extension that depends on how Lumiverse is laid out. If an update ever moves that box, it stops working and nothing else does.",
         ),
       );
+      wrap.appendChild(buildInputBox());
+    }
+    return wrap;
+  }
+
+  // Where the input box is, for the day the built-in way of finding it stops
+  // working. Auto Retry has the same pair of buttons on its own selectors, for
+  // the same reason: a layout somebody else owns can move, and waiting for a
+  // release of this to catch up is worse than being able to point at it.
+  let boxSaid: { text: string; ok: boolean } | null = null;
+
+  // Point at the box by clicking it.
+  //
+  // Every press on the page is swallowed while this runs, so clicking the input
+  // box does not also put a cursor in it, and a control that acts on the way
+  // down rather than on the click cannot fire either. Escape and a second press
+  // on the button both stop it.
+  let picking: (() => void) | null = null;
+  disposers.push(() => {
+    if (picking) picking();
+  });
+
+  function pickBox() {
+    if (picking) {
+      picking();
+      return;
+    }
+    if (typeof document === "undefined") return;
+    const PRESS = ["pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
+    const ours = (t: any) => {
+      try {
+        return !!(t && t.closest && t.closest(".arf"));
+      } catch (_) {
+        return false;
+      }
+    };
+    const stop = (sel: string | null, say: string, ok: boolean) => {
+      if (!picking) return;
+      picking = null;
+      try {
+        document.removeEventListener("click", onPick, true);
+      } catch (_) {}
+      try {
+        document.removeEventListener("keydown", onKey, true);
+      } catch (_) {}
+      for (const type of PRESS) {
+        try {
+          document.removeEventListener(type, swallow, true);
+        } catch (_) {}
+      }
+      if (sel) {
+        cfg.inputSelector = sel;
+        persist(true);
+      }
+      boxSaid = { text: say, ok: ok };
+      paint();
+    };
+    const onPick = (e: any) => {
+      const t: any = e && e.target;
+      // The panel is on screen while this runs, and its own Stop has to work.
+      if (ours(t)) return;
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch (_) {}
+      const sel = deriveSelector(t);
+      if (!sel) {
+        stop(
+          null,
+          "Could not name that one. Click the box itself rather than something drawn inside it.",
+          false,
+        );
+        return;
+      }
+      if (!boxFor(sel)) {
+        stop(
+          null,
+          "That names something, but not a box that can be typed in. Click the input box itself.",
+          false,
+        );
+        return;
+      }
+      stop(sel, "Set to " + sel, true);
+    };
+    const onKey = (e: any) => {
+      if (e && e.key === "Escape") stop(null, "Picking stopped.", false);
+    };
+    // Only propagation is stopped on the way down. Preventing the default there
+    // would also stop the browser making the click this is waiting for.
+    const swallow = (e: any) => {
+      if (ours(e && e.target)) return;
+      try {
+        e.stopPropagation();
+      } catch (_) {}
+    };
+    picking = () => stop(null, "Picking stopped.", false);
+    for (const type of PRESS) document.addEventListener(type, swallow, true);
+    document.addEventListener("click", onPick, true);
+    document.addEventListener("keydown", onKey, true);
+    boxSaid = { text: "Click your input box. Press this button again, or Escape, to stop.", ok: true };
+    paint();
+  }
+
+  function buildInputBox(): HTMLElement {
+    const wrap = el("div", "arf-col arf-under");
+    wrap.setAttribute("data-arf-row", "inputSelector");
+    (wrap as any)._arfHint =
+      "Empty means the built-in way of finding the box, which is what nearly everybody wants. Fill it in when an update has moved the box: yours is tried first and the built-in way still runs after it, so a selector that stops matching falls back rather than taking the feature down.";
+    wrap.appendChild(
+      labelRow({
+        key: "inputSelector",
+        label: "Where the input box is",
+        type: "lines",
+        hint: String((wrap as any)._arfHint),
+      }),
+    );
+    const box = document.createElement("input");
+    box.type = "text";
+    box.className = "arf-field arf-mono";
+    box.placeholder = "Leave empty to find it the built-in way";
+    box.value = String(cfg.inputSelector == null ? "" : cfg.inputSelector);
+    box.setAttribute("data-arf-field", "inputSelector");
+    box.setAttribute("aria-label", "Where the input box is");
+    box.addEventListener("input", () => {
+      cfg.inputSelector = box.value;
+      boxSaid = null;
+      persist();
+    });
+    box.addEventListener("blur", () => {
+      cfg.inputSelector = box.value;
+      persist(true);
+    });
+    wrap.appendChild(box);
+
+    const row = el("div", "arf-row");
+    const test = button("Test it", false);
+    test.setAttribute("data-arf-btn", "Test it");
+    test.addEventListener("click", () => {
+      const found = composer();
+      const mine = String(box.value || "").trim();
+      const state = boxState(mine);
+      if (!mine)
+        boxSaid = found
+          ? { text: "Found the box the built-in way. Nothing here is needed.", ok: true }
+          : { text: "The built-in way did not find it. Point at it below.", ok: false };
+      else if (state === "bad") boxSaid = { text: "That is not a selector the browser understands.", ok: false };
+      else if (state === "found") boxSaid = { text: "Found it, and it is on screen.", ok: true };
+      else if (state === "hidden")
+        boxSaid = {
+          text: found
+            ? "It matches something that is not on screen right now, so the built-in way is being used instead."
+            : "It matches something that is not on screen right now.",
+          ok: false,
+        };
+      else
+        boxSaid = {
+          text: found
+            ? "Nothing matched, so the built-in way is being used instead."
+            : "Nothing matched, and the built-in way did not find it either.",
+          ok: false,
+        };
+      paint();
+    });
+
+    const pick = button("Pick it for me", false);
+    pick.setAttribute("data-arf-btn", "Pick it for me");
+    pick.addEventListener("click", () => pickBox());
+    row.appendChild(test);
+    row.appendChild(pick);
+    wrap.appendChild(row);
+    if (boxSaid) wrap.appendChild(boxSaid.ok ? notice("good", boxSaid.text) : warn(boxSaid.text));
     return wrap;
   }
 
@@ -8425,7 +8659,46 @@ export function setup(ctx: Ctx, overrides?: any) {
     "textarea",
   ];
 
+  // Whether one selector, or a comma-separated list of them, names something
+  // usable. Named apart from composer so the card below can say what it found
+  // without acting on it.
+  function boxFor(sel: string): any | null {
+    const raw = String(sel || "").trim();
+    if (!raw) return null;
+    try {
+      const found = document.querySelectorAll(raw);
+      for (let i = found.length - 1; i >= 0; i--) {
+        const node: any = found[i];
+        if (!node || node.disabled || node.readOnly) continue;
+        if (node.closest && node.closest(".arf")) continue;
+        const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+        if (box && (!box.width || !box.height)) continue;
+        return node;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // What a selector is doing right now, in the words the card puts on screen.
+  function boxState(sel: string): "unset" | "bad" | "none" | "hidden" | "found" {
+    const raw = String(sel || "").trim();
+    if (!raw) return "unset";
+    let any = false;
+    try {
+      any = !!document.querySelector(raw);
+    } catch (_) {
+      return "bad";
+    }
+    if (boxFor(raw)) return "found";
+    return any ? "hidden" : "none";
+  }
+
   function composer(): any | null {
+    // Yours first, when you have set one. The built-in list is still tried
+    // after it, so a selector that stops matching falls back rather than
+    // taking the feature down with it.
+    const mine = boxFor(cfg.inputSelector);
+    if (mine) return mine;
     try {
       for (const pick of INPUT_PICKS) {
         const found = document.querySelectorAll(pick);

@@ -4344,6 +4344,144 @@ console.log("\nthe space a deleted block leaves");
   );
 }
 
+// ---- pointing at the input box by hand ----
+console.log("\nwhere the input box is");
+{
+  // Refining a draft reaches into the page, which is the one part of this that
+  // depends on somebody else's layout. When an update moves the box, this is
+  // how it gets pointed at again, the way Auto Retry's selectors are.
+  const open = async (page) => {
+    await goTab(page, "Setup");
+    await page.evaluate(() => {
+      const row = document.querySelector('#drawer [data-arf-row="inputRefine"]');
+      const box = row.querySelector('input[type="checkbox"]');
+      if (!box.checked) box.click();
+    });
+    await page.waitForTimeout(400);
+    await settle(page);
+  };
+  const said = (page) =>
+    page.evaluate(() => {
+      const row = document.querySelector('#drawer [data-arf-row="inputSelector"]');
+      return row ? (row.textContent || "").trim() : "";
+    });
+  const press = (page, label) =>
+    page.evaluate((l) => {
+      const row = document.querySelector('#drawer [data-arf-row="inputSelector"]');
+      [...row.querySelectorAll("button")].find((b) => b.textContent.trim() === l).click();
+    }, label);
+  const type = (page, v) =>
+    page.evaluate((v) => {
+      const n = document.querySelector('#drawer [data-arf-field="inputSelector"]');
+      n.value = v;
+      n.dispatchEvent(new Event("input", { bubbles: true }));
+    }, v);
+
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    ok("the card is only there once refining a draft is on", (await said(page)).length > 0);
+
+    // With no box on the page at all.
+    await press(page, "Test it");
+    await settle(page);
+    ok(
+      "with nothing to find, it says so rather than claiming it works",
+      /did not find it/i.test(await said(page)),
+      await said(page),
+    );
+
+    // The real input box, as Lumiverse draws it.
+    await page.evaluate(() => window.__makeComposer(""));
+    await press(page, "Test it");
+    await settle(page);
+    ok(
+      "with the box on the page, the built-in way finds it and says nothing is needed",
+      /nothing here is needed/i.test(await said(page)),
+      await said(page),
+    );
+
+    await type(page, "this is not a selector [[[");
+    await press(page, "Test it");
+    await settle(page);
+    ok(
+      "a selector the browser cannot read is named as that",
+      /not a selector/i.test(await said(page)),
+      await said(page),
+    );
+
+    await type(page, "textarea.nothing-like-this");
+    await press(page, "Test it");
+    await settle(page);
+    ok(
+      "one that matches nothing says the built-in way is being used instead",
+      /nothing matched/i.test(await said(page)),
+      await said(page),
+    );
+
+    await type(page, 'textarea[name="chat-message"]');
+    await press(page, "Test it");
+    await settle(page);
+    ok("and one that matches says it found it", /found it/i.test(await said(page)), await said(page));
+
+    // What the setting is for: yours is used ahead of the built-in way.
+    const used = await page.evaluate(() => {
+      const box = document.querySelector('[data-component="InputArea"] textarea');
+      box.setAttribute("data-mine", "1");
+      return true;
+    });
+    await type(page, 'textarea[data-mine="1"]');
+    await press(page, "Test it");
+    await settle(page);
+    ok("a selector of your own is what gets used", used && /found it/i.test(await said(page)), await said(page));
+  });
+
+  // Picking it by clicking it.
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    await page.evaluate(() => window.__makeComposer(""));
+    await press(page, "Pick it for me");
+    await settle(page);
+    ok("it says what to do", /click your input box/i.test(await said(page)), await said(page));
+    const out = await page.evaluate(async () => {
+      const box = document.querySelector('[data-component="InputArea"] textarea');
+      let reached = false;
+      box.addEventListener("click", () => { reached = true; });
+      box.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return {
+        reached,
+        held: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector,
+      };
+    });
+    await settle(page);
+    ok("the press does not also land on the box", !out.reached, JSON.stringify(out));
+    ok("and it wrote a selector for it", !!out.held, JSON.stringify(out));
+    ok("and says which one", /set to /i.test(await said(page)), await said(page));
+  });
+
+  // Stopping without picking anything.
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    await page.evaluate(() => window.__makeComposer(""));
+    await press(page, "Pick it for me");
+    await settle(page);
+    await page.evaluate(() =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    await settle(page);
+    ok("Escape stops it", /picking stopped/i.test(await said(page)), await said(page));
+    const after = await page.evaluate(async () => {
+      const box = document.querySelector('[data-component="InputArea"] textarea');
+      let reached = false;
+      box.addEventListener("click", () => { reached = true; });
+      box.click();
+      await new Promise((r) => requestAnimationFrame(r));
+      return reached;
+    });
+    ok("and the page answers presses again afterwards", after, after);
+  });
+}
+
 // ---- a block's footer ----
 console.log("\na block's footer");
 {
