@@ -3007,6 +3007,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;" +
     "border-bottom:1px solid var(--lumiverse-border,rgba(147,112,219,.12))}" +
     ".arf-tabs::-webkit-scrollbar{display:none}" +
+    // The panel is built from nothing on every repaint, and the readability
+    // sweep then writes colours onto it. Reading a computed colour resolves the
+    // element's style, so the write that follows counts as a change and the
+    // transitions above start running: a rebuild that should be invisible
+    // instead fades. Held off until the rebuild has been on the screen for a
+    // frame, after which the only changes left are ones somebody asked for.
+    ".arf-settling,.arf-settling *{transition:none!important}" +
     ".arf-tab{flex:none;cursor:pointer;background:none;border:0;border-bottom:2px solid transparent;" +
     "padding:9px 11px;margin-bottom:-1px;white-space:nowrap;" +
     "font:12.5px var(--lumiverse-font-family,system-ui);" +
@@ -4452,27 +4459,37 @@ export function setup(ctx: Ctx, overrides?: any) {
     root.appendChild(body);
 
     setScheme(root);
+    // Before the frame is painted. The tree is already in the page, so asking
+    // for a computed colour lays it out there and then and the repair lands on
+    // the first frame the reader sees. Running it a frame later instead painted
+    // the panel once in the theme's own colours and once in the repaired ones,
+    // which reads as a flicker on every press, and the tabs carry a colour
+    // transition so theirs faded across it.
+    root.classList.add("arf-settling");
+    sweepReadable(root);
     // Put back before the frame is painted, or the panel visibly jumps to the
     // top and back down.
     putBack(held);
     reAnchor(root, held2, held);
-    // Colours only resolve once the tree is in the page and laid out, so the
-    // repair runs a frame later rather than against a half-built panel. The
-    // scroll is set again there and once more after: a panel that grew taller
-    // between the frames would have clamped the earlier attempts to its old
-    // height, which is what left this looking unfixed.
+    // A second pass a frame later, for anything whose colour only settles once
+    // the panel has been through a real layout. The scroll is set again there
+    // and once more after: a panel that grew taller between the frames would
+    // have clamped the earlier attempts to its old height, which is what left
+    // this looking unfixed.
     try {
       requestAnimationFrame(() => {
         sweepReadable(root);
         putBack(held, true);
         reAnchor(root, held2, held);
         requestAnimationFrame(() => {
+          root.classList.remove("arf-settling");
           putBack(held, true);
           reAnchor(root, held2, held);
         });
       });
     } catch (_) {
       sweepReadable(root);
+      root.classList.remove("arf-settling");
       putBack(held);
       reAnchor(root, held2, held);
     }

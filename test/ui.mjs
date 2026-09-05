@@ -546,6 +546,46 @@ console.log("\ncolour on somebody else's theme");
     );
   });
 
+  // The repair has to land on the frame the reader sees. Doing it a frame late
+  // paints the panel once in the theme's colours and once in the repaired ones,
+  // which is the flicker on every press, and the tabs carry a colour transition
+  // so theirs faded across it.
+  await inTab(browser, { css: cruel }, async (page) => {
+    const out = await page.evaluate(async () => {
+      const root = document.getElementById("drawer");
+      const runs = [];
+      root.addEventListener("transitionrun", (e) => runs.push(e.propertyName), true);
+      const read = () => [...root.querySelectorAll("*")].map((n) => getComputedStyle(n).color);
+      const press = [...root.querySelectorAll(".arf-tab")].find(
+        (b) => b.getAttribute("aria-selected") !== "true",
+      );
+      press.click();
+      // What the next frame is painted with, read before it gets one.
+      const atOnce = read();
+      await new Promise((r) => setTimeout(r, 400));
+      const later = read();
+      let moved = 0;
+      for (let i = 0; i < Math.min(atOnce.length, later.length); i++)
+        if (atOnce[i] !== later[i]) moved++;
+      return { moved, count: atOnce.length, colours: runs.filter((p) => p === "color").length };
+    });
+    ok(
+      "and there is something on the panel for it to repair, or this proves nothing",
+      out.count > 40,
+      String(out.count),
+    );
+    ok(
+      "the repair is on the first frame, so a press does not repaint twice",
+      out.moved === 0,
+      out.moved + " of " + out.count + " changed colour after the frame",
+    );
+    ok(
+      "and nothing fades from one colour to the other",
+      out.colours === 0,
+      out.colours + " colour transitions ran",
+    );
+  });
+
   // A theme whose accent is light, which is where a filled button goes wrong.
   //
   // The loud button used to be the accent at full strength with its label
