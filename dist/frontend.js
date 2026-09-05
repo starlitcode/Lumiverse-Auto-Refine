@@ -6948,7 +6948,7 @@ export function setup(ctx, overrides) {
             key: "inputRefine",
             label: "Refining the draft in your input box",
             type: "bool",
-            hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs, and a row for it appears in the chat input's Extras menu or in the floating button's menu, whichever is on screen.",
+            hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs. A row for it also appears in the chat input's Extras menu, or in the floating button's menu when that is on screen.",
         }));
         return wrap;
     }

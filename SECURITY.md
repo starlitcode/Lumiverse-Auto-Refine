@@ -1,23 +1,39 @@
-# Security
+# Security policy
 
-## Reporting
+How to report a security problem in Auto Refine. For what the extension touches and keeps, read [Privacy](docs/privacy.md) instead.
 
-Open a [security advisory](https://github.com/starlitcode/Lumiverse-Auto-Refine/security/advisories/new) rather than a public issue. I will confirm I have it, and say what I am doing about it.
+## Where to send it
 
-## What this extension reaches
+**Something sensitive, or anything you can see being abused: open a [security advisory](https://github.com/starlitcode/Lumiverse-Auto-Refine/security/advisories/new), or message me on Discord.** I am `.moonsight.` in the Lumiverse server. Either way, wait for my reply before posting it anywhere public.
 
-It has no networking of its own. It never opens a connection and never contacts a server of mine or anyone else's. The one thing that leaves your machine is the model call that does the refining, and that goes through Lumiverse to the provider you already configured, on the connection you picked.
+**Anything else: [open an issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues).** Ordinary bugs, odd behaviour, and anything you are happy to have read by everyone belong there.
 
-What goes in that call: the text of the one message being refined, and the rules you wrote. Nothing else from your chat is sent, and nothing is kept after the answer comes back.
+**A permission being used for more than [Privacy](docs/privacy.md) says: an advisory or Discord.** That page states what each permission is for and what the extension does not do with it. If you find it doing something that page does not describe, that is a security report, not a bug report, whether or not it looks harmful.
 
-It never treats text as code. There is no `eval` and no `new Function`, so nothing in a reply, a rule, or a model's answer can be run.
+Not sure which? Use an advisory. If it turns out to be nothing sensitive, you can open an issue afterwards and nothing is lost. If you open an issue first and it was sensitive, deleting it does not undo anything: GitHub has already emailed it to everyone watching the repo, and search engines may have it.
 
-## What it writes
+## What to include
 
-One thing: the message it just refined, through Lumiverse's own chat API. It writes nothing else, and it never creates or deletes a message.
+- What you saw, and what you expected instead.
+- The steps that produce it, or the reply or setting that triggers it.
+- Your Lumiverse build and your browser.
+- Whatever **Reporting a problem** on the Log tab gives you. It carries the version, and its tick boxes leave out anything you would rather not share. Read it before you send it.
 
-The text from before each refine is held in memory so it can be put back, and is gone on reload. Your settings are kept in your browser and in Lumiverse's per-user storage.
+## What not to do
 
-## Verifying it
+- **Do not post a working exploit in public** before I have replied.
+- **Do not include your API keys, passwords or session tokens.** I never need them, and nothing in a real report requires one.
+- **Do not paste chat text you would not want read.** A debug report can carry short fragments of a reply, and the preview of what gets sent copies part of a chat. Delete those parts before you send it.
+- **Do not test against other people.** Anything you report should be something you reproduced in your own Lumiverse.
 
-`dist/` is committed as readable JavaScript built from `src/` with types stripped and nothing else changed. CI rebuilds on every push and fails if the two drift, so the file Lumiverse loads is one you can read and check against the source.
+## What to expect
+
+I will read it and reply with whether I think it is a real problem and what I intend to do.
+
+I maintain this alone in my spare time, so I cannot promise a fix by any particular date. If it is real, the fix ships as a new version and the changelog says what it was.
+
+Only the latest version is supported. I do not release fixes for older versions, so updating is how you get one.
+
+---
+
+[Back to the README](README.md)

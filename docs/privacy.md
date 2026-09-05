@@ -61,3 +61,19 @@ The text from before each refine, in memory, so you can put a refine back. It is
 ## What it never does
 
 It never refines the greeting. It never sends anything the block list does not show. It never keeps a copy of a reply after the refine finishes. It never writes to a message other than the one it refined.
+
+## Checking any of this yourself
+
+The files Lumiverse actually loads are the two named in `spindle.json`, `dist/frontend.js` and `dist/backend.js`. They are committed as readable code: not minified, not obfuscated, not bundled. What you read is what runs, which is also why the extension installs without a build step. If you are auditing this extension, or pointing a scanner at it, those two files are the whole of what ships.
+
+Everything else in the repo exists for working on it, and none of it reaches your browser:
+
+- `src/` is the TypeScript those two files are built from. A scanner that only parses JavaScript cannot read it and will say so. The shipped `dist/` files are plain JavaScript and parse normally.
+- `test/` runs only when a contributor types `bun run check`. It is not part of the install and adds nothing to its size.
+- `setup.sh` prepares a development machine. Nothing runs it at install time and nothing in the extension calls it.
+- `docs/` is these pages. None of it is code.
+- `.github/workflows/` runs the checks on pull requests.
+
+CI rebuilds `dist/` on every push and fails if it has drifted from `src/`, so the file Lumiverse loads is one you can read and check against the source.
+
+It never treats text as code. There is no `eval` and no `new Function`, so nothing in a reply, a rule, or a model's answer can be run.
