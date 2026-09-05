@@ -106,6 +106,4 @@ Auditing it, or pointing a scanner at it? The two files Lumiverse loads are `dis
 - **[Hone](https://github.com/AMousePad/Hone)** - the extension that showed refinement was worth having. Auto Refine is written from scratch and shares no code with it
 - Everyone who has reported a bug or suggested something that turned into a fix
 
-## Licence
-
-GPL-3.0-only.
+Licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).

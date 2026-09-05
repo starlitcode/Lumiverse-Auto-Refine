@@ -4352,9 +4352,16 @@ export function setup(ctx, overrides) {
         // this panel that is holding something up.
         if (pending)
             root.appendChild(buildPendingCard());
+        // Yours first when it is the newer of the two, so the top of the tab is
+        // whatever just happened rather than whichever kind it was.
         const back = undoHere();
+        const mine = draftBack();
+        if (mine && (!back.length || mine.at >= back[0].at))
+            root.appendChild(buildLastDraft(mine));
         if (back.length)
             root.appendChild(buildLastRefine(back));
+        if (mine && back.length && mine.at < back[0].at)
+            root.appendChild(buildLastDraft(mine));
         root.appendChild(buildSearch());
         // The strip is not a way around while a search is on: what is below is
         // everything that matched, from every tab, so a tab to stand on would be
@@ -4754,6 +4761,33 @@ export function setup(ctx, overrides) {
         for (const p of parts)
             well.appendChild(el("span", p.how === -1 ? "arf-cut" : p.how === 1 ? "arf-add" : "", p.text));
         return well;
+    }
+    // The same card a reply's refine gets, for the one you asked for on your own
+    // draft. It is not in undoable with the replies, since a draft has no message
+    // to be keyed by, so it is drawn from its own record and the tab would
+    // otherwise have shown nothing at all for it.
+    function buildLastDraft(one) {
+        const wrap = card("Your draft, refined", "Only while the box still holds it. Type over it and there is nothing to put back.", new Date(one.at).toTimeString().slice(0, 5));
+        wrap.setAttribute("data-arf-draft-undo", "1");
+        wrap.appendChild(el("div", "arf-note", "What changed"));
+        wrap.appendChild(diffWell(one.before, one.after));
+        const row = el("div", "arf-row");
+        const back = button("Put it back", false);
+        back.addEventListener("click", () => putDraftBack());
+        const seen = button("Dismiss", false);
+        seen.addEventListener("click", () => {
+            lastDraft = null;
+            unwatchDraft();
+            paintFloat();
+            paint();
+        });
+        const big = button("Read it in full", false);
+        big.addEventListener("click", () => openBig("Both versions", "As you wrote it\n\n" + one.before + "\n\n---\n\nAfter the refine\n\n" + one.after));
+        row.appendChild(back);
+        row.appendChild(seen);
+        row.appendChild(big);
+        wrap.appendChild(row);
+        return wrap;
     }
     function buildUndoRow(one) {
         const box = el("div", "arf-col");

@@ -1217,6 +1217,45 @@ console.log("\nthe extras, which are off until asked for");
     }));
     ok("the answer goes back in the box", wrote.value === "I walk through it.", wrote.value);
     ok("and an input event is raised, so the app sees it too", wrote.events > 0);
+
+    // The same card a reply's refine gets. Yours is not in the undo list with
+    // the replies, so the tab used to show nothing at all for it.
+    const card = () =>
+      page.evaluate(() => {
+        const c = document.querySelector('#drawer [data-arf-draft-undo="1"]');
+        return c ? (c.textContent || "").trim() : "";
+      });
+    ok("your draft's refine lands in the tab too", (await card()).length > 0, await card());
+    // The same word-level diff a reply's undo row shows, so both what went and
+    // what came stand on the card.
+    ok(
+      "with what changed on it, the way a reply's card has it",
+      /suddenly/.test(await card()) && /I walk through it/.test(await card()),
+      await card(),
+    );
+    const buttons = await page.evaluate(() =>
+      [...document.querySelectorAll('#drawer [data-arf-draft-undo="1"] button')].map((b) =>
+        b.textContent.trim(),
+      ),
+    );
+    ok(
+      "and a way back and a way to dismiss it",
+      buttons.includes("Put it back") && buttons.includes("Dismiss"),
+      buttons.join(", "),
+    );
+
+    await page.evaluate(() => {
+      [...document.querySelectorAll('#drawer [data-arf-draft-undo="1"] button')]
+        .find((b) => b.textContent.trim() === "Put it back")
+        .click();
+    });
+    await settle(page);
+    const back = await page.evaluate(() => ({
+      value: document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]').value,
+      card: !!document.querySelector('#drawer [data-arf-draft-undo="1"]'),
+    }));
+    ok("putting it back writes the draft you wrote", back.value === "i walk through it, suddenly", back.value);
+    ok("and the card goes with it", !back.card);
     },
   );
 
