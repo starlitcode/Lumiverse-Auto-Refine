@@ -84,7 +84,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The message button, the floating button, and the input bar row.",
-        keys: ["widgetOn", "inputRefine", "inputSelector"],
+        keys: ["widgetOn", "inputRefine"],
     },
     {
         id: "switches",
@@ -183,11 +183,10 @@ const PRESET_KEYS = [
     "thinkingMode",
     "thinkingEffort",
 ];
-// Where the input box is, in the order they are tried. Written out in the
-// setting below rather than hidden behind an empty box, the way Auto Retry
-// writes out its button selectors: what the extension is actually looking for
-// is the one thing worth reading here, and a box that says nothing cannot be
-// corrected by somebody whose layout has moved.
+// Where the input box is, tried in this order: the first names it exactly, and
+// the last names any text box on the page. Refining a draft is the one part of
+// this extension that reads Lumiverse's own layout, so if an update moves that
+// box, this list is what needs a new entry.
 const INPUT_PICKS = [
     '[data-component="InputArea"] textarea[name="chat-message"]',
     'textarea[name="chat-message"]',
@@ -195,7 +194,6 @@ const INPUT_PICKS = [
     '[data-component="InputArea"] textarea',
     "textarea",
 ];
-const INPUT_PICKS_TEXT = INPUT_PICKS.join(", ");
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
     enabled: true,
@@ -290,7 +288,6 @@ const CONFIG = {
     // for a release of this. Whatever is here is tried first and the list is
     // still tried after it, so an edit that stops matching falls back rather than
     // taking the feature down.
-    inputSelector: INPUT_PICKS_TEXT,
     // How many messages of the run-up go in the prompt. A rewrite that cannot see
     // what just happened flattens a scene into general prose, which is the
     // failure people blame on the model.
@@ -1324,60 +1321,6 @@ const LIMIT_FIELDS = [
         hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
     },
 ];
-// ---- colour, and staying readable on a theme nobody here has seen ----
-// Everything is styled from the host's --lumiverse-* variables so it arrives in
-// the reader's theme. That is most of the job and not all of it: a theme can
-// set a near-white accent, or a panel colour close to its own text, and a rule
-// that looked right on the stock dark theme comes out as a blank rectangle.
-//
-// So nothing here guesses at another variable to fix a colour. It reads what
-// the browser actually painted and steps in only when two colours are genuinely
-// too close. A theme that already reads well keeps its own colours exactly.
-//
-// ---- naming something on the page from a click on it ----
-// Auto Retry's, copied across. Both extensions have to point at something
-// somebody else's layout owns, and this is the half of that job with a right
-// answer: an attribute saying what a thing is beats a class name a bundler made
-// up this morning.
-// Class and id names Lumiverse generates per build (like _card_19912_336).
-// They change on every release, so a selector built on one quietly stops
-// matching after an app update. Skipped when building a selector from a click.
-const UNSTABLE_NAME = /(^_)|(_[a-z0-9]{4,}_\d+$)|(_[a-z0-9]{6,}$)|([-_][a-f0-9]{6,}$)/i;
-const SAFE_NAME = /^[A-Za-z_-][\w-]*$/;
-function deriveSelector(start) {
-    let el = start;
-    let hops = 0;
-    // Clicks usually land on an icon or a span inside the control, so walk up to
-    // the thing that actually behaves like a button.
-    while (el && hops < 6) {
-        const tag = String(el.tagName || "").toLowerCase();
-        const role = el.getAttribute ? el.getAttribute("role") : null;
-        if (tag === "button" || tag === "a" || role === "button")
-            break;
-        el = el.parentElement;
-        hops++;
-    }
-    if (!el || !el.getAttribute)
-        el = start;
-    if (!el || !el.getAttribute)
-        return null;
-    const tag = String(el.tagName || "").toLowerCase() || "*";
-    const q = (v) => '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
-    for (const attr of ["data-testid", "data-test-id", "data-test", "data-action", "aria-label", "title", "name"]) {
-        const v = el.getAttribute(attr);
-        if (v && String(v).trim())
-            return tag + "[" + attr + "=" + q(String(v).trim()) + "]";
-    }
-    const id = el.getAttribute("id");
-    if (id && SAFE_NAME.test(id) && !UNSTABLE_NAME.test(id))
-        return "#" + id;
-    const cls = String(el.className || "")
-        .split(/\s+/)
-        .filter((c) => c && SAFE_NAME.test(c) && !UNSTABLE_NAME.test(c));
-    if (cls.length)
-        return tag + "." + cls.slice(0, 2).join(".");
-    return null;
-}
 // getComputedStyle hands colours back as rgb() or rgba() and nothing else, so
 // those forms are the whole of what needs parsing. Anything else is unknown,
 // and unknown means leave it alone.
@@ -1608,12 +1551,6 @@ export function setup(ctx, overrides) {
         }
     }
     Object.assign(cfg, loadSaved(), overrides || {});
-    // An install from when this box meant "empty is the built-in way" carries an
-    // empty string, and reading that back would leave the list out of the panel
-    // for exactly the people who have used this longest. Filled in once, and only
-    // where there is nothing there to lose.
-    if (!String(cfg.inputSelector || "").trim())
-        cfg.inputSelector = INPUT_PICKS_TEXT;
     // Settings arriving from the account, checked key by key against the shape
     // the default says they should be. The account copy is written by this same
     // extension, but it can be older than this version, half written by a save
@@ -2885,13 +2822,6 @@ export function setup(ctx, overrides) {
         // transitions above start running: a rebuild that should be invisible
         // instead fades. Held off until the rebuild has been on the screen for a
         // frame, after which the only changes left are ones somebody asked for.
-        // While the picker is armed. A long press is also how the browser starts
-        // selecting text and raises its own callout, and it decides that at about
-        // the same moment the picker does, so the press was being taken away
-        // before the hold completed. Off for as long as the mode lasts, and only
-        // for that long.
-        ".arf-picking,.arf-picking *{-webkit-touch-callout:none!important;" +
-        "-webkit-user-select:none!important;user-select:none!important}" +
         ".arf-settling,.arf-settling *{transition:none!important}" +
         ".arf-tab{flex:none;cursor:pointer;background:none;border:0;border-bottom:2px solid transparent;" +
         "padding:9px 11px;margin-bottom:-1px;white-space:nowrap;" +
@@ -7025,319 +6955,6 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs, and a row for it appears in the chat input's Extras menu or in the floating button's menu, whichever is on screen.",
         }));
-        // Under the setting it belongs to, indented with it, and there whether or
-        // not that setting is on: the list can be read and changed before it is
-        // needed rather than only after something breaks.
-        wrap.appendChild(buildInputBox());
-        return wrap;
-    }
-    // Where the input box is, for the day the built-in way of finding it stops
-    // working. Auto Retry has the same pair of buttons on its own selectors, for
-    // the same reason: a layout somebody else owns can move, and waiting for a
-    // release of this to catch up is worse than being able to point at it.
-    let boxSaid = null;
-    // Point at the box by tapping it.
-    //
-    // Only a press on something that can be typed in is taken. Everything else on
-    // the page carries on working, which it has to: the box is on the chat screen
-    // and this panel is a drawer over it, so the reader has to be able to close
-    // the drawer to reach the thing they are pointing at. Swallowing every press
-    // shut them in behind a panel whose own Close button did nothing, and took
-    // that press as the answer.
-    //
-    // Escape stops it, pressing the button again stops it, and it gives up on its
-    // own after a while so it is never left armed.
-    let picking = null;
-    disposers.push(() => {
-        if (picking)
-            picking();
-    });
-    // How long the picker waits before giving up. Long enough to close the drawer,
-    // find the box and press it; short enough that one left running does not lie
-    // in wait for the next time somebody taps a search field.
-    const PICK_MS = 60000;
-    // A hold rather than a tap, so an ordinary press still does what it always
-    // does while the picker is up. Long enough that a tap is never mistaken for
-    // one, short enough that holding does not feel like waiting.
-    const HOLD_MS = 500;
-    // How far a finger may wander and still count as a hold rather than a drag.
-    const HOLD_SLIP = 10;
-    // The click a hold leaves behind, eaten once. It belongs to the gesture that
-    // picked, not to whatever is under it, and it outlives the picker: the picker
-    // stands down the moment it has its answer, and the click has not arrived yet.
-    let eatingClick = null;
-    disposers.push(() => {
-        if (eatingClick)
-            eatingClick();
-    });
-    function eatOneClick() {
-        if (eatingClick)
-            eatingClick();
-        const eat = (e) => {
-            drop();
-            try {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            catch (_) { }
-        };
-        let timer = null;
-        const drop = () => {
-            eatingClick = null;
-            try {
-                clearTimeout(timer);
-            }
-            catch (_) { }
-            try {
-                document.removeEventListener("click", eat, true);
-            }
-            catch (_) { }
-        };
-        eatingClick = drop;
-        document.addEventListener("click", eat, true);
-        timer = setTimeout(drop, 1200);
-    }
-    function pickBox() {
-        if (picking) {
-            picking();
-            return;
-        }
-        if (typeof document === "undefined")
-            return;
-        const ours = (t) => {
-            try {
-                return !!(t && t.closest && t.closest(".arf"));
-            }
-            catch (_) {
-                return false;
-            }
-        };
-        // The box under the press, or nothing. A tap usually lands on the box
-        // itself, but a contenteditable can have the press land on a node inside
-        // it, so this walks up a little way.
-        const aimedAt = (t) => {
-            let node = t;
-            let hops = 0;
-            while (node && hops < 4) {
-                if (typeable(node))
-                    return node;
-                node = node.parentElement;
-                hops++;
-            }
-            return null;
-        };
-        let giveUp = null;
-        const stop = (sel, say, ok) => {
-            if (!picking)
-                return;
-            picking = null;
-            try {
-                clearTimeout(giveUp);
-            }
-            catch (_) { }
-            try {
-                document.removeEventListener("keydown", onKey, true);
-            }
-            catch (_) { }
-            for (const [type, fn] of [
-                ["pointerdown", onDown],
-                ["pointermove", onMove],
-                ["pointerup", onUp],
-                ["pointercancel", onUp],
-                ["contextmenu", onMenu],
-            ]) {
-                try {
-                    document.removeEventListener(type, fn, true);
-                }
-                catch (_) { }
-            }
-            try {
-                document.documentElement.classList.remove("arf-picking");
-            }
-            catch (_) { }
-            letGo();
-            if (sel) {
-                cfg.inputSelector = sel;
-                persist(true);
-            }
-            boxSaid = { text: say, ok: ok };
-            paint();
-        };
-        // A press held on a box is the pick. A press that is not held, or is not on
-        // a box, is left entirely alone: it does what it always does, which is how
-        // the drawer gets closed to reach the box in the first place.
-        let held = null;
-        const letGo = () => {
-            if (!held)
-                return;
-            try {
-                clearTimeout(held.timer);
-            }
-            catch (_) { }
-            held = null;
-        };
-        const take = (box) => {
-            held = null;
-            // The press is still down, so a click is coming for whatever is under it.
-            // Eaten by a listener of its own rather than by the picker's, because the
-            // picker is about to stand down and would take its own listener with it
-            // before the click ever arrived.
-            eatOneClick();
-            const sel = deriveSelector(box);
-            if (!sel || !boxFor(sel)) {
-                stop(null, "Could not find a name for that box that would still work after an update. Type one in above instead.", false);
-                return;
-            }
-            stop(sel, "Set to " + sel, true);
-        };
-        const onDown = (e) => {
-            const t = e && e.target;
-            if (ours(t))
-                return;
-            const box = aimedAt(t);
-            if (!box)
-                return;
-            letGo();
-            held = {
-                box: box,
-                x: (e && e.clientX) || 0,
-                y: (e && e.clientY) || 0,
-                timer: setTimeout(() => take(box), HOLD_MS),
-            };
-        };
-        const onMove = (e) => {
-            if (!held)
-                return;
-            const dx = ((e && e.clientX) || 0) - held.x;
-            const dy = ((e && e.clientY) || 0) - held.y;
-            if (dx * dx + dy * dy > HOLD_SLIP * HOLD_SLIP)
-                letGo();
-        };
-        const onUp = () => letGo();
-        // The browser raising its own menu on a long press is that same press,
-        // recognised by something else first. Taken as the pick rather than
-        // competed with, which also covers a right click on a desktop.
-        const onMenu = (e) => {
-            const box = held ? held.box : aimedAt(e && e.target);
-            if (!box || ours(e && e.target))
-                return;
-            try {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            catch (_) { }
-            take(box);
-        };
-        const onKey = (e) => {
-            if (e && e.key === "Escape")
-                stop(null, "Picking stopped.", false);
-        };
-        picking = () => stop(null, "Picking stopped.", false);
-        try {
-            document.documentElement.classList.add("arf-picking");
-        }
-        catch (_) { }
-        document.addEventListener("pointerdown", onDown, true);
-        document.addEventListener("pointermove", onMove, true);
-        document.addEventListener("pointerup", onUp, true);
-        document.addEventListener("pointercancel", onUp, true);
-        document.addEventListener("contextmenu", onMenu, true);
-        document.addEventListener("keydown", onKey, true);
-        giveUp = setTimeout(() => stop(null, "Stopped waiting. Press Pick it for me again when you are ready.", false), PICK_MS);
-        boxSaid = {
-            text: "Close this panel, then press and hold your input box. Everything else still works normally, so you can get to it. Press Pick it for me again, or Escape, to stop.",
-            ok: true,
-        };
-        paint();
-    }
-    function buildInputBox() {
-        const wrap = el("div", "arf-col arf-under");
-        wrap.setAttribute("data-arf-row", "inputSelector");
-        // Everything this needs to say is behind its "?", the way every other row
-        // on the panel says it. A line drawn under the row as well would make this
-        // the one row that reads differently.
-        wrap._arfHint =
-            "The list it looks for, in order. Refining a draft reaches into the page rather than going through an API, because Lumiverse offers none for the input box, so this is the one part of the extension that depends on how Lumiverse is laid out. Edit it when an update has moved the box: yours is tried first and the built-in list still runs after it, so an edit that stops matching falls back rather than taking the feature down.";
-        wrap.appendChild(labelRow({
-            key: "inputSelector",
-            label: "Where the input box is",
-            type: "lines",
-            hint: String(wrap._arfHint),
-        }));
-        const box = document.createElement("input");
-        box.type = "text";
-        box.className = "arf-field arf-mono";
-        box.placeholder = INPUT_PICKS_TEXT;
-        box.value = String(cfg.inputSelector == null ? "" : cfg.inputSelector);
-        box.setAttribute("data-arf-field", "inputSelector");
-        box.setAttribute("aria-label", "Where the input box is");
-        box.addEventListener("input", () => {
-            cfg.inputSelector = box.value;
-            boxSaid = null;
-            persist();
-        });
-        box.addEventListener("blur", () => {
-            cfg.inputSelector = box.value;
-            persist(true);
-        });
-        wrap.appendChild(box);
-        const row = el("div", "arf-row");
-        const test = button("Test", false);
-        test.setAttribute("data-arf-btn", "Test");
-        test.addEventListener("click", () => {
-            const found = composer();
-            const mine = String(box.value || "").trim();
-            const state = boxState(mine);
-            // A miss is reported as a miss right now. The test only looks at what is on
-            // screen at the moment it runs, and a box that has not been opened yet
-            // misses for the same reason a box that has moved does.
-            if (!mine)
-                boxSaid = found
-                    ? { text: "Empty, so the built-in list is being used, and it found the box.", ok: true }
-                    : {
-                        text: "Empty, and the built-in list is not finding it right now. Open a chat and test again, or point at it below.",
-                        ok: false,
-                    };
-            else if (state === "invalid selector")
-                boxSaid = { text: "That is not a selector the browser understands.", ok: false };
-            else if (state === "match")
-                boxSaid = { text: "Found it, and it is on screen.", ok: true };
-            else if (state === "match, not a box you can type in")
-                boxSaid = {
-                    text: found
-                        ? "That names something on screen, but not a box you can type in right now, so the built-in list is being used instead."
-                        : "That names something on screen, but not a box you can type in right now.",
-                    ok: false,
-                };
-            else
-                boxSaid = {
-                    text: found
-                        ? "Nothing matches it on screen right now, so the built-in list is being used instead."
-                        : "Nothing matches it on screen right now, and the built-in list is not finding it either. Open a chat and test again.",
-                    ok: false,
-                };
-            paint();
-        });
-        const pick = button(picking ? "Stop picking" : "Pick it for me", false);
-        pick.setAttribute("data-arf-btn", "Pick it for me");
-        pick.addEventListener("click", () => pickBox());
-        row.appendChild(test);
-        row.appendChild(pick);
-        // Always here. A reset that appears only once something is wrong is a
-        // reset nobody can find when they need it, and there is no state this
-        // cannot be pressed in: it writes the built-in list back either way.
-        const back = button("Reset", false);
-        back.setAttribute("data-arf-btn", "Reset");
-        back.addEventListener("click", () => {
-            cfg.inputSelector = INPUT_PICKS_TEXT;
-            persist(true);
-            boxSaid = { text: "The built-in list is back.", ok: true };
-            paint();
-        });
-        row.appendChild(back);
-        wrap.appendChild(row);
-        if (boxSaid)
-            wrap.appendChild(boxSaid.ok ? notice("good", boxSaid.text) : warn(boxSaid.text));
         return wrap;
     }
     // ---- carrying a setup somewhere else ----
@@ -8477,29 +8094,11 @@ export function setup(ctx, overrides) {
     }
     // ---- refining what you are typing ----
     // The one part of this extension that reaches into the page. Everything else
-    // goes through the host's own APIs; there is no API for the input box, so
-    // this finds it, and this is what breaks if Lumiverse ever moves it.
-    // Tried in order, most specific first, and every one of them describes the
-    // box Lumiverse actually renders: a textarea named chat-message inside the
-    // input area. The container and the name are two independent facts, so a
-    // build that changes one is still found by the entry that leans on the other.
-    //
-    // The bare textarea at the end is the last resort and is meant to be one: it
-    // takes the last textarea on the page, which is right only because the chat
-    // input sits below everything it could be confused with. Anything above it
-    // has to be a shape somebody has actually seen. Three entries here named a
-    // ChatInput and an InputBar component, and no such component exists; they
-    // matched nothing but the stub written to match them.
-    // Named attributes first, then the shape of the thing, then anything at all.
-    // Every class Lumiverse puts on that box carries a per-build hash on it
-    // (_textarea_1unc0_788), so none of them is worth naming: they change on
-    // every release. name and aria-label are what the markup states about it.
-    // Something a person can type in.
-    //
-    // Asked of every candidate, because a selector matches whatever it matches: a
-    // press on the drawer's own Close button was taken as the input box and
-    // written down as one, which then found nothing to type into and trapped the
-    // reader behind a panel they could not close.
+    // goes through the host's own APIs; there is none for the input box, so this
+    // finds it, and this is what breaks if Lumiverse ever moves it.
+    // Something a person can type in. Asked of every candidate, because a
+    // selector matches whatever it matches and a button or a checkbox is no place
+    // to write a message.
     function typeable(node) {
         if (!node)
             return false;
@@ -8524,26 +8123,14 @@ export function setup(ctx, overrides) {
             return false;
         }
     }
-    // One usable box out of a list of selectors, taking them in the order they
-    // are written. Split rather than handed to the browser whole, because one
-    // query with commas in it answers in document order and throws that order
-    // away, and the order is the whole point of a list: the first entry names
-    // the box exactly and the last one names every textarea on the page.
-    //
-    // Named apart from composer so the card below can say what it found without
-    // acting on it.
-    function boxParts(sel) {
-        return String(sel || "")
-            .split(",")
-            .map((p) => p.trim())
-            .filter((p) => p.length > 0);
-    }
-    function boxFor(sel) {
-        for (const part of boxParts(sel)) {
+    // The box to write into. Each selector is asked separately so the list keeps
+    // its order: one query holding all of them answers in page order instead.
+    function composer() {
+        for (const pick of INPUT_PICKS) {
             try {
-                const found = document.querySelectorAll(part);
-                // The last one on the page, since a panel of ours is also a textarea
-                // and the chat input is below everything it could be confused with.
+                const found = document.querySelectorAll(pick);
+                // The last on the page, since our own panel holds a textarea too and
+                // the chat input sits below anything it could be confused with.
                 for (let i = found.length - 1; i >= 0; i--) {
                     const node = found[i];
                     if (!node || node.disabled || node.readOnly)
@@ -8561,37 +8148,6 @@ export function setup(ctx, overrides) {
             catch (_) { }
         }
         return null;
-    }
-    // What a selector is doing right now. The same five answers Auto Retry's
-    // selectors give, for the same question asked of a different thing.
-    function boxState(sel) {
-        const parts = boxParts(sel);
-        if (!parts.length)
-            return "not set";
-        if (boxFor(sel))
-            return "match";
-        let any = false;
-        let readable = false;
-        for (const part of parts) {
-            try {
-                if (document.querySelector(part))
-                    any = true;
-                readable = true;
-            }
-            catch (_) { }
-        }
-        if (!readable)
-            return "invalid selector";
-        return any ? "match, not a box you can type in" : "no match";
-    }
-    function composer() {
-        // Yours first, when you have set one. The built-in list is still tried
-        // after it, so a selector that stops matching falls back rather than
-        // taking the feature down with it.
-        const mine = boxFor(cfg.inputSelector);
-        if (mine)
-            return mine;
-        return boxFor(INPUT_PICKS_TEXT);
     }
     // Written through the native setter, then announced as an input event. A
     // plain assignment sets the DOM value and leaves the framework holding the
