@@ -4036,6 +4036,48 @@ export function setup(ctx, overrides) {
         }
         return null;
     }
+    // One element written down as something findable again after the rebuild.
+    function markOf(root, node) {
+        const sel = node && anchorSel(node);
+        if (!sel)
+            return null;
+        // Which one, since Delete is on every block and Load is on more than one
+        // card.
+        const all = root.querySelectorAll(sel);
+        let nth = 0;
+        for (let i = 0; i < all.length; i++)
+            if (all[i] === node) {
+                nth = i;
+                break;
+            }
+        return { sel: sel, nth: nth, at: node.getBoundingClientRect().top };
+    }
+    // The nearest marked thing above the one being held, skipping anything inside
+    // it, since that goes with it. Only something named on its own is taken: a
+    // count that shifts when a block is removed would point at a different
+    // element after the rebuild, which is worse than not correcting at all.
+    function backOf(root, node) {
+        try {
+            const all = root.querySelectorAll(ANCHOR_MARKS.map((m) => "[" + m + "]").join(","));
+            let at = -1;
+            for (let i = 0; i < all.length; i++)
+                if (all[i] === node) {
+                    at = i;
+                    break;
+                }
+            for (let i = at - 1; i >= 0; i--) {
+                const n = all[i];
+                if (n.contains && n.contains(node))
+                    continue;
+                const sel = anchorSel(n);
+                if (!sel || root.querySelectorAll(sel).length !== 1)
+                    continue;
+                return { sel: sel, nth: 0, at: n.getBoundingClientRect().top };
+            }
+        }
+        catch (_) { }
+        return null;
+    }
     function anchorNow(root) {
         try {
             let node = null;
@@ -4066,19 +4108,11 @@ export function setup(ctx, overrides) {
                     break;
                 }
             }
-            const sel = node && anchorSel(node);
-            if (!sel)
+            const held = markOf(root, node);
+            if (!held)
                 return null;
-            // Which one, since Delete is on every block and Load is on more than one
-            // card.
-            const all = root.querySelectorAll(sel);
-            let nth = 0;
-            for (let i = 0; i < all.length; i++)
-                if (all[i] === node) {
-                    nth = i;
-                    break;
-                }
-            return { sel: sel, nth: nth, at: node.getBoundingClientRect().top };
+            held.back = backOf(root, node) || undefined;
+            return held;
         }
         catch (_) {
             return null;
@@ -4092,16 +4126,22 @@ export function setup(ctx, overrides) {
         if (!a)
             return;
         try {
-            const all = root.querySelectorAll(a.sel);
             // The same one or nothing. Settling for a different match is worse than
             // not correcting at all: the blocks are given new ids by a preset load,
             // and the next Delete along is somewhere else entirely.
-            const n = all[a.nth];
+            let use = a;
+            let n = root.querySelectorAll(a.sel)[a.nth];
+            // Gone, which is what happens when the thing being held is the thing that
+            // was just deleted. The nearest marked thing above it took its place.
+            if (!n && a.back) {
+                use = a.back;
+                n = root.querySelectorAll(use.sel)[use.nth];
+            }
             if (!n)
                 return;
             const w = globalThis;
             for (const one of held) {
-                const drift = n.getBoundingClientRect().top - a.at;
+                const drift = n.getBoundingClientRect().top - use.at;
                 if (Math.abs(drift) < 1)
                     return;
                 const was = one.node === w ? w.scrollY : one.node.scrollTop;
@@ -4111,7 +4151,7 @@ export function setup(ctx, overrides) {
                 else
                     one.node.scrollTop = want;
                 const now = one.node === w ? w.scrollY : one.node.scrollTop;
-                if (Math.abs(n.getBoundingClientRect().top - a.at) >= Math.abs(drift)) {
+                if (Math.abs(n.getBoundingClientRect().top - use.at) >= Math.abs(drift)) {
                     // Moving this one did not bring the anchor closer, so it is not the
                     // box the panel is scrolling in.
                     if (one.node === w && one.node.scrollTo)
@@ -4795,6 +4835,84 @@ export function setup(ctx, overrides) {
             setTimeout(() => done(), 500);
         }
         catch (_) { }
+    }
+    // A box let down to nothing and then handed over. done runs once, whether the
+    // travel finished, was cut short by a second one, or never started because the
+    // reader asked for no movement.
+    function foldAway(node, done) {
+        let ran = false;
+        const finish = () => {
+            if (ran)
+                return;
+            ran = true;
+            try {
+                node.style.height = "";
+                node.style.opacity = "";
+                node.style.overflow = "";
+                node.style.transition = "";
+                node.style.marginBottom = "";
+                node.style.paddingTop = "";
+                node.style.paddingBottom = "";
+                node.style.borderTopWidth = "";
+                node.style.borderBottomWidth = "";
+            }
+            catch (_) { }
+            done();
+        };
+        try {
+            let still = false;
+            try {
+                still =
+                    typeof matchMedia === "function" &&
+                        matchMedia("(prefers-reduced-motion: reduce)").matches;
+            }
+            catch (_) { }
+            const tall = node && node.getBoundingClientRect ? node.getBoundingClientRect().height : 0;
+            if (still || !(tall > 0) || !node.style) {
+                finish();
+                return;
+            }
+            node.style.height = tall + "px";
+            node.style.overflow = "hidden";
+            // Read the layout between the two, or the browser sees one value being set
+            // and nothing to travel between.
+            void node.offsetWidth;
+            // Out rather than in. Easing in puts the longest step at the end, so the
+            // panel travels gently and then stops dead, which is the part that reads
+            // as a jump; easing out spends the distance early and lands softly.
+            const ease = "150ms ease-out";
+            node.style.transition =
+                "height " + ease + ",opacity " + ease + ",margin-bottom " + ease +
+                    ",padding-top " + ease + ",padding-bottom " + ease +
+                    ",border-top-width " + ease + ",border-bottom-width " + ease;
+            node.style.height = "0px";
+            node.style.opacity = "0";
+            // The gap under it closes too, or the last few pixels go all at once.
+            node.style.marginBottom = "0px";
+            // And its own padding and edge. A height of nothing still leaves those
+            // standing, so a block let down to zero was thirty pixels tall and the
+            // last thirty went in one frame at the end of the travel.
+            node.style.paddingTop = "0px";
+            node.style.paddingBottom = "0px";
+            node.style.borderTopWidth = "0px";
+            node.style.borderBottomWidth = "0px";
+            const end = (e) => {
+                if (e && e.target !== node)
+                    return;
+                try {
+                    node.removeEventListener("transitionend", end);
+                }
+                catch (_) { }
+                finish();
+            };
+            node.addEventListener("transitionend", end);
+            // A transition that never runs, on a page that will not animate, must
+            // still hand the block over.
+            setTimeout(finish, 400);
+        }
+        catch (_) {
+            finish();
+        }
     }
     // Anything that throws writing away asks first, in the host's own dialog, the
     // same one the reset uses and the same one Auto Retry uses for its presets.
@@ -5681,7 +5799,19 @@ export function setup(ctx, overrides) {
             }, "Press Delete again to remove this block.", () => {
                 const next = blockList();
                 next.splice(i, 1);
-                setBlocks(next);
+                // Let its space close rather than taking it away between two frames.
+                //
+                // A block removed makes the panel shorter by its own height, and a
+                // reader at the end of the list is then past the end of it, so the
+                // page is pulled back by exactly that much. Nothing about where the
+                // scroll is put can avoid that: the place they were looking at is not
+                // there any more. Measured deleting the lowest block from the bottom
+                // of the list, the panel moved 226 pixels in one frame while the
+                // block's own position in it did not change at all.
+                //
+                // So the height goes down over a few frames instead, and the pull
+                // back comes with it a few pixels at a time.
+                foldAway(wrap, () => setBlocks(next));
             });
         });
         foot.appendChild(drop);

@@ -4183,6 +4183,8 @@ console.log("\nnothing is thrown away on one tap");
       window.__confirmSay = true;
       document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click();
     });
+    // The block's space is let down before it goes, so this is past that.
+    await page.waitForTimeout(400);
     await settle(page);
     ok("and saying yes removes it", (await blocks(page)) === had - 1, { had: had });
   });
@@ -4237,6 +4239,7 @@ console.log("\nnothing is thrown away on one tap");
 
     await page.evaluate(() =>
       document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click());
+    await page.waitForTimeout(400);
     await settle(page);
     ok("and the second press does", (await blocks(page)) === had - 1, { had: had });
   });
@@ -4300,6 +4303,79 @@ console.log("\nnothing is thrown away on one tap");
       JSON.stringify(where),
     );
   },
+  );
+}
+
+// ---- deleting the lowest block from the bottom of the list ----
+console.log("\nthe space a deleted block leaves");
+{
+  // A block removed makes the panel shorter by its own height, and a reader at
+  // the end of the list is then past the end of it, so the page is pulled back
+  // by exactly that much. Where the scroll is put cannot avoid it: the place
+  // they were looking at is not there any more. Measured before the space was
+  // let down, the panel moved 226 pixels between two frames while the block's
+  // own position in the panel did not change at all.
+  //
+  // The page is made the scroller here, since a panel in a box of its own has
+  // the same problem in the box.
+  await inTab(
+    browser,
+    { css: "html,body{height:100%}#drawer{height:auto;overflow:visible}", viewport: { width: 420, height: 800 } },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const out = await page.evaluate(async () => {
+        const page$ = document.scrollingElement || document.documentElement;
+        const press = (n) => {
+          n.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+          n.click();
+        };
+        const bs = [...document.querySelectorAll("#drawer [data-arf-block]")];
+        const target = bs[bs.length - 1];
+        const aboveId = bs[bs.length - 2].getAttribute("data-arf-block");
+        const id = target.getAttribute("data-arf-block");
+        page$.scrollTop = page$.scrollHeight - page$.clientHeight;
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const tall = Math.round(target.getBoundingClientRect().height);
+        const seen = [];
+        let n = 0;
+        const tick = () => {
+          const a = document.querySelector('#drawer [data-arf-block="' + aboveId + '"]');
+          if (a) seen.push(Math.round(a.getBoundingClientRect().top));
+          if (++n < 60) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        press([...target.querySelectorAll("button")].find((x) => x.textContent.trim() === "Delete"));
+        await new Promise((r) => setTimeout(r, 120));
+        const again = [...document.querySelectorAll('#drawer [data-arf-block="' + id + '"] button')]
+          .find((x) => x.textContent.trim() === "Delete");
+        if (again) press(again);
+        await new Promise((r) => setTimeout(r, 1400));
+        let worst = 0;
+        let moved = 0;
+        for (let i = 1; i < seen.length; i++) {
+          const step = Math.abs(seen[i] - seen[i - 1]);
+          worst = Math.max(worst, step);
+          moved += step;
+        }
+        return {
+          tall,
+          worst,
+          moved,
+          gone: !document.querySelector('#drawer [data-arf-block="' + id + '"]'),
+        };
+      });
+      ok("the block is gone", out.gone, JSON.stringify(out));
+      ok(
+        "and the panel really did have to move, or this check proves nothing",
+        out.moved > 100,
+        JSON.stringify(out),
+      );
+      ok(
+        "the space it leaves closes over several frames rather than one",
+        out.worst < out.tall / 3,
+        "worst step " + out.worst + " of a block " + out.tall + " tall",
+      );
+    },
   );
 }
 
