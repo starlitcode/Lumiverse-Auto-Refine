@@ -36,6 +36,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **Refine using** picks which model does the refining. The list is your own connection profiles, by name. Leave it on the default to use whatever you are chatting with.
 - **Let it think first** is off by default, and can be left at whatever your connection is set to, or given an effort level of its own. In [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** cancels a refine that has not come back. The default is 90 seconds, the most is an hour, and 0 means never give up. Worth raising for a reasoning model on a high effort level, which can think for a long time before it writes anything: a cap that fires mid-thought throws away work that was about to arrive. Turning it off does not leave you stuck, since **Stop this refine** is always there and a backend that is not running says so within a few seconds.
+- **Price per million tokens sent** and **Price per million tokens back** are your provider's own prices, copied off its price list. Nothing here knows what a model charges and no two providers agree, so this is the only way the panel can turn a token count into money. Both start at 0, which leaves every cost line off. There is no currency anywhere: the number you type is the number you are shown, in whatever your provider bills you in. In [What a refine costs](prompt.md#what-a-refine-costs).
 - **Samplers** are blank to begin with, and blank means the connection's own preset decides. In [Sampler settings](prompt.md#sampler-settings).
 - **Saved model setups** keeps everything on this tab under a name: the connection, the thinking, the wait and the samplers. Save one for a cheap model and one for a careful one, and move between them in a tap.
 
@@ -59,6 +60,7 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Log
 
 - **Right now** is the live view. It names the stage instead of just saying busy: asking, thinking, writing with a character count when your connection streams, then checking. The clock runs, and past eight seconds it also says how long is left before the timeout gives up. It writes into the line in place, so the panel never repaints under you, and the dot beside it pulses while something is running.
+  Under the counters it says what the last refine actually put through the model, tokens in and tokens back, and what that cost once you have set prices. That is the real figure rather than the one a preview worked out beforehand, and a rewrite that was dropped is on it too: the call was made and paid for whether or not anything was saved.
 - **What the model worked out** keeps the working from the last refine that finished, whether that was a reply or the draft in your input box, and says which. It has a **Copy**, an **Expand** that opens it at the size of the screen, and a **Clear**.
 
   It reads as prose: the tags the model wrapped it in are taken off here and everywhere else, so the working reads the same wherever you see it.

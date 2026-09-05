@@ -1,6 +1,6 @@
 {
   "name": "lumiverse-auto-refine",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Runs a second model pass over a finished reply and saves the result, following rules you write. Never touches the greeting, keeps the original so you can put it back, and can refine on a cheaper model than the one you roleplay with.",
   "author": "starlitcode",
   "license": "GPL-3.0-only",

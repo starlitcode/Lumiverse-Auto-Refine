@@ -1412,6 +1412,38 @@ async function countTokens(text, userId) {
         return guess;
     }
 }
+// The same count, carrying the news of where the number came from. A count and
+// a guess are different things to act on, so anything that puts a token figure
+// in front of a reader has to be able to say which of the two it is holding.
+async function countSaying(text, userId) {
+    const guess = Math.ceil(String(text || '').length / 4);
+    try {
+        if (!spindle.tokens || typeof spindle.tokens.countText !== 'function')
+            return { n: guess, counted: false };
+        const got = await spindle.tokens.countText(text, { userId: userId });
+        const n = got && Number(got.total_tokens);
+        return Number.isFinite(n) && n > 0 ? { n: n, counted: true } : { n: guess, counted: false };
+    }
+    catch (_) {
+        return { n: guess, counted: false };
+    }
+}
+// A whole request, message by message. One message answered from the estimate
+// makes the total an estimate: a number that is three quarters counted is still
+// not one to read as exact.
+async function countRequest(texts, userId) {
+    const per = [];
+    let counted = true;
+    let total = 0;
+    for (const one of texts) {
+        const got = await countSaying(one, userId);
+        if (!got.counted)
+            counted = false;
+        per.push(got.n);
+        total += got.n;
+    }
+    return { per: per, total: total, counted: counted };
+}
 // Adds pieces until the budget runs out. Whole pieces only: half a lorebook
 // entry or half a message is worse than one fewer of them.
 async function fitToBudget(pieces, budget, userId) {
@@ -1610,6 +1642,24 @@ async function askModel(text, isUser, scene, userId) {
     }
     try {
         const req = { messages: await buildPrompt(text, isUser, scene, userId) };
+        // What this one refine put through the model, sent on once the answer is
+        // in. Not awaited: counting is worth a line in the panel and is not worth
+        // holding the rewrite behind, and a count that never arrives leaves the
+        // panel showing the last one rather than showing nothing.
+        const reportUsed = (answer) => {
+            const asked = req.messages.map((m) => String((m && m.content) || '')).join('\n');
+            Promise.all([countSaying(asked, userId), countSaying(answer, userId)])
+                .then(([sent, back]) => {
+                tell(userId, {
+                    type: 'refine_used',
+                    at: Date.now(),
+                    sent: sent.n,
+                    back: back.n,
+                    counted: sent.counted && back.counted,
+                });
+            })
+                .catch(() => { });
+        };
         // Only the values the reader actually changed. An empty object is left out
         // so the connection's own preset stays in charge, which is what somebody
         // who never opened the sampler section expects.
@@ -1676,6 +1726,7 @@ async function askModel(text, isUser, scene, userId) {
                         });
                     }
                 }
+                reportUsed(text);
                 return { content: text, error: '' };
             }
             catch (e) {
@@ -1688,7 +1739,9 @@ async function askModel(text, isUser, scene, userId) {
         }
         tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
         const result = await spindle.generate.quiet(req);
-        return { content: String((result && result.content) || ''), error: '' };
+        const answer = String((result && result.content) || '');
+        reportUsed(answer);
+        return { content: answer, error: '' };
     }
     catch (e) {
         const msg = (e && e.message) || String(e);
@@ -2425,6 +2478,12 @@ spindle.onFrontendMessage(async (payload, userId) => {
                     scene = { ...scene, shieldNote: SHIELD_NOTE };
                 const messages = await buildPrompt(armed.text, isUser, scene, userId);
                 const whichPrompt = isUser ? 'yours' : 'replies';
+                // Counted here rather than in the panel, because the tokeniser lives on
+                // this side and characters over four is the number this card exists to
+                // stop somebody having to work out for themselves. A preview is a press
+                // with a wait already attached, so the extra calls cost nothing anybody
+                // notices.
+                const tokens = await countRequest(messages.map((m) => String((m && m.content) || '')), userId);
                 replyTo(userId, {
                     type: 'prompt_preview',
                     requestId: payload.requestId,
@@ -2432,6 +2491,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                     real: real,
                     which: whichPrompt,
                     messages: messages,
+                    tokens: tokens,
                     parameters: cleanSamplers(),
                     wrapOutput: wrapOutput,
                     connectionId: connectionId || '',

@@ -5185,6 +5185,105 @@ console.log("\ndescriptions behind a ?");
   });
 }
 
+console.log("\ntokens and what they cost");
+{
+  // The preview used to report messages and characters, which is two numbers
+  // nobody is billed in. The count comes down with the request from the side
+  // the tokeniser lives on, and the panel says which of a count and a guess it
+  // is holding.
+  const answer = (page, tokens) =>
+    page.evaluate((tok) => {
+      const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
+      window.__fromBackend({
+        type: "prompt_preview",
+        requestId: id,
+        ok: true,
+        real: true,
+        messages: [
+          { role: "system", content: "Rules go here." },
+          { role: "user", content: "The passage." },
+        ],
+        tokens: tok,
+        parameters: null,
+        connectionId: "",
+        reasoning: { source: "off" },
+      });
+    }, tokens);
+  const build = (page) =>
+    page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Show me the request|Build it again/.test(b.textContent))
+        .click();
+    });
+  const body = (page) =>
+    page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    await build(page);
+    await answer(page, { per: [900, 100], total: 1000, counted: true });
+    await settle(page);
+    let shown = await body(page);
+    ok("the request is measured in tokens", /1,000 tokens/.test(shown), shown.slice(0, 200));
+    ok("and each message carries its own count", /900 tokens/.test(shown) && /100 tokens/.test(shown));
+    ok("with the characters kept beside them", /characters/.test(shown));
+    ok(
+      "a counted total is not called roughly anything",
+      !/roughly 1,000 tokens/.test(shown),
+    );
+    ok(
+      "and no cost is worked out until prices are set",
+      !/^About /m.test(shown) && !/for this refine/.test(shown),
+    );
+
+    // One message answered from the estimate makes the whole total a guess, and
+    // the panel has to say so rather than let it read as measured.
+    await build(page);
+    await answer(page, { per: [900, 100], total: 1000, counted: false });
+    await settle(page);
+    shown = await body(page);
+    ok("an estimated total says so in words", /roughly 1,000 tokens/.test(shown));
+  });
+
+  // With prices in, the same request is priced. 3 per million in and 15 out is
+  // 1000 sent and 100 back, so 0.003 + 0.0015, which is 0.0045.
+  await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
+    await goTab(page, "Context");
+    await build(page);
+    await answer(page, { per: [900, 100], total: 1000, counted: true });
+    await settle(page);
+    const shown = await body(page);
+    ok("prices turn the count into money", /About 0\.0045 for this refine/.test(shown), shown.slice(0, 300));
+    ok("and into a figure worth reading, across a hundred", /0\.45 across a hundred replies/.test(shown));
+    ok("no currency is invented", !/[$£€]/.test(shown));
+  });
+
+  // What one really used, which lands after the refine rather than with it.
+  await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
+    await goTab(page, "Log");
+    let shown = await body(page);
+    ok("nothing is claimed before a refine has run", !/Last refine used/.test(shown));
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_used", at: Date.now(), sent: 2000, back: 500, counted: true });
+    });
+    await settle(page);
+    shown = await body(page);
+    ok("what the last refine used is reported", /2,000 tokens in/.test(shown) && /500 tokens back/.test(shown), shown.slice(0, 300));
+    ok("and what it cost", /about 0\.013/.test(shown));
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_used", at: Date.now(), sent: 2000, back: 500, counted: true });
+    });
+    await settle(page);
+    const shown = await body(page);
+    ok("the tokens are reported with no prices set", /2,000 tokens in/.test(shown));
+    ok("and no cost is put beside them", !/Last refine cost/.test(shown));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

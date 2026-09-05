@@ -54,7 +54,7 @@ Six tabs, and everything belongs to exactly one of them. The switch, the refine 
 | **Context** | How much of the chat and the lorebook goes in, and a preview of exactly what gets sent |
 | **Model** | Which connection refines, how much thinking it does, the timeout, and the samplers |
 | **Limits** | What it protects, what it refuses to save, and what it does before it writes |
-| **Log** | What is happening right now, what it has been doing, and one button that copies a bug report |
+| **Log** | What is happening right now, what it has been doing, what the last refine used and cost, and one button that copies a bug report |
 | **Setup** | This chat, how you are told a refine landed, the three optional buttons, import and export, and starting again |
 
 ## What it costs, and how to spend less
@@ -64,6 +64,8 @@ A refine is a second model call on every reply, so three settings decide what th
 - **Refine using.** A rewrite does not need the model you roleplay with. Point this at a cheaper or faster connection and the whole feature costs a fraction of what it would otherwise.
 - **Let it think first.** Off by default. Rewriting a paragraph is not a reasoning problem. You can also leave it at whatever your connection is already set to, or pick an effort level yourself.
 - **How much it is told.** How many messages of run-up go in, and the token ceilings on that and on the lorebook. More context makes a better rewrite and costs more on every one.
+
+Put your provider's prices in on the **Model** tab and the panel stops dealing in tokens and starts dealing in money: what a request would cost before you send it, and what the last one really came to.
 
 ## Your prompt is the settings
 

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -40,7 +40,7 @@ const PARTS = [
         id: "model",
         label: "Model and thinking",
         what: "Which connection refines, how much it thinks, and how long to wait.",
-        keys: ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs"],
+        keys: ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "costIn", "costOut"],
     },
     {
         id: "samplers",
@@ -207,6 +207,10 @@ const CONFIG = {
     thinkingMode: "off",
     thinkingEffort: "medium",
     timeoutSecs: 90,
+    // What a million tokens costs, in and out. Nobody's prices are known here, so
+    // 0 means the reader has not said and no cost is worked out.
+    costIn: 0,
+    costOut: 0,
     maxGrowthPct: 60,
     minShrinkPct: 40,
     keepOriginal: true,
@@ -1290,6 +1294,25 @@ const COST_FIELDS = [
         max: 3600,
         hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up.",
     },
+    // Prices, so a token count can be shown as the number people actually want.
+    // Nothing here knows what a model costs and no two providers agree, so the
+    // figure comes from the reader. Both at 0 leaves every cost line off.
+    {
+        key: "costIn",
+        label: "Price per million tokens sent",
+        type: "num",
+        min: 0,
+        max: 10000,
+        hint: "From your provider's own price list. Left at 0, no cost is worked out anywhere.",
+    },
+    {
+        key: "costOut",
+        label: "Price per million tokens back",
+        type: "num",
+        min: 0,
+        max: 10000,
+        hint: "The other half of that price list, usually the dearer one. In whatever currency your provider bills you in, since nothing here converts anything.",
+    },
 ];
 const LIMIT_FIELDS = [
     {
@@ -2303,6 +2326,31 @@ export function setup(ctx, overrides) {
     let previewBusy = false;
     let previewWaiting = null;
     let previewRaw = false;
+    // What the last refine put through the model. Sent on after the answer rather
+    // than with it, so it lands a moment later and stays until the next one.
+    let lastUsed = null;
+    // ---- turning tokens into the number people actually want ----
+    const hasPrices = () => Number(cfg.costIn) > 0 || Number(cfg.costOut) > 0;
+    // No currency symbol anywhere, because nothing here knows the currency. A "$"
+    // printed for somebody billed in euros is worse than no symbol at all.
+    //
+    // Two places at a whole unit and up, two significant figures below one. A
+    // fixed number of decimals is what goes wrong here: two prints every refine
+    // on earth as 0.00, and four rounds a cost of 0.000012 away to nothing.
+    // Significant figures hold for both ends.
+    function money(n) {
+        if (!Number.isFinite(n) || n <= 0)
+            return "0";
+        return n >= 1 ? n.toFixed(2) : String(Number(n.toPrecision(2)));
+    }
+    // Sent and back priced separately, since providers charge more for what comes
+    // back and a single rate would flatter a rewrite that grew.
+    function costOf(sent, back) {
+        return (sent / 1e6) * Number(cfg.costIn || 0) + (back / 1e6) * Number(cfg.costOut || 0);
+    }
+    // A count and a guess are different things to act on, so which one this is
+    // gets said in words rather than left to the reader to assume.
+    const tokenWord = (n, counted) => (counted ? "" : "roughly ") + n.toLocaleString() + " tokens";
     let soundSaid = null;
     let nameWithheld = false;
     // Null until the backend has answered. Not knowing and knowing nothing is
@@ -5936,26 +5984,48 @@ export function setup(ctx, overrides) {
         let chars = 0;
         for (const m of msgs)
             chars += String((m && m.content) || "").length;
+        // Counted on the way here where the tokeniser is. An older panel, or a host
+        // whose tokeniser would not answer, leaves the estimate in place rather
+        // than leaving the line off.
+        const tok = preview.tokens && typeof preview.tokens === "object" ? preview.tokens : null;
+        const totalTokens = tok ? Number(tok.total) || 0 : Math.ceil(chars / 4);
+        const counted = tok ? !!tok.counted : false;
+        const per = tok && Array.isArray(tok.per) ? tok.per : [];
+        const size = msgs.length +
+            (msgs.length === 1 ? " message, " : " messages, ") +
+            tokenWord(totalTokens, counted) +
+            ", " +
+            chars.toLocaleString() +
+            " characters";
         if (previewRaw) {
-            wrap.appendChild(note(msgs.length +
-                (msgs.length === 1 ? " message, " : " messages, ") +
-                chars.toLocaleString() +
-                " characters. This is the request as it goes out."));
+            wrap.appendChild(note(size + ". This is the request as it goes out."));
             wrap.appendChild(el("div", "arf-well arf-scroll arf-mono arf-tall", previewAsRaw(preview)));
             return wrap;
         }
-        wrap.appendChild(note(msgs.length +
-            (msgs.length === 1 ? " message, " : " messages, ") +
-            chars.toLocaleString() +
-            " characters" +
+        wrap.appendChild(note(size +
             (preview.real ? "" : ", with a stand-in where your reply would go, since no reply was found on screen")));
-        for (const m of msgs) {
+        // What this one would cost, before it is spent. What comes back cannot be
+        // known until it arrives, so it is taken as the same size as the passage:
+        // a rewrite is the passage said better, and the length limits are what keep
+        // that true.
+        if (hasPrices()) {
+            const back = per.length ? per[per.length - 1] : Math.ceil(chars / 4);
+            const one = costOf(totalTokens, back);
+            wrap.appendChild(note("About " +
+                money(one) +
+                " for this refine, or " +
+                money(one * 100) +
+                " across a hundred replies, at the prices on the Model tab. What comes back is taken as the same size as the passage."));
+        }
+        for (let i = 0; i < msgs.length; i++) {
+            const m = msgs[i];
+            const body = String((m && m.content) || "");
             const one = el("div", "arf-block");
             const head = el("div", "arf-between");
             head.appendChild(el("span", "arf-lab arf-mono", String((m && m.role) || "system")));
-            head.appendChild(el("span", "arf-pill arf-mono", String((m && m.content) || "").length + " chars"));
+            head.appendChild(el("span", "arf-pill arf-mono", tokenWord(per.length > i ? per[i] : Math.ceil(body.length / 4), counted)));
             one.appendChild(head);
-            one.appendChild(el("div", "arf-well arf-scroll arf-mono", String((m && m.content) || "")));
+            one.appendChild(el("div", "arf-well arf-scroll arf-mono", body));
             wrap.appendChild(one);
         }
         // The rest of the call, which is part of what gets sent and is otherwise
@@ -6363,6 +6433,20 @@ export function setup(ctx, overrides) {
                 "Last refine took",
                 (lastRun.ms / 1000).toFixed(1) + "s, " + (lastRun.ok ? "saved" : "dropped"),
             ]);
+        // What that one actually put through the model, rather than what a preview
+        // reckoned beforehand. A dropped rewrite is on this line too: the call was
+        // made and paid for whether or not anything was saved.
+        if (lastUsed) {
+            rows.push([
+                "Last refine used",
+                tokenWord(lastUsed.sent, lastUsed.counted) +
+                    " in, " +
+                    tokenWord(lastUsed.back, lastUsed.counted) +
+                    " back",
+            ]);
+            if (hasPrices())
+                rows.push(["Last refine cost", "about " + money(costOf(lastUsed.sent, lastUsed.back))]);
+        }
         for (const [k, v] of rows) {
             const r = el("div", "arf-between");
             r.appendChild(el("span", "arf-note", k));
@@ -9067,6 +9151,16 @@ export function setup(ctx, overrides) {
                         shieldBad = Array.isArray(msg.patterns) ? msg.patterns.map(String).slice(0, 10) : [];
                         if (shieldBad.length)
                             log("some shield patterns could not be read");
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "refine_used") {
+                        // Counted after the answer landed, so this arrives a moment behind
+                        // the refine itself and simply replaces the figure on the Log tab.
+                        const sent = Number(msg.sent);
+                        const back = Number(msg.back);
+                        if (Number.isFinite(sent) && Number.isFinite(back))
+                            lastUsed = { sent: sent, back: back, counted: !!msg.counted };
                         paint();
                         return;
                     }

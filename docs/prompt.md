@@ -186,6 +186,20 @@ Protection catches what it can find. The prompts that ship with it also carry a 
 
 **Keep the refiner's own reasoning out of your chat** is the other direction: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
 
+## What a refine costs
+
+Set **Price per million tokens sent** and **Price per million tokens back** on the **Model** tab and the panel works the rest out. Both start at 0, and at 0 no cost is shown anywhere.
+
+The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
+
+Two places use them.
+
+**Before you spend it**, under **Show me the request**: what this one request would cost, and what a hundred replies at that size would come to. The hundred is the number worth looking at, since a refine costs a fraction of a penny and the question people actually have is what a session comes to. What comes back cannot be known before it arrives, so it is taken as the same size as the passage, which the [length limits](guardrails.md) are what keep true.
+
+**After you spent it**, on the **Log** tab under **Right now**: what the last refine really put through, in and back, and what that cost. A rewrite that was dropped counts here, because the call was made and paid for whether or not anything was saved.
+
+The cheapest thing you can do is not on this page: point **Refine using** at a smaller model. That is worth more than every other saving here put together.
+
 ## Sampler settings
 
 Under **Model**, every sampler is blank to begin with, and blank means the connection's own preset decides. That is the right default: if you tuned a preset, an extension should not quietly override it.
@@ -209,6 +223,8 @@ Under **Model**, **Let it think first** has three answers:
 ## Seeing what gets sent
 
 **Show me the request** builds the request for the reply you are looking at and shows it, message by message, with the role and size of each. No model is called and nothing is charged; it costs one read of your chat.
+
+Size is in tokens, counted with Lumiverse's own tokeniser, with the character count beside it. Where the tokeniser will not answer the number is estimated at four characters a token and the line says **roughly** so you know which of the two you are reading. A count and a guess are different things to act on.
 
 It is built by the same function a real refine uses, and the passage goes through the same two steps first, so it cannot become a nice description of something the extension does not actually send. That is why the passage may read oddly: markup shows as `[[AR1]]` tokens, the model's own reasoning is already cut off it, and `{{protect_notes}}` has become the sentence that explains the tokens. That is what the model gets. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
 
