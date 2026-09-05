@@ -4303,6 +4303,49 @@ console.log("\nnothing is thrown away on one tap");
   );
 }
 
+// ---- a block's footer ----
+console.log("\na block's footer");
+{
+  // Delete sat under the row and the "holds the turn" pill stood between it and
+  // the role picker, which read as the pill being what the button belonged to.
+  await inTab(browser, { viewport: { width: 420, height: 900 } }, async (page) => {
+    await goTab(page, "Prompt");
+    const out = await page.evaluate(() => {
+      const rows = [];
+      for (const b of document.querySelectorAll("#drawer [data-arf-block]")) {
+        const del = [...b.querySelectorAll("button")].find((x) => x.textContent.trim() === "Delete");
+        const sel = b.querySelector("select");
+        if (!del || !sel) continue;
+        const pill = [...b.querySelectorAll(".arf-pill")].find((p) =>
+          /holds the turn/.test(p.textContent || ""),
+        );
+        const d = del.getBoundingClientRect();
+        const s = sel.getBoundingClientRect();
+        rows.push({
+          onTheRoleRow: Math.abs(d.top - s.top) < 8,
+          fromTheEdge: Math.round(b.getBoundingClientRect().right - d.right),
+          pillBelow: pill ? pill.getBoundingClientRect().top > s.bottom - 2 : null,
+        });
+      }
+      return rows;
+    });
+    ok("every block has a role picker and a Delete", out.length >= 8, out.length);
+    ok(
+      "Delete sits on the role row rather than under it",
+      out.every((r) => r.onTheRoleRow),
+      JSON.stringify(out.filter((r) => !r.onTheRoleRow).slice(0, 2)),
+    );
+    ok(
+      "and at the far edge of the block rather than up against the picker",
+      out.every((r) => r.fromTheEdge < 24),
+      JSON.stringify(out.map((r) => r.fromTheEdge).slice(0, 4)),
+    );
+    const marked = out.filter((r) => r.pillBelow !== null);
+    ok("one block is marked as holding the turn", marked.length === 1, marked.length);
+    ok("and that mark sits under the row, out of the way of both", marked.every((r) => r.pillBelow), JSON.stringify(marked));
+  });
+}
+
 // ---- teardown leaves the page as it found it ----
 console.log("\nteardown");
 {

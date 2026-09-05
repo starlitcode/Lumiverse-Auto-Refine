@@ -5665,8 +5665,11 @@ export function setup(ctx, overrides) {
             setBlocks(next, false);
         });
         foot.appendChild(sel);
-        if (holdsTurn)
-            foot.appendChild(el("span", "arf-pill", "holds the turn"));
+        // A gap that takes whatever is left, so Delete sits at the far edge of the
+        // row rather than up against the picker. It used to sit below the row and
+        // the pill stood between the two, which read as the pill being what the
+        // button belonged to.
+        foot.appendChild(el("span", "arf-grow"));
         const drop = button("Delete", false);
         drop.className += " arf-danger";
         drop.setAttribute("aria-label", "Delete " + blockLabel(b));
@@ -5683,6 +5686,14 @@ export function setup(ctx, overrides) {
         });
         foot.appendChild(drop);
         wrap.appendChild(foot);
+        // Under the row rather than in it. This says something about the block, not
+        // something to press, and standing it between the picker and Delete put a
+        // label in the way of the two controls it has nothing to do with.
+        if (holdsTurn) {
+            const mark = el("div", "arf-row");
+            mark.appendChild(el("span", "arf-pill", "holds the turn"));
+            wrap.appendChild(mark);
+        }
         return wrap;
     }
     // What a block can say, and who answers it. On screen rather than in a
