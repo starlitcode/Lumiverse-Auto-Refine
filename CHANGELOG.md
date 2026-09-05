@@ -11,3 +11,7 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 _2026-09-05_
 
 First release.
+
+---
+
+[Back to the README](README.md)

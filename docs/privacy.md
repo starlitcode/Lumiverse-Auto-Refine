@@ -77,3 +77,7 @@ Everything else in the repo exists for working on it, and none of it reaches you
 CI rebuilds `dist/` on every push and fails if it has drifted from `src/`, so the file Lumiverse loads is one you can read and check against the source.
 
 It never treats text as code. There is no `eval` and no `new Function`, so nothing in a reply, a rule, or a model's answer can be run.
+
+---
+
+[Back to the README](../README.md)
