@@ -126,19 +126,33 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
     window.__makeComposer = (text) => {
       const host = document.createElement("div");
       host.innerHTML = html;
-      document.body.appendChild(host.firstElementChild);
+      const area = host.firstElementChild;
+      document.body.appendChild(area);
+      // Inside the one just added, not the first on the page: a check that makes
+      // a second input area was writing its text into the first and then asking
+      // why the extension read an empty box.
+      //
       // By name, not by tag: the real markup has a mirror div beside it and an
       // attachment input above it, and "the first textarea in there" would be a
       // guess that happens to be right today.
-      const box = document.querySelector(
-        '[data-component="InputArea"] textarea[name="chat-message"]',
-      );
+      const box = area.querySelector('textarea[name="chat-message"]');
       // The real box is sized by the app's own stylesheet, which is not here, so
       // it is given a size: the extension will not take a box with no box.
       box.style.width = "200px";
       box.style.height = "40px";
       box.value = text;
       return box;
+    };
+    // A press held long enough for the picker to take it. Its own click follows,
+    // the way a browser sends one after a hold.
+    window.__hold = async (node) => {
+      const box = node.getBoundingClientRect();
+      const at = { clientX: box.left + 4, clientY: box.top + 4, bubbles: true, pointerType: "touch" };
+      node.dispatchEvent(new PointerEvent("pointerdown", at));
+      await new Promise((r) => setTimeout(r, 620));
+      node.dispatchEvent(new PointerEvent("pointerup", at));
+      node.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     };
   }, COMPOSER_HTML);
   if (noMenu) await page.evaluate(() => { window.__noMenu = true; });
@@ -4411,10 +4425,9 @@ console.log("\nwhere the input box is");
     const wrote = await page.evaluate(async () => {
       const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
       const row = document.querySelector('#drawer [data-arf-row="inputSelector"]');
-      [...row.querySelectorAll("button")].find((b) => /pick/i.test(b.textContent)).click();
+      [...row.querySelectorAll("button")].find((b) => /pick it/i.test(b.textContent)).click();
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      box.click();
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await window.__hold(box);
       return JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector;
     });
     ok(
@@ -4506,22 +4519,108 @@ console.log("\nwhere the input box is");
     await page.evaluate(() => window.__makeComposer(""));
     await press(page, "Pick it for me");
     await settle(page);
-    ok("it says what to do", /click your input box/i.test(await said(page)), await said(page));
+    ok(
+      "it says what to do, and that the page still works",
+      /press and hold your input box/i.test(await said(page)) &&
+        /everything else still works/i.test(await said(page)),
+      await said(page),
+    );
     const out = await page.evaluate(async () => {
-      const box = document.querySelector('[data-component="InputArea"] textarea');
+      const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
       let reached = false;
       box.addEventListener("click", () => { reached = true; });
-      box.click();
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await window.__hold(box);
       return {
         reached,
         held: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector,
       };
     });
     await settle(page);
-    ok("the press does not also land on the box", !out.reached, JSON.stringify(out));
+    ok("the click the hold makes does not also land on the box", !out.reached, JSON.stringify(out));
     ok("and it wrote a selector for it", !!out.held, JSON.stringify(out));
     ok("and says which one", /set to /i.test(await said(page)), await said(page));
+  });
+
+  // The picker must not shut the reader in.
+  //
+  // The box is on the chat screen and this panel is a drawer over it, so closing
+  // the drawer is a step in the job. Swallowing every press left the drawer's own
+  // Close button doing nothing, and took that press as the answer: the setting
+  // came back reading button[aria-label="Close"].
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    await page.evaluate(() => {
+      window.__makeComposer("");
+      // The drawer's Close button, as Lumiverse draws it.
+      const x = document.createElement("button");
+      x.type = "button";
+      x.setAttribute("aria-label", "Close");
+      x.id = "hostclose";
+      x.textContent = "x";
+      x.addEventListener("click", () => { window.__closed = true; });
+      document.body.appendChild(x);
+      window.__closed = false;
+    });
+    await press(page, "Pick it for me");
+    await settle(page);
+    const out = await page.evaluate(async () => {
+      const x = document.getElementById("hostclose");
+      x.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      x.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return {
+        closed: window.__closed,
+        held: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector,
+      };
+    });
+    ok("pressing the panel's Close still closes it", out.closed, JSON.stringify(out));
+    ok("and it is not taken as the input box", !out.held, JSON.stringify(out));
+    // Still armed, so the box can be pressed after the drawer is out of the way.
+    const after = await page.evaluate(async () => {
+      const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
+      await window.__hold(box);
+      return JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector;
+    });
+    ok("and the box pressed afterwards is still taken", !!after, String(after));
+    // Whatever attribute it settled on, it has to name that box and no other.
+    ok(
+      "and what it wrote names the message box",
+      await page.evaluate((sel) => {
+        const n = sel && document.querySelector(sel);
+        return !!n && n.getAttribute("name") === "chat-message";
+      }, after),
+      String(after),
+    );
+  });
+
+  // A selector naming something that is not a box to type in.
+  await inTab(browser, {}, async (page) => {
+    await open(page);
+    await page.evaluate(() => window.__makeComposer(""));
+    await type(page, 'button[aria-label="Close"]');
+    await page.evaluate(() => {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.setAttribute("aria-label", "Close");
+      document.body.appendChild(x);
+    });
+    await press(page, "Test it");
+    await settle(page);
+    ok(
+      "a selector naming a button is named as not a box you can type in",
+      /not a box/i.test(await said(page)),
+      await said(page),
+    );
+    // And it is not used, so the built-in way still finds the real one.
+    const reads = await page.evaluate(async () => {
+      const box = window.__makeComposer("still the message box");
+      window.__sent = [];
+      window.__inputClick();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const asked = window.__sent.filter((m) => m.type === "try_refine");
+      return asked.length ? asked[0].text : null;
+    });
+    ok("and the built-in way is used instead of it", reads === "still the message box", String(reads));
   });
 
   // Stopping without picking anything.
@@ -4536,11 +4635,10 @@ console.log("\nwhere the input box is");
     await settle(page);
     ok("Escape stops it", /picking stopped/i.test(await said(page)), await said(page));
     const after = await page.evaluate(async () => {
-      const box = document.querySelector('[data-component="InputArea"] textarea');
+      const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
       let reached = false;
       box.addEventListener("click", () => { reached = true; });
-      box.click();
-      await new Promise((r) => requestAnimationFrame(r));
+      await window.__hold(box);
       return reached;
     });
     ok("and the page answers presses again afterwards", after, after);

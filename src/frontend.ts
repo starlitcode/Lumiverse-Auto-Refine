@@ -7325,16 +7325,64 @@ export function setup(ctx: Ctx, overrides?: any) {
   // release of this to catch up is worse than being able to point at it.
   let boxSaid: { text: string; ok: boolean } | null = null;
 
-  // Point at the box by clicking it.
+  // Point at the box by tapping it.
   //
-  // Every press on the page is swallowed while this runs, so clicking the input
-  // box does not also put a cursor in it, and a control that acts on the way
-  // down rather than on the click cannot fire either. Escape and a second press
-  // on the button both stop it.
+  // Only a press on something that can be typed in is taken. Everything else on
+  // the page carries on working, which it has to: the box is on the chat screen
+  // and this panel is a drawer over it, so the reader has to be able to close
+  // the drawer to reach the thing they are pointing at. Swallowing every press
+  // shut them in behind a panel whose own Close button did nothing, and took
+  // that press as the answer.
+  //
+  // Escape stops it, pressing the button again stops it, and it gives up on its
+  // own after a while so it is never left armed.
   let picking: (() => void) | null = null;
   disposers.push(() => {
     if (picking) picking();
   });
+
+  // How long the picker waits before giving up. Long enough to close the drawer,
+  // find the box and press it; short enough that one left running does not lie
+  // in wait for the next time somebody taps a search field.
+  const PICK_MS = 60000;
+  // A hold rather than a tap, so an ordinary press still does what it always
+  // does while the picker is up. Long enough that a tap is never mistaken for
+  // one, short enough that holding does not feel like waiting.
+  const HOLD_MS = 500;
+  // How far a finger may wander and still count as a hold rather than a drag.
+  const HOLD_SLIP = 10;
+
+  // The click a hold leaves behind, eaten once. It belongs to the gesture that
+  // picked, not to whatever is under it, and it outlives the picker: the picker
+  // stands down the moment it has its answer, and the click has not arrived yet.
+  let eatingClick: (() => void) | null = null;
+  disposers.push(() => {
+    if (eatingClick) eatingClick();
+  });
+
+  function eatOneClick() {
+    if (eatingClick) eatingClick();
+    const eat = (e: any) => {
+      drop();
+      try {
+        e.preventDefault();
+        e.stopPropagation();
+      } catch (_) {}
+    };
+    let timer: any = null;
+    const drop = () => {
+      eatingClick = null;
+      try {
+        clearTimeout(timer);
+      } catch (_) {}
+      try {
+        document.removeEventListener("click", eat, true);
+      } catch (_) {}
+    };
+    eatingClick = drop;
+    document.addEventListener("click", eat, true);
+    timer = setTimeout(drop, 1200);
+  }
 
   function pickBox() {
     if (picking) {
@@ -7342,7 +7390,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     if (typeof document === "undefined") return;
-    const PRESS = ["pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
     const ours = (t: any) => {
       try {
         return !!(t && t.closest && t.closest(".arf"));
@@ -7350,20 +7397,40 @@ export function setup(ctx: Ctx, overrides?: any) {
         return false;
       }
     };
+    // The box under the press, or nothing. A tap usually lands on the box
+    // itself, but a contenteditable can have the press land on a node inside
+    // it, so this walks up a little way.
+    const aimedAt = (t: any): any => {
+      let node: any = t;
+      let hops = 0;
+      while (node && hops < 4) {
+        if (typeable(node)) return node;
+        node = node.parentElement;
+        hops++;
+      }
+      return null;
+    };
+    let giveUp: any = null;
     const stop = (sel: string | null, say: string, ok: boolean) => {
       if (!picking) return;
       picking = null;
       try {
-        document.removeEventListener("click", onPick, true);
+        clearTimeout(giveUp);
       } catch (_) {}
       try {
         document.removeEventListener("keydown", onKey, true);
       } catch (_) {}
-      for (const type of PRESS) {
+      for (const [type, fn] of [
+        ["pointerdown", onDown],
+        ["pointermove", onMove],
+        ["pointerup", onUp],
+        ["pointercancel", onUp],
+      ] as Array<[string, any]>) {
         try {
-          document.removeEventListener(type, swallow, true);
+          document.removeEventListener(type, fn, true);
         } catch (_) {}
       }
+      letGo();
       if (sel) {
         cfg.inputSelector = sel;
         persist(true);
@@ -7371,49 +7438,77 @@ export function setup(ctx: Ctx, overrides?: any) {
       boxSaid = { text: say, ok: ok };
       paint();
     };
-    const onPick = (e: any) => {
-      const t: any = e && e.target;
-      // The panel is on screen while this runs, and its own Stop has to work.
-      if (ours(t)) return;
+    // A press held on a box is the pick. A press that is not held, or is not on
+    // a box, is left entirely alone: it does what it always does, which is how
+    // the drawer gets closed to reach the box in the first place.
+    let held: any = null;
+
+    const letGo = () => {
+      if (!held) return;
       try {
-        e.preventDefault();
-        e.stopPropagation();
+        clearTimeout(held.timer);
       } catch (_) {}
-      const sel = deriveSelector(t);
-      if (!sel) {
+      held = null;
+    };
+
+    const take = (box: any) => {
+      held = null;
+      // The press is still down, so a click is coming for whatever is under it.
+      // Eaten by a listener of its own rather than by the picker's, because the
+      // picker is about to stand down and would take its own listener with it
+      // before the click ever arrived.
+      eatOneClick();
+      const sel = deriveSelector(box);
+      if (!sel || !boxFor(sel)) {
         stop(
           null,
-          "Could not name that one. Click the box itself rather than something drawn inside it.",
-          false,
-        );
-        return;
-      }
-      if (!boxFor(sel)) {
-        stop(
-          null,
-          "That names something, but not a box that can be typed in. Click the input box itself.",
+          "Could not find a name for that box that would still work after an update. Type one in above instead.",
           false,
         );
         return;
       }
       stop(sel, "Set to " + sel, true);
     };
+
+    const onDown = (e: any) => {
+      const t: any = e && e.target;
+      if (ours(t)) return;
+      const box = aimedAt(t);
+      if (!box) return;
+      letGo();
+      held = {
+        box: box,
+        x: (e && e.clientX) || 0,
+        y: (e && e.clientY) || 0,
+        timer: setTimeout(() => take(box), HOLD_MS),
+      };
+    };
+    const onMove = (e: any) => {
+      if (!held) return;
+      const dx = ((e && e.clientX) || 0) - held.x;
+      const dy = ((e && e.clientY) || 0) - held.y;
+      if (dx * dx + dy * dy > HOLD_SLIP * HOLD_SLIP) letGo();
+    };
+    const onUp = () => letGo();
+
     const onKey = (e: any) => {
       if (e && e.key === "Escape") stop(null, "Picking stopped.", false);
     };
-    // Only propagation is stopped on the way down. Preventing the default there
-    // would also stop the browser making the click this is waiting for.
-    const swallow = (e: any) => {
-      if (ours(e && e.target)) return;
-      try {
-        e.stopPropagation();
-      } catch (_) {}
-    };
     picking = () => stop(null, "Picking stopped.", false);
-    for (const type of PRESS) document.addEventListener(type, swallow, true);
-    document.addEventListener("click", onPick, true);
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("pointermove", onMove, true);
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onUp, true);
     document.addEventListener("keydown", onKey, true);
-    boxSaid = { text: "Click your input box. Press this button again, or Escape, to stop.", ok: true };
+    giveUp = setTimeout(
+      () => stop(null, "Stopped waiting. Press Pick it for me again when you are ready.", false),
+      PICK_MS,
+    );
+    boxSaid = {
+      text:
+        "Close this panel, then press and hold your input box. Everything else still works normally, so you can get to it. Press Pick it for me again, or Escape, to stop.",
+      ok: true,
+    };
     paint();
   }
 
@@ -7459,13 +7554,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         boxSaid = found
           ? { text: "Found the box the built-in way. Nothing here is needed.", ok: true }
           : { text: "The built-in way did not find it. Point at it below.", ok: false };
-      else if (state === "bad") boxSaid = { text: "That is not a selector the browser understands.", ok: false };
-      else if (state === "found") boxSaid = { text: "Found it, and it is on screen.", ok: true };
-      else if (state === "hidden")
+      else if (state === "invalid selector")
+        boxSaid = { text: "That is not a selector the browser understands.", ok: false };
+      else if (state === "match") boxSaid = { text: "Found it, and it is on screen.", ok: true };
+      else if (state === "match, not a box you can type in")
         boxSaid = {
           text: found
-            ? "It matches something that is not on screen right now, so the built-in way is being used instead."
-            : "It matches something that is not on screen right now.",
+            ? "That names something, but not a box you can type in, so the built-in way is being used instead."
+            : "That names something, but not a box you can type in.",
           ok: false,
         };
       else
@@ -7478,11 +7574,24 @@ export function setup(ctx: Ctx, overrides?: any) {
       paint();
     });
 
-    const pick = button("Pick it for me", false);
+    const pick = button(picking ? "Stop picking" : "Pick it for me", false);
     pick.setAttribute("data-arf-btn", "Pick it for me");
     pick.addEventListener("click", () => pickBox());
     row.appendChild(test);
     row.appendChild(pick);
+    // Only when there is something to put back. An empty box is already the
+    // built-in way, and a button that does nothing is worse than no button.
+    if (String(cfg.inputSelector || "").trim()) {
+      const back = button("Back to the built-in way", false);
+      back.setAttribute("data-arf-btn", "Back to the built-in way");
+      back.addEventListener("click", () => {
+        cfg.inputSelector = "";
+        persist(true);
+        boxSaid = { text: "Cleared. The box is found the built-in way again.", ok: true };
+        paint();
+      });
+      row.appendChild(back);
+    }
     wrap.appendChild(row);
     if (boxSaid) wrap.appendChild(boxSaid.ok ? notice("good", boxSaid.text) : warn(boxSaid.text));
     return wrap;
@@ -8664,6 +8773,36 @@ export function setup(ctx: Ctx, overrides?: any) {
     "textarea",
   ];
 
+  // Something a person can type in.
+  //
+  // Asked of every candidate, because a selector matches whatever it matches: a
+  // press on the drawer's own Close button was taken as the input box and
+  // written down as one, which then found nothing to type into and trapped the
+  // reader behind a panel they could not close.
+  function typeable(node: any): boolean {
+    if (!node) return false;
+    const tag = String(node.tagName || "").toLowerCase();
+    if (tag === "textarea") return true;
+    if (tag === "input") {
+      const kind = String(node.type || "text").toLowerCase();
+      // The ones that hold writing. A checkbox, a file field and a button are
+      // all inputs and none of them is a box to type a message in.
+      return (
+        kind === "text" ||
+        kind === "search" ||
+        kind === "url" ||
+        kind === "email" ||
+        kind === "tel" ||
+        kind === ""
+      );
+    }
+    try {
+      return node.isContentEditable === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Whether one selector, or a comma-separated list of them, names something
   // usable. Named apart from composer so the card below can say what it found
   // without acting on it.
@@ -8675,6 +8814,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       for (let i = found.length - 1; i >= 0; i--) {
         const node: any = found[i];
         if (!node || node.disabled || node.readOnly) continue;
+        if (!typeable(node)) continue;
         if (node.closest && node.closest(".arf")) continue;
         const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
         if (box && (!box.width || !box.height)) continue;
