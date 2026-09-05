@@ -375,7 +375,6 @@ describe("answers that must not be saved", () => {
       /declined/i,
     ],
     ["nothing at all", "   ", /sent nothing back/i],
-    ["the same text back", original, /changed nothing/i],
     [
       "a rewrite that grew into new scene",
       original + " " + "She kept walking and the road opened onto a field, and beyond it a house with one lit window, and she knew whoever waited there had been waiting a long time.",
@@ -394,6 +393,32 @@ describe("answers that must not be saved", () => {
       expect(h.skipped().join(" ")).toMatch(why);
     });
   }
+
+  // The shipped prompt says a passage that already reads well comes back exactly
+  // as it was. Calling that "the model changed nothing" reported the extension's
+  // own instruction as a fault, and on a short piece of writing, which is most
+  // of what an input box holds, it was the usual answer: the button looked
+  // broken every time somebody had written a clean line.
+  test("the same text back is an outcome, not a refusal", async () => {
+    const h = await armed([original]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(original);
+    expect(h.writes.length).toBe(0);
+    const why = h.skipped().join(" ");
+    expect(why).toMatch(/already read well/i);
+    expect(why).not.toMatch(/changed nothing/i);
+  });
+
+  test("and it is not asked again, since it has just said it needs no change", async () => {
+    // Two answers waiting. A reason worth retrying takes the second; this one
+    // must not, because asking again is paying twice for the same answer.
+    const h = await armed([original, "She stepped through, and the cold took her."], { retryRefine: 1 });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(original);
+    expect(h.asked.length).toBe(1);
+  });
 
   test("a rewrite wrapped in quotes is unwrapped rather than dropped", async () => {
     const h = await armed(['"She stepped through and the cold hit her."']);

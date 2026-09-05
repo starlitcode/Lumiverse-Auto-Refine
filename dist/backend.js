@@ -906,8 +906,14 @@ let retryRefine = 0;
 // bad turn. A rewrite refused for its length is the model meaning it, and one
 // that dropped a protection token has already been re-read once; asking again
 // buys the same answer at the same price.
+// An answer that came back word for word the same is not in here. The prompt
+// asks for exactly that of a passage that already reads well, so asking again is
+// asking the model to change something it has just said needs no change, at the
+// same price. That one is decided by the verdict's own flag rather than by its
+// wording, which is what a reader sees and what a rewording would quietly
+// change the meaning of.
 function worthRetrying(why) {
-    return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished|changed nothing/i.test(String(why || ''));
+    return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished/i.test(String(why || ''));
 }
 // Wrapping the whole answer in quotes, which a model does when it reads the
 // message as a quotation rather than as the thing it is editing.
@@ -954,8 +960,13 @@ function judgeInner(answer, original) {
     const orig = original.trim();
     if (!text)
         return { ok: false, text: '', why: 'the model sent nothing back' };
+    // Not a failure. The prompt says a passage that already reads well comes back
+    // exactly as it was, so a model that hands it back is doing what it was told:
+    // calling that "the model changed nothing" reported the extension's own
+    // instruction as a fault, and on a short piece of writing, which is most of
+    // what an input box holds, it was the usual answer.
     if (text === orig)
-        return { ok: false, text: '', why: 'the model changed nothing' };
+        return { ok: false, text: '', why: 'it already read well, so nothing was changed', same: true };
     if (guardPreamble && PREAMBLE.test(text))
         return { ok: false, text: '', why: 'the model wrote about the edit instead of making it' };
     if (guardRefusal && REFUSAL.test(text) && text.length < 600)
@@ -1604,11 +1615,13 @@ async function refineMessage(chatId, messageId, userId, byHand) {
             notes = verdict.notes;
         if (verdict.ok)
             break;
+        if (verdict.same)
+            break;
         if (!worthRetrying(verdict.why))
             break;
     }
     if (!verdict.ok)
-        return { ok: false, why: verdict.why, notes: notes };
+        return { ok: false, why: verdict.why, notes: notes, same: !!verdict.same };
     const back = unshield(verdict.text, armed.parts);
     if (back.lost.length)
         return {
@@ -1776,6 +1789,7 @@ try {
                     chatId: p.chatId,
                     messageId: messageId,
                     why: done.why,
+                    same: !!done.same,
                     notes: done.notes || '',
                 });
             }
@@ -2066,6 +2080,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 messageId: payload.messageId,
                 ok: done.ok,
                 why: done.why,
+                same: !!done.same,
                 notes: done.notes || '',
             });
             return;
@@ -2324,6 +2339,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 requestId: payload.requestId,
                 ok: verdict.ok,
                 why: verdict.why,
+                same: !!verdict.same,
                 notes: verdict.notes || '',
                 after: verdict.ok ? verdict.text : String(answer.content || ''),
             });

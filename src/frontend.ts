@@ -9213,13 +9213,18 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
           if (msg.type === "refine_skipped") {
             markBusy(false);
-                  const why = String(msg.why || "no reason given");
+            const why = String(msg.why || "no reason given");
             tookNotes(msg);
             keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: false, why: why });
-            tally.dropped++;
-            countDrop(why);
+            // An answer that came back word for word the same is the prompt
+            // being followed, not a refusal, so it is said plainly and left out
+            // of the count of the ones that were turned down.
+            if (!msg.same) {
+              tally.dropped++;
+              countDrop(why);
+            }
             lastRun = { ms: lastRunMs, ok: false, why: why };
-            log("left a reply alone: " + why);
+            log(msg.same ? "left a reply as it was: " + why : "left a reply alone: " + why);
             paint();
             return;
           }
@@ -9241,11 +9246,13 @@ export function setup(ctx: Ctx, overrides?: any) {
               toast("Reply refined.", true);
             } else {
               const why = String(msg.why || "no reason given");
-              tally.dropped++;
-              countDrop(why);
+              if (!msg.same) {
+                tally.dropped++;
+                countDrop(why);
+              }
               lastRun = { ms: lastRunMs, ok: false, why: why };
-              log("could not refine: " + why);
-              toast("Not refined: " + why, true);
+              log(msg.same ? "left a reply as it was: " + why : "could not refine: " + why);
+              toast(msg.same ? "Left as it was: " + why : "Not refined: " + why, true);
             }
             paint();
             return;
@@ -9282,9 +9289,12 @@ export function setup(ctx: Ctx, overrides?: any) {
               keepNotes({ chatId: lastChatId, ok: !!msg.ok, why: String(msg.why || ""), mine: true });
               if (!msg.ok) {
                 const why = String(msg.why || "no reason given");
-                countDrop(why);
-                log("did not touch your draft: " + why);
-                toast("Left your draft alone: " + why, true);
+                if (!msg.same) countDrop(why);
+                log(msg.same ? "left your draft as it was: " + why : "did not touch your draft: " + why);
+                toast(
+                  msg.same ? "Left your draft as it was: " + why : "Left your draft alone: " + why,
+                  true,
+                );
               } else if (!node) {
                 log("the input box went away before the refine came back");
                 toast("The input box went away before it came back.", true);
