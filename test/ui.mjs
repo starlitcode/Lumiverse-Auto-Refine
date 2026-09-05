@@ -4553,27 +4553,47 @@ console.log("\nwhere the input box is");
     await open(page);
     ok("and it is still there with it on", (await said(page)).length > 0);
 
+    // The list is written out, not left to be guessed at.
+    const filled = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-field="inputSelector"]');
+      return n ? n.value : "";
+    });
+    ok(
+      "the box carries the list it looks for, rather than sitting empty",
+      /textarea\[name="chat-message"\]/.test(filled) && filled.split(",").length > 3,
+      filled,
+    );
+    // And there is a way back from an edit, whatever state the box is in.
+    ok(
+      "and a reset is there without having to break something first",
+      await page.evaluate(() =>
+        [...document.querySelectorAll('#drawer [data-arf-row="inputSelector"] button')].some(
+          (b) => b.textContent.trim() === "Reset",
+        ),
+      ),
+    );
+
     // With no box on the page at all.
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok(
       "with nothing to find, it says so rather than claiming it works",
-      /not finding it right now/i.test(await said(page)),
+      /right now/i.test(await said(page)),
       await said(page),
     );
 
     // The real input box, as Lumiverse draws it.
     await page.evaluate(() => window.__makeComposer(""));
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok(
-      "with the box on the page, the built-in way finds it and says nothing is needed",
-      /nothing here is needed/i.test(await said(page)),
+      "with the box on the page, the list finds it",
+      /found it/i.test(await said(page)),
       await said(page),
     );
 
     await type(page, "this is not a selector [[[");
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok(
       "a selector the browser cannot read is named as that",
@@ -4582,7 +4602,7 @@ console.log("\nwhere the input box is");
     );
 
     await type(page, "textarea.nothing-like-this");
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok(
       "one that matches nothing says the built-in way is being used instead",
@@ -4598,7 +4618,7 @@ console.log("\nwhere the input box is");
     );
 
     await type(page, 'textarea[name="chat-message"]');
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok("and one that matches says it found it", /found it/i.test(await said(page)), await said(page));
 
@@ -4609,9 +4629,27 @@ console.log("\nwhere the input box is");
       return true;
     });
     await type(page, 'textarea[data-mine="1"]');
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok("a selector of your own is what gets used", used && /found it/i.test(await said(page)), await said(page));
+
+    // Reset puts the list back, from whatever was typed over it.
+    await page.evaluate(() => {
+      [...document.querySelectorAll('#drawer [data-arf-row="inputSelector"] button')]
+        .find((b) => b.textContent.trim() === "Reset")
+        .click();
+    });
+    await settle(page);
+    const backTo = await page.evaluate(() => ({
+      value: document.querySelector('#drawer [data-arf-field="inputSelector"]').value,
+      saved: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").inputSelector,
+    }));
+    ok(
+      "reset writes the list back into the box",
+      /textarea\[name="chat-message"\]/.test(backTo.value) && backTo.value.split(",").length > 3,
+      backTo.value,
+    );
+    ok("and saves it, not only shows it", backTo.saved === backTo.value, String(backTo.saved));
   });
 
   // Picking it by clicking it.
@@ -4675,7 +4713,13 @@ console.log("\nwhere the input box is");
       };
     });
     ok("pressing the panel's Close still closes it", out.closed, JSON.stringify(out));
-    ok("and it is not taken as the input box", !out.held, JSON.stringify(out));
+    // The box is never empty now, so what proves this is that nothing about
+    // that button was written into it.
+    ok(
+      "and it is not taken as the input box",
+      !/close/i.test(String(out.held || "")) && !/hostclose/.test(String(out.held || "")),
+      JSON.stringify(out),
+    );
     // Still armed, so the box can be pressed after the drawer is out of the way.
     const after = await page.evaluate(async () => {
       const box = document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]');
@@ -4705,7 +4749,7 @@ console.log("\nwhere the input box is");
       x.setAttribute("aria-label", "Close");
       document.body.appendChild(x);
     });
-    await press(page, "Test it");
+    await press(page, "Test");
     await settle(page);
     ok(
       "a selector naming a button is named as not a box you can type in",

@@ -200,6 +200,20 @@ const PRESET_KEYS = [
   "thinkingEffort",
 ];
 
+// Where the input box is, in the order they are tried. Written out in the
+// setting below rather than hidden behind an empty box, the way Auto Retry
+// writes out its button selectors: what the extension is actually looking for
+// is the one thing worth reading here, and a box that says nothing cannot be
+// corrected by somebody whose layout has moved.
+const INPUT_PICKS = [
+  '[data-component="InputArea"] textarea[name="chat-message"]',
+  'textarea[name="chat-message"]',
+  '[data-component="InputArea"] textarea[aria-label="Message"]',
+  '[data-component="InputArea"] textarea',
+  "textarea",
+];
+const INPUT_PICKS_TEXT = INPUT_PICKS.join(", ");
+
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
   enabled: true,
@@ -289,11 +303,12 @@ const CONFIG = {
   // Off by default: it edits the box you are typing in, which is not something
   // to start doing unasked.
   inputRefine: false,
-  // Where the input box is, when the built-in way of finding it stops working.
-  // Empty means the built-in way, which is what nearly everybody wants: this is
-  // here for the day a Lumiverse update moves the box, so it can be pointed at
-  // by hand rather than waiting for a release of this.
-  inputSelector: "",
+  // Where the input box is. Starts as the list above, so it can be read and
+  // corrected on the day a Lumiverse update moves the box rather than waiting
+  // for a release of this. Whatever is here is tried first and the list is
+  // still tried after it, so an edit that stops matching falls back rather than
+  // taking the feature down.
+  inputSelector: INPUT_PICKS_TEXT,
   // How many messages of the run-up go in the prompt. A rewrite that cannot see
   // what just happened flattens a scene into general prose, which is the
   // failure people blame on the model.
@@ -1742,6 +1757,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
   Object.assign(cfg, loadSaved(), overrides || {});
+  // An install from when this box meant "empty is the built-in way" carries an
+  // empty string, and reading that back would leave the list out of the panel
+  // for exactly the people who have used this longest. Filled in once, and only
+  // where there is nothing there to lose.
+  if (!String(cfg.inputSelector || "").trim()) cfg.inputSelector = INPUT_PICKS_TEXT;
 
   // Settings arriving from the account, checked key by key against the shape
   // the default says they should be. The account copy is written by this same
@@ -7575,7 +7595,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const wrap = el("div", "arf-col arf-under");
     wrap.setAttribute("data-arf-row", "inputSelector");
     (wrap as any)._arfHint =
-      "Empty means the built-in way of finding the box, which is what nearly everybody wants. Fill it in when an update has moved the box: yours is tried first and the built-in way still runs after it, so a selector that stops matching falls back rather than taking the feature down.";
+      "The list it looks for, in order, and the one part of this that depends on somebody else's layout. Edit it when an update has moved the box: yours is tried first and the built-in list still runs after it, so an edit that stops matching falls back rather than taking the feature down.";
     wrap.appendChild(
       labelRow({
         key: "inputSelector",
@@ -7587,7 +7607,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const box = document.createElement("input");
     box.type = "text";
     box.className = "arf-field arf-mono";
-    box.placeholder = "Leave empty to find it the built-in way";
+    box.placeholder = INPUT_PICKS_TEXT;
     box.value = String(cfg.inputSelector == null ? "" : cfg.inputSelector);
     box.setAttribute("data-arf-field", "inputSelector");
     box.setAttribute("aria-label", "Where the input box is");
@@ -7603,8 +7623,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(box);
 
     const row = el("div", "arf-row");
-    const test = button("Test it", false);
-    test.setAttribute("data-arf-btn", "Test it");
+    const test = button("Test", false);
+    test.setAttribute("data-arf-btn", "Test");
     test.addEventListener("click", () => {
       const found = composer();
       const mine = String(box.value || "").trim();
@@ -7614,9 +7634,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       // misses for the same reason a box that has moved does.
       if (!mine)
         boxSaid = found
-          ? { text: "Found the box the built-in way. Nothing here is needed.", ok: true }
+          ? { text: "Empty, so the built-in list is being used, and it found the box.", ok: true }
           : {
-              text: "The built-in way is not finding it right now. Open a chat and test again, or point at it below.",
+              text: "Empty, and the built-in list is not finding it right now. Open a chat and test again, or point at it below.",
               ok: false,
             };
       else if (state === "invalid selector")
@@ -7625,15 +7645,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       else if (state === "match, not a box you can type in")
         boxSaid = {
           text: found
-            ? "That names something on screen, but not a box you can type in right now, so the built-in way is being used instead."
+            ? "That names something on screen, but not a box you can type in right now, so the built-in list is being used instead."
             : "That names something on screen, but not a box you can type in right now.",
           ok: false,
         };
       else
         boxSaid = {
           text: found
-            ? "Nothing matches it on screen right now, so the built-in way is being used instead."
-            : "Nothing matches it on screen right now, and the built-in way is not finding it either. Open a chat and test again.",
+            ? "Nothing matches it on screen right now, so the built-in list is being used instead."
+            : "Nothing matches it on screen right now, and the built-in list is not finding it either. Open a chat and test again.",
           ok: false,
         };
       paint();
@@ -7644,19 +7664,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     pick.addEventListener("click", () => pickBox());
     row.appendChild(test);
     row.appendChild(pick);
-    // Only when there is something to put back. An empty box is already the
-    // built-in way, and a button that does nothing is worse than no button.
-    if (String(cfg.inputSelector || "").trim()) {
-      const back = button("Back to the built-in way", false);
-      back.setAttribute("data-arf-btn", "Back to the built-in way");
-      back.addEventListener("click", () => {
-        cfg.inputSelector = "";
-        persist(true);
-        boxSaid = { text: "Cleared. The box is found the built-in way again.", ok: true };
-        paint();
-      });
-      row.appendChild(back);
-    }
+    // Always here. A reset that appears only once something is wrong is a
+    // reset nobody can find when they need it, and there is no state this
+    // cannot be pressed in: it writes the built-in list back either way.
+    const back = button("Reset", false);
+    back.setAttribute("data-arf-btn", "Reset");
+    back.addEventListener("click", () => {
+      cfg.inputSelector = INPUT_PICKS_TEXT;
+      persist(true);
+      boxSaid = { text: "The built-in list is back.", ok: true };
+      paint();
+    });
+    row.appendChild(back);
     wrap.appendChild(row);
     if (boxSaid) wrap.appendChild(boxSaid.ok ? notice("good", boxSaid.text) : warn(boxSaid.text));
     return wrap;
@@ -8830,14 +8849,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Every class Lumiverse puts on that box carries a per-build hash on it
   // (_textarea_1unc0_788), so none of them is worth naming: they change on
   // every release. name and aria-label are what the markup states about it.
-  const INPUT_PICKS = [
-    '[data-component="InputArea"] textarea[name="chat-message"]',
-    'textarea[name="chat-message"]',
-    '[data-component="InputArea"] textarea[aria-label="Message"]',
-    '[data-component="InputArea"] textarea',
-    "textarea",
-  ];
-
   // Something a person can type in.
   //
   // Asked of every candidate, because a selector matches whatever it matches: a
@@ -8868,39 +8879,56 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
-  // Whether one selector, or a comma-separated list of them, names something
-  // usable. Named apart from composer so the card below can say what it found
-  // without acting on it.
+  // One usable box out of a list of selectors, taking them in the order they
+  // are written. Split rather than handed to the browser whole, because one
+  // query with commas in it answers in document order and throws that order
+  // away, and the order is the whole point of a list: the first entry names
+  // the box exactly and the last one names every textarea on the page.
+  //
+  // Named apart from composer so the card below can say what it found without
+  // acting on it.
+  function boxParts(sel: string): string[] {
+    return String(sel || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+  }
+
   function boxFor(sel: string): any | null {
-    const raw = String(sel || "").trim();
-    if (!raw) return null;
-    try {
-      const found = document.querySelectorAll(raw);
-      for (let i = found.length - 1; i >= 0; i--) {
-        const node: any = found[i];
-        if (!node || node.disabled || node.readOnly) continue;
-        if (!typeable(node)) continue;
-        if (node.closest && node.closest(".arf")) continue;
-        const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-        if (box && (!box.width || !box.height)) continue;
-        return node;
-      }
-    } catch (_) {}
+    for (const part of boxParts(sel)) {
+      try {
+        const found = document.querySelectorAll(part);
+        // The last one on the page, since a panel of ours is also a textarea
+        // and the chat input is below everything it could be confused with.
+        for (let i = found.length - 1; i >= 0; i--) {
+          const node: any = found[i];
+          if (!node || node.disabled || node.readOnly) continue;
+          if (!typeable(node)) continue;
+          if (node.closest && node.closest(".arf")) continue;
+          const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+          if (box && (!box.width || !box.height)) continue;
+          return node;
+        }
+      } catch (_) {}
+    }
     return null;
   }
 
   // What a selector is doing right now. The same five answers Auto Retry's
   // selectors give, for the same question asked of a different thing.
   function boxState(sel: string): string {
-    const raw = String(sel || "").trim();
-    if (!raw) return "not set";
+    const parts = boxParts(sel);
+    if (!parts.length) return "not set";
+    if (boxFor(sel)) return "match";
     let any = false;
-    try {
-      any = !!document.querySelector(raw);
-    } catch (_) {
-      return "invalid selector";
+    let readable = false;
+    for (const part of parts) {
+      try {
+        if (document.querySelector(part)) any = true;
+        readable = true;
+      } catch (_) {}
     }
-    if (boxFor(raw)) return "match";
+    if (!readable) return "invalid selector";
     return any ? "match, not a box you can type in" : "no match";
   }
 
@@ -8910,23 +8938,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // taking the feature down with it.
     const mine = boxFor(cfg.inputSelector);
     if (mine) return mine;
-    try {
-      for (const pick of INPUT_PICKS) {
-        const found = document.querySelectorAll(pick);
-        // The last one on the page, since a panel of ours is also a textarea
-        // and the chat input is below everything it could be confused with.
-        for (let i = found.length - 1; i >= 0; i--) {
-          const node: any = found[i];
-          if (!node || node.disabled || node.readOnly) continue;
-          // Never our own panel, whichever selector found it.
-          if (node.closest && node.closest(".arf")) continue;
-          const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-          if (box && (!box.width || !box.height)) continue;
-          return node;
-        }
-      }
-    } catch (_) {}
-    return null;
+    return boxFor(INPUT_PICKS_TEXT);
   }
 
   // Written through the native setter, then announced as an input event. A
