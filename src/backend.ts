@@ -833,12 +833,14 @@ const REFUSAL =
 // ---- a rewrite that quietly sanitised the reply ----
 // The failure the other checks cannot see. A softened reply is not a refusal,
 // is the right length, and keeps every protected token: it just came back with
-// the edge taken off. Nothing catches that by looking at the rewrite alone,
+// the strong words taken out. Nothing catches that by looking at the rewrite alone,
 // because there is nothing wrong with it. It is only wrong next to the original.
 //
-// So this compares the two. The signal is a charged word that was in the reply
-// and is gone from the rewrite. One word going is an edit; the register being
-// stripped out is what this is looking for, and that is the fraction below.
+// So this compares the two. The signal is a strong word that was in the reply
+// and is gone from the rewrite: explicit, violent or profane, the words a model
+// takes out when it decides to tone something down. One word going is an edit;
+// most of them going at once is what this is looking for, and that is the
+// fraction below.
 //
 // Deliberately narrow. A check that fires on ordinary edits would be turned off
 // within a day, and then it catches nothing at all.
@@ -852,7 +854,7 @@ const REFUSAL =
 // The narrow list misses some real softening. That is the right way round: a
 // missed softening leaves the reader where they already were, and a false one
 // throws away a good rewrite and teaches them to distrust the whole feature.
-const CHARGED = [
+const STRONG = [
   'blood', 'bloody', 'bleeding', 'wound', 'wounded', 'corpse',
   'stab', 'stabbed', 'strangle', 'strangled', 'choke', 'choked',
   'knife', 'blade', 'gun', 'gunshot',
@@ -866,31 +868,31 @@ const CHARGED = [
 
 // The reader's own, on top of the built-in list. Somebody writing a particular
 // kind of story knows better than any list what softening looks like in it.
-let extraCharged: string[] = [];
+let extraStrong: string[] = [];
 
-function setCharged(raw: any): void {
+function setStrong(raw: any): void {
   const out: string[] = [];
   for (const line of String(raw == null ? '' : raw).split(/[\n,]/)) {
     const w = String(line).trim().toLowerCase().replace(/[^a-z0-9'-]/g, '');
     if (!w || w.length < 2) continue;
-    if (CHARGED.indexOf(w) >= 0 || out.indexOf(w) >= 0) continue;
+    if (STRONG.indexOf(w) >= 0 || out.indexOf(w) >= 0) continue;
     out.push(w);
     if (out.length >= 200) break;
   }
-  extraCharged = out;
+  extraStrong = out;
 }
 
 let guardSoften = true;
-// How much of the charged language may go before it counts as softening. A
+// How many of the strong words may go before it counts as softening. A
 // refine legitimately cuts a word or two, so this is a fraction rather than a
 // count, and it is the reader's to set.
 let softenPct = 60;
 
-function chargedIn(text: string): Record<string, number> {
+function strongIn(text: string): Record<string, number> {
   const seen: Record<string, number> = {};
   const words = String(text).toLowerCase().match(/[a-z0-9'-]+/g);
   if (!words) return seen;
-  const list = CHARGED.concat(extraCharged);
+  const list = STRONG.concat(extraStrong);
   for (const w of words) if (list.indexOf(w) >= 0) seen[w] = (seen[w] || 0) + 1;
   return seen;
 }
@@ -898,10 +900,10 @@ function chargedIn(text: string): Record<string, number> {
 // Returns the words that went, or an empty list when nothing did.
 function softenedAway(original: string, rewrite: string): string[] {
   if (!guardSoften) return [];
-  const was = chargedIn(original);
+  const was = strongIn(original);
   const names = Object.keys(was);
   if (!names.length) return [];
-  const now = chargedIn(rewrite);
+  const now = strongIn(rewrite);
   const gone: string[] = [];
   let hadTotal = 0;
   let lostTotal = 0;
@@ -914,9 +916,8 @@ function softenedAway(original: string, rewrite: string): string[] {
     }
   }
   if (!lostTotal) return [];
-  // Below this there is not enough of the register present to say anything went
-  // out of it. One charged word in a reply, gone from the rewrite, is an edit;
-  // reading it as sanitising would fail a good refine on a single word.
+  // Below this there are too few of them to say anything was taken out. One strong word in a reply, gone from the rewrite, is an edit,
+  // and reading that as sanitising would fail a good refine over one word.
   if (hadTotal < 3) return [];
   const pct = (lostTotal / hadTotal) * 100;
   const bar = Number.isFinite(softenPct) ? Math.min(100, Math.max(1, softenPct)) : 60;
@@ -1953,7 +1954,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       guardSoften = s.guardSoften !== false;
       softenPct = Number(s.softenPct);
       softenPct = Number.isFinite(softenPct) ? softenPct : 60;
-      setCharged(s.softenWords);
+      setStrong(s.softenWords);
       retryRefine = Number(s.retryRefine);
       retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
       protectInline = !!s.protectInline;

@@ -1145,7 +1145,7 @@ const GUARD_FIELDS = [
         key: "guardSoften",
         label: "Refuse a rewrite that sanitised the reply",
         type: "bool",
-        hint: "On by default, and the only check that reads the original as well as the rewrite. It compares the charged language in the two and refuses a rewrite that dropped most of it.",
+        hint: "On by default, and the only check that reads the original as well as the rewrite. It counts the strong words in each, the explicit and violent ones, and refuses a rewrite that dropped most of them.",
     },
     {
         key: "softenPct",
@@ -1155,7 +1155,7 @@ const GUARD_FIELDS = [
         max: 100,
         needs: { key: "guardSoften" },
         under: true,
-        hint: "As a percentage of the charged words that were in the reply. 60 by default, so losing more than three in five counts as sanitising and losing one or two reads as an ordinary edit. Lower is stricter.",
+        hint: "As a percentage of the strong words that were in the reply. 60 by default, so losing more than three in five counts as sanitising and losing one or two reads as an ordinary edit. Lower is stricter.",
     },
     {
         key: "softenWords",

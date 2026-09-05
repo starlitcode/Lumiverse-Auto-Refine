@@ -22,7 +22,7 @@ This is the one rule in the extension with no switch.
 
 The one the other checks cannot see. A softened reply is not a refusal, is the right length, and keeps every protected token. There is nothing wrong with it on its own; it is only wrong beside the original, which is the one thing no other check looks at.
 
-**Refuse a rewrite that sanitised the reply** compares the charged language in the two. A rewrite that dropped most of what was there is refused and the reply is left as it was.
+**Refuse a rewrite that sanitised the reply** counts the strong words in each, the explicit and violent ones. A rewrite that dropped most of what was there is refused and the reply is left as it was.
 
 It is built to stay quiet. The built-in list holds only words that are hard to use innocently, because everyday words like hit, skin or pain are the vocabulary of ordinary description and would fire on any refine that tightened a paragraph. It needs at least three such words in the reply before it can fire at all, and **How much of it may go** sets the fraction, 60% by default, so losing one or two reads as an edit.
 
