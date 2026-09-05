@@ -1380,16 +1380,16 @@ console.log("\nthe extras, which are off until asked for");
       box.addEventListener("input", () => window.__saw.push(box.value));
       window.__inputClick();
     });
-    const askedAsUser = await page.evaluate(() => {
+    const askedDraft = await page.evaluate(() => {
       const last = window.__sent.filter((m) => m.type === "try_refine").pop();
-      return last && { text: last.text, asUser: last.asUser, id: last.requestId };
+      return last && { text: last.text, id: last.requestId };
     });
-    ok("it sends what you typed, marked as yours", askedAsUser && askedAsUser.asUser === true);
-    ok("with the text from the box", askedAsUser && /i walk through it/.test(askedAsUser.text));
+    ok("it sends what you typed", !!askedDraft, JSON.stringify(askedDraft));
+    ok("with the text from the box", askedDraft && /i walk through it/.test(askedDraft.text));
 
     await page.evaluate((id) => {
       window.__fromBackend({ type: "try_result", requestId: id, ok: true, after: "I walk through it." });
-    }, askedAsUser.id);
+    }, askedDraft.id);
     await settle(page);
     const wrote = await page.evaluate(() => ({
       value: document.querySelector('[data-component="InputArea"] textarea[name="chat-message"]').value,
@@ -3792,17 +3792,6 @@ console.log("\nreading the request at full size");
 {
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Context");
-    // Try it does not need one: the box is three rows of text you pasted.
-    const onTry = await page.evaluate(() => {
-      const card = Array.from(document.querySelectorAll("#drawer .arf-card")).find((c) =>
-        /^Try it/.test(c.textContent),
-      );
-      return Array.from(card.querySelectorAll("button")).some(
-        (b) => b.textContent.trim() === "Expand",
-      );
-    });
-    ok("Try it has no Expand, because it does not need one", !onTry);
-
     await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
     await page.evaluate(() => {
       const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
@@ -3865,10 +3854,10 @@ console.log("\nrefining the draft from the panel");
     await settle(page);
     const asked = await page.evaluate(() => {
       const m = window.__sent.filter((x) => x.type === "try_refine").pop();
-      return m && { text: m.text, asUser: m.asUser, id: m.requestId };
+      return m && { text: m.text, id: m.requestId };
     });
-    ok("pressing it sends the draft, marked as yours",
-      asked && asked.asUser === true && /i walk through it/.test(asked.text), asked);
+    ok("pressing it sends the draft",
+      asked && /i walk through it/.test(asked.text), asked);
     // The panel says a refine is running from the moment it is sent, the same
     // as it does for a reply: the three buttons give way to Stop. A draft
     // refine is a stoppable run on the backend, so the offer is a real one.

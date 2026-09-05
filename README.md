@@ -51,7 +51,7 @@ Six tabs, and everything belongs to exactly one of them. The switch, the refine 
 | Tab | What is on it |
 | --- | --- |
 | **Prompt** | The request itself, block by block, the macros a block can carry, and your presets |
-| **Context** | How much of the chat and the lorebook goes in, a preview of exactly what gets sent, and a place to try it on some text |
+| **Context** | How much of the chat and the lorebook goes in, and a preview of exactly what gets sent |
 | **Model** | Which connection refines, how much thinking it does, the timeout, and the samplers |
 | **Limits** | What it protects, what it refuses to save, and what it does before it writes |
 | **Log** | What is happening right now, what it has been doing, and one button that copies a bug report |

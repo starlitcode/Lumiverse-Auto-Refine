@@ -2602,19 +2602,19 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       return;
     }
 
-    // Try the rules on some text without saving anything. The panel's own
-    // rehearsal: the answer comes back and goes nowhere near the chat.
+    // Refine a draft: text the panel holds rather than a saved message. The
+    // answer goes back to the panel and nowhere near the chat.
     if (payload.type === 'try_refine') {
       replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
       const text = String(payload.text || '');
       if (!text.trim()) {
-        replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: 'there is no text to try it on' });
+        replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: 'there is no text to refine' });
         return;
       }
-      // Pasted text belongs to no chat, so there is no card and no history to
-      // send. That is the honest version of a rehearsal: it shows what the
-      // rules do on their own, which is the thing being tried out.
-      const answer = await askModel(text, !!payload.asUser, NO_SCENE, userId);
+      // A draft belongs to no saved message, so there is no card and no history
+      // to send with it. The prompt for your own writing is the one that
+      // applies: a draft is your hand, not the story's voice.
+      const answer = await askModel(text, true, NO_SCENE, userId);
       if (answer.error) {
         replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: answer.error });
         return;

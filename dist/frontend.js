@@ -2217,8 +2217,6 @@ export function setup(ctx, overrides) {
         paint();
     }
     let connections = [];
-    let tryResult = null;
-    let tryBusy = false;
     // The status line's own nodes, so the running clock can be written into them
     // without repainting the panel around whatever somebody is typing in.
     let liveEls = null;
@@ -3975,7 +3973,7 @@ export function setup(ctx, overrides) {
         if (id === "prompt")
             return [buildBlocksCard(), buildMacroCard(), buildPresetCard()];
         if (id === "context")
-            return [buildContextCard(), buildPreviewCard(), buildTryCard()];
+            return [buildContextCard(), buildPreviewCard()];
         if (id === "model")
             return [buildConnectionCard(), buildSamplerCard(), buildSetupCard()];
         if (id === "limits")
@@ -5242,71 +5240,6 @@ export function setup(ctx, overrides) {
             popKey = "";
         }
     }
-    // ---- Prompt ----
-    function buildTryCard() {
-        const wrap = card("Try it", "Runs one refine on whatever is in the box and shows what comes back. Nothing is written to your chat.");
-        const ta = document.createElement("textarea");
-        ta.rows = 3;
-        ta.placeholder = "Paste a reply here";
-        ta.setAttribute("data-arf-field", "tryText");
-        ta.setAttribute("aria-label", "Text to try the rules on");
-        ta.className = "arf-field";
-        wrap.appendChild(ta);
-        const row = el("div", "arf-row");
-        const grab = button("Use my last reply", false);
-        grab.addEventListener("click", () => {
-            const t = lastRenderedReply();
-            if (!t) {
-                tryResult = { ok: false, text: "Could not find a reply on screen to read." };
-                paint();
-                return;
-            }
-            ta.value = t;
-            ta.focus();
-        });
-        const go = button("Try it", false);
-        go.disabled = tryBusy;
-        go.style.opacity = tryBusy ? "0.5" : "1";
-        go.addEventListener("click", () => {
-            const text = String(ta.value || "").trim();
-            if (!text) {
-                tryResult = { ok: false, text: "Put some text in the box first." };
-                paint();
-                return;
-            }
-            if (noTurn()) {
-                tryResult = {
-                    ok: false,
-                    text: "No block in your prompt has {{message}} in it, so there is nothing to rewrite.",
-                };
-                paint();
-                return;
-            }
-            // For the same reason as the draft above: this ends in the same message,
-            // and that message clears the running state.
-            if (busy) {
-                tryResult = { ok: false, text: "A refine is already running. Wait for it, or stop it first." };
-                paint();
-                return;
-            }
-            tryBusy = true;
-            tryResult = null;
-            persist(true);
-            const id = newId();
-            tryWaiting = id;
-            send({ type: "try_refine", requestId: id, text: text, asUser: false });
-            paint();
-        });
-        row.appendChild(grab);
-        row.appendChild(go);
-        wrap.appendChild(row);
-        if (tryBusy)
-            wrap.appendChild(note("Working..."));
-        else if (tryResult)
-            wrap.appendChild(el("div", "arf-well arf-scroll" + (tryResult.ok ? "" : " arf-dim"), tryResult.text));
-        return wrap;
-    }
-    let tryWaiting = null;
     // The free scan: what it found, and which ask it belongs to.
     // No switch carries a list of what hangs off it. Every row is built whether
     // or not its switch is on, hidden when it is off, and a switch re-reads all
@@ -8285,10 +8218,10 @@ export function setup(ctx, overrides) {
         const id = newId();
         inputWaiting = id;
         log("refining what you are typing");
-        // The same path the Try it box uses: nothing is saved to the chat, the
-        // answer comes back and this puts it in the box. asUser is what tells the
-        // model it is looking at your own hand rather than the story's voice.
-        send({ type: "try_refine", requestId: id, text: text, asUser: true });
+        // Nothing is saved to the chat: the answer comes back and this puts it in
+        // the box. The prompt used is the one for your own writing, since that is
+        // what a draft is.
+        send({ type: "try_refine", requestId: id, text: text });
         // Running, from this moment, rather than from whenever the backend's first
         // progress message happens to land. Everything that shows a refine in
         // flight reads this: the status line, the clock, and the widget, which is
@@ -8762,20 +8695,6 @@ export function setup(ctx, overrides) {
         });
         extras.clear();
     });
-    function lastRenderedReply() {
-        try {
-            if (typeof document === "undefined")
-                return "";
-            const all = document.querySelectorAll('[data-component="MessageContent"]');
-            for (let i = all.length - 1; i >= 0; i--) {
-                const t = String(all[i].innerText || all[i].textContent || "").trim();
-                if (t)
-                    return t;
-            }
-        }
-        catch (_) { }
-        return "";
-    }
     // Calls off whatever is running. Safe to press when nothing is: the backend
     // answers with how many it stopped, and the panel says so either way.
     //
@@ -8929,11 +8848,11 @@ export function setup(ctx, overrides) {
                         // which is the whole question the ack watchdog asks. It has to be
                         // said here as well as on the ack, because markBusy arms the
                         // watchdog whenever it turns busy on, and this is the line that
-                        // turns it on for a refine the panel did not start itself: the
-                        // draft in the input box, and the Try it card. Their ack arrived
-                        // and was cleared before there was anything to clear, so the one
-                        // armed here had nothing left to answer it and fired five seconds
-                        // later, calling a refine that was running perfectly well a backend
+                        // turns it on for a refine the panel did not start itself, which
+                        // is the draft in the input box. Its ack arrives and is cleared
+                        // before there is anything to clear, so without this the watchdog
+                        // armed here has nothing left to answer it, and fires five seconds
+                        // later calling a refine that is running perfectly well a backend
                         // that is not installed.
                         clearAck();
                         if (msg.stage === "writing" && typeof msg.chars === "number")
@@ -9211,21 +9130,16 @@ export function setup(ctx, overrides) {
                     if (msg.type === "try_result" && !msg.requestId) {
                         // Same: an answer from the net rather than from the handler.
                         markBusy(false);
-                        tryBusy = false;
-                        tryWaiting = null;
                         inputWaiting = null;
-                        tryResult = { ok: false, text: String(msg.why || "It could not be run.") };
                         paint();
                         return;
                     }
                     if (msg.type === "try_result") {
-                        // Whichever of the two asked, the run is over. Nothing else clears
-                        // this for them: the endings that do belong to a refine of a saved
-                        // reply, so a draft refine turned the widget on and left it turning
-                        // until the deadman timer came due a minute and a half later.
+                        // The run is over. Nothing else clears this for a draft: the
+                        // endings that do belong to a refine of a saved reply, so without
+                        // this the widget would turn on and keep turning until the deadman
+                        // timer came due a minute and a half later.
                         markBusy(false);
-                        // The input bar and the Try it box use the same request, so the
-                        // waiting id is what says where the answer goes.
                         if (inputWaiting === msg.requestId) {
                             inputWaiting = null;
                             const node = inputNode || composer();
@@ -9269,19 +9183,6 @@ export function setup(ctx, overrides) {
                             paint();
                             return;
                         }
-                        if (tryWaiting !== msg.requestId)
-                            return;
-                        tryWaiting = null;
-                        tryBusy = false;
-                        tryResult = msg.ok
-                            ? { ok: true, text: String(msg.after || "") }
-                            : {
-                                ok: false,
-                                text: "This would not have been saved: " +
-                                    String(msg.why || "no reason given") +
-                                    (msg.after ? "\n\nWhat came back:\n" + String(msg.after) : ""),
-                            };
-                        paint();
                         return;
                     }
                     if (msg.type === "undo_result") {

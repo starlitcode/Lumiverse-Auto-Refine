@@ -53,7 +53,7 @@ Blocks that never change belong at the top. If your provider caches prompts, eve
 
 ## Trying one
 
-**Try it**, under Context, runs one refine on pasted text and shows what comes back without touching your chat. It is the cheap way to find out whether a new block does anything before you turn it loose on a scene.
+**Refine the latest reply**, above the tabs, is the cheap way to find out whether a new block does anything: it runs once, on one reply, and **Put it back** is right there on the card if it went the wrong way.
 
 If a rule does nothing, the usual causes are these, in order: it is too vague to act on, it is too far from the turn, or it is buried in a block with four other rules and the model took the first one.
 
