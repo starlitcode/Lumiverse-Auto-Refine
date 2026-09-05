@@ -57,7 +57,7 @@ A refine reads the reply, sends it to a model, and writes the answer back. The m
 
 If the message has changed by the time the answer arrives, **the refine is dropped and nothing is written**. Somebody else's edit is worth more than a refine: the refine can be run again on the new text, and the edit cannot be recovered once it has been written over.
 
-This is not a hypothetical. Auto Retry applies word swaps to a reply on the same event this refines on, and its swap used to land while the refine was still in flight. Whoever wrote last won, and it was usually this. The same case covers editing a reply yourself while waiting for a refine you asked for.
+This covers editing a reply yourself while waiting for a refine you asked for, and any other extension that writes to a reply on the same event this refines on. Whichever write lands last would otherwise win.
 
 If the message cannot be re-read at all, the refine goes ahead. A host that will not answer is not evidence that anything changed, and refusing every refine because a read failed is worse than the race it would be avoiding.
 

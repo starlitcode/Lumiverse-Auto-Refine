@@ -1256,8 +1256,8 @@ describe("the answer it asks for", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
-  test("a model that talks around the tags is no longer a lost refine", async () => {
-    // Word for word the answer that used to be dropped for its preamble.
+  test("a model that talks around the tags is still a refine", async () => {
+    // An answer whose preamble must not cost it the rewrite inside.
     const h = await armed([
       "Sure! Here is the rewritten message:\n\n<refined>She stepped through and the cold hit her.</refined>\n\nI cut the filler.",
     ]);
@@ -1440,9 +1440,9 @@ describe("the backend after a restart", () => {
   });
 });
 
-// Settings used to live only in the browser, so opening Lumiverse anywhere else
-// presented a fresh install. They belong to the account, and on a server serving
-// several accounts they have to belong to one account each.
+// Settings kept only in the browser would present a fresh install to anyone
+// opening Lumiverse anywhere else. They belong to the account, and on a server
+// serving several accounts they have to belong to one account each.
 describe("settings that follow the account", () => {
   test("saving writes them to the account, not just to memory", async () => {
     const h = await armed(["<refined>x</refined>"]);
@@ -1518,9 +1518,8 @@ describe("settings that follow the account", () => {
   });
 });
 
-// Two extensions on one reply. Auto Retry swaps words on the same event this
-// refines on, and a refine takes seconds: the message it read is not
-// necessarily the message that is there when it writes.
+// Two writers on one reply. A refine takes seconds, so the message it read is
+// not necessarily the message that is there when it writes.
 describe("when something else edits the reply mid-refine", () => {
   test("the refine is dropped rather than reverting the other edit", async () => {
     const h = host(chat(), ["<refined>She stepped through and the cold hit her.</refined>"], {
@@ -1554,9 +1553,9 @@ describe("when something else edits the reply mid-refine", () => {
 
 // The panel's button and the floating button both mean "the latest reply", and
 // both send no message id whenever nothing has rendered since the page loaded,
-// which on a chat you opened and did not add to is every time. That used to
-// come back as "that message is not in this chat any more": the button did
-// nothing and said something untrue about why.
+// which on a chat you opened and did not add to is every time. Answering that
+// with "that message is not in this chat any more" is a button doing nothing
+// and saying something untrue about why.
 describe("refining the latest reply with no message id in hand", () => {
   test("the latest reply is found and refined", async () => {
     const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);
@@ -1591,8 +1590,8 @@ describe("refining the latest reply with no message id in hand", () => {
     expect(h.writes.length).toBe(0);
   });
 
-  // A named message that has since gone still says the right thing: the two
-  // cases are different and used to share one wrong sentence.
+  // A named message that has since gone still says the right thing: it is a
+  // different case from having no id at all, and needs its own sentence.
   test("a message id that is gone still says that, not the other thing", async () => {
     const h = await armed(["<refined>x</refined>"]);
     await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "gone" });
@@ -1943,8 +1942,8 @@ describe("asking again when a check fails", () => {
 // still belongs above everything that moves: the rules, then the setting, then
 // the pages before this one, then the passage.
 //
-// The presets used to put the run-up third, which put a block that is redrawn
-// every turn above every rule, and made the whole prompt new on every reply.
+// Putting the run-up third would put a block that is redrawn every turn above
+// every rule, and make the whole prompt new on every reply.
 describe("a prompt built to be cached", () => {
   // Built from the prompt that ships, not the small fixture the other checks
   // use: an empty list falls back to the default, which is the thing whose

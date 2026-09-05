@@ -92,7 +92,7 @@ describe("the prompts that ship with it", () => {
     }
   });
 
-  // What the names deliberately do not claim is how the two pairs compare with
+  // What the names do not claim is how the two pairs compare with
   // each other, because they cannot: a close read for a thinking model is about
   // the size of a quick read for a plain one. That belongs in the description,
   // where it can be said in words rather than implied by a label.

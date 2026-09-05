@@ -577,12 +577,10 @@ console.log("\ncolour on somebody else's theme");
 
   // A theme whose accent is light, which is where a filled button goes wrong.
   //
-  // The loud button used to be the accent at full strength with its label
-  // hardcoded white, which on a light accent is white on lavender. The contrast
-  // sweep rescued it a moment after every repaint, and a rescue that has to
-  // happen on a timer is a rescue that can be seen happening: the label read
-  // correct, then white, then correct. So the check is not that it ends up
-  // readable, it is that nothing had to touch it.
+  // The accent at full strength with a hardcoded white label is white on
+  // lavender here. The contrast sweep would rescue it, but a rescue can be seen
+  // happening, so the check is not that it ends up readable: it is that nothing
+  // had to touch it.
   const paleAccent =
     ":root{--lumiverse-primary:#e8d0ff;--lumiverse-primary-hover:#f0e0ff;" +
     "--lumiverse-primary-text:#e0c4ff;--lumiverse-primary-020:rgba(232,208,255,.2);" +
@@ -1208,7 +1206,7 @@ console.log("\nthe extras, which are off until asked for");
     ok("and an input event is raised, so the app sees it too", wrote.events > 0);
 
     // The same card a reply's refine gets. Yours is not in the undo list with
-    // the replies, so the tab used to show nothing at all for it.
+    // the replies, so it is drawn from a record of its own.
     const card = () =>
       page.evaluate(() => {
         const c = document.querySelector('#drawer [data-arf-draft-undo="1"]');
@@ -1322,6 +1320,33 @@ console.log("\nin one place at a time");
 
 console.log("\nsettings that follow the account");
 {
+  // What comes down from the account is checked key by key against the
+  // defaults, so a setting with a row on the panel but no default is dropped on
+  // the way in and is the one setting that does not follow the account.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
+      window.__fromBackend({
+        type: "loaded_settings",
+        requestId: id,
+        settings: { protectOn: false, protectInline: true, protectThinking: false },
+      });
+    });
+    await settle(page);
+    const kept = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
+    );
+    ok(
+      "every switch the panel offers has a default to be read back into",
+      kept.protectInline === true && kept.protectOn === false && kept.protectThinking === false,
+      JSON.stringify({
+        protectOn: kept.protectOn,
+        protectInline: kept.protectInline,
+        protectThinking: kept.protectThinking,
+      }),
+    );
+  });
+
   await inTab(browser, {}, async (page) => {
     const asked = await page.evaluate(() => ({
       settings: window.__sent.filter((m) => m.type === "load_settings").length,
@@ -1738,7 +1763,7 @@ console.log("\nthe mark on a focused box");
     );
     ok("and no browser outline over it", !!ring && ring.outline === "none");
 
-    // The two that were deliberately left bare stay bare.
+    // The two that are left bare on purpose stay bare.
     const bare = await page.evaluate(() => {
       const s = document.querySelector('#drawer [data-arf-field="hunt"]');
       s.focus();
@@ -1984,10 +2009,10 @@ console.log("\na temporary chat");
 console.log("\nthe spinner on the floating button");
 {
   // The ring is turned by the stylesheet over 900ms. The clock repaints the
-  // button two and a half times a second, and repainting used to rewrite the
-  // icon, which threw away the element mid-turn and started the rotation again
-  // from the top: a spinner that stuttered instead of turning. So the check is
-  // that the element survives, not that it looks right.
+  // button two and a half times a second, and rewriting the icon on each
+  // repaint would throw the element away mid-turn and start the rotation again
+  // from the top, which stutters instead of turning. So the check is that the
+  // element survives, not that it looks right.
   await inTab(browser, { saved: { widgetOn: true, refineOn: true } }, async (page) => {
     await page.evaluate(() => {
       const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
@@ -2271,10 +2296,10 @@ console.log("\nthe run through the chat");
 
 console.log("\nstopping a refine without a floating button");
 {
-  // Stopping used to live on the floating button and nowhere else: a tap on the
-  // spinner, or a row in its hold menu. Switched off, there was no way to call
-  // a refine off at all, and the panel answered a running refine by greying
-  // both its buttons out, which says wait rather than saying there is a way
+  // Stopping cannot live on the floating button alone: switched off, there
+  // would be no way to call a refine off at all, and a panel that answers a
+  // running refine by greying both its buttons out says wait rather than
+  // saying there is a way
   // out of this.
   const running = async (page) => {
     await page.evaluate(() => {
@@ -2329,10 +2354,10 @@ console.log("\nstopping a refine without a floating button");
 
 console.log("\nwatching it work");
 {
-  // The working is not put on the page at all. It used to open a card of its
-  // own, which then had to hand that card over to the one saying what the
-  // refine did, and the hand-over is what read as a second card popping up. It
-  // goes to the Log, where it can be read at whatever pace suits and nothing
+  // The working is not put on the page at all. A card of its own would have to
+  // be handed over to the one saying what the refine did, and that hand-over
+  // reads as a second card popping up. It goes to the Log, where it can be read
+  // at whatever pace suits and nothing
   // has to be caught.
   const say = async (page, notes) => {
     await page.evaluate((n) => {
@@ -2746,8 +2771,8 @@ console.log("\na switch and the rows that hang off it");
 
 console.log("\nopening a fold");
 {
-  // Opening one used to repaint the whole drawer to show rows that had already
-  // been worked out. That teardown and rebuild is what the flash was.
+  // The rows inside are already worked out, so opening one shows them without
+  // repainting the whole drawer. A teardown and rebuild here is a flash.
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const before = await page.evaluate(() => {
@@ -3072,10 +3097,9 @@ console.log("\nnever two things on the screen at once");
 
 console.log("\nno card while it is working");
 {
-  // The working never goes on the page. It used to open a card of its own that
-  // then had to be handed over, or taken down, depending on how the refine
-  // ended; four endings, each with its own way to leave a card behind. There is
-  // nothing to leave behind now.
+  // The working never goes on the page. A card of its own would have to be
+  // handed over or taken down depending on how the refine ended, which is four
+  // endings each with its own way to leave a card behind.
   // keeps says whether that ending is a refine that finished. A stop is not, so
   // it leaves the Log holding whatever the last finished one worked out, which
   // here is nothing.
@@ -3240,9 +3264,9 @@ console.log("\nswitching without the panel jumping");
 
 console.log("\nwalking back into a chat");
 {
-  // Tapping a character opens a chat, and on some builds nothing says so. The
-  // watch used to stop the moment there was no chat to lose track of, so the
-  // panel sat on "No chat open" until a reply happened to arrive.
+  // Tapping a character opens a chat, and on some builds nothing says so. A
+  // watch that stops the moment there is no chat to lose track of would leave
+  // the panel on "No chat open" until a reply happened to arrive.
   const answer = async (page, chatId) => {
     await page.evaluate((id) => {
       const req = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
@@ -3298,9 +3322,8 @@ console.log("\nwalking back into a chat");
   // Tapping a character on Lumiverse does not open a chat, it makes one, and
   // that is the only way in. For a moment afterwards the server does not call
   // the new chat the active one, so a question of "which chat is open" comes
-  // back "none" while you are plainly sitting in one. The panel used to ask
-  // exactly that question the instant the host named the chat, and then throw
-  // the id away on the answer.
+  // back "none" while you are plainly sitting in one, so an id the host has
+  // named is not thrown away on that answer.
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Setup");
     await answer(page, null);
@@ -3316,7 +3339,7 @@ console.log("\nwalking back into a chat");
     });
     ok("a chat the host named is asked about by name", ask === "madejustnow99", "asked about " + ask);
 
-    // The server, still behind. This is the answer that used to undo everything.
+    // The server, still behind. This is the answer that must not undo it.
     await answer(page, null);
     ok("and an answer about no active chat does not undo it", !(await saysNoChat(page)));
   });
@@ -3455,8 +3478,8 @@ console.log("\nwalking back into a chat");
 
   // The other way round, on a build whose addresses name no chats: the backend
   // has just restarted with the panel and does not know yet. One answer of
-  // "nobody is in a chat" used to be the last word, and the panel sat on it in
-  // a chat somebody was reading.
+  // "nobody is in a chat" cannot be the last word, or the panel sits on it in a
+  // chat somebody is reading.
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Setup");
     await rebuild(page, "/");
@@ -3612,9 +3635,9 @@ console.log("\nreading the request at full size");
 
 console.log("\nrefining the draft from the panel");
 {
-  // The draft is the third thing a refine can be pointed at, and the only one
-  // whose way in used to be a menu or a row inside Extras. It stands with the
-  // other two above the tabs, on the same terms: its own setting puts it there.
+  // The draft is the third thing a refine can be pointed at, and it stands with
+  // the other two above the tabs on the same terms: its own setting puts it
+  // there, rather than leaving it to a menu or a row inside Extras.
   await inTab(browser, {}, async (page) => {
     ok("no draft button until the setting asks for it",
       !(await page.$('#drawer [data-arf-draft]')));
@@ -3654,9 +3677,9 @@ console.log("\nrefining the draft from the panel");
 
     // A refine that takes longer than the backend watchdog. The backend says it
     // has the request, then reports progress, and a progress message is proof
-    // it is answering. The watchdog used to be armed by that very message with
-    // nothing left to clear it, so a draft refine slower than five seconds
-    // reported a backend that is not installed.
+    // it is answering, so that message has to clear the watchdog rather than
+    // arm it. Armed by it, a draft refine slower than five seconds reports a
+    // backend that is not installed.
     await page.evaluate((id) => {
       window.__fromBackend({ type: "refine_ack", requestId: id });
       window.__fromBackend({ type: "refine_progress", stage: "asking" });
@@ -3819,10 +3842,10 @@ console.log("\nthe button and its menu do not say the same thing twice");
 
 console.log("\nthe widget, while your draft is being refined");
 {
-  // The button follows the same running state the panel does. It used to be
-  // turned on by the backend's first progress message and turned off by
-  // nothing, so it began turning as the answer arrived and went on turning for
-  // a minute and a half after it had landed.
+  // The button follows the same running state the panel does. Turned on by the
+  // backend's first progress message and turned off by nothing, it would begin
+  // turning as the answer arrived and go on for a minute and a half after it
+  // landed.
   const face = (page) =>
     page.evaluate(() => {
       const b = document.querySelector("#float .arf-float");
@@ -4611,9 +4634,9 @@ console.log("\nmodel setups");
 // ---- a setting's description sits behind a "?" ----
 console.log("\ndescriptions behind a ?");
 {
-  // Every description used to sit under the row it belonged to, which made each
-  // one two rows tall whether or not you needed the second, and scrolling past
-  // the ones you know is the whole cost of finding the one you do not.
+  // A description under every row makes each one two rows tall whether or not
+  // you need the second, and scrolling past the ones you know is the whole cost
+  // of finding the one you do not.
   const TABS = ["Prompt", "Context", "Model", "Limits", "Log", "Setup"];
 
   await inTab(browser, {}, async (page) => {
@@ -4810,10 +4833,10 @@ console.log("\ndescriptions behind a ?");
   // What each part of a tick row answers to.
   //
   // A label with no `for` names the first labelable element inside it, and a
-  // button is one, so a "?" put in there took the label off the switch: pressing
-  // a setting's own words opened its description instead of flipping it, and the
-  // switch was left with only its own small box to press. Invisible from the "?"
-  // alone, which is why this presses the words too.
+  // button is one, so a "?" inside the label would take the label off the
+  // switch: the setting's own words would open its description instead of
+  // flipping it, leaving the switch with only its own small box to press. The
+  // "?" alone cannot show that, so this presses the words too.
   await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
     // Every tick row on every tab, read rather than pressed. Pressing one
     // rebuilds the panel a moment later, so a loop that presses its way down a

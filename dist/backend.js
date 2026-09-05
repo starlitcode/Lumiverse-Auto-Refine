@@ -1113,7 +1113,7 @@ function looksLikeRefusal(text) {
 // most of them going at once is what this is looking for, and that is the
 // fraction below.
 //
-// Deliberately narrow. A check that fires on ordinary edits would be turned off
+// Kept narrow on purpose. A check that fires on ordinary edits gets turned off
 // within a day, and then it catches nothing at all.
 // Kept short, and every word on it has to be hard
 // to use innocently. An earlier draft of this list held hit, beat, bare, skin,
@@ -1910,13 +1910,9 @@ async function saveRefined(chatId, m, original, next, userId) {
     const k = key(chatId, m.id);
     try {
         // The message is read, sent to a model, and written back, and the model
-        // call takes seconds. Anything else editing that message in the meantime
-        // would be silently reverted by this write: another extension applying a
-        // word swap, or the reader editing the reply while waiting.
-        //
-        // Auto Retry is the concrete case. It swaps words on the same reply, on the
-        // same event, and its swap landed while this refine was still in flight.
-        // Whoever wrote last won, and it was usually this.
+        // call takes seconds. Anything editing that message in the meantime would
+        // be silently reverted by this write: the reader editing the reply while
+        // waiting, or another extension writing on the same event.
         //
         // So the message is read again here and the write is refused if it moved.
         // A refine is worth less than somebody else's edit: the refine can be run

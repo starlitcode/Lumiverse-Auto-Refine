@@ -262,6 +262,10 @@ const CONFIG = {
   // somebody's reply, and they only notice three messages later.
   protectOn: true,
   protectThinking: true,
+  // Plain <i> and <b> with no attributes on them. Off by default: they wrap
+  // words in the middle of a sentence, and hiding those hands the model a
+  // sentence with holes in it.
+  protectInline: false,
   // Take the refiner's own working out of its answer. Separate from the one
   // above, which is about working already in the passage.
   stripAnswerThinking: true,
@@ -378,9 +382,9 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // visible at a glance, and the two that need a reasoning model say so in the
 // name rather than leaving somebody to find out by getting a worse rewrite.
 //
-// What the names deliberately do not claim is how the two pairs compare with
-// each other. They were Short and Detailed in two pairs, and that was a promise
-// the set could not keep: a close read for a thinking model is about the size
+// What the names do not claim is how the two pairs compare with each other.
+// Short and Detailed in two pairs is a promise the set cannot keep: a close
+// read for a thinking model is about the size
 // of a quick read for a plain one, because a model that reasons is handed less
 // on purpose. Each description says what it costs, which is the only place that
 // belongs.
@@ -1310,7 +1314,7 @@ const WIDGET_FIELDS: Field[] = [
     max: 96,
     needs: { key: "widgetOn" },
     under: true,
-    hint: "In pixels across, the same range Auto Retry's floating button uses. 44 by default, which is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way. Changing it rebuilds the button.",
+    hint: "How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.",
   },
   {
     key: "widgetUndo",
@@ -1557,10 +1561,10 @@ const PAGE_FALLBACK: Rgb = { r: 24, g: 20, b: 34, a: 1 };
 // The smallest step toward white or black that clears the floor, rather than a
 // jump to one of them. The panel says things at three volumes on purpose: a
 // heading, a label, and a quiet aside underneath. Repainting every failing line
-// to the same near-white flattened all three into one, so a hint that only
-// needed nudging came out shouting alongside the heading above it. Where the
-// existing colour is not known, or where nothing on this surface reaches the
-// floor, the most readable there is, which is the old behaviour.
+// to the same near-white would flatten all three into one, so a hint that only
+// needs nudging keeps its own volume. Where the existing colour is not known,
+// or where nothing on this surface reaches the floor, it takes the most
+// readable colour there is.
 function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio: number } {
   const onWhite = contrastRatio(WHITE, back);
   const onBlack = contrastRatio(BLACK, back);
@@ -1568,10 +1572,9 @@ function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio
   const most = Math.max(onWhite, onBlack);
   // Softened a little, because full white on a dark panel is harsher than
   // anything the theme itself draws. Only while it still clears the floor: the
-  // softening costs about a tenth of the ratio, which is what left a button
-  // label at 4.46 against 4.5 and the check calling it unreadable. When the
-  // softened one falls short the solid colour is used, which is the whole
-  // point of repainting in the first place.
+  // softening costs about a tenth of the ratio, which is enough to drop a label
+  // from 4.5 to 4.46. When the softened one falls short the solid colour is
+  // used, which is the whole point of repainting in the first place.
   const soft = toward === WHITE
     ? { color: "rgba(255,255,255,0.94)", ink: { r: 255, g: 255, b: 255, a: 0.94 } as Rgb }
     : { color: "rgba(0,0,0,0.9)", ink: { r: 0, g: 0, b: 0, a: 0.9 } as Rgb };
@@ -1764,8 +1767,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     return out;
   }
 
-  // Saved as it is changed, and pushed to the backend in the same breath. There
-  // is no Save button here: a drawer tab has no moment where it closes, so a
+  // Saved as it is changed, and sent to the backend at the same time. There is
+  // no Save button here: a drawer tab has no moment where it closes, so a
   // "nothing sticks until you press Save" contract would have nothing to hang
   // on and would only ever surprise somebody who walked away mid-edit.
   //
@@ -2025,9 +2028,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // been made, and on Lumiverse making one is the only way into a chat with a
   // character: you tap them and the chat comes into being. For a while after
   // that the server's idea of your most recent chat is the one before it, and
-  // that answer is correctly thrown out as stale, which left the panel with
-  // nothing and saying no chat was open. Walking out and back in fixed it,
-  // which is the shape of a race and not of a missing signal.
+  // that answer is correctly thrown out as stale. Without asking again the
+  // panel would be left with nothing and saying no chat was open, and walking
+  // out and back in would be the only way to clear it.
   //
   // The address knows immediately. What is not known is the shape of a
   // Lumiverse address, and guessing at it is how this sort of thing breaks on
@@ -2170,9 +2173,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       // nothing to disagree with, because there the backend is the only source
       // there is. It answers "nobody is in a chat" while it is still starting
       // up, which is what it has just done if the extension was updated a
-      // second ago, and one such answer used to be the last word: the panel sat
-      // on "No chat open" in a chat somebody was reading, and nothing asked
-      // again.
+      // second ago. Taken as the last word, that answer would leave "No chat
+      // open" on the panel in a chat somebody is reading.
       slow++;
       if (slow >= SLOW_EVERY && (idInUrl() != null || urlSlot == null)) {
         slow = 0;
@@ -2967,8 +2969,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border-radius:var(--lumiverse-radius-md,10px);" +
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
-    // The card's own title. Bigger and plainer than the old all-caps label,
-    // because at 11px uppercase a heading reads as another muted row.
+    // The card's own title, big and plain: at 11px uppercase a heading reads as
+    // another muted row.
     ".arf-cardh{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf-cardh .arf-note{font-weight:400}" +
@@ -3050,9 +3052,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-float.arf-idle{opacity:.5}" +
     ".arf-float.arf-idle:hover{opacity:.75}" +
     ".arf-float.arf-working{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
-    // A ring that breathes while something is running. This is the one piece of
-    // movement in the whole extension, and it is here because a floating button
-    // is often the only part of it on screen.
+    // A ring that grows out of the button and fades, only while something is
+    // running. This is the one piece of movement in the whole extension, and it
+    // is here because a floating button is often the only part of it on screen.
     "@keyframes arf-pulse{0%{box-shadow:0 0 0 0 var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
     "70%{box-shadow:0 0 0 10px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}" +
     ".arf-float.arf-working{animation:arf-pulse 1400ms ease-out infinite}" +
@@ -3778,7 +3780,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (fromMouse(e)) shut();
     });
     // Focus opens it only when a key put you there. A tap focuses the button
-    // too, and opening from that as well would fight the tap below. Blur closes
+    // too, so opening from focus as well would open it twice. Blur closes
     // only what focus opened: a finger reading a long description touches the
     // popover, which takes focus off the button, and closing on that would shut
     // the thing being read.
@@ -4450,9 +4452,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     reAnchor(root, held2, held);
     // A second pass a frame later, for anything whose colour only settles once
     // the panel has been through a real layout. The scroll is set again there
-    // and once more after: a panel that grew taller between the frames would
-    // have clamped the earlier attempts to its old height, which is what left
-    // this looking unfixed.
+    // and once more after: a panel that grows taller between the frames clamps
+    // the earlier attempts to its old height.
     try {
       requestAnimationFrame(() => {
         sweepReadable(root);
@@ -5273,17 +5274,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (popEl && popKey === key) return;
       // Whatever card is up is this card, filled in rather than taken down and
       // put back up. The automatic pass lands one refine after another, and
-      // swapping two elements for that means the old one vanishing and a new
-      // one fading up from nothing at a different height, which reads as a
-      // second card rather than as one card changing.
-      //
-      // Both cards are pinned to the bottom of the screen and they are not the
-      // same height: the working one runs to about 370 pixels and this one to
-      // about 220. Swapping the elements made the tall one vanish and a shorter
-      // one fade up from nothing a hundred and fifty pixels lower, with the dim
-      // behind them restarting its own fade, which reads as a second card
-      // coming out from under the first. Keeping the box and the dim makes it
-      // one card whose contents changed.
+      // both cards are pinned to the bottom of the screen at different heights:
+      // the working one runs to about 370 pixels and this one to about 220.
+      // Swapping the elements would make the tall one vanish and a shorter one
+      // fade up a hundred and fifty pixels lower, with the dim behind them
+      // restarting its fade, which reads as a second card coming out from under
+      // the first. Keeping the box and the dim makes it one card whose contents
+      // changed.
       const held: any = popEl;
       if (!held) dropPop();
       popKey = key;
@@ -5984,9 +5981,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     foot.appendChild(sel);
     // A gap that takes whatever is left, so Delete sits at the far edge of the
-    // row rather than up against the picker. It used to sit below the row and
-    // the pill stood between the two, which read as the pill being what the
-    // button belonged to.
+    // row rather than up against the picker.
     foot.appendChild(el("span", "arf-grow"));
     const drop = button("Delete", false);
     drop.className += " arf-danger";
@@ -8362,9 +8357,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const asked = said !== null;
     let yes = said === true;
     if (!asked) {
-      // A host with no confirm dialog, or one that refused. Ask in the panel
-      // rather than resetting on a single tap, which is the outcome this whole
-      // branch exists to prevent.
+      // A host with no confirm dialog, or one that refused. Asked in the panel
+      // rather than resetting on a single tap. The same window as every other
+      // "press it again" in the panel, so the wait never depends on which
+      // button you are looking at.
       if (!resetArmed) {
         resetArmed = true;
         resetSaid =
@@ -8375,7 +8371,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           resetArmed = false;
           resetSaid = null;
           paint();
-        }, 8000);
+        }, ARM_MS);
         return;
       }
       yes = true;
@@ -8637,9 +8633,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   function raiseWidget() {
     if (widget) return;
     try {
-      // Square, and the button fills it. It came out as a squashed oval
-      // because the host sizes the container and the button inside was drawing
-      // its own 50% radius against whatever shape that turned out to be.
+      // Square, and the button fills it. The host sizes the container, so a
+      // button drawing its own 50% radius against whatever shape that turns out
+      // to be comes out as a squashed oval.
       const d = widgetWanted();
       widget = (ctx as any).ui.createFloatWidget({
         width: d,
@@ -9514,10 +9510,10 @@ export function setup(ctx: Ctx, overrides?: any) {
               const node = inputNode || composer();
               inputNode = null;
               // The working, kept the same way a reply's is. The backend sends
-              // it on this message as well, and it was being read off the
-              // progress messages and then dropped here, so a draft refine was
-              // the one kind whose working reached the panel and never reached
-              // the Log. Kept whether the rewrite was saved or not, since the
+              // it on this message as well as on the progress messages, and
+              // without keeping it here a draft refine is the one kind whose
+              // working reaches the panel and never reaches the Log. Kept
+              // whether the rewrite was saved or not, since the
               // working is most worth reading on the one that was refused.
               tookNotes(msg);
               keepNotes({ chatId: lastChatId, ok: !!msg.ok, why: String(msg.why || ""), mine: true });

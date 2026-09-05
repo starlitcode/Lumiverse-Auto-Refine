@@ -6,6 +6,14 @@ A Lumiverse extension. It takes a finished reply, sends it to a model with the r
 
 It is the companion to [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry): that one decides whether a reply is worth keeping, this one improves the ones that are.
 
+## What it does
+
+Each finished reply is sent to a model along with the prompt you wrote, and what comes back is saved into the chat, so the wording sticks and the model reads it as context on later turns.
+
+Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, and one that goes through every reply in a chat you already have. Refining the draft in your input box is a third, behind a switch of its own, because it is the one part that writes into the box you are typing in.
+
+It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
+
 ## Install
 
 In Lumiverse, open Extensions and install from the repository URL:
@@ -15,14 +23,6 @@ https://github.com/starlitcode/Lumiverse-Auto-Refine
 ```
 
 Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt ships with it, so switching it on is the whole of the setup. Everything below is optional.
-
-## What it does
-
-Each finished reply is sent to a model along with the prompt you wrote, and what comes back is saved into the chat, so the wording sticks and the model reads it as context on later turns.
-
-Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, and one that goes through every reply in a chat you already have. Refining the draft in your input box is a third, behind a switch of its own, because it is the one part that writes into the box you are typing in.
-
-It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
 
 ## You are always in charge
 
@@ -69,7 +69,13 @@ A refine is a second model call on every reply, so three settings decide what th
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
 
-Eight prompts ship with it and work as they stand: the same four shapes once for replies and once for your own messages, under a heading each where you pick them. **A quick read** is the one to start with and **a close read** goes over the same ground properly for a bit more prompt; both work on any model. The other two say **for a model that thinks** in their names: those hand the model the standard and let it apply it, which is why they are the smaller pair, while a model that does not reason is given the list. The four for your own writing do a different job, which is to repair what is there and change nothing else.
+Eight prompts ship with it and work as they stand: the same four shapes once for replies and once for your own messages, under a heading each where you pick them.
+
+**A quick read** is the one to start with. **A close read** goes over the same ground properly, for a bit more prompt. Both work on any model.
+
+The other two say **for a model that thinks** in their names. Those hand the model the standard and let it apply it, which is why they are the smaller pair; a model that does not reason is given the list instead.
+
+The four for your own writing do a different job: repair what is there and change nothing else.
 
 ## Seeing what gets sent
 

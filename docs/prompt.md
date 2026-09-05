@@ -127,7 +127,7 @@ Eight, which is the same four shapes twice: once for refining a reply, and once 
 
 Each pair shares a name, so which two go together is visible without reading either, and the two that need a reasoning model say so where you pick them rather than leaving you to find out from a worse rewrite.
 
-What the names deliberately do not claim is how the two pairs compare with each other. They were **Short** and **Detailed** in two pairs once, and the set could not keep that promise: a close read for a thinking model is about the size of a quick read for a plain one. Per refine, smallest first: **a quick read for a model that thinks**, then **a quick read**, then **a close read for a model that thinks** a shade above it, then **a close read** at about half again on top.
+What the names do not claim is how the two pairs compare with each other. **Short** and **Detailed** in two pairs is a promise the set cannot keep: a close read for a thinking model is about the size of a quick read for a plain one. Per refine, smallest first: **a quick read for a model that thinks**, then **a quick read**, then **a close read for a model that thinks** a shade above it, then **a close read** at about half again on top.
 
 The reasoning pair is the smaller one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 
