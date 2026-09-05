@@ -1059,6 +1059,14 @@ console.log("\npresets");
     ok("it saves what shapes a refine", keys.indexOf("blocks") >= 0 && keys.indexOf("samplers") >= 0);
     ok("and not the switches that are yours", keys.indexOf("enabled") < 0 && keys.indexOf("connectionId") < 0, keys.join(","));
 
+    // Twice. This harness gives the drawer no scroll box of its own, so the page
+    // carries the scroll and the question is asked in the panel rather than in
+    // the host's dialog: the first press arms the button and the second does it.
+    // What is being checked here is the storage, not which way it asks.
+    await page.evaluate(() => {
+      document.querySelector('#drawer [data-arf-preset="delete"]').click();
+    });
+    await settle(page);
     await page.evaluate(() => {
       document.querySelector('#drawer [data-arf-preset="delete"]').click();
     });
@@ -4145,11 +4153,17 @@ console.log("\nnothing is thrown away on one tap");
   // A block holds whatever you wrote in it and a preset holds a whole prompt.
   // Neither comes back, so neither goes on a single press: the host is asked to
   // put the question up, the same dialog the reset uses.
+  //
+  // The drawer is given a scroll box of its own here, which is the layout where
+  // the host's dialog costs nothing. Where the page carries the scroll instead
+  // the question is asked in the panel, and that is checked at the end of this
+  // block.
+  const BOXED = "#drawer{height:100vh;overflow-y:auto;box-sizing:border-box}";
   const asked = (page) => page.evaluate(() => window.__confirms || []);
   const blocks = (page) =>
     page.evaluate(() => document.querySelectorAll("#drawer [data-arf-block]").length);
 
-  await inTab(browser, {}, async (page) => {
+  await inTab(browser, { css: BOXED }, async (page) => {
     await goTab(page, "Prompt");
     const had = await blocks(page);
     await page.evaluate(() => {
@@ -4174,7 +4188,7 @@ console.log("\nnothing is thrown away on one tap");
   });
 
   // The same for a preset, which is a whole prompt rather than one block of it.
-  await inTab(browser, {}, async (page) => {
+  await inTab(browser, { css: BOXED }, async (page) => {
     await goTab(page, "Prompt");
     await page.evaluate(() => {
       const n = document.querySelector('#drawer [data-arf-field="presetName"]');
@@ -4208,7 +4222,7 @@ console.log("\nnothing is thrown away on one tap");
 
   // A host with no dialog of its own is not a reason to delete on one tap. The
   // button arms itself and says so, and the second press does it.
-  await inTab(browser, { noConfirm: true }, async (page) => {
+  await inTab(browser, { css: BOXED, noConfirm: true }, async (page) => {
     await goTab(page, "Prompt");
     const had = await blocks(page);
     await page.evaluate(() =>
@@ -4227,16 +4241,19 @@ console.log("\nnothing is thrown away on one tap");
     ok("and the second press does", (await blocks(page)) === had - 1, { had: had });
   });
 
-  // A dialog stops the page behind it scrolling, and the way a host does that is
-  // to stop the page scrolling at all, which sets its scroll to nought. Letting
-  // go afterwards does not put it back. So on a build where the page is what
-  // scrolls, and that is the phone, pressing Delete threw the reader from
-  // wherever they were to the top and left them there. Held across the dialog
-  // and put back.
+  // Where the page carries the panel's scroll, the question is asked in the panel
+  // rather than in the host's dialog.
   //
-  // The page is made the scroller here on purpose: the check above runs with the
-  // drawer scrolling inside itself, where a body lock changes nothing, which is
-  // exactly why this went unseen.
+  // A dialog stops the page behind it scrolling, and the way that is done is to
+  // stop the page scrolling at all, which sets its scroll to nought. So on that
+  // layout, and that is the phone, pressing Delete threw the reader from
+  // wherever they were to the top for as long as the question was up, and back
+  // again on the way out. Measured at 1476 pixels each way. Putting them back
+  // afterwards fixed half of it and the round trip was still a jump.
+  //
+  // The check above runs with the drawer scrolling inside itself, where a lock
+  // on the page changes nothing and the dialog costs nothing, which is exactly
+  // why this went unseen.
   await inTab(
     browser,
     // The page as a host lays it out for a full-height drawer: the document is
@@ -4252,6 +4269,7 @@ console.log("\nnothing is thrown away on one tap");
       page$.scrollTop = b.getBoundingClientRect().top + page$.scrollTop - 300;
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const before = page$.scrollTop;
+      window.__confirms = [];
       window.__confirmLocks = true;
       window.__confirmSay = true;
       document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click();
@@ -4262,6 +4280,8 @@ console.log("\nnothing is thrown away on one tap");
         before: Math.round(before),
         during: Math.round(during),
         after: Math.round(page$.scrollTop),
+        confirms: (window.__confirms || []).length,
+        gone: document.querySelectorAll("#drawer [data-arf-block]").length,
       };
     });
     ok(
@@ -4270,8 +4290,13 @@ console.log("\nnothing is thrown away on one tap");
       JSON.stringify(where),
     );
     ok(
-      "a dialog that holds the page still does not cost you your place",
-      Math.abs(where.after - where.before) < 8,
+      "nothing is thrown away, and nothing moved while it was asked",
+      Math.abs(where.after - where.before) < 8 && Math.abs(where.during - where.before) < 8,
+      JSON.stringify(where),
+    );
+    ok(
+      "and it asked in the panel rather than in a dialog",
+      where.confirms === 0,
       JSON.stringify(where),
     );
   },
@@ -4353,7 +4378,11 @@ console.log("\nmodel setups");
       return card ? (card.textContent || "") : "";
     });
 
-  await inTab(browser, {}, async (page) => {
+  // With a scroll box of its own, which is where the host's dialog is used.
+  await inTab(
+    browser,
+    { css: "#drawer{height:100vh;overflow-y:auto;box-sizing:border-box}" },
+    async (page) => {
     await goTab(page, "Model");
     ok("there are no setups to begin with", (await named(page)).length === 0);
 
@@ -4402,7 +4431,8 @@ console.log("\nmodel setups");
     await press(page, "delete");
     await settle(page);
     ok("saying yes removes it", (await named(page)).length === 0, await named(page));
-  });
+    },
+  );
 }
 
 // ---- a setting's description sits behind a "?" ----

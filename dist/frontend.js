@@ -4210,7 +4210,11 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // How many times the panel has been rebuilt. Anything holding a measurement
+    // from before a rebuild has nothing to say about the panel after one.
+    let paints = 0;
     function paint() {
+        paints++;
         // A rebuild from any other cause has already done what the settle was
         // waiting to do.
         if (settleTimer) {
@@ -4812,8 +4816,37 @@ export function setup(ctx, overrides) {
     // top before the dialog had finished opening, and the deletion then landed
     // somewhere else again. Measured at thirteen hundred pixels on a full-length
     // prompt.
+    // Whether the page itself can scroll, which is what decides what a dialog
+    // costs.
+    //
+    // A dialog stops the page behind it scrolling, and the way that is done is to
+    // stop the page scrolling at all, which sets its scroll to nought and loses
+    // where the reader was. A panel in a scroll box of its own never notices; one
+    // the page carries is thrown to the top the moment the question appears and
+    // thrown back when it is answered. Measured at fourteen hundred pixels each
+    // way on a full-length prompt.
+    //
+    // Asked of the page rather than by hunting up the panel's ancestors for a
+    // scroll box. Which of them is the scroller is a judgement about somebody
+    // else's layout and it came out wrong on the first build it met; whether the
+    // page has a scroll to lose is the thing that actually decides the cost, and
+    // it is one measurement.
+    function pageScrolls() {
+        try {
+            const page = document.scrollingElement || document.documentElement;
+            return !!page && page.scrollHeight > page.clientHeight + 4;
+        }
+        catch (_) {
+            return false;
+        }
+    }
     async function askHost(spec) {
         if (!(ctx && ctx.ui && typeof ctx.ui.showConfirm === "function"))
+            return null;
+        // Asked in the panel instead where the dialog would cost the reader their
+        // place. The question is worth asking either way; throwing somebody to the
+        // top of a long prompt and back to ask it is not worth the nicer box.
+        if (pageScrolls())
             return null;
         const held = scrollers(tab && tab.root);
         let answer;
@@ -4831,11 +4864,25 @@ export function setup(ctx, overrides) {
         // Before anything is thrown away, so the repaint that follows works out
         // where you were from the right place. Twice more over the next two frames,
         // since the dialog's hold on the page can outlast its answer.
+        //
+        // Those two stand down the moment the panel is rebuilt. What is held here
+        // is where the reader was in the panel as it stood before the dialog, and
+        // the answer to this question is usually something that changes the panel's
+        // height: a block deleted, a preset put back. A rebuild works out where to
+        // put the reader from what is on screen after it, and writing a number from
+        // before it over that, a frame later, is the jump this was meant to stop.
+        const before = paints;
         putBack(held);
         try {
             requestAnimationFrame(() => {
+                if (paints !== before)
+                    return;
                 putBack(held);
-                requestAnimationFrame(() => putBack(held));
+                requestAnimationFrame(() => {
+                    if (paints !== before)
+                        return;
+                    putBack(held);
+                });
             });
         }
         catch (_) { }
