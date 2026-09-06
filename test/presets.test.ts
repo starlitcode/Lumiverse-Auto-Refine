@@ -126,6 +126,32 @@ describe("the prompts that ship with it", () => {
     /!/,
     /\b[A-Z]{4,}\b(?!\d)/,
   ];
+  // A prompt whose job is cutting stock phrases cannot be built out of them.
+  // Every entry below was in these prompts and was taken out: two of them
+  // opened on "you are the second pair of eyes", and "beat" and "lands" were
+  // used for units of writing in the same breath as telling a model to write
+  // plainly. Nothing is listed here on a guess about what might creep in
+  // later, because a guard for a fault nobody has made is a rule to work
+  // around rather than a check that ever fires.
+  const STOCK = [
+    /\bsecond pair of eyes\b/i,
+    /\byou are (?:a|an|the) \w+/i,
+    /\bbeats?\b/i,
+    /\blands?\b/i,
+    /\blose the thread\b/i,
+    /\btrip on\b/i,
+    /\bin a breath\b/i,
+    /\bsame hand\b/i,
+  ];
+  test("none of them is built out of the phrases they exist to cut", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      for (const b of p.blocks) {
+        const hit = STOCK.find((re) => re.test(String(b.text)));
+        expect({ block: p.name + "/" + b.id, stock: hit ? String(hit) : "" })
+          .toEqual({ block: p.name + "/" + b.id, stock: "" });
+      }
+  });
+
   test("none of them shouts", () => {
     for (const p of BUILT_IN_PROMPTS)
       for (const b of p.blocks) {
