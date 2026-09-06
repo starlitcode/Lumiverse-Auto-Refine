@@ -45,6 +45,14 @@ If you want more, ask your roleplay model for more. This is the pass that tighte
 
 Somewhere in your prompt, say that a passage which is already good comes back untouched. Without that, a model asked to improve something will find something to improve, and you will lose lines you liked without noticing which ones.
 
+## Two things worth saying out loud
+
+Both go wrong quietly, which is why the eight shipped prompts say them and why a prompt of your own should too.
+
+**The point of view.** A reply written in first person, in present tense, from inside one character's head can come back in polished third person with another character's thoughts in it, and nothing about that reads as an error. Say that the passage keeps the person and tense it was written in, and stays in the head it was written from.
+
+**The strength of what it is given.** A model rewriting roleplay will soften it: the heat comes down, the violence goes vague, the crude word turns polite. Say that the passage comes back at the strength it went in, and that how a line reads is the model's half while whether it should have been written is not. [What it refuses to save](guardrails.md) can catch a rewrite that sanitised a reply, but that is a model call already paid for, so it is worth asking first.
+
 ## Where a rule goes
 
 Order changes how strongly a rule lands. Anything below the turn reads as an instruction about it, so a rule you cannot get a model to follow is worth moving down, closer to the message.

@@ -152,6 +152,26 @@ describe("the prompts that ship with it", () => {
       }
   });
 
+  // Two things a refine gets wrong quietly, so every prompt says them.
+  //
+  // A reply written in first person, present tense, from inside one head can
+  // come back in polished third with another character's thoughts in it, and
+  // nothing about that reads as an error.
+  //
+  // And a model rewriting roleplay will soften it: the heat comes down, the
+  // violence goes vague, the crude word becomes a polite one. Limits can refuse
+  // a rewrite that did it, but that is a call already paid for, so the prompts
+  // ask first.
+  test("each one holds the point of view and the strength of what it is given", () => {
+    for (const p of BUILT_IN_PROMPTS) {
+      const all = p.blocks.map((b) => String(b.text)).join("\n");
+      const holdsPov = /\bperson\b/.test(all) && /\btense\b/.test(all);
+      const holdsStrength = /\bstrength it went in\b/.test(all);
+      expect({ prompt: p.name, pov: holdsPov, strength: holdsStrength })
+        .toEqual({ prompt: p.name, pov: true, strength: true });
+    }
+  });
+
   test("none of them shouts", () => {
     for (const p of BUILT_IN_PROMPTS)
       for (const b of p.blocks) {
