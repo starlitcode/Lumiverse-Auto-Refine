@@ -7109,7 +7109,7 @@ export function setup(ctx, overrides) {
     // lot. Not the chats you switched off, which name chats that do not exist on
     // the machine reading the file.
     function buildTransferCard() {
-        const wrap = card("Your whole setup", "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back.");
+        const wrap = card("Your whole setup", "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back. Presets and model setups go by name: one that matches a name you have replaces it, and one that matches it exactly is left alone.");
         const row = el("div", "arf-row");
         const out = button("Export to file", false);
         out.addEventListener("click", () => {
@@ -7192,6 +7192,29 @@ export function setup(ctx, overrides) {
     // Reads a file back into the settings. Every value is checked against what it
     // is supposed to be rather than assigned: this is a file somebody was handed,
     // and one bad field should not leave the panel in a state it cannot repaint.
+    // Two of these are the same when their name and everything they carry match.
+    // Compared as JSON with keys in order, since two objects built in a different
+    // order are still the same setup.
+    function steady(v) {
+        if (v === null || typeof v !== "object")
+            return JSON.stringify(v) || "null";
+        if (Array.isArray(v))
+            return "[" + v.map(steady).join(",") + "]";
+        return ("{" +
+            Object.keys(v)
+                .sort()
+                .map((k) => JSON.stringify(k) + ":" + steady(v[k]))
+                .join(",") +
+            "}");
+    }
+    function sameThing(a, b) {
+        try {
+            return steady(a) === steady(b);
+        }
+        catch (_) {
+            return false;
+        }
+    }
     function applyImport(text) {
         if (!text)
             return "That file could not be read.";
@@ -7275,6 +7298,10 @@ export function setup(ctx, overrides) {
         }
         // The two that are not settings.
         const extra = [];
+        // Anything in the file that matched what is already here. Importing the
+        // same file twice is a thing people do, and "nothing happened" is a worse
+        // answer than saying it was already in.
+        let alreadyHad = 0;
         if (partOn("importParts", PART_PRESETS) && Array.isArray(body.presets)) {
             const clean = body.presets
                 .filter((x) => x && typeof x === "object" && x.name && !isBuiltIn(String(x.name)))
@@ -7286,34 +7313,71 @@ export function setup(ctx, overrides) {
                 setup: typeof x.setup === "string" ? x.setup : undefined,
             }));
             if (clean.length) {
-                // Added to yours rather than replacing them: a file of somebody else's
-                // presets should not take away your own.
-                const names = presets.map((x) => x.name);
+                // One name, one preset. A file is nearly always your own setup coming
+                // back from another device, where a second copy under a "(copy)" name
+                // leaves you two of everything and no way to tell which is current.
+                // Auto Retry has worked this way all along.
+                //
+                // An identical one is not a replacement, so it is counted apart and
+                // says so: importing the same file twice should read as nothing
+                // happening, because nothing did.
+                let took = 0;
+                let over = 0;
+                let same = 0;
                 for (const one of clean) {
-                    while (names.indexOf(one.name) >= 0)
-                        one.name = one.name + " (copy)";
-                    names.push(one.name);
-                    presets.push(one);
+                    const at = presets.findIndex((x) => x.name === one.name);
+                    if (at < 0) {
+                        presets.push(one);
+                        took++;
+                        continue;
+                    }
+                    const held = presets[at];
+                    if (sameThing(held.settings, one.settings) && (held.setup || "") === (one.setup || "")) {
+                        same++;
+                        continue;
+                    }
+                    presets[at] = one;
+                    over++;
                 }
-                presets = presets.slice(-60);
-                savePresets();
-                extra.push(clean.length + " preset" + (clean.length === 1 ? "" : "s"));
+                if (took || over) {
+                    presets = presets.slice(-60);
+                    savePresets();
+                    if (took)
+                        extra.push(took + " preset" + (took === 1 ? "" : "s"));
+                    if (over)
+                        extra.push(over + (over === 1 ? " preset replaced" : " presets replaced") + " by the same name");
+                }
+                alreadyHad += same;
             }
         }
         if (partOn("importParts", PART_SETUPS) && Array.isArray(body.setups)) {
             const clean = cleanSetups(body.setups);
             if (clean.length) {
-                // Added rather than replacing, the same as presets.
-                const names = setups.map((x) => x.name);
+                // One name, one setup, the same as presets above.
+                let took = 0;
+                let over = 0;
                 for (const one of clean) {
-                    while (names.indexOf(one.name) >= 0)
-                        one.name = one.name + " (copy)";
-                    names.push(one.name);
-                    setups.push(one);
+                    const at = setups.findIndex((x) => x.name === one.name);
+                    if (at < 0) {
+                        setups.push(one);
+                        took++;
+                        continue;
+                    }
+                    if (sameThing(setups[at], one)) {
+                        alreadyHad++;
+                        continue;
+                    }
+                    setups[at] = one;
+                    over++;
                 }
-                setups = setups.slice(-40);
-                saveSetups();
-                extra.push(clean.length + " model setup" + (clean.length === 1 ? "" : "s"));
+                if (took || over) {
+                    setups = setups.slice(-40);
+                    saveSetups();
+                    if (took)
+                        extra.push(took + " model setup" + (took === 1 ? "" : "s"));
+                    if (over)
+                        extra.push(over + (over === 1 ? " model setup replaced" : " model setups replaced") + " by name");
+                }
             }
         }
         if (partOn("importParts", PART_CHATS) && Array.isArray(body.chatsOff)) {
@@ -7325,13 +7389,18 @@ export function setup(ctx, overrides) {
             extra.push("the chats switched off");
         }
         if (!took && !extra.length)
-            return wanted.length
-                ? "Nothing in that file matched what you chose to take."
-                : "Nothing is chosen under What to take from a file, so nothing was taken.";
+            return alreadyHad
+                ? "Everything in that file was already here, so nothing changed."
+                : wanted.length
+                    ? "Nothing in that file matched what you chose to take."
+                    : "Nothing is chosen under What to take from a file, so nothing was taken.";
         persist(true);
         syncExtras();
         const said = took ? took + " setting" + (took === 1 ? "" : "s") : "";
-        return "Imported " + [said].concat(extra).filter(Boolean).join(", ") + ".";
+        const skipped = alreadyHad
+            ? " " + alreadyHad + (alreadyHad === 1 ? " was" : " were") + " already here and left alone."
+            : "";
+        return "Imported " + [said].concat(extra).filter(Boolean).join(", ") + "." + skipped;
     }
     // Save text as a file. False if the browser refused, which some private
     // windows do, and which is worth saying rather than looking like nothing
@@ -7908,6 +7977,16 @@ export function setup(ctx, overrides) {
         ];
         for (const one of allPresets()) {
             const ship = shipped.get(one.name);
+            // A shipped preset is written for one list or the other and carries only
+            // that list, so loading the wrong one changes the prompt you are not
+            // looking at and leaves the one you are looking at as it was. The list
+            // you are not editing is left out rather than offered.
+            //
+            // Yours are not filtered. One of them can carry either list, or both, and
+            // you are the one who saved it, so which tab you happen to be on is not
+            // this menu's business.
+            if (ship && ship.mine !== editingYours())
+                continue;
             if (ship)
                 groups[ship.mine ? 1 : 0].of.push(one);
             else
@@ -7928,6 +8007,13 @@ export function setup(ctx, overrides) {
                 head.appendChild(op);
             }
             sel.appendChild(head);
+        }
+        // Switching lists can take the chosen one out of the menu. Left as it was,
+        // the box shows blank while every button beside it still acts on a preset
+        // that is no longer on screen.
+        if (presetPick && !groups.some((g) => g.of.some((x) => x.name === presetPick))) {
+            presetPick = "";
+            presetSaid = null;
         }
         sel.value = presetPick;
         sel.addEventListener("change", () => {

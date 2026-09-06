@@ -250,6 +250,8 @@ A new block is empty. The prompts that ship with it use XML tags because that is
 
 At the bottom of the **Prompt** tab, presets save a whole setup under a name and switch between them without copying anything by hand. The eight that ship with it are always in the list and cannot be renamed or deleted, so there is always something to go back to.
 
+**The menu shows the four for the list you are editing, not all eight.** Each shipped preset carries one prompt and not the other, so loading a **For your messages** one while you are editing replies would change the prompt you are not looking at and leave the one you are looking at alone. Switching lists switches which four are offered. Your own are not filtered: one of yours can carry either prompt, or both, and you are the one who saved it.
+
 What a preset carries is everything that decides how a refine reads:
 
 - every block: its name, its text, its role and its place in the order
@@ -273,6 +275,8 @@ Presets live in your browser. To move them to another device, use the export bel
 **Export to file** writes one JSON file with your rules, your prompt layout and your sampler settings in it. **Import from file** reads one back.
 
 Importing replaces what you have, so export first if you want a way back. The chats you switched off are not in the file: they name chats that do not exist on the machine reading it.
+
+**Presets and model setups go by name.** One name means one preset: a file carrying a name you already have replaces that one rather than sitting beside it as a copy, which is what you want when the file is your own setup coming back from another device. A preset in the file that matches yours exactly is not a replacement and is left alone, so importing the same file twice reads as nothing happening, because nothing did. The panel says how many came in, how many were replaced, and how many were already there.
 
 Every value in a file is checked against what it is supposed to be before it is used, so a hand-edited or truncated file loads what it can and says how many settings it took, leaving the panel in a state it can still draw. A sound in a file has to be audio and has to be small, or it is dropped.
 

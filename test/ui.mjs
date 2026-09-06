@@ -92,7 +92,7 @@ const COMPOSER_HTML = readFileSync(join(root, "test", "input-area.html"), "utf8"
   .replace(/^<!--[\s\S]*?-->\s*/, "")
   .trim();
 
-async function inTab(browser, { css = "", viewport, touch = false, saved = null, noMenu = false, noConfirm = false } = {}, fn) {
+async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, noMenu = false, noConfirm = false } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
   );
@@ -119,6 +119,13 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
     await page.evaluate((s) => {
       localStorage.setItem("lv-auto-refine:settings:v1", JSON.stringify(s));
     }, saved);
+  }
+  // Presets are read once on the way up, so anything wanting one already saved
+  // has to put it there before the extension starts.
+  if (presets) {
+    await page.evaluate((list) => {
+      localStorage.setItem("lv-auto-refine:presets:v1", JSON.stringify(list));
+    }, presets);
   }
   await page.addScriptTag({ content: SOURCE, type: "module" });
   await page.waitForFunction(() => !!window.__setup);
@@ -4339,11 +4346,12 @@ console.log("\nlists with headings on them");
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const got = await shape(page, "presetPick");
-    ok("the presets are under headings", got.heads.length >= 2, got && got.heads);
-    ok("one for replies and one for your own messages",
-      got.heads.indexOf("For replies") >= 0 && got.heads.indexOf("For your messages") >= 0,
-      got.heads);
-    ok("four under each", got.under.every((g) => g.items.length === 4), got.under);
+    // One heading, for the list being edited. Each shipped preset carries one
+    // prompt and not the other, so offering both invited loading the one that
+    // changes the prompt you are not looking at.
+    ok("the presets are under a heading", got.heads.length === 1, got && got.heads);
+    ok("naming the list being edited", got.heads[0] === "For replies", got.heads);
+    ok("with its four under it", got.under.every((g) => g.items.length === 4), got.under);
     // The heading says which prompt it is for, so the entry does not repeat it.
     ok("and the entries under them do not repeat the heading",
       got.under.every((g) => g.items.every((t) => !/your writing/i.test(t))), got.under);
@@ -5182,6 +5190,127 @@ console.log("\ndescriptions behind a ?");
     });
     ok("a setting is still findable by its description", !hit.none, hit);
     ok("and the search narrows to it rather than showing everything", hit.rows > 0 && hit.rows < 20, hit);
+  });
+}
+
+console.log("\nthe preset menu shows one list at a time");
+{
+  // Every shipped preset carries one list and not the other, so loading a "for
+  // your messages" one while editing replies changes the prompt you are not
+  // looking at and leaves the one you are looking at alone. The menu offered
+  // both, under headings, which is a mistake it was inviting.
+  const menu = (page) =>
+    page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      if (!sel) return null;
+      return [...sel.querySelectorAll("optgroup")].map((g) => ({
+        head: g.label,
+        of: [...g.querySelectorAll("option")].map((o) => o.textContent.trim()),
+      }));
+    });
+  const switchTo = (page, id) =>
+    page.evaluate((want) => {
+      const b = document.querySelector('#drawer [data-arf-editing="' + want + '"]');
+      b && b.click();
+    }, id);
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const forReplies = await menu(page);
+    ok(
+      "on the replies list, only its own four are offered",
+      forReplies && forReplies.length === 1 && forReplies[0].head === "For replies" && forReplies[0].of.length === 4,
+      JSON.stringify(forReplies),
+    );
+
+    await switchTo(page, "userBlocks");
+    await settle(page);
+    const forYours = await menu(page);
+    ok(
+      "and on your own messages, only theirs",
+      forYours && forYours.length === 1 && forYours[0].head === "For your messages" && forYours[0].of.length === 4,
+      JSON.stringify(forYours),
+    );
+  });
+
+  // One of yours can carry either list, or both, and you are the one who saved
+  // it, so it is offered whichever tab you are on.
+  await inTab(
+    browser,
+    { presets: [{ name: "Mine", at: 1, settings: { blocks: [] } }] },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const onReplies = await menu(page);
+      await switchTo(page, "userBlocks");
+      await settle(page);
+      const onYours = await menu(page);
+      const hasMine = (m) => !!m && m.some((g) => g.head === "Yours" && g.of.indexOf("Mine") >= 0);
+      ok("one of your own shows on the replies list", hasMine(onReplies), JSON.stringify(onReplies));
+      ok("and on your own messages too", hasMine(onYours), JSON.stringify(onYours));
+    },
+  );
+}
+
+console.log("\nimporting the same file twice");
+{
+  // People re-import. Adding a second copy under a "(copy)" name is not what
+  // they asked for, and with a cap on the list it pushes their own oldest
+  // preset out to make room for a duplicate of one they already had.
+  const file = JSON.stringify({
+    extension: "auto-refine",
+    presets: [
+      {
+        name: "Mine",
+        at: 1,
+        settings: { blocks: [{ id: "a", name: "One", on: true, role: "system", text: "<p>{{message}}</p>" }] },
+      },
+    ],
+  });
+  const load = (page, text) =>
+    page.evaluate(async (t) => {
+      const input = document.querySelector('#drawer input[type="file"]');
+      const dt = new DataTransfer();
+      dt.items.add(new File([t], "setup.json", { type: "application/json" }));
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 120));
+      return document.querySelector("#drawer .arf-body").textContent;
+    }, text);
+  const names = (page) =>
+    page.evaluate(() =>
+      (JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]") || []).map((x) => x.name),
+    );
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    const first = await load(page, file);
+    ok("the first import brings the preset in", /1 preset/.test(first), first.slice(0, 160));
+    ok("and it is there under its own name", (await names(page)).join() === "Mine", JSON.stringify(await names(page)));
+
+    const again = await load(page, file);
+    ok(
+      "the same file again changes nothing",
+      /already here/.test(again),
+      again.slice(0, 200),
+    );
+    ok(
+      "and leaves one preset rather than a copy of it",
+      (await names(page)).join() === "Mine",
+      JSON.stringify(await names(page)),
+    );
+
+    // One name, one preset. A file is nearly always your own setup coming back
+    // from another device, and two of everything with no way to tell which is
+    // current is worse than the newer one winning.
+    const changed = file.replace('"One"', '"Two"');
+    const third = await load(page, changed);
+    const after = await names(page);
+    ok("a changed one under the same name replaces it", after.join() === "Mine", JSON.stringify(after));
+    ok("and the panel says it replaced rather than added", /replaced/.test(third), third.slice(0, 200));
+    const held = await page.evaluate(
+      () => JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1"))[0].settings.blocks[0].name,
+    );
+    ok("with the newer contents in it", held === "Two", String(held));
   });
 }
 
