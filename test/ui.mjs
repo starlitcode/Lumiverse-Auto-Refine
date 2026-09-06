@@ -21,6 +21,11 @@
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+// The defaults, read from the panel's own source rather than copied here, so a
+// setting added without one is caught instead of being described twice.
+import { __testing } from "../src/frontend.ts";
+
+const { CONFIG } = __testing;
 
 const root = join(import.meta.dir, "..");
 
@@ -92,7 +97,7 @@ const COMPOSER_HTML = readFileSync(join(root, "test", "input-area.html"), "utf8"
   .replace(/^<!--[\s\S]*?-->\s*/, "")
   .trim();
 
-async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, noMenu = false, noConfirm = false } = {}, fn) {
+async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, setups = null, noMenu = false, noConfirm = false } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
   );
@@ -121,11 +126,18 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
     }, saved);
   }
   // Presets are read once on the way up, so anything wanting one already saved
-  // has to put it there before the extension starts.
+  // has to put it there before the extension starts. Model setups are read the
+  // same way, which is what lets a check start from one saved by an older
+  // version.
   if (presets) {
     await page.evaluate((list) => {
       localStorage.setItem("lv-auto-refine:presets:v1", JSON.stringify(list));
     }, presets);
+  }
+  if (setups) {
+    await page.evaluate((list) => {
+      localStorage.setItem("lv-auto-refine:setups:v1", JSON.stringify(list));
+    }, setups);
   }
   await page.addScriptTag({ content: SOURCE, type: "module" });
   await page.waitForFunction(() => !!window.__setup);
@@ -1522,7 +1534,41 @@ console.log("\nsettings that follow the account");
 {
   // What comes down from the account is checked key by key against the
   // defaults, so a setting with a row on the panel but no default is dropped on
-  // the way in and is the one setting that does not follow the account.
+  // the way in and is the one setting that does not follow the account. Nothing
+  // about that shows on the panel: the row draws, it takes a value, it saves in
+  // this browser, and it is the one setting a second machine does not have.
+  //
+  // Every row that draws is asked for, which is why this is here and not in
+  // `bun test`: which rows exist depends on which switches are on, and the
+  // second pass turns every switch on to reach the ones that fold away.
+  // Rows that are not settings, with the reason. presetSetup is the dropdown on
+  // the preset editor naming a model setup to load alongside it: it is written
+  // into the preset being saved, not into the settings, so it has no default
+  // and wants none. Anything else turning up here is the real thing.
+  const NOT_A_SETTING = ["presetSetup"];
+  const everySwitchOn = {};
+  for (const [k, v] of Object.entries(CONFIG)) if (typeof v === "boolean") everySwitchOn[k] = true;
+  for (const [what, saved] of [
+    ["as it opens", null],
+    ["with every switch on", everySwitchOn],
+  ]) {
+    await inTab(browser, saved ? { saved: saved } : {}, async (page) => {
+      const orphans = [];
+      for (const t of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+        await goTab(page, t);
+        const keys = await page.evaluate(() =>
+          [...document.querySelectorAll("#drawer [data-arf-row]")]
+            .map((r) => r.getAttribute("data-arf-row"))
+            .filter((k) => k && k.indexOf(":") < 0),
+        );
+        for (const k of keys)
+          if (!(k in CONFIG) && NOT_A_SETTING.indexOf(k) < 0 && orphans.indexOf(k) < 0)
+            orphans.push(k);
+      }
+      ok("every row " + what + " is for a setting with a default", orphans.length === 0, orphans);
+    });
+  }
+
   await inTab(browser, {}, async (page) => {
     await page.evaluate(() => {
       const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
@@ -4768,6 +4814,17 @@ console.log("\nmodel setups");
       },
       { key, value },
     );
+  // A number box settles on change rather than on every keystroke, so a value
+  // half typed never lands as a setting.
+  const typeNum = (page, key, value) =>
+    page.evaluate(
+      ({ key, value }) => {
+        const n = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+        n.value = value;
+        n.dispatchEvent(new Event("change", { bubbles: true }));
+      },
+      { key, value },
+    );
   const press = (page, what) =>
     page.evaluate((w) => document.querySelector('#drawer [data-arf-setup="' + w + '"]').click(), what);
   const said = (page) =>
@@ -4831,6 +4888,71 @@ console.log("\nmodel setups");
     await press(page, "delete");
     await settle(page);
     ok("saying yes removes it", (await named(page)).length === 0, await named(page));
+    },
+  );
+
+  // The prices are the model's, so they travel with the setup that names it.
+  // Left out, moving from a cheap model to a careful one priced the new one at
+  // the old one's rates and said nothing, which is the one wrong number here
+  // that reads as a right one.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+    await typeNum(page, "costIn", "0.075");
+    await typeNum(page, "costOut", "0.3");
+    await type(page, "setupName", "The cheap one");
+    await press(page, "new");
+    await settle(page);
+
+    await typeNum(page, "costIn", "15");
+    await typeNum(page, "costOut", "75");
+    await press(page, "load");
+    await settle(page);
+    const back = await page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1"));
+      return { in: saved.costIn, out: saved.costOut };
+    });
+    ok(
+      "a setup puts its own prices back on the panel",
+      back.in === 0.075 && back.out === 0.3,
+      JSON.stringify(back),
+    );
+  });
+
+  // One saved before the prices existed names no price at all. Zeroing them
+  // would be worse than leaving them: a cost line quietly disappearing reads as
+  // the extension deciding not to show one.
+  await inTab(
+    browser,
+    {
+      setups: [
+        {
+          name: "From before",
+          at: 1,
+          settings: { connectionId: "", thinkingMode: "off", timeoutSecs: 60, samplers: {} },
+        },
+      ],
+    },
+    async (page) => {
+      await goTab(page, "Model");
+      await typeNum(page, "costIn", "15");
+      await typeNum(page, "costOut", "75");
+      await page.evaluate(() => {
+        const sel = document.querySelector('#drawer [data-arf-field="setupPick"]');
+        sel.value = "From before";
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await settle(page);
+      await press(page, "load");
+      await settle(page);
+      const kept = await page.evaluate(() => {
+        const saved = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1"));
+        return { in: saved.costIn, out: saved.costOut };
+      });
+      ok(
+        "an older setup with no prices in it leaves yours alone",
+        kept.in === 15 && kept.out === 75,
+        JSON.stringify(kept),
+      );
     },
   );
 }

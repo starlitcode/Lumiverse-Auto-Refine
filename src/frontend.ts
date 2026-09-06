@@ -47,7 +47,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
   {
     id: "model",
     label: "Model and thinking",
-    what: "Which connection refines, how much it thinks, and how long to wait.",
+    what: "Which connection refines, how much it thinks, how long to wait, and what it charges.",
     keys: ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "costIn", "costOut"],
   },
   {
@@ -173,16 +173,31 @@ const PRESETS_KEY = "lv-auto-refine:presets:v1";
 const SETUPS_KEY = "lv-auto-refine:setups:v1";
 
 // What a model setup carries: which connection refines, how much it thinks, how
-// long to wait for it, and the samplers. Nothing about the prompt, because the
-// point of keeping them apart is being able to run the same prompt through a
-// cheap model and an expensive one without editing anything.
+// long to wait for it, the samplers, and what that model charges. Nothing about
+// the prompt, because the point of keeping them apart is being able to run the
+// same prompt through a cheap model and an expensive one without editing
+// anything.
+//
+// The prices are in for the same reason the connection is: two models charge
+// two different amounts, so a setup that changed the model and left the old
+// prices standing would put a figure on the panel that was never true of
+// either. A setup saved before prices existed carries none, and loading it
+// leaves the ones you have alone rather than zeroing them.
 //
 // A connection id is in here, which is the one thing a preset refuses to carry.
 // The reason a preset refuses is that presets go into files people share, and
 // an id from somebody else's account names nothing on yours. A setup is not
 // offered as a file: it lives in this browser and in your own account, where
 // the id means what it says.
-const SETUP_KEYS = ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "samplers"];
+const SETUP_KEYS = [
+  "connectionId",
+  "thinkingMode",
+  "thinkingEffort",
+  "timeoutSecs",
+  "samplers",
+  "costIn",
+  "costOut",
+];
 
 // What a preset carries: everything that decides how a refine reads. The rest
 // stays yours whichever preset you load, which is the split that makes a preset
@@ -8248,6 +8263,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         const v = Number(got);
         if (!Number.isFinite(v)) continue;
         cfg.timeoutSecs = Math.min(3600, Math.max(0, Math.round(v)));
+        took++;
+      } else if (k === "costIn" || k === "costOut") {
+        // Held to the same range the box is, and to a real number: a price is
+        // the one setting here where a wrong value is not visible as a wrong
+        // value, it is a plausible figure on the panel.
+        const v = Number(got);
+        if (!Number.isFinite(v)) continue;
+        const field = COST_FIELDS.find((f) => f.key === k)!;
+        cfg[k] = Math.min(field.max as number, Math.max(field.min as number, v));
         took++;
       } else if (typeof got === "string") {
         // A pick can only be given something it offers. A connection is the
