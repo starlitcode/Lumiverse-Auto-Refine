@@ -10,6 +10,10 @@
 import { expect, test, describe } from "bun:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { __testing } from "../src/frontend";
+
+// The prompt a fresh install starts with, taken from the panel that owns it.
+const { DEFAULT_BLOCKS } = __testing as any;
 
 const SRC = readFileSync(new URL("../dist/backend.js", import.meta.url), "utf8");
 
@@ -955,6 +959,20 @@ describe("how the prompt is put together", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.asked[0].messages.map((m: any) => m.role)).toEqual(["system", "assistant", "user"]);
+  });
+
+  // The backend starts with no prompt and is handed one over the bridge, so
+  // there is a window between the two. The only honest answer inside it is to
+  // say so: refining on anything else would report that the reader's prompt
+  // ran when a different one did.
+  test("a refine asked for before the prompt has arrived is refused, and nothing is written", async () => {
+    const h = host(chat(), ["A rewrite from a prompt nobody wrote."]);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+    const done = h.sent.find((m: any) => m.type === "refine_result" && m.requestId === "r");
+    expect(String(done && done.why)).toMatch(/has not reached the backend/);
   });
 
   test("a prompt with no turn macro is refused before a model is called", async () => {
@@ -1946,11 +1964,11 @@ describe("asking again when a check fails", () => {
 // every rule, and make the whole prompt new on every reply.
 describe("a prompt built to be cached", () => {
   // Built from the prompt that ships, not the small fixture the other checks
-  // use: an empty list falls back to the default, which is the thing whose
-  // order this is about.
+  // use, since the order this is about is that prompt's. It comes from the
+  // panel, which is where it lives and the only place it lives.
   const build = async (over: any = {}) => {
     const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
-      blocks: [],
+      blocks: DEFAULT_BLOCKS,
       ...over,
     });
     await h.front({ type: "preview_prompt", requestId: "p1", chatId: "c1", messageId: "m2" });

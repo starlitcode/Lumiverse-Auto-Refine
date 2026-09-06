@@ -206,95 +206,6 @@ const NO_SCENE = { character: '', context: '', lore: '', name: '' };
 // to as, and XML tags as headings with a closing tag at the end, because a
 // model reads a tagged block as one instruction rather than as a paragraph that
 // blurs into the next one.
-// What a fresh install refines with until the reader changes it. The same
-// prompt the panel ships as Short, and the same order: the rules first, because
-// they never change and a provider that caches prompts reuses everything up to
-// the first thing that did; then the setting, then the pages before this one,
-// then the passage.
-const DEFAULT_BLOCKS = [
-    {
-        id: 'job',
-        name: 'The job',
-        on: true,
-        role: 'system',
-        text: '<your_job>\n' +
-            'You are the second pair of eyes on a draft. Two authors are writing this ' +
-            'story between them, passing it back and forth, and the passage below has ' +
-            'just been written.\n\n' +
-            'Your work is on the writing. Every event, every line of speech and ' +
-            'everything anyone means survives it, and the passage ends on the moment ' +
-            'it already ends on.\n' +
-            '</your_job>',
-    },
-    {
-        id: 'cut',
-        name: 'What to cut',
-        on: true,
-        role: 'system',
-        text: '<what_to_cut>\n' +
-            'Take out the phrases that arrive by habit: a held breath, a hammering ' +
-            'heart, a voice barely above a whisper, darkening eyes, a shiver down a ' +
-            'spine, the ghost of a smile, air thick with something.\n\n' +
-            'Take out these words where the sentence still stands without them: ' +
-            'suddenly, slowly, just, really, very, almost, somehow, seemed to, began ' +
-            'to.\n\n' +
-            'Where a sentence restates the one before it in other words, keep ' +
-            'whichever is doing the work and let the other go.\n\n' +
-            'When something goes, let the gap close. A passage is usually better one ' +
-            'sentence shorter.\n' +
-            '</what_to_cut>',
-    },
-    {
-        id: 'leave',
-        name: 'What to leave',
-        on: true,
-        role: 'system',
-        text: '<what_to_leave>\n' +
-            'A passage that already reads well comes back exactly as it was. ' +
-            'Rewriting what did not need it costs the most of anything you can do ' +
-            'here: it takes away a line your co-author chose.\n\n' +
-            'Your rewrite comes back no longer than what you were given.\n' +
-            '</what_to_leave>',
-    },
-    {
-        id: 'answer',
-        name: 'How to answer',
-        on: true,
-        role: 'system',
-        text: '<how_to_answer>\n' +
-            'Your whole answer takes this shape:\n\n' +
-            '<REFINED>\n' +
-            'the passage, rewritten\n' +
-            '</REFINED>\n\n' +
-            'Only what sits between those two tags is saved, so both belong in every ' +
-            'answer. Inside them, write the passage as a reader would meet it.\n\n' +
-            'Anything outside the tags reaches me and never reaches the story, so a ' +
-            'note about the edit belongs there if you have one.\n' +
-            '</how_to_answer>\n\n' +
-            '{{protect_notes}}',
-    },
-    {
-        id: 'character',
-        name: 'Who the story follows',
-        on: true,
-        role: 'system',
-        text: '<who_the_story_follows>\n{{description}}\n</who_the_story_follows>',
-    },
-    {
-        id: 'history',
-        name: 'The pages before this one',
-        on: true,
-        role: 'system',
-        text: '<earlier_pages>\n{{history}}\n</earlier_pages>',
-    },
-    {
-        id: 'turn',
-        name: 'The passage to refine',
-        on: true,
-        role: 'user',
-        text: '<passage_to_refine>\n{{message}}\n</passage_to_refine>',
-    },
-];
 // Reasoning models are told where to put their working. Sent as its own block
 // so somebody who never turns thinking on never carries the instruction.
 // Asking for the answer inside a tag, rather than asking for the answer on its
@@ -370,12 +281,19 @@ function unwrapOutput(answer) {
 // Empty means you have not written one, and the reply prompt is used instead,
 // which is what it did before this existed.
 let userBlocks = [];
-// The blocks as they will actually be sent: the reader's list when it has one,
-// the default otherwise.
+// The blocks as they will actually be sent. There is one prompt and the panel
+// owns it: a copy kept here to fall back on was a second prompt nobody could
+// see, and it had already drifted four blocks and an opening paragraph away
+// from the one on the screen. A refine that ran on it would have said it used
+// your prompt and used something else, including without the block that keeps
+// markup out of the model's reach.
+//
+// Empty until the settings arrive, which is a window rather than a state: the
+// refine is refused for that moment and says so, and the next one runs.
 function activeBlocks(isUser) {
     if (isUser && Array.isArray(userBlocks) && userBlocks.length)
         return userBlocks.slice();
-    return Array.isArray(blocks) && blocks.length ? blocks.slice() : DEFAULT_BLOCKS.slice();
+    return Array.isArray(blocks) ? blocks.slice() : [];
 }
 // Whether the prompt shows the model the thing it is meant to rewrite. Asked
 // before any model is called, so a prompt that could not possibly work is
@@ -1869,6 +1787,13 @@ async function refineMessage(chatId, messageId, userId, byHand) {
         return { ok: false, why: 'your own messages are only refined when you ask for one' };
     // Checked here rather than at the top, because which prompt is used depends
     // on whose message this is and the two can be in different states.
+    // Told apart from a prompt that is there and wrong, because the answer is
+    // different: this one clears itself the moment the panel is open.
+    if (!activeBlocks(m.role === 'user').length)
+        return {
+            ok: false,
+            why: 'your prompt has not reached the backend yet, so nothing was sent. Opening the Auto Refine tab hands it over',
+        };
     if (!promptHasTurn(m.role === 'user'))
         return {
             ok: false,
