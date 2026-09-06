@@ -5185,6 +5185,87 @@ console.log("\ndescriptions behind a ?");
   });
 }
 
+console.log("\nthe order and what caching costs");
+{
+  // A provider that caches prompts reuses the front of one up to the first
+  // thing that changed, so a block sitting under the passage is sent as new on
+  // every refine. Said where the order is decided, because getting it wrong
+  // breaks nothing and only costs more.
+  const said = (page) =>
+    page.evaluate(() => {
+      const n = document.querySelector("#drawer [data-arf-cacheorder]");
+      return n ? { hidden: !!n.hidden, text: n.textContent.trim() } : null;
+    });
+  const rule = (id, name) => ({ id: id, name: name, on: true, role: "system", text: "<" + id + ">a rule</" + id + ">" });
+  const turn = { id: "turn", name: "The passage", on: true, role: "user", text: "<p>{{message}}</p>" };
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const shipped = await said(page);
+    ok(
+      "the shipped order says nothing about caching",
+      shipped && shipped.hidden,
+      JSON.stringify(shipped),
+    );
+  });
+
+  await inTab(
+    browser,
+    { saved: { blocks: [rule("a", "One"), turn, rule("b", "Two"), rule("c", "Three")] } },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const out = await said(page);
+      ok("a block under the passage is named", out && !out.hidden, JSON.stringify(out));
+      ok("and counted", out && /2 blocks that never change sit below/.test(out.text), out && out.text);
+      ok(
+        "and called a trade rather than a mistake",
+        out && /trade rather than a mistake/.test(out.text),
+        out && out.text,
+      );
+    },
+  );
+
+  // The run-up is redrawn every turn too, so it ends the reuse just as the
+  // passage does.
+  await inTab(
+    browser,
+    {
+      saved: {
+        blocks: [
+          rule("a", "One"),
+          { id: "hist", name: "The pages before", on: true, role: "system", text: "<h>{{history}}</h>" },
+          rule("b", "Two"),
+          turn,
+        ],
+      },
+    },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const out = await said(page);
+      ok(
+        "the run-up ends the reuse as well",
+        out && !out.hidden && /1 block that never changes sits below/.test(out.text),
+        out && out.text,
+      );
+    },
+  );
+
+  // A block switched off is not sent, so it cannot be costing anything.
+  await inTab(
+    browser,
+    {
+      saved: {
+        blocks: [rule("a", "One"), turn, { ...rule("b", "Two"), on: false }],
+      },
+    },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const out = await said(page);
+      ok("a block switched off is not counted against the order", out && out.hidden, JSON.stringify(out));
+    },
+  );
+}
+
 console.log("\ntokens and what they cost");
 {
   // The preview used to report messages and characters, which is two numbers
@@ -5303,7 +5384,7 @@ console.log("\ntokens and what they cost");
     });
     await settle(page);
     shown = await body(page);
-    ok("what the last refine used is reported", /2,000 tokens in/.test(shown) && /500 tokens back/.test(shown), shown.slice(0, 300));
+    ok("what the last refine used is reported", /2,000 tokens input/.test(shown) && /500 tokens output/.test(shown), shown.slice(0, 300));
     ok("and what it cost", /about 0\.013/.test(shown));
   });
 
@@ -5314,7 +5395,7 @@ console.log("\ntokens and what they cost");
     });
     await settle(page);
     const shown = await body(page);
-    ok("the tokens are reported with no prices set", /2,000 tokens in/.test(shown));
+    ok("the tokens are reported with no prices set", /2,000 tokens input/.test(shown));
     ok("and no cost is put beside them", !/Last refine cost/.test(shown));
   });
 
@@ -5331,7 +5412,7 @@ console.log("\ntokens and what they cost");
     const shown = await body(page);
     ok(
       "a refine that asked twice reports both asks",
-      /4,000 tokens in/.test(shown) && /1,000 tokens back/.test(shown),
+      /4,000 tokens input/.test(shown) && /1,000 tokens output/.test(shown),
       shown.slice(0, 300),
     );
     ok("and is priced on the pair", /about 0\.027/.test(shown), shown.slice(0, 300));

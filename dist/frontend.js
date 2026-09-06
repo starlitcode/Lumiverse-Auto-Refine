@@ -2343,8 +2343,8 @@ export function setup(ctx, overrides) {
             return "0";
         return n >= 1 ? n.toFixed(2) : String(Number(n.toPrecision(2)));
     }
-    // Sent and back priced separately, since providers charge more for what comes
-    // back and a single rate would flatter a rewrite that grew.
+    // Input and output priced apart, since providers charge more for output and a
+    // single rate would flatter a rewrite that grew.
     function costOf(sent, back) {
         return (sent / 1e6) * Number(cfg.costIn || 0) + (back / 1e6) * Number(cfg.costOut || 0);
     }
@@ -3189,6 +3189,28 @@ export function setup(ctx, overrides) {
     // The reply prompt, which is the one the automatic pass and the refine button
     // use. The own-messages prompt is checked where it is edited.
     const noTurn = () => !holdsTurn(blockList("blocks"));
+    // A provider that caches prompts reuses the front of one up to the first
+    // thing that changed. The passage is different on every refine and the run-up
+    // is redrawn every turn, so a block holding either pushes everything under it
+    // out of the reuse.
+    //
+    // This is a trade rather than a mistake, which is why it is a line and not a
+    // warning: a rule below the passage reads as an instruction about it and is
+    // followed more closely. Worth knowing, not worth stopping for.
+    const VOLATILE = ["{{message}}", "{{history}}"];
+    const movesEveryTurn = (b) => VOLATILE.some((m) => String(b.text || "").indexOf(m) >= 0);
+    // Blocks that never change and sit after one that does. Those are the wasted
+    // ones: above the change they would be reused, below it they are re-sent
+    // every refine for nothing. A volatile block below another volatile one is
+    // not counted, since it was never going to be reused either way, which is why
+    // the shipped order can put the passage under the run-up and say nothing.
+    function strandedBlocks(list) {
+        const on = list.filter((b) => b && b.on);
+        const at = on.findIndex(movesEveryTurn);
+        if (at < 0)
+            return 0;
+        return on.slice(at + 1).filter((b) => !movesEveryTurn(b)).length;
+    }
     function statusLine() {
         if (!cfg.enabled)
             return { text: "Off", tone: "off" };
@@ -5681,6 +5703,22 @@ export function setup(ctx, overrides) {
             noTurnSaid.hidden = holdsTurn(list);
             wrap.appendChild(noTurnSaid);
         }
+        // What this order costs where prompts are cached. Said here because here is
+        // where the order is decided, and because getting it wrong is invisible:
+        // nothing breaks, every refine just costs more.
+        {
+            const under = strandedBlocks(list);
+            const cacheSaid = note(under === 0
+                ? ""
+                : under +
+                    (under === 1 ? " block that never changes sits" : " blocks that never change sit") +
+                    " below the passage or the run-up. If your provider caches prompts, reuse stops at the first thing that changed, so " +
+                    (under === 1 ? "it is" : "they are") +
+                    " sent as new on every refine instead of being reused. A rule down there is followed more closely, so this is a trade rather than a mistake.");
+            cacheSaid.setAttribute("data-arf-cacheorder", "1");
+            cacheSaid.hidden = under === 0;
+            wrap.appendChild(cacheSaid);
+        }
         for (let i = 0; i < list.length; i++)
             wrap.appendChild(buildBlockRow(list, i));
         const acts = el("div", "arf-row");
@@ -5995,7 +6033,10 @@ export function setup(ctx, overrides) {
         // lorebook the size of everything else halfway down it.
         const parts = tok && Array.isArray(tok.parts)
             ? tok.parts
-                .map((x) => ({ name: String((x && x.name) || ""), tokens: Number(x && x.tokens) || 0 }))
+                .map((x) => ({
+                name: String((x && x.name) || "").trim() || "a block with no name",
+                tokens: Number(x && x.tokens) || 0,
+            }))
                 .sort((a, b) => b.tokens - a.tokens)
             : [];
         const size = msgs.length +
@@ -6024,9 +6065,9 @@ export function setup(ctx, overrides) {
             // nothing on that side, it is a price nobody has given, and a total that
             // quietly leaves half out is worse than one that says what it covers.
             const covers = Number(cfg.costIn) <= 0
-                ? " Only what comes back is priced, since the price for what is sent is 0."
+                ? " Only what the model writes back is priced, since the input price is 0."
                 : Number(cfg.costOut) <= 0
-                    ? " Only what is sent is priced, since the price for what comes back is 0."
+                    ? " Only what is sent is priced, since the output price is 0."
                     : " What comes back is taken as the same size as the passage.";
             wrap.appendChild(note("About " +
                 money(one) +
@@ -6470,12 +6511,14 @@ export function setup(ctx, overrides) {
         // reckoned beforehand. A dropped rewrite is on this line too: the call was
         // made and paid for whether or not anything was saved.
         if (lastUsed) {
+            // Input and output, the same two words the prices are named after, so a
+            // reader can put the one against the other without translating.
             rows.push([
                 "Last refine used",
                 tokenWord(lastUsed.sent, lastUsed.counted) +
-                    " in, " +
+                    " input, " +
                     tokenWord(lastUsed.back, lastUsed.counted) +
-                    " back",
+                    " output",
             ]);
             if (hasPrices())
                 rows.push(["Last refine cost", "about " + money(costOf(lastUsed.sent, lastUsed.back))]);

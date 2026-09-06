@@ -52,6 +52,8 @@ The other reason order matters is caching. If your provider caches prompts, the 
 
 All five shipped prompts are built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
 
+**The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
+
 ## Roles
 
 System is right for almost everything. Two cases where changing it helps:
@@ -196,7 +198,7 @@ Two places use them.
 
 **Before you spend it**, under **Show me the request**: what this one request would cost, and what a hundred replies at that size would come to. The hundred is the number worth looking at, since a refine costs a fraction of a penny and the question people actually have is what a session comes to. What comes back cannot be known before it arrives, so it is taken as the same size as the passage. The [length limits](guardrails.md) are what keep that close to true.
 
-**After you spent it**, on the **Log** tab under **Right now**: what the last refine really put through, in and back, and what that cost. A rewrite that was dropped counts here, because the call was made and paid for whether or not anything was saved, and so does every ask a refine took when **Ask again when a check fails** sent it back for another.
+**After you spent it**, on the **Log** tab under **Right now**: what the last refine really put through, input and output, and what that cost. A rewrite that was dropped counts here, because the call was made and paid for whether or not anything was saved, and so does every ask a refine took when **Ask again when a check fails** sent it back for another.
 
 The cheapest thing you can do is not on this page: point **Refine using** at a smaller model. That is worth more than every other saving here put together.
 
@@ -224,9 +226,11 @@ Under **Model**, **Let it think first** has three answers:
 
 **Show me the request** builds the request for the reply you are looking at and shows it, message by message, with the role and size of each. No model is called and nothing is charged; it costs one read of your chat.
 
-Size is in tokens, counted with Lumiverse's own tokeniser, with the character count beside it. Where the tokeniser will not answer the number is estimated at four characters a token and the line says **roughly** so you know which of the two you are reading. A count and a guess are different things to act on.
+The line above them gives the whole request in tokens, counted with Lumiverse's own tokeniser, with the character count beside it. Where the tokeniser will not answer, the number is estimated at four characters a token and the line says **roughly**, so you know which of the two you are reading. A count and a guess are different things to act on.
 
-**Where the tokens go** is under that, block by block, largest first, each with its share of the whole. It is per block rather than per message on purpose: blocks with the same role are joined before they are sent, so counting the messages would report every rule you wrote as one lump. This is the part worth reading before you change anything, because a lorebook or a run-up that is quietly two thirds of every request does not look like anything in the messages below it.
+**Where the tokens go** is the breakdown: one line per block, largest first, each with its share. The total above is those blocks added up.
+
+It is per block rather than per message on purpose. Blocks with the same role are joined before they are sent, so counting the messages would report every rule you wrote as one lump. This is the part worth reading before you change anything, because a lorebook or a run-up that is quietly two thirds of every request does not look like anything in the messages below it. Those messages carry their size in characters, since the token answer is the breakdown.
 
 It is built by the same function a real refine uses, and the passage goes through the same two steps first, so it cannot become a nice description of something the extension does not actually send. That is why the passage may read oddly: markup shows as `[[AR1]]` tokens, the model's own reasoning is already cut off it, and `{{protect_notes}}` has become the sentence that explains the tokens. That is what the model gets. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
 
