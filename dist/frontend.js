@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -89,8 +89,8 @@ const PARTS = [
     {
         id: "switches",
         label: "The on and off switches",
-        what: "Whether it is running at all, and whether the automatic pass is on.",
-        keys: ["enabled", "refineOn"],
+        what: "Whether it is running at all, whether the automatic pass is on, and what it goes back to.",
+        keys: ["enabled", "refineOn", "refineAgain"],
     },
 ];
 // The two that are not settings. Named here so a picker can offer them beside
@@ -143,6 +143,12 @@ const PERMS = [
         id: "world_books",
         label: "World books",
         why: "Reads the lorebook entries this chat has active, behind {{lore}}.",
+        without: "That macro comes back empty and its block is left out. Refining carries on.",
+    },
+    {
+        id: "memories",
+        label: "Memories",
+        why: "Reads what Lumiverse remembers of this chat, behind {{memory}}.",
         without: "That macro comes back empty and its block is left out. Refining carries on.",
     },
     {
@@ -218,6 +224,7 @@ const CONFIG = {
     // with a model, which is not something to start doing to somebody's chat
     // because they installed an extension.
     refineOn: false,
+    refineAgain: false,
     connectionId: "",
     thinkingMode: "off",
     thinkingEffort: "medium",
@@ -254,7 +261,6 @@ const CONFIG = {
     // button nobody can read, and while it stands there is no tap left for
     // starting a refine. The card that comes up is where putting one back
     // belongs: it says what it would be putting back.
-    widgetUndo: false,
     // How big the floating button is, across. The same default and the same 28
     // to 96 range as Auto Retry's floating button, so the two sit at matching
     // sizes when somebody runs both.
@@ -349,6 +355,11 @@ const MACROS = [
     { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
     {
+        tag: "{{memory}}",
+        what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the permission is not granted.",
+        ours: true,
+    },
+    {
         tag: "{{protect_notes}}",
         what: "Only when protection is on and it found something. Puts in: \"Parts of this passage " +
             "have been replaced with tokens shaped like [[AR1]], [[AR2]] and so on. Each stands in " +
@@ -415,6 +426,21 @@ const SCENE_BLOCKS = [
         text: "<what_is_true>\n{{lore}}\n</what_is_true>",
     },
 ];
+// What Lumiverse remembers of the chat from before the run-up. Below the three
+// above it because it is not settled the way a card is: it grows as the chat
+// does, so a provider reusing the front of the prompt keeps the rules and the
+// setting either way.
+//
+// Sent as its own block so somebody whose chats have no memory, or who has not
+// granted the permission, is not carrying a heading for it: a block whose
+// macros all come back empty is left out, tags and all.
+const MEMORY_BLOCK = {
+    id: "memory",
+    name: "What has happened before now",
+    on: true,
+    role: "system",
+    text: "<what_has_happened>\n{{memory}}\n</what_has_happened>",
+};
 // The pages before this one. Redrawn every single turn, so it goes as late as it
 // can and still be read as setting.
 const RECENT_BLOCK = {
@@ -626,6 +652,7 @@ const PLAIN_SHORT = [
     COPY_EXACTLY,
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -741,6 +768,7 @@ const PLAIN_LONG = [
     COPY_EXACTLY,
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -967,6 +995,7 @@ const YOURS_SHORT = [
     COPY_EXACTLY,
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -978,6 +1007,7 @@ const YOURS_LONG = [
     COPY_EXACTLY,
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -990,6 +1020,7 @@ const THINKS_SHORT = [
     COPY_EXACTLY,
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -1049,6 +1080,7 @@ const THINKS_LONG = [
     COPY_EXACTLY,
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -1062,6 +1094,7 @@ const YOURS_THINKS_SHORT = [
     COPY_EXACTLY,
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -1073,6 +1106,7 @@ const YOURS_THINKS_LONG = [
     COPY_EXACTLY,
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
+    MEMORY_BLOCK,
     RECENT_BLOCK,
     TURN_BLOCK,
 ];
@@ -1259,14 +1293,6 @@ const WIDGET_FIELDS = [
         under: true,
         hint: "How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.",
     },
-    {
-        key: "widgetUndo",
-        label: "One tap puts the last refine back",
-        type: "bool",
-        needs: { key: "widgetOn" },
-        under: true,
-        hint: "Off by default. On, a tap puts the last refine back whenever there is one, so refining again means holding the button for the menu. The undo is on the card and beside the message either way.",
-    },
 ];
 const SAMPLER_FIELDS = [
     {
@@ -1384,6 +1410,13 @@ const LIMIT_FIELDS = [
         min: 0,
         max: 99,
         hint: "A rewrite this much shorter has lost writing instead of tightening it. 0 allows any length.",
+    },
+    {
+        key: "refineAgain",
+        label: "Refine a reply that has been refined before",
+        type: "bool",
+        needs: { key: "refineOn" },
+        hint: "Off by default, so the automatic pass takes each reply once. On, a reply you swiped or regenerated is refined again. Pressing the button on one always refines it, whichever way this sits.",
     },
     {
         key: "keepOriginal",
@@ -1587,18 +1620,6 @@ function backdropOf(el, style) {
     if (seen)
         seen.set(el, out);
     return out;
-}
-// A page of writing with a spark over it. Drawn rather than borrowed so it sits
-// at the same weight as the host's own icons, and readable at the size a tab
-// gives it: three lines of text, the last one short so it reads as a paragraph
-// rather than a list, and a spark for the pass that goes over it.
-function undoIcon() {
-    return ('<svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
-        'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-        'stroke-linejoin="round" aria-hidden="true">' +
-        '<path d="M3 8h11a5 5 0 0 1 0 10H8" />' +
-        '<path d="M6.5 4.5 3 8l3.5 3.5" />' +
-        "</svg>");
 }
 // A ring with a gap, turned by the stylesheet rather than by a timer.
 function spinIcon() {
@@ -2984,7 +3005,6 @@ export function setup(ctx, overrides) {
         "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
         "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
         ".arf-float:hover{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
-        ".arf-float.arf-back{color:var(--lumiverse-success,#22c55e)}" +
         // Dimmed rather than hidden. The button is how somebody switches the
         // extension off and reaches the tab, so it stays reachable on a screen with
         // nothing to refine; it just stops looking like it is offering a refine.
@@ -8783,16 +8803,6 @@ export function setup(ctx, overrides) {
             toast("A refine is waiting for you in the Auto Refine tab.", true);
             return;
         }
-        if (cfg.widgetUndo) {
-            const back = newestBack();
-            if (back) {
-                if (back.kind === "draft")
-                    putDraftBack();
-                else
-                    askUndo(back.one.chatId, back.one.messageId);
-                return;
-            }
-        }
         refineNow();
     }
     // What the floating button shows, which is the same three states the message
@@ -8802,18 +8812,17 @@ export function setup(ctx, overrides) {
         if (!el2)
             return;
         try {
-            const back = cfg.widgetUndo && !!newestBack();
             const working = busy;
             // Why a tap would do nothing, when that is the answer. On the home screen
             // there is no chat to refine, and the button was still drawn ready for
             // one: the tap explained itself in a toast, but only after you had
             // pressed a button that looked willing.
-            const stuck = working || back ? "" : whyNot();
+            const stuck = working ? "" : whyNot();
             // The icons are written at a fixed 20px, which is most of a 28px button
             // and lost inside a 96px one. Just over half the button leaves the ring
             // around it looking even at either end of the range.
             const mark = String(Math.round(widgetWanted() * 0.52));
-            const kind = (working ? "working" : back ? "back" : "ready") + ":" + mark;
+            const kind = (working ? "working" : "ready") + ":" + mark;
             // Only when it would draw something different.
             //
             // This runs from the clock, which is to say two and a half times a
@@ -8824,7 +8833,7 @@ export function setup(ctx, overrides) {
             // have had this guard for a while and spin smoothly; the widget did not.
             if (el2.getAttribute("data-arf-icon") !== kind) {
                 el2.setAttribute("data-arf-icon", kind);
-                el2.innerHTML = working ? spinIcon() : back ? undoIcon() : refineIcon();
+                el2.innerHTML = working ? spinIcon() : refineIcon();
                 const svg = el2.querySelector && el2.querySelector("svg");
                 if (svg) {
                     svg.setAttribute("width", mark);
@@ -8834,15 +8843,12 @@ export function setup(ctx, overrides) {
             el2.className =
                 "arf-float" +
                     (working ? " arf-working" : "") +
-                    (back ? " arf-back" : "") +
                     (stuck ? " arf-idle" : "");
             el2.title = working
                 ? "Refining. Tap to stop it."
-                : back
-                    ? "Put the last refine back. Hold for more."
-                    : stuck
-                        ? stuck + " Hold for more."
-                        : "Refine the latest reply. Hold for more.";
+                : stuck
+                    ? stuck + " Hold for more."
+                    : "Refine the latest reply. Hold for more.";
             el2.setAttribute("aria-label", el2.title);
         }
         catch (_) { }
@@ -8884,21 +8890,17 @@ export function setup(ctx, overrides) {
         // menu for, and starting another is not offered at all.
         if (busy)
             doing.push({ key: "stop", label: "Stop this refine" });
-        else {
-            doing.push({ key: "now", label: "Refine the latest reply" });
+        // Refining the latest reply is not in here: that is what a tap on the
+        // button does, and a menu entry for the thing the button already does is
+        // the same action twice with a hold in front of one of them.
+        else
             doing.push({ key: "all", label: "Refine every reply in this chat" });
-        }
-        // Unless the button itself is the undo, which is what widgetUndo makes it.
-        // Then the arrow is in front of you and the entry underneath it does the
-        // same thing twice.
-        if (!cfg.widgetUndo) {
-            const back = newestBack();
-            if (back)
-                doing.push({
-                    key: "undo",
-                    label: back.kind === "draft" ? "Put your draft back" : "Put the last refine back",
-                });
-        }
+        const back = newestBack();
+        if (back)
+            doing.push({
+                key: "undo",
+                label: back.kind === "draft" ? "Put your draft back" : "Put the last refine back",
+            });
         // On the same terms as the Extras rows: their setting puts them there, and
         // this menu takes them over while the button is on screen.
         if (cfg.inputRefine)
@@ -8954,8 +8956,6 @@ export function setup(ctx, overrides) {
             takePending(false);
         else if (picked === "stop")
             cancelRefine();
-        else if (picked === "now")
-            refineNow();
         else if (picked === "all")
             startSweep();
         else if (picked === "undo") {

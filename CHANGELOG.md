@@ -6,6 +6,24 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.2.0
+
+_2026-09-06_
+
+### Fixed
+
+- **The automatic pass could not refine anything on some installs.** A reply finishing said which chat and which message and never which account, and a Lumiverse installed for an operator refuses a model call that names no account. So every automatic refine came back saying Lumiverse could not tell whose it was, while the buttons carried on working, because pressing one says who pressed it. The panel hands its account over with its settings, and that is the account the automatic pass now runs as. On a server with several accounts it is whichever panel loaded last, the same as the rules themselves.
+
+### Added
+
+- **{{memory}} puts what Lumiverse remembers of the chat into the prompt.** Everything before the run-up, in the host's own words rather than assembled here, so a refine is not working from a different version of events than the chat is. Every shipped prompt carries it in a block of its own, under the setting and above the pages before this one, and a chat with memory switched off sends no block at all rather than an empty heading. It needs the memories permission, and without it the macro is empty and refining carries on.
+- **Refine a reply that has been refined before**, off by default, on the Limits tab under the automatic pass. Off, each reply is refined once. On, a reply you swiped or regenerated goes through again. Either way a build that announces one generation twice buys one refine, not two, and pressing a button always refines what you pressed it on.
+
+### Changed
+
+- **The floating button keeps its own mark.** A refine that had landed turned it into an arrow, which put a control over your chat you had not asked for and took the extension's mark off the screen for as long as there was something to put back. The way back is a line in the menu behind the button instead, always, and **One tap puts the last refine back** is gone with the state it switched between.
+- **Refining the latest reply has left that menu**, because a tap on the button does it. Two ways to one thing, one of them behind a hold, is one more than anybody needs.
+
 ## 1.1.0
 
 _2026-09-06_

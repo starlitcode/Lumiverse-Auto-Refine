@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "Auto Refine",
   "identifier": "auto_refine",
   "author": "starlitcode",
@@ -12,6 +12,7 @@
     "chats",
     "characters",
     "world_books",
+    "memories",
     "ui_panels"
   ],
   "entry_frontend": "dist/frontend.js",

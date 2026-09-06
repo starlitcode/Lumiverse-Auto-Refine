@@ -77,6 +77,15 @@ function host(
     whileAsking?: () => void;
   } = {},
 ) {
+  // An install scoped to an operator refuses a model call that names no
+  // account. Every host here behaves that way, because the path that had no
+  // account to give was the automatic pass, and a stub that accepted the call
+  // anyway is a stub that says the pass works when it does not.
+  const needsUser = (req: any) => {
+    if (!req || !req.userId)
+      throw new Error("userId is required for operator-scoped extensions");
+  };
+
   const handlers: Record<string, Array<(p: any) => any>> = {};
   let frontHandler: any = null;
   const sent: any[] = [];
@@ -112,6 +121,7 @@ function host(
       },
       quiet: async (req: any) => {
         asked.push(req);
+        needsUser(req);
         if (opts.whileAsking) opts.whileAsking();
         if (opts.fail) throw new Error(opts.fail);
         const answer = answers[Math.min(turn, answers.length - 1)];
@@ -123,6 +133,7 @@ function host(
       quietStream: opts.stream
         ? async (req: any) => {
             asked.push(req);
+            needsUser(req);
             if (opts.fail) throw new Error(opts.fail);
             const answer = answers[Math.min(turn, answers.length - 1)];
             turn++;
@@ -306,6 +317,59 @@ async function armed(answers: string[], over: any = {}, messages = chat(), opts 
   return h;
 }
 
+
+// Two questions that look like one. A build that announces the same generation
+// twice must never buy a second refine, whatever the setting says. Going back
+// to a reply that has since been swiped or regenerated is a different thing,
+// and that one is the reader's to choose.
+describe("going over a reply more than once", () => {
+  test("one generation announced twice is refined once", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("and is still refined once with the setting on", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  // A swipe is a second generation on the same message, so the id is new and
+  // the text is somebody else's writing again.
+  test("a new generation on the same reply is left alone by default", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("and is refined again with the setting on", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(50);
+    expect(h.asked.length).toBe(2);
+  });
+
+  // A build that names no generation has only the message id to go on, which is
+  // the older guard and the one that has to hold there.
+  test("with no generation named, a second event is still refused", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+});
 
 describe("refining a reply", () => {
   test("the rewrite is saved over the reply", async () => {

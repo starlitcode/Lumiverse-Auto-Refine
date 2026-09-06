@@ -14,7 +14,12 @@ import { __testing } from "../src/frontend";
 // the passage means what it already meant.
 describe("the prompts that ship with it", () => {
   const { BUILT_IN_PROMPTS } = __testing as any;
-  const SCENE = ["character", "persona", "world", "history", "turn"];
+  // The blocks that carry the chat rather than the rules, by the ids they are
+  // built under. "world" was in this list and is not a block id: the lore block
+  // is "lore", so it was being weighed as a rule. What that measures is how
+  // much instruction each prompt gives, and a block that is one macro in a tag
+  // is not instruction.
+  const SCENE = ["character", "persona", "lore", "memory", "history", "turn"];
   const rulesOf = (p: any) =>
     p.blocks.filter((b: any) => SCENE.indexOf(b.id) < 0);
   const sizeOf = (p: any) =>

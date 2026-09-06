@@ -25,7 +25,7 @@ import { join } from "node:path";
 // setting added without one is caught instead of being described twice.
 import { __testing } from "../src/frontend.ts";
 
-const { CONFIG } = __testing;
+const { CONFIG, MACROS } = __testing;
 
 const root = join(import.meta.dir, "..");
 
@@ -1830,9 +1830,9 @@ console.log("\naccepting or turning one down");
 
 console.log("\nasking for a refine from the button's menu");
 {
-  // The row on a message holds only the way back, so this menu and the Extras
-  // rows are where a refine is asked for. A tap does the first of them, but a
-  // tap is not a label anybody can read.
+  // A tap on the button refines the latest reply, so this menu carries what a
+  // tap cannot: the whole chat, the way back, and the switches. The row on a
+  // message holds only the way back.
   await inTab(browser, { saved: { widgetOn: true, enabled: true } }, async (page) => {
     const open = async () => {
       await page.evaluate(() => {
@@ -1845,8 +1845,9 @@ console.log("\nasking for a refine from the button's menu");
       return page.evaluate(() => ((window.__menu || {}).items || []).map((i) => i.key));
     };
     const keys = await open();
-    ok("it offers the latest reply", keys.indexOf("now") >= 0, keys.join(","));
-    ok("and every reply in the chat", keys.indexOf("all") >= 0, keys.join(","));
+    ok("it offers every reply in the chat", keys.indexOf("all") >= 0, keys.join(","));
+    ok("and not the latest reply, which is what a tap does",
+      keys.indexOf("now") < 0, keys.join(","));
 
     // Grouped, with a line drawn between. A menu of eight things in one column
     // is eight things to read.
@@ -1862,7 +1863,7 @@ console.log("\nasking for a refine from the button's menu");
     ok("and two lines never sit together", !/\|\s\|/.test(shape.join(" ")), shape.join(" "));
     ok(
       "the way in comes before the things to do",
-      shape.indexOf("open") < shape.indexOf("now"),
+      shape.indexOf("open") < shape.indexOf("all"),
       shape.join(" "),
     );
     ok(
@@ -4045,10 +4046,10 @@ console.log("\nrefining the draft from the panel");
 
 console.log("\nthe button and its menu do not say the same thing twice");
 {
-  // With the button set to turn into an undo, the arrow is in front of you and
-  // one tap does it. An entry underneath saying the same thing is a second way
-  // to reach something already in reach, and it costs a line in a menu that has
-  // to be read on a phone.
+  // A tap refines the latest reply. Everything else the button can do is behind
+  // a hold, and nothing behind the hold repeats the tap: a second way to reach
+  // something already in reach costs a line in a menu that has to be read on a
+  // phone.
   const openMenu = async (page) => {
     await page.evaluate(() => {
       document.querySelector("#float .arf-float").dispatchEvent(
@@ -4067,24 +4068,32 @@ console.log("\nthe button and its menu do not say the same thing twice");
       });
     });
 
-  // The button always refines, so the menu is the only way back.
-  await inTab(browser, { saved: { widgetOn: true, widgetUndo: false } }, async (page) => {
+  // A tap refines and only refines, so everything else the button can do is in
+  // the menu behind it, and nothing in there repeats the tap.
+  await inTab(browser, { saved: { widgetOn: true } }, async (page) => {
     await landOne(page);
     await settle(page);
     const keys = await openMenu(page);
-    ok("with the button always refining, the menu carries the way back",
-      keys.indexOf("undo") >= 0, keys.join(","));
+    ok("the way back is in the menu", keys.indexOf("undo") >= 0, keys.join(","));
+    ok("and refining the latest reply is not, since that is the tap",
+      keys.indexOf("now") < 0, keys.join(","));
+    ok("while refining the whole chat is, since no tap does that",
+      keys.indexOf("all") >= 0, keys.join(","));
   });
 
-  // The button becomes the way back, so the menu does not repeat it.
-  await inTab(browser, { saved: { widgetOn: true, widgetUndo: true } }, async (page) => {
+  // The face of the button. A refine that has landed used to turn it into an
+  // arrow, which put a control nobody asked for over the chat and took the
+  // extension's own mark off the screen.
+  await inTab(browser, { saved: { widgetOn: true } }, async (page) => {
     await landOne(page);
     await settle(page);
-    const keys = await openMenu(page);
-    ok("with the button turning into the way back, the menu does not repeat it",
-      keys.indexOf("undo") < 0, keys.join(","));
-    ok("and still offers a refine, which the button no longer does",
-      keys.indexOf("now") >= 0, keys.join(","));
+    const face = await page.evaluate(() => {
+      const b = document.querySelector("#float .arf-float");
+      return { icon: b.getAttribute("data-arf-icon") || "", title: b.title };
+    });
+    ok("a refine that has landed leaves the button as it was",
+      /^ready:/.test(face.icon), face);
+    ok("and a tap still says it refines", /Refine the latest reply/.test(face.title), face.title);
   });
 }
 
@@ -4100,7 +4109,6 @@ console.log("\nthe widget, while your draft is being refined");
       const b = document.querySelector("#float .arf-float");
       return b && {
         working: b.classList.contains("arf-working"),
-        back: b.classList.contains("arf-back"),
         icon: b.getAttribute("data-arf-icon") || "",
         title: b.title,
       };
@@ -4108,7 +4116,7 @@ console.log("\nthe widget, while your draft is being refined");
 
   await inTab(
     browser,
-    { saved: { inputRefine: true, widgetOn: true, widgetUndo: true } },
+    { saved: { inputRefine: true, widgetOn: true } },
     async (page) => {
       await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
       ok("the button is not turning before anything is asked",
@@ -4138,20 +4146,30 @@ console.log("\nthe widget, while your draft is being refined");
       const done = await face(page);
       ok("and stops the moment the answer lands", !done.working, done);
 
-      // The green arrow, the same one a reply's refine puts there.
-      ok("the button offers to put your draft back", done.back, done);
-      ok("with the arrow rather than the refine mark", /^back:/.test(done.icon), done.icon);
-      ok("and says so", /put the last refine back/i.test(done.title), done.title);
+      // The button goes back to its own mark rather than becoming an arrow.
+      // The way back is in the menu behind it.
+      ok("and comes back as the refine mark", /^ready:/.test(done.icon), done.icon);
+      ok("and stops offering to put anything back",
+        !/put the last refine back/i.test(done.title), done.title);
 
-      // A tap takes the draft back to what you wrote.
-      await page.evaluate(() => document.querySelector("#float .arf-float").click());
+      const keys = await page.evaluate(() => {
+        document.querySelector("#float .arf-float").dispatchEvent(
+          new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+        );
+        return ((window.__menu || {}).items || []).map((i) => i.key);
+      });
+      ok("while the menu offers the draft back", keys.indexOf("undo") >= 0, keys.join(","));
+      await page.evaluate(() => {
+        window.__menuPick = "undo";
+        document.querySelector("#float .arf-float").dispatchEvent(
+          new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+        );
+      });
       await settle(page);
-      ok("tapping it puts your draft back",
+      ok("and taking it puts your draft back",
         await page.evaluate(() =>
           document.querySelector('[data-component="InputArea"] textarea').value
             === "i walk through it, suddenly"));
-      ok("and the arrow goes, because there is nothing left to put back",
-        !(await face(page)).back);
     },
   );
 
@@ -4159,7 +4177,7 @@ console.log("\nthe widget, while your draft is being refined");
   // the way back stands down rather than throwing it away.
   await inTab(
     browser,
-    { saved: { inputRefine: true, widgetOn: true, widgetUndo: true } },
+    { saved: { inputRefine: true, widgetOn: true } },
     async (page) => {
       await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
       await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
@@ -4171,8 +4189,16 @@ console.log("\nthe widget, while your draft is being refined");
                               after: "I walk through it." });
       }, id);
       await settle(page);
-      ok("the arrow is there while the box still holds the rewrite",
-        (await face(page)).back);
+      const menuKeys = async () =>
+        page.evaluate(() => {
+          window.__menuPick = null;
+          document.querySelector("#float .arf-float").dispatchEvent(
+            new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+          );
+          return ((window.__menu || {}).items || []).map((i) => i.key);
+        });
+      ok("the way back is offered while the box still holds the rewrite",
+        (await menuKeys()).indexOf("undo") >= 0);
 
       await page.evaluate(() => {
         const box = document.querySelector('[data-component="InputArea"] textarea');
@@ -4180,7 +4206,8 @@ console.log("\nthe widget, while your draft is being refined");
         box.dispatchEvent(new Event("input", { bubbles: true }));
       });
       await settle(page);
-      ok("and goes once you have typed over it", !(await face(page)).back);
+      ok("and goes once you have typed over it",
+        (await menuKeys()).indexOf("undo") < 0);
     },
   );
 }
@@ -5517,7 +5544,9 @@ console.log("\nthe macro list");
         copyLabels: rows.filter((r) => /^Copy \{\{/.test(r.querySelector("button").getAttribute("aria-label") || "")).length,
       };
     });
-    ok("every macro is listed", out.n === 10, JSON.stringify(out));
+    // Counted against the panel's own list rather than a number written here,
+    // which is what went stale the moment a macro was added.
+    ok("every macro is listed", out.n === MACROS.length, JSON.stringify(out));
     ok("each one carries a ?", out.withQ === out.n, JSON.stringify(out));
     ok("and none spells its meaning out under the row", out.prose === 0, JSON.stringify(out));
     ok("the tag itself still copies", out.copyLabels === out.n, JSON.stringify(out));

@@ -23,9 +23,12 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{message}}` | The turn being refined. |
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
+| `{{memory}}` | What Lumiverse remembers of this chat from further back than the run-up. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
 **A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that quietly added its own would mean the request that ran was not the one on the screen.
+
+`{{memory}}` asks Lumiverse for the eight most relevant pieces it holds for the chat and drops in what it hands back, already written out. That is a fixed number rather than a setting, because it is going into a request that is already carrying the passage, the setting and the pages before it, and the run-up is what a refine mostly works from. A chat with memory switched off, or a Lumiverse without it, gives nothing back and the block is left out.
 
 `{{protect_notes}}` is the one exception and is written out here so nothing goes unread. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
 
@@ -47,10 +50,11 @@ The other reason order matters is caching. If your provider caches prompts, the 
 
 1. **The rules.** Identical on every refine in every chat.
 2. **The setting**: who the story follows, who you are writing with, what is true in its world. Identical for a whole chat.
-3. **The pages before this one.** Redrawn every turn.
-4. **The passage.** Different every time.
+3. **What has happened before now.** Lumiverse's own memory of the chat, which grows as the chat does.
+4. **The pages before this one.** Redrawn every turn.
+5. **The passage.** Different every time.
 
-All five shipped prompts are built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
+Every shipped prompt is built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
 
 **The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
 

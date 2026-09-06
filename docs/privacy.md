@@ -33,6 +33,7 @@ Two things are taken out of a message before it is sent, rather than added. The 
 - **`characters`** reads that card, so a rewrite knows who is speaking rather than smoothing every voice into the same one. Refuse it and refining carries on with the card block left out.
 
 - **`world_books`** reads the lorebook entries the chat has active, so a rewrite does not contradict what the world has already established. Refuse it and refining carries on with the lore block left out.
+- **`memories`** reads what Lumiverse remembers of this chat, which is what `{{memory}}` becomes: the story so far from further back than the run-up, so a refine is working from the same account of events the chat is. It reads and never writes: nothing this extension does adds to, edits, or removes a memory. Refuse it and refining carries on with that block left out.
 - **`ui_panels`** is only for the floating button, which is off by default. Refuse it and everything works except that button, and the panel says so rather than the switch quietly doing nothing.
 
 The three that read rather than write are why a rewrite sounds like the character rather than like generic prose. Refusing any of them costs you quality, not the feature.

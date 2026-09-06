@@ -99,7 +99,7 @@ Under **Context**, **Show me the request** builds the real request for the reply
 
 The refining runs in a backend module, because editing a saved message is a backend job. The tab collects what you want, hands it over, and shows what came back. Every model call goes through Lumiverse to the provider you already configured; the extension has no networking of its own, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing.
 
-It declares six permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` and `characters` to know whose chat it is, `world_books` to read the lore the chat has active, and `ui_panels` for the floating button. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
+It declares seven permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` and `characters` to know whose chat it is, `world_books` to read the lore the chat has active, `memories` to read what Lumiverse remembers of it, and `ui_panels` for the floating button. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
 
 One part reaches into the page rather than going through an API, because Lumiverse does not offer one: **Refine what I am typing** reads and writes the chat input box. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box.
 

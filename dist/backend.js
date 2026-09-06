@@ -25,10 +25,25 @@
 // user is known and comes back empty.
 let masterOn = true;
 let refineOn = false; // the automatic pass, off until asked for
+let refineAgain = false; // whether the pass returns to a reply it refined
 let connectionId = ''; // empty means the reader's active connection
 let thinkingMode = 'off'; // off | inherit | custom
 let thinkingEffort = 'medium'; // only read when thinkingMode is custom
 let timeoutSecs = 90;
+// Who these settings came from, which is who the automatic pass runs as.
+//
+// A generation event names the chat and the message and no account. An install
+// scoped to an operator refuses a model call that carries no account, so the
+// automatic pass asked for a refine nobody was paying for and came back saying
+// Lumiverse could not tell whose it was. The panel's own messages do carry an
+// account, so the one that handed these settings over is the one whose rules
+// are running, and it is the answer whenever the event has none of its own.
+//
+// One value, like the settings above it: this module holds one set of rules for
+// the process, so on a server with several accounts the automatic pass belongs
+// to whichever panel loaded last. Pressing the button is unaffected, since that
+// message carries its own account.
+let settingsUser;
 // How the request is put together: which blocks go in, in what order, and what
 // role each one is sent as. The reader owns this, which is the point of it
 // being a list rather than a hardcoded prompt.
@@ -54,10 +69,18 @@ const generating = new Set();
 // than a record: the extension does not keep your writing after a reload.
 const before = new Map();
 const BEFORE_MAX = 30;
-// Messages this run has already refined, so a re-render or a second event
-// cannot refine the same reply twice and drift it further each time.
+// Messages this run has already refined. Whether that stops a later one is the
+// reader's to say, in Refine a reply that has been refined before.
 const refined = new Set();
 const REFINED_MAX = 400;
+// Generations this run has already answered. A build that reports one
+// generation as ended twice would otherwise hand the same reply over again and
+// drift it further, and that holds whatever the setting above says: two events
+// for one generation are one reply, not two. Kept apart from the message ids
+// because a swipe is a second generation on the same message, and that really
+// is a new reply.
+const answered = new Set();
+const ANSWERED_MAX = 400;
 // Writes this module made, so the edit event they raise is not mistaken for
 // somebody else editing the reply.
 const ourWrites = new Map();
@@ -199,8 +222,8 @@ const TURN_MACRO = '{{message}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'protect_notes'];
-const NO_SCENE = { character: '', context: '', lore: '', name: '' };
+const OURS = ['message', 'history', 'lore', 'memory', 'protect_notes'];
+const NO_SCENE = { character: '', context: '', lore: '', memory: '', name: '' };
 // The prompt a fresh install ships with, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
 // to as, and XML tags as headings with a closing tag at the end, because a
@@ -631,6 +654,8 @@ function fillOurs(text, p) {
             return p.history;
         if (id === 'lore')
             return p.lore;
+        if (id === 'memory')
+            return p.memory;
         if (id === 'protect_notes')
             return p.shieldNote || '';
         return '';
@@ -683,6 +708,7 @@ async function buildPrompt(text, isUser, scene, userId, parts) {
         message: text,
         history: scene.context,
         lore: scene.lore,
+        memory: scene.memory,
         shieldNote: scene.shieldNote,
     };
     const out = [];
@@ -1391,6 +1417,34 @@ async function fitToBudget(pieces, budget, userId) {
     }
     return out;
 }
+// What Lumiverse remembers of this chat beyond the messages in the run-up.
+// Handed over already written out by the host, which is the point of asking it
+// rather than assembling something here: the same text the chat itself is
+// working from, so a refine is not told a different version of events.
+//
+// How many pieces to ask for. The run-up is what a refine mostly needs and
+// this is the older material behind it, so it is a few pieces rather than a
+// second history: it goes in a request that is already carrying the passage,
+// the scene and the pages before it.
+const MEMORY_TOP_K = 8;
+async function gatherMemory(chatId, userId) {
+    try {
+        const mem = spindle.memories;
+        if (!mem || !mem.chatMemory || typeof mem.chatMemory.get !== 'function')
+            return '';
+        const got = await mem.chatMemory.get(chatId, { topK: MEMORY_TOP_K, userId: userId });
+        // Off for this chat is not the same as empty, and neither is worth a tag
+        // around nothing, so both answer the same way here.
+        if (!got || got.enabled === false)
+            return '';
+        return String(got.formatted == null ? '' : got.formatted).trim();
+    }
+    catch (_) {
+        // No permission, memory switched off, or a Lumiverse without it. A refine
+        // reads perfectly well without this, so it goes ahead.
+        return '';
+    }
+}
 async function gatherLore(chatId, userId) {
     try {
         const books = spindle.world_books;
@@ -1813,6 +1867,7 @@ async function refineMessage(chatId, messageId, userId, byHand) {
         character: card.text,
         context: await gatherHistory(msgs, at, card.name, userId),
         lore: await gatherLore(chatId, userId),
+        memory: await gatherMemory(chatId, userId),
         name: card.name,
         chatId: chatId,
         characterId: card.id,
@@ -1998,6 +2053,9 @@ try {
                 return;
             if (chatsOff.has(String(p.chatId)))
                 return;
+            // The account this pass is for. Read once, so the refine, anything it has
+            // to say afterwards and the chat read all go to the same place.
+            const who = p.userId || settingsUser;
             let messageId = p.messageId;
             if (!messageId) {
                 // Not every build puts the id on the end event, so the newest reply
@@ -2015,11 +2073,18 @@ try {
             }
             if (!messageId)
                 return;
-            if (refined.has(String(messageId)))
+            // One generation is one reply, however many times it is announced. Where
+            // a build names no generation the message id stands in, which is the
+            // older guard and the only one available there.
+            const run = p.generationId ? 'g:' + String(p.generationId) : 'm:' + String(messageId);
+            if (answered.has(run))
+                return;
+            note(answered, run, ANSWERED_MAX);
+            if (!refineAgain && refined.has(String(messageId)))
                 return;
             let done;
             try {
-                done = await refineMessage(p.chatId, messageId, p.userId, false);
+                done = await refineMessage(p.chatId, messageId, who, false);
             }
             catch (e) {
                 // Caught here, because a throw that escapes ends the whole handler and
@@ -2028,7 +2093,7 @@ try {
                 say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
             }
             if (!done.ok && done.why) {
-                replyTo(p.userId, {
+                replyTo(who, {
                     type: 'refine_skipped',
                     chatId: p.chatId,
                     messageId: messageId,
@@ -2040,7 +2105,7 @@ try {
             // A refine that worked still has a report to hand over when the prompt
             // asked for one, and the automatic pass has no other way to show it.
             else if (done.ok && done.notes) {
-                replyTo(p.userId, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
+                replyTo(who, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
             }
         }
         catch (e) {
@@ -2061,8 +2126,10 @@ spindle.onFrontendMessage(async (payload, userId) => {
         // reason to write over it.
         if (payload.type === 'set_settings' && payload.settings && typeof payload.settings === 'object') {
             const s = payload.settings;
+            settingsUser = userId;
             masterOn = s.enabled !== false;
             refineOn = !!s.refineOn;
+            refineAgain = !!s.refineAgain;
             connectionId = String(s.connectionId == null ? '' : s.connectionId);
             thinkingMode =
                 s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
@@ -2415,6 +2482,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                             character: card.text,
                             context: at > 0 ? await gatherHistory(msgs, at, card.name, userId) : '',
                             lore: await gatherLore(payload.chatId, userId),
+                            memory: await gatherMemory(payload.chatId, userId),
                             name: card.name,
                             chatId: payload.chatId,
                             characterId: card.id,
