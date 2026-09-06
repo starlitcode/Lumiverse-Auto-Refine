@@ -5185,6 +5185,53 @@ console.log("\ndescriptions behind a ?");
   });
 }
 
+console.log("\nthe macro list");
+{
+  // A list you scan for a name you half remember. The meanings sit behind the
+  // same ? every other row uses, so ten paragraphs do not stand between you and
+  // the name you came for.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    await page.evaluate(() => {
+      const f = [...document.querySelectorAll("#drawer summary")].find((x) =>
+        /The list/.test(x.textContent),
+      );
+      f && f.click();
+    });
+    await settle(page);
+    const out = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#drawer [data-arf-row^="macro:"]')];
+      return {
+        n: rows.length,
+        withQ: rows.filter((r) => r.querySelector(".arf-q")).length,
+        prose: rows.filter((r) => r.querySelector(".arf-note")).length,
+        copyLabels: rows.filter((r) => /^Copy \{\{/.test(r.querySelector("button").getAttribute("aria-label") || "")).length,
+      };
+    });
+    ok("every macro is listed", out.n === 10, JSON.stringify(out));
+    ok("each one carries a ?", out.withQ === out.n, JSON.stringify(out));
+    ok("and none spells its meaning out under the row", out.prose === 0, JSON.stringify(out));
+    ok("the tag itself still copies", out.copyLabels === out.n, JSON.stringify(out));
+
+    // The longest description of the lot, which is the reason for the change.
+    const opened = await page.evaluate(async () => {
+      const row = document.querySelector('#drawer [data-arf-row="macro:{{protect_notes}}"]');
+      const q = row && row.querySelector(".arf-q");
+      if (!q) return null;
+      q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+      q.click();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const pop = document.querySelector('[role="tooltip"]');
+      return pop ? pop.textContent.trim().slice(0, 60) : null;
+    });
+    ok(
+      "and pressing one opens its meaning",
+      !!opened && /protection is on/.test(opened),
+      String(opened),
+    );
+  });
+}
+
 console.log("\nthe order and what caching costs");
 {
   // A provider that caches prompts reuses the front of one up to the first

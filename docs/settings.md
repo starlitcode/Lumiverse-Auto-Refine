@@ -23,7 +23,7 @@ Three things never move, whichever tab you left open, because they are what you 
 ## Prompt
 
 - **Your prompt** is the whole request, block by block. Rename them, reorder them, switch them off, change the role each is sent as, write your own. A line under the list says when your order costs you prompt caching, and what you are getting for it. **Expand** opens one in an editor the size of the screen, and does not focus the box, so no keyboard jumps up on a phone. In [How the prompt is built](prompt.md).
-- **Macros you can use** is the list of what a block can carry, with a tap to copy each one.
+- **Macros you can use** is the list of what a block can carry, with a tap to copy each one and a **?** beside it for what it becomes, the same **?** every other row on the panel uses.
 - **Presets** save how a refine reads under a name, and can name a model setup to load with them. Eight ship with the extension and work as they stand, in [Presets](prompt.md#presets).
 
 ## Context

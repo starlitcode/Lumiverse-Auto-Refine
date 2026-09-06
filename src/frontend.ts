@@ -6062,9 +6062,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     wrap.appendChild(
       fold("The list", (body) => {
+        // Behind a ? like every other description on the panel, rather than
+        // spelled out under each one. This is a list you scan for a name you
+        // half remember, and ten paragraphs is not a list: {{protect_notes}}
+        // alone runs longer than the other nine rows together.
         for (const m of MACROS) {
-          const row = el("div", "arf-col");
-          const head = el("div", "arf-row");
+          const row = el("div", "arf-row");
           const tag = button(m.tag, false);
           tag.className += " arf-mono";
           tag.setAttribute("aria-label", "Copy " + m.tag);
@@ -6072,10 +6075,14 @@ export function setup(ctx: Ctx, overrides?: any) {
             copyText(m.tag);
             toast("Copied " + m.tag, true);
           });
-          head.appendChild(tag);
-          if (!m.ours) head.appendChild(el("span", "arf-pill", "Lumiverse"));
-          row.appendChild(head);
-          row.appendChild(note(m.what));
+          row.appendChild(tag);
+          if (!m.ours) row.appendChild(el("span", "arf-pill", "Lumiverse"));
+          const q = hintButton(m.what, m.tag);
+          if (q) row.appendChild(q);
+          // Marked as a row like every other one carrying a ?, which is what
+          // the description anchors itself against. reveal() passes over it,
+          // since a macro row has no field to be shown or hidden by.
+          row.setAttribute("data-arf-row", "macro:" + m.tag);
           body.appendChild(row);
         }
         body.appendChild(
