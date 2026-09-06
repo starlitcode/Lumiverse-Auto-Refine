@@ -5245,17 +5245,51 @@ console.log("\ntokens and what they cost");
     ok("an estimated total says so in words", /roughly 1,000 tokens/.test(shown));
   });
 
-  // With prices in, the same request is priced. 3 per million in and 15 out is
-  // 1000 sent and 100 back, so 0.003 + 0.0015, which is 0.0045.
+  // With prices in, the same request is priced. 3 per million in and 15 out,
+  // with 1000 sent and a 100-token passage, is 0.003 + 0.0015, so 0.0045.
   await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
     await goTab(page, "Context");
     await build(page);
-    await answer(page, { per: [900, 100], total: 1000, counted: true });
+    await answer(page, { per: [900, 100], total: 1000, counted: true, passage: 100 });
     await settle(page);
     const shown = await body(page);
     ok("prices turn the count into money", /About 0\.0045 for this refine/.test(shown), shown.slice(0, 300));
     ok("and into a figure worth reading, across a hundred", /0\.45 across a hundred replies/.test(shown));
     ok("no currency is invented", !/[$£€]/.test(shown));
+  });
+
+  // One price left at 0 is a price nobody gave, not a cost of nothing, so the
+  // line has to say which half of the sum it covers.
+  await inTab(browser, { saved: { costIn: 3 } }, async (page) => {
+    await goTab(page, "Context");
+    await build(page);
+    await answer(page, { per: [900, 100], total: 1000, counted: true, passage: 100 });
+    await settle(page);
+    const shown = await body(page);
+    ok(
+      "with one price missing, the line says which half it covers",
+      /Only what is sent is priced/.test(shown),
+      shown.slice(0, 300),
+    );
+    ok("and the figure is the sent side alone", /About 0\.003 for this refine/.test(shown));
+  });
+
+  // The passage is counted on its own, so moving the block that holds it does
+  // not move what the cost is worked out from. Here the passage is 200 tokens
+  // and sits first, with a 800-token rule block after it: at 3 in and 15 out
+  // that is 0.003 + 0.003, and reading the last message instead would give
+  // 0.003 + 0.012.
+  await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
+    await goTab(page, "Context");
+    await build(page);
+    await answer(page, { per: [200, 800], total: 1000, counted: true, passage: 200 });
+    await settle(page);
+    const shown = await body(page);
+    ok(
+      "the cost follows the passage rather than whatever block is last",
+      /About 0\.006 for this refine/.test(shown),
+      shown.slice(0, 300),
+    );
   });
 
   // What one really used, which lands after the refine rather than with it.
@@ -5281,6 +5315,25 @@ console.log("\ntokens and what they cost");
     const shown = await body(page);
     ok("the tokens are reported with no prices set", /2,000 tokens in/.test(shown));
     ok("and no cost is put beside them", !/Last refine cost/.test(shown));
+  });
+
+  // A refine allowed a second ask costs twice, and the backend adds the asks up
+  // before sending, so a later figure replaces the earlier one rather than the
+  // panel showing whichever ask happened to land last.
+  await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refine_used", at: Date.now(), sent: 2000, back: 500, counted: true });
+      window.__fromBackend({ type: "refine_used", at: Date.now(), sent: 4000, back: 1000, counted: true });
+    });
+    await settle(page);
+    const shown = await body(page);
+    ok(
+      "a refine that asked twice reports both asks",
+      /4,000 tokens in/.test(shown) && /1,000 tokens back/.test(shown),
+      shown.slice(0, 300),
+    );
+    ok("and is priced on the pair", /about 0\.027/.test(shown), shown.slice(0, 300));
   });
 }
 

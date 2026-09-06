@@ -1438,7 +1438,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "From your provider's own price list. Left at 0, no cost is worked out anywhere.",
+    hint: "The price for what goes to the model, from your provider's own price list. Left at 0, no cost is worked out anywhere.",
   },
   {
     key: "costOut",
@@ -1446,7 +1446,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "The other half of that price list, usually the dearer one. In whatever currency your provider bills you in, since nothing here converts anything.",
+    hint: "The price for what comes back, usually the dearer one of the two. In whatever currency your provider bills you in, since nothing here converts anything.",
   },
 ];
 
@@ -4699,9 +4699,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // The heart of the tab. After a refine you want to see what it did to your
-  // writing and be able to disagree, and this is that, sitting above the tabs
-  // so it is there whichever one you left open.
+  // What the tab is mostly for. After a refine you want to see what it did to
+  // your writing and be able to disagree, so this sits above the tabs and is
+  // there whichever one you left open.
   type Undo = { chatId: any; messageId: any; before: string; after: string; at: number };
 
   // Every refine in this chat that can still be put back, newest first. It used
@@ -6196,15 +6196,27 @@ export function setup(ctx: Ctx, overrides?: any) {
     // a rewrite is the passage said better, and the length limits are what keep
     // that true.
     if (hasPrices()) {
-      const back = per.length ? per[per.length - 1] : Math.ceil(chars / 4);
+      // The passage is counted on its own and comes down with the request, so
+      // this does not depend on where in the order the block holding it sits.
+      const back = tok && Number(tok.passage) > 0 ? Number(tok.passage) : Math.ceil(chars / 4);
       const one = costOf(totalTokens, back);
+      // Which half of the sum is real. One price left at 0 is not a cost of
+      // nothing on that side, it is a price nobody has given, and a total that
+      // quietly leaves half out is worse than one that says what it covers.
+      const covers =
+        Number(cfg.costIn) <= 0
+          ? " Only what comes back is priced, since the price for what is sent is 0."
+          : Number(cfg.costOut) <= 0
+            ? " Only what is sent is priced, since the price for what comes back is 0."
+            : " What comes back is taken as the same size as the passage.";
       wrap.appendChild(
         note(
           "About " +
             money(one) +
             " for this refine, or " +
             money(one * 100) +
-            " across a hundred replies, at the prices on the Model tab. What comes back is taken as the same size as the passage.",
+            " across a hundred replies, at the prices on the Model tab." +
+            covers,
         ),
       );
     }

@@ -12,8 +12,8 @@ _2026-09-05_
 
 ### Added
 
-- **The request is measured in tokens, and priced.** **Show me the request** counts the whole request and every message in it, with Lumiverse's own tokeniser where it will answer and an estimate where it will not, saying which of the two you are reading. Put your provider's prices per million tokens on the Model tab and the same card says what that request would cost and what a hundred replies at that size come to. Both prices start at 0, and at 0 no cost is shown anywhere. No currency is shown either, because nothing here knows which one you are billed in.
-- **The Log tab says what the last refine really used**, tokens in and back, and what it cost. A rewrite that was dropped is on that line too: the call was made and paid for whether or not anything was saved.
+- **The request is measured in tokens, and priced.** **Show me the request** counts the whole request and every message in it, with Lumiverse's own tokeniser where it will answer and an estimate where it will not, saying which of the two you are reading. Put your provider's prices per million tokens on the Model tab and the same card says what that request would cost and what a hundred replies at that size come to. Both prices start at 0, and with both at 0 no cost is shown anywhere. Fill in one and the line says which half of the sum it is pricing. No currency is shown either, because nothing here knows which one you are billed in.
+- **The Log tab says what the last refine really used**, tokens in and back, and what it cost. It covers the whole refine rather than its last ask, so a rewrite that was dropped is on that line and so is every extra try **Ask again when a check fails** made: the calls were paid for whether or not anything was saved.
 
 ## 1.0.0
 

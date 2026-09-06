@@ -188,15 +188,15 @@ Protection catches what it can find. The prompts that ship with it also carry a 
 
 ## What a refine costs
 
-Set **Price per million tokens sent** and **Price per million tokens back** on the **Model** tab and the panel works the rest out. Both start at 0, and at 0 no cost is shown anywhere.
+Set **Price per million tokens sent** and **Price per million tokens back** on the **Model** tab and the panel works the rest out. Both start at 0, and with both at 0 no cost is shown anywhere. Fill in one and leave the other, and the line says which half of the sum it is pricing rather than quietly leaving the other half out.
 
 The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
 
 Two places use them.
 
-**Before you spend it**, under **Show me the request**: what this one request would cost, and what a hundred replies at that size would come to. The hundred is the number worth looking at, since a refine costs a fraction of a penny and the question people actually have is what a session comes to. What comes back cannot be known before it arrives, so it is taken as the same size as the passage, which the [length limits](guardrails.md) are what keep true.
+**Before you spend it**, under **Show me the request**: what this one request would cost, and what a hundred replies at that size would come to. The hundred is the number worth looking at, since a refine costs a fraction of a penny and the question people actually have is what a session comes to. What comes back cannot be known before it arrives, so it is taken as the same size as the passage. The [length limits](guardrails.md) are what keep that close to true.
 
-**After you spent it**, on the **Log** tab under **Right now**: what the last refine really put through, in and back, and what that cost. A rewrite that was dropped counts here, because the call was made and paid for whether or not anything was saved.
+**After you spent it**, on the **Log** tab under **Right now**: what the last refine really put through, in and back, and what that cost. A rewrite that was dropped counts here, because the call was made and paid for whether or not anything was saved, and so does every ask a refine took when **Ask again when a check fails** sent it back for another.
 
 The cheapest thing you can do is not on this page: point **Refine using** at a smaller model. That is worth more than every other saving here put together.
 

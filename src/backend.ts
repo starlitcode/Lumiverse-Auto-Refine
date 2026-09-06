@@ -1482,6 +1482,14 @@ async function countTokens(text: string, userId?: string): Promise<number> {
   }
 }
 
+// What the refine running right now has put through the model, added up across
+// however many asks it took. Keyed by account, because one backend serves every
+// account on the server and a shared total would report somebody else's spend.
+const usedRun = new Map<string, { sent: number; back: number; counted: boolean }>();
+function startUsed(userId?: string) {
+  usedRun.set(String(userId || ''), { sent: 0, back: 0, counted: true });
+}
+
 // The same count, carrying the news of where the number came from. A count and
 // a guess are different things to act on, so anything that puts a token figure
 // in front of a reader has to be able to say which of the two it is holding.
@@ -1726,14 +1734,25 @@ async function askModel(
     // panel showing the last one rather than showing nothing.
     const reportUsed = (answer: string) => {
       const asked = req.messages.map((m: any) => String((m && m.content) || '')).join('\n');
+      // The run this answer belongs to, taken before the counting starts. A
+      // count that comes back after the next refine has begun belongs to a
+      // refine that is over, and adding it to the new one would report somebody
+      // the previous reply's tokens on top of this one's.
+      const key = String(userId || '');
+      const run = usedRun.get(key);
+      if (!run) return;
       Promise.all([countSaying(asked, userId), countSaying(answer, userId)])
         .then(([sent, back]) => {
+          if (usedRun.get(key) !== run) return;
+          run.sent += sent.n;
+          run.back += back.n;
+          if (!sent.counted || !back.counted) run.counted = false;
           tell(userId, {
             type: 'refine_used',
             at: Date.now(),
-            sent: sent.n,
-            back: back.n,
-            counted: sent.counted && back.counted,
+            sent: run.sent,
+            back: run.back,
+            counted: run.counted,
           });
         })
         .catch(() => {});
@@ -1963,6 +1982,10 @@ async function refineMessage(
   // thing is spending money to be told the same answer.
   let verdict: Verdict = { ok: false, text: '', why: 'nothing was tried' };
   let notes = '';
+  // A refine is allowed more than one call, so what it used is the run rather
+  // than the last ask. Cleared here and added to by each one, or a panel would
+  // report a retried refine at a quarter of what it cost.
+  startUsed(userId);
   const tries = 1 + (Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0);
   for (let attempt = 0; attempt < tries; attempt++) {
     if (attempt > 0) {
@@ -2560,6 +2583,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
           messages.map((m: any) => String((m && m.content) || '')),
           userId,
         );
+        // The passage on its own, so the panel can reckon what comes back
+        // without having to guess which message holds it. Blocks are the
+        // reader's to reorder, so "the last one" is not the passage in every
+        // layout, and a cost worked out from a rule block would be wrong with
+        // nothing on screen to say so.
+        const passage = await countSaying(armed.text, userId);
         replyTo(userId, {
           type: 'prompt_preview',
           requestId: payload.requestId,
@@ -2567,7 +2596,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
           real: real,
           which: whichPrompt,
           messages: messages,
-          tokens: tokens,
+          tokens: { ...tokens, passage: passage.n },
           parameters: cleanSamplers(),
           wrapOutput: wrapOutput,
           connectionId: connectionId || '',
@@ -2683,6 +2712,10 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       // A draft belongs to no saved message, so there is no card and no history
       // to send with it. The prompt for your own writing is the one that
       // applies: a draft is your hand, not the story's voice.
+      //
+      // One ask, and no retry loop around it, but the run still has to be
+      // opened or nothing counts what this one costs.
+      startUsed(userId);
       const answer = await askModel(text, true, NO_SCENE, userId);
       if (answer.error) {
         replyTo(userId, { type: 'try_result', requestId: payload.requestId, ok: false, why: answer.error });
