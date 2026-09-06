@@ -23,12 +23,12 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{message}}` | The turn being refined. |
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
-| `{{memory}}` | What Lumiverse remembers of this chat from further back than the run-up. |
+| `{{memories}}` | What Lumiverse remembers of this chat from further back than the run-up. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
 **A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that quietly added its own would mean the request that ran was not the one on the screen.
 
-`{{memory}}` asks Lumiverse for the eight most relevant pieces it holds for the chat and drops in what it hands back, already written out. That is a fixed number rather than a setting, because it is going into a request that is already carrying the passage, the setting and the pages before it, and the run-up is what a refine mostly works from. A chat with memory switched off, or a Lumiverse without it, gives nothing back and the block is left out.
+`{{memories}}` is Lumiverse's own name for this, and it holds Lumiverse's own answer: the pieces it would have retrieved for the chat, as many as your chat memory settings ask for, written out with your own header and chunk templates. How many is not a setting here on purpose, because your chat and your refine working from different amounts of the same thing is a difference nobody would think to look for. A chat with memory switched off, or one with nothing vectorised yet, gives nothing back and the block is left out.
 
 `{{protect_notes}}` is the one exception and is written out here so nothing goes unread. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
 

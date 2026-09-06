@@ -130,8 +130,8 @@ const PERMS = [
     {
         id: "chats",
         label: "Chats",
-        why: "Says which chat you are in and which card it belongs to.",
-        without: "It falls back to the last chat it saw a reply in, so the per-chat switch and the buttons can act on a chat you have left.",
+        why: "Says which chat you are in and which card it belongs to, and reads what Lumiverse remembers of it, behind {{memories}}.",
+        without: "It falls back to the last chat it saw a reply in, so the per-chat switch and the buttons can act on a chat you have left, and the memories block is left out.",
     },
     {
         id: "characters",
@@ -143,12 +143,6 @@ const PERMS = [
         id: "world_books",
         label: "World books",
         why: "Reads the lorebook entries this chat has active, behind {{lore}}.",
-        without: "That macro comes back empty and its block is left out. Refining carries on.",
-    },
-    {
-        id: "memories",
-        label: "Memories",
-        why: "Reads what Lumiverse remembers of this chat, behind {{memory}}.",
         without: "That macro comes back empty and its block is left out. Refining carries on.",
     },
     {
@@ -355,7 +349,7 @@ const MACROS = [
     { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
     {
-        tag: "{{memory}}",
+        tag: "{{memories}}",
         what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the permission is not granted.",
         ours: true,
     },
@@ -439,7 +433,7 @@ const MEMORY_BLOCK = {
     name: "What has happened before now",
     on: true,
     role: "system",
-    text: "<what_has_happened>\n{{memory}}\n</what_has_happened>",
+    text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
 };
 // The pages before this one. Redrawn every single turn, so it goes as late as it
 // can and still be read as setting.

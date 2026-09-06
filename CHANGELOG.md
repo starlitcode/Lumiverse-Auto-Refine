@@ -16,7 +16,7 @@ _2026-09-06_
 
 ### Added
 
-- **{{memory}} puts what Lumiverse remembers of the chat into the prompt.** Everything before the run-up, in the host's own words rather than assembled here, so a refine is not working from a different version of events than the chat is. Every shipped prompt carries it in a block of its own, under the setting and above the pages before this one, and a chat with memory switched off sends no block at all rather than an empty heading. It needs the memories permission, and without it the macro is empty and refining carries on.
+- **{{memories}} puts what Lumiverse remembers of the chat into the prompt.** Everything from further back than the run-up, and Lumiverse's own answer rather than one assembled here: the same pieces it would have retrieved, as many as your chat memory settings ask for, written out with your own header and chunk templates. Every shipped prompt carries it in a block of its own, under the setting and above the pages before this one, and a chat with memory switched off sends no block at all rather than an empty heading. It needs no new permission, and it is empty on a chat that has nothing vectorised.
 - **Refine a reply that has been refined before**, off by default, on the Limits tab under the automatic pass. Off, each reply is refined once. On, a reply you swiped or regenerated goes through again. Either way a build that announces one generation twice buys one refine, not two, and pressing a button always refines what you pressed it on.
 
 ### Changed

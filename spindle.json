@@ -12,7 +12,6 @@
     "chats",
     "characters",
     "world_books",
-    "memories",
     "ui_panels"
   ],
   "entry_frontend": "dist/frontend.js",

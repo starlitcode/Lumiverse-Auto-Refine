@@ -32,12 +32,13 @@ let thinkingEffort = 'medium'; // only read when thinkingMode is custom
 let timeoutSecs = 90;
 // Who these settings came from, which is who the automatic pass runs as.
 //
-// A generation event names the chat and the message and no account. An install
-// scoped to an operator refuses a model call that carries no account, so the
-// automatic pass asked for a refine nobody was paying for and came back saying
-// Lumiverse could not tell whose it was. The panel's own messages do carry an
-// account, so the one that handed these settings over is the one whose rules
-// are running, and it is the answer whenever the event has none of its own.
+// A generation event carries the generation, the chat, the message, the content
+// and the error. It has never carried an account and there is no build where it
+// does. An install scoped to an operator refuses a model call that carries no
+// account, so the automatic pass asked for a refine nobody was paying for and
+// came back saying Lumiverse could not tell whose it was. The panel's own
+// messages do carry an account, so the one that handed these settings over is
+// the one whose rules are running, and it is the only account there is to use.
 //
 // One value, like the settings above it: this module holds one set of rules for
 // the process, so on a server with several accounts the automatic pass belongs
@@ -222,7 +223,7 @@ const TURN_MACRO = '{{message}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'memory', 'protect_notes'];
+const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes'];
 const NO_SCENE = { character: '', context: '', lore: '', memory: '', name: '' };
 // The prompt a fresh install ships with, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
@@ -654,7 +655,7 @@ function fillOurs(text, p) {
             return p.history;
         if (id === 'lore')
             return p.lore;
-        if (id === 'memory')
+        if (id === 'memories')
             return p.memory;
         if (id === 'protect_notes')
             return p.shieldNote || '';
@@ -1418,30 +1419,34 @@ async function fitToBudget(pieces, budget, userId) {
     return out;
 }
 // What Lumiverse remembers of this chat beyond the messages in the run-up.
-// Handed over already written out by the host, which is the point of asking it
-// rather than assembling something here: the same text the chat itself is
-// working from, so a refine is not told a different version of events.
+// Handed over already written out by the host, which is the point of asking for
+// it rather than assembling something here: formatted is built from the
+// reader's own header and chunk templates, so what a refine is shown is what
+// their chat is shown.
 //
-// How many pieces to ask for. The run-up is what a refine mostly needs and
-// this is the older material behind it, so it is a few pieces rather than a
-// second history: it goes in a request that is already carrying the passage,
-// the scene and the pages before it.
-const MEMORY_TOP_K = 8;
+// Asked for through chats rather than through memories. The two are documented
+// as the same call, and this one is covered by a permission the extension
+// already holds: the other would put a second approval in front of every reader
+// for a thing they have already said yes to.
+//
+// How many pieces to fetch is not passed. The count is the reader's own chat
+// memory setting, and overriding it here would mean their chat and their refine
+// were working from different amounts of the same thing.
 async function gatherMemory(chatId, userId) {
     try {
-        const mem = spindle.memories;
-        if (!mem || !mem.chatMemory || typeof mem.chatMemory.get !== 'function')
+        const chats = spindle.chats;
+        if (!chats || typeof chats.getMemories !== 'function')
             return '';
-        const got = await mem.chatMemory.get(chatId, { topK: MEMORY_TOP_K, userId: userId });
-        // Off for this chat is not the same as empty, and neither is worth a tag
-        // around nothing, so both answer the same way here.
+        const got = await chats.getMemories(chatId, { userId: userId });
+        // Switched off for this chat is not the same as nothing to say, and neither
+        // is worth a heading around nothing, so both answer the same way here.
         if (!got || got.enabled === false)
             return '';
         return String(got.formatted == null ? '' : got.formatted).trim();
     }
     catch (_) {
-        // No permission, memory switched off, or a Lumiverse without it. A refine
-        // reads perfectly well without this, so it goes ahead.
+        // Memory switched off, no embedding set up, or a Lumiverse without it. A
+        // refine reads perfectly well without this, so it goes ahead.
         return '';
     }
 }
@@ -2053,9 +2058,12 @@ try {
                 return;
             if (chatsOff.has(String(p.chatId)))
                 return;
-            // The account this pass is for. Read once, so the refine, anything it has
-            // to say afterwards and the chat read all go to the same place.
-            const who = p.userId || settingsUser;
+            // The account this pass is for. GenerationEndedPayloadDTO is the
+            // generation, the chat, the message, the content and the error, and no
+            // account at all, so there is nothing on the event to prefer over this
+            // and no version of Lumiverse where there is. Read once, so the refine
+            // and anything it has to say afterwards go to the same place.
+            const who = settingsUser;
             let messageId = p.messageId;
             if (!messageId) {
                 // Not every build puts the id on the end event, so the newest reply
