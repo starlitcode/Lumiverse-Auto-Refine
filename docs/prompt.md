@@ -194,6 +194,8 @@ Set **Input price, per million tokens** and **Output price, per million tokens**
 
 The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
 
+**What to type.** Price lists write these as `$5.00/M` or `$0.075/M`, which already means per million tokens, so the number is the number: type `5` or `0.075`. You can also paste the whole thing, `$` and `/M` included, and the number is taken out of it. Decimals matter here, since the cheap models are priced in fractions of a penny.
+
 Two places use them.
 
 **Before you spend it**, under **Show me the request**: what this one request would cost, and what a hundred replies at that size would come to. The hundred is the number worth looking at, since a refine costs a fraction of a penny and the question people actually have is what a session comes to. What comes back cannot be known before it arrives, so it is taken as the same size as the passage. The [length limits](guardrails.md) are what keep that close to true.

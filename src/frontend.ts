@@ -1283,6 +1283,7 @@ const GUARD_FIELDS: Field[] = [
   },
   {
     key: "softenPct",
+    int: true,
     label: "How much of it may go",
     type: "num",
     min: 10,
@@ -1301,6 +1302,7 @@ const GUARD_FIELDS: Field[] = [
   },
   {
     key: "retryRefine",
+    int: true,
     label: "Ask again when a check fails",
     type: "num",
     min: 0,
@@ -1314,6 +1316,7 @@ const GUARD_FIELDS: Field[] = [
 const WIDGET_FIELDS: Field[] = [
   {
     key: "widgetSize",
+    int: true,
     label: "How big it is",
     type: "num",
     min: 28,
@@ -1375,6 +1378,10 @@ type Field = {
   hint: string;
   min?: number;
   max?: number;
+  // Whole numbers only, named the same as Auto Retry's flag so the two read
+  // alike. Without it a box takes decimals, which is what a price needs: every
+  // provider quotes a fraction of a unit per million tokens.
+  int?: boolean;
   options?: Array<{ value: string; label: string }>;
   // Shown only while another setting is on, or holds a given value. A row that
   // can do nothing where it sits is worse than a row that is not there, and a
@@ -1423,6 +1430,7 @@ const COST_FIELDS: Field[] = [
   },
   {
     key: "timeoutSecs",
+    int: true,
     label: "Give up waiting after (seconds)",
     type: "num",
     min: 0,
@@ -1438,7 +1446,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "What your provider charges for what you send it. Its price list calls this input. Left at 0, no cost is worked out anywhere.",
+    hint: "What your provider charges for what you send it. Its price list calls this input, and writes it as $5.00/M or $0.075/M. Type the number on its own, or paste the whole thing and the number is taken out of it. Left at 0, no cost is worked out anywhere.",
   },
   {
     key: "costOut",
@@ -1446,13 +1454,14 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. In whatever currency it bills you in, since nothing here converts anything.",
+    hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. Same as above: the number on its own, or paste the line. In whatever currency it bills you in, since nothing here converts anything.",
   },
 ];
 
 const LIMIT_FIELDS: Field[] = [
   {
     key: "maxGrowthPct",
+    int: true,
     label: "Longest a rewrite may get (%)",
     type: "num",
     min: 0,
@@ -1461,6 +1470,7 @@ const LIMIT_FIELDS: Field[] = [
   },
   {
     key: "minShrinkPct",
+    int: true,
     label: "Shortest a rewrite may get (%)",
     type: "num",
     min: 0,
@@ -5606,14 +5616,33 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(labelRow(f));
       const num = document.createElement("input");
       num.type = "number";
+      // A box with no step is one the browser holds to whole numbers, and
+      // "numeric" is the keypad with no decimal point on it, so a price could
+      // be neither typed on a phone nor accepted on a desktop.
+      num.step = f.int ? "1" : "any";
+      num.inputMode = f.int ? "numeric" : "decimal";
       if (f.min != null) num.min = String(f.min);
       if (f.max != null) num.max = String(f.max);
       num.value = String(cfg[f.key]);
       num.setAttribute("data-arf-field", f.key);
       num.setAttribute("aria-label", f.label);
       num.className = "arf-field";
+      // A price is copied off a provider's own page, where it reads $5.00/M or
+      // $0.075/M. A number box takes none of that: the paste lands as nothing
+      // and the setting quietly stays at its default, which reads as the
+      // feature being broken. The number is lifted out of whatever was pasted.
+      num.addEventListener("paste", (e: any) => {
+        const raw = e && e.clipboardData && e.clipboardData.getData("text");
+        if (!raw) return;
+        const found = String(raw).replace(/,/g, "").match(/-?\d*\.?\d+/);
+        if (!found) return;
+        e.preventDefault();
+        num.value = found[0];
+        num.dispatchEvent(new Event("change", { bubbles: true }));
+      });
       num.addEventListener("change", () => {
-        let v = Math.round(Number(num.value));
+        let v = Number(num.value);
+        if (f.int) v = Math.round(v);
         if (!Number.isFinite(v)) v = Number((CONFIG as any)[f.key]);
         if (f.min != null) v = Math.max(f.min, v);
         if (f.max != null) v = Math.min(f.max, v);
@@ -6083,6 +6112,12 @@ export function setup(ctx: Ctx, overrides?: any) {
           // the description anchors itself against. reveal() passes over it,
           // since a macro row has no field to be shown or hidden by.
           row.setAttribute("data-arf-row", "macro:" + m.tag);
+          // The search reads a row's description off this, since a description
+          // behind a ? is not among the children to walk. Without it, moving
+          // these out of the row took them out of the search with them: a macro
+          // whose name you cannot remember is exactly the one you search for by
+          // what it does.
+          (row as any)._arfHint = m.what;
           body.appendChild(row);
         }
         body.appendChild(
@@ -6103,6 +6138,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "contextMessages",
+        int: true,
         label: "Messages of run-up to send",
         type: "num",
         min: 0,
@@ -6113,6 +6149,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "maxHistoryTokens",
+        int: true,
         label: "Most tokens of run-up",
         type: "num",
         min: 0,
@@ -6123,6 +6160,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "maxLoreTokens",
+        int: true,
         label: "Most tokens of lorebook",
         type: "num",
         min: 0,
@@ -7412,6 +7450,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(
         fieldRow({
           key: "soundVolume",
+          int: true,
           label: "How loud (%)",
           type: "num",
           min: 0,

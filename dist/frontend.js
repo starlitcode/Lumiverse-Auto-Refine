@@ -1170,6 +1170,7 @@ const GUARD_FIELDS = [
     },
     {
         key: "softenPct",
+        int: true,
         label: "How much of it may go",
         type: "num",
         min: 10,
@@ -1188,6 +1189,7 @@ const GUARD_FIELDS = [
     },
     {
         key: "retryRefine",
+        int: true,
         label: "Ask again when a check fails",
         type: "num",
         min: 0,
@@ -1200,6 +1202,7 @@ const GUARD_FIELDS = [
 const WIDGET_FIELDS = [
     {
         key: "widgetSize",
+        int: true,
         label: "How big it is",
         type: "num",
         min: 28,
@@ -1288,6 +1291,7 @@ const COST_FIELDS = [
     },
     {
         key: "timeoutSecs",
+        int: true,
         label: "Give up waiting after (seconds)",
         type: "num",
         min: 0,
@@ -1303,7 +1307,7 @@ const COST_FIELDS = [
         type: "num",
         min: 0,
         max: 10000,
-        hint: "What your provider charges for what you send it. Its price list calls this input. Left at 0, no cost is worked out anywhere.",
+        hint: "What your provider charges for what you send it. Its price list calls this input, and writes it as $5.00/M or $0.075/M. Type the number on its own, or paste the whole thing and the number is taken out of it. Left at 0, no cost is worked out anywhere.",
     },
     {
         key: "costOut",
@@ -1311,12 +1315,13 @@ const COST_FIELDS = [
         type: "num",
         min: 0,
         max: 10000,
-        hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. In whatever currency it bills you in, since nothing here converts anything.",
+        hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. Same as above: the number on its own, or paste the line. In whatever currency it bills you in, since nothing here converts anything.",
     },
 ];
 const LIMIT_FIELDS = [
     {
         key: "maxGrowthPct",
+        int: true,
         label: "Longest a rewrite may get (%)",
         type: "num",
         min: 0,
@@ -1325,6 +1330,7 @@ const LIMIT_FIELDS = [
     },
     {
         key: "minShrinkPct",
+        int: true,
         label: "Shortest a rewrite may get (%)",
         type: "num",
         min: 0,
@@ -5474,6 +5480,11 @@ export function setup(ctx, overrides) {
             wrap.appendChild(labelRow(f));
             const num = document.createElement("input");
             num.type = "number";
+            // A box with no step is one the browser holds to whole numbers, and
+            // "numeric" is the keypad with no decimal point on it, so a price could
+            // be neither typed on a phone nor accepted on a desktop.
+            num.step = f.int ? "1" : "any";
+            num.inputMode = f.int ? "numeric" : "decimal";
             if (f.min != null)
                 num.min = String(f.min);
             if (f.max != null)
@@ -5482,8 +5493,25 @@ export function setup(ctx, overrides) {
             num.setAttribute("data-arf-field", f.key);
             num.setAttribute("aria-label", f.label);
             num.className = "arf-field";
+            // A price is copied off a provider's own page, where it reads $5.00/M or
+            // $0.075/M. A number box takes none of that: the paste lands as nothing
+            // and the setting quietly stays at its default, which reads as the
+            // feature being broken. The number is lifted out of whatever was pasted.
+            num.addEventListener("paste", (e) => {
+                const raw = e && e.clipboardData && e.clipboardData.getData("text");
+                if (!raw)
+                    return;
+                const found = String(raw).replace(/,/g, "").match(/-?\d*\.?\d+/);
+                if (!found)
+                    return;
+                e.preventDefault();
+                num.value = found[0];
+                num.dispatchEvent(new Event("change", { bubbles: true }));
+            });
             num.addEventListener("change", () => {
-                let v = Math.round(Number(num.value));
+                let v = Number(num.value);
+                if (f.int)
+                    v = Math.round(v);
                 if (!Number.isFinite(v))
                     v = Number(CONFIG[f.key]);
                 if (f.min != null)
@@ -5926,6 +5954,12 @@ export function setup(ctx, overrides) {
                 // the description anchors itself against. reveal() passes over it,
                 // since a macro row has no field to be shown or hidden by.
                 row.setAttribute("data-arf-row", "macro:" + m.tag);
+                // The search reads a row's description off this, since a description
+                // behind a ? is not among the children to walk. Without it, moving
+                // these out of the row took them out of the search with them: a macro
+                // whose name you cannot remember is exactly the one you search for by
+                // what it does.
+                row._arfHint = m.what;
                 body.appendChild(row);
             }
             body.appendChild(note("The ones marked Lumiverse are the host's own, so anything you already use in a character card or a preset works here too. A macro nobody can answer is left as you typed it rather than being blanked."));
@@ -5936,6 +5970,7 @@ export function setup(ctx, overrides) {
         const wrap = card("How much it is told", "What the {{history}} and {{lore}} macros carry. Every one of these costs tokens on every single refine, which is where a cheap feature quietly becomes an expensive one.");
         wrap.appendChild(fieldRow({
             key: "contextMessages",
+            int: true,
             label: "Messages of run-up to send",
             type: "num",
             min: 0,
@@ -5944,6 +5979,7 @@ export function setup(ctx, overrides) {
         }));
         wrap.appendChild(fieldRow({
             key: "maxHistoryTokens",
+            int: true,
             label: "Most tokens of run-up",
             type: "num",
             min: 0,
@@ -5952,6 +5988,7 @@ export function setup(ctx, overrides) {
         }));
         wrap.appendChild(fieldRow({
             key: "maxLoreTokens",
+            int: true,
             label: "Most tokens of lorebook",
             type: "num",
             min: 0,
@@ -7029,6 +7066,7 @@ export function setup(ctx, overrides) {
                 wrap.appendChild(note("A file is attached. Clear it above to use a link instead."));
             wrap.appendChild(fieldRow({
                 key: "soundVolume",
+                int: true,
                 label: "How loud (%)",
                 type: "num",
                 min: 0,

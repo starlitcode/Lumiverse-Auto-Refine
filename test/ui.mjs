@@ -5185,6 +5185,64 @@ console.log("\ndescriptions behind a ?");
   });
 }
 
+console.log("\nprices as a provider writes them");
+{
+  // A price list reads $5.00/M or $0.075/M. Both halves of that were refused:
+  // the box rounded every number to a whole one, and asked a phone for the
+  // keypad with no decimal point on it.
+  const box = (page) =>
+    page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-field="costIn"]');
+      return n ? { step: n.step, mode: n.inputMode, type: n.type } : null;
+    });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+    const b = await box(page);
+    ok("a price box takes decimals", b && b.step === "any", JSON.stringify(b));
+    ok("and asks for a keypad with a point on it", b && b.mode === "decimal", JSON.stringify(b));
+
+    // 0.075 is the cheapest row in a real price list, and it was becoming 0.
+    const kept = await page.evaluate(async () => {
+      const n = document.querySelector('#drawer [data-arf-field="costIn"]');
+      n.value = "0.075";
+      n.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 40));
+      return JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).costIn;
+    });
+    ok("a fraction of a unit survives being typed", kept === 0.075, String(kept));
+
+    // Pasted straight off the provider's page.
+    const pasted = await page.evaluate(async () => {
+      const n = document.querySelector('#drawer [data-arf-field="costOut"]');
+      const dt = new DataTransfer();
+      dt.setData("text", "$3.75/M");
+      n.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 40));
+      return JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).costOut;
+    });
+    ok("a price pasted as the provider writes it is understood", pasted === 3.75, String(pasted));
+  });
+
+  // A setting that was always a whole number stays one, keypad included.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Context");
+    const whole = await page.evaluate(async () => {
+      const n = document.querySelector('#drawer [data-arf-field="contextMessages"]');
+      if (!n) return null;
+      const shape = { step: n.step, mode: n.inputMode };
+      n.value = "4.6";
+      n.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 40));
+      shape.kept = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).contextMessages;
+      return shape;
+    });
+    ok("a whole number still asks for whole numbers", whole && whole.step === "1", JSON.stringify(whole));
+    ok("with the plain keypad", whole && whole.mode === "numeric", JSON.stringify(whole));
+    ok("and is still rounded to one", whole && whole.kept === 5, JSON.stringify(whole));
+  });
+}
+
 console.log("\nthe macro list");
 {
   // A list you scan for a name you half remember. The meanings sit behind the
@@ -5228,6 +5286,24 @@ console.log("\nthe macro list");
       "and pressing one opens its meaning",
       !!opened && /protection is on/.test(opened),
       String(opened),
+    );
+
+    // A description behind a ? is not among the children the search walks, so
+    // moving these out of the rows would have taken them out of the search
+    // with them. A macro whose name you cannot remember is exactly the one you
+    // go looking for by what it does.
+    const found = await page.evaluate(async () => {
+      const box = document.querySelector('#drawer input[type="search"]');
+      if (!box) return null;
+      box.value = "lorebook entries this chat";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 60));
+      return document.querySelector("#drawer").textContent;
+    });
+    ok(
+      "a macro is still findable by what it does",
+      !!found && /\{\{lore\}\}/.test(found),
+      String(found).slice(0, 200),
     );
   });
 }
