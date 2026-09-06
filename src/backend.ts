@@ -782,11 +782,16 @@ function isHollow(text: string): boolean {
   return bare.length === 0;
 }
 
+// parts, when given, is filled with what each block came to after its macros
+// were resolved. Blocks that sit next to each other with the same role are
+// joined into one message, so counting the messages alone reports every rule as
+// a single lump. What a reader wants to know is which block is costing them.
 async function buildPrompt(
   text: string,
   isUser: boolean,
   scene: Scene,
   userId?: string,
+  parts?: Array<{ name: string; text: string }>,
 ): Promise<any[]> {
   const piece = {
     message: text,
@@ -807,6 +812,7 @@ async function buildPrompt(
     const body = fillOurs(resolved, piece).trim();
     // Empty, or nothing but the tags somebody wrapped a macro in.
     if (!body || isHollow(body)) continue;
+    if (parts) parts.push({ name: String(b.name || 'a block with no name'), text: body });
     const role = ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system';
     // Blocks that land next to each other with the same role are joined rather
     // than sent as separate messages. Providers differ on how they treat two
@@ -2572,15 +2578,21 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         const split = splitThinking(text);
         const armed = shield(split.body);
         if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
-        const messages = await buildPrompt(armed.text, isUser, scene, userId);
+        const blockParts: Array<{ name: string; text: string }> = [];
+        const messages = await buildPrompt(armed.text, isUser, scene, userId, blockParts);
         const whichPrompt = isUser ? 'yours' : 'replies';
         // Counted here rather than in the panel, because the tokeniser lives on
         // this side and characters over four is the number this card exists to
         // stop somebody having to work out for themselves. A preview is a press
         // with a wait already attached, so the extra calls cost nothing anybody
         // notices.
+        // Per block rather than per message, since blocks with the same role are
+        // joined on the way out and counting the messages would report every
+        // rule as one lump. The total is the sum of the parts, which is what a
+        // breakdown that does not add up would otherwise cost somebody an
+        // afternoon working out.
         const tokens = await countRequest(
-          messages.map((m: any) => String((m && m.content) || '')),
+          blockParts.map((b) => b.text),
           userId,
         );
         // The passage on its own, so the panel can reckon what comes back
@@ -2596,7 +2608,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
           real: real,
           which: whichPrompt,
           messages: messages,
-          tokens: { ...tokens, passage: passage.n },
+          tokens: {
+            total: tokens.total,
+            counted: tokens.counted,
+            passage: passage.n,
+            parts: blockParts.map((b, i) => ({ name: b.name, tokens: tokens.per[i] || 0 })),
+          },
           parameters: cleanSamplers(),
           wrapOutput: wrapOutput,
           connectionId: connectionId || '',

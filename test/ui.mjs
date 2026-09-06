@@ -5221,11 +5221,12 @@ console.log("\ntokens and what they cost");
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Context");
     await build(page);
-    await answer(page, { per: [900, 100], total: 1000, counted: true });
+    await answer(page, { parts: [{ name: "The rules", tokens: 900 }, { name: "The passage", tokens: 100 }], total: 1000, counted: true });
     await settle(page);
     let shown = await body(page);
     ok("the request is measured in tokens", /1,000 tokens/.test(shown), shown.slice(0, 200));
-    ok("and each message carries its own count", /900 tokens/.test(shown) && /100 tokens/.test(shown));
+    ok("and it says where those tokens go, block by block", /Where the tokens go/.test(shown) && /The rules/.test(shown));
+    ok("with a share for each", /90%/.test(shown) && /10%/.test(shown), shown.slice(0, 400));
     ok("with the characters kept beside them", /characters/.test(shown));
     ok(
       "a counted total is not called roughly anything",
@@ -5239,7 +5240,7 @@ console.log("\ntokens and what they cost");
     // One message answered from the estimate makes the whole total a guess, and
     // the panel has to say so rather than let it read as measured.
     await build(page);
-    await answer(page, { per: [900, 100], total: 1000, counted: false });
+    await answer(page, { parts: [{ name: "The rules", tokens: 900 }, { name: "The passage", tokens: 100 }], total: 1000, counted: false });
     await settle(page);
     shown = await body(page);
     ok("an estimated total says so in words", /roughly 1,000 tokens/.test(shown));
@@ -5250,7 +5251,7 @@ console.log("\ntokens and what they cost");
   await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
     await goTab(page, "Context");
     await build(page);
-    await answer(page, { per: [900, 100], total: 1000, counted: true, passage: 100 });
+    await answer(page, { parts: [{ name: "The rules", tokens: 900 }, { name: "The passage", tokens: 100 }], total: 1000, counted: true, passage: 100 });
     await settle(page);
     const shown = await body(page);
     ok("prices turn the count into money", /About 0\.0045 for this refine/.test(shown), shown.slice(0, 300));
@@ -5263,7 +5264,7 @@ console.log("\ntokens and what they cost");
   await inTab(browser, { saved: { costIn: 3 } }, async (page) => {
     await goTab(page, "Context");
     await build(page);
-    await answer(page, { per: [900, 100], total: 1000, counted: true, passage: 100 });
+    await answer(page, { parts: [{ name: "The rules", tokens: 900 }, { name: "The passage", tokens: 100 }], total: 1000, counted: true, passage: 100 });
     await settle(page);
     const shown = await body(page);
     ok(
@@ -5282,7 +5283,7 @@ console.log("\ntokens and what they cost");
   await inTab(browser, { saved: { costIn: 3, costOut: 15 } }, async (page) => {
     await goTab(page, "Context");
     await build(page);
-    await answer(page, { per: [200, 800], total: 1000, counted: true, passage: 200 });
+    await answer(page, { parts: [{ name: "The passage", tokens: 200 }, { name: "The rules", tokens: 800 }], total: 1000, counted: true, passage: 200 });
     await settle(page);
     const shown = await body(page);
     ok(

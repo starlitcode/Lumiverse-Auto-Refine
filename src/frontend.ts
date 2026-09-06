@@ -1434,19 +1434,19 @@ const COST_FIELDS: Field[] = [
   // figure comes from the reader. Both at 0 leaves every cost line off.
   {
     key: "costIn",
-    label: "Price per million tokens sent",
+    label: "Input price, per million tokens",
     type: "num",
     min: 0,
     max: 10000,
-    hint: "The price for what goes to the model, from your provider's own price list. Left at 0, no cost is worked out anywhere.",
+    hint: "What your provider charges for what you send it. Its price list calls this input. Left at 0, no cost is worked out anywhere.",
   },
   {
     key: "costOut",
-    label: "Price per million tokens back",
+    label: "Output price, per million tokens",
     type: "num",
     min: 0,
     max: 10000,
-    hint: "The price for what comes back, usually the dearer one of the two. In whatever currency your provider bills you in, since nothing here converts anything.",
+    hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. In whatever currency it bills you in, since nothing here converts anything.",
   },
 ];
 
@@ -6170,7 +6170,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     const tok = preview.tokens && typeof preview.tokens === "object" ? preview.tokens : null;
     const totalTokens = tok ? Number(tok.total) || 0 : Math.ceil(chars / 4);
     const counted = tok ? !!tok.counted : false;
-    const per: number[] = tok && Array.isArray(tok.per) ? tok.per : [];
+    // What each block came to, largest first. Which block is costing you is the
+    // question this card exists to answer, and a list in prompt order buries a
+    // lorebook the size of everything else halfway down it.
+    const parts: Array<{ name: string; tokens: number }> =
+      tok && Array.isArray(tok.parts)
+        ? tok.parts
+            .map((x: any) => ({ name: String((x && x.name) || ""), tokens: Number(x && x.tokens) || 0 }))
+            .sort((a: any, b: any) => b.tokens - a.tokens)
+        : [];
     const size =
       msgs.length +
       (msgs.length === 1 ? " message, " : " messages, ") +
@@ -6220,19 +6228,34 @@ export function setup(ctx: Ctx, overrides?: any) {
         ),
       );
     }
+    // Where the tokens are going, block by block. This is the part worth having
+    // before a change: a lorebook or a run-up that is quietly two thirds of
+    // every request does not look like anything in the messages below.
+    if (parts.length) {
+      const box = el("div", "arf-block");
+      box.appendChild(el("div", "arf-note", "Where the tokens go"));
+      for (const one of parts) {
+        const row = el("div", "arf-between");
+        row.appendChild(el("span", "arf-note", one.name));
+        row.appendChild(
+          el(
+            "span",
+            "arf-lab arf-mono",
+            one.tokens.toLocaleString() +
+              (totalTokens ? "  " + Math.round((one.tokens / totalTokens) * 100) + "%" : ""),
+          ),
+        );
+        box.appendChild(row);
+      }
+      wrap.appendChild(box);
+    }
     for (let i = 0; i < msgs.length; i++) {
       const m = msgs[i];
       const body = String((m && m.content) || "");
       const one = el("div", "arf-block");
       const head = el("div", "arf-between");
       head.appendChild(el("span", "arf-lab arf-mono", String((m && m.role) || "system")));
-      head.appendChild(
-        el(
-          "span",
-          "arf-pill arf-mono",
-          tokenWord(per.length > i ? per[i] : Math.ceil(body.length / 4), counted),
-        ),
-      );
+      head.appendChild(el("span", "arf-pill arf-mono", body.length.toLocaleString() + " chars"));
       one.appendChild(head);
       one.appendChild(el("div", "arf-well arf-scroll arf-mono", body));
       wrap.appendChild(one);

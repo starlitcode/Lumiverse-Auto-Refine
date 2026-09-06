@@ -188,7 +188,7 @@ Protection catches what it can find. The prompts that ship with it also carry a 
 
 ## What a refine costs
 
-Set **Price per million tokens sent** and **Price per million tokens back** on the **Model** tab and the panel works the rest out. Both start at 0, and with both at 0 no cost is shown anywhere. Fill in one and leave the other, and the line says which half of the sum it is pricing rather than quietly leaving the other half out.
+Set **Input price, per million tokens** and **Output price, per million tokens** on the **Model** tab and the panel works the rest out. Both start at 0, and with both at 0 no cost is shown anywhere. Fill in one and leave the other, and the line says which half of the sum it is pricing rather than quietly leaving the other half out.
 
 The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
 
@@ -225,6 +225,8 @@ Under **Model**, **Let it think first** has three answers:
 **Show me the request** builds the request for the reply you are looking at and shows it, message by message, with the role and size of each. No model is called and nothing is charged; it costs one read of your chat.
 
 Size is in tokens, counted with Lumiverse's own tokeniser, with the character count beside it. Where the tokeniser will not answer the number is estimated at four characters a token and the line says **roughly** so you know which of the two you are reading. A count and a guess are different things to act on.
+
+**Where the tokens go** is under that, block by block, largest first, each with its share of the whole. It is per block rather than per message on purpose: blocks with the same role are joined before they are sent, so counting the messages would report every rule you wrote as one lump. This is the part worth reading before you change anything, because a lorebook or a run-up that is quietly two thirds of every request does not look like anything in the messages below it.
 
 It is built by the same function a real refine uses, and the passage goes through the same two steps first, so it cannot become a nice description of something the extension does not actually send. That is why the passage may read oddly: markup shows as `[[AR1]]` tokens, the model's own reasoning is already cut off it, and `{{protect_notes}}` has become the sentence that explains the tokens. That is what the model gets. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
 
