@@ -3114,22 +3114,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     "-webkit-mask:" + SEARCH_X + " center/contain no-repeat;" +
     "mask:" + SEARCH_X + " center/contain no-repeat}" +
     ".arf-field[type=search]::-webkit-search-cancel-button:hover{opacity:1}" +
-    // A menu opened by pointer marks nothing: the menu is already in front of
-    // you, and a ring behind it says something you can see. Reached by keyboard
-    // it takes the same mark every other field does, because then the open menu
-    // is the only thing saying where you are, and without it a tab through the
-    // panel passes over the dropdowns invisibly.
-    //
-    // :focus-visible is the browser's own answer to "is this worth marking",
-    // and it is the right one here. It counts a dropdown clicked with a pointer
-    // as worth marking, since you can type a letter to jump through its
-    // options, so the plain :focus rule below takes that back off and
-    // :focus-visible puts it on for the keyboard. Auto Retry works the same
-    // way, so a dropdown behaves the same in both.
-    "select.arf-field:focus{outline:none;box-shadow:none;" +
-    "border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
-    "select.arf-field:focus-visible{outline:none;box-shadow:" + FOCUS_RING + ";" +
-    "border-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+    // A menu you pick from takes no mark at all, reached any way. The list
+    // opening in front of you is the whole of the feedback, and a ring behind
+    // it is decoration over the top of the thing it is pointing at. Auto Retry
+    // does the same, so a dropdown behaves the same in both.
+    "select.arf-field:focus,select.arf-field:focus-visible{outline:none;" +
+    "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The browser's own up and down arrows on a number box are drawn by the
     // browser rather than the theme, so on a dark panel they arrive as grey
     // chevrons belonging to no design here. The value is typed, and a focused

@@ -5863,16 +5863,25 @@ console.log("\nno switch rebuilds the panel to show its children");
           .map((el) => el.getAttribute("data-arf-field")),
       );
       for (const k of keys) {
-        const out = await page.evaluate((key) => {
+        const out = await page.evaluate(async (key) => {
           const count = () =>
             document.querySelectorAll("#drawer [data-arf-row],#drawer [data-arf-hangs]").length;
+          // Past the settle. A switch hides and shows its rows on the spot, and
+          // the rebuild that catches the rest of the card up runs 260ms later:
+          // counting before that lands measures the panel as it was and passes
+          // whatever the cards do, which is what the first version of this check
+          // did. It reported nothing wrong with the bug it exists to catch.
+          const settled = () => new Promise((r) => setTimeout(r, 420));
           const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
           if (!box) return null;
+          await settled();
           const before = count();
           box.click();
+          await settled();
           const after = count();
           // Put it back, so the next key starts where this one did.
           box.click();
+          await settled();
           return { key, before, after, back: count() };
         }, k);
         if (!out) continue;
