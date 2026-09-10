@@ -2911,3 +2911,116 @@ describe("the ceiling on one reply", () => {
     expect(h.asked.length).toBe(wasAsked + 1);
   });
 });
+
+// Refining part of a reply rather than the whole of it.
+//
+// A selection is made in rendered markdown and has to be written back into the
+// raw source, which is a different string: emphasis markers style the text
+// rather than appearing in it. Everything here is about the two staying in step,
+// and about the rest of the reply coming through untouched.
+describe("refining what you selected", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+
+  const ask = (h: any, picked: string, ordinal = 0) =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ordinal: ordinal });
+
+  test("only the part picked is sent to the model", async () => {
+    const body = "She set the crate down. The lock had been changed again. Nobody was in.";
+    const h = await armed(["<REFINED>The lock was new.</REFINED>"], {}, reply(body));
+    await ask(h, "The lock had been changed again.");
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    const sent = JSON.stringify(h.asked[0].messages || []);
+    expect(sent).toContain("The lock had been changed again.");
+    // The sentences either side of it were never sent.
+    expect(sent).not.toContain("She set the crate down");
+    expect(sent).not.toContain("Nobody was in");
+  });
+
+  test("and the rest of the reply is left exactly as it was", async () => {
+    const body = "She set the crate down. The lock had been changed again. Nobody was in.";
+    const h = await armed(["<REFINED>Somebody had changed the lock again.</REFINED>"], {}, reply(body));
+    await ask(h, "The lock had been changed again.");
+    await wait(60);
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].content).toBe("She set the crate down. Somebody had changed the lock again. Nobody was in.");
+  });
+
+  test("a selection inside italics does not leave a marker stranded", async () => {
+    // The markers are not in the rendered text, so they cannot be in what was
+    // picked. The span has to grow to cover the pair or the rest of the reply
+    // turns italic.
+    const body = "He shrugged. *She had said the same on the ferry.* Nobody answered.";
+    const h = await armed(["<REFINED>She had said that same thing on the boat.</REFINED>"], {}, reply(body));
+    await ask(h, "She had said the same on the ferry.");
+    await wait(60);
+    const out = h.writes[0].content;
+    expect((out.split("*").length - 1) % 2).toBe(0);
+    expect(out).toBe("He shrugged. *She had said that same thing on the boat.* Nobody answered.");
+  });
+
+  test("a selection running out of italics into plain text takes the whole run", async () => {
+    const body = "*Not tonight,* she said, and put the lid back on the pot.";
+    const h = await armed(["<REFINED>She said no and closed the pot.</REFINED>"], {}, reply(body));
+    await ask(h, "Not tonight, she said");
+    await wait(60);
+    const out = h.writes[0].content;
+    expect((out.split("*").length - 1) % 2).toBe(0);
+    expect(out).toBe("She said no and closed the pot., and put the lid back on the pot.");
+  });
+
+  test("the same phrase twice refines the one you picked", async () => {
+    const body = "He said it was fine. Later he said it was fine again, with less conviction.";
+    const h = await armed(["<REFINED>it was not fine</REFINED>"], {}, reply(body));
+    await ask(h, "it was fine", 1);
+    await wait(60);
+    expect(h.writes[0].content).toBe("He said it was fine. Later he said it was not fine again, with less conviction.");
+  });
+
+  test("a selection that is not in the reply any more sends nothing", async () => {
+    const body = "She counted the jars on the shelf and came up short.";
+    const h = await armed(["<REFINED>never asked for</REFINED>"], {}, reply(body));
+    await ask(h, "a sentence that was never in this reply");
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.writes.length).toBe(0);
+    expect(h.sent.map((x: any) => String(x.why || "")).join(" ")).toMatch(/not in that reply any more/i);
+  });
+
+  test("an empty selection is not a refine of the whole reply by accident", async () => {
+    const body = "She counted the jars on the shelf and came up short.";
+    const h = await armed(["<REFINED>A whole new reply nobody asked for.</REFINED>"], {}, reply(body));
+    await ask(h, "   ");
+    await wait(60);
+    // Nothing picked means the pass has nothing to act on, so the reply is not
+    // quietly rewritten end to end.
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("{{whole_reply}} carries the reply with the picked part marked", async () => {
+    const body = "She set the crate down. The lock had been changed. Nobody was in.";
+    const blocks = PROMPT.concat([
+      { id: "around", name: "Around it", on: true, role: "system", text: "<around>\n{{whole_reply}}\n</around>" },
+    ]);
+    const h = await armed(["<REFINED>The lock was new.</REFINED>"], { blocks: blocks }, reply(body));
+    await ask(h, "The lock had been changed.");
+    await wait(60);
+    const sent = JSON.stringify(h.asked[0].messages || []);
+    expect(sent).toContain("<<<The lock had been changed.>>>");
+    expect(sent).toContain("She set the crate down.");
+  });
+
+  test("and that block is left out of an ordinary refine", async () => {
+    const blocks = PROMPT.concat([
+      { id: "around", name: "Around it", on: true, role: "system", text: "<around>\n{{whole_reply}}\n</around>" },
+    ]);
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], { blocks: blocks });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(JSON.stringify(h.asked[0].messages || [])).not.toContain("<around>");
+  });
+});

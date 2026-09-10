@@ -399,6 +399,15 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
     ours: true,
   },
   {
+    tag: "{{whole_reply}}",
+    what:
+      "Only when you refined part of a reply rather than the whole of it. The " +
+      "reply as it stands, with the part being rewritten wrapped in <<< and >>>, " +
+      "so the model can see what surrounds the piece it was handed. Empty on an " +
+      "ordinary refine, which leaves the block carrying it out of the prompt.",
+    ours: true,
+  },
+  {
     tag: "{{protect_notes}}",
     what:
       "Only when protection is on and it found something. Puts in: \"Parts of this passage " +

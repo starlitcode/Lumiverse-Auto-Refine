@@ -270,7 +270,7 @@ const MEMORY_MACRO = '{{memories}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes'];
+const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply'];
 const NO_SCENE = { character: '', context: '', lore: '', memory: '', name: '' };
 // The prompt a fresh install ships with, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
@@ -717,6 +717,8 @@ function fillOurs(text, p) {
             return p.memory;
         if (id === 'protect_notes')
             return p.shieldNote || '';
+        if (id === 'whole_reply')
+            return p.wholeReply || '';
         return '';
     });
 }
@@ -749,6 +751,147 @@ async function fillHost(text, scene, userId) {
         return text;
     }
 }
+// ---- finding a selection in the text it was rendered from ----
+// A selection is made in rendered markdown and has to be written back into the
+// raw source. The two are different strings: emphasis markers style the text
+// rather than appearing in it, so an offset counted on screen lands in the wrong
+// place in the source. Rather than do arithmetic on that difference, the source
+// is walked once and two things are recorded: the characters a reader can
+// actually select, and the source index each of them came from.
+function renderMap(raw) {
+    const seen = [];
+    const from = [];
+    const n = raw.length;
+    let i = 0;
+    while (i < n) {
+        const c = raw[i];
+        // A fenced block is shown as written, so its markers are selectable.
+        if (raw.startsWith('```', i)) {
+            const end = raw.indexOf('```', i + 3);
+            const stop = end < 0 ? n : end + 3;
+            for (let k = i; k < stop; k++) {
+                seen.push(raw[k]);
+                from.push(k);
+            }
+            i = stop;
+            continue;
+        }
+        if (c === '`') {
+            const end = raw.indexOf('`', i + 1);
+            if (end > 0) {
+                for (let k = i + 1; k < end; k++) {
+                    seen.push(raw[k]);
+                    from.push(k);
+                }
+                i = end + 1;
+                continue;
+            }
+        }
+        // One or two of either emphasis marker, which style the run rather than
+        // being part of it.
+        if ((c === '*' || c === '_') && raw[i + 1] === c) {
+            i += 2;
+            continue;
+        }
+        if (c === '*' || c === '_') {
+            i += 1;
+            continue;
+        }
+        seen.push(c);
+        from.push(i);
+        i += 1;
+    }
+    return { seen: seen.join(''), from: from };
+}
+// Whitespace does not survive the trip identically: block elements join with one
+// newline in a DOM range and with a blank line in the source. Both sides are
+// compared with runs of whitespace flattened to one space, and the flattened
+// form keeps its own map back so a match can still be located exactly.
+function loosen(s) {
+    const out = [];
+    const at = [];
+    let gap = false;
+    for (let k = 0; k < s.length; k++) {
+        if (/\s/.test(s[k])) {
+            gap = true;
+            continue;
+        }
+        if (gap && out.length) {
+            out.push(' ');
+            at.push(k);
+        }
+        gap = false;
+        out.push(s[k]);
+        at.push(k);
+    }
+    return { text: out.join(''), at: at };
+}
+// Emphasis markers come in pairs. A span that starts or ends between a pair
+// takes one marker with it, and replacing it leaves the other one stranded,
+// which turns the rest of the message italic. The span is widened outward to
+// whichever marker it is inside, so the pair travels together.
+function balanced(raw, start, end) {
+    let from = start;
+    let to = end;
+    // Runs of one or two markers, in source order, so a span can be tested
+    // against the pair it falls between.
+    const runs = [];
+    for (let i = 0; i < raw.length; i++) {
+        const c = raw[i];
+        if (c !== '*' && c !== '_')
+            continue;
+        const len = raw[i + 1] === c ? 2 : 1;
+        runs.push({ at: i, len: len, mark: c });
+        i += len - 1;
+    }
+    // Paired off in order, which is how a reader reads them and how the host
+    // renders them.
+    for (let k = 0; k + 1 < runs.length; k += 2) {
+        const open = runs[k];
+        const shut = runs[k + 1];
+        if (open.mark !== shut.mark || open.len !== shut.len)
+            continue;
+        const inside = open.at + open.len;
+        const outside = shut.at;
+        // Crossing either end of this pair: take the whole thing, markers and all.
+        const crossesOpen = from > open.at && from < inside + 1 && to > outside;
+        const startsInside = from >= inside && from <= outside;
+        const endsInside = to >= inside && to <= outside;
+        if ((startsInside && !endsInside) || (endsInside && !startsInside) || crossesOpen) {
+            from = Math.min(from, open.at);
+            to = Math.max(to, shut.at + shut.len);
+        }
+    }
+    if (from < 0 || to > raw.length || from >= to)
+        return null;
+    return { start: from, end: to };
+}
+// picked is what the selection read as. ordinal says how many identical runs came
+// before it, so a phrase used twice in one reply is not ambiguous. Null means it
+// could not be found, which is a selection that no longer matches the message.
+function pickedSpan(raw, picked, ordinal) {
+    const want = Number(ordinal) > 0 ? Math.floor(Number(ordinal)) : 0;
+    const map = renderMap(String(raw == null ? '' : raw));
+    const hay = loosen(map.seen);
+    const needle = loosen(String(picked == null ? '' : picked)).text;
+    if (!needle)
+        return null;
+    let at = -1;
+    for (let k = 0; k <= want; k++) {
+        at = hay.text.indexOf(needle, at + 1);
+        if (at < 0)
+            return null;
+    }
+    const firstSeen = hay.at[at];
+    const lastSeen = hay.at[at + needle.length - 1];
+    if (firstSeen == null || lastSeen == null)
+        return null;
+    const start = map.from[firstSeen];
+    const end = map.from[lastSeen];
+    if (start == null || end == null)
+        return null;
+    return balanced(raw, start, end + 1);
+}
 // A block that is nothing but empty tags once its macros came back empty. A
 // chat with no lorebook should not send <world></world>, which reads to a model
 // as "this world is empty" rather than as "nothing was said about the world".
@@ -769,6 +912,7 @@ async function buildPrompt(text, isUser, scene, userId, parts) {
         lore: scene.lore,
         memory: scene.memory,
         shieldNote: scene.shieldNote,
+        wholeReply: scene.wholeReply,
     };
     const out = [];
     for (const b of activeBlocks(isUser)) {
@@ -1958,7 +2102,11 @@ function latestReply(msgs, greetingId) {
     }
     return null;
 }
-async function refineMessage(chatId, messageId, userId, byHand) {
+async function refineMessage(chatId, messageId, userId, byHand, 
+// Set when a refine was asked for on part of a reply rather than the whole of
+// it. text is what the selection read as on screen, ordinal says how many
+// identical runs came before it.
+pick) {
     if (!masterOn)
         return { ok: false, why: 'Auto Refine is switched off' };
     if (chatsOff.has(String(chatId)))
@@ -2068,11 +2216,40 @@ async function refineMessage(chatId, messageId, userId, byHand) {
     // The model's own working is cut off rather than sent. It is not prose, and a
     // rewrite of it would be invisible in the place people look.
     const split = splitThinking(original);
+    // Where the selection sits in the body. Worked out against the body rather
+    // than the whole message, because the model's own working is in front of it
+    // and counting through that would put every offset out by its length.
+    let pickAt = null;
+    if (pick && String(pick.text || '').trim()) {
+        pickAt = pickedSpan(split.body, String(pick.text), pick.ordinal);
+        if (!pickAt)
+            return {
+                ok: false,
+                why: 'what you selected is not in that reply any more, so nothing was sent',
+            };
+    }
+    // What the model is actually given. A selection hands over the part you picked
+    // and nothing else, so every check on the answer, its length included, is
+    // measured against the part rather than the reply around it.
+    const target = pickAt ? split.body.slice(pickAt.start, pickAt.end) : split.body;
     // Markup is lifted out and stood in for, so the model cannot mangle what it
     // was never meant to touch.
-    const armed = shield(split.body);
+    const armed = shield(target);
     if (armed.parts.length)
         scene = { ...scene, shieldNote: SHIELD_NOTE };
+    // The reply the selection came out of, with the part being rewritten marked,
+    // so a prompt can show the model what surrounds the fragment it was given.
+    // Left unset on an ordinary refine, which keeps the block carrying it out of
+    // the prompt rather than sending an empty heading.
+    if (pickAt)
+        scene = {
+            ...scene,
+            wholeReply: split.body.slice(0, pickAt.start) +
+                '<<<' +
+                split.body.slice(pickAt.start, pickAt.end) +
+                '>>>' +
+                split.body.slice(pickAt.end),
+        };
     // Asked, judged, and asked again when the answer failed a check. A refusal, a
     // preamble or a softened rewrite is usually the same model having a bad turn
     // rather than a settled opinion, and the same request often comes back clean.
@@ -2182,8 +2359,12 @@ async function refineMessage(chatId, messageId, userId, byHand) {
                 (back.lost.length === 1 ? ' piece' : ' pieces') +
                 ' of formatting it was told to keep',
         };
-    // The thinking goes back exactly as it was, in front of the rewrite.
-    const whole = split.head + back.text;
+    // The thinking goes back exactly as it was, in front of the rewrite. A
+    // selection puts the rewrite back where it came from, with the rest of the
+    // reply either side of it untouched.
+    const whole = pickAt
+        ? split.head + split.body.slice(0, pickAt.start) + back.text + split.body.slice(pickAt.end)
+        : split.head + back.text;
     if (confirmBeforeSave) {
         replyTo(userId, {
             type: 'confirm_refine',
@@ -2686,6 +2867,43 @@ spindle.onFrontendMessage(async (payload, userId) => {
             return;
         }
         // The confirmation coming back with a yes.
+        // A refine asked for on part of a reply. The same pass as any other, and the
+        // same refusals: the only difference is what the model is given and where the
+        // answer goes back.
+        if (payload.type === 'refine_selection') {
+            const picked = String(payload.picked == null ? '' : payload.picked);
+            // Nothing picked is not a reason to rewrite the whole reply. Falling
+            // through to an ordinary refine here would rewrite the lot on a selection
+            // that had already been cleared, which is the one answer nobody asked for.
+            if (!picked.trim()) {
+                replyTo(userId, {
+                    type: 'refine_result',
+                    requestId: payload.requestId,
+                    chatId: payload.chatId,
+                    messageId: payload.messageId,
+                    ok: false,
+                    why: 'nothing was selected, so nothing was sent',
+                });
+                return;
+            }
+            replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
+            const done = await refineMessage(payload.chatId, payload.messageId, userId, true, {
+                text: picked,
+                ordinal: Number(payload.ordinal) > 0 ? Number(payload.ordinal) : 0,
+            });
+            replyTo(userId, {
+                type: 'refine_result',
+                requestId: payload.requestId,
+                chatId: payload.chatId,
+                messageId: payload.messageId,
+                ok: done.ok,
+                why: done.why,
+                same: !!done.same,
+                stood: !!done.stood,
+                notes: done.notes || '',
+            });
+            return;
+        }
         if (payload.type === 'apply_refine') {
             try {
                 const msgs = await spindle.chat.getMessages(payload.chatId);
