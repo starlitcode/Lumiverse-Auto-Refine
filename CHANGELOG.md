@@ -34,7 +34,6 @@ _2026-09-10_
 
 ### Changed
 
-- **A dropdown takes no mark at all, reached any way.** The list opening in front of you is the whole of the feedback, and anything drawn behind it sits over the top of what it would be pointing at. A box you can type in is still marked, which is where the mark belongs. [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) does the same, so a dropdown behaves the same in both.
 - **Nothing is refined while the next reply is being written.** Auto Retry swiping a refusal, or you pressing regenerate, means the reply in front of it is on its way out. The pass stands down before the call where it can, and refuses to save where the call was already out.
 - **The floating button keeps its own mark.** A refine that had landed turned it into an arrow, which put a control over your chat you had not asked for and took the extension's mark off the screen for as long as there was something to put back. The way back is a line in the menu behind the button instead, always, and **One tap puts the last refine back** is gone with the state it switched between.
 - **Refining the latest reply has left that menu**, because a tap on the button does it. Two ways to one thing, one of them behind a hold, is one more than anybody needs.
