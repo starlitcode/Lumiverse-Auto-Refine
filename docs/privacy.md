@@ -64,7 +64,7 @@ It never refines the greeting. It never sends anything the block list does not s
 
 ## Checking any of this yourself
 
-The files Lumiverse actually loads are the two named in `spindle.json`, `dist/frontend.js` and `dist/backend.js`. They are committed as readable code: not minified, not obfuscated, not bundled. What you read is what runs, which is also why the extension installs without a build step. If you are auditing this extension, or pointing a scanner at it, those two files are the whole of what ships.
+The files Lumiverse actually loads are the two named in `spindle.json`, `dist/frontend.js` and `dist/backend.js`. They are committed as readable code, with nothing minified, obfuscated or bundled. What you read is what runs, which is also why the extension installs without a build step. If you are auditing this extension, or pointing a scanner at it, those two files are the whole of what ships.
 
 Everything else in the repo exists for working on it, and none of it reaches your browser:
 
