@@ -3352,3 +3352,155 @@ describe("phrases this chat has worn out", () => {
     expect(wornSent(h)).not.toContain("shiver");
   });
 });
+
+// Several passes, each handed what the one before it wrote.
+//
+// One pass is the default and goes down the same path, built from the list on the
+// Prompt tab under its own name, so the two cannot drift apart.
+describe("a chain of passes", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+
+  // Each pass carries a line naming itself, so which prompt ran is readable off
+  // the request rather than inferred from the number of calls.
+  const pass = (name: string, mark: string) => ({
+    name: name,
+    on: true,
+    blocks: [
+      { id: "which", name: "Which", on: true, role: "system", text: "<pass>\n" + mark + "\n</pass>" },
+      { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+    ],
+  });
+
+  const two = [pass("Cut the filler", "PASS ONE"), pass("Fix the rhythm", "PASS TWO")];
+  const body = "She stepped through the gate and, suddenly, the cold just hit her hard.";
+
+  test("one pass is still one call, with the setting off", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her at once.</REFINED>"], { passMode: "one", passes: two }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("two passes are two calls, in order", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold hit her hard.</REFINED>",
+        "<REFINED>She stepped through, and the cold took her breath away.</REFINED>",
+      ],
+      { passMode: "many", passes: two },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.asked.length).toBe(2);
+    expect(JSON.stringify(h.asked[0].messages)).toContain("PASS ONE");
+    expect(JSON.stringify(h.asked[1].messages)).toContain("PASS TWO");
+  });
+
+  test("the second pass is handed what the first one wrote, not the reply", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold hit her hard.</REFINED>",
+        "<REFINED>She stepped through, and the cold took her breath away.</REFINED>",
+      ],
+      { passMode: "many", passes: two },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    const second = JSON.stringify(h.asked[1].messages);
+    expect(second).toContain("She stepped through the gate and the cold hit her hard.");
+    expect(second).not.toContain("suddenly");
+  });
+
+  test("and what gets saved is the last pass's answer", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold hit her hard.</REFINED>",
+        "<REFINED>She stepped through, and the cold took her breath away.</REFINED>",
+      ],
+      { passMode: "many", passes: two },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].content).toBe("She stepped through, and the cold took her breath away.");
+  });
+
+  test("a refusal in the first pass stops the chain there", async () => {
+    const h = await armed(
+      ["I cannot rewrite this request.", "<REFINED>A second answer nobody should ever ask for.</REFINED>"],
+      { passMode: "many", passes: two },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("a pass with no block carrying the turn is dropped rather than sent", async () => {
+    const broken = { name: "Nothing to rewrite", on: true, blocks: [{ id: "a", name: "A", on: true, role: "system", text: "<pass>\nNO TURN HERE\n</pass>" }] };
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her all at once.</REFINED>"],
+      { passMode: "many", passes: [broken, pass("Fix the rhythm", "PASS TWO")] },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.asked.length).toBe(1);
+    expect(JSON.stringify(h.asked[0].messages)).toContain("PASS TWO");
+    expect(JSON.stringify(h.asked[0].messages)).not.toContain("NO TURN HERE");
+  });
+
+  test("a switched-off pass is skipped", async () => {
+    const off = { ...pass("Cut the filler", "PASS ONE"), on: false };
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her all at once.</REFINED>"],
+      { passMode: "many", passes: [off, pass("Fix the rhythm", "PASS TWO")] },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.asked.length).toBe(1);
+    expect(JSON.stringify(h.asked[0].messages)).toContain("PASS TWO");
+  });
+
+  test("with the mode on and no usable pass, the prompt tab's list runs instead", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her all at once.</REFINED>"],
+      { passMode: "many", passes: [] },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("three passes each tightening a little are refused on the total", async () => {
+    // No single pass breaks the shrink limit. Together they take the reply to
+    // under half, which is exactly what a per-pass check cannot see.
+    const long = "She stepped through the gate and, quite suddenly, the cold of the yard just hit her all at once, hard.";
+    const three = [pass("One", "P1"), pass("Two", "P2"), pass("Three", "P3")];
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold of the yard hit her all at once.</REFINED>",
+        "<REFINED>She stepped through the gate and the cold hit her at once.</REFINED>",
+        "<REFINED>She went through, and the cold hit.</REFINED>",
+      ],
+      { passMode: "many", passes: three, minShrinkPct: 40 },
+      reply(long),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(160);
+    expect(h.asked.length).toBe(3);
+    expect(h.writes.length).toBe(0);
+    expect(h.sent.map((x: any) => String(x.why || "")).join(" ")).toMatch(/across all 3 passes/i);
+  });
+});

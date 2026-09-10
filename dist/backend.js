@@ -393,8 +393,11 @@ function promptHasTurn(isUser) {
 // switching the memory block off left every refine retrieving the chat's memory
 // and throwing it away. A macro nobody is going to see is a call nobody has to
 // make.
-function promptWants(macro, isUser) {
-    for (const b of activeBlocks(isUser)) {
+function promptWants(macro, isUser, use) {
+    // use is every block that is going to be sent, which in a chain of passes is
+    // all of their lists together. The scene is built once before the first pass
+    // runs, so a macro only the third pass asks for still has to be gathered.
+    for (const b of use && use.length ? use : activeBlocks(isUser)) {
         if (!b || b.on === false)
             continue;
         if (String(b.text || '').indexOf(macro) >= 0)
@@ -1062,7 +1065,10 @@ function isHollow(text) {
 // were resolved. Blocks that sit next to each other with the same role are
 // joined into one message, so counting the messages alone reports every rule as
 // a single lump. What a reader wants to know is which block is costing them.
-async function buildPrompt(text, isUser, scene, userId, parts) {
+async function buildPrompt(text, isUser, scene, userId, parts, 
+// Which blocks to build from. A chain of passes hands its own list per pass;
+// everything else leaves this out and gets the one on the Prompt tab.
+use) {
     const piece = {
         message: text,
         history: scene.context,
@@ -1073,7 +1079,7 @@ async function buildPrompt(text, isUser, scene, userId, parts) {
         worn: scene.worn,
     };
     const out = [];
-    for (const b of activeBlocks(isUser)) {
+    for (const b of use && use.length ? use : activeBlocks(isUser)) {
         if (!b || !b.on)
             continue;
         // Ours are masked, not filled, so the host pass runs over the block's own
@@ -1535,6 +1541,10 @@ let wornLeast = 3;
 // Phrases to leave alone. A repeated line can be the point: a motif, a ritual, a
 // thing a story is about.
 let wornFine = [];
+// One pass or several. One is the default and what every refine did before this
+// existed. Several walks a list, each pass handed what the one before it wrote.
+let manyPasses = false;
+let passList = [];
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
 // softened rewrite and an answer cut off mid-write are all the model having a
 // bad turn. A rewrite refused for its length is the model meaning it, and one
@@ -2116,7 +2126,7 @@ function pause(ms, userId) {
     });
 }
 // ---- running one refine ----
-async function askModel(text, isUser, scene, userId) {
+async function askModel(text, isUser, scene, userId, use) {
     const controller = typeof globalThis.AbortController === 'function'
         ? new globalThis.AbortController()
         : null;
@@ -2145,7 +2155,7 @@ async function askModel(text, isUser, scene, userId) {
             }, ms);
     }
     try {
-        const req = { messages: await buildPrompt(text, isUser, scene, userId) };
+        const req = { messages: await buildPrompt(text, isUser, scene, userId, undefined, use) };
         // What this one refine put through the model, sent on once the answer is
         // in. Not awaited: counting is worth a line in the panel and is not worth
         // holding the rewrite behind, and a count that never arrives leaves the
@@ -2411,14 +2421,27 @@ pick) {
     // its name is what the run-up is written with whether or not a block shows
     // the description.
     const isUser = m.role === 'user';
+    // What this refine is going to run. One pass is the list on the Prompt tab
+    // under its own name, so the walk further down is the only path either way and
+    // the single pass case cannot drift away from the chained one.
+    const chain = manyPasses && passList.length ? passList : [{ name: 'the prompt', blocks: activeBlocks(isUser) }];
+    // Every block any pass is going to send. The scene is built once, before the
+    // first pass runs, so a macro only the last pass asks for still has to be
+    // gathered for it.
+    const willSend = [];
+    for (const one of chain)
+        for (const b of one.blocks)
+            willSend.push(b);
     const card = await gatherCard(chatId, userId);
     const at = msgs.findIndex((x) => x && x.id === m.id);
     let scene = {
         character: card.text,
-        context: promptWants(HISTORY_MACRO, isUser) ? await gatherHistory(msgs, at, card.name, userId) : '',
-        lore: promptWants(LORE_MACRO, isUser) ? await gatherLore(chatId, userId) : '',
-        memory: promptWants(MEMORY_MACRO, isUser) ? await gatherMemory(chatId, userId) : '',
-        worn: promptWants(OVERUSED_MACRO, isUser) ? gatherWorn(msgs, at, card.name) : '',
+        context: promptWants(HISTORY_MACRO, isUser, willSend)
+            ? await gatherHistory(msgs, at, card.name, userId)
+            : '',
+        lore: promptWants(LORE_MACRO, isUser, willSend) ? await gatherLore(chatId, userId) : '',
+        memory: promptWants(MEMORY_MACRO, isUser, willSend) ? await gatherMemory(chatId, userId) : '',
+        worn: promptWants(OVERUSED_MACRO, isUser, willSend) ? gatherWorn(msgs, at, card.name) : '',
         name: card.name,
         chatId: chatId,
         characterId: card.id,
@@ -2493,60 +2516,111 @@ pick) {
     // to answer at all, which cost nothing and are limited separately.
     let asks = 0;
     let waits = 0;
-    while (true) {
-        if (asks > 0) {
-            tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: asks + 1, of: tries });
-            say('info', 'asking again after: ' + verdict.why);
+    // What the next pass is handed. The shield is applied once, before any of
+    // them, so the tokens standing in for markup are the same throughout and the
+    // instruction about them stays true for every pass.
+    let carried = armed.text;
+    for (let step = 0; step < chain.length; step++) {
+        const pass = chain[step];
+        if (chain.length > 1) {
+            say('info', 'pass ' + (step + 1) + ' of ' + chain.length + ': ' + pass.name);
+            tell(userId, {
+                type: 'refine_progress',
+                stage: 'pass',
+                pass: step + 1,
+                of: chain.length,
+                name: pass.name,
+            });
         }
-        tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
-        const answer = await askModel(armed.text, m.role === 'user', scene, userId);
-        if (answer.error) {
-            // The provider would not take the call. Waiting is what fixes that, and
-            // nothing has been spent, so it is worth waiting for: a free tier meters
-            // per minute and a local server answers 503 while it loads a model, and
-            // both clear on their own. A wrong key does not, and is not waited on.
-            if (waits < rateWaits && rateLimited(answer.error)) {
-                waits++;
-                const ms = rateWait(waits, answer.error);
-                say('info', 'the provider would not take the call, waiting ' + Math.round(ms / 1000) + 's: ' + answer.error);
-                tell(userId, {
-                    type: 'refine_progress',
-                    stage: 'waiting',
-                    waitMs: ms,
-                    attempt: waits,
-                    of: rateWaits,
-                    why: String(answer.error),
-                });
-                if (!(await pause(ms, userId)))
-                    return { ok: false, stood: true, notes: notes, why: 'stopped while waiting out a rate limit' };
-                continue;
-            }
-            // Anything else is the call failing rather than the answer being wrong,
-            // and asking again would fail the same way. A stop especially: asking
-            // again is the opposite of what was asked for.
-            return { ok: false, why: answer.error, notes: notes };
-        }
-        asks++;
-        tell(userId, { type: 'refine_progress', stage: 'checking' });
-        // Judged against the text that was actually sent, so a message that is half
-        // markup is not called "too short" for the tokens standing in for it.
-        verdict = judge(answer.content, armed.text);
-        // Whatever the model wrote around the tags travels with every answer from
-        // here on, refused ones included. A prompt that asked for a report on what
-        // was cut wants that report most on the pass that was turned down.
-        if (verdict.notes)
-            notes = verdict.notes;
-        if (verdict.ok)
-            break;
-        if (verdict.same)
-            break;
-        if (!worthRetrying(verdict.why))
-            break;
-        if (asks >= tries)
-            break;
+        // Each pass gets its own tries, and its own count of them, or a retry spent
+        // on pass one would be taken out of pass two's.
+        asks = 0;
+        waits = 0;
+        verdict = { ok: false, text: '', why: 'nothing was tried' };
+        const got = await walkPass(pass, carried);
+        if (!got.ok)
+            return got.out;
+        carried = got.text;
     }
-    if (!verdict.ok)
-        return { ok: false, why: verdict.why, notes: notes, same: !!verdict.same };
+    // Each pass was judged against what it was given, which on its own lets a
+    // chain drift: three passes each tightening by a third leaves a reply half its
+    // length, and no single pass did anything the limits object to. So the end of
+    // the chain is judged once more against the reply it started from.
+    if (chain.length > 1) {
+        const whole = judge(carried, armed.text);
+        if (!whole.ok)
+            return {
+                ok: false,
+                notes: notes,
+                same: !!whole.same,
+                why: 'across all ' + chain.length + ' passes, ' + whole.why,
+            };
+    }
+    verdict = { ok: true, text: carried, why: '' };
+    // One pass, asked and judged, with the retries it is allowed. Returns the text
+    // for the next pass, or the refusal to hand back as the whole refine's answer.
+    async function walkPass(pass, input) {
+        while (true) {
+            if (asks > 0) {
+                tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: asks + 1, of: tries });
+                say('info', 'asking again after: ' + verdict.why);
+            }
+            tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
+            const answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks);
+            if (answer.error) {
+                // The provider would not take the call. Waiting is what fixes that, and
+                // nothing has been spent, so it is worth waiting for: a free tier meters
+                // per minute and a local server answers 503 while it loads a model, and
+                // both clear on their own. A wrong key does not, and is not waited on.
+                if (waits < rateWaits && rateLimited(answer.error)) {
+                    waits++;
+                    const ms = rateWait(waits, answer.error);
+                    say('info', 'the provider would not take the call, waiting ' + Math.round(ms / 1000) + 's: ' + answer.error);
+                    tell(userId, {
+                        type: 'refine_progress',
+                        stage: 'waiting',
+                        waitMs: ms,
+                        attempt: waits,
+                        of: rateWaits,
+                        why: String(answer.error),
+                    });
+                    if (!(await pause(ms, userId)))
+                        return {
+                            ok: false,
+                            out: { ok: false, stood: true, notes: notes, why: 'stopped while waiting out a rate limit' },
+                        };
+                    continue;
+                }
+                // Anything else is the call failing rather than the answer being wrong,
+                // and asking again would fail the same way. A stop especially: asking
+                // again is the opposite of what was asked for.
+                return { ok: false, out: { ok: false, why: answer.error, notes: notes } };
+            }
+            asks++;
+            tell(userId, { type: 'refine_progress', stage: 'checking' });
+            // Judged against the text that was actually sent, so a message that is half
+            // markup is not called "too short" for the tokens standing in for it.
+            // Judged against what this pass was given rather than against the reply, so
+            // a chain is not measured as though every pass started from the original.
+            verdict = judge(answer.content, input);
+            // Whatever the model wrote around the tags travels with every answer from
+            // here on, refused ones included. A prompt that asked for a report on what
+            // was cut wants that report most on the pass that was turned down.
+            if (verdict.notes)
+                notes = verdict.notes;
+            if (verdict.ok)
+                break;
+            if (verdict.same)
+                break;
+            if (!worthRetrying(verdict.why))
+                break;
+            if (asks >= tries)
+                break;
+        }
+        if (!verdict.ok)
+            return { ok: false, out: { ok: false, why: verdict.why, notes: notes, same: !!verdict.same } };
+        return { ok: true, text: verdict.text };
+    }
     // Asked again now the model has finished. The call takes seconds, and in
     // those seconds Auto Retry can decide the reply was a refusal and swipe it,
     // or the reader can press regenerate. Either way the rewrite in hand is a
@@ -2900,6 +2974,20 @@ spindle.onFrontendMessage(async (payload, userId) => {
             wornLeast = Number.isFinite(wornLeast) && wornLeast >= 2 ? Math.floor(wornLeast) : 3;
             wornFine = Array.isArray(s.wornFine)
                 ? s.wornFine.map((x) => String(x == null ? '' : x).trim().toLowerCase()).filter(Boolean)
+                : [];
+            manyPasses = String(s.passMode || 'one') === 'many';
+            // A pass with no blocks would send a prompt with nothing in it, and one
+            // with no block carrying {{message}} would never show the model the thing
+            // it is meant to rewrite. Both are dropped here rather than found halfway
+            // through a chain somebody is paying for.
+            passList = Array.isArray(s.passes)
+                ? s.passes
+                    .filter((x) => x && x.on !== false && Array.isArray(x.blocks) && x.blocks.length)
+                    .map((x, i) => ({
+                    name: String(x.name == null || !String(x.name).trim() ? 'Pass ' + (i + 1) : x.name),
+                    blocks: x.blocks,
+                }))
+                    .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
                 : [];
             protectInline = !!s.protectInline;
             wrapOutput = s.wrapOutput !== false;

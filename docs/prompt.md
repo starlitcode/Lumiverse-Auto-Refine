@@ -38,6 +38,29 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 
 **A macro nobody is going to see costs nothing.** `{{history}}`, `{{lore}}` and `{{memories}}` are each a call to Lumiverse, and each is made only when a block that is actually being sent asks for it. Switch that block off, or take the macro out, and the call is not made either.
 
+## Several passes instead of one
+
+A refine is one model call by default. **How many passes a refine makes** on the Limits tab can make it several, each pass handed what the one before it wrote. Two cheap passes often beat one expensive one: cut the filler first, fix the rhythm second, and neither prompt has to do both jobs at once.
+
+**The passes, in order** takes one saved preset name per line, top to bottom. Names rather than copies, so editing a preset changes every pass that uses it.
+
+What it costs: one call per pass. Three passes is three times the bill of one, and the Log adds them up rather than reporting the last one.
+
+What happens when something is wrong with a line:
+
+- A name matching no preset is skipped.
+- So is a preset with no block carrying `{{message}}`, since the model would never see the reply it is meant to rewrite.
+- With no usable line at all, the prompt on the **Prompt** tab runs as a single pass, which is what happens with the mode off.
+
+How the checks apply, which is the part worth understanding:
+
+- **Each pass is judged against what it was given**, not against the original reply. A pass that tightens by a fifth has not shrunk the reply by a fifth, and measuring it as though it had would refuse ordinary work.
+- **The end of the chain is judged once more against the reply it started from.** Three passes each tightening by a third leaves a reply half its length, and no single pass did anything the limits object to. That refusal says "across all 3 passes" so you can tell it from a single pass being turned down.
+- **A refusal stops the chain where it happens.** Pass two declining means pass three is never asked for, and nothing is saved.
+- **Stop ends it.** The call in flight is cut off, and the passes behind it never run.
+
+Markup protection is applied once, before the first pass, and undone after the last. The tokens standing in for your formatting are the same throughout, so the instruction about them stays true for every pass.
+
 ### Phrases this chat has worn out
 
 A refine judges one reply at a time, so a phrase reads as fine every time it is met. Used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. `{{overused}}` is the list, so a block can name them and ask for something else.

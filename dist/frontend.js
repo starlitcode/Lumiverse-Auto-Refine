@@ -248,6 +248,12 @@ const CONFIG = {
     wornLeast: 3,
     // One phrase per line, left alone. A repeated line can be the point.
     wornFine: [],
+    // One pass or several. One is what every refine did before this existed.
+    passMode: "one",
+    // One saved preset name per line, run top to bottom, each pass handed what the
+    // one before it wrote. Names rather than copies of the blocks, so editing a
+    // preset changes the pass that uses it.
+    passNames: [],
     keepOriginal: true,
     confirmBeforeSave: false,
     toast: true,
@@ -1527,6 +1533,24 @@ const LIMIT_FIELDS = [
         hint: "Off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that reroll off again. Needs a build that gives a message rerolls; where one does not, the rewrite is written over the reply as usual.",
     },
     {
+        key: "passMode",
+        label: "How many passes a refine makes",
+        type: "pick",
+        options: [
+            { value: "one", label: "One pass" },
+            { value: "many", label: "Several passes, one after another" },
+        ],
+        hint: "One by default, which is one model call per refine. Several walks a list of your saved presets in order, each pass handed what the one before it wrote. Two cheap passes often beat one expensive one, and it costs one call per pass.",
+    },
+    {
+        key: "passNames",
+        label: "The passes, in order",
+        type: "lines",
+        needs: { key: "passMode", is: "many" },
+        under: true,
+        hint: "One saved preset name per line, top to bottom. A name that matches nothing is skipped, and so is a preset with no block carrying {{message}}, since the model would never see the reply. With no usable line here the prompt on the Prompt tab runs as a single pass.",
+    },
+    {
         key: "wornOn",
         label: "Find phrases this chat has worn out",
         type: "bool",
@@ -1908,17 +1932,10 @@ export function setup(ctx, overrides) {
             clearTimeout(extrasTimer);
         extrasTimer = null;
     });
-    // The settings as the backend needs them, which is not quite as they are
-    // stored. An untouched prompt is stored as nothing, because writing the whole
-    // shipped prompt into storage on a fresh install would make every later
-    // change to it invisible to anybody who never edited theirs. The backend
-    // cannot work with nothing, so it filled the gap with a copy of its own, and
-    // that copy is shorter than the one the panel draws: on a fresh install the
-    // prompt shown under Prompt was not the prompt that ran.
-    //
-    // Resolved here instead. What is sent is what the panel is showing, and the
-    // backend's own copy goes back to being what it says it is, the last resort
-    // for settings that never arrived at all.
+    // Declared here rather than beside the code that loads it, because forBackend
+    // reads it to turn a pass's name into its blocks and the first settings send
+    // can happen before that code has run.
+    let presets = [];
     function forBackend() {
         const out = {};
         for (const k of Object.keys(cfg))
@@ -1933,6 +1950,20 @@ export function setup(ctx, overrides) {
         const yours = usable(cfg.userBlocks);
         out.blocks = mine.length ? mine : DEFAULT_BLOCKS.map((b) => ({ ...b }));
         out.userBlocks = yours.length ? yours : YOURS_DEFAULT.map((b) => ({ ...b }));
+        // The passes, resolved here rather than named. The panel holds preset names
+        // because a name follows the preset when it is edited, and the backend needs
+        // the blocks themselves because it is the thing that sends them. A name
+        // matching no preset is dropped here, so a typo is a pass that does not run
+        // rather than a pass that sends an empty prompt.
+        out.passes = (Array.isArray(cfg.passNames) ? cfg.passNames : [])
+            .map((raw) => String(raw == null ? "" : raw).trim())
+            .filter(Boolean)
+            .map((name) => {
+            const had = presets.find((p) => p && String(p.name).toLowerCase() === name.toLowerCase());
+            const list = had && had.settings ? usable(had.settings.blocks) : [];
+            return { name: name, on: list.length > 0, blocks: list };
+        })
+            .filter((one) => one.blocks.length > 0);
         return out;
     }
     let saveTimer = null;
@@ -8115,7 +8146,15 @@ export function setup(ctx, overrides) {
             catch (_) { }
         }
     });
-    let presets = [];
+    // ---- presets ----
+    // A named copy of the refining setup, so somebody who writes one set of rules
+    // for prose and another for dialogue can move between them without keeping
+    // both in a text file somewhere.
+    // setup is the name of a saved model setup to load with it, when one is
+    // chosen. Held as a name rather than as the setup's values: a setup carries a
+    // connection id, which names nothing on anybody else's account, so a preset
+    // that carried the values could not be shared. A name that matches nothing on
+    // the machine reading it is simply not loaded, and the card says so.
     let presetPick = "";
     let presetName = "";
     // The setup the picker is showing. Follows whichever preset is selected, so
