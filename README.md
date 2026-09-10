@@ -59,11 +59,12 @@ Six tabs, and everything belongs to exactly one of them. The switch, the refine 
 
 ## What it costs, and how to spend less
 
-A refine is a second model call on every reply, so three settings decide what that costs.
+A refine is a second model call on every reply. Three settings decide what that call costs, and one thing it does on its own keeps the bill down without you touching anything.
 
 - **Refine using.** A rewrite does not need the model you roleplay with. Point this at a cheaper or faster connection and the whole feature costs a fraction of what it would otherwise.
 - **Let it think first.** Off by default. Rewriting a paragraph is not a reasoning problem. You can also leave it at whatever your connection is already set to, or pick an effort level yourself.
 - **How much it is told.** How many messages of run-up go in, and the token ceilings on that and on the lorebook. More context makes a better rewrite and costs more on every one.
+- **A block that has nothing to say is not sent.** A block whose macros came back empty, a chat with no lorebook or no memories, is left out of the request rather than sent as an empty heading, so switching one on does not cost you anything on a chat that has nothing to put in it.
 
 Put your provider's prices in on the **Model** tab and the panel stops dealing in tokens and starts dealing in money: what a request would cost before you send it, and what the last one really came to.
 

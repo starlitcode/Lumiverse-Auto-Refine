@@ -10,7 +10,7 @@ A block is a name, a role, and text. The name is only for you. The role is Syste
 
 Blocks are sent top to bottom. Two next to each other with the same role are joined into one message, because providers disagree about what two system messages in a row mean and putting them together is what you meant by putting them together.
 
-A block whose text comes out empty is left out, not sent blank, and so is one that is nothing but empty tags: a chat with no lorebook does not send `<world></world>`, which reads to a model as "this world is empty" rather than as "nothing was said about the world".
+A block whose text comes out empty is left out, not sent blank, and so is one that is nothing but empty tags: a chat with no lorebook does not send `<world></world>`, which reads to a model as "this world is empty" rather than as "nothing was said about the world". A block left out this way costs you nothing either, since there is nothing of it to send. A switched-on block whose macro came back empty is a block you are not paying for.
 
 ### Folding one shut
 
@@ -35,6 +35,17 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
 **A macro nobody is going to see costs nothing.** `{{history}}`, `{{lore}}` and `{{memories}}` are each a call to Lumiverse, and each is made only when a block that is actually being sent asks for it. Switch that block off, or take the macro out, and the call is not made either.
+
+**Keep a macro in a block of its own.** A block is dropped only when the whole of it comes out empty, so wording you typed beside a macro is still sent when the macro gives nothing back. Write
+
+```
+<notes>
+{{memories}}
+</notes>
+Keep these in mind.
+```
+
+and a chat with no memories sends `Keep these in mind.` on its own, pointing at nothing. Put the macro in one block and your wording in another, and an empty macro takes its whole block with it.
 
 **A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that quietly added its own would mean the request that ran was not the one on the screen.
 
