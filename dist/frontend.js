@@ -55,6 +55,7 @@ const PARTS = [
         keys: [
             "maxGrowthPct",
             "minShrinkPct",
+            "asSwipe",
             "keepOriginal",
             "confirmBeforeSave",
             "protectOn",
@@ -230,6 +231,11 @@ const CONFIG = {
     costOut: 0,
     maxGrowthPct: 60,
     minShrinkPct: 40,
+    // The rewrite as a reroll beside the reply rather than over it. Off by
+    // default: it changes what the chat holds rather than only what it says, and
+    // a reader who has not asked for that should not find their reroll count
+    // going up on every reply.
+    asSwipe: false,
     keepOriginal: true,
     confirmBeforeSave: false,
     toast: true,
@@ -1441,6 +1447,12 @@ const LIMIT_FIELDS = [
         type: "bool",
         needs: { key: "refineOn" },
         hint: "Off by default, so the automatic pass takes each reply once. On, a reply you swiped or regenerated is refined again. Pressing the button on one always refines it, whichever way this sits.",
+    },
+    {
+        key: "asSwipe",
+        label: "Add the refine as a reroll instead of writing over the reply",
+        type: "bool",
+        hint: "Off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that reroll off again. Needs a build that gives a message rerolls; where one does not, the rewrite is written over the reply as usual.",
     },
     {
         key: "keepOriginal",
@@ -4465,6 +4477,21 @@ export function setup(ctx, overrides) {
     // carries the field it was built from, so this cannot go looking for a list
     // of which switches have children and be wrong about it, which is the mistake
     // that kept being made when it did.
+    // Marks an element built by hand as hanging off a switch, so reveal() takes
+    // it in with everything else. A row built from a field carries the field it
+    // came from; this gives one of these the same thing, with only the part
+    // reveal() reads filled in.
+    //
+    // The alternative is what these used to do: build the children only while the
+    // switch is on, which means the switch has to rebuild the panel to show them,
+    // and they arrive between two frames with nothing to watch. Built either way
+    // and hidden, they are already standing there when the switch goes on.
+    function hangsOff(node, key) {
+        node.setAttribute("data-arf-row", "hangs:" + key);
+        node._arfField = { key: key, label: "", type: "bool", needs: { key: key } };
+        node.hidden = !cfg[key];
+        return node;
+    }
     function reveal() {
         if (!tab || !tab.root)
             return;
@@ -4765,7 +4792,7 @@ export function setup(ctx, overrides) {
         // two rather than living only in a menu over the chat or a row inside
         // Extras. Both of those are a hunt, and this is the one people reach for
         // while the panel is already open in front of them.
-        if (cfg.inputRefine) {
+        {
             const draft = button("Refine what I am typing", false);
             const noDraft = whyNotDraft();
             draft.setAttribute("data-arf-draft", "1");
@@ -4777,7 +4804,9 @@ export function setup(ctx, overrides) {
                 : noDraft ||
                     "Rewrites what is in the chat's input box, before you send it. Nothing is written to the chat.";
             draft.addEventListener("click", () => refineInput());
-            row.appendChild(draft);
+            // Built either way and hidden while the switch is off, so switching it on
+            // brings the button out where it stands.
+            row.appendChild(hangsOff(draft, "inputRefine"));
         }
         const auto = document.createElement("label");
         auto.className = "arf-row arf-note";
@@ -5952,6 +5981,33 @@ export function setup(ctx, overrides) {
             cacheSaid.hidden = under === 0;
             wrap.appendChild(cacheSaid);
         }
+        // One press for the whole list, since folding twenty blocks one at a time is
+        // the thing folding was meant to save.
+        //
+        // Above the list rather than in the row with Add a block and Back to the
+        // default. Those two change the prompt and this changes how much of it you
+        // are looking at, which is a different kind of thing; and standing it with
+        // them made that row wrap when this label grew by a word, which moved Back
+        // to the default onto a line of its own and back again on every press.
+        {
+            const anyOpen = list.some((b) => !isShut(b));
+            const view = el("div", "arf-row");
+            view.appendChild(el("span", "arf-grow"));
+            const foldAll = button(anyOpen ? "Fold them all" : "Open them all", false);
+            foldAll.className += " arf-mini";
+            foldAll.setAttribute("data-arf-foldall", "1");
+            foldAll.addEventListener("click", () => {
+                const which = editingYours() ? "userBlocks" : "blocks";
+                const others = shutList().filter((k) => k.indexOf(which + ":") !== 0);
+                cfg.blocksShut = anyOpen
+                    ? others.concat(list.map((b) => which + ":" + String(b.id))).slice(-80)
+                    : others;
+                persist();
+                paint();
+            });
+            view.appendChild(foldAll);
+            wrap.appendChild(view);
+        }
         for (let i = 0; i < list.length; i++)
             wrap.appendChild(buildBlockRow(list, i));
         const acts = el("div", "arf-row");
@@ -5981,20 +6037,6 @@ export function setup(ctx, overrides) {
             log("put the prompt back to the default", true);
         });
         acts.appendChild(add);
-        // One press for the whole list, since folding twenty blocks one at a time
-        // is the thing folding was meant to save.
-        const anyOpen = list.some((b) => !isShut(b));
-        const foldAll = button(anyOpen ? "Fold them all" : "Open them all", false);
-        foldAll.addEventListener("click", () => {
-            const which = editingYours() ? "userBlocks" : "blocks";
-            const others = shutList().filter((k) => k.indexOf(which + ":") !== 0);
-            cfg.blocksShut = anyOpen
-                ? others.concat(list.map((b) => which + ":" + String(b.id))).slice(-80)
-                : others;
-            persist();
-            paint();
-        });
-        acts.appendChild(foldAll);
         acts.appendChild(reset);
         wrap.appendChild(acts);
         return wrap;
@@ -6723,20 +6765,18 @@ export function setup(ctx, overrides) {
         // Folded. Three lists of text that most readers never open, sitting in
         // front of the switches everybody does. A search still reaches inside,
         // because fold opens itself while one is running.
-        if (cfg.protectThinking)
-            wrap.appendChild(fold("Reasoning tag names your model uses", (body) => {
-                body.appendChild(fieldRow({
-                    key: "thinkTags",
-                    label: "Extra reasoning tag names",
-                    type: "lines",
-                    hint: "Optional, one per line, just the name with no brackets or pipes. The eight common wrappers are known already. Working that is not recognised is rewritten and saved over the reply.",
-                }));
+        wrap.appendChild(hangsOff(fold("Reasoning tag names your model uses", (body) => {
+            body.appendChild(fieldRow({
+                key: "thinkTags",
+                label: "Extra reasoning tag names",
+                type: "lines",
+                hint: "Optional, one per line, just the name with no brackets or pipes. The eight common wrappers are known already. Working that is not recognised is rewritten and saved over the reply.",
             }));
-        if (cfg.protectOn)
-            wrap.appendChild(fold("Patterns of your own", (body) => {
-                for (const f of SHIELD_FIELDS)
-                    body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
-            }));
+        }), "protectThinking"));
+        wrap.appendChild(hangsOff(fold("Patterns of your own", (body) => {
+            for (const f of SHIELD_FIELDS)
+                body.appendChild(fieldRow({ ...f, needs: undefined, under: false }));
+        }), "protectOn"));
         if (shieldBad.length)
             wrap.appendChild(bad("These patterns could not be read and are doing nothing: " + shieldBad.join("; ")));
         if (!cfg.protectOn)
@@ -7229,12 +7269,17 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised in the browser, with no file to ship. Attach your own below if you would rather.",
         }));
-        if (cfg.soundOn) {
+        // Built either way and hidden while the sound is off, so switching it on
+        // brings these out where they stand rather than rebuilding the card around
+        // them. Everything under a switch on this panel works this way.
+        const sound = hangsOff(el("div", "arf-col"), "soundOn");
+        {
             if (!hasSound())
-                wrap.appendChild(note("Using the built-in blip. Attach a file or paste a link below to use your own."));
+                sound.appendChild(note("Using the built-in blip. Attach a file or paste a link below to use your own."));
             const attached = /^data:/.test(String(cfg.soundUrl || ""));
             const picker = document.createElement("input");
             picker.type = "file";
+            picker.setAttribute("data-arf-file", "sound");
             picker.accept = "audio/*";
             picker.style.display = "none";
             picker.addEventListener("change", () => {
@@ -7293,8 +7338,8 @@ export function setup(ctx, overrides) {
                 row.appendChild(drop);
             }
             row.appendChild(picker);
-            wrap.appendChild(row);
-            wrap.appendChild(note("An attached file is held with your settings as text, so it has to be small: " +
+            sound.appendChild(row);
+            sound.appendChild(note("An attached file is held with your settings as text, so it has to be small: " +
                 Math.round(SOUND_MAX / 1024) +
                 "KB at most. A link is not, and is the better answer for anything bigger."));
             const link = document.createElement("input");
@@ -7327,10 +7372,10 @@ export function setup(ctx, overrides) {
                 soundSaid = "Using that link.";
                 paint();
             });
-            wrap.appendChild(link);
+            sound.appendChild(link);
             if (attached)
-                wrap.appendChild(note("A file is attached. Clear it above to use a link instead."));
-            wrap.appendChild(fieldRow({
+                sound.appendChild(note("A file is attached. Clear it above to use a link instead."));
+            sound.appendChild(fieldRow({
                 key: "soundVolume",
                 int: true,
                 label: "How loud (%)",
@@ -7340,8 +7385,9 @@ export function setup(ctx, overrides) {
                 hint: "",
             }));
             if (soundSaid)
-                wrap.appendChild(note(soundSaid));
+                sound.appendChild(note(soundSaid));
         }
+        wrap.appendChild(sound);
         return wrap;
     }
     // Ways in other than the drawer. Both are off until asked for, because an
@@ -7415,6 +7461,7 @@ export function setup(ctx, overrides) {
         });
         const picker = document.createElement("input");
         picker.type = "file";
+        picker.setAttribute("data-arf-file", "import");
         picker.accept = "application/json,.json";
         picker.style.display = "none";
         picker.addEventListener("change", () => {

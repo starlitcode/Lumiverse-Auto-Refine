@@ -75,7 +75,12 @@ const generating = new Set<string>();
 // The text each message had before the refine that changed it, so it can go
 // back. Held in memory only, and capped, since this is a convenience rather
 // than a record: the extension does not keep your writing after a reload.
-const before = new Map<string, { text: string; at: number }>();
+// swipeAt is the index the refine was added at, when it was added as a reroll
+// rather than written over the reply. Put it back then means taking that reroll
+// off again and going back to the one before it, not writing the original over
+// the top of it: a write would leave two rerolls saying the same thing and no
+// way to tell which was which.
+const before = new Map<string, { text: string; at: number; swipeAt?: number }>();
 const BEFORE_MAX = 30;
 
 // Messages this run has already refined, each against a mark of the text the
@@ -111,6 +116,23 @@ function markOf(text: any): string {
 // is a new reply.
 const answered = new Set<string>();
 const ANSWERED_MAX = 400;
+
+// How many times the automatic pass has refined one message, whatever the text
+// was each time. The content mark decides whether a reply is new writing, and
+// it answers that question correctly: a swipe really is a different reply and
+// really does deserve a refine. What it cannot see is a loop.
+//
+// One message being refined twenty times means something is cycling: another
+// extension rewriting what this one wrote, a build re-announcing generations,
+// or a chat somebody is swiping through fast enough that every arrival is new.
+// None of those is worth twenty model calls, and the reader is paying for all
+// of them. The ceiling is per message and lasts as long as the process does.
+const passes = new Map<string, number>();
+const PASSES_MAX = 400;
+// Deliberately well above what any reader does by hand. This is not a budget,
+// it is a stop on something that has gone wrong, and it has to sit far enough
+// out that nobody meets it while using the extension normally.
+const PASS_CEILING = 12;
 
 // Writes this module made, so the edit event they raise is not mistaken for
 // somebody else editing the reply.
@@ -1227,6 +1249,11 @@ let retryRefine = 0;
 // nothing: the model never read anything, so waiting and asking again buys the
 // refine that was already asked for rather than a second one.
 let rateWaits = 2;
+// Whether a refine is added as a reroll beside the reply rather than written
+// over it. Off by default: it changes what the chat holds rather than what it
+// says, and a reader who has not asked for that should not find their swipe
+// count going up on every reply.
+let asSwipe = false;
 
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
 // softened rewrite and an answer cut off mid-write are all the model having a
@@ -2090,6 +2117,19 @@ async function refineMessage(
   if (!byHand && !refineAgain && refined.get(String(m.id)) === markOf(original))
     return { ok: false, stood: true, why: 'this reply is still holding the refine it was given' };
 
+  // The ceiling above. Only the automatic pass counts against it: pressing the
+  // button is somebody asking for this one, now, and a person pressing a button
+  // twelve times is not a loop.
+  if (!byHand && (passes.get(String(m.id)) || 0) >= PASS_CEILING)
+    return {
+      ok: false,
+      stood: true,
+      why:
+        'this reply has been refined ' +
+        PASS_CEILING +
+        ' times already, so the automatic pass has stopped on it. Press the button if you want another',
+    };
+
 
   // Who this is and what led up to it. Both are best-effort: a chat with no
   // card, or a reader who has not granted the two read permissions, refines
@@ -2287,19 +2327,47 @@ async function saveRefined(
         why: 'that message changed while the rewrite was being written, so it was left alone',
       };
     }
-    if (keepOriginal) remember(before, k, { text: original, at: Date.now() }, BEFORE_MAX);
     remember(ourWrites, k, next, OURS_MAX);
+    remember(passes, String(m.id), (passes.get(String(m.id)) || 0) + 1, PASSES_MAX);
     const patch: any = { content: next };
     // A message can hold several swipes, and the one on screen is the one to
     // write. Writing content alone leaves the active swipe holding the old text
     // on a build that reads swipes first.
     const swipes = m && Array.isArray(m.swipes) ? m.swipes.slice() : null;
     const idx = m && typeof m.swipe_id === 'number' ? m.swipe_id : 0;
-    if (swipes && idx >= 0 && idx < swipes.length) {
+    // The rewrite as a reroll beside the reply rather than over it.
+    //
+    // Put it back is held in memory and gone on reload, which is the right
+    // trade for an undo but a poor one for the writing itself: a refine you
+    // liked less than the original, noticed a day later, has nothing behind it.
+    // A swipe is Lumiverse's own way back, it survives a reload, and the arrows
+    // for it are already on the message.
+    //
+    // Only where the build gives the message a swipe list. Where it does not
+    // there is nothing to add to, and writing content alone is the old
+    // behaviour, which is what this falls back to.
+    let addedAt = -1;
+    if (asSwipe && swipes) {
+      swipes.push(next);
+      addedAt = swipes.length - 1;
+      patch.swipes = swipes;
+      patch.swipe_id = addedAt;
+    } else if (swipes && idx >= 0 && idx < swipes.length) {
       swipes[idx] = next;
       patch.swipes = swipes;
       patch.swipe_id = idx;
     }
+    // Written down after the shape of the write is settled, so the way back
+    // knows which kind it is undoing.
+    if (keepOriginal)
+      remember(
+        before,
+        k,
+        addedAt >= 0
+          ? { text: original, at: Date.now(), swipeAt: addedAt }
+          : { text: original, at: Date.now() },
+        BEFORE_MAX,
+      );
     await spindle.chat.updateMessage(chatId, m.id, patch);
     remember(refined, String(m.id), markOf(next), REFINED_MAX);
     replyTo(userId, {
@@ -2512,6 +2580,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
       rateWaits = Number(s.rateWaits);
       rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
+      asSwipe = !!s.asSwipe;
       protectInline = !!s.protectInline;
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
@@ -2785,7 +2854,27 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         const patch: any = { content: kept.text };
         const swipes = Array.isArray(m.swipes) ? m.swipes.slice() : null;
         const idx = typeof m.swipe_id === 'number' ? m.swipe_id : 0;
-        if (swipes && idx >= 0 && idx < swipes.length) {
+        // The refine was added as a reroll of its own, so putting it back is
+        // taking that reroll off again rather than writing the original over
+        // it. A write would leave two rerolls saying the same thing.
+        //
+        // Only when it is still the last one and still holds what the refine
+        // wrote. Anything else means the reader has been swiping or rerolling
+        // since, and cutting the end off a list somebody has been working in is
+        // not an undo.
+        const wroteAt = typeof kept.swipeAt === 'number' ? kept.swipeAt : -1;
+        if (
+          swipes &&
+          wroteAt >= 0 &&
+          wroteAt === swipes.length - 1 &&
+          markOf(swipes[wroteAt]) === refined.get(String(payload.messageId))
+        ) {
+          swipes.pop();
+          const back = Math.max(0, Math.min(swipes.length - 1, wroteAt - 1));
+          patch.swipes = swipes;
+          patch.swipe_id = back;
+          patch.content = String(swipes[back] == null ? kept.text : swipes[back]);
+        } else if (swipes && idx >= 0 && idx < swipes.length) {
           swipes[idx] = kept.text;
           patch.swipes = swipes;
           patch.swipe_id = idx;

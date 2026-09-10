@@ -3900,8 +3900,14 @@ console.log("\nrefining the draft from the panel");
   // the other two above the tabs on the same terms: its own setting puts it
   // there, rather than leaving it to a menu or a row inside Extras.
   await inTab(browser, {}, async (page) => {
+    // Built either way and hidden while the switch is off, the same as every
+    // other row that hangs off one, so what is asked is whether it is on the
+    // panel rather than whether the element exists.
     ok("no draft button until the setting asks for it",
-      !(await page.$('#drawer [data-arf-draft]')));
+      await page.evaluate(() => {
+        const b = document.querySelector('#drawer [data-arf-draft]');
+        return !b || b.offsetParent === null;
+      }));
   });
 
   await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
@@ -5428,7 +5434,7 @@ console.log("\nimporting the same file twice");
   });
   const load = (page, text) =>
     page.evaluate(async (t) => {
-      const input = document.querySelector('#drawer input[type="file"]');
+      const input = document.querySelector('#drawer [data-arf-file="import"]');
       const dt = new DataTransfer();
       dt.items.add(new File([t], "setup.json", { type: "application/json" }));
       input.files = dt.files;

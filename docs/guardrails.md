@@ -36,6 +36,16 @@ Only the failures a second try could fix are retried. A rewrite refused for its 
 
 Every retry is another call on your bill, which is why it is off until you ask for it.
 
+## The ceiling on one reply
+
+The automatic pass refines a reply again when its words are new, which is what makes it work alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry): every reply Auto Retry re-rolls is a reply this pass has never seen, and each gets its refine.
+
+What that cannot see is a loop. Another extension rewriting what this one wrote, a build announcing the same generation under new ids, or a chat being swiped through fast enough that every arrival looks new: all three are new writing by the only test available, and all three would buy a model call each.
+
+So one reply is refined at most twelve times by the automatic pass, for as long as Lumiverse is running. Twelve is far past what anybody does by hand, on purpose: this is a stop on something that has gone wrong, not a budget, and it has to sit far enough out that nobody meets it while using the extension normally.
+
+Pressing the refine button on a reply still works, whatever the count says. That is you asking for this one, now, and a person pressing a button twelve times is not a loop. The Log says when the pass has stopped on a reply and why.
+
 ## Waiting out a provider that will not take the call
 
 **Wait out a provider that will not take the call** is a different thing from the setting above, and the difference is what it costs. A check that failed was paid for: the model read the prompt and wrote something, and asking again buys a second answer. A call the provider refused was never read by anything, so waiting and asking again buys the refine you already asked for.

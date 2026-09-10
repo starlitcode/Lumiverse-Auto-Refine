@@ -105,6 +105,9 @@ function host(
   const writes: Array<{ id: string; content: string }> = [];
   const asked: any[] = [];
   const memoryAsked: Array<{ chatId: any; userId: any }> = [];
+  // Every write as it was sent, so a check can read the reroll list rather than
+  // only the text that ended up on screen.
+  const patches: Array<{ id: string; patch: any }> = [];
   const msgs = messages.map((m) => ({ ...m }));
   let turn = 0;
 
@@ -252,6 +255,7 @@ function host(
         if (!m) return;
         Object.assign(m, patch);
         writes.push({ id: id, content: patch.content });
+        patches.push({ id: id, patch: patch });
       },
     },
     // The old shared store, which every account on a server would read the
@@ -310,6 +314,19 @@ function host(
     writes,
     asked,
     memoryAsked,
+    patches,
+    lastPatch: (id: string) => {
+      for (let i = patches.length - 1; i >= 0; i--) if (patches[i].id === id) return patches[i].patch;
+      return null;
+    },
+    // Stands in for the reader rolling another one after the refine.
+    addSwipe: (id: string, text: string) => {
+      const m: any = msgs.find((x) => x.id === id);
+      if (!m) return;
+      m.swipes = (Array.isArray(m.swipes) ? m.swipes : []).concat([text]);
+      m.swipe_id = m.swipes.length - 1;
+      m.content = text;
+    },
     // Lets a check stand in for another extension writing to the same reply.
     edit: (id: string, content: string) => {
       const m = msgs.find((x) => x.id === id);
@@ -2762,5 +2779,135 @@ describe("only reading what the prompt asks for", () => {
     await withIt.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
     expect(said(withIt)).toContain("i walk through it");
+  });
+});
+
+// The refine as a reroll beside the reply rather than over it.
+//
+// Put it back is held in memory and gone on reload, which is the right trade
+// for an undo and a poor one for the writing itself. A reroll is Lumiverse's
+// own way back: it survives a reload, and the arrows are already on the message.
+describe("adding the refine as a reroll", () => {
+  const swiped = (): Msg[] => {
+    const list = chat() as any[];
+    list[2].swipes = ["She stepped through and, suddenly, the cold just hit her."];
+    list[2].swipe_id = 0;
+    return list as Msg[];
+  };
+  const patched = (h: any, id: string) =>
+    h.sent.length >= 0 ? h.lastPatch(id) : null;
+
+  test("off by default, so the reply is written over", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      swiped(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const p = patched(h, "m2");
+    expect(p.swipes.length).toBe(1);
+    expect(p.swipe_id).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("on, it goes in beside the reply and the original stays behind it", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { asSwipe: true },
+      swiped(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const p = patched(h, "m2");
+    expect(p.swipes.length).toBe(2);
+    expect(p.swipes[0]).toBe("She stepped through and, suddenly, the cold just hit her.");
+    expect(p.swipes[1]).toBe("She stepped through and the cold hit her.");
+    expect(p.swipe_id).toBe(1);
+  });
+
+  test("putting it back takes the reroll off rather than writing over it", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { asSwipe: true },
+      swiped(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    await h.front({ type: "undo_refine", requestId: "u1", chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const p = patched(h, "m2");
+    expect(p.swipes.length).toBe(1);
+    expect(p.swipes[0]).toBe("She stepped through and, suddenly, the cold just hit her.");
+    expect(p.swipe_id).toBe(0);
+    const done = h.sent.find((m: any) => m.type === "undo_result" && m.requestId === "u1");
+    expect(done.ok).toBe(true);
+  });
+
+  // Cutting the end off a list somebody has been working in is not an undo.
+  test("a reroll added after the refine is not cut off the end", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { asSwipe: true },
+      swiped(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const wrote = h.patches.length;
+    // The reader rolled another one after the refine, so it is no longer the
+    // last, and what the message holds is not what the refine wrote.
+    h.addSwipe("m2", "A third one they rolled themselves.");
+    await h.front({ type: "undo_refine", requestId: "u1", chatId: "c1", messageId: "m2" });
+    await wait(60);
+    // Nothing was written at all: the reply moved on, so there is no way back
+    // to offer and the row comes off the tab instead.
+    expect(h.patches.length).toBe(wrote);
+    const done = h.sent.find((m: any) => m.type === "undo_result" && m.requestId === "u1");
+    expect(done.ok).toBe(false);
+    expect(done.gone).toBe(true);
+  });
+
+  // A build with no rerolls on a message has nothing to add to.
+  test("a build without rerolls writes over the reply as usual", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { asSwipe: true },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+});
+
+// A stop on something that has gone wrong.
+//
+// The content mark answers "is this new writing" correctly, and a swipe really
+// is new writing. What it cannot see is a loop: another extension rewriting
+// what this one wrote, a build re-announcing generations, a chat being swiped
+// through fast. None of those is worth a model call each, and the reader pays.
+describe("the ceiling on one reply", () => {
+  test("the automatic pass stops after twelve, and says so", async () => {
+    const h = await armed(new Array(20).fill("").map((_, i) => "<REFINED>Rewrite number " + i + ", which is long enough to keep.</REFINED>"));
+    for (let i = 0; i < 16; i++) {
+      // Each arrival is new writing, so nothing else would stop it.
+      h.edit("m2", "A fresh reply, number " + i + ", long enough to be refined.");
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g" + i });
+      await wait(30);
+    }
+    expect(h.asked.length).toBe(12);
+    expect(h.stood().join(" ")).toMatch(/refined 12 times already/i);
+  });
+
+  test("but pressing the button still refines it", async () => {
+    const h = await armed(new Array(20).fill("").map((_, i) => "<REFINED>Rewrite number " + i + ", which is long enough to keep.</REFINED>"));
+    for (let i = 0; i < 14; i++) {
+      h.edit("m2", "A fresh reply, number " + i + ", long enough to be refined.");
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g" + i });
+      await wait(30);
+    }
+    const wasAsked = h.asked.length;
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(wasAsked + 1);
   });
 });
