@@ -32,6 +32,7 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat from further back than the run-up. |
+| `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when a refine was asked for on part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
 **A macro nobody is going to see costs nothing.** `{{history}}`, `{{lore}}` and `{{memories}}` are each a call to Lumiverse, and each is made only when a block that is actually being sent asks for it. Switch that block off, or take the macro out, and the call is not made either.

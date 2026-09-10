@@ -2925,8 +2925,12 @@ describe("refining what you selected", () => {
     { id: "m2", role: "assistant", content: text },
   ];
 
-  const ask = (h: any, picked: string, ordinal = 0) =>
-    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ordinal: ordinal });
+  // ahead is the text in front of the selection, which is what the panel sends:
+  // the backend counts through it to work out which of several identical runs was
+  // picked. Driving it the way the panel does is the point, so a check cannot
+  // pass on a path nothing ships.
+  const ask = (h: any, picked: string, ahead = "") =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ahead: ahead });
 
   test("only the part picked is sent to the model", async () => {
     const body = "She set the crate down. The lock had been changed again. Nobody was in.";
@@ -2976,7 +2980,7 @@ describe("refining what you selected", () => {
   test("the same phrase twice refines the one you picked", async () => {
     const body = "He said it was fine. Later he said it was fine again, with less conviction.";
     const h = await armed(["<REFINED>it was not fine</REFINED>"], {}, reply(body));
-    await ask(h, "it was fine", 1);
+    await ask(h, "it was fine", "He said it was fine. Later he said ");
     await wait(60);
     expect(h.writes[0].content).toBe("He said it was fine. Later he said it was not fine again, with less conviction.");
   });
@@ -3038,8 +3042,8 @@ describe("selecting inside your own message", () => {
     { id: "m2", role: "assistant", content: "She did not answer for a while." },
   ];
 
-  const ask = (h: any, id: string, picked: string, ordinal = 0) =>
-    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: id, picked: picked, ordinal: ordinal });
+  const ask = (h: any, id: string, picked: string, ahead = "") =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: id, picked: picked, ahead: ahead });
 
   test("it is refined, and only the part picked", async () => {
     const h = await armed(
@@ -3117,8 +3121,8 @@ describe("which of several identical runs was picked", () => {
   ];
   const body = "He said it was fine. Later he said it was fine again, with less conviction.";
 
-  const ask = (h: any, picked: string, before: string) =>
-    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, before: before });
+  const ask = (h: any, picked: string, ahead: string) =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ahead: ahead });
 
   test("nothing in front of it means the first one", async () => {
     const h = await armed(["<REFINED>it was not fine at all</REFINED>"], {}, twice(body));
@@ -3165,7 +3169,7 @@ describe("the length limits on a short passage", () => {
       {},
       one("He said it was fine and went back to the crates."),
     );
-    await h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: "it was fine", before: "He said " });
+    await h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: "it was fine", ahead: "He said " });
     await wait(60);
     expect(h.writes.length).toBe(1);
     expect(h.writes[0].content).toBe("He said it seemed all right to him and went back to the crates.");
@@ -3177,5 +3181,45 @@ describe("the length limits on a short passage", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(60);
     expect(h.body("m2")).toBe(whole);
+  });
+});
+
+// An underscore with a word character either side of it is not emphasis, so it
+// is drawn as typed and is part of what a reader selects. Taking it out when
+// reading the source would make any selection over snake_case unfindable.
+describe("text that looks like markup and is not", () => {
+  const one = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+  const ask = (h: any, picked: string, ahead = "") =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ahead: ahead });
+
+  test("a selection over an underscored name is found", async () => {
+    const body = "The file was called my_long_name and nobody ever renamed it.";
+    const h = await armed(["<REFINED>nobody renamed it afterwards</REFINED>"], {}, one(body));
+    await ask(h, "and nobody ever renamed it", "The file was called my_long_name ");
+    await wait(60);
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].content).toBe("The file was called my_long_name nobody renamed it afterwards.");
+  });
+
+  test("and the name itself comes through the rewrite unchanged", async () => {
+    const body = "The file was called my_long_name and nobody ever renamed it.";
+    const h = await armed(["<REFINED>a file named my_long_name sat there</REFINED>"], {}, one(body));
+    await ask(h, "The file was called my_long_name", "");
+    await wait(60);
+    expect(h.writes[0].content).toContain("my_long_name");
+  });
+
+  test("real underscore emphasis is still styling, not text", async () => {
+    const body = "He called it _a waste of good timber_ and walked off.";
+    const h = await armed(["<REFINED>He said it wasted decent wood</REFINED>"], {}, one(body));
+    // The markers are not on screen, so they cannot be in what was picked.
+    await ask(h, "He called it a waste of good timber", "");
+    await wait(60);
+    expect(h.writes.length).toBe(1);
+    expect((h.writes[0].content.split("_").length - 1) % 2).toBe(0);
   });
 });

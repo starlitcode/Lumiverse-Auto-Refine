@@ -835,11 +835,23 @@ function renderMap(raw: string): { seen: string; from: number[] } {
     }
     // One or two of either emphasis marker, which style the run rather than
     // being part of it.
-    if ((c === '*' || c === '_') && raw[i + 1] === c) {
+    //
+    // An underscore with a word character either side of it is not emphasis and
+    // is drawn as typed, so my_long_name is text a reader can select rather than
+    // a styled run. Taking it out here would make that selection unfindable.
+    // Stars have no such rule and can open emphasis inside a word.
+    //
+    // Where this is wrong it is wrong in the safe direction. A marker taken out
+    // that the host kept means the selection will not match, which is refused
+    // and said out loud; a marker kept that the host took out would shift every
+    // offset after it, which is the kind of wrong that writes to the wrong place.
+    const wordish = (ch: string | undefined) => !!ch && /[A-Za-z0-9]/.test(ch);
+    const literalUnderscore = c === '_' && wordish(raw[i - 1]) && wordish(raw[i + 1]);
+    if (!literalUnderscore && (c === '*' || c === '_') && raw[i + 1] === c) {
       i += 2;
       continue;
     }
-    if (c === '*' || c === '_') {
+    if (!literalUnderscore && (c === '*' || c === '_')) {
       i += 1;
       continue;
     }
@@ -899,11 +911,16 @@ function balanced(raw: string, start: number, end: number): { start: number; end
     if (open.mark !== shut.mark || open.len !== shut.len) continue;
     const inside = open.at + open.len;
     const outside = shut.at;
-    // Crossing either end of this pair: take the whole thing, markers and all.
-    const crossesOpen = from > open.at && from < inside + 1 && to > outside;
+    // One end of the span inside this pair and the other outside it: take the
+    // whole pair, markers and all, or the one left behind turns the rest of the
+    // reply into emphasis.
+    //
+    // A span can never begin or end inside the markers themselves. Both ends
+    // come from the map of characters a reader can select, and a marker is not
+    // one of those.
     const startsInside = from >= inside && from <= outside;
     const endsInside = to >= inside && to <= outside;
-    if ((startsInside && !endsInside) || (endsInside && !startsInside) || crossesOpen) {
+    if (startsInside !== endsInside) {
       from = Math.min(from, open.at);
       to = Math.max(to, shut.at + shut.len);
     }
@@ -3022,12 +3039,10 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         return;
       }
       replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
-      const ordinal =
-        payload.before != null
-          ? ordinalOf(String(payload.before), picked)
-          : Number(payload.ordinal) > 0
-            ? Number(payload.ordinal)
-            : 0;
+      // ahead, not before: before already names the original content in
+      // apply_refine, and one field meaning two things across two messages is a
+      // trap for whoever reads this next.
+      const ordinal = ordinalOf(String(payload.ahead == null ? '' : payload.ahead), picked);
       const done = await refineMessage(payload.chatId, payload.messageId, userId, true, {
         text: picked,
         ordinal: ordinal,
