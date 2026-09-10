@@ -4632,7 +4632,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and they arrive between two frames with nothing to watch. Built either way
   // and hidden, they are already standing there when the switch goes on.
   function hangsOff(node: any, key: string): any {
-    node.setAttribute("data-arf-row", "hangs:" + key);
+    // Its own attribute, not data-arf-row. That one means a settings row: one
+    // label, one control, its explanation behind the "?". These are containers
+    // holding several of those, and a container that answered to the same name
+    // read as a row carrying a "?" and a description under it at once, which is
+    // the one shape the panel does not allow.
+    node.setAttribute("data-arf-hangs", key);
     node._arfField = { key: key, label: "", type: "bool", needs: { key: key } } as Field;
     node.hidden = !cfg[key];
     return node;
@@ -4641,7 +4646,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function reveal() {
     if (!tab || !tab.root) return;
     try {
-      const rows = (tab.root as HTMLElement).querySelectorAll("[data-arf-row]");
+      const rows = (tab.root as HTMLElement).querySelectorAll("[data-arf-row],[data-arf-hangs]");
       for (let i = 0; i < rows.length; i++) {
         const row: any = rows[i];
         const f = row._arfField as Field | undefined;
