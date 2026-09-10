@@ -85,6 +85,14 @@ const settle = (page) =>
     () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
   );
 
+// A row switched off closes over a few frames rather than going in one, the same
+// way a deleted block does, so anything asking whether it is gone waits that out
+// first. Long enough for the 240ms fold plus a frame either side.
+const closed = async (page) => {
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 320)));
+  await settle(page);
+};
+
 // Boots the extension in a page with the tab mounted, and hands the callback the
 // page plus whatever the stub host recorded.
 // The chat input as Lumiverse actually renders it, kept beside this file and
@@ -2055,6 +2063,7 @@ console.log("\nthe checks are yours to switch off");
       sw.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await settle(page);
+    await closed(page);
     const gone = {
       pct: await onScreen(page, "softenPct"),
       sent: await page.evaluate(
@@ -2989,9 +2998,10 @@ console.log("\na switch and the rows that hang off it");
   // the truth after you leave the tab and come back. This drives the switch and
   // reads the panel without leaving it.
   //
-  // Nothing here waits for the rebuild that follows a switch. The row has to be
-  // right in the frame after the tap, because the whole point of doing it in
-  // place is that nobody is waiting on anything.
+  // Nothing here waits for the rebuild that follows a switch. A row arriving has
+  // to be right in the frame after the tap, because the whole point of doing it
+  // in place is that nobody is waiting on a rebuild. A row leaving closes over
+  // a few frames on purpose, so that one waits out the close and no more.
   const there = (page, key) => onScreen(page, key);
   const flip = async (page, key) => {
     await page.evaluate((k) => {
@@ -3004,9 +3014,10 @@ console.log("\na switch and the rows that hang off it");
     await goTab(page, "Setup");
     ok("the row is there while the switch above it is on", await there(page, "widgetSize"));
     await flip(page, "widgetOn");
-    ok("switching it off takes the row with it, on the spot", !(await there(page, "widgetSize")));
+    await closed(page);
+    ok("switching it off closes the row away", !(await there(page, "widgetSize")));
     await flip(page, "widgetOn");
-    ok("and switching it back on brings it back", await there(page, "widgetSize"));
+    ok("and switching it back on brings it back on the spot", await there(page, "widgetSize"));
     // The switch itself has to survive its own repaint, or a second tap lands
     // on a box that was never redrawn.
     const state = await page.evaluate(

@@ -6,6 +6,32 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.3.0
+
+_2026-09-10_
+
+### Fixed
+
+- **The spinner could turn forever after a run through a chat.** A reply refined inside a run sends its own ending and that stopped the spinner; a reply the run left alone sends nothing, because the run counts those itself. So a run whose last reply was left alone finished with the panel still marked busy, and with **Give up waiting after** set to 0 there was no timer left to notice. The run's own ending stops it now, and with the wait switched off the panel stops waiting at an hour rather than never, which is the ceiling every other setting is already held to.
+- **The panel said the backend was not answering when it was.** It turns the spinner on the moment a reply lands rather than waiting for this extension to answer, so a turn does not open with a second of nothing. Several ways out of the automatic pass returned in silence, and five seconds later the panel reported a backend that was not installed and counted a refine it never made as turned down. Every way out says so now, in words, on the Log tab.
+- **A run through a chat gave up partway through itself.** The timer that gives up on a refine was armed once at the first reply and covered the whole run, so on a long chat it came due while the run was working.
+- **Put it back could write over the wrong swipe.** The text from before a refine is the only copy there is, and it went back into the message whatever the message was holding by then. A reply swiped, regenerated or edited since the refine keeps what it has, the row comes off the tab, and it says why.
+- **Ask before saving a refine could save a rewrite of the swipe before it.** The card waits for a yes, and a reply swiped while it waited had the rewrite of the old one written over the new one. The save is refused if the reply moved while the card was up.
+- **A line on the Log tab rebuilt the whole panel.** A run through a chat writes a line per reply, which was forty rebuilds of every box on the tab, back to back, while somebody watched it.
+- **A block switched off still cost what it would have cost switched on.** The lorebook, the chat memory and the run-up are each a call to Lumiverse, and all three were made on every refine whether or not any block being sent asked for them: switching the memory block off left every refine retrieving the chat's memory and throwing it away. A macro nobody is going to see is a call nobody has to make.
+
+### Added
+
+- **It waits out a provider that will not take the call.** A "too many requests", a shared key at its limit, or a local server answering 503 while it loads a model is not a bad answer, because there was no answer and nothing was spent. **Wait out a provider that will not take the call** on the Limits tab does this twice by default, waiting longer each time, and where the provider says how long to wait, that is what it waits. It never waits on a wrong key or a prompt too long for the model, since waiting cannot fix either. The status line counts down while it waits, and Stop ends the wait as well as the call.
+- **Blocks fold shut on the Prompt tab.** A caret on each one, and **Fold them all** for the list. A folded block is its switch and its name, so a prompt of twenty is a list you can read at once rather than twenty text boxes to scroll past. Which are folded is remembered, and it is not part of a preset: it is where you were looking, not part of the request.
+- **A row that hangs off a switch closes rather than vanishing.** The same movement a deleted block makes, so the panel below travels instead of jumping by the row's whole height in one frame.
+
+### Changed
+
+- **A reply is refined again when its words are new.** Whether a reply had been refined was kept against its id, and a swipe, a regenerate, a deleted swipe and an edit all leave the id alone and put different words behind it. The automatic pass walked past every one of them, which is every reply [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) re-rolled. What the refine left in the message is remembered instead, so a reply holding something else is a reply this pass has never seen.
+- **Nothing is refined while the next reply is being written.** Auto Retry swiping a refusal, or you pressing regenerate, means the reply in front of it is on its way out. The pass stands down before the call where it can, and refuses to save where the call was already out.
+- **What has happened before now ships switched off.** It carries `{{memories}}`, and it is the one block whose size is decided by your chat memory settings rather than by anything on the Prompt tab, on every refine. Switch it on there when you want it. A prompt you had already saved with it on is unchanged, and the Prompt tab will call that prompt your own, because now it is.
+
 ## 1.2.0
 
 _2026-09-06_

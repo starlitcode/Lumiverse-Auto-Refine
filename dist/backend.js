@@ -70,10 +70,30 @@ const generating = new Set();
 // than a record: the extension does not keep your writing after a reload.
 const before = new Map();
 const BEFORE_MAX = 30;
-// Messages this run has already refined. Whether that stops a later one is the
-// reader's to say, in Refine a reply that has been refined before.
-const refined = new Set();
+// Messages this run has already refined, each against a mark of the text the
+// refine left in it. Whether that stops a later one is the reader's to say, in
+// Refine a reply that has been refined before.
+//
+// The mark, and not the id on its own. A swipe, a regenerate and a delete all
+// write new text into the same message id, so an id alone says "refined" about
+// a reply nobody has refined yet, and the automatic pass walks past every reply
+// Auto Retry re-rolled. Comparing the mark asks the question that was meant:
+// is this still the refine, or is it something new sitting where the refine
+// was.
+const refined = new Map();
 const REFINED_MAX = 400;
+// A short stand-in for a piece of text, for telling two apart rather than for
+// hiding one. Length first, since two rewrites of the same passage rarely land
+// on the same length, then a rolling hash over the characters for the rest.
+// Kept instead of the text itself: four hundred replies held whole is the chat
+// twice over in memory, for a question a dozen characters can answer.
+function markOf(text) {
+    const s = String(text == null ? '' : text);
+    let h = 5381;
+    for (let i = 0; i < s.length; i++)
+        h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return s.length + ':' + h.toString(36);
+}
 // Generations this run has already answered. A build that reports one
 // generation as ended twice would otherwise hand the same reply over again and
 // drift it further, and that holds whatever the setting above says: two events
@@ -213,6 +233,12 @@ const ROLES = ['system', 'user', 'assistant'];
 // never shown the thing it is meant to be rewriting, so the refine is refused
 // rather than sent and quietly wasted.
 const TURN_MACRO = '{{message}}';
+// The three whose answers cost a call to the host. Named here so the check that
+// decides whether to make that call and the resolver that answers it cannot
+// drift into using different spellings of the same macro.
+const HISTORY_MACRO = '{{history}}';
+const LORE_MACRO = '{{lore}}';
+const MEMORY_MACRO = '{{memories}}';
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
 // rather than a stray heading in the prompt.
@@ -323,10 +349,21 @@ function activeBlocks(isUser) {
 // before any model is called, so a prompt that could not possibly work is
 // refused rather than paid for.
 function promptHasTurn(isUser) {
+    return promptWants(TURN_MACRO, isUser);
+}
+// Whether any block that is actually being sent asks for this. What a block
+// that is switched off wants is nothing, since it is not sent.
+//
+// Read before the reads themselves. The lorebook, the memory and the card each
+// cost a call to the host, and a block switched off was still paying for one:
+// switching the memory block off left every refine retrieving the chat's memory
+// and throwing it away. A macro nobody is going to see is a call nobody has to
+// make.
+function promptWants(macro, isUser) {
     for (const b of activeBlocks(isUser)) {
         if (!b || b.on === false)
             continue;
-        if (String(b.text || '').indexOf(TURN_MACRO) >= 0)
+        if (String(b.text || '').indexOf(macro) >= 0)
             return true;
     }
     return false;
@@ -1156,6 +1193,11 @@ let guardPreamble = true;
 // another call, and somebody who never opened this setting has not agreed to
 // pay for three refines where they asked for one.
 let retryRefine = 0;
+// How many times a refine will wait out a provider that would not take the
+// call. On by default, unlike the retry above, because a refused call costs
+// nothing: the model never read anything, so waiting and asking again buys the
+// refine that was already asked for rather than a second one.
+let rateWaits = 2;
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
 // softened rewrite and an answer cut off mid-write are all the model having a
 // bad turn. A rewrite refused for its length is the model meaning it, and one
@@ -1169,6 +1211,72 @@ let retryRefine = 0;
 // change the meaning of.
 function worthRetrying(why) {
     return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished/i.test(String(why || ''));
+}
+// ---- a call that never happened ----
+// A rate limit is a different thing from a bad answer, and the difference is
+// what it costs. A bad answer was paid for; asking again buys a second one. A
+// 429 was refused before the model read anything, so waiting and asking again
+// costs nothing but the wait. That is why this is on by default and the retry
+// above is not.
+//
+// Free tiers and shared keys meter per minute, and a local server answers 503
+// while it is loading a model. Both are the common case for anybody not paying
+// per token, and both clear on their own.
+const RATE_LIMITED = /\b(?:408|429|500|502|503|504|522|524)\b|rate.?limit|too many requests|quota|overloaded|capacity|try again later|temporarily unavailable|connection reset|socket hang up|econnrefused|fetch failed/i;
+// Errors waiting cannot fix. A wrong key stays wrong, and a model that does not
+// exist does not start existing. Checked first, because a message can carry
+// both a number and a word from the list above.
+const NOT_WORTH_WAITING = /\b(?:400|401|402|403|404|405|413|422)\b|invalid.?api.?key|authentication|unauthorized|forbidden|not found|does not exist|insufficient (?:balance|credit|funds)|context length|too long|billing/i;
+function rateLimited(err) {
+    const s = String(err == null ? '' : err);
+    if (!s)
+        return false;
+    if (NOT_WORTH_WAITING.test(s))
+        return false;
+    return RATE_LIMITED.test(s);
+}
+// How long the provider said to wait, in milliseconds, or 0 when it said
+// nothing. The header's own form first, which is a whole number of seconds
+// against the words and no unit; then the wordings written into an error body.
+// It is the only figure here that is not a guess, so it wins over the backoff.
+const RETRY_AFTER = /retry[-_ ]?after["'\s:=]*(\d+(?:\.\d+)?)(?![.\d]*\s*[a-z])/i;
+const STATED_WAIT = /(?:retry|try|again|wait|resets?|available)[^0-9]{0,24}?(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?|m|mins?|minutes?)\b/i;
+const WAIT_SCALE = {
+    ms: 1, millisecond: 1, milliseconds: 1,
+    s: 1000, sec: 1000, secs: 1000, second: 1000, seconds: 1000,
+    m: 60000, min: 60000, mins: 60000, minute: 60000, minutes: 60000,
+};
+// An hour is the ceiling. A provider naming a longer one is naming a daily
+// quota, and sitting on a timer for that is worse than saying so and stopping.
+const WAIT_CEILING = 3600000;
+function statedWait(err) {
+    const s = String(err == null ? '' : err);
+    if (!s)
+        return 0;
+    const bare = RETRY_AFTER.exec(s);
+    if (bare) {
+        const secs = Number(bare[1]);
+        if (Number.isFinite(secs) && secs > 0)
+            return Math.min(WAIT_CEILING, secs * 1000);
+    }
+    const hit = STATED_WAIT.exec(s);
+    if (!hit)
+        return 0;
+    const ms = Number(hit[1]) * (WAIT_SCALE[String(hit[2]).toLowerCase()] || 0);
+    return Number.isFinite(ms) && ms > 0 ? Math.min(WAIT_CEILING, ms) : 0;
+}
+// The first wait, doubling, with a little spread on it so a pause everybody is
+// serving does not end for everybody in the same instant. A figure the provider
+// named wins outright: waiting less than it is spending a try to be told the
+// same thing.
+const RATE_WAIT_MS = 15000;
+const RATE_WAIT_MAX = 120000;
+function rateWait(attempt, err) {
+    const said = statedWait(err);
+    if (said > 0)
+        return said + Math.round(Math.random() * 1000);
+    const grown = Math.min(RATE_WAIT_MAX, RATE_WAIT_MS * Math.pow(2, Math.max(0, attempt - 1)));
+    return Math.round(grown * (0.85 + Math.random() * 0.3));
 }
 // Wrapping the whole answer in quotes, which a model does when it reads the
 // message as a quotation rather than as the thing it is editing.
@@ -1601,6 +1709,33 @@ function stopRuns(userId) {
     set.clear();
     return n;
 }
+// A wait, ended early by Stop. Held in the same place a call in flight is held,
+// so the button that calls off a refine also calls off the pause in front of
+// one: a reader watching "trying again in 40s" who presses stop means now, not
+// in forty seconds.
+//
+// Answers true when the wait ran its course and false when it was cut short.
+function pause(ms, userId) {
+    return new Promise((resolve) => {
+        let done = false;
+        let timer = null;
+        let handle = null;
+        const finish = (ranOut) => {
+            if (done)
+                return;
+            done = true;
+            try {
+                clearTimeout(timer);
+            }
+            catch (_) { }
+            dropRun(userId, handle);
+            resolve(ranOut);
+        };
+        handle = { abort: () => finish(false) };
+        holdRun(userId, handle);
+        timer = setTimeout(() => finish(true), Math.max(0, ms));
+    });
+}
 // ---- running one refine ----
 async function askModel(text, isUser, scene, userId) {
     const controller = typeof globalThis.AbortController === 'function'
@@ -1863,16 +1998,32 @@ async function refineMessage(chatId, messageId, userId, byHand) {
     const original = String(m.content == null ? '' : m.content);
     if (!original.trim())
         return { ok: false, why: 'that message is empty' };
+    // Still holding the refine it was already given, so there is nothing new to
+    // do with it. Asked here, against the text in front of us, rather than off
+    // the message id: a swipe, a regenerate, a deleted swipe and an edit all
+    // leave the id alone and put different words behind it, and every one of
+    // those is a reply this pass has never seen. Auto Retry re-rolling a refusal
+    // is that case, several times in a row.
+    //
+    // By hand goes ahead whatever the mark says. Pressing the button on a reply
+    // is somebody asking for this one, now.
+    if (!byHand && !refineAgain && refined.get(String(m.id)) === markOf(original))
+        return { ok: false, stood: true, why: 'this reply is still holding the refine it was given' };
     // Who this is and what led up to it. Both are best-effort: a chat with no
     // card, or a reader who has not granted the two read permissions, refines
     // with the blocks left out rather than not refining at all.
+    //
+    // Only what the prompt is going to use. The card is read either way, because
+    // its name is what the run-up is written with whether or not a block shows
+    // the description.
+    const isUser = m.role === 'user';
     const card = await gatherCard(chatId, userId);
     const at = msgs.findIndex((x) => x && x.id === m.id);
     let scene = {
         character: card.text,
-        context: await gatherHistory(msgs, at, card.name, userId),
-        lore: await gatherLore(chatId, userId),
-        memory: await gatherMemory(chatId, userId),
+        context: promptWants(HISTORY_MACRO, isUser) ? await gatherHistory(msgs, at, card.name, userId) : '',
+        lore: promptWants(LORE_MACRO, isUser) ? await gatherLore(chatId, userId) : '',
+        memory: promptWants(MEMORY_MACRO, isUser) ? await gatherMemory(chatId, userId) : '',
         name: card.name,
         chatId: chatId,
         characterId: card.id,
@@ -1893,6 +2044,18 @@ async function refineMessage(chatId, messageId, userId, byHand) {
     // Only the checks a second try could fix are retried. A rewrite refused for
     // being too long is a rewrite the model meant, and asking again for the same
     // thing is spending money to be told the same answer.
+    // Something is being written in this chat right now. The reply in front of us
+    // is on its way out: Auto Retry swipes a refusal, the reader presses
+    // regenerate, or the next turn has already started. Refining it would spend a
+    // call on writing nobody is going to read.
+    //
+    // Asked here rather than at the top of this function. Everything above is
+    // reads: the chat, the card, the run-up, the lorebook, the memory, several
+    // round trips of them, and the swipe that makes this pointless usually lands
+    // during those rather than before them. This is the last point before any
+    // money is spent.
+    if (!byHand && generating.has(String(chatId)))
+        return { ok: false, stood: true, why: 'another reply is being written in this chat, so this one was left' };
     let verdict = { ok: false, text: '', why: 'nothing was tried' };
     let notes = '';
     // A refine is allowed more than one call, so what it used is the run rather
@@ -1900,18 +2063,46 @@ async function refineMessage(chatId, messageId, userId, byHand) {
     // report a retried refine at a quarter of what it cost.
     startUsed(userId);
     const tries = 1 + (Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0);
-    for (let attempt = 0; attempt < tries; attempt++) {
-        if (attempt > 0) {
-            tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: attempt + 1, of: tries });
+    // Two counters, because they are two different things. asks is how many
+    // answers there have been to judge, which is what the retry setting limits
+    // and what the bill is made of. waits is how many times the provider refused
+    // to answer at all, which cost nothing and are limited separately.
+    let asks = 0;
+    let waits = 0;
+    while (true) {
+        if (asks > 0) {
+            tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: asks + 1, of: tries });
             say('info', 'asking again after: ' + verdict.why);
         }
         tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
         const answer = await askModel(armed.text, m.role === 'user', scene, userId);
-        // An error is the call failing rather than the answer being wrong, and
-        // asking again would usually fail the same way. A stop especially: asking
-        // again is the opposite of what was asked for.
-        if (answer.error)
+        if (answer.error) {
+            // The provider would not take the call. Waiting is what fixes that, and
+            // nothing has been spent, so it is worth waiting for: a free tier meters
+            // per minute and a local server answers 503 while it loads a model, and
+            // both clear on their own. A wrong key does not, and is not waited on.
+            if (waits < rateWaits && rateLimited(answer.error)) {
+                waits++;
+                const ms = rateWait(waits, answer.error);
+                say('info', 'the provider would not take the call, waiting ' + Math.round(ms / 1000) + 's: ' + answer.error);
+                tell(userId, {
+                    type: 'refine_progress',
+                    stage: 'waiting',
+                    waitMs: ms,
+                    attempt: waits,
+                    of: rateWaits,
+                    why: String(answer.error),
+                });
+                if (!(await pause(ms, userId)))
+                    return { ok: false, stood: true, notes: notes, why: 'stopped while waiting out a rate limit' };
+                continue;
+            }
+            // Anything else is the call failing rather than the answer being wrong,
+            // and asking again would fail the same way. A stop especially: asking
+            // again is the opposite of what was asked for.
             return { ok: false, why: answer.error, notes: notes };
+        }
+        asks++;
         tell(userId, { type: 'refine_progress', stage: 'checking' });
         // Judged against the text that was actually sent, so a message that is half
         // markup is not called "too short" for the tokens standing in for it.
@@ -1927,9 +2118,23 @@ async function refineMessage(chatId, messageId, userId, byHand) {
             break;
         if (!worthRetrying(verdict.why))
             break;
+        if (asks >= tries)
+            break;
     }
     if (!verdict.ok)
         return { ok: false, why: verdict.why, notes: notes, same: !!verdict.same };
+    // Asked again now the model has finished. The call takes seconds, and in
+    // those seconds Auto Retry can decide the reply was a refusal and swipe it,
+    // or the reader can press regenerate. Either way the rewrite in hand is a
+    // rewrite of writing that is being replaced, and saving it would land under
+    // whatever is arriving.
+    if (generating.has(String(chatId)))
+        return {
+            ok: false,
+            stood: true,
+            notes: notes,
+            why: 'another reply started while the rewrite was being written, so it was not saved',
+        };
     const back = unshield(verdict.text, armed.parts);
     if (back.lost.length)
         return {
@@ -2008,7 +2213,7 @@ async function saveRefined(chatId, m, original, next, userId) {
             patch.swipe_id = idx;
         }
         await spindle.chat.updateMessage(chatId, m.id, patch);
-        note(refined, String(m.id), REFINED_MAX);
+        remember(refined, String(m.id), markOf(next), REFINED_MAX);
         replyTo(userId, {
             type: 'refined',
             chatId: chatId,
@@ -2054,16 +2259,35 @@ try {
             if (!p || !p.chatId)
                 return;
             generating.delete(String(p.chatId));
-            if (!masterOn || !refineOn || p.error)
-                return;
-            if (chatsOff.has(String(p.chatId)))
-                return;
             // The account this pass is for. GenerationEndedPayloadDTO is the
             // generation, the chat, the message, the content and the error, and no
             // account at all, so there is nothing on the event to prefer over this
             // and no version of Lumiverse where there is. Read once, so the refine
             // and anything it has to say afterwards go to the same place.
             const who = settingsUser;
+            // Every way out of this handler from here on says so. The panel turns its
+            // spinner on the moment a reply lands, because waiting for this side to
+            // answer before showing anything is a second of nothing happening on
+            // every turn. That only works while every path answers: a path that
+            // returned in silence left the panel spinning until its watchdog gave up
+            // five seconds later and reported a backend that was not running, which
+            // was untrue and counted against the reader's refused total.
+            const stand = (why, messageId) => {
+                replyTo(who, {
+                    type: 'refine_stood_down',
+                    chatId: p.chatId,
+                    messageId: messageId == null ? null : messageId,
+                    why: why,
+                });
+            };
+            if (p.error)
+                return stand('the reply itself failed, so there was nothing to refine');
+            if (!masterOn)
+                return stand('Auto Refine is switched off');
+            if (!refineOn)
+                return stand('the automatic pass is switched off');
+            if (chatsOff.has(String(p.chatId)))
+                return stand('Auto Refine is switched off in this chat');
             let messageId = p.messageId;
             if (!messageId) {
                 // Not every build puts the id on the end event, so the newest reply
@@ -2080,16 +2304,14 @@ try {
                 catch (_) { }
             }
             if (!messageId)
-                return;
+                return stand('this build named no reply on the event and the chat had none to find');
             // One generation is one reply, however many times it is announced. Where
             // a build names no generation the message id stands in, which is the
             // older guard and the only one available there.
             const run = p.generationId ? 'g:' + String(p.generationId) : 'm:' + String(messageId);
             if (answered.has(run))
-                return;
+                return stand('this reply was announced twice, and it was taken the first time', messageId);
             note(answered, run, ANSWERED_MAX);
-            if (!refineAgain && refined.has(String(messageId)))
-                return;
             let done;
             try {
                 done = await refineMessage(p.chatId, messageId, who, false);
@@ -2100,7 +2322,14 @@ try {
                 done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
                 say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
             }
-            if (!done.ok && done.why) {
+            // Nothing reached a model, so nothing is reported as refused. The reply
+            // may well come back round: Auto Retry swipes a refusal and the next one
+            // arrives as its own generation, with its own text, which this pass has
+            // never seen and does not skip.
+            if (done.stood) {
+                stand(done.why, messageId);
+            }
+            else if (!done.ok && done.why) {
                 replyTo(who, {
                     type: 'refine_skipped',
                     chatId: p.chatId,
@@ -2210,6 +2439,8 @@ spindle.onFrontendMessage(async (payload, userId) => {
             setStrong(s.softenWords);
             retryRefine = Number(s.retryRefine);
             retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
+            rateWaits = Number(s.rateWaits);
+            rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
             protectInline = !!s.protectInline;
             wrapOutput = s.wrapOutput !== false;
             streamProgress = s.streamProgress !== false;
@@ -2388,6 +2619,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 ok: done.ok,
                 why: done.why,
                 same: !!done.same,
+                stood: !!done.stood,
                 notes: done.notes || '',
             });
             return;
@@ -2403,7 +2635,16 @@ spindle.onFrontendMessage(async (payload, userId) => {
                     replyTo(userId, { type: 'refine_result', requestId: payload.requestId, ok: false, why: 'that message is gone' });
                     return;
                 }
-                const done = await saveRefined(payload.chatId, m, String(m.content == null ? '' : m.content), String(payload.after || ''), userId);
+                // The text the rewrite was made from, as the panel had it, not
+                // whatever the message holds now. saveRefined refuses a write onto a
+                // message that moved, and handing it the current content as the
+                // original asks it to compare a value against itself, which it always
+                // passes: a reply swiped while the card sat waiting for a yes would
+                // have had a rewrite of the swipe before it written over the new one.
+                const from = typeof payload.before === 'string'
+                    ? payload.before
+                    : String(m.content == null ? '' : m.content);
+                const done = await saveRefined(payload.chatId, m, from, String(payload.after || ''), userId);
                 replyTo(userId, { type: 'refine_result', requestId: payload.requestId, ok: done.ok, why: done.why });
             }
             catch (e) {
@@ -2424,14 +2665,39 @@ spindle.onFrontendMessage(async (payload, userId) => {
             // does nothing.
             const about = { chatId: payload.chatId, messageId: payload.messageId };
             if (!kept) {
-                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, why: 'nothing was kept for that message' });
+                // gone marks the answers the panel cannot act on again. There is no
+                // second attempt at any of these, so the row offering one comes off
+                // the tab rather than sitting there for the rest of the session.
+                replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, gone: true, why: 'nothing was kept for that message' });
                 return;
             }
             try {
                 const msgs = await spindle.chat.getMessages(payload.chatId);
                 const m = Array.isArray(msgs) ? msgs.find((x) => x && x.id === payload.messageId) : null;
                 if (!m) {
-                    replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, why: 'that message is gone' });
+                    before.delete(k);
+                    refined.delete(String(payload.messageId));
+                    replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, gone: true, why: 'that message is gone' });
+                    return;
+                }
+                // Only over the refine itself. Between the refine and this button the
+                // reply can be swiped, regenerated or edited, and all three leave the
+                // message id alone. Writing the kept text in regardless would put a
+                // rewrite of one swipe on top of a different swipe, and there is no way
+                // back from that: the text this was holding is the only copy.
+                const mark = refined.get(String(payload.messageId));
+                const holds = String(m.content == null ? '' : m.content);
+                if (mark != null && markOf(holds) !== mark) {
+                    before.delete(k);
+                    refined.delete(String(payload.messageId));
+                    replyTo(userId, {
+                        type: 'undo_result',
+                        requestId: payload.requestId,
+                        ...about,
+                        ok: false,
+                        gone: true,
+                        why: 'that message has changed since the refine, so it was left as it is',
+                    });
                     return;
                 }
                 remember(ourWrites, k, kept.text, OURS_MAX);

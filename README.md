@@ -67,6 +67,8 @@ A refine is a second model call on every reply, so three settings decide what th
 
 Put your provider's prices in on the **Model** tab and the panel stops dealing in tokens and starts dealing in money: what a request would cost before you send it, and what the last one really came to.
 
+**On a free tier or a local model**, the setting that matters instead is **Wait out a provider that will not take the call**, on the **Limits** tab. A "too many requests" or a server still loading a model is not a bad answer, because there was no answer and nothing was spent, so it waits and asks again rather than dropping the refine. It never waits on a wrong key. Where the provider says how long to wait, that is what it waits.
+
 ## Your prompt is the settings
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.

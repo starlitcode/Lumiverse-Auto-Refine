@@ -12,6 +12,14 @@ Blocks are sent top to bottom. Two next to each other with the same role are joi
 
 A block whose text comes out empty is left out, not sent blank, and so is one that is nothing but empty tags: a chat with no lorebook does not send `<world></world>`, which reads to a model as "this world is empty" rather than as "nothing was said about the world".
 
+### Folding one shut
+
+Each block has a caret beside its switch. Folded, it is its switch and its name and nothing else, so a prompt of a dozen is a list you can read at once instead of a dozen text boxes to scroll past. **Fold them all** at the bottom of the card does the whole list, and turns into **Open them all** once they are.
+
+A folded block is sent exactly as it was: this is about what is on the screen, not what goes to the model. Its switch still works while it is folded.
+
+Which are folded is remembered, per prompt, so the two lists fold separately. It is not part of a preset and does not travel in an export: it is where you were looking, not part of the request, and a preset that folded your prompt shut when you loaded it would be a preset changing something you never asked it to.
+
 ## Macros
 
 Anything in double braces is filled in at the moment of the refine. There are two kinds, and the difference matters.
@@ -26,9 +34,13 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{memories}}` | What Lumiverse remembers of this chat from further back than the run-up. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
+**A macro nobody is going to see costs nothing.** `{{history}}`, `{{lore}}` and `{{memories}}` are each a call to Lumiverse, and each is made only when a block that is actually being sent asks for it. Switch that block off, or take the macro out, and the call is not made either.
+
 **A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that quietly added its own would mean the request that ran was not the one on the screen.
 
 `{{memories}}` is Lumiverse's own name for this, and it holds Lumiverse's own answer: the pieces it would have retrieved for the chat, as many as your chat memory settings ask for, written out with your own header and chunk templates. How many is not a setting here on purpose, because your chat and your refine working from different amounts of the same thing is a difference nobody would think to look for. A chat with memory switched off, or one with nothing vectorised yet, gives nothing back and the block is left out.
+
+**The block that carries it, What has happened before now, ships switched off.** It is the one block whose size is decided by your chat memory settings rather than by anything on this tab, and it is sent on every refine. Switch it on under **Prompt** when you want the refine to read the story from further back than the run-up. Nothing else about the macro changes: it works the moment the block is on.
 
 `{{protect_notes}}` is the one exception and is written out here so nothing goes unread. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
 
@@ -50,7 +62,7 @@ The other reason order matters is caching. If your provider caches prompts, the 
 
 1. **The rules.** Identical on every refine in every chat.
 2. **The setting**: who the story follows, who you are writing with, what is true in its world. Identical for a whole chat.
-3. **What has happened before now.** Lumiverse's own memory of the chat, which grows as the chat does.
+3. **What has happened before now.** Lumiverse's own memory of the chat, which grows as the chat does. Off in every shipped prompt, and this is where it goes when you switch it on.
 4. **The pages before this one.** Redrawn every turn.
 5. **The passage.** Different every time.
 

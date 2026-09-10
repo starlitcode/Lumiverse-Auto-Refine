@@ -36,6 +36,20 @@ Only the failures a second try could fix are retried. A rewrite refused for its 
 
 Every retry is another call on your bill, which is why it is off until you ask for it.
 
+## Waiting out a provider that will not take the call
+
+**Wait out a provider that will not take the call** is a different thing from the setting above, and the difference is what it costs. A check that failed was paid for: the model read the prompt and wrote something, and asking again buys a second answer. A call the provider refused was never read by anything, so waiting and asking again buys the refine you already asked for.
+
+That is why this one is on, twice by default, and the retry above is not.
+
+It covers the answers a wait actually fixes: "too many requests", a key at its limit, a server saying it is overloaded, and the 503 a local server gives while it is loading a model. Anybody not paying per token meets one of those regularly, and every one of them clears on its own.
+
+It never waits on a wrong key, a model that does not exist, or a prompt too long for the model. Waiting cannot fix any of those, and a refine sitting on a timer for one is worse than being told.
+
+Where the provider says how long to wait, that is what it waits. Providers usually do say, and the figure is the only number here that is not a guess: waiting less than it spends a try being told the same thing. An hour is the ceiling, because a provider naming longer than that is naming a daily quota. Otherwise it starts at fifteen seconds and doubles.
+
+The status line counts down while it waits, and **Stop** ends the wait as well as the call.
+
 ## The rewrite is the wrong size
 
 **Too long.** A refine that grows a reply by more than the limit you set has written new scene instead of polishing what was there. The default is 60%.

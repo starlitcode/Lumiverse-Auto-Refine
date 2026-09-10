@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -70,6 +70,7 @@ const PARTS = [
             "softenPct",
             "softenWords",
             "retryRefine",
+            "rateWaits",
             "wrapOutput",
             "streamProgress",
         ],
@@ -288,6 +289,11 @@ const CONFIG = {
     // Extra asks after a failed check. None by default: somebody who never opened
     // this has not agreed to pay for three refines where they asked for one.
     retryRefine: 0,
+    // How many times to wait out a provider that would not take the call. On,
+    // unlike the retry above, because nothing was spent on a call that was
+    // refused: a free tier meters per minute and a local server answers 503 while
+    // it loads, and both clear on their own.
+    rateWaits: 2,
     // Asking for the rewrite inside <REFINED> tags rather than on its own. A
     // model that cannot help adding a sentence of its own still puts the rewrite
     // between the tags, and taking what is between them is exact.
@@ -337,6 +343,15 @@ const CONFIG = {
     // The prompt used when the message being refined is one of yours. Empty means
     // you have not written one and the reply prompt is used instead.
     userBlocks: [],
+    // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
+    // "userBlocks:id". A folded block draws its name and its switch and nothing
+    // else, so a prompt of twenty is a list you can see at once rather than
+    // twenty text boxes to scroll past.
+    //
+    // Kept out of the blocks themselves on purpose. This is where you were
+    // looking, not part of the request, and a preset that carried it would fold
+    // somebody's prompt shut for them when they loaded it.
+    blocksShut: [],
     // Sampler values for the refine call. Empty means the connection's preset
     // decides, which is the right default: somebody who tuned a preset should not
     // have it quietly overridden by an extension.
@@ -428,10 +443,16 @@ const SCENE_BLOCKS = [
 // Sent as its own block so somebody whose chats have no memory, or who has not
 // granted the permission, is not carrying a heading for it: a block whose
 // macros all come back empty is left out, tags and all.
+//
+// Off in every shipped prompt. It is the one block whose size nobody here can
+// see: the others are a card, a persona and a fixed run-up, and this one is
+// however many pieces the reader's chat memory setting retrieves, on every
+// single refine. A reader who wants it switches it on knowing what their own
+// memory settings are; a reader who never opens this card is not paying for it.
 const MEMORY_BLOCK = {
     id: "memory",
     name: "What has happened before now",
-    on: true,
+    on: false,
     role: "system",
     text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
 };
@@ -1272,6 +1293,15 @@ const GUARD_FIELDS = [
         max: 3,
         hint: "How many extra times to ask, and 0 by default. Only the failures a second try could fix are retried, and every retry is another call on your bill.",
     },
+    {
+        key: "rateWaits",
+        int: true,
+        label: "Wait out a provider that will not take the call",
+        type: "num",
+        min: 0,
+        max: 5,
+        hint: "How many times to wait and ask again when the provider answers \"too many requests\" or is loading a model, and 2 by default. A refused call costs nothing, so this buys the refine you asked for rather than a second one. Where the provider says how long to wait, that is what it waits.",
+    },
 ];
 // What the floating button offers once it is switched on. Kept out of the main
 // list so they appear under it rather than beside it.
@@ -1364,7 +1394,7 @@ const COST_FIELDS = [
         type: "num",
         min: 0,
         max: 3600,
-        hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up.",
+        hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up, past which the panel stops waiting at an hour so it cannot sit spinning on a refine nothing is going to answer.",
     },
     // Prices, so a token count can be shown as the number people actually want.
     // Nothing here knows what a model costs and no two providers agree, so the
@@ -1688,6 +1718,13 @@ export function setup(ctx, overrides) {
                 }
                 out.samplers = clean;
             }
+            else if (key === "blocksShut") {
+                // Two lists of up to forty blocks each, so the cap is eighty and the
+                // entries are made into strings whatever the store held.
+                if (!Array.isArray(got))
+                    continue;
+                out.blocksShut = got.slice(0, 80).map((v) => String(v));
+            }
             else if (key === "soundUrl") {
                 if (typeof got !== "string")
                     continue;
@@ -1880,12 +1917,37 @@ export function setup(ctx, overrides) {
     // ---- state the tab shows ----
     const LOG_MAX = 20;
     const activity = [];
+    // A line for the Log tab. The panel is rebuilt from nothing on every repaint,
+    // so a line each was one full rebuild each, and a run through a long chat
+    // writes a line per reply: forty rebuilds of every box on the tab, back to
+    // back, while somebody watches it. The first line paints straight away and
+    // anything within the window after it lands on one rebuild at the end of it.
+    const LOG_PAINT_MS = 120;
+    let logPaintedAt = 0;
+    let logPaintSoon = null;
     function log(text, good) {
         activity.unshift({ at: Date.now(), text: String(text), good: !!good });
         while (activity.length > LOG_MAX)
             activity.pop();
-        paint();
+        const now = Date.now();
+        if (now - logPaintedAt >= LOG_PAINT_MS) {
+            logPaintedAt = now;
+            paint();
+            return;
+        }
+        if (logPaintSoon)
+            return;
+        logPaintSoon = setTimeout(() => {
+            logPaintSoon = null;
+            logPaintedAt = Date.now();
+            paint();
+        }, LOG_PAINT_MS);
     }
+    disposers.push(() => {
+        if (logPaintSoon)
+            clearTimeout(logPaintSoon);
+        logPaintSoon = null;
+    });
     let lastChatId = null;
     let lastMessageId = null;
     // Whether something that could actually look has said no chat is open. Not
@@ -2468,6 +2530,18 @@ export function setup(ctx, overrides) {
             return "Writing" + (streamed ? ", " + streamed.toLocaleString() + " characters" : "") + clockPart;
         if (stage === "checking")
             return "Checking the answer" + clockPart;
+        // Waiting out a provider that would not take the call. The number counts
+        // down, because a status line that says "waiting" and does not move looks
+        // exactly like one that has stopped, and this is the longest anything here
+        // ever sits still.
+        if (stage === "waiting") {
+            const left = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
+            return ("The provider would not take the call" +
+                (waitAt ? " (" + waitAt + " of " + waitOf + ")" : "") +
+                ", trying again in " +
+                left +
+                "s");
+        }
         // Which try this is, because a refine that quietly takes three times as
         // long reads as broken unless it says why.
         if (stage === "retrying")
@@ -2557,16 +2631,23 @@ export function setup(ctx, overrides) {
     }
     disposers.push(clearSweepWatch);
     let deadman = null;
-    function armDeadman() {
+    // The longest this waits for anything, whatever the setting says. Every other
+    // value is already held under it, since a wait longer than an hour is capped
+    // to this on the way in.
+    const BACKSTOP_S = 3700;
+    function armDeadman(allowMs) {
         if (deadman)
             clearTimeout(deadman);
         const cap = waitCap();
-        // Nothing to arm when the wait is switched off. Cutting a refine short here
-        // would be the panel doing the exact thing that was just switched off, and
-        // this is not what catches a backend that is not running: the ack watchdog
-        // above does that in five seconds whatever the wait is set to.
-        if (!cap)
-            return;
+        // Time the backend is spending on purpose, which is not time it has gone
+        // missing for. Added on top of the wait rather than counted against it.
+        const allow = Math.max(0, Number(allowMs) || 0) / 1000;
+        // The wait switched off means do not cut the model short, and an hour does
+        // not cut any refine short: it is the ceiling every other setting is
+        // already held to. What it does catch is the panel left marked busy by
+        // something that went away without a word, which is the one state nothing
+        // else can clear and a reload is the only way out of.
+        const secs = cap ? Math.min(BACKSTOP_S, Math.max(20, cap + 15) + allow) : BACKSTOP_S;
         // The backend gives up at the timeout, so this waits a little longer than
         // that: it should only ever fire when the answer itself went missing.
         deadman = setTimeout(() => {
@@ -2574,14 +2655,16 @@ export function setup(ctx, overrides) {
             if (!busy)
                 return;
             markBusy(false);
-            const why = "nothing came back within " + Math.round(cap + 15) + "s";
+            const why = cap
+                ? "nothing came back within " + Math.round(secs) + "s"
+                : "nothing came back in an hour, and the wait is switched off, so this is the backstop";
             tally.dropped++;
             countDrop(why);
             lastRun = { ms: lastRunMs, ok: false, why: why };
             log("gave up waiting: " + why);
             toast("The refine never came back. Nothing was changed.", true);
             paint();
-        }, Math.min(3700, Math.max(20, cap + 15)) * 1000);
+        }, secs * 1000);
     }
     disposers.push(() => {
         if (deadman)
@@ -2959,6 +3042,10 @@ export function setup(ctx, overrides) {
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         // One block in the prompt list. Indented and edged so eight of them read as
         // a list of things rather than as twenty-four loose rows.
+        // Everything a block's fold hides, in one box. The gap matches the block's
+        // own, so a block reads exactly the same open as it did before there was a
+        // fold: this is a container the fold needs, not a change to the layout.
+        ".arf-blockbody{display:flex;flex-direction:column;gap:7px}" +
         ".arf-block{display:flex;flex-direction:column;gap:7px;padding:9px 10px;" +
         "border-radius:var(--lumiverse-radius-sm,5px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
@@ -3105,6 +3192,11 @@ export function setup(ctx, overrides) {
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-x:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf-x:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
+        // The fold on a block. Its own class, not the panel's fold caret: that one
+        // is 9px inside a heading, and this one is a button beside a tick box.
+        // Fixed at the width the two carets share, so the name beside it does not
+        // shift when one turns.
+        ".arf-blockfold{font-size:12px;padding:2px 4px;min-width:16px;text-align:center;flex:0 0 auto}" +
         // The full-screen editor for one block of text.
         ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
         "justify-content:center;padding:16px;box-sizing:border-box;" +
@@ -4384,11 +4476,31 @@ export function setup(ctx, overrides) {
                 if (!f)
                     continue;
                 const away = !fieldShows(f);
-                if (row.hidden === away)
+                // What the row is on its way to, rather than what it is. A row halfway
+                // through closing is still shown, and asking again whether it is shown
+                // would start it closing a second time.
+                const going = row._arfGoing === undefined ? row.hidden : row._arfGoing;
+                if (going === away)
                     continue;
-                row.hidden = away;
-                if (!away)
+                row._arfGoing = away;
+                if (!away) {
+                    row.hidden = false;
+                    // A close still running is dropped rather than waited out.
+                    clearFold(row);
                     arrive(row);
+                    continue;
+                }
+                // Closing rather than vanishing. A switch turned off takes its rows
+                // with it, and the panel below jumps up by their whole height in one
+                // frame; this walks that height down instead, the same movement a
+                // deleted block makes.
+                foldAway(row, () => {
+                    // Unless the switch went back on while it was closing, in which case
+                    // the row is wanted after all and the close is dropped.
+                    if (row._arfGoing !== true)
+                        return;
+                    row.hidden = true;
+                });
             }
         }
         catch (_) { }
@@ -4409,6 +4521,13 @@ export function setup(ctx, overrides) {
     let paints = 0;
     function paint() {
         paints++;
+        // A rebuild from any other cause has already done what the pending log
+        // repaint and the settle were waiting to do.
+        if (logPaintSoon) {
+            clearTimeout(logPaintSoon);
+            logPaintSoon = null;
+            logPaintedAt = Date.now();
+        }
         // A rebuild from any other cause has already done what the settle was
         // waiting to do.
         if (settleTimer) {
@@ -4707,6 +4826,9 @@ export function setup(ctx, overrides) {
                 requestId: newId(),
                 chatId: one.chatId,
                 messageId: one.messageId,
+                // What the rewrite was made from, so the save can tell whether the
+                // reply moved while this card was waiting for an answer.
+                before: one.before,
                 after: one.after,
             });
             log("accepted a refine", true);
@@ -5036,24 +5158,31 @@ export function setup(ctx, overrides) {
     // A box let down to nothing and then handed over. done runs once, whether the
     // travel finished, was cut short by a second one, or never started because the
     // reader asked for no movement.
+    // Everything a fold sets, taken back off. Called at the end of one, and by
+    // anything that wants the fold dropped rather than waited out: a row switched
+    // back on mid-close would otherwise sit at no height until a travel it no
+    // longer needs finished.
+    function clearFold(node) {
+        try {
+            node.style.height = "";
+            node.style.opacity = "";
+            node.style.overflow = "";
+            node.style.transition = "";
+            node.style.marginBottom = "";
+            node.style.paddingTop = "";
+            node.style.paddingBottom = "";
+            node.style.borderTopWidth = "";
+            node.style.borderBottomWidth = "";
+        }
+        catch (_) { }
+    }
     function foldAway(node, done) {
         let ran = false;
         const finish = () => {
             if (ran)
                 return;
             ran = true;
-            try {
-                node.style.height = "";
-                node.style.opacity = "";
-                node.style.overflow = "";
-                node.style.transition = "";
-                node.style.marginBottom = "";
-                node.style.paddingTop = "";
-                node.style.paddingBottom = "";
-                node.style.borderTopWidth = "";
-                node.style.borderBottomWidth = "";
-            }
-            catch (_) { }
+            clearFold(node);
             done();
         };
         try {
@@ -5632,6 +5761,20 @@ export function setup(ctx, overrides) {
             paint();
     }
     const blockLabel = (b) => String(b.name || "").trim() || "Untitled block";
+    // Whether a block is folded shut, and the switch for it. Keyed by which list
+    // it is in as well as its id: the two prompts use the same ids for the same
+    // jobs, and folding the turn in one would otherwise fold it in both.
+    const shutKey = (b) => (editingYours() ? "userBlocks" : "blocks") + ":" + String(b.id);
+    const shutList = () => (Array.isArray(cfg.blocksShut) ? cfg.blocksShut : []);
+    const isShut = (b) => shutList().indexOf(shutKey(b)) >= 0;
+    function setShut(b, shut) {
+        const k = shutKey(b);
+        const next = shutList().filter((x) => x !== k);
+        if (shut)
+            next.push(k);
+        cfg.blocksShut = next.slice(-80);
+        persist();
+    }
     // Which saved prompt this one is, if it is one of them. The eight that ship
     // with the extension are looked at first, so the one it starts on is named as
     // itself rather than as whatever you later saved on top of it.
@@ -5838,6 +5981,20 @@ export function setup(ctx, overrides) {
             log("put the prompt back to the default", true);
         });
         acts.appendChild(add);
+        // One press for the whole list, since folding twenty blocks one at a time
+        // is the thing folding was meant to save.
+        const anyOpen = list.some((b) => !isShut(b));
+        const foldAll = button(anyOpen ? "Fold them all" : "Open them all", false);
+        foldAll.addEventListener("click", () => {
+            const which = editingYours() ? "userBlocks" : "blocks";
+            const others = shutList().filter((k) => k.indexOf(which + ":") !== 0);
+            cfg.blocksShut = anyOpen
+                ? others.concat(list.map((b) => which + ":" + String(b.id))).slice(-80)
+                : others;
+            persist();
+            paint();
+        });
+        acts.appendChild(foldAll);
         acts.appendChild(reset);
         wrap.appendChild(acts);
         return wrap;
@@ -5849,6 +6006,42 @@ export function setup(ctx, overrides) {
         wrap.setAttribute("data-arf-block", b.id);
         const top = el("div", "arf-between");
         const left = el("div", "arf-row arf-grow");
+        // Folded shut, a block is its switch and its name and nothing else. A
+        // prompt of twenty is twenty text boxes to scroll past otherwise, and every
+        // one of them is a live textarea the browser is keeping up to date.
+        const shut = isShut(b);
+        const fold2 = document.createElement("button");
+        fold2.type = "button";
+        fold2.className = "arf-x arf-blockfold";
+        fold2.textContent = shut ? CARET_SHUT : CARET_OPEN;
+        fold2.setAttribute("aria-expanded", shut ? "false" : "true");
+        fold2.setAttribute("aria-label", (shut ? "Open " : "Close ") + blockLabel(b));
+        fold2.addEventListener("click", () => {
+            const now = !isShut(b);
+            setShut(b, now);
+            fold2.textContent = now ? CARET_SHUT : CARET_OPEN;
+            fold2.setAttribute("aria-expanded", now ? "false" : "true");
+            fold2.setAttribute("aria-label", (now ? "Open " : "Close ") + blockLabel(b));
+            // Where it stands, rather than through a rebuild. The card holds every
+            // box of prompt on the tab and tearing it down to hide one block is the
+            // heaviest thing a press here could ask for.
+            if (now) {
+                foldAway(rest, () => {
+                    // Unless it was opened again while it was closing.
+                    if (!isShut(b))
+                        return;
+                    rest.hidden = true;
+                });
+            }
+            else {
+                rest.hidden = false;
+                // A close still running is dropped rather than waited out, or the body
+                // would sit at no height until a travel it no longer needs finishes.
+                clearFold(rest);
+                growIn(rest);
+            }
+        });
+        left.appendChild(fold2);
         const box = document.createElement("input");
         box.type = "checkbox";
         box.className = "arf-box";
@@ -5902,6 +6095,12 @@ export function setup(ctx, overrides) {
         moves.appendChild(move(i + 1, "Move down", "\u2193"));
         top.appendChild(moves);
         wrap.appendChild(top);
+        // One box holding everything the fold hides, so folding is one element
+        // going away rather than four.
+        const rest = el("div", "arf-blockbody");
+        rest.setAttribute("data-arf-blockbody", "1");
+        rest.hidden = shut;
+        wrap.appendChild(rest);
         const ta = document.createElement("textarea");
         ta.rows = Math.min(12, Math.max(3, String(b.text || "").split("\n").length + 1));
         ta.className = "arf-field arf-mono";
@@ -5926,7 +6125,7 @@ export function setup(ctx, overrides) {
             // be right the moment you leave the box.
             setBlocks(next);
         });
-        wrap.appendChild(ta);
+        rest.appendChild(ta);
         const foot = el("div", "arf-row");
         foot.appendChild(el("span", "arf-note", "Sent as"));
         const sel = document.createElement("select");
@@ -5976,14 +6175,14 @@ export function setup(ctx, overrides) {
             });
         });
         foot.appendChild(drop);
-        wrap.appendChild(foot);
+        rest.appendChild(foot);
         // Under the row rather than in it. This says something about the block, not
         // something to press, and standing it between the picker and Delete put a
         // label in the way of the two controls it has nothing to do with.
         if (holdsTurn) {
             const mark = el("div", "arf-row");
             mark.appendChild(el("span", "arf-pill", "holds the turn"));
-            wrap.appendChild(mark);
+            rest.appendChild(mark);
         }
         return wrap;
     }
@@ -6598,6 +6797,11 @@ export function setup(ctx, overrides) {
     // Which try is running, for the line that says so.
     let retryAt = 0;
     let retryOf = 0;
+    // The wait in front of a retry, when the provider would not take the call.
+    // When it ends, and which of the allowed waits this is.
+    let waitUntil = 0;
+    let waitAt = 0;
+    let waitOf = 0;
     // What is happening right now, which the panel could not say before: it knew
     // it was busy and nothing else, so a refine that took forty seconds looked
     // the same as one that had quietly failed.
@@ -9216,6 +9420,21 @@ export function setup(ctx, overrides) {
                             retryOf = Number(msg.of) || 0;
                             log("an answer failed a check, asking again");
                         }
+                        if (msg.stage === "waiting") {
+                            const ms = Number(msg.waitMs) || 0;
+                            waitUntil = Date.now() + ms;
+                            waitAt = Number(msg.attempt) || 0;
+                            waitOf = Number(msg.of) || 0;
+                            // The wait is the backend doing as it was told, so the panel's
+                            // own giving-up timer has to make room for it. Without this a
+                            // two-minute wait on a free tier fired the deadman and the panel
+                            // reported a refine that never came back while it was sitting
+                            // there waiting on purpose.
+                            armDeadman(ms);
+                            log("the provider would not take the call, waiting " +
+                                Math.round(ms / 1000) +
+                                "s before trying again");
+                        }
                         // Written again now everything this message carried has been read.
                         // markBusy above writes the line as its last act, which is before
                         // the count, the working and the try number have been taken off the
@@ -9435,6 +9654,20 @@ export function setup(ctx, overrides) {
                         paint();
                         return;
                     }
+                    if (msg.type === "refine_stood_down") {
+                        // The pass looked at a reply and decided it was not its turn.
+                        // Nothing reached a model, so nothing is counted and nothing pops
+                        // up: the panel's spinner goes out and a line says why.
+                        //
+                        // This is what the spinner is waiting on. It goes on the moment a
+                        // reply lands rather than when this side answers, so every way the
+                        // backend can decide against a refine has to come back here.
+                        markBusy(false);
+                        lastRun = { ms: lastRunMs, ok: false, why: String(msg.why || "") };
+                        log("left a reply alone: " + String(msg.why || "no reason given"));
+                        paint();
+                        return;
+                    }
                     if (msg.type === "refine_skipped") {
                         markBusy(false);
                         const why = String(msg.why || "no reason given");
@@ -9471,7 +9704,10 @@ export function setup(ctx, overrides) {
                         }
                         else {
                             const why = String(msg.why || "no reason given");
-                            if (!msg.same) {
+                            // Nothing was sent, so nothing is counted as turned down. It is
+                            // still said out loud: this one was asked for by hand, and a
+                            // button that does nothing without a word is the complaint.
+                            if (!msg.same && !msg.stood) {
                                 tally.dropped++;
                                 countDrop(why);
                             }
@@ -9564,7 +9800,20 @@ export function setup(ctx, overrides) {
                             toast("Put back.", true);
                         }
                         else {
-                            log("could not put it back: " + String(msg.why || "no reason given"));
+                            const why = String(msg.why || "no reason given");
+                            log("could not put it back: " + why);
+                            // Nothing to try again. The message was deleted, or swiped or
+                            // edited since the refine, so the text this was holding does not
+                            // belong in it any more. The row goes rather than staying on the
+                            // tab offering a button that cannot work.
+                            if (msg.gone && about) {
+                                undoable.delete(undoKey(about.chatId, about.messageId));
+                                if (popKey === undoKey(about.chatId, about.messageId))
+                                    dropPop();
+                                if (!undoHere().length)
+                                    setBadge(null);
+                                toast("That reply has moved on, so there is nothing to put back.", true);
+                            }
                         }
                         paint();
                         return;
@@ -9606,6 +9855,18 @@ export function setup(ctx, overrides) {
                         // missing rather than the whole run, which is the case the panel
                         // could not otherwise tell from a very slow model.
                         armSweepWatch();
+                        // No stage passed, so whatever the refine in flight last reported
+                        // stands. Naming one here would write "Refining" over "Thinking"
+                        // on every message and read as the run starting again.
+                        // And the deadman with it, per message rather than per sweep. It is
+                        // armed when busy turns on, and a sweep turns busy on once at the
+                        // first message and leaves it on to the end, so a run through forty
+                        // replies had one timer covering the lot: it came due partway and
+                        // reported a refine that never came back while the sweep was
+                        // working perfectly well.
+                        markBusy(true);
+                        armDeadman();
+                        clearAck();
                         paint();
                         return;
                     }
@@ -9615,6 +9876,16 @@ export function setup(ctx, overrides) {
                         sweepAsk = null;
                         sweep = null;
                         clearSweepWatch();
+                        // The sweep is over, so the spinner goes out here.
+                        //
+                        // Nothing else was clearing it. A message refined inside a sweep
+                        // sends its own ending and that cleared it; a message left alone
+                        // sends nothing, because the sweep counts those itself rather than
+                        // reporting each one. So a run whose last reply was left alone
+                        // ended with the panel still marked busy, and with the wait
+                        // switched off there was no timer left to notice: the spinner
+                        // turned until the page was reloaded.
+                        markBusy(false);
                         const saved = Number(msg.saved) || 0;
                         const left = Number(msg.skipped) || 0;
                         // Every ending says what happened to the chat, including the ones
