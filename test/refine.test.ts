@@ -3106,3 +3106,76 @@ describe("selecting inside your own message", () => {
     expect(h.asked.length).toBe(0);
   });
 });
+
+// The panel sends the text in front of what was picked rather than a count it
+// worked out itself, so the counting and the finding use one set of rules.
+describe("which of several identical runs was picked", () => {
+  const twice = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+  const body = "He said it was fine. Later he said it was fine again, with less conviction.";
+
+  const ask = (h: any, picked: string, before: string) =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, before: before });
+
+  test("nothing in front of it means the first one", async () => {
+    const h = await armed(["<REFINED>it was not fine at all</REFINED>"], {}, twice(body));
+    await ask(h, "it was fine", "He said ");
+    await wait(60);
+    expect(h.writes[0].content).toBe("He said it was not fine at all. Later he said it was fine again, with less conviction.");
+  });
+
+  test("one in front of it means the second one", async () => {
+    const h = await armed(["<REFINED>it was not fine at all</REFINED>"], {}, twice(body));
+    await ask(h, "it was fine", "He said it was fine. Later he said ");
+    await wait(60);
+    expect(h.writes[0].content).toBe("He said it was fine. Later he said it was not fine at all again, with less conviction.");
+  });
+
+  test("the count survives whitespace coming back differently", async () => {
+    // A DOM range joins paragraphs with one newline where the source has a
+    // blank line, so the text in front arrives flattened differently than it is
+    // stored. Counting has to read through that the same way finding does.
+    const split = "He said it was fine.\n\nLater he said it was fine again, with less conviction.";
+    const h = await armed(["<REFINED>it was not fine at all</REFINED>"], {}, twice(split));
+    await ask(h, "it was fine", "He said it was fine.\nLater he said ");
+    await wait(60);
+    expect(h.writes[0].content).toBe("He said it was fine.\n\nLater he said it was not fine at all again, with less conviction.");
+  });
+});
+
+// A share of a short passage is a handful of characters, so the length limits
+// carry a floor in characters as well. These two pin both halves of that: a
+// short passage has room to come back longer, and a whole reply losing most of
+// its writing is still refused.
+describe("the length limits on a short passage", () => {
+  const one = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+
+  test("a few words may come back as a few more", async () => {
+    // Eleven characters becoming twenty-six is 136% longer, which the share on
+    // its own refuses at any setting anybody would pick.
+    const h = await armed(
+      ["<REFINED>it seemed all right to him</REFINED>"],
+      {},
+      one("He said it was fine and went back to the crates."),
+    );
+    await h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: "it was fine", before: "He said " });
+    await wait(60);
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].content).toBe("He said it seemed all right to him and went back to the crates.");
+  });
+
+  test("but a whole reply losing most of its writing is still turned down", async () => {
+    const whole = "She set the crate down on the step, straightened up, and tried the handle twice.";
+    const h = await armed(["<REFINED>She tried it.</REFINED>"], {}, one(whole));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.body("m2")).toBe(whole);
+  });
+});

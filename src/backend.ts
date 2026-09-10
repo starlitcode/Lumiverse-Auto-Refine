@@ -63,6 +63,18 @@ let contextMessages = 4;
 let samplers: Record<string, any> = {};
 let maxGrowthPct = 60;         // how much longer a refine may make a reply
 let minShrinkPct = 40;         // and how much shorter before it looks wrong
+// The smallest allowance each limit will give, in characters. Refining one
+// sentence means judging a rewrite of a few words, where a percentage of the
+// original is too small a number to write in.
+//
+// The two are not the same number because the two risks are not the same. A
+// short passage coming back longer is ordinary: "it was fine" becoming "it
+// seemed all right to him" is the rewrite working. A short passage coming back
+// much shorter is a model answering with a stub, and the room for that has to
+// stay tight or the check stops catching it. Set too high, a reply losing most
+// of its writing reads as within the allowance, which is the check gone.
+const GROW_FLOOR = 40;
+const SHRINK_FLOOR = 16;
 let keepOriginal = true;
 let confirmBeforeSave = false;
 let chatsOff = new Set<string>();
@@ -900,6 +912,24 @@ function balanced(raw: string, start: number, end: number): { start: number; end
   return { start: from, end: to };
 }
 
+// How many identical runs came before the selection. Worked out here rather than
+// in the panel so there is one set of matching rules: the panel sends the text in
+// front of what was picked and this counts through it with the same flattening
+// the span itself is found with. Two implementations of that would drift, and the
+// failure would be a refine landing on the wrong sentence.
+function ordinalOf(before: string, picked: string): number {
+  const hay = loosen(renderMap(String(before == null ? '' : before)).seen).text;
+  const needle = loosen(String(picked == null ? '' : picked)).text;
+  if (!needle) return 0;
+  let n = 0;
+  let at = hay.indexOf(needle);
+  while (at >= 0) {
+    n++;
+    at = hay.indexOf(needle, at + 1);
+  }
+  return n;
+}
+
 // picked is what the selection read as. ordinal says how many identical runs came
 // before it, so a phrase used twice in one reply is not ambiguous. Null means it
 // could not be found, which is a selection that no longer matches the message.
@@ -1603,14 +1633,25 @@ function judgeInner(answer: any, original: string): Verdict {
   // Length. A refine that doubles a reply has written new scene, and one that
   // halves it has thrown writing away. Both are judged against what the reader
   // set, and both leave the reply as it was.
-  const grew = orig.length > 0 ? ((text.length - orig.length) / orig.length) * 100 : 0;
-  if (maxGrowthPct > 0 && grew > maxGrowthPct)
+  //
+  // A share of a short passage is a handful of characters, and refining one
+  // sentence out of a reply hands over a short passage. Sixty per cent of eleven
+  // characters is six, which refuses every rewrite of "it was fine" that is not
+  // the same length as it. So the allowance is the share or a floor in
+  // characters, whichever is larger: a passage long enough for the share to
+  // matter is judged by the share exactly as before, and a short one is judged
+  // by something that leaves room to write.
+  const room = Math.max(GROW_FLOOR, (orig.length * maxGrowthPct) / 100);
+  const cut = Math.max(SHRINK_FLOOR, (orig.length * minShrinkPct) / 100);
+  const by = text.length - orig.length;
+  const grew = orig.length > 0 ? (by / orig.length) * 100 : 0;
+  if (maxGrowthPct > 0 && by > room)
     return {
       ok: false,
       text: '',
       why: 'the rewrite was ' + Math.round(grew) + '% longer, over the limit you set',
     };
-  if (minShrinkPct > 0 && grew < -minShrinkPct)
+  if (minShrinkPct > 0 && -by > cut)
     return {
       ok: false,
       text: '',
@@ -2981,9 +3022,15 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         return;
       }
       replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
+      const ordinal =
+        payload.before != null
+          ? ordinalOf(String(payload.before), picked)
+          : Number(payload.ordinal) > 0
+            ? Number(payload.ordinal)
+            : 0;
       const done = await refineMessage(payload.chatId, payload.messageId, userId, true, {
         text: picked,
-        ordinal: Number(payload.ordinal) > 0 ? Number(payload.ordinal) : 0,
+        ordinal: ordinal,
       });
       replyTo(userId, {
         type: 'refine_result',

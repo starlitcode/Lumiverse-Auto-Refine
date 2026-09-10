@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.3.0
+
+_2026-09-10_
+
+### Added
+
+- **Refine part of a reply instead of all of it.** Select a sentence or a paragraph in a message and refine what you picked, leaving the rest of the reply exactly as it was. The model is given the part and nothing else, so every check on the answer, its length included, is measured against the part rather than the reply around it. Selecting inside your own message works too, and uses your own prompt list, the same as pressing the button on one does. The greeting is refused, the same as ever.
+- **The length limits leave room on a short passage.** **How much longer** and **how much shorter** are shares of what was sent, and a share of one sentence is a handful of characters: sixty per cent of "it was fine" is six, which turns down every rewrite of it that is not nearly the same length. Each limit now gives the share or a floor in characters, whichever is larger. A reply long enough for the share to matter is judged by the share exactly as before. The two floors are not the same number, because a short passage coming back longer is the rewrite working and one coming back much shorter is a model answering with a stub.
+- **`{{whole_reply}}` shows the model what surrounds the part it was given.** The reply as it stands, with the part being rewritten wrapped in `<<<` and `>>>`, for a prompt that wants a fragment read in context. Empty on an ordinary refine, which leaves the block carrying it out of the prompt rather than sending an empty heading.
+
 ## 1.2.0
 
 _2026-09-10_
