@@ -3114,11 +3114,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     "-webkit-mask:" + SEARCH_X + " center/contain no-repeat;" +
     "mask:" + SEARCH_X + " center/contain no-repeat}" +
     ".arf-field[type=search]::-webkit-search-cancel-button:hover{opacity:1}" +
-    // A menu you pick from is not a box you type in. It gets nothing: no ring,
-    // no glow, and not even a border change, because the menu opening is
-    // already the whole of the feedback.
-    "select.arf-field:focus,select.arf-field:focus-visible{outline:none;" +
-    "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
+    // A menu opened by pointer marks nothing: the menu is already in front of
+    // you, and a ring behind it says something you can see. Reached by keyboard
+    // it takes the same mark every other field does, because then the open menu
+    // is the only thing saying where you are, and without it a tab through the
+    // panel passes over the dropdowns invisibly.
+    //
+    // :focus-visible is the browser's own answer to "is this worth marking",
+    // and it is the right one here. It counts a dropdown clicked with a pointer
+    // as worth marking, since you can type a letter to jump through its
+    // options, so the plain :focus rule below takes that back off and
+    // :focus-visible puts it on for the keyboard. Auto Retry works the same
+    // way, so a dropdown behaves the same in both.
+    "select.arf-field:focus{outline:none;box-shadow:none;" +
+    "border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
+    "select.arf-field:focus-visible{outline:none;box-shadow:" + FOCUS_RING + ";" +
+    "border-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
     // The browser's own up and down arrows on a number box are drawn by the
     // browser rather than the theme, so on a dark panel they arrive as grey
     // chevrons belonging to no design here. The value is typed, and a focused
@@ -4631,15 +4642,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // switch is on, which means the switch has to rebuild the panel to show them,
   // and they arrive between two frames with nothing to watch. Built either way
   // and hidden, they are already standing there when the switch goes on.
-  function hangsOff(node: any, key: string): any {
+  function hangsOff(node: any, on: string | (() => boolean), name?: string): any {
     // Its own attribute, not data-arf-row. That one means a settings row: one
     // label, one control, its explanation behind the "?". These are containers
     // holding several of those, and a container that answered to the same name
     // read as a row carrying a "?" and a description under it at once, which is
     // the one shape the panel does not allow.
-    node.setAttribute("data-arf-hangs", key);
-    node._arfField = { key: key, label: "", type: "bool", needs: { key: key } } as Field;
-    node.hidden = !cfg[key];
+    const test = typeof on === "function" ? on : () => !!cfg[on];
+    node.setAttribute("data-arf-hangs", typeof on === "function" ? name || "test" : on);
+    node._arfShows = test;
+    node.hidden = !test();
     return node;
   }
 
@@ -4649,9 +4661,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const rows = (tab.root as HTMLElement).querySelectorAll("[data-arf-row],[data-arf-hangs]");
       for (let i = 0; i < rows.length; i++) {
         const row: any = rows[i];
-        const f = row._arfField as Field | undefined;
-        if (!f) continue;
-        const away = !fieldShows(f);
+        const shows = row._arfShows as (() => boolean) | undefined;
+        if (typeof shows !== "function") continue;
+        const away = !shows();
         // What the row is on its way to, rather than what it is. A row halfway
         // through closing is still shown, and asking again whether it is shown
         // would start it closing a second time.
@@ -5751,7 +5763,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     // rebuilt underneath the finger that switched it.
     const wrap = el("div", "arf-col" + (f.under ? " arf-under" : ""));
     wrap.setAttribute("data-arf-row", f.key);
+    // What decides whether this row is on the panel, carried by the row itself.
+    // One predicate per row and one pass that reads it: a list of which switches
+    // have children goes stale, and asking each card to work it out is how a
+    // row ends up built only while its switch is on, which is a row that cannot
+    // fade because it was not there a moment ago.
     (wrap as any)._arfField = f;
+    (wrap as any)._arfShows = () => fieldShows(f);
     wrap.hidden = !fieldShows(f);
     if (f.type === "bool") {
       // The "?" sits beside the words rather than inside the label.
@@ -7148,16 +7166,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The switches stay in front. What each one measures by is a number and a
     // word list, which belong behind a fold with the rest of the tuning.
     for (const f of GUARD_FIELDS) if (!f.under) wrap.appendChild(fieldRow(f));
-    const tuning = GUARD_FIELDS.filter((f) => f.under && fieldShows(f));
+    // Built whole and hidden as one, rather than built from whichever checks
+    // happen to be on. Filtering here meant switching a check rebuilt the card
+    // around its tuning, so the rows arrived and left between two frames with
+    // nothing to watch, and the fold itself came and went the same way.
+    const tuning = GUARD_FIELDS.filter((f) => f.under);
     if (tuning.length)
       wrap.appendChild(
-        fold("What counts as sanitising", (body) => {
-          // The condition is kept rather than stripped. The fold is only built
-          // for the checks that are on, so nothing in here is hidden the moment
-          // it is drawn, but switching one of those checks off should take its
-          // tuning with it there and then rather than a moment later.
-          for (const f of tuning) body.appendChild(fieldRow({ ...f, under: false }));
-        }),
+        hangsOff(
+          fold("What counts as sanitising", (body) => {
+            // Each keeps the switch it waits on, so one going off takes its own
+            // rows with it while the fold stays for the others.
+            for (const f of tuning) body.appendChild(fieldRow({ ...f, under: false }));
+          }),
+          () => tuning.some((f) => fieldShows(f)),
+          "softening tuning",
+        ),
       );
     if (!cfg.guardRefusal && !cfg.guardPreamble && !cfg.guardSoften)
       wrap.appendChild(

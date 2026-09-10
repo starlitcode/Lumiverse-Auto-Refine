@@ -5839,6 +5839,58 @@ console.log("\ntokens and what they cost");
   });
 }
 
+// ---- every switch's children are already on the panel ----
+console.log("\nno switch rebuilds the panel to show its children");
+{
+  // The bug this exists to end, which was found four separate times by hand:
+  // a card that builds its children only while their switch is on. Flipping
+  // that switch then has to rebuild the card, so the rows appear and vanish
+  // between two frames while every other row on the panel fades. Worse, each
+  // one had to be noticed by eye.
+  //
+  // Every row is built either way and hidden, so flipping any switch can only
+  // change how many rows are showing, never how many exist. That is what this
+  // measures, across every switch on every tab.
+  const TABS = ["Prompt", "Context", "Model", "Limits", "Log", "Setup"];
+  await inTab(browser, {}, async (page) => {
+    const bad = [];
+    let flipped = 0;
+    for (const t of TABS) {
+      await goTab(page, t);
+      const keys = await page.evaluate(() =>
+        [...document.querySelectorAll("#drawer [data-arf-field]")]
+          .filter((el) => el.type === "checkbox")
+          .map((el) => el.getAttribute("data-arf-field")),
+      );
+      for (const k of keys) {
+        const out = await page.evaluate((key) => {
+          const count = () =>
+            document.querySelectorAll("#drawer [data-arf-row],#drawer [data-arf-hangs]").length;
+          const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+          if (!box) return null;
+          const before = count();
+          box.click();
+          const after = count();
+          // Put it back, so the next key starts where this one did.
+          box.click();
+          return { key, before, after, back: count() };
+        }, k);
+        if (!out) continue;
+        flipped++;
+        if (out.after !== out.before || out.back !== out.before) bad.push(out);
+        // The master switch takes the whole panel down and is meant to.
+        if (k === "enabled") bad.pop();
+      }
+    }
+    ok("there are switches to flip, or this proves nothing", flipped > 15, "flipped " + flipped);
+    ok(
+      "flipping one changes what is shown, never what exists",
+      bad.length === 0,
+      JSON.stringify(bad.slice(0, 4)),
+    );
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
