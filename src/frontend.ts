@@ -9753,6 +9753,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
     // On the same terms as the Extras rows: their setting puts them there, and
     // this menu takes them over while the button is on screen.
+    // Only while something is selected. An entry that is always there and
+    // usually does nothing is an entry somebody presses once and stops trusting.
+    if (!busy && pickedHere()) doing.push({ key: "part", label: "Refine the part I selected" });
     if (cfg.inputRefine) doing.push({ key: "draft", label: "Refine what I am typing" });
     groups.push(doing);
 
@@ -9803,7 +9806,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       const back = newestBack();
       if (back && back.kind === "draft") putDraftBack();
       else if (back) askUndo(back.one.chatId, back.one.messageId);
-    } else if (picked === "draft") refineInput();
+    } else if (picked === "part") refinePicked();
+    else if (picked === "draft") refineInput();
     else if (picked === "open") {
       try {
         tab && tab.activate && tab.activate();
@@ -9952,6 +9956,122 @@ export function setup(ctx: Ctx, overrides?: any) {
     paint();
   }
 
+  // ---- refining part of a reply ----
+  //
+  // The last run of text selected inside a message. Remembered rather than read
+  // when the refine is asked for, because asking for it means pressing
+  // something, and pressing anything clears the selection: by the time a menu
+  // entry runs there is nothing on screen to read.
+  //
+  // ahead is the text between the start of the message and the start of the
+  // selection. The backend counts through it to work out which of several
+  // identical runs was picked, so the counting and the finding use one set of
+  // rules rather than two that can drift.
+  let pickedRun: { chatId: any; messageId: any; text: string; ahead: string } | null = null;
+
+  // The host's own mount points carry the message id, in a scope shaped
+  // "message:<id>:...". Read from those rather than from a class name, because
+  // the host's classes carry a build hash that changes when it rebuilds its CSS,
+  // and rather than from another extension's attributes, which are not there for
+  // somebody who does not have that extension.
+  function messageUnder(node: any): { id: string; body: HTMLElement } | null {
+    try {
+      const el = node && node.nodeType === 3 ? node.parentElement : node;
+      const body = el && el.closest ? el.closest('[data-component="MessageContent"]') : null;
+      if (!body || !body.parentElement) return null;
+      const mount = body.parentElement.querySelector('[data-spindle-scope^="message:"]');
+      if (!mount) return null;
+      const parts = String(mount.getAttribute("data-spindle-scope") || "").split(":");
+      if (parts.length < 2 || !parts[1]) return null;
+      return { id: parts[1], body: body as HTMLElement };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Read after the gesture rather than during it. A drag across a paragraph
+  // fires many times on the way and only the end of it is a selection anybody
+  // meant to make.
+  function notePicked() {
+    try {
+      const sel = typeof getSelection === "function" ? getSelection() : null;
+      const text = sel ? String(sel.toString()) : "";
+      // A collapsed selection is a click, which is how somebody puts a selection
+      // away. Cleared here so the entry for it goes with it.
+      if (!sel || !text.trim() || sel.isCollapsed) {
+        if (pickedRun) {
+          pickedRun = null;
+          paint();
+        }
+        return;
+      }
+      const found = messageUnder(sel.anchorNode);
+      // Outside a message body, which includes the model's own working: the host
+      // draws that in a box of its own, outside the body, so it is not something
+      // this can be pointed at.
+      if (!found) return;
+      // Both ends in the same message, or what was picked is not one run of that
+      // reply and there is nothing sensible to send.
+      const ended = messageUnder(sel.focusNode);
+      if (!ended || ended.id !== found.id) return;
+      let ahead = "";
+      try {
+        const run = document.createRange();
+        run.selectNodeContents(found.body);
+        run.setEnd(sel.anchorNode as any, sel.anchorOffset);
+        ahead = String(run.toString());
+      } catch (_) {
+        // No readable range means no count, which the backend reads as the first
+        // run. Worth sending: the common case is one occurrence.
+        ahead = "";
+      }
+      const was = pickedRun;
+      pickedRun = { chatId: lastChatId, messageId: found.id, text: text, ahead: ahead };
+      // Only repaint when the entry for it appears or the message changed, since
+      // this runs on every selection anybody makes anywhere on the page.
+      if (!was || was.messageId !== pickedRun.messageId) paint();
+    } catch (_) {}
+  }
+
+  // What is on screen to refine, if anything. A selection made in another chat
+  // is not offered: the reply it was made in is not the one in front of you.
+  function pickedHere(): { chatId: any; messageId: any; text: string; ahead: string } | null {
+    if (!pickedRun) return null;
+    if (lastChatId != null && pickedRun.chatId != null && pickedRun.chatId !== lastChatId) return null;
+    return pickedRun;
+  }
+
+  function refinePicked() {
+    const one = pickedHere();
+    if (!one) {
+      toast("Select part of a reply first, then open this again.", true);
+      return;
+    }
+    if (busy) {
+      toast("A refine is already running. Press it again to stop that one.", true);
+      return;
+    }
+    const why = whyNot();
+    if (why) {
+      toast(why, true);
+      log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
+      return;
+    }
+    retryAt = 0;
+    retryOf = 0;
+    markBusy(true);
+    paint();
+    log("refining the part you selected, " + one.text.trim().length + " characters of it");
+    send({
+      type: "refine_selection",
+      requestId: newId(),
+      chatId: one.chatId != null ? one.chatId : lastChatId,
+      messageId: one.messageId,
+      picked: one.text,
+      ahead: one.ahead,
+    });
+  }
+
   function refineNow() {
     // One at a time. Two against the same reply means whichever finishes last
     // wins, which is not a thing anybody asked for.
@@ -9976,6 +10096,24 @@ export function setup(ctx: Ctx, overrides?: any) {
       messageId: lastMessageId,
     });
   }
+
+  // Both, because neither covers the other. A drag ends with pointerup and never
+  // fires selectionchange on some builds; selecting with shift and the arrow keys
+  // fires selectionchange and no pointer event at all.
+  try {
+    if (typeof document !== "undefined") {
+      const onPick = () => notePicked();
+      document.addEventListener("pointerup", onPick, true);
+      document.addEventListener("selectionchange", onPick);
+      disposers.push(() => {
+        try {
+          document.removeEventListener("pointerup", onPick, true);
+          document.removeEventListener("selectionchange", onPick);
+        } catch (_) {}
+        pickedRun = null;
+      });
+    }
+  } catch (_) {}
 
   // ---- host events ----
   try {

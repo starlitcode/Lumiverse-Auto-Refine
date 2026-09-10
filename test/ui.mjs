@@ -5946,6 +5946,105 @@ console.log("\nno switch rebuilds the panel to show its children");
   });
 }
 
+console.log("\nrefining the part you selected");
+{
+  // The host's own message structure, with prose invented for this check. Only
+  // data-component and data-spindle-scope are read by the extension: the class
+  // names carry a build hash and another extension's attributes may not be there
+  // at all, so neither is something to hang a feature on.
+  const BUBBLE = `
+  <div class="_bubble_86318_171">
+    <div class="_header_86318_177">
+      <span data-spindle-mount="message_header" data-spindle-scope="message:msg-one:minimal:header" style="display:contents"></span>
+    </div>
+    <div class="_container_14i0r_1">
+      <button type="button" data-reasoning-toggle="true">Thought for 0s</button>
+      <div class="_bodyWrapper_14i0r_60"><div class="_body_14i0r_60" id="thinking">The model's own working, which is not the reply.</div></div>
+    </div>
+    <div data-component="MessageContent"><div><div><div class="_prose_1rr8k_181"><p id="p1">Wren set the crate down on the step and wiped both hands on her jeans.</p>
+    <p id="p2"><span class="_proseDialogue_1rr8k_222">"The lock's been changed."</span> She tried the handle twice anyway.</p>
+    </div></div></div></div>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
+  </div>`;
+
+  await inTab(browser, { saved: { widgetOn: true, enabled: true } }, async (page) => {
+    const out = await page.evaluate(async (html) => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap);
+      // A refine needs to know which chat it is in, which the panel learns from
+      // the host rather than from the page. Without this the action is refused
+      // with "waiting to be told which chat you are in", which is the right
+      // answer and not the thing being checked here.
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      for (const f of window.__handlers.CHARACTER_MESSAGE_RENDERED || []) f({ chatId: "c1", messageId: "msg-one" });
+      await new Promise((r) => setTimeout(r, 40));
+
+      const pickIn = (id, text) => {
+        const node = [...document.getElementById(id).childNodes].find(
+          (n) => n.nodeType === 3 && n.nodeValue.includes(text),
+        ) || document.getElementById(id).firstChild;
+        const at = node.nodeValue.indexOf(text);
+        const r = document.createRange();
+        r.setStart(node, at < 0 ? 0 : at);
+        r.setEnd(node, (at < 0 ? 0 : at) + text.length);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      };
+      const clear = () => {
+        getSelection().removeAllRanges();
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      };
+      const menu = async () => {
+        window.__menu = null;
+        const b = document.querySelector("#float button") || document.querySelector(".arf-float");
+        if (!b) return null;
+        b.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 20, clientY: 20 }));
+        await new Promise((r) => setTimeout(r, 620));
+        b.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 40));
+        return window.__menu ? window.__menu.items.filter((i) => i.type !== "divider").map((i) => i.label) : null;
+      };
+
+      const noneAtFirst = await menu();
+      pickIn("p1", "wiped both hands on her jeans");
+      const afterPicking = await menu();
+      clear();
+      const afterClearing = await menu();
+      pickIn("thinking", "own working");
+      const afterPickingThinking = await menu();
+
+      // And the one that actually runs it.
+      window.__sent.length = 0;
+      pickIn("p1", "wiped both hands");
+      window.__menuPick = "part";
+      await menu();
+      await new Promise((r) => setTimeout(r, 60));
+      const fired = window.__sent.filter((m) => m && m.type === "refine_selection");
+      window.__menuPick = null;
+      return { noneAtFirst, afterPicking, afterClearing, afterPickingThinking, fired };
+    }, BUBBLE);
+
+    const has = (list) => !!list && list.some((t) => /part I selected/i.test(t));
+    ok("with nothing selected the menu does not offer it", !has(out.noneAtFirst), JSON.stringify(out.noneAtFirst));
+    ok("selecting part of a reply puts it in the menu", has(out.afterPicking), JSON.stringify(out.afterPicking));
+    ok("and putting the selection away takes it out again", !has(out.afterClearing), JSON.stringify(out.afterClearing));
+    // The host draws the model's working outside the message body, so a
+    // selection in it is not in a reply and there is nothing to offer.
+    ok("selecting the model's working offers nothing", !has(out.afterPickingThinking), JSON.stringify(out.afterPickingThinking));
+
+    const one = out.fired && out.fired[0];
+    ok("choosing it sends the refine", !!one, JSON.stringify(out.fired));
+    ok("carrying the host's own message id", !!one && one.messageId === "msg-one", JSON.stringify(one));
+    ok("what was picked", !!one && one.picked === "wiped both hands", JSON.stringify(one));
+    // The text in front of it, which is how the backend tells one run of an
+    // identical phrase from another.
+    ok("and the text ahead of it, for counting", !!one && one.ahead === "Wren set the crate down on the step and ", JSON.stringify(one));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
