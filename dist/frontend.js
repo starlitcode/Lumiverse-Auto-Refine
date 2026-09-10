@@ -157,6 +157,11 @@ const PERMS = [
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
+// Where the floating button was left. Kept in the browser rather than in the
+// settings, for the same reason the list of switched-off chats is: a position is
+// a property of the screen you are sitting at, not of your account, and it does
+// not belong in an export somebody might share.
+const LAYOUT_KEY = "lv-auto-refine:layout:v1";
 const PRESETS_KEY = "lv-auto-refine:presets:v1";
 const SETUPS_KEY = "lv-auto-refine:setups:v1";
 // What a model setup carries: which connection refines, how much it thinks, how
@@ -3716,6 +3721,32 @@ export function setup(ctx, overrides) {
     // one open, since there is only ever one of these.
     let hintPop = null;
     let hintAnchor = null;
+    // Read a field at a time rather than trusting the shape. This is a store a
+    // person can edit by hand, and half of it becoming NaN would put the button
+    // somewhere with no way back to it.
+    const layout = {};
+    try {
+        if (typeof localStorage !== "undefined") {
+            const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}");
+            const f = raw && typeof raw === "object" ? raw.float : null;
+            const fx = Number(f && f.x);
+            const fy = Number(f && f.y);
+            if (Number.isFinite(fx) && Number.isFinite(fy))
+                layout.float = { x: fx, y: fy };
+        }
+    }
+    catch (_) {
+        /* no storage, or nonsense in it: the default corner is fine */
+    }
+    function saveLayout() {
+        try {
+            if (typeof localStorage !== "undefined")
+                localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+        }
+        catch (_) {
+            /* storage full or blocked: a position is not worth an error */
+        }
+    }
     const vpW = () => (typeof window !== "undefined" && window.innerWidth) || 360;
     const vpH = () => (typeof window !== "undefined" && window.innerHeight) || 640;
     // Put a fixed element at a viewport position and check it got there. Where it
@@ -8917,6 +8948,12 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
         widgetOff = null;
+        // A read still pending would land after the button has gone and write
+        // whatever it found over a position that is already correct.
+        if (widgetSettle) {
+            clearTimeout(widgetSettle);
+            widgetSettle = null;
+        }
         try {
             widget && widget.destroy && widget.destroy();
         }
@@ -8924,7 +8961,36 @@ export function setup(ctx, overrides) {
         widget = null;
         floatBtn = null;
     }
-    function raiseWidget() {
+    // Where this extension last put the button. A size change rebuilds the widget,
+    // and the rebuild is handed this figure rather than a reading off the screen.
+    // Measuring would make every resize depend on the host reporting a rect the
+    // size of the button, and a host whose root does not carry that size reports a
+    // middle that is too high, so each resize would nudge the button upward until
+    // it reached the top. Nothing here is measured, so a hundred resizes land
+    // where one does.
+    let widgetPlaced = null;
+    // The delayed read after a drag. Held out here so dropWidget can call it off:
+    // it would otherwise fire against a button that has gone and write its last
+    // position over a newer one.
+    let widgetSettle = null;
+    // Only the corner is taken from here, never the size: the size is widgetAt,
+    // which is what this extension asked for. A box with nothing in any of the
+    // four is a root that is not on screen and has nothing to say.
+    function widgetPos() {
+        try {
+            const root = widget && widget.root;
+            const r = root && root.getBoundingClientRect ? root.getBoundingClientRect() : null;
+            if (!r)
+                return null;
+            if (!r.width && !r.height && !r.left && !r.top)
+                return null;
+            return { x: Math.round(r.left), y: Math.round(r.top) };
+        }
+        catch (_) {
+            return null;
+        }
+    }
+    function raiseWidget(at) {
         if (widget)
             return;
         try {
@@ -8932,10 +8998,28 @@ export function setup(ctx, overrides) {
             // button drawing its own 50% radius against whatever shape that turns out
             // to be comes out as a squashed oval.
             const d = widgetWanted();
+            // Nothing asked for means where it was left last time, if it was ever
+            // moved. An explicit position wins, since that is a rebuild carrying the
+            // button across a size change.
+            if (!at && layout.float)
+                at = layout.float;
+            // Whatever is asked for, the whole button has to land on screen: a
+            // position carried over from a smaller button, or saved on a wider window,
+            // can sit past the edge otherwise.
+            const start = at
+                ? {
+                    x: Math.max(8, Math.min(at.x, vpW() - d - 8)),
+                    y: Math.max(8, Math.min(at.y, vpH() - d - 8)),
+                }
+                : { x: 16, y: Math.max(16, Math.min(160, vpH() - d - 8)) };
+            // Remembered as asked for, before the host has a say. Snapping moves the
+            // button afterwards, and this is only ever used to work out where the next
+            // size should sit, which is a question about where it was put.
+            widgetPlaced = { x: start.x, y: start.y };
             widget = ctx.ui.createFloatWidget({
                 width: d,
                 height: d,
-                initialPosition: { x: 16, y: 160 },
+                initialPosition: start,
                 snapToEdge: true,
                 tooltip: "Auto Refine",
                 chromeless: true,
@@ -8989,9 +9073,37 @@ export function setup(ctx, overrides) {
                 if (dx > 6 || dy > 6)
                     disarm();
             };
+            // The host does the dragging and does not report where it finished, so the
+            // only way to know is to look. Read after a delay rather than straight
+            // away, because the button snaps to the nearest edge once it is let go and
+            // the position wanted is the one it settles on, not the one your finger
+            // left.
+            const rememberWidget = () => {
+                // Only ever one pending. Both events this is on can land from the same
+                // gesture, and an untracked timer is one dropWidget cannot call off.
+                if (widgetSettle)
+                    clearTimeout(widgetSettle);
+                widgetSettle = setTimeout(() => {
+                    widgetSettle = null;
+                    const at = widgetPos();
+                    if (!at)
+                        return;
+                    // Dragging is the other thing that moves the button, so the next size
+                    // change has to grow it around where the drag left it rather than
+                    // where this extension last placed it.
+                    widgetPlaced = at;
+                    if (layout.float && layout.float.x === at.x && layout.float.y === at.y)
+                        return;
+                    layout.float = at;
+                    saveLayout();
+                }, 400);
+            };
             // Capture phase and on the window, so a pointer the host has captured
             // still gets here.
-            const onUp = () => disarm();
+            const onUp = () => {
+                disarm();
+                rememberWidget();
+            };
             try {
                 globalThis.addEventListener("pointerup", onUp, true);
                 globalThis.addEventListener("pointercancel", onUp, true);
@@ -9284,10 +9396,27 @@ export function setup(ctx, overrides) {
     function syncExtras() {
         // The floating button. Rebuilt when the size changes: the host sizes the
         // container when it is made and there is no asking it to resize.
-        if (widget && widgetWanted() !== widgetAt)
+        //
+        // The place it was last put is carried across in widgetPlaced rather than
+        // read back off the screen, or a size change would drop the button at the
+        // default corner and lose wherever it had been dragged to. Worked out from
+        // the middle, because the position a host is given is a top-left: carrying
+        // that across unchanged pins the corner and lets the button grow away from
+        // it, down and to the right. raiseWidget still clamps, so a button against
+        // an edge that gets bigger comes back on screen.
+        let moveTo = null;
+        if (widget && widgetWanted() !== widgetAt) {
+            const was = widgetPlaced;
+            const d = widgetWanted();
+            if (was)
+                moveTo = {
+                    x: Math.round(was.x + widgetAt / 2 - d / 2),
+                    y: Math.round(was.y + widgetAt / 2 - d / 2),
+                };
             dropWidget();
+        }
         if (cfg.widgetOn && cfg.enabled)
-            raiseWidget();
+            raiseWidget(moveTo);
         else
             dropWidget();
         // The button is settled before the Extras row is decided, because that

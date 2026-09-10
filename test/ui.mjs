@@ -2364,6 +2364,52 @@ console.log("\nthe floating button's size");
       JSON.stringify(counted),
     );
   });
+
+  // A size change rebuilds the button, and a rebuild that starts where a fresh
+  // one starts throws away wherever it had been dragged to. Auto Retry has the
+  // same check against the same numbers.
+  await inTab(browser, { saved: { widgetOn: true, widgetSize: 44 } }, async (page) => {
+    await goTab(page, "Setup");
+    const out = await page.evaluate(async () => {
+      const host = document.getElementById("float");
+      if (!host) return { noHost: true };
+      // Where a drag left it. The extension cannot see the host move its own
+      // container, so the read after a pointerup is what tells it, exactly as
+      // it would be told on a real drag.
+      host.style.position = "fixed";
+      host.style.left = "300px";
+      host.style.top = "260px";
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      // Past the 400ms settle the read waits out.
+      await new Promise((r) => setTimeout(r, 520));
+      const size = document.querySelector('#drawer [data-arf-field="widgetSize"]');
+      if (!size) return { noField: true };
+      size.value = "72";
+      size.dispatchEvent(new Event("change", { bubbles: true }));
+      // The rebuild runs on the 260ms settle, not on the change. Reading before
+      // that waits out measures the button as it stood before the thing this
+      // check is about could happen.
+      await new Promise((r) => setTimeout(r, 420));
+      const spec = window.__widgetSpec;
+      return {
+        at: spec ? spec.initialPosition : null,
+        size: spec ? spec.width : null,
+        stored: localStorage.getItem("lv-auto-refine:layout:v1"),
+      };
+    });
+    ok("the dragged position is written down", /"x":300/.test(out.stored || ""), JSON.stringify(out));
+    ok("a size change rebuilds it at the new size", out.size === 72, JSON.stringify(out));
+    // The position a host is given is a top-left, so carrying it across
+    // unchanged pins the corner and lets the button grow away from it. Taken
+    // from the middle instead: the old button sits at 300,260 at 44 across, so
+    // its middle is 322,282, and a 72 across button around that middle starts
+    // at 286,246.
+    ok(
+      "and it keeps the middle of the button where it was, rather than its corner",
+      out.at && out.at.x === 286 && out.at.y === 246,
+      JSON.stringify(out),
+    );
+  });
 }
 
 console.log("\nsearch");
