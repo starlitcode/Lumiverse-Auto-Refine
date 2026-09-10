@@ -3024,3 +3024,85 @@ describe("refining what you selected", () => {
     expect(JSON.stringify(h.asked[0].messages || [])).not.toContain("<around>");
   });
 });
+
+// Your own messages, and the one message that is never touched.
+//
+// A whole-message refine already treats these three differently: your messages
+// have their own prompt list, the greeting is refused outright, and neither is
+// picked up by the automatic pass. A selection goes through the same pass, so
+// the question is whether it inherits all of that or quietly works around it.
+describe("selecting inside your own message", () => {
+  const mine = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: text },
+    { id: "m2", role: "assistant", content: "She did not answer for a while." },
+  ];
+
+  const ask = (h: any, id: string, picked: string, ordinal = 0) =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: id, picked: picked, ordinal: ordinal });
+
+  test("it is refined, and only the part picked", async () => {
+    const h = await armed(
+      ["<REFINED>I push the gate open with my shoulder.</REFINED>"],
+      {},
+      mine("i go in through the gate. then i look around the yard."),
+    );
+    await ask(h, "m1", "i go in through the gate.");
+    await wait(60);
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].content).toBe("I push the gate open with my shoulder. then i look around the yard.");
+  });
+
+  test("and it is built from the prompt for your messages, not the one for replies", async () => {
+    // Two lists, each carrying a line the other does not, so which one was sent
+    // is readable off the request rather than inferred from a call happening.
+    const forReplies = PROMPT.concat([
+      { id: "which", name: "Which list", on: true, role: "system", text: "<list>\nTHE REPLIES LIST\n</list>" },
+    ]);
+    const forMine = PROMPT.concat([
+      { id: "which", name: "Which list", on: true, role: "system", text: "<list>\nTHE MY MESSAGES LIST\n</list>" },
+    ]);
+    const h = await armed(
+      ["<REFINED>I push the gate open with my shoulder.</REFINED>"],
+      { blocks: forReplies, userBlocks: forMine },
+      mine("i go in through the gate. then i look around the yard."),
+    );
+    await ask(h, "m1", "i go in through the gate.");
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    const sent = JSON.stringify(h.asked[0].messages || []);
+    expect(sent).toContain("THE MY MESSAGES LIST");
+    expect(sent).not.toContain("THE REPLIES LIST");
+  });
+
+  test("and a selection in a reply still uses the replies list", async () => {
+    const forReplies = PROMPT.concat([
+      { id: "which", name: "Which list", on: true, role: "system", text: "<list>\nTHE REPLIES LIST\n</list>" },
+    ]);
+    const forMine = PROMPT.concat([
+      { id: "which", name: "Which list", on: true, role: "system", text: "<list>\nTHE MY MESSAGES LIST\n</list>" },
+    ]);
+    const h = await armed(
+      ["<REFINED>She said nothing for a long while afterwards.</REFINED>"],
+      { blocks: forReplies, userBlocks: forMine },
+      mine("i go in through the gate."),
+    );
+    await ask(h, "m2", "She did not answer for a while.");
+    await wait(60);
+    const sent = JSON.stringify(h.asked[0].messages || []);
+    expect(sent).toContain("THE REPLIES LIST");
+    expect(sent).not.toContain("THE MY MESSAGES LIST");
+  });
+
+  test("the greeting is refused, the same as it is for a whole message", async () => {
+    const h = await armed(
+      ["<REFINED>A rewrite of writing a person did, which must never be saved.</REFINED>"],
+      {},
+      mine("i go in through the gate."),
+    );
+    await ask(h, "m0", "The yard gate was already open");
+    await wait(60);
+    expect(h.writes.length).toBe(0);
+    expect(h.asked.length).toBe(0);
+  });
+});
