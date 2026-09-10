@@ -1449,9 +1449,30 @@ const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: numbe
     step: "0.05",
     hint: "How loose the wording is. A rewrite usually wants this lower than the one you roleplay with.",
   },
-  { id: "top_p", label: "Top P", min: 0, max: 1, step: "0.01", hint: "" },
-  { id: "top_k", label: "Top K", min: 0, max: 500, step: "1", hint: "" },
-  { id: "min_p", label: "Min P", min: 0, max: 1, step: "0.01", hint: "" },
+  {
+    id: "top_p",
+    label: "Top P",
+    min: 0,
+    max: 1,
+    step: "0.01",
+    hint: "Cuts the choices down to the likeliest ones, by share. 1 leaves them all in, and lower is tighter.",
+  },
+  {
+    id: "top_k",
+    label: "Top K",
+    min: 0,
+    max: 500,
+    step: "1",
+    hint: "Cuts the choices down to this many, by count. 0 leaves them all in. Some providers ignore it.",
+  },
+  {
+    id: "min_p",
+    label: "Min P",
+    min: 0,
+    max: 1,
+    step: "0.01",
+    hint: "Drops any choice this far below the likeliest one. 0 leaves them all in. Some providers ignore it.",
+  },
   {
     id: "max_context",
     label: "Context size (tokens)",
@@ -1468,9 +1489,30 @@ const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: numbe
     step: "1",
     hint: "A ceiling low enough to cut the rewrite off mid-sentence gets it dropped for being too short, so leave room.",
   },
-  { id: "frequency_penalty", label: "Frequency penalty", min: -2, max: 2, step: "0.05", hint: "" },
-  { id: "presence_penalty", label: "Presence penalty", min: -2, max: 2, step: "0.05", hint: "" },
-  { id: "repetition_penalty", label: "Repetition penalty", min: 0, max: 2, step: "0.05", hint: "" },
+  {
+    id: "frequency_penalty",
+    label: "Frequency penalty",
+    min: -2,
+    max: 2,
+    step: "0.05",
+    hint: "Pushes against a word the more often it has already been used. 0 is off, and a refine rarely needs it.",
+  },
+  {
+    id: "presence_penalty",
+    label: "Presence penalty",
+    min: -2,
+    max: 2,
+    step: "0.05",
+    hint: "Pushes against a word that has been used at all, however often. 0 is off.",
+  },
+  {
+    id: "repetition_penalty",
+    label: "Repetition penalty",
+    min: 0,
+    max: 2,
+    step: "0.05",
+    hint: "The same idea as the two above, under the name local models use. 1 is off. Raising it can fight your own rules.",
+  },
 ];
 
 // A row on the panel, built from its description rather than written out by
@@ -7773,7 +7815,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           type: "num",
           min: 0,
           max: 100,
-          hint: "",
+          hint: "Against whatever your device is set to, so 100 is as loud as that goes rather than as loud as it can.",
         }),
       );
       if (soundSaid) sound.appendChild(note(soundSaid));
