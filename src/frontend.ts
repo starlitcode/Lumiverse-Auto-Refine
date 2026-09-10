@@ -259,6 +259,13 @@ const CONFIG = {
   // a reader who has not asked for that should not find their reroll count
   // going up on every reply.
   asSwipe: false,
+  // Phrases this chat has worn out. Off by default, since it reads the chat's
+  // replies and nobody asked for that until they put {{overused}} in a block.
+  wornOn: false,
+  wornBack: 60,
+  wornLeast: 3,
+  // One phrase per line, left alone. A repeated line can be the point.
+  wornFine: [] as string[],
   keepOriginal: true,
   confirmBeforeSave: false,
   toast: true,
@@ -396,6 +403,17 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
   {
     tag: "{{memories}}",
     what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the permission is not granted.",
+    ours: true,
+  },
+  {
+    tag: "{{overused}}",
+    what:
+      "The phrases the replies in this chat keep reaching for, one per line with " +
+      "how many replies carried each. Counted across replies rather than within " +
+      "one, so a phrase used five times in a single reply is that reply's choice " +
+      "and is not here. Dialogue is left out, since a character repeating " +
+      "themselves is characterisation. Empty unless Find phrases this chat has " +
+      "worn out is on under Limits.",
     ours: true,
   },
   {
@@ -1650,6 +1668,42 @@ const LIMIT_FIELDS: Field[] = [
     label: "Add the refine as a reroll instead of writing over the reply",
     type: "bool",
     hint: "Off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that reroll off again. Needs a build that gives a message rerolls; where one does not, the rewrite is written over the reply as usual.",
+  },
+  {
+    key: "wornOn",
+    label: "Find phrases this chat has worn out",
+    type: "bool",
+    hint: "Off by default. On, `{{overused}}` fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. It reads replies the refine already has, so it costs no extra call.",
+  },
+  {
+    key: "wornBack",
+    label: "How many replies to look across",
+    type: "num",
+    int: true,
+    min: 5,
+    max: 200,
+    needs: { key: "wornOn" },
+    under: true,
+    hint: "Counting back from the one being refined. Fewer follows the last stretch of writing; more finds a habit that has been there all along.",
+  },
+  {
+    key: "wornLeast",
+    label: "How many replies a phrase has to be in",
+    type: "num",
+    int: true,
+    min: 2,
+    max: 20,
+    needs: { key: "wornOn" },
+    under: true,
+    hint: "Three means a phrase in three different replies counts. Five times in one reply is that reply's choice and is never counted, whatever this says.",
+  },
+  {
+    key: "wornFine",
+    label: "Phrases to leave alone",
+    type: "lines",
+    needs: { key: "wornOn" },
+    under: true,
+    hint: "One per line. A repeated line can be the point of a story rather than a habit, and anything here is never reported.",
   },
   {
     key: "keepOriginal",

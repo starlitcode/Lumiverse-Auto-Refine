@@ -3223,3 +3223,132 @@ describe("text that looks like markup and is not", () => {
     expect((h.writes[0].content.split("_").length - 1) % 2).toBe(0);
   });
 });
+
+// Phrases this chat has worn out.
+//
+// A refine judges one reply at a time, so a phrase reads as fine every time it
+// is met. These drive the macro through a real refine, because what matters is
+// what reaches the model rather than what a counting function returns.
+describe("phrases this chat has worn out", () => {
+  const WORN_BLOCK = { id: "worn", name: "Worn out", on: true, role: "system", text: "<worn_out>\n{{overused}}\n</worn_out>" };
+
+  // Only what the macro filled in. The run-up block carries the replies
+  // themselves, so a phrase being repeated is in the request either way: asking
+  // whether the whole request mentions it answers a different question.
+  const wornSent = (h: any): string => {
+    const all = JSON.stringify(h.asked[0].messages);
+    const hit = /<worn_out>\\n([\s\S]*?)\\n<\/worn_out>/.exec(all);
+    return hit ? hit[1] : "";
+  };
+
+  const chatWith = (replies: string[]): Msg[] => {
+    const out: Msg[] = [{ id: "m0", role: "assistant", content: "The yard gate stood open." }];
+    replies.forEach((text, i) => {
+      out.push({ id: "u" + i, role: "user", content: "i keep going" });
+      out.push({ id: "a" + i, role: "assistant", content: text });
+    });
+    return out;
+  };
+
+  const habit = [
+    "A shiver ran down her spine as the lamp guttered out.",
+    "She pushed the door wider. A shiver ran down her spine.",
+    "The cold found the gap in the frame, and a shiver ran down her spine again.",
+    "She set the lamp on the sill and waited for the wind to drop.",
+  ];
+
+  test("a phrase in several replies reaches the model", async () => {
+    const h = await armed(
+      ["<REFINED>She set the lamp down and waited for the wind to drop at last.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(habit),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(wornSent(h)).toContain("shiver ran down her spine");
+  });
+
+  test("and the block is left out entirely with the setting off", async () => {
+    const h = await armed(
+      ["<REFINED>She set the lamp down and waited for the wind to drop at last.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: false },
+      chatWith(habit),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(JSON.stringify(h.asked[0].messages)).not.toContain("<worn_out>");
+  });
+
+  test("a phrase listed as fine is never reported", async () => {
+    const h = await armed(
+      ["<REFINED>She set the lamp down and waited for the wind to drop at last.</REFINED>"],
+      {
+        blocks: PROMPT.concat([WORN_BLOCK]),
+        wornOn: true,
+        wornLeast: 3,
+        wornFine: ["a shiver ran down her spine"],
+      },
+      chatWith(habit),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(h)).not.toContain("shiver ran down her spine");
+  });
+
+  test("nothing repeated means the block is left out rather than sent empty", async () => {
+    const varied = [
+      "The kettle screamed and she took it off the ring.",
+      "Outside, somebody was dragging a bin across gravel.",
+      "She counted the jars on the shelf and came up two short.",
+      "The gutter had come away from the brick at one end.",
+    ];
+    const h = await armed(
+      ["<REFINED>The gutter hung loose from the brick at one end of the roof.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(varied),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(JSON.stringify(h.asked[0].messages)).not.toContain("<worn_out>");
+  });
+
+  test("no block asking for it means none of it is sent", async () => {
+    // The same rule the other three macros follow: what a block nobody sends
+    // wants is nothing, so the counting is never done either.
+    const h = await armed(
+      ["<REFINED>She set the lamp down and waited for the wind to drop at last.</REFINED>"],
+      { blocks: PROMPT, wornOn: true, wornLeast: 3 },
+      chatWith(habit),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(JSON.stringify(h.asked[0].messages)).not.toContain("<worn_out>");
+  });
+
+  test("your own messages are not counted, since they are not the model's habit", async () => {
+    // Enough of them to clear the threshold on their own, or the check would
+    // pass because there were too few rather than because they were skipped.
+    const msgs = chatWith([
+      "The kettle screamed and she took it off the ring.",
+      "Outside, somebody dragged a bin across the gravel.",
+      "She counted the jars and came up two short.",
+      "The gutter had come away from the brick at one end.",
+    ]);
+    let mine = 0;
+    for (const m of msgs)
+      if (m.role === "user") {
+        m.content = "a shiver ran down her spine";
+        mine++;
+      }
+    expect(mine).toBeGreaterThanOrEqual(3);
+    const h = await armed(
+      ["<REFINED>The gutter hung loose from the brick at one end of the roof.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      msgs,
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(h)).not.toContain("shiver");
+  });
+});

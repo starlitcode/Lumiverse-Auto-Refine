@@ -32,10 +32,30 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat from further back than the run-up. |
+| `{{overused}}` | The phrases the replies in this chat keep reaching for, one per line. Only when **Find phrases this chat has worn out** is on. |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when a refine was asked for on part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
 **A macro nobody is going to see costs nothing.** `{{history}}`, `{{lore}}` and `{{memories}}` are each a call to Lumiverse, and each is made only when a block that is actually being sent asks for it. Switch that block off, or take the macro out, and the call is not made either.
+
+### Phrases this chat has worn out
+
+A refine judges one reply at a time, so a phrase reads as fine every time it is met. Used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. `{{overused}}` is the list, so a block can name them and ask for something else.
+
+It is not a list of phrases that are bad. A written list catches known slop the first time it appears, and a rule in a block is the place for one. This catches what no list can hold, which is the drift of one chat.
+
+What it counts, and what it refuses to count:
+
+- **Across replies, not within one.** Five times in a single reply is that reply's choice. Five times across five replies is a habit. **How many replies a phrase has to be in** sets the number, three by default.
+- **Narration only.** Everything in quotation marks comes out first, because a character repeating a phrase is characterisation rather than a habit.
+- **Three words at least.** One word is vocabulary. A run made only of common words is grammar, so "out of the" is never a finding.
+- **The longest phrase wins.** A finding of six words does not also report the four-word run inside it, which is the same habit counted twice.
+- **Your own messages are left out,** and so is the character's name, which is in every reply by definition.
+- **Code is left out.** Anything in backticks is not prose.
+
+It reads replies the refine already has, so it costs no extra call. **Phrases to leave alone** takes one per line: a repeated line can be the point of a story, and nothing listed there is ever reported.
+
+Honest about the limits: the thresholds are a starting point rather than a tuned answer, and a long chat with a consistent setting will eventually flag that setting's own vocabulary. **Phrases to leave alone** is the way out of that, not cleverness on this end.
 
 **Keep a macro in a block of its own.** A block is dropped only when the whole of it comes out empty, so wording you typed beside a macro is still sent when the macro gives nothing back. Write
 

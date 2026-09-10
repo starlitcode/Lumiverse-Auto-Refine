@@ -269,6 +269,7 @@ const TURN_MACRO = '{{message}}';
 const HISTORY_MACRO = '{{history}}';
 const LORE_MACRO = '{{lore}}';
 const MEMORY_MACRO = '{{memories}}';
+const OVERUSED_MACRO = '{{overused}}';
 
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
@@ -280,7 +281,7 @@ const MEMORY_MACRO = '{{memories}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply'];
+const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused'];
 
 interface Scene {
   character: string;
@@ -293,6 +294,9 @@ interface Scene {
   // Only set when something was actually shielded, so a message with no markup
   // in it does not carry an instruction about tokens that are not there.
   shieldNote?: string;
+  // Phrases this chat has worn out, one per line. Read from replies already in
+  // hand, so it costs no call.
+  worn?: string;
   // The whole reply with the selected part marked, set only when a refine was
   // asked for on a selection rather than on the message. Empty on every other
   // refine, which leaves the block carrying it out of the prompt entirely.
@@ -758,6 +762,7 @@ function fillOurs(
     memory: string;
     shieldNote?: string;
     wholeReply?: string;
+    worn?: string;
   },
 ): string {
   return String(text).replace(/\u0000ARF:([a-z_]+)\u0000/g, (whole, name) => {
@@ -769,6 +774,7 @@ function fillOurs(
     if (id === 'memories') return p.memory;
     if (id === 'protect_notes') return p.shieldNote || '';
     if (id === 'whole_reply') return p.wholeReply || '';
+    if (id === 'overused') return p.worn || '';
     return '';
   });
 }
@@ -795,6 +801,131 @@ async function fillHost(text: string, scene: Scene, userId?: string): Promise<st
     // refine failing over a macro nobody may have used.
     return text;
   }
+}
+
+// ---- phrases this chat has worn out ----
+//
+// A refine judges one reply at a time, so a phrase reads as fine every time it
+// is met. Used in eleven of the last fifteen replies it is the model's crutch,
+// and nobody notices because nobody reads fifteen replies at once.
+//
+// What this is not: a list of phrases that are bad. A written list catches known
+// slop on first use and a prompt block is the place for one. This catches what no
+// list can hold, which is the drift of one particular chat.
+
+// Words that carry no sense on their own. A run made only of these is grammar,
+// not a habit, so "out of the" and "one of the" are not findings.
+const PLAIN_WORDS =
+  ('a an and as at be been but by for from had has have he her here hers him his ' +
+   'i if in into is it its me my no not of on one or our out she so that the their ' +
+   'them then there they this to up us was were what when which who will with you your')
+    .split(' ');
+const PLAIN = new Set(PLAIN_WORDS);
+
+// How many words a phrase has to be. Two is a pairing anybody writes; a single
+// word is vocabulary rather than a habit.
+const PHRASE_MIN = 3;
+const PHRASE_MAX = 6;
+// How many to put in the prompt. A list of forty is a list a model skims; the
+// ones worth saying are the ones at the top of it.
+const WORN_SHOWN = 12;
+
+// Narration only. A character repeating a phrase is characterisation, and
+// flagging somebody's catchphrase as slop would be telling them off for writing.
+// Everything between one quotation mark and the next comes out.
+function narrationOf(text: string): string {
+  const s = String(text == null ? '' : text);
+  let out = '';
+  let inside = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '"' || c === '\u201c' || c === '\u201d') {
+      inside = !inside;
+      out += ' ';
+      continue;
+    }
+    out += inside ? ' ' : c;
+  }
+  return out;
+}
+
+// Down to the words a phrase is made of. Markup, punctuation and case all go,
+// because "her hand, shaking," and "her hand shaking" are the same habit.
+function wordsOf(text: string, skip: Set<string>): string[] {
+  return String(text == null ? '' : text)
+    .toLowerCase()
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/[*_~>#\[\]()]/g, ' ')
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !skip.has(w));
+}
+
+interface Worn {
+  phrase: string;
+  count: number;
+  replies: number;
+}
+
+// The phrases worn out across these replies, longest first.
+//
+// Counted by how many different replies carry one rather than by how many times
+// it appears. Five times in one reply is a choice that reply made; five times
+// across five replies is a habit, and only the second is worth saying.
+function overusedIn(
+  replies: string[],
+  opts?: { least?: number; names?: string[] },
+): Worn[] {
+  const least = Math.max(2, Math.floor(Number(opts && opts.least) || 3));
+  // Names are in every reply by definition, so a phrase carrying one says
+  // nothing about the writing.
+  const skip = new Set<string>();
+  for (const name of (opts && opts.names) || [])
+    for (const w of String(name || '').toLowerCase().split(/\s+/)) if (w) skip.add(w);
+
+  // phrase -> which replies it turned up in, and how often in total.
+  const seen = new Map<string, { times: number; where: Set<number> }>();
+  for (let r = 0; r < replies.length; r++) {
+    const words = wordsOf(narrationOf(replies[r]), skip);
+    for (let n = PHRASE_MIN; n <= PHRASE_MAX; n++) {
+      for (let i = 0; i + n <= words.length; i++) {
+        const run = words.slice(i, i + n);
+        // Grammar rather than a habit.
+        if (run.every((w) => PLAIN.has(w))) continue;
+        const phrase = run.join(' ');
+        let hit = seen.get(phrase);
+        if (!hit) {
+          hit = { times: 0, where: new Set<number>() };
+          seen.set(phrase, hit);
+        }
+        hit.times++;
+        hit.where.add(r);
+      }
+    }
+  }
+
+  const worn: Worn[] = [];
+  seen.forEach((hit, phrase) => {
+    if (hit.where.size >= least) worn.push({ phrase: phrase, count: hit.times, replies: hit.where.size });
+  });
+
+  // Longest first, because a long phrase is the finding and the short runs
+  // inside it are the same habit counted again.
+  worn.sort((a, b) =>
+    b.phrase.length - a.phrase.length || b.replies - a.replies || a.phrase.localeCompare(b.phrase),
+  );
+  const kept: Worn[] = [];
+  for (const one of worn) {
+    // Inside something already reported, and appearing no more often than it
+    // does: the same habit, said once already.
+    const swallowed = kept.some(
+      (had) => had.phrase.indexOf(one.phrase) >= 0 && had.replies >= one.replies,
+    );
+    if (!swallowed) kept.push(one);
+  }
+  kept.sort((a, b) => b.replies - a.replies || b.count - a.count || a.phrase.localeCompare(b.phrase));
+  return kept;
 }
 
 // ---- finding a selection in the text it was rendered from ----
@@ -1002,6 +1133,7 @@ async function buildPrompt(
     memory: scene.memory,
     shieldNote: scene.shieldNote,
     wholeReply: scene.wholeReply,
+    worn: scene.worn,
   };
   const out: any[] = [];
   for (const b of activeBlocks(isUser)) {
@@ -1456,6 +1588,15 @@ let rateWaits = 2;
 // says, and a reader who has not asked for that should not find their swipe
 // count going up on every reply.
 let asSwipe = false;
+// Phrases this chat has worn out, and how far back to look for them. Off by
+// default: it reads the chat's replies, which is a call to Lumiverse nobody asked
+// for until they put the macro in a block.
+let wornOn = false;
+let wornBack = 60;
+let wornLeast = 3;
+// Phrases to leave alone. A repeated line can be the point: a motif, a ritual, a
+// thing a story is about.
+let wornFine: string[] = [];
 
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
 // softened rewrite and an answer cut off mid-write are all the model having a
@@ -1868,6 +2009,32 @@ async function fitToBudget(
 // How many pieces to fetch is not passed. The count is the reader's own chat
 // memory setting, and overriding it here would mean their chat and their refine
 // were working from different amounts of the same thing.
+// The phrases this chat has worn out, written out for a prompt. Read from replies
+// already in hand, so this costs no call of its own.
+//
+// Your own messages are left out. This is about the model's habits, and your
+// writing is not the thing being rewritten here.
+function gatherWorn(msgs: any[], upTo: number, name?: string): string {
+  if (!wornOn) return '';
+  const replies: string[] = [];
+  const until = upTo >= 0 ? upTo : msgs.length;
+  for (let i = until - 1; i >= 0 && replies.length < wornBack; i--) {
+    const m = msgs[i];
+    if (!m || m.role === 'user') continue;
+    const body = String(m.content == null ? '' : m.content).trim();
+    if (body) replies.push(body);
+  }
+  if (replies.length < wornLeast) return '';
+  const worn = overusedIn(replies, { least: wornLeast, names: name ? [name] : [] });
+  const lines: string[] = [];
+  for (const one of worn) {
+    if (wornFine.indexOf(one.phrase) >= 0) continue;
+    lines.push(one.phrase + ' (' + one.replies + ' replies)');
+    if (lines.length >= WORN_SHOWN) break;
+  }
+  return lines.join('\n');
+}
+
 async function gatherMemory(chatId: string, userId?: string): Promise<string> {
   try {
     const chats = spindle.chats;
@@ -2363,6 +2530,7 @@ async function refineMessage(
     context: promptWants(HISTORY_MACRO, isUser) ? await gatherHistory(msgs, at, card.name, userId) : '',
     lore: promptWants(LORE_MACRO, isUser) ? await gatherLore(chatId, userId) : '',
     memory: promptWants(MEMORY_MACRO, isUser) ? await gatherMemory(chatId, userId) : '',
+    worn: promptWants(OVERUSED_MACRO, isUser) ? gatherWorn(msgs, at, card.name) : '',
     name: card.name,
     chatId: chatId,
     characterId: card.id,
@@ -2832,6 +3000,14 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       rateWaits = Number(s.rateWaits);
       rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
       asSwipe = !!s.asSwipe;
+      wornOn = !!s.wornOn;
+      wornBack = Number(s.wornBack);
+      wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
+      wornLeast = Number(s.wornLeast);
+      wornLeast = Number.isFinite(wornLeast) && wornLeast >= 2 ? Math.floor(wornLeast) : 3;
+      wornFine = Array.isArray(s.wornFine)
+        ? s.wornFine.map((x: any) => String(x == null ? '' : x).trim().toLowerCase()).filter(Boolean)
+        : [];
       protectInline = !!s.protectInline;
       wrapOutput = s.wrapOutput !== false;
       streamProgress = s.streamProgress !== false;
