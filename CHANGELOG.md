@@ -10,6 +10,11 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-09-11_
 
+### Fixed
+
+- **Picking a model setup for a prompt that ships with the extension said nothing about where the pick was going.** The eight shipped prompts are fixed, so **Update selected** is greyed out on them and there is nowhere to write the link. **Save as new** does write it, onto your copy, which is the way to do it, but nothing said that: the box took the pick and then switching the preset list put it back to what the next preset carried. The card now says the copy is what keeps it, and only while a shipped prompt is the one selected.
+- **A name clash with a shipped prompt counted wrong.** Saving a preset under a name one of them already has is refused, and the refusal said there were two of them. There are eight.
+
 ### Added
 
 - **A measurement mark is no longer read as somebody speaking.** Dialogue is left out of the worn phrase counting, and a straight quote after a digit, the kind in `the gap was 6" wide`, opened a line of dialogue that never closed. Every word after it in that reply was thrown away, so a habit sitting past one was never found. Curly quotes are read by their shape, which says which end they are without guessing.

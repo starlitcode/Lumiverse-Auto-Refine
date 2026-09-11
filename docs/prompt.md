@@ -341,6 +341,8 @@ What stays yours whichever preset you load is everything else: whether refining 
 
 **Model setup to load with it** is how to use the two together anyway. Pick one of your saved model setups on the preset card and loading that preset loads that setup as well, so a way of reading and the model that runs it arrive in one press. Leave it at **None** and the Model tab is left alone.
 
+The link lives on a preset you saved. The eight that ship with the extension are fixed, so there is nowhere on one of those to write it, and **Update selected** is greyed out on them. Picking a setup with a shipped prompt selected still works: press **Save as new** and your copy keeps the link. The card says so while you are there, so the pick does not look like it took and then go quietly.
+
 It is stored as the setup's name rather than its values, which is what lets a preset still be shared: a setup holds a connection id, and an id from another account names nothing on yours. If you load a preset that asks for a setup this device does not have, the preset still loads and the card tells you which setup it wanted.
 
 The buttons work the way you would expect: **Load** switches to the preset in the list, **Save as new** stores the current setup under the name in the box, **Update selected** overwrites the chosen one, **Rename selected** renames it, and **Delete** removes it. Loading takes effect at once and is saved, so there is no separate Save step.

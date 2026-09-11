@@ -9154,11 +9154,28 @@ export function setup(ctx: Ctx, overrides?: any) {
       o.textContent = presetSetup + " (not on this device)";
       setupSel.appendChild(o);
     }
+    // The prompts that ship with the extension cannot hold this. Picking one
+    // here still works, because Save as new writes it onto the copy, but Update
+    // selected is greyed out on a shipped prompt and switching the picker puts
+    // the box back to what the next preset carries. Without this line the pick
+    // looks like it took and then goes without a word.
+    const shippedSaid = note(
+      "The prompts that ship with the extension cannot hold this. Press Save as new and the copy keeps it.",
+    );
+    shippedSaid.setAttribute("data-arf-shipped-setup", "1");
+    const sayShipped = () => {
+      shippedSaid.hidden = !presetSetup || !isBuiltIn(presetPick);
+    };
+
     setupSel.value = presetSetup;
     setupSel.addEventListener("change", () => {
       presetSetup = setupSel.value;
+      sayShipped();
     });
     withSetup.appendChild(setupSel);
+
+    sayShipped();
+    withSetup.appendChild(shippedSaid);
     wrap.appendChild(withSetup);
 
     const row = el("div", "arf-row");
@@ -9205,7 +9222,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         return;
       }
       if (isBuiltIn(name)) {
-        presetSaid = "That is the name of one of the two that ship with the extension. Pick another.";
+        presetSaid = "That name belongs to a prompt that ships with the extension. Pick another.";
         paint();
         return;
       }

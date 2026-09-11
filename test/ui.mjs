@@ -1303,6 +1303,38 @@ console.log("\na preset that names a model setup");
     });
     ok("the preset card offers the saved setups", !!offered && offered.indexOf("Careful model") >= 0, JSON.stringify(offered));
 
+    // A shipped prompt cannot hold the setup: Update selected is greyed out on
+    // one, and switching the picker puts the box back to what the next preset
+    // carries. So picking a setup with one selected has to say where the pick is
+    // going, or it looks like it took and then goes without a word.
+    const shippedNote = () =>
+      page.evaluate(() => {
+        const n = document.querySelector('#drawer [data-arf-shipped-setup]');
+        return n ? !n.hidden : null;
+      });
+    const pickSetup = (value) =>
+      page.evaluate((val) => {
+        const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
+        sel.value = val;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value);
+    const pickPreset = (value) =>
+      page.evaluate((val) => {
+        const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+        sel.value = val;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value);
+
+    await pickPreset("A close read");
+    await settle(page);
+    ok("nothing is said about a shipped prompt before a setup is picked", (await shippedNote()) === false);
+    await pickSetup("Careful model");
+    ok("picking a setup on a shipped prompt says the copy is what keeps it", (await shippedNote()) === true);
+    const cannotUpdate = await page.evaluate(
+      () => document.querySelector('#drawer [data-arf-preset="update"]').disabled,
+    );
+    ok("and Update selected is greyed out on it, which is why", cannotUpdate === true);
+
     await page.evaluate(() => {
       const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
       sel.value = "Careful model";
@@ -1317,6 +1349,7 @@ console.log("\na preset that names a model setup");
       JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").map((p) => [p.name, p.setup]),
     );
     ok("the preset is saved with the setup it asks for", JSON.stringify(written).indexOf("Careful model") >= 0, JSON.stringify(written));
+    ok("and on a preset of your own there is nothing to say", (await shippedNote()) === false);
 
     // Turn thinking off, then load the preset. The setup should put it back.
     await goTab(page, "Model");
