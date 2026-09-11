@@ -1246,9 +1246,10 @@ const DEFAULT_BLOCKS = PLAIN_SHORT;
 // No connection id, no prices. A setup only writes the keys it has, so leaving
 // those out means loading this cannot move you off the model you chose or put a
 // price on your tab that is not yours.
+const SHIPPED_SETUP = "Lower temperature, for rewriting";
 const BUILT_IN_SETUPS = [
     {
-        name: "Lower temperature, for rewriting",
+        name: SHIPPED_SETUP,
         settings: { samplers: { temperature: 0.7 } },
     },
 ];
@@ -1259,6 +1260,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: PLAIN_SHORT,
         thinking: "off",
+        setup: SHIPPED_SETUP,
         what: "The one to start with. What to cut, what to mend, what to leave, a block each. The smaller of the two prompts that work on any model.",
     },
     {
@@ -1267,6 +1269,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
+        setup: SHIPPED_SETUP,
         what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt on every refine, and followed more closely. Works on any model.",
     },
     {
@@ -1275,6 +1278,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: THINKS_SHORT,
         thinking: "inherit",
+        setup: SHIPPED_SETUP,
         what: "One question, and the room to answer it: could this sentence sit in any story, or only in this one? The smallest prompt of the four, because a model that reasons works the rest out. Needs a model that reasons.",
     },
     {
@@ -1283,6 +1287,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
+        setup: SHIPPED_SETUP,
         what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer. About the size of a quick read on a plain model, and it goes deeper for it. Needs a model that reasons.",
     },
     {
@@ -1291,6 +1296,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_SHORT,
         thinking: "off",
+        setup: SHIPPED_SETUP,
         what: "The one to start with. What to mend, and then a full stop: slips, missing words, punctuation that came out wrong. Your word choice, your length and your plain lines come back as they went in. The smaller of the two prompts that work on any model.",
     },
     {
@@ -1299,6 +1305,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
+        setup: SHIPPED_SETUP,
         what: "The same list, gone through properly, and a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. About half again the prompt, and more careful about the line between a slip and a choice. Works on any model.",
     },
     {
@@ -1307,6 +1314,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_THINKS_SHORT,
         thinking: "inherit",
+        setup: SHIPPED_SETUP,
         what: "One question, and the room to answer it: would you read the change and say yes, that is what I meant to type? The smallest of the four, because a model that reasons works out what counts as a slip from the question. Needs a model that reasons.",
     },
     {
@@ -1315,6 +1323,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
+        setup: SHIPPED_SETUP,
         what: "The same question, plus where a passage typed at speed actually goes wrong and what is not a repair. None of it is a matter of taste, which is the point of the longer list. About the size of a quick read on a plain model. Needs a model that reasons.",
     },
 ];
@@ -8346,6 +8355,7 @@ export function setup(ctx, overrides) {
             settings: p.mine
                 ? { userBlocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking }
                 : { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
+            setup: p.setup,
         }));
     }
     const isBuiltIn = (name) => BUILT_IN.indexOf(name) >= 0;
@@ -8781,7 +8791,7 @@ export function setup(ctx, overrides) {
             let alsoSaid = "";
             const wants = String(p.setup || "");
             if (wants) {
-                const one = setups.find((x) => x.name === wants);
+                const one = allSetups().find((x) => x.name === wants);
                 if (one) {
                     applySetup(one);
                     alsoSaid = " Model setup " + wants + " went on with it.";

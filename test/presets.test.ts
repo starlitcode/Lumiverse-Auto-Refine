@@ -431,3 +431,36 @@ describe("the model setup that ships with it", () => {
     for (const s of BUILT_IN_SETUPS) expect(s.name.length).toBeGreaterThan(8);
   });
 });
+
+// A prompt that ships with the extension brings the setup that ships with it.
+// The point of both is the same: somebody who has not tuned anything gets a
+// whole working arrangement from one pick rather than a prompt and then a second
+// trip to another tab.
+describe("a shipped prompt brings the shipped setup", () => {
+  const { BUILT_IN_PROMPTS, BUILT_IN_SETUPS } = __testing as any;
+
+  test("every shipped prompt names one", () => {
+    const without = BUILT_IN_PROMPTS.filter((p: any) => !p.setup).map((p: any) => p.name);
+    expect(without).toEqual([]);
+  });
+
+  test("and the one it names is a setup that exists", () => {
+    // A name that matches nothing is reported to the reader as missing, which
+    // would be this telling everybody their own extension is incomplete.
+    const known = BUILT_IN_SETUPS.map((s: any) => s.name);
+    const dangling = BUILT_IN_PROMPTS.filter((p: any) => known.indexOf(p.setup) < 0).map(
+      (p: any) => p.name + " asks for " + p.setup,
+    );
+    expect(dangling).toEqual([]);
+  });
+
+  test("the setup it brings cannot undo what the prompt just set", () => {
+    // The prompts each decide their own thinking, and a setup carrying that key
+    // would overwrite it a moment after the prompt set it, so the reasoning
+    // prompts would load with thinking off.
+    const clashes = BUILT_IN_SETUPS.filter((s: any) => "thinkingMode" in s.settings).map(
+      (s: any) => s.name,
+    );
+    expect(clashes).toEqual([]);
+  });
+});
