@@ -1653,7 +1653,7 @@ const LIMIT_FIELDS = [
         key: "wornOn",
         label: "Find phrases this chat has worn out",
         type: "bool",
-        hint: "Off by default. On, {{overused}} fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. It reads replies the refine already has, so it costs no extra call.",
+        hint: "Off by default. On, {{overused}} fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. Narration only: a character who says the same thing every scene is a character, and counting speech would hand that back as a habit worth removing. Dialogue clichés are the prompt's job instead, and the Speech block covers them. It reads replies the refine already has, so it costs no extra call.",
     },
     {
         key: "wornBack",

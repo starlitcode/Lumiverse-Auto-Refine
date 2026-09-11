@@ -75,7 +75,7 @@ It is not a list of phrases that are bad. A written list catches known slop the 
 What it counts, and what it refuses to count:
 
 - **Across replies, not within one.** Five times in a single reply is that reply's choice. Five times across five replies is a habit. **How many replies a phrase has to be in** sets the number, three by default.
-- **Narration only.** Everything in quotation marks comes out first, because a character repeating a phrase is characterisation rather than a habit.
+- **Narration only.** Everything in quotation marks comes out first, because a character repeating a phrase is characterisation rather than a habit. Counting it would hand a character's own way of talking back as something to remove. Dialogue clichés are a prompt's job instead: the **Speech** block in the prompts that ship with the extension covers them.
 - **Three words at least.** One word is vocabulary. A run made only of common words is grammar, so "out of the" is never a finding.
 - **The longest phrase wins.** A finding of six words does not also report the four-word run inside it, which is the same habit counted twice.
 - **Your own messages are left out,** and so is the character's name, which is in every reply by definition.
