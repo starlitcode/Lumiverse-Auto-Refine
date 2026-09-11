@@ -2839,6 +2839,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // What the last refine put through the model. Sent on after the answer rather
   // than with it, so it lands a moment later and stays until the next one.
   let lastUsed: { sent: number; back: number; counted: boolean } | null = null;
+  // The passes the last chain made, each with what it was handed and what it
+  // gave back. Empty for a single pass, which has nothing to break down: the
+  // card already shows the one before and the one after.
+  let lastSteps: Array<{ name: string; before: string; after: string }> = [];
 
   // ---- turning tokens into the number people actually want ----
   const hasPrices = (): boolean => Number(cfg.costIn) > 0 || Number(cfg.costOut) > 0;
@@ -7470,6 +7474,35 @@ export function setup(ctx: Ctx, overrides?: any) {
       r.appendChild(el("span", "arf-lab arf-mono", v));
       wrap.appendChild(r);
     }
+    // What each pass of the last chain did. One before and one after, with three
+    // calls somewhere in between, says a chain came out worse and never says
+    // which link did it. Folded, because most refines are one pass and this is
+    // only here when one was not.
+    if (lastSteps.length > 1) {
+      wrap.appendChild(el("div", "arf-rule"));
+      wrap.appendChild(
+        fold("What each pass changed", (body) => {
+          for (let i = 0; i < lastSteps.length; i++) {
+            const one = lastSteps[i];
+            const head = el("div", "arf-between");
+            head.appendChild(el("span", "arf-lab arf-grow", i + 1 + ". " + one.name));
+            // Measured rather than described. A pass that took a fifth out is
+            // the thing a reader is looking for, and the number says it faster
+            // than the marking does.
+            const by = one.after.length - one.before.length;
+            head.appendChild(
+              el(
+                "span",
+                "arf-pill arf-mono",
+                by === 0 ? "no change in length" : (by > 0 ? "+" : "") + by + " characters",
+              ),
+            );
+            body.appendChild(head);
+            body.appendChild(diffWell(one.before, one.after));
+          }
+        }),
+      );
+    }
     if (drops.size) {
       wrap.appendChild(el("div", "arf-rule"));
       wrap.appendChild(el("div", "arf-note", "Why rewrites were dropped"));
@@ -10594,6 +10627,21 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (msg.type === "shield_bad") {
             shieldBad = Array.isArray(msg.patterns) ? msg.patterns.map(String).slice(0, 10) : [];
             if (shieldBad.length) log("some shield patterns could not be read");
+            paint();
+            return;
+          }
+          if (msg.type === "refine_steps") {
+            // Only the last chain is kept. Two chains back is not a thing
+            // anybody is comparing, and holding every one of them would grow
+            // without a ceiling on a run through a long chat.
+            const got = Array.isArray(msg.steps) ? msg.steps : [];
+            lastSteps = got
+              .map((one: any) => ({
+                name: String((one && one.name) || ""),
+                before: String((one && one.before) || ""),
+                after: String((one && one.after) || ""),
+              }))
+              .filter((one: any) => one.name);
             paint();
             return;
           }

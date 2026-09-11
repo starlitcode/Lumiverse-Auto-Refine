@@ -3584,3 +3584,86 @@ describe("the shipped prompt carries the new macros", () => {
     expect(sent).toContain("shiver ran down her spine");
   });
 });
+
+// What each pass of a chain did. One before and one after, with three calls
+// somewhere between them, says a chain came out worse and never says which link
+// did it.
+describe("what each pass changed", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+  const pass = (name: string) => ({
+    name: name,
+    on: true,
+    blocks: [
+      { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+    ],
+  });
+  const body = "She stepped through the gate and, suddenly, the cold just hit her hard.";
+  const steps = (h: any) => (h.sent.filter((x: any) => x && x.type === "refine_steps").pop() || {}).steps || [];
+
+  test("a chain reports a step for each pass, in order", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold hit her hard.</REFINED>",
+        "<REFINED>She stepped through, and the cold took her breath away.</REFINED>",
+      ],
+      { passMode: "many", passes: [pass("Cut the filler"), pass("Fix the rhythm")] },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(140);
+    const got = steps(h);
+    expect(got.length).toBe(2);
+    expect(got.map((s: any) => s.name)).toEqual(["Cut the filler", "Fix the rhythm"]);
+  });
+
+  test("each step says what it was handed and what it gave back", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold hit her hard.</REFINED>",
+        "<REFINED>She stepped through, and the cold took her breath away.</REFINED>",
+      ],
+      { passMode: "many", passes: [pass("Cut the filler"), pass("Fix the rhythm")] },
+      reply(body),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(140);
+    const got = steps(h);
+    // The first pass starts from the reply, and each one after starts where the
+    // one before it finished. Without that they would all read as starting from
+    // the original, which is the thing this is for.
+    expect(got[0].before).toBe(body);
+    expect(got[0].after).toBe("She stepped through the gate and the cold hit her hard.");
+    expect(got[1].before).toBe(got[0].after);
+    expect(got[1].after).toBe("She stepped through, and the cold took her breath away.");
+  });
+
+  test("one pass reports nothing, since there is nothing to break down", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her at once.</REFINED>"], { passMode: "one" }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(steps(h).length).toBe(0);
+  });
+
+  test("a chain refused on the total still reports its passes", async () => {
+    // The refusal says which limit was hit. This says which pass hit it, which
+    // is the half a reader cannot get anywhere else.
+    const long = "She stepped through the gate and, quite suddenly, the cold of the yard just hit her all at once, hard.";
+    const h = await armed(
+      [
+        "<REFINED>She stepped through the gate and the cold of the yard hit her all at once.</REFINED>",
+        "<REFINED>She stepped through the gate and the cold hit her at once.</REFINED>",
+        "<REFINED>She went through, and the cold hit.</REFINED>",
+      ],
+      { passMode: "many", passes: [pass("One"), pass("Two"), pass("Three")], minShrinkPct: 40 },
+      reply(long),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(180);
+    expect(h.writes.length).toBe(0);
+    expect(steps(h).length).toBe(3);
+  });
+});

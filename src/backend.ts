@@ -2639,6 +2639,13 @@ async function refineMessage(
   // them, so the tokens standing in for markup are the same throughout and the
   // instruction about them stays true for every pass.
   let carried = armed.text;
+  // What each pass was given and what it handed back. A chain that came out
+  // worse is otherwise one before and one after with three calls somewhere in
+  // between, and no way to tell which of them did it.
+  //
+  // The shielded text, unshielded per pass on the way out, so what a reader is
+  // shown is the writing rather than the tokens standing in for its markup.
+  const steps: Array<{ name: string; before: string; after: string }> = [];
   for (let step = 0; step < chain.length; step++) {
     const pass = chain[step];
     if (chain.length > 1) {
@@ -2658,8 +2665,21 @@ async function refineMessage(
     verdict = { ok: false, text: '', why: 'nothing was tried' };
     const got = await walkPass(pass, carried);
     if (!got.ok) return got.out;
+    if (chain.length > 1)
+      steps.push({
+        name: pass.name,
+        before: unshield(carried, armed.parts).text,
+        after: unshield(got.text, armed.parts).text,
+      });
     carried = got.text;
   }
+  // Sent as soon as the walk is done, ahead of every check that can turn the
+  // result down. A chain refused on its total is the one a reader most wants to
+  // look through: the refusal says which limit was hit, and this says which pass
+  // hit it.
+  if (steps.length > 1)
+    tell(userId, { type: 'refine_steps', chatId: chatId, messageId: m.id, steps: steps });
+
   // Each pass was judged against what it was given, which on its own lets a
   // chain drift: three passes each tightening by a third leaves a reply half its
   // length, and no single pass did anything the limits object to. So the end of

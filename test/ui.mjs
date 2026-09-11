@@ -6087,6 +6087,45 @@ console.log("\nswitching on a setting with nowhere to put its answer");
   });
 }
 
+console.log("\nwhat each pass changed, on the Log tab");
+{
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    await goTab(page, "Log");
+    const out = await page.evaluate(async () => {
+      const fire = (steps) => {
+        window.__fromBackend({ type: "refine_steps", chatId: "c1", messageId: "m2", steps: steps });
+      };
+      const text = () => document.querySelector("#drawer").textContent || "";
+      const before = text();
+      fire([
+        { name: "Cut the filler", before: "She stepped through and, suddenly, the cold just hit her.", after: "She stepped through and the cold hit her." },
+        { name: "Fix the rhythm", before: "She stepped through and the cold hit her.", after: "She stepped through, and the cold took her breath." },
+      ]);
+      await new Promise((r) => setTimeout(r, 320));
+      const after = text();
+      // Open the fold and read what is inside it.
+      let opened = "";
+      for (const b of document.querySelectorAll("#drawer button")) {
+        if (/what each pass changed/i.test(b.textContent || "")) {
+          b.click();
+          await new Promise((r) => setTimeout(r, 320));
+          opened = text();
+          break;
+        }
+      }
+      return { before, after, opened, marks: document.querySelectorAll("#drawer [data-arf-diff]").length };
+    });
+    ok("nothing is there before a chain runs", !/what each pass changed/i.test(out.before));
+    ok("a chain puts a fold on the Log tab", /what each pass changed/i.test(out.after), out.after.slice(-200));
+    ok("and it names each pass in order",
+      /1\. Cut the filler/.test(out.opened) && /2\. Fix the rhythm/.test(out.opened), out.opened.slice(-300));
+    // The number is what a reader scans for: a pass that took a fifth out is the
+    // thing they are looking for.
+    ok("with how much each one changed the length", /characters/.test(out.opened), out.opened.slice(-300));
+    ok("and a marked diff for each", out.marks >= 2, JSON.stringify({ marks: out.marks }));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

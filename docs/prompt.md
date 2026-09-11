@@ -61,6 +61,8 @@ How the checks apply, which is the part worth understanding:
 - **A refusal stops the chain where it happens.** Pass two declining means pass three is never asked for, and nothing is saved.
 - **Stop ends it.** The call in flight is cut off, and the passes behind it never run.
 
+**What each pass changed** on the Log tab breaks a chain open: every pass in order, what it was handed, what it gave back, and how much it changed the length. It is the answer to a chain that came out worse, which one before and one after cannot give you. A chain refused on its total still fills it in, so the refusal and the pass that caused it can be read together.
+
 Markup protection is applied once, before the first pass, and undone after the last. The tokens standing in for your formatting are the same throughout, so the instruction about them stays true for every pass.
 
 ### Phrases this chat has worn out
