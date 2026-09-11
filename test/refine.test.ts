@@ -3504,3 +3504,83 @@ describe("a chain of passes", () => {
     expect(h.sent.map((x: any) => String(x.why || "")).join(" ")).toMatch(/across all 3 passes/i);
   });
 });
+
+// The two blocks added for the new macros ship switched on, which is only safe
+// because a block whose macros came back empty leaves the prompt. If that ever
+// stopped being true, every refine would carry two empty headings.
+describe("the shipped prompt carries the new macros", () => {
+  const blocks = (DEFAULT_BLOCKS as any[]).map((b) => ({ ...b }));
+
+  test("the shipped prompt has a block for each of them", () => {
+    const text = blocks.map((b) => String(b.text || "")).join("\n");
+    expect(text).toContain("{{overused}}");
+    expect(text).toContain("{{whole_reply}}");
+  });
+
+  test("and both are switched on, so turning the setting on is enough", () => {
+    for (const id of ["worn", "around"]) {
+      const had = blocks.find((b) => b.id === id);
+      expect(had).toBeTruthy();
+      expect(had.on).toBe(true);
+    }
+  });
+
+  test("an ordinary refine sends neither of them", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her at once.</REFINED>"], { blocks: blocks });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    const sent = JSON.stringify(h.asked[0].messages);
+    expect(sent).not.toContain("already_worn_out_in_this_chat");
+    expect(sent).not.toContain("the_reply_around_it");
+  });
+
+  test("refining a selection sends the one that has something to say", async () => {
+    const msgs: Msg[] = [
+      { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },
+      { id: "m1", role: "user", content: "i go in" },
+      { id: "m2", role: "assistant", content: "She set the crate down. She tried the handle twice anyway. Nobody came." },
+    ];
+    const h = await armed(
+      ["<REFINED>She tried the handle twice regardless of that.</REFINED>"],
+      { blocks: blocks },
+      msgs,
+    );
+    await h.front({
+      type: "refine_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m2",
+      picked: "She tried the handle twice anyway.",
+      ahead: "She set the crate down. ",
+    });
+    await wait(80);
+    const sent = JSON.stringify(h.asked[0].messages);
+    // The reply around it, so the fragment is not read without its context.
+    expect(sent).toContain("the_reply_around_it");
+    expect(sent).toContain("<<<She tried the handle twice anyway.>>>");
+    // And still not the worn one, whose setting is off.
+    expect(sent).not.toContain("already_worn_out_in_this_chat");
+  });
+
+  test("switching the worn setting on is all it takes", async () => {
+    const habit = [
+      { id: "m0", role: "assistant", content: "A shiver ran down her spine as the lamp guttered." },
+      { id: "u1", role: "user", content: "i keep going" },
+      { id: "a1", role: "assistant", content: "She pushed the door wider. A shiver ran down her spine." },
+      { id: "u2", role: "user", content: "i keep going" },
+      { id: "a2", role: "assistant", content: "The cold found the frame, and a shiver ran down her spine again." },
+      { id: "u3", role: "user", content: "i keep going" },
+      { id: "a3", role: "assistant", content: "She set the lamp on the sill and waited for the wind to drop." },
+    ];
+    const h = await armed(
+      ["<REFINED>She put the lamp on the sill and waited for the wind to fall away.</REFINED>"],
+      { blocks: blocks, wornOn: true, wornLeast: 3 },
+      habit as Msg[],
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(80);
+    const sent = JSON.stringify(h.asked[0].messages);
+    expect(sent).toContain("already_worn_out_in_this_chat");
+    expect(sent).toContain("shiver ran down her spine");
+  });
+});

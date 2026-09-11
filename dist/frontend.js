@@ -498,6 +498,37 @@ const MEMORY_BLOCK = {
     role: "system",
     text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
 };
+// The phrases this chat keeps reaching for. On in every shipped prompt, and that
+// costs nothing: the macro is empty until Find phrases this chat has worn out is
+// switched on, and a block whose macros came back empty is left out, tags and
+// all. Shipping it off instead would mean switching the setting on did nothing
+// anybody could see until they also found this block and switched it on too.
+//
+// The tag says where the list came from, which is the part a model can act on. A
+// phrase it has reached for eleven times is a different instruction from a phrase
+// somebody put on a list.
+const WORN_BLOCK = {
+    id: "worn",
+    name: "Phrases this chat has worn out",
+    on: true,
+    role: "system",
+    text: "<already_worn_out_in_this_chat>\n{{overused}}\n</already_worn_out_in_this_chat>",
+};
+// What surrounds the part being rewritten, and only when part of a reply is what
+// was asked for. Empty on every ordinary refine, so the block leaves the prompt.
+//
+// Without this a selection is handed over as a fragment with nothing around it:
+// a sentence about a handle, with no idea whose hand or which door. It goes
+// directly above the passage, which is where the thing it describes sits.
+const AROUND_BLOCK = {
+    id: "around",
+    name: "The reply this part came from",
+    on: true,
+    role: "system",
+    text: "<the_reply_around_it>\n" +
+        "{{whole_reply}}\n" +
+        "</the_reply_around_it>",
+};
 // The pages before this one. Redrawn every single turn, so it goes as late as it
 // can and still be read as setting.
 const RECENT_BLOCK = {
@@ -710,7 +741,9 @@ const PLAIN_SHORT = [
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 // ---- a model that does not reason, in full ----
@@ -826,7 +859,9 @@ const PLAIN_LONG = [
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 const THINKS_JOB = {
@@ -1053,7 +1088,9 @@ const YOURS_SHORT = [
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 const YOURS_LONG = [
@@ -1065,7 +1102,9 @@ const YOURS_LONG = [
     HOW_TO_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 const YOURS_DEFAULT = YOURS_SHORT;
@@ -1078,7 +1117,9 @@ const THINKS_SHORT = [
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 // ---- a model that reasons, in full ----
@@ -1138,7 +1179,9 @@ const THINKS_LONG = [
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 // The same two, for a model that reasons. It is given the test and left to
@@ -1152,7 +1195,9 @@ const YOURS_THINKS_SHORT = [
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 const YOURS_THINKS_LONG = [
@@ -1164,7 +1209,9 @@ const YOURS_THINKS_LONG = [
     THINKS_ANSWER,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
+    WORN_BLOCK,
     RECENT_BLOCK,
+    AROUND_BLOCK,
     TURN_BLOCK,
 ];
 const DEFAULT_BLOCKS = PLAIN_SHORT;
@@ -1548,7 +1595,7 @@ const LIMIT_FIELDS = [
         type: "lines",
         needs: { key: "passMode", is: "many" },
         under: true,
-        hint: "One saved preset name per line, top to bottom. A name that matches nothing is skipped, and so is a preset with no block carrying {{message}}, since the model would never see the reply. With no usable line here the prompt on the Prompt tab runs as a single pass.",
+        hint: "One preset name per line, top to bottom. Yours or one that ships with it, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass.",
     },
     {
         key: "wornOn",
@@ -1959,8 +2006,18 @@ export function setup(ctx, overrides) {
             .map((raw) => String(raw == null ? "" : raw).trim())
             .filter(Boolean)
             .map((name) => {
-            const had = presets.find((p) => p && String(p.name).toLowerCase() === name.toLowerCase());
-            const list = had && had.settings ? usable(had.settings.blocks) : [];
+            const want = name.toLowerCase();
+            // Yours first, so a preset you saved under a shipped name is the one that
+            // runs. Then the shipped prompts, which are a separate list from your
+            // saved ones: without this line a pass named after one of them resolved
+            // to nothing and was skipped without saying so.
+            const mineNamed = presets.find((p) => p && String(p.name).toLowerCase() === want);
+            const shipped = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
+            const list = mineNamed && mineNamed.settings
+                ? usable(mineNamed.settings.blocks)
+                : shipped
+                    ? usable(shipped.blocks)
+                    : [];
             return { name: name, on: list.length > 0, blocks: list };
         })
             .filter((one) => one.blocks.length > 0);
@@ -3501,6 +3558,10 @@ export function setup(ctx, overrides) {
     // The reply prompt, which is the one the automatic pass and the refine button
     // use. The own-messages prompt is checked where it is edited.
     const noTurn = () => !holdsTurn(blockList("blocks"));
+    // Whether the prompt has anywhere to put the worn phrases. A prompt saved
+    // before that block existed does not carry it, so switching the setting on
+    // would otherwise fill nothing and say nothing about why.
+    const noWornBlock = () => !blockList("blocks").some((b) => b.on && String(b.text || "").indexOf("{{overused}}") >= 0);
     // A provider that caches prompts reuses the front of one up to the first
     // thing that changed. The passage is different on every refine and the run-up
     // is redrawn every turn, so a block holding either pushes everything under it
@@ -3509,7 +3570,18 @@ export function setup(ctx, overrides) {
     // This is a trade rather than a mistake, which is why it is a line and not a
     // warning: a rule below the passage reads as an instruction about it and is
     // followed more closely. Worth knowing, not worth stopping for.
-    const VOLATILE = ["{{message}}", "{{history}}"];
+    // Macros whose answer is different on every refine. A block carrying one can
+    // never be reused, so anything stable below it is sent as new for nothing.
+    //
+    // {{whole_reply}} is in here because it is the reply, which is the most
+    // changeable thing in the prompt. Left out, the block carrying it read as a
+    // block that never changes and the shipped order reported itself as costing
+    // caching, which it does not: that block is empty on an ordinary refine and
+    // leaves the prompt entirely.
+    //
+    // {{overused}} is not in here. It changes as a chat goes on, but it is the same
+    // for every refine in the same stretch of one, so a provider can reuse it.
+    const VOLATILE = ["{{message}}", "{{history}}", "{{whole_reply}}"];
     const movesEveryTurn = (b) => VOLATILE.some((m) => String(b.text || "").indexOf(m) >= 0);
     // Blocks that never change and sit after one that does. Those are the wasted
     // ones: above the change they would be reused, below it they are re-sent
@@ -5781,6 +5853,17 @@ export function setup(ctx, overrides) {
             box.addEventListener("change", () => {
                 cfg[f.key] = !!box.checked;
                 persist(true);
+                // Switched on with nowhere to put its answer. Both, because they answer
+                // two different moments: the pop-up is seen now, on whichever tab the
+                // switch was flipped on, and the Log line is still there later when
+                // somebody wonders why nothing changed. Forced past the pop-up setting,
+                // since that setting is about refines rather than about this.
+                if (f.key === "wornOn" && box.checked && noWornBlock()) {
+                    const why = "No block in your prompt has {{overused}} in it, so there is nowhere to put " +
+                        "the worn phrases. Add one under Prompt, or load a prompt that ships with it.";
+                    toast(why, true);
+                    log("worn phrases are on, but " + why.charAt(0).toLowerCase() + why.slice(1));
+                }
                 reveal();
                 settle();
             });

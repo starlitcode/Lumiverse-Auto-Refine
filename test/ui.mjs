@@ -6045,6 +6045,48 @@ console.log("\nrefining the part you selected");
   });
 }
 
+console.log("\nswitching on a setting with nowhere to put its answer");
+{
+  // A prompt saved before the worn block existed does not carry it. Turning the
+  // setting on then fills nothing, and doing that quietly is the failure.
+  const noWorn = [
+    { id: "system", name: "The job", on: true, role: "system", text: "<your_task>\nRewrite it.\n</your_task>" },
+    { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+  ];
+  await inTab(browser, { saved: { blocks: noWorn, wornOn: false } }, async (page) => {
+    await goTab(page, "Limits");
+    const said = await page.evaluate(async () => {
+      const box = document.querySelector('#drawer [data-arf-field="wornOn"]');
+      if (!box) return { noRow: true };
+      window.__toasts = [];
+      box.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return { text: (window.__toasts || []).join(" | ") };
+    });
+    ok("the row is on the Limits tab", !said.noRow, JSON.stringify(said));
+    ok("and switching it on says there is nowhere to put them",
+      !said.noRow && /nowhere to put the worn phrases/i.test(said.text), (said.text || "").slice(-220));
+  });
+
+  // And with a block for it, nothing is said.
+  const withWorn = [
+    { id: "system", name: "The job", on: true, role: "system", text: "<your_task>\nRewrite it.\n</your_task>" },
+    { id: "worn", name: "Worn", on: true, role: "system", text: "<worn>\n{{overused}}\n</worn>" },
+    { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+  ];
+  await inTab(browser, { saved: { blocks: withWorn, wornOn: false } }, async (page) => {
+    await goTab(page, "Limits");
+    const quiet = await page.evaluate(async () => {
+      const box = document.querySelector('#drawer [data-arf-field="wornOn"]');
+      window.__toasts = [];
+      box.click();
+      await new Promise((r) => setTimeout(r, 320));
+      return (window.__toasts || []).join(" | ");
+    });
+    ok("with a block for it, nothing is said", !/nowhere to put/i.test(quiet), quiet);
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

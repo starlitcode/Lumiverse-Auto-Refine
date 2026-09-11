@@ -42,7 +42,9 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 
 A refine is one model call by default. **How many passes a refine makes** on the Limits tab can make it several, each pass handed what the one before it wrote. Two cheap passes often beat one expensive one: cut the filler first, fix the rhythm second, and neither prompt has to do both jobs at once.
 
-**The passes, in order** takes one saved preset name per line, top to bottom. Names rather than copies, so editing a preset changes every pass that uses it.
+**The passes, in order** takes one preset name per line, top to bottom. Either one of yours or one that ships with it, and yours wins where the two share a name. Names rather than copies, so editing a preset changes every pass that uses it.
+
+The prompts that ship with it are whole refines rather than single jobs, so running two of them in sequence does the same work twice. A chain is worth building out of passes that each do one thing: one that only cuts, one that only fixes rhythm. Save those as presets of your own and name them here.
 
 What it costs: one call per pass. Three passes is three times the bill of one, and the Log adds them up rather than reporting the last one.
 
