@@ -1312,12 +1312,6 @@ console.log("\na preset that names a model setup");
         const n = document.querySelector('#drawer [data-arf-shipped-setup]');
         return n ? !n.hidden : null;
       });
-    const pickSetup = (value) =>
-      page.evaluate((val) => {
-        const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
-        sel.value = val;
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
-      }, value);
     const pickPreset = (value) =>
       page.evaluate((val) => {
         const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
@@ -1328,17 +1322,20 @@ console.log("\na preset that names a model setup");
     await pickPreset("A close read");
     await settle(page);
     ok("nothing is said about a shipped prompt before a setup is picked", (await shippedNote()) === false);
-    await pickSetup("Careful model");
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
+      sel.value = "Careful model";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     ok("picking a setup on a shipped prompt says the copy is what keeps it", (await shippedNote()) === true);
     const cannotUpdate = await page.evaluate(
       () => document.querySelector('#drawer [data-arf-preset="update"]').disabled,
     );
     ok("and Update selected is greyed out on it, which is why", cannotUpdate === true);
 
+    // The pick survives into Save as new, which is the whole point of the line
+    // above: the copy is what carries it.
     await page.evaluate(() => {
-      const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
-      sel.value = "Careful model";
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
       const name = document.querySelector('#drawer [data-arf-field="presetName"]');
       name.value = "Close read";
       name.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1358,11 +1355,7 @@ console.log("\na preset that names a model setup");
     ok("thinking is back off before the preset is loaded", (await thinking()) === "off", await thinking());
 
     await goTab(page, "Prompt");
-    await page.evaluate(() => {
-      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      sel.value = "Close read";
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await pickPreset("Close read");
     await settle(page);
     await page.evaluate(() => document.querySelector('#drawer [data-arf-preset="load"]').click());
     await settle(page);
