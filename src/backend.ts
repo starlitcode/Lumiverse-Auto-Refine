@@ -2563,9 +2563,10 @@ async function refineMessage(
   // those is a reply this pass has never seen. Auto Retry re-rolling a refusal
   // is that case, several times in a row.
   //
-  // By hand goes ahead whatever the mark says. Pressing the button on a reply
-  // is somebody asking for this one, now.
-  if (!byHand && !refineAgain && refined.get(String(m.id)) === markOf(original))
+  // Pressing the button is held to this as well. Refining the same words twice
+  // is a model call that buys a second opinion on a passage nobody changed, and
+  // somebody who wants one turns the setting on.
+  if (!refineAgain && refined.get(String(m.id)) === markOf(original))
     return { ok: false, stood: true, why: 'this reply is still holding the refine it was given' };
 
   // The ceiling above. Only the automatic pass counts against it: pressing the

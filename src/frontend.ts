@@ -654,36 +654,54 @@ const THINKS_ANSWER: Block = {
 // The phrase list, the same in both lengths. These turn up in machine-written
 // fiction several times a session and in published fiction almost never.
 const PHRASES =
+  // Bodies standing in for a feeling nobody wrote.
   "- a breath they did not know they were holding\n" +
-  "- a breath that hitches, or catches\n" +
+  "- a breath that hitches or catches\n" +
   "- a heart hammering, pounding, racing or thundering against ribs\n" +
+  "- a shiver down a spine, or sent anywhere\n" +
+  "- a stomach dropping, knuckles whitening, a jaw tightening\n" +
+  "- swallowing hard, or a throat bobbing\n" +
+  "- pupils blown wide, or eyes darkening\n" +
+  "- a body going rigid, going still, or steeling itself\n" +
+  // Feeling packed into a container and handed over unopened.
+  "- a jolt, a surge, a wave, a rush, a pang, a flicker or a ghost of something\n" +
+  "- an emotion given as a mixture of two others, or warring with another\n" +
+  "- being acutely, keenly, painfully or achingly aware of something\n" +
+  "- the weight of a look, a word, a silence, or of an unnamed it\n" +
+  // Faces and voices running the same stock business.
+  "- a smirk, a wicked grin, a knowing look, an eyebrow raised, quirked or arched\n" +
+  "- a smile that does not reach the eyes\n" +
+  "- a mouth whose corner quirks, twitches or lifts\n" +
+  "- an expression called unreadable, neutral or blank\n" +
+  "- a voice given a texture: velvety, husky, gravelly, silky, raspy\n" +
+  "- a voice that purrs, growls, or drops an octave\n" +
   "- a voice barely above a whisper\n" +
-  "- eyes that darken, or flick, or trace\n" +
-  "- a shiver running down a spine, or sent anywhere\n" +
-  "- the ghost of a smile\n" +
-  "- the air thick with anything\n" +
-  "- something shifting, hanging or crackling in the air\n" +
-  "- an emotion given as a mixture of two other emotions\n" +
-  "- not knowing whether to do one thing or another\n" +
-  "- doing something before they could stop themselves\n" +
-  "- closing the distance\n" +
-  "- swallowing hard\n" +
-  "- time slowing, or the world falling away\n" +
+  // The room doing work the characters should be doing.
+  "- the air thick with anything, or charged, or shifting\n" +
+  "- something crackling or hanging between two people\n" +
+  "- a setting given a will of its own: a house that watches, a forest that breathes\n" +
+  "- a sound placed out of reach: somewhere, a door slams\n" +
+  "- time slowing, the world falling away, the world narrowing\n" +
+  "- a pause named instead of filled: a long moment, a beat, a silence that stretches\n" +
   // Shapes rather than particular phrases. A model reaches for these whatever
   // the scene is, so naming the shape catches every filling of it where naming
   // one example catches one.
   "- a thing said by what it is not, then corrected: not a question, an order\n" +
   "- the same thing twice with the weaker one kept: they did not just leave, they ran\n" +
-  "- three of anything in a row, three adjectives or three fragments or three clauses\n" +
-  "- a pause named instead of filled: a long moment, or a silence that stretches\n" +
+  "- three of anything in a row: three adjectives, three fragments, three clauses\n" +
   "- two or three actions strung onto one sentence with as\n" +
-  "- a laugh, a breath or a sound that escapes somebody\n" +
   "- a sentence opened on a participle: reaching for the glass, they\n" +
-  "- an action given and then graded: they laughed, and it was thin";
+  "- an action given and then graded: they laughed, and it was thin\n" +
+  "- a laugh, a breath or a sound that escapes somebody\n" +
+  "- a softened double negative: not unkind, no small thing\n" +
+  "- closing the distance\n" +
+  "- doing something before they could stop themselves\n" +
+  "- not knowing whether to do one thing or another";
 
 const FILLER =
   "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
-  "seemed to, began to, found themselves";
+  "seemed to, began to, found themselves, could not help but, visibly, " +
+  "practically, simply, merely";
 
 const COPY_EXACTLY: Block = {
   id: "hands_off",
@@ -891,13 +909,30 @@ const PLAIN_LONG: Block[] = [
       "<speech>\n" +
       "Every line keeps its meaning and its speaker. Where phrasing is stiff, " +
       "loosen the phrasing and leave the meaning where it is.\n\n" +
-      "Take out the tag that explains its own line: they said angrily, they asked, " +
-      "curious. Where the tone is missing from the words, mend the words.\n\n" +
-      "Take out speech that repeats back what the other person just did before " +
-      "answering it.\n\n" +
-      "A character who speaks badly goes on speaking badly. Clipped, rambling, " +
-      "plain or crude is a voice, and smoothing it hands back a different " +
-      "character.\n" +
+      "Take out the tag that explains its own line: they said angrily, they " +
+      "asked, curious. Where the tone is missing from the words, mend the " +
+      "words.\n\n" +
+      "Take out speech that repeats back what the other person just said or " +
+      "did before answering it.\n\n" +
+      "Cut the line that announces itself before it arrives: here is the deal, " +
+      "here is the thing, bottom line, long story short, the short version, " +
+      "two things. Let the first sentence carry the point. Somebody quoting " +
+      "terms or running triage may lay a delivery out in order; nobody else " +
+      "does it in conversation.\n\n" +
+      "Cut the line that only grades what was just said: I respect that, fair " +
+      "enough, that is valid, honestly as a lead-in. Every line wants " +
+      "something. It deflects, probes, demands, confesses or lies.\n\n" +
+      "Counselling talk belongs to characters who counsel for a living. What I " +
+      "am hearing is, that is completely valid, you do not have to answer " +
+      "that, how are you holding up. Handed something heavy, a character " +
+      "answers like a person: badly, or too late, or by making it about " +
+      "themselves, or by changing the subject.\n\n" +
+      "Cut a soft name added to take the edge off a line: champ, friend, " +
+      "buddy, chief, boss. A character who already talks that way keeps " +
+      "it.\n\n" +
+      "A character who speaks badly goes on speaking badly. Clipped, " +
+      "rambling, plain or crude is a voice, and smoothing it hands back a " +
+      "different character.\n" +
       "</speech>",
   },
   {
@@ -1731,10 +1766,9 @@ const LIMIT_FIELDS: Field[] = [
   },
   {
     key: "refineAgain",
-    label: "Refine a reply that has been refined before",
+    label: "Refine something that has been refined before",
     type: "bool",
-    needs: { key: "refineOn" },
-    hint: "Off by default, so the automatic pass takes each reply once. On, a reply you swiped or regenerated is refined again. Pressing the button on one always refines it, whichever way this sits.",
+    hint: "Off by default, so the same words are refined once. That covers the automatic pass, the buttons, and your own messages. Swiping, regenerating or editing puts different words behind the message, and those are refined either way. On, pressing refine on a reply still holding its refine sends it again.",
   },
   {
     key: "asSwipe",
@@ -6874,6 +6908,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!preview.ok) {
       wrap.appendChild(el("div", "arf-well arf-dim", String(preview.why || "It could not be built.")));
       return wrap;
+    }
+
+    // Which of the two prompt lists this was built from. The backend picks it
+    // off the message being previewed: your own turn is built from the prompt
+    // for your writing, a reply from the prompt for replies. Loading a preset
+    // writes to one list and leaves the other alone, so somebody who loads a
+    // reply preset while their own message is the newest one gets a preview of
+    // the prompt they did not touch, and nothing here said so.
+    const which = String(preview.which || "");
+    if (which) {
+      const line = note(
+        which === "yours"
+          ? "Built from your prompt for your own writing, because the message being previewed is yours. A preset loaded into the reply prompt will not show here."
+          : "Built from your prompt for replies, because the message being previewed is a reply. A preset loaded into the prompt for your own writing will not show here.",
+      );
+      line.setAttribute("data-arf-preview", "which");
+      wrap.appendChild(line);
     }
 
     const msgs = Array.isArray(preview.messages) ? preview.messages : [];

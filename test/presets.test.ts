@@ -151,10 +151,19 @@ describe("the prompts that ship with it", () => {
     /\bin a breath\b/i,
     /\bsame hand\b/i,
   ];
+  // Only the prose. A bullet is an example of something to cut, so a prompt
+  // naming "a beat" as a pause worth filling is doing its job rather than
+  // failing this: the fault being guarded against is a prompt written in the
+  // stuff it exists to remove, not one that quotes it.
+  const prose = (text: string) =>
+    String(text)
+      .split("\n")
+      .filter((line) => !/^\s*-\s/.test(line))
+      .join("\n");
   test("none of them is built out of the phrases they exist to cut", () => {
     for (const p of BUILT_IN_PROMPTS)
       for (const b of p.blocks) {
-        const hit = STOCK.find((re) => re.test(String(b.text)));
+        const hit = STOCK.find((re) => re.test(prose(b.text)));
         expect({ block: p.name + "/" + b.id, stock: hit ? String(hit) : "" })
           .toEqual({ block: p.name + "/" + b.id, stock: "" });
       }

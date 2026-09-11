@@ -2395,6 +2395,26 @@ describe("standing down instead of refining", () => {
     expect(h.stood().join(" ")).toMatch(/still holding the refine/i);
   });
 
+  // Pressing the button used to walk past this. It does not: refining the same
+  // words twice is a model call that buys a second opinion on a passage nobody
+  // changed, and the setting is there for anybody who wants one.
+  test("and so is a refine somebody pressed the button for", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    await h.front({ type: "refine_now", requestId: "byhand", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    // No second model call, and the refusal names the reason rather than
+    // leaving the button looking broken.
+    expect(h.asked.length).toBe(1);
+    const said = h.sent
+      .filter((m: any) => m && m.requestId === "byhand")
+      .map((m: any) => String(m.why || ""))
+      .join(" ");
+    expect(said).toMatch(/still holding the refine/i);
+  });
+
   // The case Auto Retry creates. It reads a reply as a refusal and swipes it,
   // and what arrives is a different reply behind the same id. Keyed on the id
   // alone this pass walked past every one of them.

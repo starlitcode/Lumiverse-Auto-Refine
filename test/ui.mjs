@@ -3112,6 +3112,49 @@ console.log("\nthe card that comes up on the page");
   });
 }
 
+console.log("\nthe preview says which prompt it used");
+{
+  // There are two prompt lists, and the preview builds from whichever fits the
+  // message it is previewing. A preset writes to one of them, so somebody who
+  // loads a reply preset while their own message is newest gets a preview of
+  // the list they did not touch. Saying nothing about that reads as a preset
+  // that failed to load.
+  await inTab(browser, {}, async (page) => {
+    const feed = async (which) => {
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
+      await page.evaluate((w) => {
+        const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
+        window.__fromBackend({
+          type: "prompt_preview",
+          requestId: id,
+          ok: true,
+          real: true,
+          which: w,
+          messages: [{ role: "system", content: "a rule of mine" }],
+          tokens: { total: 4, counted: true, passage: 2, parts: [] },
+          parameters: null,
+          wrapOutput: true,
+          connectionId: "",
+        });
+      }, which);
+      await settle(page);
+      return page.evaluate(() => {
+        const n = document.querySelector('#drawer [data-arf-preview="which"]');
+        return n ? n.textContent : null;
+      });
+    };
+    await goTab(page, "Context");
+    const replies = await feed("replies");
+    ok("a reply preview says it used the reply prompt",
+      /prompt for replies/.test(replies || ""), replies);
+    ok("and warns the other list will not show here",
+      /will not show here/.test(replies || ""), replies);
+    const yours = await feed("yours");
+    ok("your own turn says it used the prompt for your writing",
+      /your own writing/.test(yours || ""), yours);
+  });
+}
+
 console.log("\nthe raw view");
 {
   await inTab(browser, {}, async (page) => {

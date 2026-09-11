@@ -10,7 +10,15 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-09-11_
 
+### Fixed
+
+- **The preview never said which of your two prompts it built.** There are two lists, one for replies and one for your own writing, and the preview builds whichever fits the message it is previewing. Loading a preset writes to one list and leaves the other alone, so loading a reply preset while your own message is the newest one built a preview of the list you had not touched, and it read as a preset that failed to load. It says which list it used now, and that a preset loaded into the other one will not show there. The backend had been working this out and sending it all along; nothing on the panel read it.
+
 ### Changed
+
+- **Refining the same words twice is refused everywhere now, not only on the automatic pass.** The setting is **Refine something that has been refined before**, still off by default, and it covers the buttons and your own messages as well. Pressing refine on a reply still holding its refine used to go ahead and buy a second opinion on a passage nobody had changed. Swiping, regenerating, deleting a swipe or editing puts different words behind the message, and those are refined either way. The setting no longer hides itself when the automatic pass is off, because it applies whether or not that is running.
+- **The phrase list the prompts cut from is half again as long.** It covered bodies and a few sentence shapes. It now covers feeling handed over in a container, faces and voices running stock business, the room doing the characters' work, pauses named instead of filled, and softened double negatives, alongside what it already had. Named as shapes wherever a shape catches more than an example does.
+- **The Speech block knows about register.** Lines that announce themselves before arriving, lines that only grade what was just said, counselling talk from characters who do not counsel for a living, and a soft name dropped in to take the edge off. None of it touches how a character is allowed to sound: somebody who speaks badly goes on speaking badly, and a character who already talks that way keeps it.
 
 - **The prompts that ship with it now name you and the user plainly.** They called the person writing with you your co-author, which put a word in the prompt that means nothing to a model and reads as a role it has to work out. The user is the user. Their character is **The User's Character**, yours is **Your Character**, and both are written with they and them throughout, so nothing in the prompt assumes a gender for either.
 - **The rhetorical framing is gone.** Two prompts opened on a question asked for effect and four descriptions repeated it. A rule reads as a rule; the standard and the test say what they want outright now.
