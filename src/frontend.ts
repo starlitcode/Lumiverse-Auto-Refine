@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.4.0";
+const VERSION = "1.3.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -1339,32 +1339,7 @@ type Shipped = {
   blocks: Block[];
   thinking: string;
   what: string;
-  // A model setup to load alongside it. The shipped prompts all name the shipped
-  // setup, so loading one is the whole thing rather than the prompt and then a
-  // second trip to the Model tab. It is said out loud when it happens, so nobody
-  // finds their temperature moved without being told.
-  setup?: string;
 };
-
-// A model setup that ships with the extension, so somebody who has not tuned one
-// has something to pick.
-//
-// One value in it, and only one. The panel already says a rewrite usually wants
-// a lower temperature than the chat you are roleplaying in, and that is the
-// setting it says it about, so that is the setting this carries. Everything else
-// is left out on purpose: a value nobody measured, shipped as a default, is a
-// guess wearing the extension's name.
-//
-// No connection id, no prices. A setup only writes the keys it has, so leaving
-// those out means loading this cannot move you off the model you chose or put a
-// price on your tab that is not yours.
-const SHIPPED_SETUP = "Lower temperature, for rewriting";
-const BUILT_IN_SETUPS: Array<{ name: string; settings: Record<string, any> }> = [
-  {
-    name: SHIPPED_SETUP,
-    settings: { samplers: { temperature: 0.7 } },
-  },
-];
 
 const BUILT_IN_PROMPTS: Shipped[] = [
   {
@@ -1373,7 +1348,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: false,
     blocks: PLAIN_SHORT,
     thinking: "off",
-    setup: SHIPPED_SETUP,
     what: "The one to start with. What to cut, what to mend, what to leave, a block each. The smaller of the two prompts that work on any model.",
   },
   {
@@ -1382,7 +1356,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: false,
     blocks: PLAIN_LONG,
     thinking: "off",
-    setup: SHIPPED_SETUP,
     what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt on every refine, and followed more closely. Works on any model.",
   },
   {
@@ -1391,7 +1364,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: false,
     blocks: THINKS_SHORT,
     thinking: "inherit",
-    setup: SHIPPED_SETUP,
     what: "One question, and the room to answer it: could this sentence sit in any story, or only in this one? The smallest prompt of the four, because a model that reasons works the rest out. Needs a model that reasons.",
   },
   {
@@ -1400,7 +1372,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: false,
     blocks: THINKS_LONG,
     thinking: "inherit",
-    setup: SHIPPED_SETUP,
     what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer. About the size of a quick read on a plain model, and it goes deeper for it. Needs a model that reasons.",
   },
   {
@@ -1409,7 +1380,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: true,
     blocks: YOURS_SHORT,
     thinking: "off",
-    setup: SHIPPED_SETUP,
     what: "The one to start with. What to mend, and then a full stop: slips, missing words, punctuation that came out wrong. Your word choice, your length and your plain lines come back as they went in. The smaller of the two prompts that work on any model.",
   },
   {
@@ -1418,7 +1388,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: true,
     blocks: YOURS_LONG,
     thinking: "off",
-    setup: SHIPPED_SETUP,
     what: "The same list, gone through properly, and a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. About half again the prompt, and more careful about the line between a slip and a choice. Works on any model.",
   },
   {
@@ -1427,7 +1396,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: true,
     blocks: YOURS_THINKS_SHORT,
     thinking: "inherit",
-    setup: SHIPPED_SETUP,
     what: "One question, and the room to answer it: would you read the change and say yes, that is what I meant to type? The smallest of the four, because a model that reasons works out what counts as a slip from the question. Needs a model that reasons.",
   },
   {
@@ -1436,7 +1404,6 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     mine: true,
     blocks: YOURS_THINKS_LONG,
     thinking: "inherit",
-    setup: SHIPPED_SETUP,
     what: "The same question, plus where a passage typed at speed actually goes wrong and what is not a repair. None of it is a matter of taste, which is the point of the longer list. About the size of a quick read on a plain model. Needs a model that reasons.",
   },
 ];
@@ -7080,11 +7047,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildSetupCard(): HTMLElement {
     const wrap = card(
       "Saved model setups",
-      "Everything on this tab under one name: the connection, the thinking, how long to wait, and the samplers. Your prompt is not in here, so loading one changes what runs the refine and nothing about how it reads. Kept in this browser and in your account, and not offered as a file: a connection id names nothing on anybody else's account. One ships with the extension and carries a lower temperature and nothing else, so loading it cannot move you off the model you picked.",
+      "Everything on this tab under one name: the connection, the thinking, how long to wait, and the samplers. Your prompt is not in here, so loading one changes what runs the refine and nothing about how it reads. Kept in this browser and in your account, and not offered as a file: a connection id names nothing on anybody else's account.",
       setups.length ? String(setups.length) : undefined,
     );
 
-    const chosen = () => allSetups().find((x) => x.name === setupPick) || null;
+    const chosen = () => setups.find((x) => x.name === setupPick) || null;
 
     const sel = document.createElement("select");
     sel.className = "arf-field";
@@ -7092,9 +7059,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     sel.setAttribute("data-arf-field", "setupPick");
     const none = document.createElement("option");
     none.value = "";
-    none.textContent = "Pick a setup";
+    none.textContent = setups.length ? "Pick a setup" : "Nothing saved yet";
     sel.appendChild(none);
-    for (const one of allSetups()) {
+    for (const one of setups) {
       const op = document.createElement("option");
       op.value = one.name;
       op.textContent = one.name;
@@ -7180,11 +7147,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       const one = chosen();
       const name = String(setupName || "").trim();
       if (!one) return;
-      if (isShippedSetup(one.name)) {
-        setupSaid = "That one ships with the extension. Save it as new under a name of your own first.";
-        paint();
-        return;
-      }
       if (!name) {
         setupSaid = "Put the new name in the box first.";
         paint();
@@ -7205,17 +7167,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const drop = button("Delete", false);
     drop.className += " arf-danger";
     drop.setAttribute("data-arf-setup", "delete");
-    // The shipped one cannot be deleted, because it would be back on the next
-    // update and a button that undoes itself is worse than one that is not there.
-    // Greyed rather than hidden, so the row does not move under your finger when
-    // the picker changes.
-    drop.disabled = !chosen() || isShippedSetup(String(setupPick));
+    drop.disabled = !chosen();
     drop.style.opacity = drop.disabled ? "0.45" : "1";
-    if (chosen() && isShippedSetup(String(setupPick)))
-      drop.title = "This one ships with the extension, so there is nothing to delete.";
     drop.addEventListener("click", () => {
       const one = chosen();
-      if (!one || isShippedSetup(one.name)) return;
+      if (!one) return;
       askFirst(
         "setup:" + one.name,
         {
@@ -8793,7 +8749,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       settings: p.mine
         ? { userBlocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking }
         : { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
-      setup: p.setup,
     }));
   }
   const isBuiltIn = (name: string) => BUILT_IN.indexOf(name) >= 0;
@@ -8837,17 +8792,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // prompt can be sent to a cheap model one minute and a good one the next
   // without either of them being edited to do it.
   type Setup = { name: string; at: number; settings: Record<string, any> };
-  // Yours. The shipped one is not in here: it is not saved, cannot be renamed or
-  // deleted, and must not be written to the store, or updating the extension
-  // would leave everybody holding a stale copy of it.
   let setups: Setup[] = [];
-  const shippedSetups = (): Setup[] =>
-    BUILT_IN_SETUPS.map((one) => ({ name: one.name, at: 0, settings: one.settings }));
-  const isShippedSetup = (name: string) =>
-    BUILT_IN_SETUPS.some((one) => one.name === name);
-  // What the picker lists, shipped first so somebody with none of their own sees
-  // one rather than "nothing saved yet".
-  const allSetups = (): Setup[] => shippedSetups().concat(setups);
   let setupPick = "";
   let setupName = "";
   let setupSaid: string | null = null;
@@ -9229,7 +9174,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       let alsoSaid = "";
       const wants = String(p.setup || "");
       if (wants) {
-        const one = allSetups().find((x) => x.name === wants);
+        const one = setups.find((x) => x.name === wants);
         if (one) {
           applySetup(one);
           alsoSaid = " Model setup " + wants + " went on with it.";
@@ -11189,7 +11134,6 @@ export function setup(ctx: Ctx, overrides?: any) {
 export const __testing = {
   CONFIG,
   PARTS,
-  BUILT_IN_SETUPS,
   COST_FIELDS,
   LIMIT_FIELDS,
   MACROS,

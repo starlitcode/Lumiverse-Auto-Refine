@@ -6,16 +6,6 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.4.0
-
-_2026-09-11_
-
-### Added
-
-- **A model setup ships with it, so there is one to pick before you have made any.** **Lower temperature, for rewriting** sits at the top of the saved setups list and carries one value: a temperature of 0.7. The box for that setting already says a rewrite usually wants this lower than the chat you roleplay in, and this is that sentence with a number on it. It names no connection, so loading it cannot move you off the model you chose, and no prices, which are yours. It cannot be renamed or deleted, since it would be back on the next update either way. Save it as new under a name of your own and that copy is yours to change.
-- **Every prompt that ships with it brings that setup along.** Loading one is the whole arrangement in a single pick rather than a prompt and then a second trip to the Model tab. The card says when it happened, so nobody finds their temperature moved without being told, and a preset of your own can point at any setup you have saved the same way.
-- **Nothing else is in it on purpose.** A value nobody measured, shipped as a default, is a guess wearing the extension's name. Temperature is the one setting the panel already holds an opinion about, so it is the only one this carries. Everything else is left to whatever your connection is set to.
-
 ## 1.3.0
 
 _2026-09-11_

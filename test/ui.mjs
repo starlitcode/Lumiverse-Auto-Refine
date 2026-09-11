@@ -4899,19 +4899,12 @@ console.log("\nmodel setups");
   // connection, the thinking settings and the samplers under a name. They are
   // built the same way and sit one tab apart, and every check written so far was
   // for the first of them.
-  // Everything in the picker, the one that ships with it included.
-  const allNamed = (page) =>
+  const named = (page) =>
     page.evaluate(() =>
       [...document.querySelectorAll('#drawer [data-arf-field="setupPick"] option')]
         .map((o) => o.textContent)
         .filter((t) => t !== "Pick a setup" && t !== "Nothing saved yet"),
     );
-  // Only the ones somebody saved. The checks below are about saving, renaming
-  // and deleting your own, and the shipped one sitting at the top of the list is
-  // not one of those: counting it would make every one of them read as off by
-  // one rather than as what it is.
-  const SHIPPED_SETUP = "Lower temperature, for rewriting";
-  const named = async (page) => (await allNamed(page)).filter((t) => t !== SHIPPED_SETUP);
   const type = (page, key, value) =>
     page.evaluate(
       ({ key, value }) => {
@@ -4948,11 +4941,7 @@ console.log("\nmodel setups");
     { css: "#drawer{height:100vh;overflow-y:auto;box-sizing:border-box}" },
     async (page) => {
     await goTab(page, "Model");
-    ok("none of your own to begin with", (await named(page)).length === 0);
-    // And the one that ships with it is there before anybody has saved anything,
-    // which is the whole reason it exists.
-    ok("but the one that ships with it is offered", (await allNamed(page)).includes(SHIPPED_SETUP),
-      JSON.stringify(await allNamed(page)));
+    ok("there are no setups to begin with", (await named(page)).length === 0);
 
     // Saving with nothing typed says so rather than saving something unnamed.
     await press(page, "new");
