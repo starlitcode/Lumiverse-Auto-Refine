@@ -3766,3 +3766,59 @@ describe("quotes that are not dialogue", () => {
     expect(wornSent(h)).not.toContain("told you about the gate");
   });
 });
+
+// A place, an institution or a thing the story is about repeats because the
+// story is about it. Telling somebody their own setting is a habit is telling
+// them to stop writing their story.
+describe("the story's own words are not a habit", () => {
+  const WORN = { id: "worn", name: "Worn", on: true, role: "system", text: "<worn>\n{{overused}}\n</worn>" };
+  const wornSent = (h: any): string => {
+    const all = JSON.stringify(h.asked[0].messages);
+    const hit = /<worn>\\n([\s\S]*?)\\n<\/worn>/.exec(all);
+    return hit ? hit[1] : "";
+  };
+  const chatWith = (replies: string[]): Msg[] => {
+    const out: Msg[] = [{ id: "m0", role: "assistant", content: "The gate stands open." }];
+    replies.forEach((text, i) => {
+      out.push({ id: "u" + i, role: "user", content: "i keep going" });
+      out.push({ id: "a" + i, role: "assistant", content: text });
+    });
+    return out;
+  };
+
+  test("something the card says is not reported", async () => {
+    // The card calls her a ferry pilot who has crossed the same water. A story
+    // about that will say it, and saying it is not a habit.
+    const replies = [
+      "She had crossed the same water for years and thought nothing of it.",
+      "Anyone who had crossed the same water that long stopped looking at it.",
+      "She had crossed the same water in worse weather than this.",
+      "The lamp guttered and she put a hand over it.",
+    ];
+    const h = await armed(
+      ["<REFINED>The lamp guttered, and she cupped a hand around it to keep it lit.</REFINED>"],
+      { blocks: PROMPT.concat([WORN]), wornOn: true, wornLeast: 3 },
+      chatWith(replies),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(80);
+    expect(wornSent(h)).not.toContain("crossed the same water");
+  });
+
+  test("but a habit the story never mentions still is", async () => {
+    const replies = [
+      "A shiver ran down her spine as the lamp guttered out.",
+      "She pushed the door wider. A shiver ran down her spine.",
+      "The cold found the frame, and a shiver ran down her spine again.",
+      "The lamp guttered and she put a hand over it.",
+    ];
+    const h = await armed(
+      ["<REFINED>The lamp guttered, and she cupped a hand around it to keep it lit.</REFINED>"],
+      { blocks: PROMPT.concat([WORN]), wornOn: true, wornLeast: 3 },
+      chatWith(replies),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(80);
+    expect(wornSent(h)).toContain("shiver ran down her spine");
+  });
+});

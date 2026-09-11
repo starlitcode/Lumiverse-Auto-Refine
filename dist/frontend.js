@@ -621,7 +621,18 @@ const PHRASES = "- a breath they did not know they were holding\n" +
     "- doing something before they could stop themselves\n" +
     "- closing the distance\n" +
     "- swallowing hard\n" +
-    "- time slowing, or the world falling away";
+    "- time slowing, or the world falling away\n" +
+    // Shapes rather than particular phrases. A model reaches for these whatever
+    // the scene is, so naming the shape catches every filling of it where naming
+    // one example catches one.
+    "- a thing said by what it is not, then corrected: not a question, an order\n" +
+    "- the same thing twice with the weaker one kept: she did not just leave, she ran\n" +
+    "- three of anything in a row, three adjectives or three fragments or three clauses\n" +
+    "- a pause named instead of filled: a long moment, or a silence that stretches\n" +
+    "- two or three actions strung onto one sentence with as\n" +
+    "- a laugh, a breath or a sound that escapes somebody\n" +
+    "- a sentence opened on a participle: reaching for the glass, he\n" +
+    "- an action given and then graded: she laughed, and it was thin";
 const FILLER = "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
     "seemed to, began to, found themselves";
 const COPY_EXACTLY = {

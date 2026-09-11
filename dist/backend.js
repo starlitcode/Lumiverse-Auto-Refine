@@ -1922,12 +1922,24 @@ async function fitToBudget(pieces, budget, userId) {
 // How many pieces to fetch is not passed. The count is the reader's own chat
 // memory setting, and overriding it here would mean their chat and their refine
 // were working from different amounts of the same thing.
+// Whether enough of this phrase is written into the story itself. Any run of
+// PHRASE_MIN words shared with the card or the lorebook is enough: that many
+// words in a row is a name for something rather than a coincidence.
+function fromTheStory(phrase, known) {
+    const words = phrase.split(' ');
+    if (words.length < PHRASE_MIN)
+        return known.indexOf(phrase) >= 0;
+    for (let i = 0; i + PHRASE_MIN <= words.length; i++)
+        if (known.indexOf(words.slice(i, i + PHRASE_MIN).join(' ')) >= 0)
+            return true;
+    return false;
+}
 // The phrases this chat has worn out, written out for a prompt. Read from replies
 // already in hand, so this costs no call of its own.
 //
 // Your own messages are left out. This is about the model's habits, and your
 // writing is not the thing being rewritten here.
-function gatherWorn(msgs, upTo, name) {
+function gatherWorn(msgs, upTo, name, canon) {
     if (!wornOn)
         return '';
     const replies = [];
@@ -1943,12 +1955,26 @@ function gatherWorn(msgs, upTo, name) {
     if (replies.length < wornLeast)
         return '';
     const worn = overusedIn(replies, { least: wornLeast, names: name ? [name] : [] });
+    // The card and the lorebook, read the same way the phrases are. A place, an
+    // institution or a thing the story is about repeats because the story is about
+    // it, and telling somebody their own setting is a habit is telling them to stop
+    // writing their story.
+    const known = canon ? wordsOf(String(canon), new Set()).join(' ') : '';
     const lines = [];
     for (const one of worn) {
         // Anything holding a phrase you have left alone is left alone too. Listing
         // "shiver ran down" and still being told about "a shiver ran down her spine"
         // would mean listing every length of the same habit.
         if (wornFine.some((fine) => one.phrase.indexOf(fine) >= 0))
+            continue;
+        // Written down somewhere as part of the story, so it is the story rather
+        // than a reach for the same words twice.
+        //
+        // A run of it rather than all of it, because a finding drifts from the words
+        // it came from: a card saying "has crossed the same water" against a reply
+        // saying "had crossed the same water" is the same thing said twice, and
+        // asking for the whole phrase to match would miss every one of those.
+        if (known && fromTheStory(one.phrase, known))
             continue;
         lines.push(one.phrase + ' (' + one.replies + ' replies)');
         if (lines.length >= WORN_SHOWN)
@@ -2461,14 +2487,23 @@ pick) {
             willSend.push(b);
     const card = await gatherCard(chatId, userId);
     const at = msgs.findIndex((x) => x && x.id === m.id);
+    // Read out here rather than inside the object, because the worn phrases are
+    // checked against it and one field of an object cannot read another.
+    //
+    // The card is read on every refine either way, so it costs nothing. The
+    // lorebook is only used where a block was already asking for it: fetching it
+    // solely for this would be the extra call this feature promises not to make.
+    const lore = promptWants(LORE_MACRO, isUser, willSend) ? await gatherLore(chatId, userId) : '';
     let scene = {
         character: card.text,
         context: promptWants(HISTORY_MACRO, isUser, willSend)
             ? await gatherHistory(msgs, at, card.name, userId)
             : '',
-        lore: promptWants(LORE_MACRO, isUser, willSend) ? await gatherLore(chatId, userId) : '',
+        lore: lore,
         memory: promptWants(MEMORY_MACRO, isUser, willSend) ? await gatherMemory(chatId, userId) : '',
-        worn: promptWants(OVERUSED_MACRO, isUser, willSend) ? gatherWorn(msgs, at, card.name) : '',
+        worn: promptWants(OVERUSED_MACRO, isUser, willSend)
+            ? gatherWorn(msgs, at, card.name, card.text + '\n' + lore)
+            : '',
         name: card.name,
         chatId: chatId,
         characterId: card.id,

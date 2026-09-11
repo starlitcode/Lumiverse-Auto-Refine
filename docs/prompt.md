@@ -78,6 +78,7 @@ What it counts, and what it refuses to count:
 - **Three words at least.** One word is vocabulary. A run made only of common words is grammar, so "out of the" is never a finding.
 - **The longest phrase wins.** A finding of six words does not also report the four-word run inside it, which is the same habit counted twice.
 - **Your own messages are left out,** and so is the character's name, which is in every reply by definition.
+- **The story's own words are left out.** Anything written into your character card, or into your lorebook where a block was already asking for it, is the story rather than a habit. A place or an institution the chat is about will repeat, and that is the chat working.
 - **Code is left out.** Anything in backticks is not prose.
 
 It reads replies the refine already has, so it costs no extra call. **Phrases to leave alone** takes one per line: a repeated line can be the point of a story, and nothing listed there is ever reported.
