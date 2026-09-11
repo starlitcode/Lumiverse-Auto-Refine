@@ -2703,6 +2703,60 @@ console.log("\ntaking more than one file at a time");
   });
 }
 
+console.log("\nthe three buttons agree about the home screen");
+{
+  // The two beside it were greyed off a chat and this one stayed lit, which
+  // read as the one that still worked. There is no input box out there to read,
+  // so pressing it could only ever fail.
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    const state = () =>
+      page.evaluate(() => {
+        const one = (sel) => {
+          const n = document.querySelector("#drawer " + sel);
+          return n ? { off: !!n.disabled, why: n.title } : null;
+        };
+        return {
+          latest: one('[data-arf-now="1"]'),
+          every: one('[data-arf-sweep="1"]'),
+          draft: one('[data-arf-draft="1"]'),
+        };
+      });
+    const tellChat = async (id) => {
+      await page.evaluate((chatId) => {
+        const last = window.__sent.filter((m) => m.type === "active_chat").pop();
+        window.__fromBackend({
+          type: "active_chat",
+          requestId: last && last.requestId,
+          chatId: chatId,
+          character: chatId ? "Wren" : null,
+          hasCharacter: !!chatId,
+          resolved: true,
+          found: !!chatId,
+        });
+      }, id);
+      await settle(page);
+    };
+
+    // The probe's own aim: all three have to be on screen, or nothing below is
+    // measuring a button.
+    const first = await state();
+    ok("all three buttons are on the panel",
+      !!first.latest && !!first.every && !!first.draft, JSON.stringify(first));
+
+    await tellChat(null);
+    const home = await state();
+    ok("off a chat, refine the latest is greyed", home.latest.off, JSON.stringify(home.latest));
+    ok("and refine every reply here is greyed", home.every.off, JSON.stringify(home.every));
+    ok("and so is refine what I am typing", home.draft.off, JSON.stringify(home.draft));
+    ok("which says why rather than just going dim",
+      /no chat/i.test(home.draft.why || ""), home.draft.why);
+
+    await tellChat("c-home-1");
+    const inChat = await state();
+    ok("back in a chat it is live again", !inChat.draft.off, JSON.stringify(inChat.draft));
+  });
+}
+
 console.log("\nthe run through the chat");
 {
   // One button, in one place. It was moved next to Refine the latest reply and

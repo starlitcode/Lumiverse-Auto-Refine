@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -3843,6 +3843,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // text.
   function whyNotDraft(): string {
     if (!cfg.enabled) return "Auto Refine is switched off.";
+    // The home screen has no input box to read, so the button had nothing to
+    // act on and said nothing about why. The two beside it were already greyed
+    // there and this one stayed lit, which read as the one that still worked.
+    if (outsideAnyChat()) return "No chat is open, so there is no input box to read.";
     if (lastChatId != null && chatIsOff(lastChatId))
       return "Auto Refine is switched off in this chat.";
     if (noTurn())
@@ -5156,6 +5160,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
 
     const now = button("Refine the latest reply", true);
+    now.setAttribute("data-arf-now", "1");
     now.disabled = !!stop;
     now.style.opacity = now.disabled ? "0.5" : "1";
     now.style.cursor = now.disabled ? "not-allowed" : "pointer";
@@ -7032,6 +7037,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       "A refine is a second model call on every reply, so these decide what it costs. They default to the cheap answer.",
     );
     for (const f of COST_FIELDS) wrap.appendChild(fieldRow(f));
+    // Every cost on this panel is worked out here, so the one place to say what
+    // it is worth is under the boxes that set it. Left off when no price is
+    // typed, since nothing is being worked out to caveat.
+    if (hasPrices())
+      wrap.appendChild(
+        note(
+          "Read every cost here as a ballpark rather than your bill. The tokens are counted from the prompt this extension builds, so anything your provider wraps around it is not in the figure, and their tokeniser may not agree with this one. It also prices every token sent at the full rate: on a model with prompt caching switched on, a refine usually costs less than this says, sometimes a lot less.",
+        ),
+      );
     if (lostConnection())
       wrap.appendChild(
         bad(
@@ -10125,7 +10139,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Only while something is selected. An entry that is always there and
     // usually does nothing is an entry somebody presses once and stops trusting.
     if (!busy && pickedHere()) doing.push({ key: "part", label: "Refine the part I selected" });
-    if (cfg.inputRefine) doing.push({ key: "draft", label: "Refine what I am typing" });
+    // On the same terms as the panel button beside it: no chat means no input
+    // box, and an entry that is always there and sometimes does nothing is one
+    // people press once and stop trusting.
+    if (cfg.inputRefine && !outsideAnyChat())
+      doing.push({ key: "draft", label: "Refine what I am typing" });
     groups.push(doing);
 
     // Last, under everything else, because these two are the only entries that

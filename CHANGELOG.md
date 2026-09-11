@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.5.0
+
+_2026-09-11_
+
+### Fixed
+
+- **Refine what I am typing stayed lit on the home screen.** The two buttons beside it grey out when no chat is open, and this one did not, so the odd one out read as the one that still worked. There is no input box out there to read, so pressing it could only ever fail. It greys with the others now and its tooltip says why, and the entry in the floating button's menu comes off on the same terms.
+
+### Changed
+
+- **Every cost figure now says what it is worth.** A line under the price boxes on the Model tab, and only once a price is typed. The tokens are counted from the prompt this extension builds rather than taken from your provider, so their tokeniser may disagree and whatever they wrap around the prompt is missing from the figure. It also prices every token sent at the full rate, so on a model with prompt caching switched on a refine usually costs less than the panel says, sometimes a lot less.
+
 ## 1.4.0
 
 _2026-09-11_
