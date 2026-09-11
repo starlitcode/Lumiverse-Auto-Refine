@@ -363,3 +363,71 @@ describe("every block in a shipped prompt is one the panel can hold", () => {
 // Macros Lumiverse fills in rather than this extension. Listed here because the
 // check above cannot tell one it has never heard of from one the host answers.
 const HOSTS = ["{{description}}", "{{persona}}", "{{char}}", "{{user}}", "{{scenario}}", "{{personality}}", "{{whose}}"];
+
+// The model setup that ships with the extension, so somebody who has not tuned
+// one has something to pick.
+describe("the model setup that ships with it", () => {
+  const { BUILT_IN_SETUPS, SAMPLER_FIELDS } = __testing as any;
+
+  test("there is one", () => {
+    expect(Array.isArray(BUILT_IN_SETUPS) && BUILT_IN_SETUPS.length).toBeGreaterThan(0);
+  });
+
+  test("it names no connection, so loading it cannot move you off your model", () => {
+    // A setup only writes the keys it has. A connection id in here would mean
+    // picking this one silently changed which model runs the refine, and a
+    // connection id from somebody else's install names nothing on yours anyway.
+    const bad = BUILT_IN_SETUPS.filter((s: any) => "connectionId" in s.settings).map((s: any) => s.name);
+    expect(bad).toEqual([]);
+  });
+
+  test("and no prices, which are yours rather than anybody's default", () => {
+    const bad = BUILT_IN_SETUPS.filter(
+      (s: any) => "costIn" in s.settings || "costOut" in s.settings,
+    ).map((s: any) => s.name);
+    expect(bad).toEqual([]);
+  });
+
+  test("every sampler in it is one the panel has, and inside its range", () => {
+    const wrong: string[] = [];
+    for (const s of BUILT_IN_SETUPS) {
+      const got = s.settings.samplers || {};
+      for (const id of Object.keys(got)) {
+        const f = SAMPLER_FIELDS.find((x: any) => x.id === id);
+        if (!f) {
+          wrong.push(s.name + ": " + id + " is not a sampler the panel has");
+          continue;
+        }
+        const v = Number(got[id]);
+        if (!Number.isFinite(v) || v < f.min || v > f.max)
+          wrong.push(s.name + ": " + id + " is " + got[id] + ", outside " + f.min + " to " + f.max);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  test("it carries a temperature, since that is the one the panel has an opinion about", () => {
+    // The hint under that box already says a rewrite usually wants this lower
+    // than the chat you roleplay in. Shipping the setting it says that about is
+    // the whole point of this one existing.
+    const temps = BUILT_IN_SETUPS.map((s: any) => (s.settings.samplers || {}).temperature).filter(
+      (t: any) => t != null,
+    );
+    expect(temps.length).toBeGreaterThan(0);
+  });
+
+  test("and nothing else, since a value nobody measured is a guess with a name on it", () => {
+    const extra: string[] = [];
+    for (const s of BUILT_IN_SETUPS) {
+      const keys = Object.keys(s.settings);
+      if (keys.join(",") !== "samplers") extra.push(s.name + ": " + keys.join(", "));
+      const sam = Object.keys(s.settings.samplers || {});
+      if (sam.join(",") !== "temperature") extra.push(s.name + " samplers: " + sam.join(", "));
+    }
+    expect(extra).toEqual([]);
+  });
+
+  test("its name says what it does", () => {
+    for (const s of BUILT_IN_SETUPS) expect(s.name.length).toBeGreaterThan(8);
+  });
+});
