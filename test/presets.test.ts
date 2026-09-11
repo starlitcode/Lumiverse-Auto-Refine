@@ -93,7 +93,10 @@ describe("the prompts that ship with it", () => {
   test("the prompts for your own writing are about leaving it alone", () => {
     for (const p of forMine()) {
       const whole = rulesOf(p).map((b: any) => b.text).join(" ");
-      expect(whole).toMatch(/co-author|their hand|not yours|what I meant to type/i);
+      // The words these prompts use for standing back. Updated with the
+      // prompts rather than loosened: the point is that a prompt for somebody's
+      // own turn talks about leaving it alone, and it still has to say so.
+      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|what they meant to type/i);
     }
   });
 
@@ -103,7 +106,7 @@ describe("the prompts that ship with it", () => {
   // where it can be said in words rather than implied by a label.
   test("and the description of each says what it costs", () => {
     for (const p of BUILT_IN_PROMPTS)
-      expect({ name: p.name, said: /size|smallest|half again|prompt/i.test(p.what) })
+      expect({ name: p.name, said: /size|short|smallest|half again|prompt/i.test(p.what) })
         .toEqual({ name: p.name, said: true });
   });
 

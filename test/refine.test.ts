@@ -2115,7 +2115,7 @@ describe("a prompt built to be cached", () => {
   test("and the setting sits between them", async () => {
     const whole = await build();
     const rules = whole.indexOf("</how_to_answer>");
-    const who = whole.indexOf("<who_the_story_follows>");
+    const who = whole.indexOf("<your_character>");
     const runUp = whole.indexOf("<earlier_pages>");
     expect(who).toBeGreaterThan(rules);
     expect(runUp).toBeGreaterThan(who);
@@ -2126,7 +2126,7 @@ describe("a prompt built to be cached", () => {
   test("the rules are byte for byte the same across two different chats", async () => {
     const a = await build();
     const b = await build();
-    const cut = (t: string) => t.slice(0, t.indexOf("<who_the_story_follows>"));
+    const cut = (t: string) => t.slice(0, t.indexOf("<your_character>"));
     expect(cut(a)).toBe(cut(b));
     expect(cut(a).length).toBeGreaterThan(200);
   });

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -465,21 +465,21 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 const SCENE_BLOCKS = [
     {
         id: "character",
-        name: "Who the story follows",
+        name: "Your Character",
         on: true,
         role: "system",
-        text: "<who_the_story_follows>\n{{description}}\n</who_the_story_follows>",
+        text: "<your_character>\n{{description}}\n</your_character>",
     },
     {
         id: "persona",
-        name: "Who you are writing with",
+        name: "The User's Character",
         on: true,
         role: "system",
-        text: "<your_co_author>\n{{persona}}\n</your_co_author>",
+        text: "<the_users_character>\n{{persona}}\n</the_users_character>",
     },
     {
         id: "lore",
-        name: "What is true in this world",
+        name: "What Is True",
         on: true,
         role: "system",
         text: "<what_is_true>\n{{lore}}\n</what_is_true>",
@@ -501,7 +501,7 @@ const SCENE_BLOCKS = [
 // memory settings are; a reader who never opens this card is not paying for it.
 const MEMORY_BLOCK = {
     id: "memory",
-    name: "What has happened before now",
+    name: "What Has Happened",
     on: false,
     role: "system",
     text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
@@ -517,7 +517,7 @@ const MEMORY_BLOCK = {
 // somebody put on a list.
 const WORN_BLOCK = {
     id: "worn",
-    name: "Phrases this chat has worn out",
+    name: "Already Worn Out in This Chat",
     on: true,
     role: "system",
     text: "<already_worn_out_in_this_chat>\n{{overused}}\n</already_worn_out_in_this_chat>",
@@ -530,7 +530,7 @@ const WORN_BLOCK = {
 // directly above the passage, which is where the thing it describes sits.
 const AROUND_BLOCK = {
     id: "around",
-    name: "The reply this part came from",
+    name: "The Reply Around It",
     on: true,
     role: "system",
     text: "<the_reply_around_it>\n" +
@@ -541,14 +541,14 @@ const AROUND_BLOCK = {
 // can and still be read as setting.
 const RECENT_BLOCK = {
     id: "history",
-    name: "The pages before this one",
+    name: "Earlier Pages",
     on: true,
     role: "system",
     text: "<earlier_pages>\n{{history}}\n</earlier_pages>",
 };
 const TURN_BLOCK = {
     id: "turn",
-    name: "The passage to refine",
+    name: "Passage to Refine",
     on: true,
     role: "user",
     text: "<passage_to_refine>\n{{message}}\n</passage_to_refine>",
@@ -562,7 +562,7 @@ const TURN_BLOCK = {
 // still works.
 const HOW_TO_ANSWER = {
     id: "answer",
-    name: "How to answer",
+    name: "How to Answer",
     on: true,
     role: "system",
     text: "<how_to_answer>\n" +
@@ -588,7 +588,7 @@ const HOW_TO_ANSWER = {
 // something else.
 const THINKS_ANSWER = {
     id: "answer",
-    name: "How to answer",
+    name: "How to Answer",
     on: true,
     role: "system",
     text: "<how_to_answer>\n" +
@@ -634,18 +634,18 @@ const PHRASES = "- a breath they did not know they were holding\n" +
     // the scene is, so naming the shape catches every filling of it where naming
     // one example catches one.
     "- a thing said by what it is not, then corrected: not a question, an order\n" +
-    "- the same thing twice with the weaker one kept: she did not just leave, she ran\n" +
+    "- the same thing twice with the weaker one kept: they did not just leave, they ran\n" +
     "- three of anything in a row, three adjectives or three fragments or three clauses\n" +
     "- a pause named instead of filled: a long moment, or a silence that stretches\n" +
     "- two or three actions strung onto one sentence with as\n" +
     "- a laugh, a breath or a sound that escapes somebody\n" +
-    "- a sentence opened on a participle: reaching for the glass, he\n" +
-    "- an action given and then graded: she laughed, and it was thin";
+    "- a sentence opened on a participle: reaching for the glass, they\n" +
+    "- an action given and then graded: they laughed, and it was thin";
 const FILLER = "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
     "seemed to, began to, found themselves";
 const COPY_EXACTLY = {
     id: "hands_off",
-    name: "What to copy exactly",
+    name: "Copy These Exactly",
     on: true,
     role: "system",
     text: "<copy_these_exactly>\n" +
@@ -669,34 +669,33 @@ const COPY_EXACTLY = {
 };
 const JOB_BLOCK = {
     id: "job",
-    name: "The job",
+    name: "Your Job",
     on: true,
     role: "system",
     text: "<your_job>\n" +
-        "Two authors are writing this story between them, passing it back and " +
-        "forth. Your co-author has just written the passage below, and it comes " +
-        "to you before it goes back to them.\n\n" +
-        "What it means is settled, and you are not the one deciding it. Whatever " +
-        "happens in the passage still happens. Whoever says something still says " +
-        "it, and still means it. It ends on the moment it already ends on. That " +
-        "holds however weak a line reads, and it holds when you cannot see why a " +
-        "line is there: it is there because your co-author put it there.\n\n" +
-        "It stays in the person and the tense it was written in, and it stays in " +
-        "the head it was written from: what one character can see, hear and think " +
-        "of another is what they could before." +
+        "The user is writing a story with you, turn by turn. They wrote the " +
+        "passage below, and it reaches you before it goes back to them.\n\n" +
+        "What it means is settled and you are not deciding it. Whatever happens " +
+        "in the passage still happens. Whoever says a thing still says it and " +
+        "still means it. It ends where it already ends. That holds when a line " +
+        "reads badly, and it holds when you cannot see why a line is there: it " +
+        "is there because the user put it there.\n\n" +
+        "Keep the person and the tense it was written in, and keep the head it " +
+        "was written from. What one character can see, hear and think of another " +
+        "is what they could before." +
         "\n\n" +
-        "Where the story goes is your co-author's to decide, and that includes " +
-        "how dark, explicit or crude it gets. A passage comes back at the " +
-        "strength it went in, the same heat and the same violence in the same " +
-        "places, in words as plain as the ones it arrived in. How a line reads " +
-        "is your half. Whether it should have been written is theirs." +
+        "The user decides where the story goes, and that takes in how dark, " +
+        "explicit or crude it gets. A passage comes back at the strength it went " +
+        "in, the same heat and the same violence in the same places, in words as " +
+        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
+        "should have been written is theirs." +
         "\n\n" +
-        "Your half of this is how it reads. Same story, told better.\n" +
+        "Same story, told better.\n" +
         "</your_job>",
 };
 const CUT_THESE = {
     id: "cut",
-    name: "What to cut",
+    name: "What to Cut",
     on: true,
     role: "system",
     text: "<what_to_cut>\n" +
@@ -715,30 +714,30 @@ const CUT_THESE = {
 };
 const MEND_THESE = {
     id: "fix",
-    name: "What to mend",
+    name: "What to Mend",
     on: true,
     role: "system",
     text: "<what_to_mend>\n" +
-        "Give hands, eyes and breath an owner. Her hand found his becomes she took " +
-        "his hand.\n\n" +
+        "Give hands, eyes and breath an owner. Their hand found the other's " +
+        "becomes they took the other's hand.\n\n" +
         "Where three sentences run to the same length, vary one. Where three " +
         "fragments run together, give one of them a verb.\n\n" +
         "Where three physical details stack on one moment, keep the one that " +
         "carries it.\n\n" +
-        "The passage keeps the ending it has. Where the last line reaches for what " +
-        "happens next, or turns to your co-author with a question, that last " +
-        "line is what to trim back.\n" +
+        "The passage keeps the ending it has. Where the last line reaches for " +
+        "what happens next, or turns to the user with a question, that last line " +
+        "is what to trim back.\n" +
         "</what_to_mend>",
 };
 const LEAVE_ALONE = {
     id: "leave",
-    name: "What to leave",
+    name: "What to Leave",
     on: true,
     role: "system",
     text: "<what_to_leave>\n" +
         "A passage that already reads well comes back exactly as it was. " +
-        "Rewriting what did not need it costs the most of anything you can do " +
-        "here: it takes away a line your co-author chose, and they cannot see what " +
+        "Rewriting what did not need it costs more than anything else you can do " +
+        "here: it takes away a line the user chose, and they cannot see what " +
         "moved.\n\n" +
         "A rewrite that came back longer has usually added rather than mended, so " +
         "it is worth a second look before you hand it over.\n\n" +
@@ -771,7 +770,7 @@ const PLAIN_LONG = [
     JOB_BLOCK,
     {
         id: "cut",
-        name: "Phrases to cut",
+        name: "Phrases to Cut",
         on: true,
         role: "system",
         text: "<phrases_to_cut>\n" +
@@ -785,7 +784,7 @@ const PLAIN_LONG = [
     },
     {
         id: "words",
-        name: "Words to cut",
+        name: "Words to Cut",
         on: true,
         role: "system",
         text: "<words_to_cut>\n" +
@@ -834,7 +833,7 @@ const PLAIN_LONG = [
         text: "<speech>\n" +
             "Every line keeps its meaning and its speaker. Where phrasing is stiff, " +
             "loosen the phrasing and leave the meaning where it is.\n\n" +
-            "Take out the tag that explains its own line: she said angrily, he asked, " +
+            "Take out the tag that explains its own line: they said angrily, they asked, " +
             "curious. Where the tone is missing from the words, mend the words.\n\n" +
             "Take out speech that repeats back what the other person just did before " +
             "answering it.\n\n" +
@@ -845,15 +844,16 @@ const PLAIN_LONG = [
     },
     {
         id: "bodies",
-        name: "Bodies and feeling",
+        name: "Bodies and Feeling",
         on: true,
         role: "system",
         text: "<bodies_and_feeling>\n" +
-            "Give hands, eyes and breath an owner. Her hand found his becomes she " +
-            "took his hand. His eyes traced her face becomes he looked at her.\n\n" +
+            "Give hands, eyes and breath an owner. Their hand found the other's " +
+            "becomes they took the other's hand. Their eyes traced the other's face " +
+            "becomes they looked at them.\n\n" +
             "Feeling belongs in what someone does. Where the action already carries " +
-            "it, the naming is the part to cut: if she is pulling her coat closed, " +
-            "she needs no line saying she felt exposed.\n\n" +
+            "it, the naming is the part to cut: somebody pulling their coat closed " +
+            "needs no line saying they felt exposed.\n\n" +
             "One physical detail at a time. Three stacked together is a list, and a " +
             "reader skims a list.\n\n" +
             "A heartbeat, a shiver or a held breath standing in for an emotion is the " +
@@ -862,12 +862,12 @@ const PLAIN_LONG = [
     },
     {
         id: "endings",
-        name: "How it ends",
+        name: "How It Ends",
         on: true,
         role: "system",
         text: "<how_it_ends>\n" +
             "The passage ends where it ends. Where the last line reaches for what " +
-            "happens next, or turns into a question aimed at your co-author, that " +
+            "happens next, or turns into a question aimed at the user, that " +
             "last line is what to trim back.\n\n" +
             "Where it already ends on a hook, keep the hook. The shape of the turn " +
             "belongs to whoever wrote it.\n" +
@@ -885,44 +885,42 @@ const PLAIN_LONG = [
 ];
 const THINKS_JOB = {
     id: "job",
-    name: "The job",
+    name: "Your Job",
     on: true,
     role: "system",
     text: "<your_job>\n" +
-        "Two authors are writing this story between them. Your co-author has " +
-        "just written the passage below, and it comes to you before it goes " +
-        "back to them.\n\n" +
-        "Work out what is weak in how it is written, then mend that, and nothing " +
-        "else. What it means is settled: whatever happens still happens, whoever " +
-        "says something still says it and still means it, and it ends on the " +
-        "moment it already ends on. That holds however weak a line reads, and it " +
-        "holds when you cannot see why a line is there: it is there because your " +
-        "co-author put it there.\n\n" +
-        "It stays in the person and the tense it was written in, and it stays in " +
-        "the head it was written from: what one character can see, hear and think " +
-        "of another is what they could before." +
+        "The user is writing a story with you, turn by turn. They wrote the " +
+        "passage below, and it reaches you before it goes back to them.\n\n" +
+        "Work out what is weak in how it is written, mend that, and stop there. " +
+        "What it means is settled: whatever happens still happens, whoever says " +
+        "a thing still says it and still means it, and it ends where it already " +
+        "ends. That holds when a line reads badly, and it holds when you cannot " +
+        "see why a line is there: it is there because the user put it there.\n\n" +
+        "Keep the person and the tense it was written in, and keep the head it " +
+        "was written from. What one character can see, hear and think of another " +
+        "is what they could before." +
         "\n\n" +
-        "Where the story goes is your co-author's to decide, and that includes " +
-        "how dark, explicit or crude it gets. A passage comes back at the " +
-        "strength it went in, the same heat and the same violence in the same " +
-        "places, in words as plain as the ones it arrived in. How a line reads " +
-        "is your half. Whether it should have been written is theirs." +
+        "The user decides where the story goes, and that takes in how dark, " +
+        "explicit or crude it gets. A passage comes back at the strength it went " +
+        "in, the same heat and the same violence in the same places, in words as " +
+        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
+        "should have been written is theirs." +
         "\n" +
         "</your_job>",
 };
 const THE_STANDARD = {
     id: "standard",
-    name: "The standard",
+    name: "The Standard",
     on: true,
     role: "system",
     text: "<the_standard>\n" +
-        "One question decides every line: could this sentence sit in any story, or " +
-        "only in this one?\n\n" +
-        "A sentence that could sit anywhere is the one to work on. Put in its " +
-        "place what is true of this person, in this room, now. Where nothing is " +
-        "true there, let the line go and leave the gap closed.\n\n" +
-        "Ask it of speech, of gesture, of description, and ask it of your own " +
-        "rewrite before you answer.\n" +
+        "A sentence that would sit just as well in any other story is the one to " +
+        "work on. It is the mark of writing assembled from what usually goes " +
+        "here rather than from what is in front of you.\n\n" +
+        "Put in its place what is true of these characters, in this room, now. " +
+        "Where nothing is true there, let the line go and close the gap.\n\n" +
+        "Hold speech to it, hold gesture to it, hold description to it, and hold " +
+        "your own rewrite to it before you hand it back.\n" +
         "</the_standard>",
 };
 const RESTRAINT = {
@@ -946,31 +944,31 @@ const RESTRAINT = {
 // the reply prompts say what to look for and how to do it better.
 const YOURS_JOB = {
     id: "job",
-    name: "The job",
+    name: "Your Job",
     on: true,
     role: "system",
     text: "<your_job>\n" +
-        "Your co-author has written the passage below. Tidy how it reads and " +
-        "leave the writing to them.\n\n" +
+        "The user wrote the passage below. Tidy how it reads and leave the " +
+        "writing to them.\n\n" +
         "Everything they did, said and meant stays. Where you find yourself " +
         "about to add an action, a line of speech or a reaction they left out, " +
-        "that is the moment to stop: their turn belongs to them.\n\n" +
-        "Where the story goes is your co-author's to decide, and that includes " +
-        "how dark, explicit or crude it gets. A passage comes back at the " +
-        "strength it went in, the same heat and the same violence in the same " +
-        "places, in words as plain as the ones it arrived in. How a line reads " +
-        "is your half. Whether it should have been written is theirs." +
+        "stop there: their turn belongs to them.\n\n" +
+        "The user decides where the story goes, and that takes in how dark, " +
+        "explicit or crude it gets. A passage comes back at the strength it went " +
+        "in, the same heat and the same violence in the same places, in words as " +
+        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
+        "should have been written is theirs." +
         "\n" +
         "</your_job>",
 };
 const YOURS_HAND = {
     id: "voice",
-    name: "The way they write",
+    name: "The Way They Write",
     on: true,
     role: "system",
     text: "<the_way_they_write>\n" +
-        "This is your co-author writing, not the narrator, and the two do not " +
-        "sound the same. Keep the way they write.\n\n" +
+        "This is the user writing, not a narrator, and the two do not sound the " +
+        "same. Keep the way they write.\n\n" +
         "Short plain lines stay short and plain. Lower case stays lower case. " +
         "Present tense stays present tense, and first person stays first person. " +
         "A passage handed back in polished third person is one they will read as " +
@@ -981,7 +979,7 @@ const YOURS_HAND = {
 };
 const YOURS_MEND = {
     id: "fix",
-    name: "What to mend",
+    name: "What to Mend",
     on: true,
     role: "system",
     text: "<what_to_mend>\n" +
@@ -999,7 +997,7 @@ const YOURS_MEND = {
 // than an improvement: the long version is longer about what counts as one.
 const YOURS_MEND_LONG = {
     id: "fix",
-    name: "What to mend",
+    name: "What to Mend",
     on: true,
     role: "system",
     text: "<what_to_mend>\n" +
@@ -1024,13 +1022,13 @@ const YOURS_MEND_LONG = {
 // somebody's own turn every one of these is a way of taking it off them.
 const YOURS_NOT_YOURS = {
     id: "leave",
-    name: "Not yours to change",
+    name: "Not Yours",
     on: true,
     role: "system",
     text: "<not_yours>\n" +
         "Not a repair, and not to be done here:\n\n" +
         "Adding a gesture, a glance, a breath or a pause they did not write.\n\n" +
-        "Making a plain line vivid. If they wrote she left, she left.\n\n" +
+        "Making a plain line vivid. If they wrote they left, they left.\n\n" +
         "Giving a line more feeling than it was written with. Understatement is a " +
         "choice and reads as one.\n\n" +
         "Finishing a thought they left unfinished, or answering a question they " +
@@ -1043,45 +1041,45 @@ const YOURS_NOT_YOURS = {
 };
 const YOURS_THINKS_JOB = {
     id: "job",
-    name: "The job",
+    name: "Your Job",
     on: true,
     role: "system",
     text: "<your_job>\n" +
-        "Your co-author has written the passage below. You are proofreading it, " +
-        "not rewriting it.\n\n" +
+        "The user wrote the passage below. You are proofreading it, not " +
+        "rewriting it.\n\n" +
         "Everything they did, said and meant stays, and so does the way they " +
         "write it: the tense, the person, the capitalisation, the length, the " +
         "plainness. Work the standard below and change nothing it does not " +
         "name.\n\n" +
-        "Where the story goes is your co-author's to decide, and that includes " +
-        "how dark, explicit or crude it gets. A passage comes back at the " +
-        "strength it went in, the same heat and the same violence in the same " +
-        "places, in words as plain as the ones it arrived in. How a line reads " +
-        "is your half. Whether it should have been written is theirs.\n" +
+        "The user decides where the story goes, and that takes in how dark, " +
+        "explicit or crude it gets. A passage comes back at the strength it went " +
+        "in, the same heat and the same violence in the same places, in words as " +
+        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
+        "should have been written is theirs.\n" +
         "</your_job>",
 };
-// The reply prompts hand a reasoning model one question about the writing.
-// This hands it one question about the reader, which is a different one: not
-// could this be better, but did this go wrong.
+// The reply prompts judge the writing. This one judges the repair: the reply
+// prompts ask what could read better, and this asks what actually went wrong,
+// which is the only thing anybody wants touched in their own turn.
 const YOURS_TEST = {
     id: "standard",
-    name: "The test",
+    name: "The Test",
     on: true,
     role: "system",
     text: "<the_test>\n" +
-        "One question, asked of every line: would the person who wrote this read " +
-        "the change and say yes, that is what I meant to type?\n\n" +
-        "A slip they would have caught themselves passes it. A word you preferred " +
-        "does not. A sentence untangled so it reads once passes it, as long as it " +
-        "is untangled into their words and not yours.\n\n" +
-        "Where the answer is anything but a clear yes, the line comes back as it " +
-        "went in. A passage you found nothing wrong with comes back unchanged, " +
-        "and that is a correct answer.\n" +
+        "Every change has to be one the user would look at and recognise as what " +
+        "they meant to type.\n\n" +
+        "A slip they would have caught themselves passes. A word you preferred " +
+        "does not. A sentence untangled so it reads in one pass passes, as long " +
+        "as it is untangled into their words and not yours.\n\n" +
+        "Anything short of that comes back exactly as it went in. A passage you " +
+        "found nothing wrong with comes back unchanged, and that is a correct " +
+        "answer.\n" +
         "</the_test>",
 };
 const YOURS_WHERE = {
     id: "where",
-    name: "Where to look",
+    name: "Where to Look",
     on: true,
     role: "system",
     text: "<where_to_look>\n" +
@@ -1148,7 +1146,7 @@ const THINKS_LONG = [
     THE_STANDARD,
     {
         id: "where",
-        name: "Where to look",
+        name: "Where to Look",
         on: true,
         role: "system",
         text: "<where_to_look>\n" +
@@ -1182,7 +1180,7 @@ const THINKS_LONG = [
     RESTRAINT,
     {
         id: "check",
-        name: "Before you answer",
+        name: "Before You Answer",
         on: true,
         role: "system",
         text: "<before_you_answer>\n" +
@@ -1241,7 +1239,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: PLAIN_SHORT,
         thinking: "off",
-        what: "The one to start with. What to cut, what to mend, what to leave, a block each. The smaller of the two prompts that work on any model.",
+        what: "Start here. Three blocks: what to cut, what to mend, what to leave. The shorter of the two that run on any model.",
     },
     {
         name: "A close read",
@@ -1249,7 +1247,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "The same ground, gone over properly: phrases, words, repetition, rhythm, speech, bodies, endings, one block apiece. Half again the prompt on every refine, and followed more closely. Works on any model.",
+        what: "The same ground broken into eight blocks: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Half again the prompt on every refine, and followed more closely for it. Runs on any model.",
     },
     {
         name: "A quick read, for a model that thinks",
@@ -1257,7 +1255,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: THINKS_SHORT,
         thinking: "inherit",
-        what: "One question, and the room to answer it: could this sentence sit in any story, or only in this one? The smallest prompt of the four, because a model that reasons works the rest out. Needs a model that reasons.",
+        what: "One standard and the room to work it: a sentence that would sit in any other story is the one to rewrite. The shortest of the four, because a model that reasons fills in the rest. Needs a model that reasons.",
     },
     {
         name: "A close read, for a model that thinks",
@@ -1265,7 +1263,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "The same question, plus the five places worth looking, keeping the writer's voice, and a pass back over its own answer. About the size of a quick read on a plain model, and it goes deeper for it. Needs a model that reasons.",
+        what: "The same standard, plus the five places worth checking, holding the user's voice, and a pass back over its own rewrite. About the size of a quick read on a plain model and goes deeper for it. Needs a model that reasons.",
     },
     {
         name: "Your writing, a quick read",
@@ -1273,7 +1271,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_SHORT,
         thinking: "off",
-        what: "The one to start with. What to mend, and then a full stop: slips, missing words, punctuation that came out wrong. Your word choice, your length and your plain lines come back as they went in. The smaller of the two prompts that work on any model.",
+        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your word choice, your length and your plain lines come back as they went in. The shorter of the two that run on any model.",
     },
     {
         name: "Your writing, a close read",
@@ -1281,7 +1279,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
-        what: "The same list, gone through properly, and a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. About half again the prompt, and more careful about the line between a slip and a choice. Works on any model.",
+        what: "The same list in full, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Half again the prompt, and harder on the line between a slip and a choice. Runs on any model.",
     },
     {
         name: "Your writing, a quick read, for a model that thinks",
@@ -1289,7 +1287,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_THINKS_SHORT,
         thinking: "inherit",
-        what: "One question, and the room to answer it: would you read the change and say yes, that is what I meant to type? The smallest of the four, because a model that reasons works out what counts as a slip from the question. Needs a model that reasons.",
+        what: "One test and the room to work it: every change has to be one you would recognise as what you meant to type. The shortest of the four, because a model that reasons works out what counts as a slip from that alone. Needs a model that reasons.",
     },
     {
         name: "Your writing, a close read, for a model that thinks",
@@ -1297,7 +1295,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
-        what: "The same question, plus where a passage typed at speed actually goes wrong and what is not a repair. None of it is a matter of taste, which is the point of the longer list. About the size of a quick read on a plain model. Needs a model that reasons.",
+        what: "The same test, plus where writing typed at speed actually goes wrong and what is not a repair. Nothing on the list is a matter of taste, which is the point of it. About the size of a quick read on a plain model. Needs a model that reasons.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);

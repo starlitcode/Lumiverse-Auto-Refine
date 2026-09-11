@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.6.0
+
+_2026-09-11_
+
+### Changed
+
+- **The prompts that ship with it now name you and the user plainly.** They called the person writing with you your co-author, which put a word in the prompt that means nothing to a model and reads as a role it has to work out. The user is the user. Their character is **The User's Character**, yours is **Your Character**, and both are written with they and them throughout, so nothing in the prompt assumes a gender for either.
+- **The rhetorical framing is gone.** Two prompts opened on a question asked for effect and four descriptions repeated it. A rule reads as a rule; the standard and the test say what they want outright now.
+- **Every block is named after the tag it holds.** The block called The Job holds `<your_job>`, What to Cut holds `<what_to_cut>`, Copy These Exactly holds `<copy_these_exactly>`. Reading the Prompt tab and reading the prompt are now the same thing, rather than two sets of names to hold in your head.
+- **The examples inside the prompts use they and them.** They were written with he and she, which reads as an instruction about who is in the scene.
+
 ## 1.5.0
 
 _2026-09-11_
