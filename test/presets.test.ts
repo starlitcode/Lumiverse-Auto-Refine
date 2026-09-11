@@ -295,3 +295,71 @@ describe("every setting can leave the panel", () => {
   });
 });
 
+
+// The blocks the shipped prompts are made of. A block with a role the panel does
+// not offer is turned into a system block without a word, and a block with no id
+// is dropped on the way to the backend. Neither says anything, and both are the
+// kind of mistake that comes from adding a block by hand.
+describe("every block in a shipped prompt is one the panel can hold", () => {
+  const { BUILT_IN_PROMPTS, ROLE_OPTIONS, MACROS } = __testing as any;
+  const roles = ROLE_OPTIONS.map((r: any) => r.value);
+  const every = BUILT_IN_PROMPTS.flatMap((p: any) =>
+    p.blocks.map((b: any) => ({ prompt: p.name, block: b })),
+  );
+
+  test("there are blocks to check", () => {
+    expect(every.length).toBeGreaterThan(40);
+  });
+
+  test("every role is one the panel offers", () => {
+    const wrong = every
+      .filter((x: any) => roles.indexOf(String(x.block.role)) < 0)
+      .map((x: any) => x.prompt + "/" + x.block.id + ": " + x.block.role);
+    expect(wrong).toEqual([]);
+  });
+
+  test("every block has an id, since one without is dropped on the way out", () => {
+    const wrong = every
+      .filter((x: any) => !x.block.id || !String(x.block.id).trim())
+      .map((x: any) => x.prompt + ": a block with no id");
+    expect(wrong).toEqual([]);
+  });
+
+  test("every block has a name, since the list is read by name", () => {
+    const wrong = every
+      .filter((x: any) => !x.block.name || !String(x.block.name).trim())
+      .map((x: any) => x.prompt + "/" + x.block.id);
+    expect(wrong).toEqual([]);
+  });
+
+  test("no two blocks in one prompt share an id", () => {
+    const clashes: string[] = [];
+    for (const p of BUILT_IN_PROMPTS) {
+      const seen = new Set<string>();
+      for (const b of p.blocks) {
+        if (seen.has(String(b.id))) clashes.push(p.name + "/" + b.id);
+        seen.add(String(b.id));
+      }
+    }
+    expect(clashes).toEqual([]);
+  });
+
+  test("every macro used in one is a macro that gets answered", () => {
+    // A macro nothing fills is left in the prompt as its own braces, so the
+    // model is sent the word rather than the thing.
+    const known = MACROS.map((m: any) => m.tag);
+    const unknown: string[] = [];
+    for (const x of every)
+      for (const m of String(x.block.text).matchAll(/\{\{\s*[a-z_]+\s*\}\}/gi)) {
+        const tag = m[0].replace(/\s+/g, "");
+        // The host answers its own, and the panel lists ours. Anything in
+        // neither list is checked by hand below rather than guessed at.
+        if (known.indexOf(tag) < 0 && !HOSTS.includes(tag)) unknown.push(x.prompt + "/" + x.block.id + ": " + tag);
+      }
+    expect([...new Set(unknown)]).toEqual([]);
+  });
+});
+
+// Macros Lumiverse fills in rather than this extension. Listed here because the
+// check above cannot tell one it has never heard of from one the host answers.
+const HOSTS = ["{{description}}", "{{persona}}", "{{char}}", "{{user}}", "{{scenario}}", "{{personality}}", "{{whose}}"];
