@@ -27,14 +27,22 @@ const PARTS = [
     {
         id: "prompt",
         label: "Your prompt",
-        what: "Every block: its name, its text, its role and its place in the order.",
-        keys: ["blocks", "userBlocks"],
+        what: "Every block, and whether a refine runs one pass or several.",
+        keys: ["blocks", "userBlocks", "passMode", "passNames"],
     },
     {
         id: "context",
         label: "Context",
-        what: "How much of the chat goes in.",
-        keys: ["contextMessages", "maxHistoryTokens", "maxLoreTokens"],
+        what: "How much of the chat goes in, and what it is read for.",
+        keys: [
+            "contextMessages",
+            "maxHistoryTokens",
+            "maxLoreTokens",
+            "wornOn",
+            "wornBack",
+            "wornLeast",
+            "wornFine",
+        ],
     },
     {
         id: "model",
@@ -86,7 +94,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The message button, the floating button, and the input bar row.",
-        keys: ["widgetOn", "inputRefine"],
+        keys: ["widgetOn", "widgetSize", "inputRefine"],
     },
     {
         id: "switches",
@@ -10730,6 +10738,7 @@ export function setup(ctx, overrides) {
 // never loads.
 export const __testing = {
     CONFIG,
+    PARTS,
     COST_FIELDS,
     LIMIT_FIELDS,
     MACROS,

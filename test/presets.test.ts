@@ -245,3 +245,53 @@ describe("the macros offered and the macros answered", () => {
       expect(shown).toContain(part.slice(0, 40));
   });
 });
+
+// A setting nobody can export is a setting that does not survive moving to
+// another device, and nothing says so: the export runs, the file downloads, and
+// the setting is quietly not in it.
+//
+// Six were missed this way at once, which is what this is here to stop.
+describe("every setting can leave the panel", () => {
+  const { CONFIG, PARTS } = __testing as any;
+
+  // Settings that belong to this browser or to this screen rather than to a
+  // person, so carrying them to another device would be wrong rather than
+  // missing. Named one at a time, with the reason, so the list cannot quietly
+  // become a place to put anything awkward.
+  const STAYS_HERE: Record<string, string> = {
+    ui: "which tab was open",
+    blocksShut: "which blocks are folded, which is where you were looking",
+    exportParts: "what to tick on the export card",
+    importParts: "what to tick on the import card",
+    resetParts: "what to tick on the reset card",
+    debugParts: "what to tick on the problem report card",
+    hunt: "what is typed in the search box",
+    tab: "which tab of the panel was last open",
+  };
+
+  test("there are parts to check, or this proves nothing", () => {
+    expect(Array.isArray(PARTS) && PARTS.length).toBeGreaterThan(4);
+  });
+
+  test("every setting is in a part, or named as staying on this device", () => {
+    const carried = new Set<string>();
+    for (const p of PARTS) for (const k of p.keys) carried.add(k);
+    const missing = Object.keys(CONFIG).filter((k) => !carried.has(k) && !(k in STAYS_HERE));
+    expect(missing).toEqual([]);
+  });
+
+  test("and nothing is named as staying here that is also exported", () => {
+    const carried = new Set<string>();
+    for (const p of PARTS) for (const k of p.keys) carried.add(k);
+    const both = Object.keys(STAYS_HERE).filter((k) => carried.has(k));
+    expect(both).toEqual([]);
+  });
+
+  test("no part names a setting that does not exist", () => {
+    const known = new Set(Object.keys(CONFIG));
+    const ghosts: string[] = [];
+    for (const p of PARTS) for (const k of p.keys) if (!known.has(k)) ghosts.push(p.id + "/" + k);
+    expect(ghosts).toEqual([]);
+  });
+});
+
