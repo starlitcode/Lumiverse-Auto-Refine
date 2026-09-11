@@ -351,7 +351,7 @@ Presets live in your browser. To move them to another device, use the export bel
 
 ## Import and export
 
-**Export to file** writes one JSON file with your rules, your prompt layout and your sampler settings in it. **Import from file** reads one back.
+**Export to file** writes one JSON file with your rules, your prompt layout and your sampler settings in it. **Import from files** reads them back, and it takes more than one at a time: pick several and they are applied as one import with one count at the end, so two files carrying a preset each report two presets rather than one twice. Where two files name the same preset, setup or setting, the last one picked is the one that stands. A file that cannot be read stops the whole import and says which one, so nothing is taken from any of them.
 
 Importing replaces what you have, so export first if you want a way back. The chats you switched off are not in the file: they name chats that do not exist on the machine reading it.
 

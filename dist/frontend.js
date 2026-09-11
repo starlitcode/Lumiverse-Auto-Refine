@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -7744,9 +7744,10 @@ export function setup(ctx, overrides) {
     // lot. Not the chats you switched off, which name chats that do not exist on
     // the machine reading the file.
     function buildTransferCard() {
-        const wrap = card("Your whole setup", "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back. Presets and model setups go by name: one that matches a name you have replaces it, and one that matches it exactly is left alone.");
+        const wrap = card("Your whole setup", "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back. Presets and model setups go by name: one that matches a name you have replaces it, and one that matches it exactly is left alone. Pick several files at once and they are taken as one, counted together, with the last file naming something being the one that stands.");
         const row = el("div", "arf-row");
         const out = button("Export to file", false);
+        out.setAttribute("data-arf-transfer", "export");
         out.addEventListener("click", () => {
             const settings = {};
             for (const k of keysFor("exportParts"))
@@ -7771,8 +7772,18 @@ export function setup(ctx, overrides) {
                 body.setups = setups;
             if (partOn("exportParts", PART_CHATS))
                 body.chatsOff = chatsOff.slice();
-            if (!Object.keys(settings).length && !body.presets && !body.chatsOff) {
-                transferSaid = "Nothing is chosen, so there would be nothing in the file.";
+            // What is actually going in, rather than what was ticked. A list with
+            // nothing in it counts as nothing: ticking a part you have never saved
+            // anything under would otherwise write a file holding an empty list and
+            // report it as exported.
+            const holds = Object.keys(settings).length > 0 ||
+                (body.presets || []).length > 0 ||
+                (body.setups || []).length > 0 ||
+                (body.chatsOff || []).length > 0;
+            if (!holds) {
+                transferSaid = body.parts.length
+                    ? "Nothing you chose has anything saved in it yet."
+                    : "Nothing is chosen, so there would be nothing in the file.";
                 paint();
                 return;
             }
@@ -7786,18 +7797,38 @@ export function setup(ctx, overrides) {
         picker.type = "file";
         picker.setAttribute("data-arf-file", "import");
         picker.accept = "application/json,.json";
+        // More than one at a time, because taking two files one after the other
+        // reports each on its own and leaves you adding the numbers up yourself.
+        picker.multiple = true;
         picker.style.display = "none";
         picker.addEventListener("change", () => {
-            const file = picker.files && picker.files[0];
+            const files = picker.files ? Array.prototype.slice.call(picker.files) : [];
             picker.value = "";
-            if (!file)
+            if (!files.length)
                 return;
-            readFileAsText(file, (text) => {
-                transferSaid = applyImport(text);
+            readAllAsText(files, (texts) => {
+                const bodies = [];
+                for (let i = 0; i < texts.length; i++) {
+                    const one = readOne(texts[i]);
+                    if (one.error) {
+                        // Named, because with several picked at once "that file" leaves you
+                        // opening all of them to find out which. Nothing is taken from any
+                        // of them, so a bad file cannot leave half an import behind.
+                        transferSaid =
+                            files.length === 1
+                                ? one.error
+                                : one.error.replace(/^That file/, String(files[i].name)) +
+                                    " Nothing was taken from any of them.";
+                        paint();
+                        return;
+                    }
+                    bodies.push(one.body);
+                }
+                transferSaid = applyImport(mergeBodies(bodies));
                 paint();
             });
         });
-        const inBtn = button("Import from file", false);
+        const inBtn = button("Import from files", false);
         inBtn.addEventListener("click", () => {
             try {
                 picker.click();
@@ -7851,21 +7882,54 @@ export function setup(ctx, overrides) {
             return false;
         }
     }
-    function applyImport(text) {
+    // One file, read and checked. Either what it holds, laid out the same way
+    // every time, or the reason it cannot be used.
+    function readOne(text) {
         if (!text)
-            return "That file could not be read.";
-        let body = null;
+            return { error: "That file could not be read." };
+        let raw = null;
         try {
-            body = JSON.parse(text);
+            raw = JSON.parse(text);
         }
         catch (_) {
-            return "That file is not settings JSON.";
+            return { error: "That file is not settings JSON." };
         }
-        const s = body && body.settings && typeof body.settings === "object" ? body.settings : body;
+        // A file is normally a wrapper with the settings inside it. One that is the
+        // settings on their own is read as those settings, which is what lets a
+        // hand written file work.
+        const s = raw && raw.settings && typeof raw.settings === "object" ? raw.settings : raw;
         if (!s || typeof s !== "object")
-            return "That file has no settings in it.";
-        if (body && body.extension && body.extension !== "auto-refine")
-            return "That file is for a different extension.";
+            return { error: "That file has no settings in it." };
+        if (raw && raw.extension && raw.extension !== "auto-refine")
+            return { error: "That file is for a different extension." };
+        return {
+            body: {
+                settings: s,
+                presets: Array.isArray(raw.presets) ? raw.presets : [],
+                setups: Array.isArray(raw.setups) ? raw.setups : [],
+                chatsOff: Array.isArray(raw.chatsOff) ? raw.chatsOff : [],
+            },
+        };
+    }
+    // Several files handed over as one, so the count at the end is the real total
+    // rather than whatever the last file happened to carry. Later files win a
+    // settings key, and their presets and setups sit after the earlier ones, so
+    // where two files name the same thing the last one is what stands.
+    function mergeBodies(list) {
+        const out = { settings: {}, presets: [], setups: [], chatsOff: [] };
+        for (const one of list) {
+            for (const k of Object.keys(one.settings))
+                out.settings[k] = one.settings[k];
+            out.presets = out.presets.concat(one.presets);
+            out.setups = out.setups.concat(one.setups);
+            for (const id of one.chatsOff)
+                if (out.chatsOff.indexOf(id) < 0)
+                    out.chatsOff.push(id);
+        }
+        return out;
+    }
+    function applyImport(body) {
+        const s = body.settings;
         // Only the keys the chosen parts cover. Everything else in the file is
         // read past, so a file carrying somebody's whole setup can be used to take
         // just their prompt.
@@ -8016,13 +8080,24 @@ export function setup(ctx, overrides) {
                 }
             }
         }
-        if (partOn("importParts", PART_CHATS) && Array.isArray(body.chatsOff)) {
+        // Only when the file actually named a chat. Every file arrives with this
+        // list present and usually empty, so counting it as taken would put "the
+        // chats switched off" on the end of every import that never carried one.
+        if (partOn("importParts", PART_CHATS) && body.chatsOff.length) {
             const ids = body.chatsOff.map((x) => String(x)).slice(0, 500);
+            let added = 0;
             for (const id of ids)
-                if (chatsOff.indexOf(id) < 0)
+                if (chatsOff.indexOf(id) < 0) {
                     chatsOff.push(id);
-            saveChatsOff();
-            extra.push("the chats switched off");
+                    added++;
+                }
+            if (added) {
+                saveChatsOff();
+                extra.push("the chats switched off");
+            }
+            else {
+                alreadyHad += ids.length;
+            }
         }
         if (!took && !extra.length)
             return alreadyHad
@@ -8062,6 +8137,26 @@ export function setup(ctx, overrides) {
         catch (_) {
             return false;
         }
+    }
+    // Every file in a selection, read before any of them is applied, so one
+    // import covers the lot and its count is the real total rather than the last
+    // file's. Order is kept: where two files carry the same name, the later one
+    // is the one that stands.
+    function readAllAsText(files, cb) {
+        const out = new Array(files.length);
+        let left = files.length;
+        if (!left) {
+            cb(out);
+            return;
+        }
+        files.forEach((file, at) => {
+            readFileAsText(file, (text) => {
+                out[at] = text;
+                left--;
+                if (left === 0)
+                    cb(out);
+            });
+        });
     }
     function readFileAsText(file, cb) {
         try {

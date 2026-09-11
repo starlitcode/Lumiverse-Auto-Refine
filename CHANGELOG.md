@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.4.0
+
+_2026-09-11_
+
+### Fixed
+
+- **Exporting only your saved model setups was refused.** The check that decides whether a file would be empty never looked at the setups, so ticking that part on its own and nothing else said there was nothing to put in a file, with your setups sitting right there. It counts what is going in now, setups included. An empty list counts as nothing too, so ticking a part you have never saved anything under says so plainly instead of writing a file holding an empty list and reporting it as exported.
+
+### Added
+
+- **Import takes more than one file at a time.** Two files one after the other reported each on its own, so a pair carrying a preset each said one preset, twice, and left you adding them up. Picked together they are one import with one total. They go on in the order you picked them, so where two files name the same preset, setup or setting the last one is what stands, and a file that cannot be read stops the whole import and names which one rather than taking half.
+
 ## 1.3.0
 
 _2026-09-11_

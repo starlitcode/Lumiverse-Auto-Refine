@@ -2579,6 +2579,130 @@ console.log("\nchoosing what goes where");
   });
 }
 
+console.log("\ntaking more than one file at a time");
+{
+  await inTab(browser, {}, async (page) => {
+    const said = () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll("#drawer .arf-note"))
+          .map((n) => n.textContent)
+          .filter((t) => /^Imported |^Everything |^Nothing |\.json/.test(t))
+          .join(" | "));
+    const names = () =>
+      page.evaluate(() =>
+        JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").map((p) => p.name));
+    const preset = (name, n) => ({
+      extension: "auto-refine",
+      version: "1.0.0",
+      parts: ["presets"],
+      settings: {},
+      presets: [{ name: name, at: 1, settings: { contextMessages: n } }],
+    });
+    const drop = async (files) => {
+      await page.setInputFiles(
+        '#drawer [data-arf-file="import"]',
+        files.map((f) => ({
+          name: f.name,
+          mimeType: "application/json",
+          buffer: Buffer.from(JSON.stringify(f.body)),
+        })),
+      );
+      await settle(page);
+      await settle(page);
+    };
+
+    await goTab(page, "Setup");
+    // Two files, one press. The count is what somebody is reading to find out
+    // where they stand, so it has to be the total rather than the last file's.
+    await drop([
+      { name: "one.json", body: preset("A rewrite of my own", 5) },
+      { name: "two.json", body: preset("A second one", 9) },
+    ]);
+    ok("two files in one press count as two", /Imported 2 presets/.test(await said()), await said());
+    ok("and both are held", (await names()).length === 2, JSON.stringify(await names()));
+    // Neither file named a chat, so the line has no business mentioning them.
+    ok("and it claims nothing the files did not carry",
+      !/chats switched off/.test(await said()), await said());
+
+    // The same two again, which is nothing happening rather than two more.
+    await drop([
+      { name: "one.json", body: preset("A rewrite of my own", 5) },
+      { name: "two.json", body: preset("A second one", 9) },
+    ]);
+    ok("the same two again changes nothing", (await names()).length === 2, JSON.stringify(await names()));
+
+    // One file in the pick is unreadable. The import stops and names it, rather
+    // than taking half and leaving somebody to work out what landed.
+    await page.setInputFiles('#drawer [data-arf-file="import"]', [
+      { name: "good.json", mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(preset("A third one", 3))) },
+      { name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{ not json") },
+    ]);
+    await settle(page);
+    await settle(page);
+    ok("a bad file in the pick is named", /broken\.json/.test(await said()), await said());
+    ok("and nothing from the good one landed either", (await names()).length === 2,
+      JSON.stringify(await names()));
+  });
+
+  // Export refuses only when there is really nothing to write. Ticking just the
+  // model setups used to be refused outright, because the check that decides
+  // never looked at them.
+  await inTab(browser, { setups: [{ name: "A careful model", at: 1, settings: { samplers: { temperature: 0.6 } } }] },
+    async (page) => {
+    const files = [];
+    page.on("download", (d) => files.push(d.suggestedFilename()));
+    await goTab(page, "Setup");
+    await page.evaluate(() => {
+      const fold = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
+        /What goes in the file/.test(h.textContent));
+      fold.click();
+    });
+    await settle(page);
+    // Everything off except the saved model setups.
+    await page.evaluate(() => {
+      for (const box of document.querySelectorAll('#drawer [data-arf-part^="exportParts:"]')) {
+        const want = box.getAttribute("data-arf-part") === "exportParts:setups";
+        if (box.checked !== want) {
+          box.checked = want;
+          box.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    });
+    await settle(page);
+    const ticked = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('#drawer [data-arf-part^="exportParts:"]'))
+        .filter((b) => b.checked).map((b) => b.getAttribute("data-arf-part")));
+    ok("only the model setups are ticked", JSON.stringify(ticked) === '["exportParts:setups"]',
+      JSON.stringify(ticked));
+
+    await page.evaluate(() =>
+      document.querySelector('#drawer [data-arf-transfer="export"]').click());
+    await settle(page);
+    const line = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("#drawer .arf-note"))
+        .map((n) => n.textContent).filter((t) => /^Exported |^Nothing /.test(t)).join(" | "));
+    ok("a setup on its own exports", files.length === 1, JSON.stringify(files) + " " + line);
+    ok("and says it did", /^Exported 1 part\./.test(line), line);
+
+    // Nothing ticked at all is still refused, and says so plainly.
+    await page.evaluate(() => {
+      for (const box of document.querySelectorAll('#drawer [data-arf-part^="exportParts:"]')) {
+        if (box.checked) { box.checked = false; box.dispatchEvent(new Event("change", { bubbles: true })); }
+      }
+    });
+    await settle(page);
+    await page.evaluate(() =>
+      document.querySelector('#drawer [data-arf-transfer="export"]').click());
+    await settle(page);
+    const none = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("#drawer .arf-note"))
+        .map((n) => n.textContent).filter((t) => /^Exported |^Nothing /.test(t)).join(" | "));
+    ok("with nothing ticked it still refuses", /^Nothing is chosen/.test(none), none);
+    ok("and wrote no second file", files.length === 1, JSON.stringify(files));
+  });
+}
+
 console.log("\nthe run through the chat");
 {
   // One button, in one place. It was moved next to Refine the latest reply and
