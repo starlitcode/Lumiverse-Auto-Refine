@@ -131,10 +131,15 @@ const ANSWERED_MAX = 400;
 // of them. The ceiling is per message and lasts as long as the process does.
 const passes = new Map();
 const PASSES_MAX = 400;
-// Deliberately well above what any reader does by hand. This is not a budget,
-// it is a stop on something that has gone wrong, and it has to sit far enough
-// out that nobody meets it while using the extension normally.
+// Set well above what anybody does by hand. This is not a budget, it is a stop
+// on something that has gone wrong, so it has to sit far enough out that nobody
+// meets it while using the extension normally.
 const PASS_CEILING = 12;
+// How many passes one refine will walk. Each one is a model call, so a list of
+// fifty lines would fire fifty calls off one button press and the bill for it
+// would arrive before anybody noticed. Six is past any chain worth building:
+// cut, mend, rhythm, dialogue, endings is five.
+const CHAIN_MAX = 6;
 // Writes this module made, so the edit event they raise is not mistaken for
 // somebody else editing the reply.
 const ourWrites = new Map();
@@ -801,7 +806,26 @@ function narrationOf(text) {
     let inside = false;
     for (let i = 0; i < s.length; i++) {
         const c = s[i];
-        if (c === '"' || c === '\u201c' || c === '\u201d') {
+        // Curly quotes say which end they are by their shape, so they need no
+        // guessing: one opens and the other closes.
+        if (c === '\u201c') {
+            inside = true;
+            out += ' ';
+            continue;
+        }
+        if (c === '\u201d') {
+            inside = false;
+            out += ' ';
+            continue;
+        }
+        if (c === '"') {
+            // A straight quote straight after a digit is a measurement rather than
+            // somebody speaking. Read as dialogue it opened a line that never closed,
+            // and every word after it in the reply was dropped from the counting.
+            if (!inside && /[0-9]/.test(s[i - 1] || '')) {
+                out += c;
+                continue;
+            }
             inside = !inside;
             out += ' ';
             continue;
@@ -3007,6 +3031,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                     blocks: x.blocks,
                 }))
                     .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
+                    .slice(0, CHAIN_MAX)
                 : [];
             protectInline = !!s.protectInline;
             wrapOutput = s.wrapOutput !== false;

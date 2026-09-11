@@ -3667,3 +3667,102 @@ describe("what each pass changed", () => {
     expect(steps(h).length).toBe(3);
   });
 });
+
+// Each pass is a model call, so the list cannot be allowed to run away with
+// somebody's bill.
+describe("how many passes one refine will walk", () => {
+  test("a list longer than the cap is cut to it", async () => {
+    const one = (n: number) => ({
+      name: "Pass " + n,
+      on: true,
+      blocks: [{ id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" }],
+    });
+    const answers = new Array(20)
+      .fill("")
+      .map((_, i) => "<REFINED>A rewrite from pass " + i + ", long enough to keep as it stands.</REFINED>");
+    const h = await armed(
+      answers,
+      { passMode: "many", passes: new Array(20).fill(0).map((_, i) => one(i + 1)) },
+      [
+        { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },
+        { id: "m1", role: "user", content: "i go in" },
+        { id: "m2", role: "assistant", content: "A rewrite from pass zero, long enough to keep as it stands." },
+      ],
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(400);
+    expect(h.asked.length).toBe(6);
+  });
+});
+
+// A straight quote is not always somebody speaking, and reading one as dialogue
+// drops every word after it from the counting.
+describe("quotes that are not dialogue", () => {
+  const chatWith = (replies: string[]): Msg[] => {
+    const out: Msg[] = [{ id: "m0", role: "assistant", content: "The yard gate stood open." }];
+    replies.forEach((text, i) => {
+      out.push({ id: "u" + i, role: "user", content: "i keep going" });
+      out.push({ id: "a" + i, role: "assistant", content: text });
+    });
+    return out;
+  };
+  const WORN = { id: "worn", name: "Worn", on: true, role: "system", text: "<worn>\n{{overused}}\n</worn>" };
+  const wornSent = (h: any): string => {
+    const all = JSON.stringify(h.asked[0].messages);
+    const hit = /<worn>\\n([\s\S]*?)\\n<\/worn>/.exec(all);
+    return hit ? hit[1] : "";
+  };
+
+  test("a measurement mark does not hide the narration after it", async () => {
+    // The habit sits after the inch mark in every reply. Read as an opening
+    // quote, the whole of it is thrown away and nothing is ever found.
+    const replies = [
+      'The gap was 6" wide and the wind came straight through it.',
+      'The gap was 4" wide and the wind came straight through it again.',
+      'The gap was 8" wide and the wind came straight through it once more.',
+      "She packed the frame with rag and sat back down.",
+    ];
+    const h = await armed(
+      ["<REFINED>She packed the frame with rag and then sat back down again.</REFINED>"],
+      { blocks: PROMPT.concat([WORN]), wornOn: true, wornLeast: 3 },
+      chatWith(replies),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(80);
+    expect(wornSent(h)).toContain("wind came straight through it");
+  });
+
+  test("real dialogue is still left out", async () => {
+    const replies = [
+      'She shrugged. "I told you about the gate," she said.',
+      'He looked away. "I told you about the gate."',
+      'The dog barked. "I told you about the gate," she repeated.',
+      "She packed the frame with rag and sat back down.",
+    ];
+    const h = await armed(
+      ["<REFINED>She packed the frame with rag and then sat back down again.</REFINED>"],
+      { blocks: PROMPT.concat([WORN]), wornOn: true, wornLeast: 3 },
+      chatWith(replies),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(80);
+    expect(wornSent(h)).not.toContain("told you about the gate");
+  });
+
+  test("curly quotes are read by their shape", async () => {
+    const replies = [
+      "She shrugged. “I told you about the gate,” she said.",
+      "He looked away. “I told you about the gate.”",
+      "The dog barked. “I told you about the gate,” she repeated.",
+      "She packed the frame with rag and sat back down.",
+    ];
+    const h = await armed(
+      ["<REFINED>She packed the frame with rag and then sat back down again.</REFINED>"],
+      { blocks: PROMPT.concat([WORN]), wornOn: true, wornLeast: 3 },
+      chatWith(replies),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(80);
+    expect(wornSent(h)).not.toContain("told you about the gate");
+  });
+});
