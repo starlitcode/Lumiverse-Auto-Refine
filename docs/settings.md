@@ -94,7 +94,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   The automatic pass and the per chat switch stay on the tab rather than in that menu, so their explanations are next to them instead of appearing as bare labels over the chat.
 
-  **Refining the draft in your input box** is the other way in, off by default because it writes into the box you are typing in. On, a **Refine what I am typing** button joins the other two above the tabs, and an entry for it appears in the chat input's Extras menu, or in the floating button's menu while that button is on screen.
+  **Refining the draft in your input box** is the other way in, off by default because it writes into the box you are typing in. On, a **Refine what I am typing** button joins the other two above the tabs, and an entry for it appears in the chat input's Extras menu, or in the floating button's menu while that button is on screen. It greys out alongside the other two when no chat is open, since there is no input box out there to read, and the menu entry comes off on the same terms.
 
   A refine of your draft asks the chat for nothing, so it works in a chat the panel is still working out, and outside a chat entirely. Switching Auto Refine off, here or everywhere, still stops it.
 
