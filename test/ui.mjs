@@ -3962,8 +3962,18 @@ console.log("\nrefining the draft from the panel");
       [...document.querySelectorAll("#drawer button")]
         .map((b) => b.textContent.trim())
         .filter((t) => /^Refine /.test(t)));
-    ok("in the order they are reached for", order[0] === "Refine the latest reply"
-      && order[2] === "Refine what I am typing", JSON.stringify(order));
+    // Asserted as an order rather than as positions, so a button added between
+    // two of these does not read as the order being wrong when it is not. What
+    // matters is the reading: the latest reply first because it is what most
+    // people came for, the part you selected beside it because both act on one
+    // reply, the whole chat after them, and your own writing last.
+    const where = (t) => order.indexOf(t);
+    ok("in the order they are reached for",
+      where("Refine the latest reply") === 0 &&
+        where("Refine the part I selected") > where("Refine the latest reply") &&
+        where("Refine every reply here") > where("Refine the part I selected") &&
+        where("Refine what I am typing") === order.length - 1,
+      JSON.stringify(order));
 
     // It reads the real box, the same one every other way in reads.
     await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
@@ -6123,6 +6133,154 @@ console.log("\nwhat each pass changed, on the Log tab");
     // thing they are looking for.
     ok("with how much each one changed the length", /characters/.test(out.opened), out.opened.slice(-300));
     ok("and a marked diff for each", out.marks >= 2, JSON.stringify({ marks: out.marks }));
+  });
+}
+
+console.log("\nthe selection listeners come off with the panel");
+{
+  // Watching for a selection means listening on the document, not on anything
+  // the panel owns, so the drawer emptying does not take them away. Only
+  // teardown can, and an update in the extensions panel is a teardown and a
+  // fresh setup in place: a set left behind every time would run on every
+  // pointer event on the page, for as many reloads as somebody has done.
+  await inTab(browser, {}, async (page) => {
+    const counted = await page.evaluate(async () => {
+      let live = 0;
+      const kinds = [];
+      const add = EventTarget.prototype.addEventListener;
+      const rm = EventTarget.prototype.removeEventListener;
+      EventTarget.prototype.addEventListener = function (t, f, c) {
+        if (this === document && /^pointerup$|^selectionchange$/.test(t)) {
+          live++;
+          kinds.push(t);
+        }
+        return add.call(this, t, f, c);
+      };
+      EventTarget.prototype.removeEventListener = function (t, f, c) {
+        if (this === document && /^pointerup$|^selectionchange$/.test(t)) live--;
+        return rm.call(this, t, f, c);
+      };
+      // Torn down and set up again twice over, which is what updating the
+      // extension does.
+      const before = live;
+      for (let i = 0; i < 2; i++) {
+        window.__teardown();
+        await new Promise((r) => setTimeout(r, 30));
+        window.__teardown = window.__setup({
+          events: { on: () => () => {} },
+          dom: { addStyle: () => () => {}, inject: () => {}, cleanup: () => {} },
+          ui: { registerDrawerTab: () => ({ root: document.getElementById("drawer"), onShow: () => {} }) },
+          sendToBackend: () => {},
+          onBackendMessage: () => () => {},
+        });
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      const after = live;
+      window.__teardown();
+      await new Promise((r) => setTimeout(r, 30));
+      return { before, after, andGone: live, kinds: [...new Set(kinds)] };
+    });
+    // Both, because neither event covers the other: a drag ends with pointerup
+    // and selecting with shift and the arrows fires only selectionchange.
+    ok("both are listened for", counted.kinds.length === 2, JSON.stringify(counted));
+    ok("reloading the panel twice does not pile them up", counted.after <= counted.before, JSON.stringify(counted));
+    ok("and teardown takes the last set off", counted.andGone <= 0, JSON.stringify(counted));
+  });
+}
+
+console.log("\nreaching a selection refine without the floating button");
+{
+  const BUBBLE = `
+  <div>
+    <span data-spindle-mount="message_header" data-spindle-scope="message:msg-two:minimal:header" style="display:contents"></span>
+    <div data-component="MessageContent"><div><div><div><p id="pp">Wren set the crate down on the step and wiped both hands on her jeans.</p></div></div></div></div>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-two:minimal:footer" style="display:contents"></span>
+  </div>`;
+
+  // The floating button off, which is how it ships, and the Extras row on. The
+  // panel is the way in nobody can switch off, so it is checked either way.
+  await inTab(browser, { saved: { widgetOn: false, inputRefine: true, enabled: true } }, async (page) => {
+    const out = await page.evaluate(async (html) => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap);
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      await new Promise((r) => setTimeout(r, 40));
+
+      const panelBtn = () => document.querySelector('#drawer [data-arf-part]');
+      const extrasKeys = () => Object.keys(window.__inputActions || {});
+      const shownOnPanel = () => {
+        const b = panelBtn();
+        return !!b && !b.hidden && getComputedStyle(b).display !== "none";
+      };
+
+      const before = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part") };
+
+      const node = document.getElementById("pp").firstChild;
+      const at = node.nodeValue.indexOf("wiped both hands");
+      const r = document.createRange();
+      r.setStart(node, at);
+      r.setEnd(node, at + "wiped both hands".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 420));
+      const after = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part") };
+
+      // And pressing the panel one sends it.
+      window.__sent.length = 0;
+      const b = panelBtn();
+      if (b) b.click();
+      await new Promise((r2) => setTimeout(r2, 60));
+      const fired = window.__sent.filter((m) => m && m.type === "refine_selection");
+
+      getSelection().removeAllRanges();
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 420));
+      const gone = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part") };
+      return { before, after, gone, fired };
+    }, BUBBLE);
+
+    ok("the panel button is not there with nothing selected", !out.before.panel, JSON.stringify(out.before));
+    ok("selecting part of a reply brings it up on the panel", out.after.panel, JSON.stringify(out.after));
+    ok("and puts a row in the chat input's menu too", out.after.extras, JSON.stringify(out.after));
+    ok("pressing the panel button sends the refine", out.fired.length === 1, JSON.stringify(out.fired));
+    ok("it carries the right message", out.fired[0] && out.fired[0].messageId === "msg-two", JSON.stringify(out.fired[0]));
+    ok("and putting the selection away takes both away", !out.gone.panel && !out.gone.extras, JSON.stringify(out.gone));
+  });
+
+  // With the Extras row switched off as well, the panel is the only way left and
+  // it still works. Somebody who turned off both should not be locked out of a
+  // feature they never said anything about.
+  await inTab(browser, { saved: { widgetOn: false, inputRefine: false, enabled: true } }, async (page) => {
+    const out = await page.evaluate(async (html) => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap);
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      await new Promise((r) => setTimeout(r, 40));
+      const node = document.getElementById("pp").firstChild;
+      const at = node.nodeValue.indexOf("wiped both hands");
+      const r = document.createRange();
+      r.setStart(node, at);
+      r.setEnd(node, at + "wiped both hands".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 420));
+      const b = document.querySelector('#drawer [data-arf-part]');
+      window.__sent.length = 0;
+      if (b && !b.hidden) b.click();
+      await new Promise((r2) => setTimeout(r2, 60));
+      return {
+        onPanel: !!b && !b.hidden,
+        inExtras: Object.keys(window.__inputActions || {}).includes("auto-refine-part"),
+        fired: window.__sent.filter((m) => m && m.type === "refine_selection").length,
+      };
+    }, BUBBLE);
+    ok("with the Extras row off too, the panel still offers it", out.onPanel, JSON.stringify(out));
+    ok("and nothing is put in a menu that was turned off", !out.inExtras, JSON.stringify(out));
+    ok("and it still sends", out.fired === 1, JSON.stringify(out));
   });
 }
 

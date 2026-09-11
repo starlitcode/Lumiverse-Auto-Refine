@@ -2067,7 +2067,10 @@ function gatherWorn(msgs: any[], upTo: number, name?: string): string {
   const worn = overusedIn(replies, { least: wornLeast, names: name ? [name] : [] });
   const lines: string[] = [];
   for (const one of worn) {
-    if (wornFine.indexOf(one.phrase) >= 0) continue;
+    // Anything holding a phrase you have left alone is left alone too. Listing
+    // "shiver ran down" and still being told about "a shiver ran down her spine"
+    // would mean listing every length of the same habit.
+    if (wornFine.some((fine) => one.phrase.indexOf(fine) >= 0)) continue;
     lines.push(one.phrase + ' (' + one.replies + ' replies)');
     if (lines.length >= WORN_SHOWN) break;
   }
@@ -3131,8 +3134,14 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
       wornLeast = Number(s.wornLeast);
       wornLeast = Number.isFinite(wornLeast) && wornLeast >= 2 ? Math.floor(wornLeast) : 3;
+      // Put through the same reading the phrases themselves go through, so a line
+      // typed with a full stop on the end still matches. Lowercasing alone left
+      // "a shiver ran down her spine." matching nothing and saying nothing about
+      // why, which is the worst way for a setting to not work.
       wornFine = Array.isArray(s.wornFine)
-        ? s.wornFine.map((x: any) => String(x == null ? '' : x).trim().toLowerCase()).filter(Boolean)
+        ? s.wornFine
+            .map((x: any) => wordsOf(String(x == null ? '' : x), new Set<string>()).join(' '))
+            .filter(Boolean)
         : [];
       manyPasses = String(s.passMode || 'one') === 'many';
       // A pass with no blocks would send a prompt with nothing in it, and one

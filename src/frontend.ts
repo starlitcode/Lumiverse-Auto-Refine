@@ -5144,6 +5144,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     now.addEventListener("click", () => refineNow());
     row.appendChild(now);
 
+    // The part you selected. Here as well as in the button's menu and the Extras
+    // row, because the panel is the one way in nobody can switch off: somebody
+    // with the floating button off and no Extras row could otherwise select part
+    // of a reply and have nothing anywhere to press.
+    //
+    // Built either way and hidden while there is no selection, the same as every
+    // other row that hangs off something, so it closes rather than vanishing.
+    const part = button("Refine the part I selected", false);
+    part.setAttribute("data-arf-part", "1");
+    hangsOff(part, () => !!pickedHere(), "a selection");
+    part.disabled = !!stop;
+    part.style.opacity = part.disabled ? "0.5" : "1";
+    part.style.cursor = part.disabled ? "not-allowed" : "pointer";
+    part.title = stop || "Rewrites what you highlighted and leaves the rest of the reply alone.";
+    part.addEventListener("click", () => refinePicked());
+    row.appendChild(part);
+
     // The whole chat, next to the one reply, and the only place it appears. A
     // chat written before the extension was installed is the ordinary reason
     // somebody opens this panel at all, so the button belongs where they are
@@ -10087,6 +10104,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
     extra("auto-refine-now", "Refine the latest reply", inExtras, () => refineNow());
     extra("auto-refine-input", "Refine what I am typing", inExtras, () => refineInput());
+    // On the row's terms, not its own. Somebody who switched the row off wants an
+    // empty Extras menu, and letting one entry back in would undo that for them.
+    // Nobody is shut out by it either: the panel offers this whatever the row and
+    // the floating button are doing, which is the point of it being there.
+    //
+    // Only while there is a selection, so it is never an entry that does nothing.
+    extra("auto-refine-part", "Refine the part I selected", inExtras && !!pickedHere(), () =>
+      refinePicked(),
+    );
   }
 
   // One Extras entry, put up or taken down to match. Registered by id, so the
@@ -10221,7 +10247,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!sel || !text.trim() || sel.isCollapsed) {
         if (pickedRun) {
           pickedRun = null;
+          // Both, because they are two different surfaces: paint redraws the
+          // panel's own button and syncExtras puts the row in the chat input's
+          // menu up or takes it down.
           paint();
+          syncExtrasSoon();
         }
         return;
       }
@@ -10247,9 +10277,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       const was = pickedRun;
       pickedRun = { chatId: lastChatId, messageId: found.id, text: text, ahead: ahead };
-      // Only repaint when the entry for it appears or the message changed, since
-      // this runs on every selection anybody makes anywhere on the page.
-      if (!was || was.messageId !== pickedRun.messageId) paint();
+      // Only when the ways in have to change: the first selection, or a selection
+      // moving to another reply. This runs on every selection anybody makes
+      // anywhere on the page, and redrawing the panel for each one would be a
+      // repaint per drag.
+      if (!was || was.messageId !== pickedRun.messageId) {
+        paint();
+        syncExtrasSoon();
+      }
     } catch (_) {}
   }
 
