@@ -1601,7 +1601,7 @@ const LIMIT_FIELDS = [
         key: "wornOn",
         label: "Find phrases this chat has worn out",
         type: "bool",
-        hint: "Off by default. On, `{{overused}}` fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. It reads replies the refine already has, so it costs no extra call.",
+        hint: "Off by default. On, {{overused}} fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. It reads replies the refine already has, so it costs no extra call.",
     },
     {
         key: "wornBack",

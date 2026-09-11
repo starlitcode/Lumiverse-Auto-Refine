@@ -6284,6 +6284,65 @@ console.log("\nreaching a selection refine without the floating button");
   });
 }
 
+console.log("\nthe rows that only appear when switched on, at both sizes");
+{
+  // Every check that measures the panel does it with the defaults, and the rows
+  // added for passes and worn phrases are hidden under their own switches. So
+  // nothing has ever measured them: they could push the panel sideways on a
+  // phone and every run would still come back green.
+  const ON = {
+    enabled: true,
+    passMode: "many",
+    passNames: ["A close read", "A quick read, for a model that thinks"],
+    wornOn: true,
+    wornBack: 60,
+    wornLeast: 3,
+    wornFine: ["a shiver ran down her spine", "the air between them was thick with something"],
+  };
+  for (const [label, viewport, touch] of [
+    ["a small phone", { width: 320, height: 680 }, true],
+    ["a phone", { width: 390, height: 844 }, true],
+    ["a desktop", { width: 1440, height: 900 }, false],
+  ]) {
+    await inTab(browser, { saved: ON, viewport, touch }, async (page) => {
+      await goTab(page, "Limits");
+      const out = await page.evaluate(() => {
+        const drawer = document.getElementById("drawer");
+        const rows = ["passMode", "passNames", "wornOn", "wornBack", "wornLeast", "wornFine"];
+        const missing = [];
+        const spilling = [];
+        const small = [];
+        const coarse = matchMedia("(pointer: coarse)").matches;
+        const box = drawer.getBoundingClientRect();
+        for (const key of rows) {
+          const node = drawer.querySelector('[data-arf-field="' + key + '"]');
+          if (!node) { missing.push(key); continue; }
+          const r = node.getBoundingClientRect();
+          // Inside the panel it lives in, with a pixel of slack for rounding.
+          if (r.right > box.right + 1 || r.left < box.left - 1) spilling.push(key + " " + Math.round(r.width));
+          // A finger needs something to land on. Only what is actually pressed:
+          // a text box is as tall as its rows and is not a tap target.
+          const tag = String(node.tagName).toUpperCase();
+          if (coarse && (tag === "SELECT" || node.type === "checkbox") && r.height < 24)
+            small.push(key + " " + Math.round(r.height));
+        }
+        return {
+          missing,
+          spilling,
+          small,
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+          panelFits: box.width <= window.innerWidth + 1,
+        };
+      });
+      ok(label + ": every switched-on row is drawn", out.missing.length === 0, JSON.stringify(out.missing));
+      ok(label + ": none of them reaches past the panel", out.spilling.length === 0, JSON.stringify(out.spilling));
+      ok(label + ": nothing pushes the page sideways", !out.sideways);
+      ok(label + ": the panel fits the screen", out.panelFits);
+      if (touch) ok(label + ": what a finger presses is big enough", out.small.length === 0, JSON.stringify(out.small));
+    });
+  }
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
