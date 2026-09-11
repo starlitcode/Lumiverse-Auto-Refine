@@ -60,6 +60,7 @@ How the checks apply, which is the part worth understanding:
 - **The end of the chain is judged once more against the reply it started from.** Three passes each tightening by a third leaves a reply half its length, and no single pass did anything the limits object to. That refusal says "across all 3 passes" so you can tell it from a single pass being turned down.
 - **A refusal stops the chain where it happens.** Pass two declining means pass three is never asked for, and nothing is saved.
 - **Stop ends it.** The call in flight is cut off, and the passes behind it never run.
+- **A reply being replaced ends it too.** Auto Retry swiping the reply, or you pressing regenerate, means everything from that point on would be a rewrite of writing that is already on its way out. The chain stops between passes rather than running to the end and being refused, so an interrupted chain costs the passes that had already gone rather than all of them.
 
 **What each pass changed** on the Log tab breaks a chain open: every pass in order, what it was handed, what it gave back, and how much it changed the length. It is the answer to a chain that came out worse, which one before and one after cannot give you. A chain refused on its total still fills it in, so the refusal and the pass that caused it can be read together.
 

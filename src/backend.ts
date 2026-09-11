@@ -2733,6 +2733,26 @@ async function refineMessage(
         after: unshield(got.text, armed.parts).text,
       });
     carried = got.text;
+    // Between one pass and the next, because a chain is several calls with real
+    // time between them. Auto Retry deciding the reply was a refusal and swiping
+    // it, or the reader pressing regenerate, means everything from here on is a
+    // rewrite of writing that is on its way out. Checked once at the end too,
+    // but on its own that is the whole chain paid for before anybody finds out:
+    // a swipe during the second of six passes buys four more calls that were
+    // never going to be saved.
+    if (step + 1 < chain.length && generating.has(String(chatId))) {
+      say('info', 'another reply started, so the chain stopped after pass ' + (step + 1));
+      return {
+        ok: false,
+        stood: true,
+        notes: notes,
+        why:
+          'another reply started while the rewrite was being written, so the chain stopped after pass ' +
+          (step + 1) +
+          ' of ' +
+          chain.length,
+      };
+    }
   }
   // Sent as soon as the walk is done, ahead of every check that can turn the
   // result down. A chain refused on its total is the one a reader most wants to

@@ -3822,3 +3822,62 @@ describe("the story's own words are not a habit", () => {
     expect(wornSent(h)).toContain("shiver ran down her spine");
   });
 });
+
+// A chain is several calls with real time between them, so the window for the
+// reply to be replaced underneath it is as many times wider as there are passes.
+describe("a chain stops when the reply is on its way out", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+  const pass = (name: string) => ({
+    name: name,
+    on: true,
+    blocks: [{ id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" }],
+  });
+  const six = [pass("One"), pass("Two"), pass("Three"), pass("Four"), pass("Five"), pass("Six")];
+  const body = "She stepped through the gate and, suddenly, the cold just hit her hard.";
+  const answers = new Array(8)
+    .fill("")
+    .map((_, i) => "<REFINED>She stepped through the gate and the cold hit her, take " + i + ".</REFINED>");
+
+  test("all six run when nothing interrupts", async () => {
+    const h = await armed(answers, { passMode: "many", passes: six }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(400);
+    expect(h.asked.length).toBe(6);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("but a reply starting partway through stops it there", async () => {
+    // Announced while the second pass is being answered, which is Auto Retry
+    // swiping the reply or the reader pressing regenerate.
+    let calls = 0;
+    const h = await armed(answers, { passMode: "many", passes: six }, reply(body), {
+      whileAsking: () => {
+        calls++;
+        if (calls === 2) h.started({ chatId: "c1" });
+      },
+    } as any);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(400);
+    // Two paid for rather than six, and nothing written over a reply that is
+    // being replaced anyway.
+    expect(h.asked.length).toBe(2);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("and it says which pass it stopped after", async () => {
+    let calls = 0;
+    const h = await armed(answers, { passMode: "many", passes: six }, reply(body), {
+      whileAsking: () => {
+        calls++;
+        if (calls === 2) h.started({ chatId: "c1" });
+      },
+    } as any);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(400);
+    expect(h.sent.map((x: any) => String(x.why || "")).join(" ")).toMatch(/stopped after pass 2 of 6/i);
+  });
+});
