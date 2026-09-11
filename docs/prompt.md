@@ -46,7 +46,7 @@ A refine is one model call by default. **How many passes a refine makes** on the
 
 The prompts that ship with it are whole refines rather than single jobs, so running two of them in sequence does the same work twice. A chain is worth building out of passes that each do one thing: one that only cuts, one that only fixes rhythm. Save those as presets of your own and name them here.
 
-What it costs: one call per pass. Three passes is three times the bill of one, and the Log adds them up rather than reporting the last one.
+What it costs: one call per pass, and each pass sends a whole prompt of its own. Measured against the shipped prompt, one refine is about 1,600 tokens in, so a chain of six is nearer ten thousand before a word comes back. Three passes is three times the bill of one, and the Log adds them up rather than reporting the last one.
 
 What happens when something is wrong with a line:
 
@@ -81,7 +81,7 @@ What it counts, and what it refuses to count:
 - **The story's own words are left out.** Anything written into your character card, or into your lorebook where a block was already asking for it, is the story rather than a habit. A place or an institution the chat is about will repeat, and that is the chat working.
 - **Code is left out.** Anything in backticks is not prose.
 
-It reads replies the refine already has, so it costs no extra call. **Phrases to leave alone** takes one per line: a repeated line can be the point of a story, and nothing listed there is ever reported.
+It reads replies the refine already has, so it costs no extra call. It does cost tokens, though: measured against the shipped prompt it adds around 150 to a request of about 1,600, so roughly a tenth more on every refine while it is on. **Phrases to leave alone** takes one per line: a repeated line can be the point of a story, and nothing listed there is ever reported.
 
 Honest about the limits: the thresholds are a starting point rather than a tuned answer, and a long chat with a consistent setting will eventually flag that setting's own vocabulary. **Phrases to leave alone** is the way out of that, not cleverness on this end.
 
