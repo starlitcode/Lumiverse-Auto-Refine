@@ -279,6 +279,11 @@ describe("every setting can leave the panel", () => {
     debugParts: "what to tick on the problem report card",
     hunt: "what is typed in the search box",
     tab: "which tab of the panel was last open",
+    // A record of the shipped prompts this device has already been shown. It
+    // describes what somebody has read rather than anything about their setup,
+    // and carrying it to another device would silence a notice there that
+    // nobody there had seen.
+    promptsSeen: "which shipped prompts this device has already been told about",
   };
 
   test("there are parts to check, or this proves nothing", () => {
