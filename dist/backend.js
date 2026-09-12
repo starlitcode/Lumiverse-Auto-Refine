@@ -1803,11 +1803,50 @@ async function gatherCard(chatId, userId) {
 // the model can tell the two voices apart. The message itself is not in here:
 // it arrives as its own block, and sending it twice teaches the model that
 // repeating it is what the answer looks like.
-async function gatherHistory(msgs, at, charName, userId) {
+// The name of the character the reader plays. Lumiverse knows it as {{user}},
+// which is the same thing the chat itself prints above their messages, so the
+// run-up names them the way the page does.
+//
+// Empty on a chat with no persona set, on a build with no macros API, and where
+// the macro comes back unresolved. The caller has a fallback for all three.
+async function gatherPersonaName(chatId, characterId, userId) {
+    try {
+        if (!spindle.macros || typeof spindle.macros.resolve !== 'function')
+            return '';
+        const out = await spindle.macros.resolve('{{user}}', {
+            chatId: chatId,
+            characterId: characterId,
+            userId: userId,
+        });
+        const got = typeof out === 'string'
+            ? out
+            : out && typeof out.content === 'string'
+                ? out.content
+                : out && typeof out.text === 'string'
+                    ? out.text
+                    : '';
+        const name = String(got).trim();
+        // An unresolved macro is not a name. Some builds hand the tag straight back
+        // rather than answering, and labelling every line "{{user}}" is worse than
+        // the fallback.
+        if (!name || name.indexOf('{{') >= 0)
+            return '';
+        // A persona long enough to be a description rather than a name would push
+        // the run-up out of shape on every single line.
+        return name.length > 40 ? '' : name;
+    }
+    catch (_) {
+        return '';
+    }
+}
+async function gatherHistory(msgs, at, charName, userId, youName) {
     const want = Math.max(0, Math.min(40, Number(contextMessages) || 0));
     if (!want || at <= 0)
         return '';
     const them = charName || 'Character';
+    // Their own character by name, the same as the other one. Falls back to a
+    // plain word rather than a role nobody in the chat is called.
+    const you = String(youName || '').trim() || 'You';
     const out = [];
     // Backwards from the message being refined, because the turn just before it
     // matters more than one twenty turns ago, and the budget runs out from the
@@ -1819,9 +1858,9 @@ async function gatherHistory(msgs, at, charName, userId) {
         const body = String(m.content == null ? '' : m.content).trim();
         if (!body)
             continue;
-        // The label the prompts use for the reader, so the run-up and the prompt
-        // above it never name the same person two ways.
-        out.push((m.role === 'user' ? 'Co-author' : them) + ': ' + body);
+        // Both characters named, so the run-up reads the way the chat does and the
+        // model is never working out which of two labels is a person.
+        out.push((m.role === 'user' ? you : them) + ': ' + body);
     }
     const kept = await fitToBudget(out, maxHistoryTokens, userId);
     return kept.reverse().join('\n\n');
@@ -2495,10 +2534,15 @@ pick) {
     // lorebook is only used where a block was already asking for it: fetching it
     // solely for this would be the extra call this feature promises not to make.
     const lore = promptWants(LORE_MACRO, isUser, willSend) ? await gatherLore(chatId, userId) : '';
+    // Only where the run-up is actually going out, since it is a macro call and
+    // the label is the only thing it is for.
+    const youName = promptWants(HISTORY_MACRO, isUser, willSend)
+        ? await gatherPersonaName(chatId, card.id, userId)
+        : '';
     let scene = {
         character: card.text,
         context: promptWants(HISTORY_MACRO, isUser, willSend)
-            ? await gatherHistory(msgs, at, card.name, userId)
+            ? await gatherHistory(msgs, at, card.name, userId, youName)
             : '',
         lore: lore,
         memory: promptWants(MEMORY_MACRO, isUser, willSend) ? await gatherMemory(chatId, userId) : '',
@@ -3468,9 +3512,10 @@ spindle.onFrontendMessage(async (payload, userId) => {
                         }
                         const card = await gatherCard(payload.chatId, userId);
                         const at = m ? msgs.findIndex((x) => x && x.id === m.id) : -1;
+                        const youName = await gatherPersonaName(payload.chatId, card.id, userId);
                         scene = {
                             character: card.text,
-                            context: at > 0 ? await gatherHistory(msgs, at, card.name, userId) : '',
+                            context: at > 0 ? await gatherHistory(msgs, at, card.name, userId, youName) : '',
                             lore: await gatherLore(payload.chatId, userId),
                             memory: await gatherMemory(payload.chatId, userId),
                             name: card.name,

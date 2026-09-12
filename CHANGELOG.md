@@ -12,7 +12,7 @@ _2026-09-12_
 
 ### Fixed
 
-- **An improved shipped prompt reached nobody who had already used the extension, and nothing said so.** Your saved settings win over the defaults every time the panel loads, which is what keeps a prompt you edited safe across an update. The cost was that a shipped prompt rewritten in a later version sat there unreachable, and the panel gave no sign it existed. The Presets card now says when the ones that ship have changed since the ones you are carrying, and points at Load. It overwrites nothing, it stays quiet if you are already on a shipped prompt, and once you have read it, it stays quiet until they change again.
+- **The run-up called you Co-author instead of using your character's name.** Every one of your messages in **See what gets sent** was labelled that way, while the character you are writing with got their name off the card. A job title is not anybody in the story, and a model reading it has to work out who is meant. Both sides are named now, so the run-up reads the way the chat page does. A chat with no persona set, or a build that will not resolve one, falls back to **You** rather than labelling a blank.
 
 ## 1.6.0
 
@@ -20,6 +20,7 @@ _2026-09-11_
 
 ### Fixed
 
+- **An improved shipped prompt reached nobody who had already used the extension, and nothing said so.** Your saved settings win over the defaults every time the panel loads, which is what keeps a prompt you edited safe across an update. The cost was that a shipped prompt rewritten in a later version sat there unreachable, and the panel gave no sign it existed. The Presets card now says when the ones that ship have changed since the ones you are carrying, and points at Load. It overwrites nothing, it stays quiet if you are already on a shipped prompt, and once you have read it, it stays quiet until they change again.
 - **The preview never said which of your two prompts it built.** There are two lists, one for replies and one for your own writing, and the preview builds whichever fits the message it is previewing. Loading a preset writes to one list and leaves the other alone, so loading a reply preset while your own message is the newest one built a preview of the list you had not touched, and it read as a preset that failed to load. It says which list it used now, and that a preset loaded into the other one will not show there. The backend had been working this out and sending it all along; nothing on the panel read it.
 
 ### Changed

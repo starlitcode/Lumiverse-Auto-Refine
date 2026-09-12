@@ -185,6 +185,9 @@ function host(
           .replace(/\{\{personality\}\}/g, known ? CARD.personality : "")
           .replace(/\{\{scenario\}\}/g, known ? CARD.scenario : "")
           .replace(/\{\{persona\}\}/g, known ? "A traveller who arrived at night." : "")
+          // The name the reader's own character goes by, which is what labels
+          // their side of the run-up. noPersona is a chat with none set.
+          .replace(/\{\{user\}\}/g, known && !opts.noPersona ? "Tam" : "")
           .replace(/\{\{char\}\}/g, known ? CARD.name : "");
       },
     },
@@ -786,12 +789,23 @@ describe("what the model is told about the scene", () => {
     expect(said(h)).not.toContain("You are late");
   });
 
-  test("the run-up is in the prompt, with the two voices named apart", async () => {
+  test("the run-up is in the prompt, with both characters named", async () => {
     const h = await armed(["She stepped through and the cold hit her."]);
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(said(h)).toContain("Co-author: i walk through it");
-    expect(said(h)).not.toContain("Player:");
+    // Their own character by name, the same as the card's, so the run-up reads
+    // the way the chat page does. It used to label their side "Co-author",
+    // which is a job rather than anybody in the story.
+    expect(said(h)).toContain("Tam: i walk through it");
+    expect(said(h)).toContain("Wren: The gate stands open");
+    expect(said(h)).not.toContain("Co-author:");
+  });
+
+  test("and a chat with no persona set falls back rather than labelling a blank", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noPersona: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("You: i walk through it");
     expect(said(h)).toContain("Wren: The gate stands open");
   });
 
