@@ -12,7 +12,6 @@ _2026-09-12_
 
 ### Fixed
 
-- **An improved shipped prompt reached nobody who had already used the extension, and nothing said so.** Your saved settings win over the defaults every time the panel loads, which is what keeps a prompt you edited safe across an update. The cost was that a shipped prompt rewritten in a later version sat there unreachable, and the panel gave no sign it existed. The Presets card now says when the ones that ship have changed since the ones you are carrying, and points at Load. It overwrites nothing, it stays quiet if you are already on a shipped prompt, and once you have read it, it stays quiet until they change again.
 - **The run-up called you Co-author instead of using your character's name.** Every one of your messages in **See what gets sent** was labelled that way, while the character you are writing with got their name off the card. A job title is not anybody in the story, and a model reading it has to work out who is meant. Both sides are named now, so the run-up reads the way the chat page does. A chat with no persona set, or a build that will not resolve one, falls back to **You** rather than labelling a blank.
 
 ## 1.6.0

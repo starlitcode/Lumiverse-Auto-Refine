@@ -2757,40 +2757,6 @@ console.log("\nthe three buttons agree about the home screen");
   });
 }
 
-console.log("\nsaying the shipped prompts have moved on");
-{
-  // Saved settings win over the defaults on load, which keeps an edited prompt
-  // safe across an update and also means a shipped prompt improved later reaches
-  // nobody who has used the extension once. The panel says so rather than
-  // overwriting anything.
-  const seen = (page) =>
-    page.evaluate(() => !!document.querySelector('#drawer [data-arf-prompts-moved="1"]'));
-
-  // Carrying something that is not a shipped prompt, and never told about it.
-  await inTab(browser, { saved: { blocks: [{ id: "mine", name: "Mine", on: true, role: "system", text: "<mine>\n{{message}}\n</mine>" }] } },
-    async (page) => {
-    await goTab(page, "Prompt");
-    ok("a prompt of your own is told the shipped ones moved", await seen(page));
-
-    // Waving it away holds until the shipped prompts change again.
-    await page.evaluate(() =>
-      document.querySelector('#drawer [data-arf-prompts-moved="dismiss"]').click());
-    await settle(page);
-    ok("and it goes once you have read it", !(await seen(page)));
-    const kept = await page.evaluate(() => {
-      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
-      return last && last.settings.blocks.length === 1;
-    });
-    ok("and nothing of yours was overwritten", kept);
-  });
-
-  // A fresh panel is already carrying this version's shipped prompts.
-  await inTab(browser, {}, async (page) => {
-    await goTab(page, "Prompt");
-    ok("a fresh install is told nothing, since it already has them", !(await seen(page)));
-  });
-}
-
 console.log("\nthe run through the chat");
 {
   // One button, in one place. It was moved next to Refine the latest reply and

@@ -252,12 +252,6 @@ const CONFIG = {
   // because they installed an extension.
   refineOn: false,
   refineAgain: false,
-  // A fingerprint of the prompts that shipped when the reader last loaded one,
-  // or last waved the notice away. Saved settings win over the defaults on every
-  // load, which is what keeps an edited prompt safe across an update and also
-  // what stops an improved shipped prompt ever reaching anybody who has used the
-  // extension once. This is how the panel can say so without overwriting a word.
-  promptsSeen: "",
   connectionId: "",
   thinkingMode: "off",
   thinkingEffort: "medium",
@@ -8916,30 +8910,6 @@ export function setup(ctx: Ctx, overrides?: any) {
         : { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
     }));
   }
-  // What the shipped prompts say, in one short string. Cheap to compare and it
-  // changes whenever any of their text does, which is the only question here.
-  function shippedMark(): string {
-    let h = 0;
-    const all = BUILT_IN_PROMPTS.map((p) => p.blocks.map((b) => b.text).join("")).join("");
-    for (let i = 0; i < all.length; i++) h = (h * 31 + all.charCodeAt(i)) | 0;
-    return String(h);
-  }
-  // Whether what the reader is carrying is one of the shipped prompts as they
-  // stand in this version. Compared on the text, since a prompt that matches is
-  // a prompt with nothing to update whatever it is called.
-  function onAShippedPrompt(): boolean {
-    const mine = (list: Block[]) => list.map((b) => String(b.text)).join("\u0000");
-    const here = mine(blockList("blocks"));
-    const hereMine = mine(blockList("userBlocks"));
-    let reply = false;
-    let own = false;
-    for (const p of BUILT_IN_PROMPTS) {
-      const text = mine(p.blocks);
-      if (p.mine) own = own || text === hereMine;
-      else reply = reply || text === here;
-    }
-    return reply && own;
-  }
   const isBuiltIn = (name: string) => BUILT_IN.indexOf(name) >= 0;
   const allPresets = (): Preset[] => builtIn().concat(presets);
 
@@ -9224,31 +9194,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.",
       presets.length ? presets.length + " yours" : BUILT_IN.length + " built in",
     );
-    // An update never rewrites a prompt somebody is carrying, because that would
-    // throw away anybody's edits. The cost is that a shipped prompt improved in
-    // a later version reaches nobody who has already used the extension, and
-    // nothing said so. This says so, and changes nothing on its own.
-    //
-    // Quiet for anybody already on a shipped prompt, since they have nothing to
-    // update, and quiet again once waved away until the shipped prompts change.
-    if (!onAShippedPrompt() && String(cfg.promptsSeen || "") !== shippedMark()) {
-      const box = el("div", "arf-block");
-      box.setAttribute("data-arf-prompts-moved", "1");
-      box.appendChild(
-        note(
-          "The prompts that ship with Auto Refine have changed since the ones you are carrying. Yours are kept as they are, edits and all, so loading one below is the only way to take the new wording. Load the one for replies and the one for your own writing separately.",
-        ),
-      );
-      const seen = button("I have read this", false);
-      seen.setAttribute("data-arf-prompts-moved", "dismiss");
-      seen.addEventListener("click", () => {
-        cfg.promptsSeen = shippedMark();
-        persist(true);
-        paint();
-      });
-      box.appendChild(seen);
-      wrap.appendChild(box);
-    }
 
     const sel = document.createElement("select");
     sel.className = "arf-field";
@@ -9402,12 +9347,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       const p = chosen();
       if (!p) return;
       const took = applyPreset(p);
-      // Taking a shipped prompt is taking this version's wording, so the notice
-      // has nothing left to say until they change again.
-      if (isBuiltIn(p.name)) {
-        cfg.promptsSeen = shippedMark();
-        persist(true);
-      }
       let alsoSaid = "";
       const wants = String(p.setup || "");
       if (wants) {
