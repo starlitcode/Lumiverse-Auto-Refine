@@ -28,7 +28,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 ## Context
 
-- **How much it is told** is the message count and the two token budgets, for the run-up and the lorebook. In [How much it is told](prompt.md#how-much-it-is-told).
+- **How much it is told** is the message count, whether the run-up names who said each line, and the two token budgets, for the run-up and the lorebook. In [How much it is told](prompt.md#how-much-it-is-told).
 - **See what gets sent** builds the real request and shows it to you, message by message, without calling a model. **Raw** shows the same thing as the JSON that goes over the wire, and **Expand** opens either at the size of the screen.
 
 ## Model
