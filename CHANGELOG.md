@@ -14,6 +14,10 @@ _2026-09-12_
 
 - **The run-up called you Co-author instead of using your character's name.** Every one of your messages in **See what gets sent** was labelled that way, while the character you are writing with got their name off the card. A job title is not anybody in the story, and a model reading it has to work out who is meant. Both sides are named now, so the run-up reads the way the chat page does. A chat with no persona set, or a build that will not resolve one, falls back to **You** rather than labelling a blank.
 
+### Added
+
+- **Name the speakers in the run-up**, on by default, under **Context**. The run-up goes out as one block of text, so the labels are the only thing separating your lines from the character's in it. A chat whose messages already begin with a name, which is what a group chat looks like, gets that name twice on every line, and switching this off sends the messages as they were written. It also skips the persona lookup, since the label is the only thing that reads it.
+
 ## 1.6.0
 
 _2026-09-11_

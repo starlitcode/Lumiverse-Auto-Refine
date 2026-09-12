@@ -231,11 +231,13 @@ They are picked from the same list as the others, under a heading of their own, 
 
 ## How much it is told
 
-Three settings under **Context**, and they are the ones most likely to make a refine expensive without looking like it. Every one of them costs tokens on every single reply.
+Four settings under **Context**. The three that set a size are the ones most likely to make a refine expensive without looking like it, since every one of them costs tokens on every single reply.
 
 **Messages of run-up to send** is how many messages before the one being refined. Four is the default. Zero sends none, which is fine for rules about wording and wrong for rules about continuity: a model that cannot see the run-up will smooth a scene into general prose and take the thread out with it.
 
 **Most tokens of run-up** is a ceiling on the same thing, and whichever runs out first decides. Whole messages are kept or dropped, working backwards from the message being refined, so the turn just before it always survives.
+
+**Name the speakers in the run-up** is on, and puts your character's name and theirs at the start of each line of it. The run-up goes out as one block of text, so that label is the only thing separating the two voices in it. Switch it off for a chat whose messages already begin with a name, which is what a group chat looks like, and the run-up goes out as it was written.
 
 **Most tokens of lorebook** is a ceiling on the entries this chat has active. Whole entries again: half a lorebook entry is worse than one fewer of them.
 

@@ -801,6 +801,29 @@ describe("what the model is told about the scene", () => {
     expect(said(h)).not.toContain("Co-author:");
   });
 
+  // A group chat, or any chat whose messages already begin with a name. The
+  // label then says who is speaking a second time on every single line.
+  test("the labels can be switched off, leaving the run-up as it was written", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { nameSpeakers: false });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("i walk through it");
+    expect(said(h)).toContain("The gate stands open");
+    expect(said(h)).not.toContain("Tam:");
+    expect(said(h)).not.toContain("Wren:");
+  });
+
+  // A panel older than the setting sends nothing for it, and the labels were
+  // always on before it existed. Absent has to mean on, or updating the backend
+  // ahead of the panel would silently strip them.
+  test("a panel that says nothing about the labels keeps them", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "set_settings", settings: { ...RULES, nameSpeakers: undefined } });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("Tam: i walk through it");
+  });
+
   test("and a chat with no persona set falls back rather than labelling a blank", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noPersona: true });
     await h.ended({ chatId: "c1", messageId: "m2" });

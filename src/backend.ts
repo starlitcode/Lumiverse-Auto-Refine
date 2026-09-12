@@ -57,6 +57,9 @@ let blocks: Block[] = [];
 // How much of the chat to show the model as context, in messages. The refine
 // sees the message it is rewriting either way; this is what came before it.
 let contextMessages = 4;
+// Whether each line of the run-up carries who said it. Off for a chat whose
+// messages already begin with a name, where the label says it a second time.
+let nameSpeakers = true;
 // Sampler values for the refine call, sent as parameters. Empty means the
 // connection's own preset decides, which is the right default: a reader who
 // has not asked for a temperature should get the one they already tuned.
@@ -1978,8 +1981,9 @@ async function gatherHistory(
     const body = String(m.content == null ? '' : m.content).trim();
     if (!body) continue;
     // Both characters named, so the run-up reads the way the chat does and the
-    // model is never working out which of two labels is a person.
-    out.push((m.role === 'user' ? you : them) + ': ' + body);
+    // model is never working out which of two labels is a person. Off where the
+    // messages already carry names, which is what a group chat looks like.
+    out.push(nameSpeakers ? (m.role === 'user' ? you : them) + ': ' + body : body);
   }
   const kept = await fitToBudget(out, maxHistoryTokens, userId);
   return kept.reverse().join('\n\n');
@@ -2653,11 +2657,12 @@ async function refineMessage(
   // lorebook is only used where a block was already asking for it: fetching it
   // solely for this would be the extra call this feature promises not to make.
   const lore = promptWants(LORE_MACRO, isUser, willSend) ? await gatherLore(chatId, userId) : '';
-  // Only where the run-up is actually going out, since it is a macro call and
-  // the label is the only thing it is for.
-  const youName = promptWants(HISTORY_MACRO, isUser, willSend)
-    ? await gatherPersonaName(chatId, card.id, userId)
-    : '';
+  // Only where the run-up is going out and the labels are on, since it is a
+  // macro call and a label is the only thing it is for.
+  const youName =
+    nameSpeakers && promptWants(HISTORY_MACRO, isUser, willSend)
+      ? await gatherPersonaName(chatId, card.id, userId)
+      : '';
   let scene: Scene = {
     character: card.text,
     context: promptWants(HISTORY_MACRO, isUser, willSend)
@@ -3199,6 +3204,9 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         : [];
       contextMessages = Number(s.contextMessages);
       contextMessages = Number.isFinite(contextMessages) ? contextMessages : 4;
+      // Absent on a panel older than this setting, where the labels were always
+      // on, so a missing value means on rather than off.
+      nameSpeakers = s.nameSpeakers === undefined ? true : !!s.nameSpeakers;
       maxLoreTokens = Number(s.maxLoreTokens);
       maxLoreTokens = Number.isFinite(maxLoreTokens) && maxLoreTokens >= 0 ? maxLoreTokens : 2500;
       maxHistoryTokens = Number(s.maxHistoryTokens);
@@ -3646,7 +3654,9 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
             }
             const card = await gatherCard(payload.chatId, userId);
             const at = m ? msgs.findIndex((x: any) => x && x.id === m.id) : -1;
-            const youName = await gatherPersonaName(payload.chatId, card.id, userId);
+            const youName = nameSpeakers
+              ? await gatherPersonaName(payload.chatId, card.id, userId)
+              : '';
             scene = {
               character: card.text,
               context: at > 0 ? await gatherHistory(msgs, at, card.name, userId, youName) : '',

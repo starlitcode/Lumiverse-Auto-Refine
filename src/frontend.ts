@@ -44,6 +44,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     what: "How much of the chat goes in, and what it is read for.",
     keys: [
       "contextMessages",
+      "nameSpeakers",
       "maxHistoryTokens",
       "maxLoreTokens",
       "wornOn",
@@ -373,6 +374,11 @@ const CONFIG = {
   // what just happened flattens a scene into general prose, which is the
   // failure people blame on the model.
   contextMessages: 4,
+  // Whether each line of the run-up is labelled with who said it. On, because
+  // the run-up goes out as one flat string and the labels are the only thing
+  // telling two voices apart in it. Off for a chat whose messages already carry
+  // names, where labelling them again says everything twice.
+  nameSpeakers: true,
   // Budgets in tokens, which is the unit a context window is measured in.
   // Whole entries and whole messages are kept or dropped: half a lorebook entry
   // is worse than one fewer of them.
@@ -6806,6 +6812,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         min: 0,
         max: 40,
         hint: "How many messages before the one being refined. 0 sends none, which is fine for rules about wording and wrong for rules about continuity.",
+      }),
+    );
+    wrap.appendChild(
+      fieldRow({
+        key: "nameSpeakers",
+        label: "Name the speakers in the run-up",
+        type: "bool",
+        under: true,
+        hint: "On by default. The run-up goes out as one block of text, so these labels are the only thing telling the two voices apart in it. Switch it off for a group chat, or any chat whose messages already begin with a name, where labelling them again says it twice.",
       }),
     );
     wrap.appendChild(
