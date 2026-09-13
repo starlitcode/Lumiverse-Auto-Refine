@@ -7015,7 +7015,43 @@ export function setup(ctx, overrides) {
             wrap.appendChild(note("Read every cost here as a ballpark rather than your bill. The tokens are counted from the prompt this extension builds, so anything your provider wraps around it is not in the figure, and their tokeniser may not agree with this one. It also prices every token sent at the full rate: on a model with prompt caching switched on, a refine usually costs less than this says, sometimes a lot less."));
         if (lostConnection())
             wrap.appendChild(bad("The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above."));
+        // What the chosen connection is set to do about prompt caching. A refine
+        // goes out under that connection and inherits its setting, so this is not
+        // something the extension turns on: it is something it can tell you about.
+        //
+        // Said only where the connection has something to say. A provider with no
+        // caching to speak of is not a provider anybody needs a line about.
+        {
+            const said = cacheLine();
+            if (said) {
+                const line = note(said);
+                line.setAttribute("data-arf-cacheline", "1");
+                wrap.appendChild(line);
+            }
+        }
         return wrap;
+    }
+    // The connection a refine would actually run on: the one picked here, or the
+    // chat's own when nothing is picked. The chat's own is not in the list under
+    // an id this can match, so that case says nothing rather than guessing.
+    function cacheLine() {
+        const id = String(cfg.connectionId || "");
+        if (!id)
+            return "";
+        const one = connections.find((c) => c.id === id);
+        const facts = one && one.cache;
+        if (!facts || facts.on === null)
+            return "";
+        if (!facts.on)
+            return ("Prompt caching is off for this connection. On, the front of the refine is the same on every " +
+                "reply in a chat, so a provider that caches would charge for it once rather than every time. " +
+                "The switch is in Lumiverse under Connections.");
+        const held = facts.ttl ? " Held for " + facts.ttl + "." : "";
+        return ("Prompt caching is on for this connection." +
+            held +
+            " Your rules and the character card sit at the front of the refine and do not change between " +
+            "replies, so that part is what gets reused. Nothing here switches it on or off: a refine runs " +
+            "on your connection and takes its setting.");
     }
     // Named setups for the Model tab, so somebody running more than one custom
     // connection can move between them in one go rather than resetting five

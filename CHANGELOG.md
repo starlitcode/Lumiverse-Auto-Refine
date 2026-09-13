@@ -27,6 +27,10 @@ _2026-09-12_
 
 A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
 
+- **The Model tab says whether your connection has prompt caching on.** One line under the connection picker: whether it is on, how long a cached prefix is held, and that a refine takes the connection's setting rather than anything set here. Caching is a connection setting in Lumiverse and a refine inherits it, so this is not a switch, it is the panel telling you what is already true.
+
+  A provider whose settings say nothing about caching gets no line. Nothing found and switched off are different answers and reporting one as the other would be the panel inventing something.
+
 - **It says when the prompts that ship with it have changed.** One line on the **Prompt** tab, with a **Got it** that puts it away for good. Your own prompt is never touched by it and it never loads anything for you: loading a shipped prompt writes over the list you are on, so that stays your call.
 
   Only for somebody who has loaded one of the eight before. A prompt that is entirely your own is not affected by the shipped ones changing, so there is nothing to tell you. A fresh install is marked as up to date, so this release is quiet for everybody and the first thing it says is about the next change.

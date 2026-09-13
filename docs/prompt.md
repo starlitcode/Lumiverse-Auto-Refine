@@ -146,6 +146,8 @@ It goes out as **User** for the same reason. It is your instruction about what y
 
 It does cost a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block, and the trade is the point.
 
+**Whether any of this is live is your connection's business, not this extension's.** Prompt caching is a setting on the connection in Lumiverse, under **Connections**, along with its lifetime and which parts get a breakpoint. A refine goes out under whichever connection you point it at and inherits that setting, so there is nothing here to switch on. The **Model** tab reads the connection you chose and says what it is set to, and says nothing at all for a provider whose settings mention no caching, since that is not the same as caching being off.
+
 **The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. **How to Answer** is not counted, since every shipped prompt puts it there. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
 
 ## Roles

@@ -3149,6 +3149,49 @@ try {
 }
 
 // ---- the bridge ----
+// What a connection says about prompt caching, read out of its metadata bag.
+//
+// The bag is documented as provider-specific and its keys are not named
+// anywhere, so nothing here matches an exact key. It looks for keys carrying
+// "cache" and reads what it finds, which means a provider wording them
+// differently still reports, and a provider with no caching at all reports
+// nothing rather than reporting "off".
+//
+// Absent and off are different answers and are kept apart: saying caching is
+// off because nothing was found would be the panel making something up.
+function cacheFacts(meta: any): { on: boolean | null; ttl: string; spots: string[] } {
+  const out: { on: boolean | null; ttl: string; spots: string[] } = { on: null, ttl: '', spots: [] };
+  if (!meta || typeof meta !== 'object') return out;
+  for (const key of Object.keys(meta)) {
+    // cach rather than cache, because caching is the commoner word for the
+    // switch itself and cache is the commoner word for the things under it.
+    if (!/cach/i.test(key)) continue;
+    const val = (meta as any)[key];
+    // The time a cached prefix is held for, which providers write as a short
+    // string like "5m" or "1h".
+    if (/ttl|expiry|expires|duration/i.test(key)) {
+      const said = String(val == null ? '' : val).trim();
+      if (said && said.length < 12) out.ttl = said;
+      continue;
+    }
+    if (typeof val !== 'boolean') continue;
+    // One of the breakpoints under the switch rather than the switch itself.
+    if (/tool|system|prefix|conversation|message|breakpoint|auto/i.test(key)) {
+      if (val) out.spots.push(key);
+      continue;
+    }
+    // The master switch, and only wordings that actually read as one: a key
+    // turning it on or off, or the bare word. Anything else carrying "cache"
+    // is left alone, because a bag can hold a debug flag or a counter and the
+    // panel reporting one of those as the switch would be worse than the panel
+    // saying nothing. Saying nothing is what an unrecognised wording gets.
+    const bare = key.replace(/[^a-z]/gi, '').toLowerCase();
+    const isSwitch = /enable|use/.test(bare) || /^(prompt)?cach(e|ing)(enabled|on)?$/.test(bare);
+    if (isSwitch) out.on = val;
+  }
+  return out;
+}
+
 spindle.onFrontendMessage(async (payload: any, userId?: string) => {
   try {
     if (!payload) return;
@@ -3864,6 +3907,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
             provider: String((c && c.provider) || ''),
             model: String((c && c.model) || ''),
             isDefault: !!(c && c.is_default),
+            // What this connection is set to do about prompt caching, which is
+            // the connection's business rather than this extension's: a refine
+            // goes out under the reader's own connection and inherits it. Sent
+            // on so the panel can say so rather than leaving somebody to guess
+            // whether the order of their prompt is buying them anything.
+            cache: cacheFacts(c && c.metadata),
           }));
       } catch (_) { /* no permission, or none set up: the panel says so */ }
       replyTo(userId, { type: 'connections', requestId: payload.requestId, list: list });

@@ -88,6 +88,9 @@ function host(
     // Runs while the pass is reading the chat, before any model call. That is
     // several round trips, and it is where a swipe usually lands.
     whileReading?: () => void;
+    // The connection profiles the host hands back, for the checks that read
+    // what a connection says about prompt caching.
+    connections?: any[];
   } = {},
 ) {
   // An install scoped to an operator refuses a model call that names no
@@ -166,10 +169,11 @@ function host(
         : undefined,
     },
     connections: {
-      list: async () => [
-        { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
-        { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
-      ],
+      list: async () =>
+        opts.connections || [
+          { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
+          { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
+        ],
     },
     macros: {
       // Stands in for Lumiverse's own resolver: the character fields and the
@@ -650,6 +654,100 @@ describe("what the pass costs", () => {
     const got = h.sent.find((m) => m.type === "connections");
     expect(got.list.map((c: any) => c.name)).toEqual(["Cheap and quick", "The good one"]);
     expect(got.list[1].isDefault).toBe(true);
+  });
+
+  // A refine goes out under the reader's own connection and takes its caching
+  // setting with it. The panel says what that setting is, so it has to read it
+  // off the connection rather than assume. The metadata bag is documented as
+  // provider-specific with no named keys, so nothing here matches an exact one.
+  const askConnections = async (list: any[]) => {
+    const h = await armed(["x"], {}, chat(), { connections: list });
+    await h.front({ type: "list_connections", requestId: "r" });
+    await wait(50);
+    return h.sent.find((m) => m.type === "connections").list;
+  };
+
+  test("a connection with caching on says so, and for how long", async () => {
+    const list = await askConnections([
+      {
+        id: "c1",
+        name: "Claude",
+        provider: "anthropic",
+        model: "big",
+        is_default: true,
+        metadata: { promptCaching: true, promptCacheTtl: "5m", cacheSystemPrompt: true },
+      },
+    ]);
+    expect(list[0].cache.on).toBe(true);
+    expect(list[0].cache.ttl).toBe("5m");
+    expect(list[0].cache.spots).toContain("cacheSystemPrompt");
+  });
+
+  test("and one with it off says off rather than saying nothing", async () => {
+    const list = await askConnections([
+      { id: "c1", name: "Claude", provider: "anthropic", model: "big", is_default: true, metadata: { promptCaching: false } },
+    ]);
+    expect(list[0].cache.on).toBe(false);
+  });
+
+  // The difference that matters. A provider that says nothing about caching is
+  // not a provider with caching switched off, and reporting it as off would be
+  // the panel making something up.
+  test("a provider that says nothing about caching is not reported as off", async () => {
+    const list = await askConnections([
+      { id: "c1", name: "Local", provider: "custom", model: "small", is_default: true, metadata: { thinkingBudget: 200 } },
+    ]);
+    expect(list[0].cache.on).toBe(null);
+    const none = await askConnections([
+      { id: "c2", name: "Local", provider: "custom", model: "small", is_default: true },
+    ]);
+    expect(none[0].cache.on).toBe(null);
+  });
+
+  // Worded differently by another provider, or by a later Lumiverse. Matching
+  // on the word rather than on an exact key is what survives that.
+  test("wording it differently still reads", async () => {
+    const list = await askConnections([
+      { id: "c1", name: "Other", provider: "openrouter", model: "big", is_default: true, metadata: { enable_prompt_cache: true, cache_ttl: "1h" } },
+    ]);
+    expect(list[0].cache.on).toBe(true);
+    expect(list[0].cache.ttl).toBe("1h");
+  });
+
+  // A bag can hold more than one cache-ish boolean, and the switch is the one
+  // worth reading. Without this the last key in the bag would decide, which is
+  // an answer that depends on the order of an object nobody controls.
+  test("a stray cache flag does not overrule the switch", async () => {
+    const list = await askConnections([
+      {
+        id: "c1",
+        name: "Claude",
+        provider: "anthropic",
+        model: "big",
+        is_default: true,
+        metadata: { promptCaching: true, cacheDebugLogging: false },
+      },
+    ]);
+    expect(list[0].cache.on).toBe(true);
+  });
+
+  // The safe direction. A bag with something cache-ish in it that is not a
+  // switch leaves the panel quiet rather than guessing which way it points.
+  test("a cache key that is not a switch is not read as one", async () => {
+    const list = await askConnections([
+      { id: "c1", name: "Claude", provider: "anthropic", model: "big", is_default: true, metadata: { cacheDebugLogging: false } },
+    ]);
+    expect(list[0].cache.on).toBe(null);
+  });
+
+  test("a breakpoint is not mistaken for the switch", async () => {
+    const list = await askConnections([
+      { id: "c1", name: "Claude", provider: "anthropic", model: "big", is_default: true, metadata: { cacheTools: true, cacheConversationPrefix: true } },
+    ]);
+    // Three boxes ticked under a switch nobody can see is not a switch that is
+    // on, and the panel says nothing rather than claiming it.
+    expect(list[0].cache.on).toBe(null);
+    expect(list[0].cache.spots.length).toBe(2);
   });
 });
 
