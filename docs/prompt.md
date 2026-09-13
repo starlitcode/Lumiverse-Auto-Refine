@@ -32,7 +32,7 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 | `{{history}}` | The messages leading up to it, as many as **Context** says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat from further back than the run-up. |
-| `{{overused}}` | The phrases the replies in this chat keep reaching for, one per line. Only when **Find phrases this chat has worn out** is on. |
+| `{{overused}}` | The phrases the replies in this chat keep reaching for, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when a refine was asked for on part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only appears when there are some. |
 
@@ -71,6 +71,16 @@ Markup protection is applied once, before the first pass, and undone after the l
 A refine judges one reply at a time, so a phrase reads as fine every time it is met. Used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. `{{overused}}` is the list, so a block can name them and ask for something else.
 
 It is not a list of phrases that are bad. A written list catches known slop the first time it appears, and a rule in a block is the place for one. This catches what no list can hold, which is the drift of one chat.
+
+What lands in the block is one phrase a line with the number of replies it turned up in:
+
+```
+shiver ran down (4 replies)
+the air thick with (3 replies)
+let out a breath (3 replies)
+```
+
+The count is there because it is the part a model can act on. A phrase reached for eleven times is a different instruction from one somebody put on a list.
 
 What it counts, and what it refuses to count:
 

@@ -29,6 +29,7 @@ A prompt you already have is yours and is not touched by any of this. To take th
 
 ### Fixed
 
+- **The `{{overused}}` macro never showed what it puts in.** The macro list described it and left you to run a refine to find out what the shape was. It now shows a line the way `{{protect_notes}}` shows its wording, and [How the prompt is built](docs/prompt.md) has the block as it arrives, counts and all.
 - **Refining part of a reply was documented inside the floating button's paragraph.** It has three ways in and none of them is the floating button, so it has its own paragraph in [Settings](docs/settings.md) now, and the README says it exists.
 
 ## 1.7.0

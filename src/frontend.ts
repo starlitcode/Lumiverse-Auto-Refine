@@ -433,7 +433,8 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
     tag: "{{overused}}",
     what:
       "The phrases the replies in this chat keep reaching for, one per line with " +
-      "how many replies carried each. Counted across replies rather than within " +
+      "how many replies carried each, so a line reads \"shiver ran down " +
+      "(4 replies)\". Counted across replies rather than within " +
       "one, so a phrase used five times in a single reply is that reply's choice " +
       "and is not here. Dialogue is left out, since a character repeating " +
       "themselves is characterisation. Empty unless Find phrases this chat has " +
