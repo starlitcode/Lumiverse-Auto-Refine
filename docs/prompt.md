@@ -222,8 +222,8 @@ Eight, which is the same four shapes twice: once for refining a reply, and once 
 | --- | --- | --- |
 | **A quick read** | What to cut, what to mend, what to leave, a block each. The one to start with. | no |
 | **A close read** | The same ground gone over properly, one block apiece for phrases, words, repetition, rhythm, speech, bodies and endings. | no |
-| **A quick read, for a model that thinks** | One question and the room to answer it: could this sentence sit in any story, or only in this one? Asks for its working in `<REFINE_NOTES>`. | yes |
-| **A close read, for a model that thinks** | The same question, the five places worth looking, keeping the writer's voice, and a pass back over its own answer. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A quick read, for a model that thinks** | One standard and the room to work it: a sentence that would sit in any other story is the one to rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A close read, for a model that thinks** | The same standard, the five places worth checking, holding the writer's voice, and a pass back over its own rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
 
 Each pair shares a name, so which two go together is visible without reading either, and the two that need a reasoning model say so where you pick them rather than leaving you to find out from a worse rewrite.
 
@@ -245,8 +245,8 @@ The same four shapes, written for a different job. A reply is prose to improve; 
 | --- | --- | --- |
 | **A quick read** | What to mend, and then a full stop: slips, missing words, punctuation that came out wrong by accident. | no |
 | **A close read** | The same list gone through properly, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. | no |
-| **A quick read, for a model that thinks** | One question and the room to answer it: would you read the change and say yes, that is what I meant to type? Asks for its working in `<REFINE_NOTES>`. | yes |
-| **A close read, for a model that thinks** | The same question, plus where a passage typed at speed actually goes wrong. None of that list is a matter of taste, which is the point of it. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A quick read, for a model that thinks** | One test and the room to work it: every change has to be one you would recognise as what you meant to type. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A close read, for a model that thinks** | The same test, plus where writing typed at speed actually goes wrong. Nothing on that list is a matter of taste, which is the point of it. Asks for its working in `<REFINE_NOTES>`. | yes |
 
 Where the two sets differ is restraint. Every one of these ends by saying that where you cannot tell a slip from a choice, it is a choice: understatement is a decision, a fragment can be how somebody writes, and a plain line that says she left means she left.
 
