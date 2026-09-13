@@ -605,14 +605,29 @@ const TURN_BLOCK: Block = {
 //
 // Shouted, and read back case-insensitively so a prompt written in lower case
 // still works.
+// Last in every shipped prompt, under the passage, and sent as you rather than
+// as the system.
+//
+// A rule about the shape of an answer is followed most closely when it is the
+// last thing read: put it at the top and a model has the whole prompt between it
+// and the answer, and some will hand back a rewrite with the tags missing or
+// wrapped around something else. It is also the one rule the reader cannot work
+// around, since a rewrite that loses the tags is dropped.
+//
+// The role is yours because it is your instruction to the model rather than the
+// setup's, and it sits beside the passage in the same message that way.
+//
+// It costs a little where prompts are cached: it used to sit in the run that
+// never changes and now sits under the part that changes every turn, so it is
+// sent as new each time. It is a short block and the trade is the point.
 const HOW_TO_ANSWER: Block = {
   id: "answer",
   name: "How to Answer",
   on: true,
-  role: "system",
+  role: "user",
   text:
     "<how_to_answer>\n" +
-    "Your whole answer takes this shape:\n\n" +
+    "Give it back to me in this shape:\n\n" +
     "<REFINED>\n" +
     "the passage, rewritten\n" +
     "</REFINED>\n\n" +
@@ -637,10 +652,10 @@ const THINKS_ANSWER: Block = {
   id: "answer",
   name: "How to Answer",
   on: true,
-  role: "system",
+  role: "user",
   text:
     "<how_to_answer>\n" +
-    "Your whole answer takes this shape, in this order:\n\n" +
+    "Give it back to me in this shape, in this order:\n\n" +
     "<REFINE_NOTES>\n" +
     "What reads weakly as it stands, quoted so I can see the line you mean.\n" +
     "What you are going to change, and why.\n" +
@@ -837,13 +852,13 @@ const PLAIN_SHORT: Block[] = [
   MEND_THESE,
   LEAVE_ALONE,
   COPY_EXACTLY,
-  HOW_TO_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  HOW_TO_ANSWER,
 ];
 
 // ---- a model that does not reason, in full ----
@@ -981,13 +996,13 @@ const PLAIN_LONG: Block[] = [
   },
   LEAVE_ALONE,
   COPY_EXACTLY,
-  HOW_TO_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  HOW_TO_ANSWER,
 ];
 
 const THINKS_JOB: Block = {
@@ -1231,13 +1246,13 @@ const YOURS_SHORT: Block[] = [
   YOURS_HAND,
   YOURS_MEND,
   COPY_EXACTLY,
-  HOW_TO_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  HOW_TO_ANSWER,
 ];
 
 const YOURS_LONG: Block[] = [
@@ -1246,13 +1261,13 @@ const YOURS_LONG: Block[] = [
   YOURS_MEND_LONG,
   YOURS_NOT_YOURS,
   COPY_EXACTLY,
-  HOW_TO_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  HOW_TO_ANSWER,
 ];
 
 const YOURS_DEFAULT: Block[] = YOURS_SHORT;
@@ -1263,13 +1278,13 @@ const THINKS_SHORT: Block[] = [
   THE_STANDARD,
   RESTRAINT,
   COPY_EXACTLY,
-  THINKS_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  THINKS_ANSWER,
 ];
 
 // ---- a model that reasons, in full ----
@@ -1329,13 +1344,13 @@ const THINKS_LONG: Block[] = [
       "</before_you_answer>",
   },
   COPY_EXACTLY,
-  THINKS_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  THINKS_ANSWER,
 ];
 
 // The same two, for a model that reasons. It is given the test and left to
@@ -1346,13 +1361,13 @@ const YOURS_THINKS_SHORT: Block[] = [
   YOURS_THINKS_JOB,
   YOURS_TEST,
   COPY_EXACTLY,
-  THINKS_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  THINKS_ANSWER,
 ];
 
 const YOURS_THINKS_LONG: Block[] = [
@@ -1361,13 +1376,13 @@ const YOURS_THINKS_LONG: Block[] = [
   YOURS_WHERE,
   YOURS_NOT_YOURS,
   COPY_EXACTLY,
-  THINKS_ANSWER,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
+  THINKS_ANSWER,
 ];
 
 const DEFAULT_BLOCKS: Block[] = PLAIN_SHORT;
@@ -3892,11 +3907,18 @@ export function setup(ctx: Ctx, overrides?: any) {
   // every refine for nothing. A volatile block below another volatile one is
   // not counted, since it was never going to be reused either way, which is why
   // the shipped order can put the passage under the run-up and say nothing.
+  // Blocks below the first thing that changes every turn, which is what ends a
+  // provider's reuse of the front of the prompt.
+  //
+  // The block holding the shape of the answer is not counted. Every shipped
+  // prompt puts it down there on purpose, so counting it would put a line about
+  // somebody's own ordering on a panel where nobody has ordered anything. The
+  // line is for a block the reader moved, which is what it says.
   function strandedBlocks(list: Block[]): number {
     const on = list.filter((b) => b && b.on);
     const at = on.findIndex(movesEveryTurn);
     if (at < 0) return 0;
-    return on.slice(at + 1).filter((b) => !movesEveryTurn(b)).length;
+    return on.slice(at + 1).filter((b) => !movesEveryTurn(b) && b.id !== "answer").length;
   }
 
   function statusLine(): { text: string; tone: "off" | "idle" | "busy" } {
@@ -6533,7 +6555,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               (under === 1 ? " block that never changes sits" : " blocks that never change sit") +
               " below the passage or the run-up. If your provider caches prompts, reuse stops at the first thing that changed, so " +
               (under === 1 ? "it is" : "they are") +
-              " sent as new on every refine instead of being reused. A rule down there is followed more closely, so this is a trade rather than a mistake.",
+              " sent as new on every refine instead of being reused. This is a trade rather than a mistake: a rule down there is the last thing read and is followed more closely for it, which is why How to Answer ships at the bottom.",
       );
       cacheSaid.setAttribute("data-arf-cacheorder", "1");
       cacheSaid.hidden = under === 0;

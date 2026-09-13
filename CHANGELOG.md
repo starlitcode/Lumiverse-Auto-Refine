@@ -27,6 +27,10 @@ _2026-09-12_
 
 A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
 
+- **How to Answer is the last block now, and it goes out as you rather than as the setup.** It used to sit near the top with the rest of the rules. A rule about the shape of an answer is followed most closely when it is the last thing read: put it at the top and the model has the whole prompt between that rule and the answer, and some hand back a rewrite with the tags missing or wrapped around the wrong thing. That rule is also the one you cannot work around, since a rewrite without its tags is dropped rather than saved. The role is **User** because it is your instruction about what you want back rather than part of the setup, and it lands in the same message as the passage.
+
+  It costs a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block and the trade is the point. The line on the Prompt tab that counts blocks below the passage does not count this one, because every shipped prompt puts it there.
+
 - **The tabs are a tray with the one you are on filled in.** They were a row of labels with a line under the selected one, which is the tab strip every panel has, and telling two of them apart at a glance is the one thing a tab strip has to do. The tab you are on is filled and its label is brighter; the rest are plain. Auto Retry marks its tabs the same way, so the two read as a pair. No label changes weight when you pick it, since a label that goes bold gets wider and shifts the row under the finger that just tapped it.
 
 ### Fixed

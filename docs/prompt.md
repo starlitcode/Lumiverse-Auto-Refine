@@ -136,10 +136,17 @@ The other reason order matters is caching. If your provider caches prompts, the 
 3. **What has happened before now.** Lumiverse's own memory of the chat, which grows as the chat does. Off in every shipped prompt, and this is where it goes when you switch it on.
 4. **The pages before this one.** Redrawn every turn.
 5. **The passage.** Different every time.
+6. **How to Answer.** Below the passage on purpose, and sent as **User** rather than **System**.
 
 Every shipped prompt is built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
 
-**The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
+**Why the last one breaks the pattern.** A rule about the shape of an answer is followed most closely when it is the last thing read. Put it at the top and the model has the whole prompt between that rule and the answer it writes, and some models hand back a rewrite with the tags missing or wrapped around the wrong thing. That rule is also the one you cannot work around: a rewrite without its tags is dropped rather than saved, so a model that forgets them costs you the call.
+
+It goes out as **User** for the same reason. It is your instruction about what you want back rather than part of the setup, and one role either side of the passage means the model reads your passage and what you want done with it as one message.
+
+It does cost a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block, and the trade is the point.
+
+**The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. **How to Answer** is not counted, since every shipped prompt puts it there. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
 
 ## Roles
 

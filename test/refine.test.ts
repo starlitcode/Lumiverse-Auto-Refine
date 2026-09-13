@@ -2139,9 +2139,22 @@ describe("a prompt built to be cached", () => {
     return (got.messages || []).map((m: any) => String(m.content || "")).join("\n\n");
   };
 
+  // The messages as they go out, so a check can read a role rather than infer
+  // one from where the text landed.
+  const parts = async (over: any = {}) => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      blocks: DEFAULT_BLOCKS,
+      ...over,
+    });
+    await h.front({ type: "preview_prompt", requestId: "p2", chatId: "c1", messageId: "m2" });
+    await wait(20);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p2");
+    return (got.messages || []) as Array<{ role: string; content: string }>;
+  };
+
   test("the run-up and the passage come after the rules", async () => {
     const whole = await build();
-    const rules = whole.indexOf("</how_to_answer>");
+    const rules = whole.indexOf("</your_job>");
     const runUp = whole.indexOf("<earlier_pages>");
     const turn = whole.indexOf("<passage_to_refine>");
     expect(rules).toBeGreaterThan(-1);
@@ -2151,11 +2164,40 @@ describe("a prompt built to be cached", () => {
 
   test("and the setting sits between them", async () => {
     const whole = await build();
-    const rules = whole.indexOf("</how_to_answer>");
+    const rules = whole.indexOf("</your_job>");
     const who = whole.indexOf("<your_characters>");
     const runUp = whole.indexOf("<earlier_pages>");
     expect(who).toBeGreaterThan(rules);
     expect(runUp).toBeGreaterThan(who);
+  });
+
+  // A rule about the shape of an answer is followed most closely when it is the
+  // last thing read. It is also the one rule that cannot be worked around, since
+  // a rewrite that loses the tags is dropped rather than saved.
+  test("the shape of the answer is the last thing in the prompt", async () => {
+    const whole = await build();
+    const turn = whole.indexOf("<passage_to_refine>");
+    const shape = whole.indexOf("<how_to_answer>");
+    expect(shape).toBeGreaterThan(turn);
+    expect(whole.slice(shape).indexOf("<earlier_pages>")).toBe(-1);
+  });
+
+  test("and it goes out as you rather than as the setup", async () => {
+    const msgs = await parts();
+    const holding = msgs.filter((m) => String(m.content).indexOf("<how_to_answer>") >= 0);
+    expect(holding.length).toBe(1);
+    expect(holding[0].role).toBe("user");
+    // In the same message as the passage, which is what one role either side of
+    // it means: your passage, then what you want back.
+    expect(holding[0].content.indexOf("<passage_to_refine>")).toBeGreaterThan(-1);
+    expect(holding[0].content.indexOf("<passage_to_refine>")).toBeLessThan(
+      holding[0].content.indexOf("<how_to_answer>"),
+    );
+  });
+
+  test("the message the model reads last is yours, not the setup's", async () => {
+    const msgs = await parts();
+    expect(msgs[msgs.length - 1].role).toBe("user");
   });
 
   // What the front of the request is worth: the run above the first thing that

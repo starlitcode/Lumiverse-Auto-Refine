@@ -5970,6 +5970,9 @@ console.log("\nthe order and what caching costs");
   const rule = (id, name) => ({ id: id, name: name, on: true, role: "system", text: "<" + id + ">a rule</" + id + ">" });
   const turn = { id: "turn", name: "The passage", on: true, role: "user", text: "<p>{{message}}</p>" };
 
+  // The shipped prompts put the shape of the answer below the passage on
+  // purpose, and that one is not counted: a line about somebody's own ordering
+  // has no business on a panel where nobody has ordered anything yet.
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const shipped = await said(page);
@@ -5977,6 +5980,15 @@ console.log("\nthe order and what caching costs");
       "the shipped order says nothing about caching",
       shipped && shipped.hidden,
       JSON.stringify(shipped),
+    );
+    const where = await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll("#drawer [data-arf-block]"));
+      return rows.map((r) => r.getAttribute("data-arf-block"));
+    });
+    ok(
+      "even though the answer block really is the last one",
+      where.length > 2 && where[where.length - 1] === "answer",
+      JSON.stringify(where),
     );
   });
 
