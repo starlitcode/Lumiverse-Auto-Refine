@@ -27,6 +27,10 @@ _2026-09-12_
 
 A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
 
+- **It says when the prompts that ship with it have changed.** One line on the **Prompt** tab, with a **Got it** that puts it away for good. Your own prompt is never touched by it and it never loads anything for you: loading a shipped prompt writes over the list you are on, so that stays your call.
+
+  Only for somebody who has loaded one of the eight before. A prompt that is entirely your own is not affected by the shipped ones changing, so there is nothing to tell you. A fresh install is marked as up to date, so this release is quiet for everybody and the first thing it says is about the next change.
+
 - **How to Answer is the last block now, and it goes out as you rather than as the setup.** It used to sit near the top with the rest of the rules. A rule about the shape of an answer is followed most closely when it is the last thing read: put it at the top and the model has the whole prompt between that rule and the answer, and some hand back a rewrite with the tags missing or wrapped around the wrong thing. That rule is also the one you cannot work around, since a rewrite without its tags is dropped rather than saved. The role is **User** because it is your instruction about what you want back rather than part of the setup, and it lands in the same message as the passage.
 
   It costs a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block and the trade is the point. The line on the Prompt tab that counts blocks below the passage does not count this one, because every shipped prompt puts it there.

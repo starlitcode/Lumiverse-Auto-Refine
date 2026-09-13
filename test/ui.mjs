@@ -5956,6 +5956,73 @@ console.log("\nthe macro list");
   });
 }
 
+console.log("\nsaying the shipped prompts have changed");
+{
+  // The mark is a fingerprint of the eight as they ship, so a saved one that
+  // does not match means they moved since the reader last took one. A made-up
+  // mark stands in for "you were here two versions ago".
+  const OLD = "notthemark";
+  const seen = (page) =>
+    page.evaluate(() => {
+      const n = document.querySelector("#drawer [data-arf-shippedmoved]");
+      return n ? n.textContent.trim() : null;
+    });
+
+  // Nothing saved at all is a fresh install, which is already on these.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    ok("a fresh install is told nothing", (await seen(page)) === null);
+    const stamped = await page.evaluate(() => {
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      return raw ? !!JSON.parse(raw).shippedSeen : false;
+    });
+    ok("and is stamped as having seen them", stamped);
+  });
+
+  // Somebody who took one, back when they were different.
+  await inTab(browser, { saved: { shippedSeen: OLD } }, async (page) => {
+    await goTab(page, "Prompt");
+    const said = await seen(page);
+    ok("somebody who took one before is told", !!said, String(said));
+    ok("and told their own prompt is untouched", /Yours is untouched/.test(said || ""), String(said));
+
+    const after = await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-shippedmoved="dismiss"]').click();
+      await new Promise((r) => setTimeout(r, 120));
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      return {
+        gone: !document.querySelector("#drawer [data-arf-shippedmoved]"),
+        stamped: raw ? JSON.parse(raw).shippedSeen : null,
+      };
+    });
+    ok("saying got it takes the line away", after.gone, JSON.stringify(after));
+    ok("and it stays away, because the mark was written down", after.stamped && after.stamped !== OLD, JSON.stringify(after));
+  });
+
+  // Loading one of the eight is the other way to be up to date.
+  await inTab(browser, { saved: { shippedSeen: OLD } }, async (page) => {
+    await goTab(page, "Prompt");
+    const out = await page.evaluate(async () => {
+      const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const shipped = Array.from(sel.options).find((o) => /A close read/.test(o.textContent));
+      sel.value = shipped.value;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 60));
+      document.querySelector('#drawer [data-arf-preset="load"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      return {
+        picked: shipped.textContent.trim(),
+        stamped: raw ? JSON.parse(raw).shippedSeen : null,
+        line: !!document.querySelector("#drawer [data-arf-shippedmoved]"),
+      };
+    });
+    ok("the shipped prompt really was the one loaded", /A close read/.test(out.picked), JSON.stringify(out));
+    ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
+    ok("so the line goes with it", !out.line, JSON.stringify(out));
+  });
+}
+
 console.log("\nthe order and what caching costs");
 {
   // A provider that caches prompts reuses the front of one up to the first

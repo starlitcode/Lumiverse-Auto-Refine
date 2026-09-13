@@ -279,6 +279,7 @@ describe("every setting can leave the panel", () => {
     debugParts: "what to tick on the problem report card",
     hunt: "what is typed in the search box",
     tab: "which tab of the panel was last open",
+    shippedSeen: "the shipped prompts as they were when you last took one",
   };
 
   test("there are parts to check, or this proves nothing", () => {

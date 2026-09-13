@@ -231,6 +231,8 @@ The rules themselves are specific, not general. "Cut clichés" gives a model not
 
 All four work as they stand. Load one, change whatever you like, save it under a name of your own.
 
+**When these change in a later version, the Prompt tab says so.** One line with a **Got it** that puts it away. It appears only if you have loaded one of the eight before, since a prompt that is your own is not affected by theirs moving. It never touches your prompt and it never loads one for you: loading writes over the list you are on, so that stays your call.
+
 ### For your own messages
 
 The same four shapes, written for a different job. A reply is prose to improve; your own turn is writing to leave alone except where it went wrong, so these say what to mend and then stop.

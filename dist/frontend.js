@@ -385,6 +385,11 @@ const CONFIG = {
     // The prompt used when the message being refined is one of yours. Empty means
     // you have not written one and the reply prompt is used instead.
     userBlocks: [],
+    // The shipped prompts as they were when you last took one, so a change to them
+    // can be mentioned once. Empty means nothing to say: a fresh install is
+    // already on the current ones, and an install from before this existed is not
+    // worth a notice about a change nobody can point at.
+    shippedSeen: "",
     // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
     // "userBlocks:id". A folded block draws its name and its switch and nothing
     // else, so a prompt of twenty is a list you can see at once rather than
@@ -1380,6 +1385,20 @@ const BUILT_IN_SHAPES = BUILT_IN_PROMPTS.map((p) => ({
     mine: p.mine,
     shape: promptShape(p.blocks),
 }));
+// A short mark for the eight prompts as they ship, so a reader can be told when
+// they have changed. FNV-1a over their shapes: it only has to differ when the
+// prompts differ, and it goes in storage, so short matters more than anything a
+// hash is usually chosen for.
+function markText(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        // The usual FNV multiply, written as shifts so it stays in 32 bits.
+        h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h.toString(36);
+}
+const SHIPPED_MARK = markText(BUILT_IN_SHAPES.map((p) => p.shape).join("\u0003"));
 const ROLE_OPTIONS = [
     { value: "system", label: "System" },
     { value: "user", label: "User" },
@@ -1947,6 +1966,13 @@ export function setup(ctx, overrides) {
         }
     }
     Object.assign(cfg, loadSaved(), overrides || {});
+    // A panel with nothing saved is a fresh install, and a fresh install is
+    // already on the prompts that ship with this build. Stamped here rather than
+    // left empty, so the first change after today is the first thing anybody is
+    // told about. An install from before this existed is stamped the same way and
+    // hears nothing about changes it cannot be shown.
+    if (!cfg.shippedSeen)
+        cfg.shippedSeen = SHIPPED_MARK;
     // Settings arriving from the account, checked key by key against the shape
     // the default says they should be. The account copy is written by this same
     // extension, but it can be older than this version, half written by a save
@@ -2100,6 +2126,25 @@ export function setup(ctx, overrides) {
         })
             .filter((one) => one.blocks.length > 0);
         return out;
+    }
+    // The shipped prompts as they stand, written down as seen. Called when one is
+    // loaded, when the panel opens on a fresh install, and when the line saying
+    // they moved is dismissed.
+    function markShippedSeen() {
+        if (cfg.shippedSeen === SHIPPED_MARK)
+            return;
+        cfg.shippedSeen = SHIPPED_MARK;
+        // Written now rather than on the usual settle. This is what decides whether
+        // somebody is told the same thing twice, and a panel closed inside the
+        // settle would lose it.
+        persist(true);
+    }
+    // Whether the eight have changed since this reader last took one. Empty means
+    // they never have, or that this panel came up before any of this existed, and
+    // neither is worth a line about a change nobody can point at.
+    function shippedMoved() {
+        const seen = String(cfg.shippedSeen || "");
+        return !!seen && seen !== SHIPPED_MARK;
     }
     let saveTimer = null;
     function persist(now) {
@@ -6373,6 +6418,29 @@ export function setup(ctx, overrides) {
         const isLine = note(whatThisIs() + " " + aboutWorking());
         isLine.setAttribute("data-arf-whatthisis", "1");
         wrap.appendChild(isLine);
+        // The prompts that ship with the extension have changed since this reader
+        // last took one. Said once, here, where the prompt is, and only to somebody
+        // who has actually loaded one: a reader whose prompt is their own has
+        // nothing to act on and does not need telling.
+        //
+        // It says what to do and nothing else. Loading one is the reader's to
+        // decide, because it writes over whatever is in the list, and a line that
+        // offered to do it for them would be a button that throws work away.
+        if (shippedMoved()) {
+            const moved = el("div", "arf-row arf-note");
+            moved.setAttribute("data-arf-shippedmoved", "1");
+            const what = el("span", "", "The prompts that ship with Auto Refine have changed since you last loaded one. Yours is untouched. To take the new wording, load one from the card below, which writes over the list you are on.");
+            what.style.flex = "1";
+            moved.appendChild(what);
+            const gotIt = button("Got it", false);
+            gotIt.setAttribute("data-arf-shippedmoved", "dismiss");
+            gotIt.addEventListener("click", () => {
+                markShippedSeen();
+                paint();
+            });
+            moved.appendChild(gotIt);
+            wrap.appendChild(moved);
+        }
         // Built either way and hidden while the prompt is fine, so switching the
         // block that carries the message off can show it without the card being
         // rebuilt around it.
@@ -9006,6 +9074,11 @@ export function setup(ctx, overrides) {
             if (!p)
                 return;
             const took = applyPreset(p);
+            // Taking one of the eight marks them as seen. Changing them later is then
+            // worth a line, and changing them for somebody who has never touched one
+            // is not.
+            if (took && isBuiltIn(p.name))
+                markShippedSeen();
             let alsoSaid = "";
             const wants = String(p.setup || "");
             if (wants) {
