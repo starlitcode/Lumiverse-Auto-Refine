@@ -88,6 +88,9 @@ function host(
     // Runs while the pass is reading the chat, before any model call. That is
     // several round trips, and it is where a swipe usually lands.
     whileReading?: () => void;
+    // Lumiverse's token counter, and whether it says its own answer is the
+    // characters over four guess rather than a real count.
+    tokens?: { approximate?: boolean };
   } = {},
 ) {
   // An install scoped to an operator refuses a model call that names no
@@ -165,6 +168,16 @@ function host(
           }
         : undefined,
     },
+    // Lumiverse's own counter. Absent unless a check asks for it, since most of
+    // them do not care and the fallback is the same guess either way.
+    tokens: opts.tokens
+      ? {
+          countText: async (text: string) => ({
+            total_tokens: Math.ceil(String(text || "").length / 3),
+            approximate: !!opts.tokens.approximate,
+          }),
+        }
+      : undefined,
     connections: {
       list: async () => [
         { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
@@ -641,6 +654,31 @@ describe("what the pass costs", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.asked[0].connection_id).toBeUndefined();
+  });
+
+  // Lumiverse counts with a real tokeniser where it has one for the model and
+  // says so when it does not. Every price on the panel is worked out from that
+  // number, so a guess taken for a count is a price that looks exact and is not.
+  const used = async (opts: any) => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, chat(), opts);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    return h.sent.filter((m: any) => m.type === "refine_used").pop();
+  };
+
+  test("a real count is reported as counted", async () => {
+    const got = await used({ tokens: { approximate: false } });
+    expect(got.counted).toBe(true);
+  });
+
+  test("and one Lumiverse calls approximate is not", async () => {
+    const got = await used({ tokens: { approximate: true } });
+    expect(got.counted).toBe(false);
+  });
+
+  test("a build with no counter at all is not counted either", async () => {
+    const got = await used({});
+    expect(got.counted).toBe(false);
   });
 
   test("the connections come back named, so nobody pastes an id", async () => {

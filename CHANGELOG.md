@@ -8,7 +8,7 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ## 1.8.0
 
-_2026-09-12_
+_2026-09-13_
 
 ### Added
 
@@ -40,6 +40,7 @@ A prompt you already have is yours and is not touched by any of this. To take th
 ### Fixed
 
 - **Dragging the tabs up and down moved them.** The titles shifted by a pixel and the line under the strip looked like it thickened. A strip that scrolls sideways scrolls up and down too unless it is told not to, and the tabs were pulled a pixel down over that line, so the strip was one pixel taller than it could show. Dragging scrolled that pixel and stacked the selected tab's underline onto the line. The line is gone with the redraw above, and the strip is locked to sideways now.
+- **A token count Lumiverse called a guess was reported as a count.** It counts with a real tokeniser where it has one for the model and says so when it has none and fell back to characters over four. That flag was not read, so a guess came back through the panel as an exact figure, and every price on the Model tab is worked out from it. The flag is read now: a guess says roughly, the same as a build with no counter at all.
 - **The `{{overused}}` macro never showed what it puts in.** The macro list described it and left you to run a refine to find out what the shape was. It now shows a line the way `{{protect_notes}}` shows its wording, and [How the prompt is built](docs/prompt.md) has the block as it arrives, counts and all.
 - **Refining part of a reply was documented inside the floating button's paragraph.** It has three ways in and none of them is the floating button, so it has its own paragraph in [Settings](docs/settings.md) now, and the README says it exists.
 

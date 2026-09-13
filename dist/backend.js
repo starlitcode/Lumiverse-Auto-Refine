@@ -1912,6 +1912,12 @@ async function countSaying(text, userId) {
         if (!spindle.tokens || typeof spindle.tokens.countText !== 'function')
             return { n: guess, counted: false };
         const got = await spindle.tokens.countText(text, { userId: userId });
+        // Lumiverse says when it had no tokeniser for the model and fell back to
+        // characters over four, which is the same guess made here. Taken at its
+        // word: a guess reported as a count is a figure that looks exact and is
+        // not, and every price on the panel is worked out from it.
+        if (got && got.approximate)
+            return { n: guess, counted: false };
         const n = got && Number(got.total_tokens);
         return Number.isFinite(n) && n > 0 ? { n: n, counted: true } : { n: guess, counted: false };
     }

@@ -7012,7 +7012,7 @@ export function setup(ctx, overrides) {
         // it is worth is under the boxes that set it. Left off when no price is
         // typed, since nothing is being worked out to caveat.
         if (hasPrices())
-            wrap.appendChild(note("Read every cost here as a ballpark rather than your bill. The tokens are counted from the prompt this extension builds, so anything your provider wraps around it is not in the figure, and their tokeniser may not agree with this one. It also prices every token sent at the full rate: on a model with prompt caching switched on, a refine usually costs less than this says, sometimes a lot less."));
+            wrap.appendChild(note("Read every cost here as a ceiling rather than your bill. It is worked out from the prompt this extension builds, so anything your provider wraps around it is missing, and it prices every token at the full rate: whatever your provider reuses from a cache is charged at less than this says. Lumiverse counts the tokens with its own tokeniser for the model, which is not the counter your provider bills you against."));
         if (lostConnection())
             wrap.appendChild(bad("The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above."));
         return wrap;

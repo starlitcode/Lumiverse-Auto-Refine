@@ -296,7 +296,9 @@ Set **Input price, per million tokens** and **Output price, per million tokens**
 
 The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
 
-**Read the figure as a ballpark rather than your bill,** which is what the line under the price boxes says. The tokens are counted from the prompt this extension builds rather than taken from your provider, so their tokeniser may not agree with this one and whatever they wrap around the prompt is missing from the number. It also prices every token sent at the full rate: on a model with prompt caching switched on, a refine usually costs less than this says, sometimes a lot less. Lumiverse reports a prompt, completion and total token count back to an extension and no cached count at all, so there is nothing here to price a cached token against.
+**Read the figure as a ceiling rather than your bill,** which is what the line under the price boxes says. It is worked out from the prompt this extension builds, so whatever your provider wraps around that prompt is missing from the number, and it prices every token at the full rate: whatever your provider reuses from a cache is charged at less than this says.
+
+The tokens are counted by Lumiverse, with its own tokeniser for the model rather than the counter your provider bills you against. Where it has no tokeniser for a model it says so, and the panel says roughly rather than giving you a figure that looks exact. Nothing here can do better than a ceiling: Lumiverse reports a prompt, completion and total token count back to an extension and no cached count at all, so there is nothing to price a cached token against.
 
 **What to type.** Price lists write these as `$5.00/M` or `$0.075/M`, which already means per million tokens, so the number is the number: type `5` or `0.075`. You can also paste the whole thing, `$` and `/M` included, and the number is taken out of it. Decimals matter here, since the cheap models are priced in fractions of a penny.
 

@@ -7257,7 +7257,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (hasPrices())
       wrap.appendChild(
         note(
-          "Read every cost here as a ballpark rather than your bill. The tokens are counted from the prompt this extension builds, so anything your provider wraps around it is not in the figure, and their tokeniser may not agree with this one. It also prices every token sent at the full rate: on a model with prompt caching switched on, a refine usually costs less than this says, sometimes a lot less.",
+          "Read every cost here as a ceiling rather than your bill. It is worked out from the prompt this extension builds, so anything your provider wraps around it is missing, and it prices every token at the full rate: whatever your provider reuses from a cache is charged at less than this says. Lumiverse counts the tokens with its own tokeniser for the model, which is not the counter your provider bills you against.",
         ),
       );
     if (lostConnection())
