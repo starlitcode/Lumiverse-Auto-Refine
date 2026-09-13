@@ -5956,60 +5956,6 @@ console.log("\nthe macro list");
   });
 }
 
-console.log("\nwhat the connection says about caching");
-{
-  // A refine goes out under the reader's own connection and takes its caching
-  // setting with it. Nothing here switches that on; the panel reads it and says
-  // what it is, so somebody can tell whether the order of their prompt is
-  // buying them anything.
-  const feed = (page, list) =>
-    page.evaluate(async (rows) => {
-      window.__fromBackend({ type: "connections", list: rows });
-      await new Promise((r) => setTimeout(r, 120));
-      const n = document.querySelector("#drawer [data-arf-cacheline]");
-      return n ? n.textContent.trim() : null;
-    }, list);
-  const conn = (cache) => [
-    { id: "c1", name: "Claude", provider: "anthropic", model: "big", isDefault: true, cache: cache },
-  ];
-
-  await inTab(browser, { saved: { enabled: true, connectionId: "c1" } }, async (page) => {
-    await goTab(page, "Model");
-    // The aim first: the tab really is the one holding the connection picker,
-    // so a missing line is a missing line rather than a missing tab.
-    const picker = await page.evaluate(
-      () => !!document.querySelector('#drawer [data-arf-field="connectionId"]'),
-    );
-    ok("the Model tab is up, with the connection picker on it", picker);
-
-    const on = await feed(page, conn({ on: true, ttl: "5m" }));
-    ok("a connection with caching on is said to have it on", /caching is on/i.test(on || ""), String(on));
-    ok("and for how long it is held", /5m/.test(on || ""), String(on));
-    ok(
-      "and that the panel is not the thing switching it",
-      /takes its setting|switches it on or off/i.test(on || ""),
-      String(on),
-    );
-
-    const off = await feed(page, conn({ on: false, ttl: "" }));
-    ok("one with it off is said to have it off", /caching is off/i.test(off || ""), String(off));
-    ok("and told where the switch is", /Connections/.test(off || ""), String(off));
-
-    // The difference that matters. A provider that says nothing about caching
-    // is not one with caching off, and a line either way would be invented.
-    const quiet = await feed(page, conn({ on: null, ttl: "" }));
-    ok("a provider that says nothing gets no line", quiet === null, String(quiet));
-  });
-
-  // Refining on the chat's own model. That connection is not in the list under
-  // an id this can match, so there is nothing to read and nothing to say.
-  await inTab(browser, { saved: { enabled: true, connectionId: "" } }, async (page) => {
-    await goTab(page, "Model");
-    const said = await feed(page, conn({ on: true, ttl: "5m" }));
-    ok("refining on the chat's own model says nothing about caching", said === null, String(said));
-  });
-}
-
 console.log("\nsaying the shipped prompts have changed");
 {
   // The mark is a fingerprint of the eight as they ship, so a saved one that

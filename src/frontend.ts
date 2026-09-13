@@ -2856,17 +2856,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     paint();
   }
 
-  let connections: Array<{
-    id: string;
-    name: string;
-    provider: string;
-    model: string;
-    isDefault: boolean;
-    // What the connection is set to do about prompt caching, as the backend
-    // read it out of the connection's own metadata. on is null where the
-    // provider says nothing about caching at all, which is not the same as off.
-    cache?: { on: boolean | null; ttl: string };
-  }> = [];
+  let connections: Array<{ id: string; name: string; provider: string; model: string; isDefault: boolean }> = [];
   // The status line's own nodes, so the running clock can be written into them
   // without repainting the panel around whatever somebody is typing in.
   let liveEls: { dot: any; text: any } | null = null;
@@ -7276,46 +7266,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           "The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above.",
         ),
       );
-    // What the chosen connection is set to do about prompt caching. A refine
-    // goes out under that connection and inherits its setting, so this is not
-    // something the extension turns on: it is something it can tell you about.
-    //
-    // Said only where the connection has something to say. A provider with no
-    // caching to speak of is not a provider anybody needs a line about.
-    {
-      const said = cacheLine();
-      if (said) {
-        const line = note(said);
-        line.setAttribute("data-arf-cacheline", "1");
-        wrap.appendChild(line);
-      }
-    }
     return wrap;
-  }
-
-  // The connection a refine would actually run on: the one picked here, or the
-  // chat's own when nothing is picked. The chat's own is not in the list under
-  // an id this can match, so that case says nothing rather than guessing.
-  function cacheLine(): string {
-    const id = String(cfg.connectionId || "");
-    if (!id) return "";
-    const one = connections.find((c) => c.id === id);
-    const facts = one && one.cache;
-    if (!facts || facts.on === null) return "";
-    if (!facts.on)
-      return (
-        "Prompt caching is off for this connection. On, the front of the refine is the same on every " +
-        "reply in a chat, so a provider that caches would charge for it once rather than every time. " +
-        "The switch is in Lumiverse under Connections."
-      );
-    const held = facts.ttl ? " Held for " + facts.ttl + "." : "";
-    return (
-      "Prompt caching is on for this connection." +
-      held +
-      " Your rules and the character card sit at the front of the refine and do not change between " +
-      "replies, so that part is what gets reused. Nothing here switches it on or off: a refine runs " +
-      "on your connection and takes its setting."
-    );
   }
 
   // Named setups for the Model tab, so somebody running more than one custom
