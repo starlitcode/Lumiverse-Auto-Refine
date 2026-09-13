@@ -7153,7 +7153,7 @@ export function setup(ctx, overrides) {
             key: "protectThinking",
             label: "Keep the reply's own reasoning out of the refine",
             type: "bool",
-            hint: "On by default. Working the character's model left in the reply is not your writing, so it is cut out before the refine and put back after rather than being rewritten.",
+            hint: "On by default. Reasoning the model left in the reply is not part of the writing, so it is cut out before the refine and put back after rather than being rewritten.",
         }));
         wrap.appendChild(fieldRow({
             key: "stripAnswerThinking",
