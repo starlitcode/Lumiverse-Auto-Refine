@@ -113,7 +113,7 @@ and a chat with no memories sends `Keep these in mind.` on its own, pointing at 
 
 **The block that carries it, What has happened before now, ships switched off.** It is the one block whose size is decided by your chat memory settings rather than by anything on this tab, and it is sent on every refine. Switch it on under **Prompt** when you want the refine to read the story from further back than the run-up. Nothing else about the macro changes: it works the moment the block is on.
 
-`{{protect_notes}}` is the one exception and is written out here so nothing goes unread. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
+`{{protect_notes}}` is the one exception and is written out here so nothing goes unread. It has a block of its own, **Protected Formatting**, which is what lets it sit in a tag like the other macros: a block that comes out as nothing but its tags is dropped whole, so on a refine that protected nothing the tag goes with the words. Kept inside **How to Answer**, which always has writing in it, an empty pair would be sent every time instead. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
 
 Whether the passage is a reply or something you wrote is not a macro either. It is which prompt runs: your own messages have a set of blocks of their own, under **For your messages**, and those say it in words you can read and change. A macro said it before, in words nobody could see.
 
@@ -137,6 +137,7 @@ The other reason order matters is caching. If your provider caches prompts, the 
 4. **The pages before this one.** Redrawn every turn.
 5. **The passage.** Different every time.
 6. **How to Answer.** Below the passage on purpose, and sent as **User** rather than **System**.
+7. **Protected Formatting.** The note about the tokens standing in for formatting, when there is anything to say. Empty on any refine that protected nothing, and a block holding nothing but an empty tag is not sent at all, so most refines carry six blocks here rather than seven.
 
 Every shipped prompt is built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
 
@@ -150,7 +151,7 @@ It does cost a little where prompts are cached, since it used to sit in the run 
 
 Worth knowing if you are counting on it: providers that cache have a minimum length below which they do not bother. On Anthropic that is between 512 and 4,096 tokens depending on the model, and the whole of a shipped prompt here is around 1,500 to 2,900 with a character card in it. On a model at the top of that range, none of it caches whatever the order is.
 
-**The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. **How to Answer** is not counted, since every shipped prompt puts it there. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
+**The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. **How to Answer** is not counted, since every shipped prompt puts it there, and neither is **Protected Formatting**, whose macro answers to the passage and so was never going to be reused anyway. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
 
 ## Roles
 

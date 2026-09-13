@@ -6066,9 +6066,12 @@ console.log("\nthe order and what caching costs");
   const rule = (id, name) => ({ id: id, name: name, on: true, role: "system", text: "<" + id + ">a rule</" + id + ">" });
   const turn = { id: "turn", name: "The passage", on: true, role: "user", text: "<p>{{message}}</p>" };
 
-  // The shipped prompts put the shape of the answer below the passage on
-  // purpose, and that one is not counted: a line about somebody's own ordering
-  // has no business on a panel where nobody has ordered anything yet.
+  // The shipped prompts put two blocks below the passage on purpose: the shape
+  // of the answer, and the note about protected formatting under it. Neither is
+  // counted, since a line about somebody's own ordering has no business on a
+  // panel where nobody has ordered anything yet. The answer block is left out by
+  // name; the protect block is left out because its macro moves with the
+  // passage, so it was never going to be reused either way.
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const shipped = await said(page);
@@ -6082,8 +6085,8 @@ console.log("\nthe order and what caching costs");
       return rows.map((r) => r.getAttribute("data-arf-block"));
     });
     ok(
-      "even though the answer block really is the last one",
-      where.length > 2 && where[where.length - 1] === "answer",
+      "even though those two really are the last ones",
+      where.length > 3 && where.slice(-2).join(",") === "answer,protect",
       JSON.stringify(where),
     );
   });

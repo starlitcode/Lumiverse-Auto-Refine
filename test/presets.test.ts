@@ -357,6 +357,30 @@ describe("every block in a shipped prompt is one the panel can hold", () => {
     expect(clashes).toEqual([]);
   });
 
+  // {{protect_notes}} is the one macro that puts the extension's own words into
+  // the prompt rather than a piece of the chat, and it is the only one that is
+  // empty on most refines. It gets a block to itself so the tag around it can go
+  // when the words do: a block that comes out as nothing but tags is dropped
+  // whole, and a block is the only thing that check can drop.
+  test("the token note has a block to itself in every shipped prompt", () => {
+    const wrong: string[] = [];
+    for (const p of BUILT_IN_PROMPTS as any[]) {
+      const carry = (p.blocks as any[]).filter((b) => String(b.text).includes("{{protect_notes}}"));
+      if (carry.length !== 1) {
+        wrong.push(p.name + ": " + carry.length + " blocks carry it");
+        continue;
+      }
+      const b = carry[0];
+      // Nothing but the macro in a tag, so there is never anything left to keep
+      // the block alive once the macro is empty.
+      if (!/^<[a-z_]+>\s*\{\{protect_notes\}\}\s*<\/[a-z_]+>$/.test(String(b.text).trim()))
+        wrong.push(p.name + ": the block holds more than the macro in a tag");
+      if ((p.blocks as any[])[p.blocks.length - 1] !== b)
+        wrong.push(p.name + ": it is not the last block");
+    }
+    expect(wrong).toEqual([]);
+  });
+
   test("every macro used in one is a macro that gets answered", () => {
     // A macro nothing fills is left in the prompt as its own braces, so the
     // model is sent the word rather than the thing.

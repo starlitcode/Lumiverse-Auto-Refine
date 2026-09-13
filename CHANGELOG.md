@@ -6,6 +6,22 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.9.0
+
+_2026-09-13_
+
+### Changed
+
+- **The note about protected formatting has a block of its own now, called Protected Formatting.** It used to hang off the end of **How to Answer** with no tag around it, which made `{{protect_notes}}` the one macro in the list not sitting in one.
+
+  A tag needs a block rather than a line. A block whose content comes out as nothing but tags is dropped before it is sent, and that macro is empty on any refine where nothing needed protecting, which is most of them. Left inside **How to Answer**, that check could never fire, because that block always has writing in it, so an empty pair would have gone out on every refine.
+
+  It sits last, under **How to Answer**, which is where the macro already was. What a model is sent when protection does fire is what it was sent before, with the tag around it.
+
+  It is not counted by the line about blocks below the passage, for the same reason the block carrying the reply around a part-refine is not: its macro answers to the passage, so it was never going to be reused.
+
+A prompt you already have is yours and is not touched by this. To take the new arrangement, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on. A prompt that still has the macro on the end of **How to Answer** goes on working exactly as it did.
+
 ## 1.8.1
 
 _2026-09-13_

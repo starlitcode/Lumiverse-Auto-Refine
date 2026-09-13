@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.8.1";
+const VERSION = "1.9.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -640,8 +640,7 @@ const HOW_TO_ANSWER: Block = {
     "answer. Inside them, write the passage as a reader would meet it.\n\n" +
     "Anything outside the tags reaches me and never reaches the story, so a " +
     "note about the edit belongs there if you have one.\n" +
-    "</how_to_answer>\n\n" +
-    "{{protect_notes}}",
+    "</how_to_answer>",
 };
 
 // The reasoning version. The working goes in a tag of its own, ahead of the
@@ -678,8 +677,27 @@ const THINKS_ANSWER: Block = {
     "Only what sits between <REFINED> and </REFINED> is saved. Inside those " +
     "tags, write the passage as a reader would meet it; what you changed and " +
     "why is already said above.\n" +
-    "</how_to_answer>\n\n" +
-    "{{protect_notes}}",
+    "</how_to_answer>",
+};
+
+// The note about the tokens standing in for protected formatting. It used to
+// hang off the end of How to Answer with no tag on it, which made it the one
+// macro in the list not sitting in one.
+//
+// It needs a block of its own to carry a tag rather than a line of its own. A
+// block whose content comes out as nothing but tags is dropped whole, and this
+// macro is empty on any refine where nothing needed protecting, which is most
+// of them. Left inside How to Answer, that check could never fire, because that
+// block always has prose in it: the tag pair would be sent empty every time.
+//
+// Last, under How to Answer, which is where the macro already sat. So what a
+// model is sent is what it was sent before, with the tag around it.
+const PROTECT_BLOCK: Block = {
+  id: "protect",
+  name: "Protected Formatting",
+  on: true,
+  role: "user",
+  text: "<protected_formatting>\n{{protect_notes}}\n</protected_formatting>",
 };
 
 // The phrase list, the same in both lengths. These turn up in machine-written
@@ -863,7 +881,7 @@ const PLAIN_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,
+  HOW_TO_ANSWER,  PROTECT_BLOCK,
 ];
 
 // ---- a model that does not reason, in full ----
@@ -1007,7 +1025,7 @@ const PLAIN_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,
+  HOW_TO_ANSWER,  PROTECT_BLOCK,
 ];
 
 const THINKS_JOB: Block = {
@@ -1257,7 +1275,7 @@ const YOURS_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,
+  HOW_TO_ANSWER,  PROTECT_BLOCK,
 ];
 
 const YOURS_LONG: Block[] = [
@@ -1272,7 +1290,7 @@ const YOURS_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,
+  HOW_TO_ANSWER,  PROTECT_BLOCK,
 ];
 
 const YOURS_DEFAULT: Block[] = YOURS_SHORT;
@@ -1289,7 +1307,7 @@ const THINKS_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,
+  THINKS_ANSWER,  PROTECT_BLOCK,
 ];
 
 // ---- a model that reasons, in full ----
@@ -1355,7 +1373,7 @@ const THINKS_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,
+  THINKS_ANSWER,  PROTECT_BLOCK,
 ];
 
 // The same two, for a model that reasons. It is given the test and left to
@@ -1372,7 +1390,7 @@ const YOURS_THINKS_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,
+  THINKS_ANSWER,  PROTECT_BLOCK,
 ];
 
 const YOURS_THINKS_LONG: Block[] = [
@@ -1387,7 +1405,7 @@ const YOURS_THINKS_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,
+  THINKS_ANSWER,  PROTECT_BLOCK,
 ];
 
 const DEFAULT_BLOCKS: Block[] = PLAIN_SHORT;
@@ -3944,9 +3962,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // caching, which it does not: that block is empty on an ordinary refine and
   // leaves the prompt entirely.
   //
+  // {{protect_notes}} is in here for the same reason as {{whole_reply}}. It
+  // answers to what the passage had in it, so it is empty on a refine with
+  // nothing to protect and its block leaves the prompt. Left out, that block
+  // read as one that never changes and every shipped prompt reported itself as
+  // costing caching, which it does not.
+  //
   // {{overused}} is not in here. It changes as a chat goes on, but it is the same
   // for every refine in the same stretch of one, so a provider can reuse it.
-  const VOLATILE = ["{{message}}", "{{history}}", "{{whole_reply}}"];
+  const VOLATILE = ["{{message}}", "{{history}}", "{{whole_reply}}", "{{protect_notes}}"];
   const movesEveryTurn = (b: Block) =>
     VOLATILE.some((m) => String(b.text || "").indexOf(m) >= 0);
 

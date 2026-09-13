@@ -1059,6 +1059,55 @@ describe("seeing what gets sent", () => {
     expect(whole).not.toContain("tokens shaped like");
   });
 
+  // A phrase from the token note and from nowhere else in a shipped prompt. The
+  // obvious one, "tokens shaped like", is no good here: What to Copy Exactly
+  // says it too, in every prompt, whether anything was protected or not.
+  const NOTE_ONLY = "a single character you cannot spell";
+
+  // The note about the tokens is a block of its own in every shipped prompt, so
+  // it can carry a tag like the other macros do. The two below are the pair that
+  // decides whether that block was worth having: it has to arrive wrapped when
+  // there is something to say, and it has to leave the prompt entirely when
+  // there is not. An empty tag pair sent on every refine is what moving it out
+  // of How to Answer was for.
+  test("the shipped prompt wraps the token note in a tag of its own", async () => {
+    const h = await armed(["x"], { blocks: DEFAULT_BLOCKS }, [
+      { id: "m1", role: "user", content: "i walk through it" },
+      {
+        id: "m2",
+        role: "assistant",
+        content: 'She stepped <font color="#ff0000">through</font> it, suddenly.',
+      },
+    ]);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.sent
+      .find((m) => m.type === "prompt_preview")
+      .messages.map((m: any) => m.content)
+      .join("\n");
+    expect(whole).toContain("<protected_formatting>");
+    expect(whole).toContain("</protected_formatting>");
+    // The words inside the tag rather than merely somewhere in the prompt.
+    const inside = /<protected_formatting>([\s\S]*?)<\/protected_formatting>/.exec(whole);
+    expect(inside && inside[1]).toContain(NOTE_ONLY);
+  });
+
+  test("and sends no tag at all when nothing needed protecting", async () => {
+    const h = await armed(["x"], { blocks: DEFAULT_BLOCKS });
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const whole = h.sent
+      .find((m) => m.type === "prompt_preview")
+      .messages.map((m: any) => m.content)
+      .join("\n");
+    expect(whole).not.toContain(NOTE_ONLY);
+    // Not an empty pair either, which is what would be left if the block were
+    // still a line inside How to Answer.
+    expect(whole).not.toContain("protected_formatting");
+    // And the check is looking at a real prompt rather than an empty string.
+    expect(whole).toContain("<passage_to_refine>");
+  });
+
   // A reasoning model's working is cut off before the call, so a preview that
   // showed it was showing a passage no model is given.
   test("and leaves the model's own working out, as the call does", async () => {
