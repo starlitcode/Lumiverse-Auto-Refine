@@ -881,7 +881,8 @@ const PLAIN_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,  PROTECT_BLOCK,
+  HOW_TO_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 // ---- a model that does not reason, in full ----
@@ -1025,7 +1026,8 @@ const PLAIN_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,  PROTECT_BLOCK,
+  HOW_TO_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 const THINKS_JOB: Block = {
@@ -1275,7 +1277,8 @@ const YOURS_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,  PROTECT_BLOCK,
+  HOW_TO_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 const YOURS_LONG: Block[] = [
@@ -1290,7 +1293,8 @@ const YOURS_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  HOW_TO_ANSWER,  PROTECT_BLOCK,
+  HOW_TO_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 const YOURS_DEFAULT: Block[] = YOURS_SHORT;
@@ -1307,7 +1311,8 @@ const THINKS_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,  PROTECT_BLOCK,
+  THINKS_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 // ---- a model that reasons, in full ----
@@ -1373,7 +1378,8 @@ const THINKS_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,  PROTECT_BLOCK,
+  THINKS_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 // The same two, for a model that reasons. It is given the test and left to
@@ -1390,7 +1396,8 @@ const YOURS_THINKS_SHORT: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,  PROTECT_BLOCK,
+  THINKS_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 const YOURS_THINKS_LONG: Block[] = [
@@ -1405,7 +1412,8 @@ const YOURS_THINKS_LONG: Block[] = [
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
-  THINKS_ANSWER,  PROTECT_BLOCK,
+  THINKS_ANSWER,
+  PROTECT_BLOCK,
 ];
 
 const DEFAULT_BLOCKS: Block[] = PLAIN_SHORT;

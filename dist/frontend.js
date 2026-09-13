@@ -829,7 +829,8 @@ const PLAIN_SHORT = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    HOW_TO_ANSWER, PROTECT_BLOCK,
+    HOW_TO_ANSWER,
+    PROTECT_BLOCK,
 ];
 // ---- a model that does not reason, in full ----
 // The same rules, one to a block, each said at length.
@@ -965,7 +966,8 @@ const PLAIN_LONG = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    HOW_TO_ANSWER, PROTECT_BLOCK,
+    HOW_TO_ANSWER,
+    PROTECT_BLOCK,
 ];
 const THINKS_JOB = {
     id: "job",
@@ -1192,7 +1194,8 @@ const YOURS_SHORT = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    HOW_TO_ANSWER, PROTECT_BLOCK,
+    HOW_TO_ANSWER,
+    PROTECT_BLOCK,
 ];
 const YOURS_LONG = [
     YOURS_JOB,
@@ -1206,7 +1209,8 @@ const YOURS_LONG = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    HOW_TO_ANSWER, PROTECT_BLOCK,
+    HOW_TO_ANSWER,
+    PROTECT_BLOCK,
 ];
 const YOURS_DEFAULT = YOURS_SHORT;
 // ---- a model that reasons, short ----
@@ -1221,7 +1225,8 @@ const THINKS_SHORT = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    THINKS_ANSWER, PROTECT_BLOCK,
+    THINKS_ANSWER,
+    PROTECT_BLOCK,
 ];
 // ---- a model that reasons, in full ----
 // The same standard, plus where to point it and a pass over its own answer.
@@ -1283,7 +1288,8 @@ const THINKS_LONG = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    THINKS_ANSWER, PROTECT_BLOCK,
+    THINKS_ANSWER,
+    PROTECT_BLOCK,
 ];
 // The same two, for a model that reasons. It is given the test and left to
 // apply it, which is what makes these the smaller pair: the plain ones have to
@@ -1299,7 +1305,8 @@ const YOURS_THINKS_SHORT = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    THINKS_ANSWER, PROTECT_BLOCK,
+    THINKS_ANSWER,
+    PROTECT_BLOCK,
 ];
 const YOURS_THINKS_LONG = [
     YOURS_THINKS_JOB,
@@ -1313,7 +1320,8 @@ const YOURS_THINKS_LONG = [
     RECENT_BLOCK,
     AROUND_BLOCK,
     TURN_BLOCK,
-    THINKS_ANSWER, PROTECT_BLOCK,
+    THINKS_ANSWER,
+    PROTECT_BLOCK,
 ];
 const DEFAULT_BLOCKS = PLAIN_SHORT;
 const BUILT_IN_PROMPTS = [
