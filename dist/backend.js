@@ -3039,41 +3039,51 @@ catch (_) {
 // Absent and off are different answers and are kept apart: saying caching is
 // off because nothing was found would be the panel making something up.
 function cacheFacts(meta) {
-    const out = { on: null, ttl: '', spots: [] };
+    const out = { on: null, ttl: '' };
     if (!meta || typeof meta !== 'object')
         return out;
-    for (const key of Object.keys(meta)) {
-        // cach rather than cache, because caching is the commoner word for the
-        // switch itself and cache is the commoner word for the things under it.
-        if (!/cach/i.test(key))
-            continue;
-        const val = meta[key];
-        // The time a cached prefix is held for, which providers write as a short
-        // string like "5m" or "1h".
-        if (/ttl|expiry|expires|duration/i.test(key)) {
-            const said = String(val == null ? '' : val).trim();
-            if (said && said.length < 12)
-                out.ttl = said;
-            continue;
+    // A bag off the host, so reading it is reading somebody else's object: a
+    // getter in it that throws would otherwise take the whole connection list
+    // down with it, and losing the picker to gain a line about caching is a bad
+    // trade. Nothing found is the same answer as nothing readable.
+    try {
+        for (const key of Object.keys(meta)) {
+            // cach rather than cache, because caching is the commoner word for the
+            // switch itself and cache is the commoner word for the things under it.
+            if (!/cach/i.test(key))
+                continue;
+            const val = meta[key];
+            // How long a cached prefix is held, which providers write as a short
+            // string like "5m" or "1h". A bare number is skipped: it carries no unit,
+            // and "held for 300" would be the panel reporting something it cannot
+            // read as though it could.
+            if (/ttl|expiry|expires|duration/i.test(key)) {
+                const said = String(val == null ? '' : val).trim();
+                if (said && said.length < 12 && /[^0-9]/.test(said))
+                    out.ttl = said;
+                continue;
+            }
+            if (typeof val !== 'boolean')
+                continue;
+            // One of the breakpoints under the switch rather than the switch itself.
+            // Not collected: which sections carry a breakpoint is not something a
+            // reader can act on, and the keys are raw enough that printing them would
+            // be worse than saying nothing.
+            if (/tool|system|prefix|conversation|message|breakpoint|auto/i.test(key))
+                continue;
+            // The master switch, and only wordings that actually read as one: a key
+            // turning it on or off, or the bare word. Anything else carrying "cache"
+            // is left alone, because a bag can hold a debug flag or a counter and the
+            // panel reporting one of those as the switch would be worse than the
+            // panel saying nothing. Saying nothing is what an unrecognised wording
+            // gets.
+            const bare = key.replace(/[^a-z]/gi, '').toLowerCase();
+            const isSwitch = /enable|use/.test(bare) || /^(prompt)?cach(e|ing)(enabled|on)?$/.test(bare);
+            if (isSwitch)
+                out.on = val;
         }
-        if (typeof val !== 'boolean')
-            continue;
-        // One of the breakpoints under the switch rather than the switch itself.
-        if (/tool|system|prefix|conversation|message|breakpoint|auto/i.test(key)) {
-            if (val)
-                out.spots.push(key);
-            continue;
-        }
-        // The master switch, and only wordings that actually read as one: a key
-        // turning it on or off, or the bare word. Anything else carrying "cache"
-        // is left alone, because a bag can hold a debug flag or a counter and the
-        // panel reporting one of those as the switch would be worse than the panel
-        // saying nothing. Saying nothing is what an unrecognised wording gets.
-        const bare = key.replace(/[^a-z]/gi, '').toLowerCase();
-        const isSwitch = /enable|use/.test(bare) || /^(prompt)?cach(e|ing)(enabled|on)?$/.test(bare);
-        if (isSwitch)
-            out.on = val;
     }
+    catch (_) { }
     return out;
 }
 spindle.onFrontendMessage(async (payload, userId) => {

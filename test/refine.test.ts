@@ -680,7 +680,38 @@ describe("what the pass costs", () => {
     ]);
     expect(list[0].cache.on).toBe(true);
     expect(list[0].cache.ttl).toBe("5m");
-    expect(list[0].cache.spots).toContain("cacheSystemPrompt");
+  });
+
+  // A lifetime with no unit on it. Read back as "held for 300" it would be the
+  // panel reporting something it cannot read as though it could.
+  test("a lifetime with no unit is left unsaid", async () => {
+    const list = await askConnections([
+      { id: "c1", name: "Claude", provider: "anthropic", model: "big", is_default: true, metadata: { promptCaching: true, cacheTtl: 300 } },
+    ]);
+    expect(list[0].cache.on).toBe(true);
+    expect(list[0].cache.ttl).toBe("");
+  });
+
+  // The bag belongs to the host. One that cannot be read costs the line about
+  // caching and must not cost the connection list, which is what the picker
+  // above it is built from.
+  test("a metadata bag that throws costs the line and not the list", async () => {
+    const nasty: any = { id: "c1", name: "Claude", provider: "anthropic", model: "big", is_default: true };
+    Object.defineProperty(nasty, "metadata", {
+      enumerable: true,
+      get() {
+        return Object.defineProperty({}, "promptCaching", {
+          enumerable: true,
+          get() {
+            throw new Error("no");
+          },
+        });
+      },
+    });
+    const list = await askConnections([nasty]);
+    expect(list.length).toBe(1);
+    expect(list[0].name).toBe("Claude");
+    expect(list[0].cache.on).toBe(null);
   });
 
   test("and one with it off says off rather than saying nothing", async () => {
@@ -747,7 +778,6 @@ describe("what the pass costs", () => {
     // Three boxes ticked under a switch nobody can see is not a switch that is
     // on, and the panel says nothing rather than claiming it.
     expect(list[0].cache.on).toBe(null);
-    expect(list[0].cache.spots.length).toBe(2);
   });
 });
 

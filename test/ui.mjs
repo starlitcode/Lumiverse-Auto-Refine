@@ -5982,7 +5982,7 @@ console.log("\nwhat the connection says about caching");
     );
     ok("the Model tab is up, with the connection picker on it", picker);
 
-    const on = await feed(page, conn({ on: true, ttl: "5m", spots: ["cacheSystemPrompt"] }));
+    const on = await feed(page, conn({ on: true, ttl: "5m" }));
     ok("a connection with caching on is said to have it on", /caching is on/i.test(on || ""), String(on));
     ok("and for how long it is held", /5m/.test(on || ""), String(on));
     ok(
@@ -5991,13 +5991,13 @@ console.log("\nwhat the connection says about caching");
       String(on),
     );
 
-    const off = await feed(page, conn({ on: false, ttl: "", spots: [] }));
+    const off = await feed(page, conn({ on: false, ttl: "" }));
     ok("one with it off is said to have it off", /caching is off/i.test(off || ""), String(off));
     ok("and told where the switch is", /Connections/.test(off || ""), String(off));
 
     // The difference that matters. A provider that says nothing about caching
     // is not one with caching off, and a line either way would be invented.
-    const quiet = await feed(page, conn({ on: null, ttl: "", spots: [] }));
+    const quiet = await feed(page, conn({ on: null, ttl: "" }));
     ok("a provider that says nothing gets no line", quiet === null, String(quiet));
   });
 
@@ -6005,7 +6005,7 @@ console.log("\nwhat the connection says about caching");
   // an id this can match, so there is nothing to read and nothing to say.
   await inTab(browser, { saved: { enabled: true, connectionId: "" } }, async (page) => {
     await goTab(page, "Model");
-    const said = await feed(page, conn({ on: true, ttl: "5m", spots: [] }));
+    const said = await feed(page, conn({ on: true, ttl: "5m" }));
     ok("refining on the chat's own model says nothing about caching", said === null, String(said));
   });
 }

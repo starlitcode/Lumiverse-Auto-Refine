@@ -2865,7 +2865,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // What the connection is set to do about prompt caching, as the backend
     // read it out of the connection's own metadata. on is null where the
     // provider says nothing about caching at all, which is not the same as off.
-    cache?: { on: boolean | null; ttl: string; spots: string[] };
+    cache?: { on: boolean | null; ttl: string };
   }> = [];
   // The status line's own nodes, so the running clock can be written into them
   // without repainting the panel around whatever somebody is typing in.
