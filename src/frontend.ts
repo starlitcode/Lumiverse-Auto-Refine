@@ -3476,8 +3476,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     // ---- the tab strip ----
     // Scrolls sideways rather than wrapping. Wrapped tabs move under each other
     // as the panel narrows, and the row you tapped is not where you left it.
-    ".arf-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;" +
-    "border-bottom:1px solid var(--lumiverse-border,rgba(147,112,219,.12))}" +
+    // A tray holding the tabs, with the one you are on filled in. Not a row of
+    // labels with a line under the selected one: that is the tab strip every
+    // panel has, and telling two of them apart at a glance is the one thing a
+    // tab strip has to do. It is also the same way the companion extension
+    // marks its tabs, so the two read as a pair.
+    //
+    // The line that used to sit under the strip is gone with it, and that is
+    // what fixes the drag. A sideways scroller is vertically scrollable too
+    // unless it is told otherwise, and the tabs were pulled a pixel down over
+    // that line by a negative margin, so the strip was one pixel taller than it
+    // could show: a drag up moved the titles by that pixel and stacked the
+    // tab's underline on the line, which reads as the line thickening. The tray
+    // has nothing under it to sit over, so there is nothing to scroll.
+    ".arf-tabs{display:flex;gap:3px;overflow-x:auto;overflow-y:hidden;" +
+    "overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none;" +
+    "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+    "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
     ".arf-tabs::-webkit-scrollbar{display:none}" +
     // The panel is built from nothing on every repaint, and the readability
     // sweep then writes colours onto it. Reading a computed colour resolves the
@@ -3486,16 +3502,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     // instead fades. Held off until the rebuild has been on the screen for a
     // frame, after which the only changes left are ones somebody asked for.
     ".arf-settling,.arf-settling *{transition:none!important}" +
-    ".arf-tab{flex:none;cursor:pointer;background:none;border:0;border-bottom:2px solid transparent;" +
-    "padding:9px 11px;margin-bottom:-1px;white-space:nowrap;" +
+    // The weight never changes with the state. A label that goes bold on select
+    // is a label that gets wider, and the whole row shifts under the finger that
+    // just tapped it.
+    ".arf-tab{flex:none;cursor:pointer;background:transparent;border:0;" +
+    "padding:8px 12px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
     "font:12.5px var(--lumiverse-font-family,system-ui);" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
-    "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
-    ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
-    ".arf-tab[aria-selected=true]{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-    "border-bottom-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+    "transition:color var(--lumiverse-transition-fast,150ms ease)," +
+    "background var(--lumiverse-transition-fast,150ms ease)}" +
+    ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+    "background:var(--lumiverse-primary-010,rgba(147,112,219,.1))}" +
+    // Filled, and the text at full strength. Two marks rather than one, because
+    // a fill alone is lost on a theme that washes it out and colour alone is
+    // lost on one that flattens it.
+    ".arf-tab[aria-selected=true]{color:var(--lumiverse-text,rgba(255,255,255,.95));" +
+    "background:var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
     ".arf-tab:focus-visible{outline:none;" +
-    "box-shadow:inset 0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+    "box-shadow:inset 0 0 0 2px var(--lumiverse-primary,rgba(147,112,219,.9))}" +
     ".arf-body{display:flex;flex-direction:column;gap:12px}" +
     // A pill for a count or a state, next to a card title.
     ".arf-pill{flex:none;font-size:11px;padding:2px 7px;border-radius:999px;" +

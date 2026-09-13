@@ -1028,6 +1028,54 @@ console.log("\nthe tabs");
     });
     ok("the switch and the refine button sit above the tabs", above);
 
+    // The strip scrolls sideways, and a sideways scroller is vertically
+    // scrollable too unless it is told otherwise. A pixel of that was enough:
+    // dragging up moved the titles and put the selected tab's underline on top
+    // of the strip's own line, which reads as the line thickening.
+    const strip = await page.evaluate(() => {
+      const el = document.querySelector("#drawer .arf-tabs");
+      if (!el) return { missing: true };
+      const tab = document.querySelector('#drawer .arf-tab[aria-selected="true"]');
+      const seen = getComputedStyle(el);
+      // Asked for, not assumed: a strip that cannot scroll sideways either is a
+      // strip with nothing to overflow, and this would pass on it for the wrong
+      // reason.
+      el.scrollTop = 50;
+      const other = Array.from(document.querySelectorAll("#drawer .arf-tab")).find(
+        (b) => b.getAttribute("aria-selected") !== "true",
+      );
+      const fill = (n) => (n ? getComputedStyle(n).backgroundColor : "");
+      return {
+        canScrollSideways: el.scrollWidth > el.clientWidth,
+        overflowY: seen.overflowY,
+        over: el.scrollHeight - el.clientHeight,
+        movedTo: el.scrollTop,
+        // The tray around them, which is what the strip is now instead of a row
+        // of labels over a line.
+        tray: seen.backgroundColor,
+        trayEdge: seen.borderBottomWidth,
+        onFill: fill(tab),
+        offFill: fill(other),
+        onInk: tab ? getComputedStyle(tab).color : "",
+        offInk: other ? getComputedStyle(other).color : "",
+        // The weight is the same either way, or selecting a tab makes its label
+        // wider and shifts the row under the finger that tapped it.
+        onWeight: tab ? getComputedStyle(tab).fontWeight : "",
+        offWeight: other ? getComputedStyle(other).fontWeight : "",
+        pulled: tab ? getComputedStyle(tab).marginBottom : "",
+      };
+    });
+    const clear = (c) => /rgba\(0, 0, 0, 0\)|transparent/.test(c);
+    ok("the strip really does scroll sideways", !!strip.canScrollSideways, JSON.stringify(strip));
+    ok("there is nothing to scroll up and down", strip.over === 0, JSON.stringify(strip));
+    ok("and it will not scroll if asked", strip.movedTo === 0 && strip.overflowY === "hidden", JSON.stringify(strip));
+    ok("nothing is pulled down past the strip", strip.pulled === "0px", JSON.stringify(strip));
+    ok("the tabs sit in a tray of their own", !clear(strip.tray), JSON.stringify(strip));
+    ok("the tab you are on is filled in", !clear(strip.onFill), JSON.stringify(strip));
+    ok("and the ones you are not are not", clear(strip.offFill), JSON.stringify(strip));
+    ok("its label is brighter than theirs too", strip.onInk !== strip.offInk, JSON.stringify(strip));
+    ok("and no heavier, so the row cannot shift", strip.onWeight === strip.offWeight, JSON.stringify(strip));
+
     // One tab's worth of cards on screen at a time, which is the whole point.
     for (const label of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
       await goTab(page, label);

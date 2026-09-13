@@ -27,8 +27,11 @@ _2026-09-12_
 
 A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
 
+- **The tabs are a tray with the one you are on filled in.** They were a row of labels with a line under the selected one, which is the tab strip every panel has, and telling two of them apart at a glance is the one thing a tab strip has to do. The tab you are on is filled and its label is brighter; the rest are plain. Auto Retry marks its tabs the same way, so the two read as a pair. No label changes weight when you pick it, since a label that goes bold gets wider and shifts the row under the finger that just tapped it.
+
 ### Fixed
 
+- **Dragging the tabs up and down moved them.** The titles shifted by a pixel and the line under the strip looked like it thickened. A strip that scrolls sideways scrolls up and down too unless it is told not to, and the tabs were pulled a pixel down over that line, so the strip was one pixel taller than it could show. Dragging scrolled that pixel and stacked the selected tab's underline onto the line. The line is gone with the redraw above, and the strip is locked to sideways now.
 - **The `{{overused}}` macro never showed what it puts in.** The macro list described it and left you to run a refine to find out what the shape was. It now shows a line the way `{{protect_notes}}` shows its wording, and [How the prompt is built](docs/prompt.md) has the block as it arrives, counts and all.
 - **Refining part of a reply was documented inside the floating button's paragraph.** It has three ways in and none of them is the floating button, so it has its own paragraph in [Settings](docs/settings.md) now, and the README says it exists.
 
