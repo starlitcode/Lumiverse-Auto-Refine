@@ -498,17 +498,17 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 const SCENE_BLOCKS: Block[] = [
   {
     id: "character",
-    name: "Your Character",
+    name: "Your Characters",
     on: true,
     role: "system",
-    text: "<your_character>\n{{description}}\n</your_character>",
+    text: "<your_characters>\n{{description}}\n</your_characters>",
   },
   {
     id: "persona",
-    name: "The User's Character",
+    name: "The User's Characters",
     on: true,
     role: "system",
-    text: "<the_users_character>\n{{persona}}\n</the_users_character>",
+    text: "<the_users_characters>\n{{persona}}\n</the_users_characters>",
   },
   {
     id: "lore",
@@ -684,7 +684,7 @@ const PHRASES =
   "- a voice barely above a whisper\n" +
   // The room doing work the characters should be doing.
   "- the air thick with anything, or charged, or shifting\n" +
-  "- something crackling or hanging between two people\n" +
+  "- something crackling or hanging between people\n" +
   "- a setting given a will of its own: a house that watches, a forest that breathes\n" +
   "- a sound placed out of reach: somewhere, a door slams\n" +
   "- time slowing, the world falling away, the world narrowing\n" +
@@ -791,8 +791,8 @@ const MEND_THESE: Block = {
   role: "system",
   text:
     "<what_to_mend>\n" +
-    "Give hands, eyes and breath an owner. Their hand found the other's " +
-    "becomes they took the other's hand.\n\n" +
+    "Give hands, eyes and breath an owner. Their hand found another's " +
+    "becomes they took that person's hand.\n\n" +
     "Where three sentences run to the same length, vary one. Where three " +
     "fragments run together, give one of them a verb.\n\n" +
     "Where three physical details stack on one moment, keep the one that " +
@@ -918,8 +918,8 @@ const PLAIN_LONG: Block[] = [
       "Take out the tag that explains its own line: they said angrily, they " +
       "asked, curious. Where the tone is missing from the words, mend the " +
       "words.\n\n" +
-      "Take out speech that repeats back what the other person just said or " +
-      "did before answering it.\n\n" +
+      "Take out speech that repeats back what somebody else just said or did " +
+      "before answering it.\n\n" +
       "Cut the line that announces itself before it arrives: here is the deal, " +
       "here is the thing, bottom line, long story short, the short version, " +
       "two things. Let the first sentence carry the point. Somebody quoting " +
@@ -948,9 +948,9 @@ const PLAIN_LONG: Block[] = [
     role: "system",
     text:
       "<bodies_and_feeling>\n" +
-      "Give hands, eyes and breath an owner. Their hand found the other's " +
-      "becomes they took the other's hand. Their eyes traced the other's face " +
-      "becomes they looked at them.\n\n" +
+      "Give hands, eyes and breath an owner. Their hand found another's " +
+      "becomes they took that person's hand. Their eyes traced another's face " +
+      "becomes they looked at that person.\n\n" +
       "Feeling belongs in what someone does. Where the action already carries " +
       "it, the naming is the part to cut: somebody pulling their coat closed " +
       "needs no line saying they felt exposed.\n\n" +
@@ -1290,7 +1290,7 @@ const THINKS_LONG: Block[] = [
       "The stock phrase. A held breath, a hammering heart, a whisper, a " +
       "shiver, air thick with something. These arrive by habit.\n\n" +
       "The last line. A passage ending by pointing at what comes next is " +
-      "asking the other author to do the work.\n" +
+      "asking the user to do the work.\n" +
       "</where_to_look>",
   },
   {
@@ -6449,7 +6449,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       note(
         editingYours()
           ? "Used when you refine one of your own messages, or the draft in your input box. Your own messages are never refined automatically, whatever else is switched on: it takes you asking."
-          : "Used for every reply the character writes, by the automatic pass and by the refine button.",
+          : "Used for every reply that comes back, whoever is speaking, by the automatic pass and by the refine button.",
       ),
     );
     const isLine = note(whatThisIs() + " " + aboutWorking());

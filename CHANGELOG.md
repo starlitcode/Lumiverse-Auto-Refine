@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.8.0
+
+_2026-09-12_
+
+### Changed
+
+- **The shipped prompts no longer assume one character on each side.** A card can hold a cast and a chat can be a group, so **Your Character** is now **Your Characters** holding `<your_characters>`, and **The User's Character** is **The User's Characters** holding `<the_users_characters>`. Four lines inside the prompts said the other person where they meant anybody else in the scene: something hanging between two people, a hand finding the other's, eyes tracing the other's face, speech repeating back what the other person said. All of them read for any number of characters now.
+- **One prompt still called you the other author.** That framing came out of the rest of them in 1.6.0 and this line was missed. A passage ending by pointing at what happens next is asking the user to do the work.
+
+A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
+
 ## 1.7.0
 
 _2026-09-12_
