@@ -12,6 +12,10 @@ Each finished reply is sent to a model along with the prompt you wrote, and what
 
 Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, and one that goes through every reply in a chat you already have. Refining the draft in your input box is a third, behind a switch of its own, because it is the one part that writes into the box you are typing in.
 
+Select part of a reply and you can refine only that. Two optional buttons put a refine in the chat itself: one at the end of Lumiverse's own row of chat controls, and one under each message that refines that message. Both are off until you ask for them, and both sit in the places the app hands out to extensions.
+
+Your own messages can be refined too, by hand, never automatically. They get their own prompt, which repairs what went wrong and leaves the writing alone.
+
 It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
 
 ## Install
@@ -92,6 +96,7 @@ Under **Context**, **Show me the request** builds the real request for the reply
 - [Writing rules](docs/rules.md) - what to ask a refine for, and what not to
 - [What it refuses to save](docs/guardrails.md) - the checks on what comes back
 - [Settings](docs/settings.md) - every tab, with what is on it and why
+- [Ways to reach it](docs/settings.md#setup) - the floating button, the two buttons in the chat, the Extras row, and refining a selection
 - [Presets](docs/prompt.md#presets) - saving a setup and moving between setups
 - [Import and export](docs/prompt.md#import-and-export) - carrying a setup to another device
 - [Privacy](docs/privacy.md) - what it can reach, what it sends, and what it keeps

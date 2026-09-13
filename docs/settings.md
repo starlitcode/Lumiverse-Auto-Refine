@@ -86,17 +86,29 @@ Three things never move, whichever tab you left open, because they are what you 
   **Show a brief message** is the one-line note at the edge of the screen. A sound is off by default, and with nothing attached it is a short built-in blip made in the browser, so there is no file to ship.
 
   Closing the card loses nothing: every refine stays under **The last refine** here until you dismiss it.
-- **Ways to reach it** are two optional ways in, both off by default.
+- **Ways to reach it** are four optional ways in, all off by default.
 
-  **A floating button** puts a round button over the chat. One tap refines the latest reply, and that is the only thing a tap does. Holding it, or right clicking, opens Lumiverse's own menu, which carries the tab, refining every reply in the chat, stopping one that is running, an undo when there is one, refining your draft when that is switched on, a way to hide the button, and the master switch. It pulses while a refine is running, which is often the only part of the extension on screen. Select part of a reply first and the menu gains **Refine the part I selected**, which rewrites what you picked and leaves the rest of the reply alone. It is only there while something is selected, and it is on the panel and in the Extras menu too, so the floating button is not the only way to reach it. A selection that runs out of italics takes the whole italic run with it, because leaving one marker behind would turn the rest of the reply into emphasis. Drag it where you want it and that is where it stays, including after you change its size, which it grows around its own middle. Where you leave it is kept in the browser rather than in your settings, so it does not travel in an export. It needs the interface panels permission.
+  **A floating button** puts a round button over the chat. One tap refines the latest reply, and that is the only thing a tap does. It pulses while a refine is running, which is often the only part of the extension on screen. It needs the interface panels permission.
+
+  Holding it, or right clicking, opens Lumiverse's own menu. That menu carries the tab, refining every reply in the chat, stopping one that is running, an undo when there is one, refining your draft when that is switched on, a way to hide the button, and the master switch.
+
+  Drag it where you want it and that is where it stays, including after you change its size, which it grows around its own middle. Where you leave it is kept in the browser rather than in your settings, so it does not travel in an export.
 
   The button keeps its own mark whatever has just happened. A refine that landed used to turn it into an arrow, which put a control over your chat that you had not asked for and took the extension's mark off the screen; the way back is a line in the menu instead. Refining the latest reply is not in that menu, because that is what the tap does.
 
   The automatic pass and the per chat switch stay on the tab rather than in that menu, so their explanations are next to them instead of appearing as bare labels over the chat.
 
+  **Refining part of a reply** is not a setting and has nothing to switch on. Select part of a reply and **Refine the part I selected** appears in three places: on the panel, in the chat input's Extras menu, and in the floating button's menu while that button is on screen. It rewrites what you picked and leaves the rest of the reply alone. It is only there while something is selected. A selection that runs out of italics takes the whole italic run with it, because leaving one marker behind would turn the rest of the reply into emphasis. It works in your own messages as well as in replies, and it uses the prompt for your own writing when it does.
+
   **Refining the draft in your input box** is the other way in, off by default because it writes into the box you are typing in. On, a **Refine what I am typing** button joins the other two above the tabs, and an entry for it appears in the chat input's Extras menu, or in the floating button's menu while that button is on screen. It greys out alongside the other two when no chat is open, since there is no input box out there to read, and the menu entry comes off on the same terms.
 
   A refine of your draft asks the chat for nothing, so it works in a chat the panel is still working out, and outside a chat entirely. Switching Auto Refine off, here or everywhere, still stops it.
+
+  **A button in the row above the input box** goes at the end of Lumiverse's own row of chat buttons, in the place the app leaves there for extensions. One tap refines the latest reply, the same as a tap on the floating button.
+
+  **A button under every message** refines that message in one tap. It is the only way to refine a message that is not the latest without selecting all of it first, and it works on your own messages as well as on replies. On the greeting it says the greeting is never refined, which is true of every other way in too.
+
+  It sits under the message and above Lumiverse's own row of buttons rather than among them, because the app leaves an extension no room inside that row. Both of these buttons are drawn in the places the app hands out, so a Lumiverse update that moves its own controls does not take them with it.
 
   It shows itself the way a reply's refine does: the button turns while it runs, **Stop this refine** ends it, a card lands with the before and after on it, and the working goes to the Log. **Your draft, refined** then stands at the top of the tab, carrying what changed, **Put it back**, **Dismiss** and **Read it in full**.
 

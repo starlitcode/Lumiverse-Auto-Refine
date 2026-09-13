@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.7.0";
+const VERSION = "1.8.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -94,8 +94,8 @@ const PARTS = [
     {
         id: "reach",
         label: "Buttons and the widget",
-        what: "The message button, the floating button, and the input bar row.",
-        keys: ["widgetOn", "widgetSize", "inputRefine"],
+        what: "The floating button, the buttons in the chat, and the input bar row.",
+        keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton"],
     },
     {
         id: "switches",
@@ -338,15 +338,19 @@ const CONFIG = {
     // the page, and an extension that redecorates somebody's chat on install is
     // one they uninstall.
     //
-    // There was a button on every message too, put into Lumiverse's own row of
-    // actions. It is gone. That row belongs to the app and every extension wants
-    // a seat in it, the floating button and Extras both reach everything it
-    // reached, and it was the one part of this that had to guess at the page's
-    // shape twice over: the message wrapper and the action bar inside it.
     // Refining what you are about to send, from the input bar, before it is sent.
     // Off by default: it edits the box you are typing in, which is not something
     // to start doing unasked.
     inputRefine: false,
+    // A button in the row of chat controls above the input box, in the slot
+    // Lumiverse leaves there for extensions. One tap refines the latest reply.
+    // Off by default, like every other way in that draws on somebody's chat.
+    barButton: false,
+    // A button under each message, in the slot at the end of it. One tap refines
+    // that message, which is the only way to refine one that is not the latest
+    // without selecting the whole of it first. Off by default for the same
+    // reason as the rest.
+    messageButton: false,
     // Where the input box is. Starts as the list above, so it can be read and
     // corrected on the day a Lumiverse update moves the box rather than waiting
     // for a release of this. Whatever is here is tried first and the list is
@@ -3544,7 +3548,29 @@ export function setup(ctx, overrides) {
         ".arf-box{width:46px;height:26px;border-radius:13px}" +
         ".arf-box::after{width:18px;height:18px}" +
         ".arf-box:checked::after{left:23px}" +
-        ".arf-field{padding:10px 12px}}";
+        ".arf-field{padding:10px 12px}}" +
+        // The buttons that sit in Lumiverse's own slots. Drawn from theme
+        // variables rather than copied off the host's buttons, whose class names
+        // carry a build hash: the colours follow the reader's theme and there is
+        // nothing to keep in step with a Lumiverse rebuild.
+        ".arf-slot{display:inline-flex;align-items:center;justify-content:center;" +
+        "background:none;border:0;margin:0;padding:5px;border-radius:8px;" +
+        "line-height:0;cursor:pointer;-webkit-tap-highlight-color:transparent;" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.62));" +
+        "transition:color .15s ease,opacity .15s ease}" +
+        ".arf-slot:hover{color:var(--lumiverse-text,rgba(255,255,255,.92))}" +
+        ".arf-slot:focus-visible{outline:2px solid var(--lumiverse-primary,#8b5cf6);" +
+        "outline-offset:2px}" +
+        ".arf-slot svg{display:block;width:14px;height:14px}" +
+        // While a refine is running. It stays pressable, because pressing it is how
+        // somebody is told one is already going.
+        ".arf-slot[aria-busy=true]{opacity:.55}" +
+        // The message one is a block in the message's own column, so it needs a row
+        // of its own to sit in. Centred, which is where the host puts the row of
+        // buttons under it.
+        ".arf-slot-row{display:flex;justify-content:center;align-items:center;" +
+        "padding:2px 0}" +
+        "@media (pointer:coarse){.arf-slot{padding:9px}}";
     let styleEl = null;
     function injectStyle() {
         try {
@@ -4872,8 +4898,9 @@ export function setup(ctx, overrides) {
             clearTimeout(settleTimer);
             settleTimer = null;
         }
-        // The buttons on the messages show the same state this panel does, so they
-        // are refreshed with it rather than on a timer of their own.
+        // The buttons in the host's slots show the same state this panel does, so
+        // they are refreshed with it rather than on a timer of their own.
+        paintSlots();
         // And the floating button. Painting it only from the live clock is not
         // enough: that clock runs while a refine runs, so walking out to the home
         // screen would leave the button looking ready to refine something that is
@@ -7808,6 +7835,18 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs. A row for it also appears in the chat input's Extras menu, or in the floating button's menu when that is on screen.",
         }));
+        wrap.appendChild(fieldRow({
+            key: "barButton",
+            label: "A button in the row above the input box",
+            type: "bool",
+            hint: "One tap refines the latest reply. It goes at the end of Lumiverse's own row of chat buttons, in the place the app leaves there for extensions.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "messageButton",
+            label: "A button under every message",
+            type: "bool",
+            hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It sits under the message, above Lumiverse's own row of buttons, because the app leaves no room inside that row.",
+        }));
         return wrap;
     }
     // ---- carrying a setup somewhere else ----
@@ -9665,8 +9704,8 @@ export function setup(ctx, overrides) {
             // second while a refine is in flight, and rewriting the icon throws the
             // old one away mid-turn. The ring is turned by the stylesheet over 900ms,
             // so it never got past half a rotation before starting again from the
-            // top: a spinner that stutters rather than turns. The message buttons
-            // have had this guard for a while and spin smoothly; the widget did not.
+            // top: a spinner that stutters rather than turns. The buttons in the
+            // host's slots are guarded the same way, for the same reason.
             if (el2.getAttribute("data-arf-icon") !== kind) {
                 el2.setAttribute("data-arf-icon", kind);
                 el2.innerHTML = working ? spinIcon() : refineIcon();
@@ -9878,6 +9917,10 @@ export function setup(ctx, overrides) {
         //
         // Only while there is a selection, so it is never an entry that does nothing.
         extra("auto-refine-part", "Refine the part I selected", inExtras && !!pickedHere(), () => refinePicked());
+        // The two that live in the host's own slots. Last, because putting them up
+        // means starting to watch the page, and that is the one thing here worth
+        // not doing for somebody who has them off.
+        watchSlots();
     }
     // One Extras entry, put up or taken down to match. Registered by id, so the
     // host is never handed two of the same one.
@@ -9914,6 +9957,190 @@ export function setup(ctx, overrides) {
             catch (_) { }
         });
         extras.clear();
+    });
+    // ---- buttons in Lumiverse's own slots ----
+    // The host leaves empty mount points in its chrome for extensions to fill,
+    // each carrying the chat or the message it belongs to in its scope. That is
+    // the supported way in, and the difference between this and the button that
+    // used to be on every message: that one reached for a row by class name, and
+    // those names carry a build hash that changes when Lumiverse rebuilds its
+    // CSS.
+    //
+    // There is no slot inside the host's own row of message buttons, so the
+    // message one goes in the footer slot, which is the last thing inside the
+    // message and sits directly above that row.
+    const BAR_SLOT = '[data-spindle-mount="chat_actions"]';
+    const MSG_SLOT = '[data-spindle-mount="message_footer"]';
+    // Set while this is writing into the page, so the watcher below does not
+    // answer its own insertions.
+    let filling = false;
+    let slotEye = null;
+    let slotTimer = null;
+    function slotButton(kind, title, run) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "arf-slot";
+        b.setAttribute("data-arf-slot", kind);
+        b.title = title;
+        b.setAttribute("aria-label", title);
+        b.innerHTML = refineIcon();
+        b.addEventListener("click", (e) => {
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            catch (_) { }
+            run();
+        });
+        return b;
+    }
+    // The id the host wrote into the slot, which is the second field of a scope
+    // shaped "message:<id>:...". Read from there rather than from anything around
+    // it, for the same reason the selection code does: it is the host's own
+    // label and it is not going to move.
+    function slotId(node) {
+        const parts = String(node.getAttribute("data-spindle-scope") || "").split(":");
+        return parts.length > 1 && parts[1] ? String(parts[1]) : "";
+    }
+    // Both buttons, brought into line with the settings and with whatever the
+    // host has just redrawn. Cheap to call: it is two queries and a walk over
+    // what is already there.
+    function fillSlots() {
+        if (typeof document === "undefined")
+            return;
+        const wantBar = !!cfg.enabled && !!cfg.barButton;
+        const wantMsg = !!cfg.enabled && !!cfg.messageButton;
+        filling = true;
+        try {
+            // Anything not wanted any more comes out first, including the rows the
+            // message buttons sit in. A button whose slot the host has thrown away
+            // went with it, so there is nothing to clean up for those.
+            if (!wantBar || !wantMsg) {
+                const stale = document.querySelectorAll("[data-arf-slot]");
+                for (let i = 0; i < stale.length; i++) {
+                    const one = stale[i];
+                    const kind = one.getAttribute("data-arf-slot");
+                    if (kind === "bar" ? wantBar : wantMsg)
+                        continue;
+                    const row = one.parentElement;
+                    try {
+                        one.remove();
+                        if (row && row.classList && row.classList.contains("arf-slot-row"))
+                            row.remove();
+                    }
+                    catch (_) { }
+                }
+            }
+            if (wantBar) {
+                const bar = document.querySelector(BAR_SLOT);
+                if (bar && !bar.querySelector('[data-arf-slot="bar"]'))
+                    bar.appendChild(slotButton("bar", "Refine the latest reply", () => refineNow()));
+            }
+            if (wantMsg) {
+                const slots = document.querySelectorAll(MSG_SLOT);
+                for (let i = 0; i < slots.length; i++) {
+                    const slot = slots[i];
+                    if (slot.querySelector('[data-arf-slot="message"]'))
+                        continue;
+                    const id = slotId(slot);
+                    if (!id)
+                        continue;
+                    const row = document.createElement("div");
+                    row.className = "arf-slot-row";
+                    row.appendChild(slotButton("message", "Refine this message", () => refineOne(id)));
+                    slot.appendChild(row);
+                }
+            }
+            paintSlots();
+        }
+        catch (_) {
+        }
+        finally {
+            filling = false;
+        }
+    }
+    function fillSlotsSoon() {
+        if (slotTimer)
+            return;
+        slotTimer = setTimeout(() => {
+            slotTimer = null;
+            fillSlots();
+        }, SETTLE_MS);
+    }
+    // What the buttons show while a refine is running. The icon is swapped only
+    // when it would draw something different, or the spinner starts from the top
+    // on every repaint and stutters instead of turning.
+    function paintSlots() {
+        if (typeof document === "undefined")
+            return;
+        let found = null;
+        try {
+            found = document.querySelectorAll("[data-arf-slot]");
+        }
+        catch (_) {
+            return;
+        }
+        for (let i = 0; i < found.length; i++) {
+            const one = found[i];
+            const kind = busy ? "working" : "ready";
+            if (one.getAttribute("data-arf-icon") !== kind) {
+                one.setAttribute("data-arf-icon", kind);
+                one.innerHTML = busy ? spinIcon() : refineIcon();
+            }
+            if (busy)
+                one.setAttribute("aria-busy", "true");
+            else
+                one.removeAttribute("aria-busy");
+        }
+    }
+    // The host redraws this chrome on its own terms: a new reply, a swipe, a chat
+    // change, a re-render nobody asked for. Watched only while a button is wanted,
+    // because a chat that is streaming mutates constantly and there is no reason
+    // to answer any of it for somebody who has both of these switched off.
+    function watchSlots() {
+        const want = !!cfg.enabled && (!!cfg.barButton || !!cfg.messageButton);
+        if (want && !slotEye) {
+            try {
+                slotEye = new MutationObserver(() => {
+                    if (!filling)
+                        fillSlotsSoon();
+                });
+                if (document.body)
+                    slotEye.observe(document.body, { childList: true, subtree: true });
+            }
+            catch (_) {
+                slotEye = null;
+            }
+        }
+        else if (!want && slotEye) {
+            try {
+                slotEye.disconnect();
+            }
+            catch (_) { }
+            slotEye = null;
+        }
+        fillSlots();
+    }
+    disposers.push(() => {
+        if (slotTimer)
+            clearTimeout(slotTimer);
+        slotTimer = null;
+        try {
+            slotEye && slotEye.disconnect();
+        }
+        catch (_) { }
+        slotEye = null;
+        try {
+            const mine = document.querySelectorAll("[data-arf-slot]");
+            for (let i = 0; i < mine.length; i++) {
+                const one = mine[i];
+                const row = one.parentElement;
+                one.remove();
+                if (row && row.classList && row.classList.contains("arf-slot-row"))
+                    row.remove();
+            }
+        }
+        catch (_) { }
     });
     // Calls off whatever is running. Safe to press when nothing is: the backend
     // answers with how many it stopped, and the panel says so either way.
@@ -10096,6 +10323,12 @@ export function setup(ctx, overrides) {
         });
     }
     function refineNow() {
+        refineOne(lastMessageId);
+    }
+    // One message, by id. No id means the latest reply, which is what the backend
+    // works out: it holds the messages and the panel only knows what it happened
+    // to watch arrive.
+    function refineOne(messageId) {
         // One at a time. Two against the same reply means whichever finishes last
         // wins, which is not a thing anybody asked for.
         if (busy) {
@@ -10116,7 +10349,7 @@ export function setup(ctx, overrides) {
             type: "refine_now",
             requestId: newId(),
             chatId: lastChatId,
-            messageId: lastMessageId,
+            messageId: messageId,
         });
     }
     // Both, because neither covers the other. A drag ends with pointerup and never

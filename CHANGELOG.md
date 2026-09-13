@@ -10,12 +10,26 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-09-12_
 
+### Added
+
+- **Two optional buttons that put a refine in the chat itself.** Both are under **Ways to reach it** on the Setup tab and both are off until you ask for them.
+
+  **A button in the row above the input box** goes at the end of Lumiverse's own row of chat controls. One tap refines the latest reply.
+
+  **A button under every message** refines that message. It is the only way to refine a message that is not the latest without selecting all of it first, and it works on your own messages as well as on replies.
+
+  Both sit in the places Lumiverse hands out to extensions, which is the difference between these and the button on every message that came out in an earlier version: that one reached for a row by class name, and those names change whenever Lumiverse rebuilds its CSS. The message one sits under the message, above the app's own row of buttons, because the app leaves no room inside that row.
+
 ### Changed
 
 - **The shipped prompts no longer assume one character on each side.** A card can hold a cast and a chat can be a group, so **Your Character** is now **Your Characters** holding `<your_characters>`, and **The User's Character** is **The User's Characters** holding `<the_users_characters>`. Four lines inside the prompts said the other person where they meant anybody else in the scene: something hanging between two people, a hand finding the other's, eyes tracing the other's face, speech repeating back what the other person said. All of them read for any number of characters now.
 - **One prompt still called you the other author.** That framing came out of the rest of them in 1.6.0 and this line was missed. A passage ending by pointing at what happens next is asking the user to do the work.
 
 A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
+
+### Fixed
+
+- **Refining part of a reply was documented inside the floating button's paragraph.** It has three ways in and none of them is the floating button, so it has its own paragraph in [Settings](docs/settings.md) now, and the README says it exists.
 
 ## 1.7.0
 

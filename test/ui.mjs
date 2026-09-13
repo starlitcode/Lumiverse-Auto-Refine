@@ -6302,6 +6302,144 @@ console.log("\nrefining the part you selected");
   });
 }
 
+console.log("\nthe buttons in Lumiverse's own slots");
+{
+  // Two messages as the host draws them, cut down to the parts this reads: the
+  // footer slot and the id the host writes into its scope. The prose is
+  // invented for this check.
+  const MESSAGES = `
+  <div id="wrap">
+    <div class="_bubble_86318_171">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>The lamp over the bench had been out for a week.</p></div></div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
+    </div>
+    <div class="_bubble_86318_171">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>She left the crate where it was and went back inside.</p></div></div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-two:minimal:footer" style="display:contents"></span>
+    </div>
+  </div>`;
+
+  // What every run here needs on the page: the real input area, so the toolbar
+  // slot is the host's own rather than one invented to match the selector, and
+  // two messages with their footer slots.
+  const draw = async (page, html) =>
+    page.evaluate(async (markup) => {
+      window.__makeComposer("");
+      const wrap = document.createElement("div");
+      wrap.innerHTML = markup;
+      document.body.appendChild(wrap.firstElementChild);
+      // The panel refuses everything until it knows which chat it is in.
+      (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+      await new Promise((r) => setTimeout(r, 700));
+    }, html);
+
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(() => ({
+      // The aim, asserted before anything is measured: the host's own slots are
+      // on the page and empty is a real answer rather than a missing fixture.
+      barSlots: document.querySelectorAll('[data-spindle-mount="chat_actions"]').length,
+      msgSlots: document.querySelectorAll('[data-spindle-mount="message_footer"]').length,
+      bar: document.querySelectorAll('[data-arf-slot="bar"]').length,
+      msg: document.querySelectorAll('[data-arf-slot="message"]').length,
+      // Inside the slot the host left, not somewhere near it.
+      inBarSlot: !!document.querySelector('[data-spindle-mount="chat_actions"] [data-arf-slot="bar"]'),
+      onSecond: !!document.querySelector(
+        '[data-spindle-scope^="message:msg-two"] [data-arf-slot="message"]',
+      ),
+    }));
+    ok("the host's toolbar slot is on the page", out.barSlots === 1, JSON.stringify(out));
+    ok("and both message slots are", out.msgSlots === 2, JSON.stringify(out));
+    ok("one button goes in the toolbar slot", out.bar === 1 && out.inBarSlot, JSON.stringify(out));
+    ok("and one under each message", out.msg === 2 && out.onSecond, JSON.stringify(out));
+
+    // The one on the second message refines that message, not the latest.
+    const pressed = await page.evaluate(async () => {
+      window.__sent.length = 0;
+      document
+        .querySelector('[data-spindle-scope^="message:msg-two"] [data-arf-slot="message"]')
+        .click();
+      await new Promise((r) => setTimeout(r, 60));
+      return window.__sent.filter((m) => m && m.type === "refine_now");
+    });
+    ok("pressing the one on a message sends a refine", pressed.length === 1, JSON.stringify(pressed));
+    ok("for that message, by the host's own id", pressed[0] && pressed[0].messageId === "msg-two", JSON.stringify(pressed[0]));
+
+    // And it says a refine is running while one is.
+    const busy = await page.evaluate(
+      () => document.querySelectorAll('[data-arf-slot][aria-busy="true"]').length,
+    );
+    ok("every one of them shows that it is running", busy === 3, String(busy));
+
+    // Let it finish, then the toolbar one, which sends no id: the backend
+    // works out which reply is the latest, because it holds the messages.
+    const barSent = await page.evaluate(async () => {
+      const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+      window.__fromBackend({ type: "refine_result", requestId: id, chatId: "c1", messageId: "msg-two", ok: false, why: "not this time" });
+      await new Promise((r) => setTimeout(r, 80));
+      window.__sent.length = 0;
+      document.querySelector('[data-arf-slot="bar"]').click();
+      await new Promise((r) => setTimeout(r, 60));
+      return window.__sent.filter((m) => m && m.type === "refine_now");
+    });
+    ok("pressing the one in the toolbar sends a refine", barSent.length === 1, JSON.stringify(barSent));
+    ok("with no message named, which means the latest", !!barSent[0] && !barSent[0].messageId, JSON.stringify(barSent[0]));
+  });
+
+  // Off is off. Nothing of this extension's goes near the chat for somebody who
+  // has not asked for it, which is the rule every other way in keeps.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(() => ({
+      slots: document.querySelectorAll('[data-spindle-mount="message_footer"]').length,
+      mine: document.querySelectorAll("[data-arf-slot]").length,
+      rows: document.querySelectorAll(".arf-slot-row").length,
+    }));
+    ok("with both off the slots are still there", out.slots === 2, JSON.stringify(out));
+    ok("and nothing is put in them", out.mine === 0 && out.rows === 0, JSON.stringify(out));
+  });
+
+  // Switching one off takes its button back off the page, rows and all.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    await goTab(page, "Setup");
+    const out = await page.evaluate(async () => {
+      const before = document.querySelectorAll("[data-arf-slot]").length;
+      const box = document.querySelector('#drawer [data-arf-field="messageButton"]');
+      if (!box) return { noRow: true, before };
+      box.click();
+      await new Promise((r) => setTimeout(r, 700));
+      return {
+        before,
+        bar: document.querySelectorAll('[data-arf-slot="bar"]').length,
+        msg: document.querySelectorAll('[data-arf-slot="message"]').length,
+        rows: document.querySelectorAll(".arf-slot-row").length,
+      };
+    });
+    ok("the panel has a row for the message button", !out.noRow, JSON.stringify(out));
+    ok("all three are up before it is switched", out.before === 3, JSON.stringify(out));
+    ok("switching it off takes the message buttons away", out.msg === 0 && out.rows === 0, JSON.stringify(out));
+    ok("and leaves the toolbar one alone", out.bar === 1, JSON.stringify(out));
+  });
+
+  // Teardown. Anything left behind outlives the extension being switched off.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const before = document.querySelectorAll("[data-arf-slot]").length;
+      window.__teardown();
+      await new Promise((r) => setTimeout(r, 120));
+      return {
+        before,
+        after: document.querySelectorAll("[data-arf-slot]").length,
+        rows: document.querySelectorAll(".arf-slot-row").length,
+      };
+    });
+    ok("the buttons are on the page to begin with", out.before === 3, JSON.stringify(out));
+    ok("and teardown leaves none of them behind", out.after === 0 && out.rows === 0, JSON.stringify(out));
+  });
+}
+
 console.log("\nswitching on a setting with nowhere to put its answer");
 {
   // A prompt saved before the worn block existed does not carry it. Turning the
