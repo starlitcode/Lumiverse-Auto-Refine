@@ -5391,12 +5391,19 @@ console.log("\ndescriptions behind a ?");
     ["UI Scale 0.8", "body{zoom:0.8}", { width: 420, height: 900 }],
     ["UI Scale 1.5", "body{zoom:1.5}", { width: 420, height: 900 }],
     ["larger host text", "#drawer{font-size:19px}", { width: 420, height: 900 }],
+    // A panel narrower than the screen, which is what the tab is on a phone. The
+    // cap used to be room on the screen, so a description came out wider than
+    // the panel holding it and hung off the side: on screen, and nowhere near
+    // the setting it belonged to.
+    ["narrow panel on a phone", "#drawer{width:290px}", { width: 420, height: 900 }],
   ]) {
     await inTab(browser, { css: css, viewport: viewport, touch: true }, async (page) => {
       let checked = 0;
       const covering = [];
       let offscreen = 0;
       let moved = 0;
+      const wider = [];
+      const outside = [];
       for (const t of TABS) {
         await goTab(page, t);
         const r = await page.evaluate(async () => {
@@ -5405,7 +5412,7 @@ console.log("\ndescriptions behind a ?");
           const over = (a, b) =>
             !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right);
           const qs = [...document.querySelectorAll("#drawer .arf-q")];
-          const out = { n: 0, covering: [], offscreen: 0, moved: 0 };
+          const out = { n: 0, covering: [], offscreen: 0, moved: 0, wider: [], outside: [] };
           for (const q of qs) {
             q.scrollIntoView({ block: "center" });
             await frame();
@@ -5425,10 +5432,28 @@ console.log("\ndescriptions behind a ?");
             out.moved = Math.max(out.moved, Math.abs(Math.round(row.getBoundingClientRect().top - was)));
             const pr = pop.getBoundingClientRect();
             if (getComputedStyle(pop).display !== "none") {
-              if (over(pr, row.getBoundingClientRect()))
-                out.covering.push((row.textContent || "").trim().slice(0, 28));
+              const rr = row.getBoundingClientRect();
+              if (over(pr, rr)) out.covering.push((row.textContent || "").trim().slice(0, 28));
               if (pr.left < -1 || pr.right > innerWidth + 1 || pr.top < -1 || pr.bottom > innerHeight + 1)
                 out.offscreen++;
+              // No wider than the setting it describes, and inside the panel it
+              // opened from. Being on screen is not enough: the panel is
+              // narrower than the screen, so a description can clear the screen
+              // edge and still sit half off the panel.
+              //
+              // Only rows that are actually drawn. A row inside a shut section
+              // has no box at all, and there is nothing for a description to be
+              // sized to, which is also why the real thing falls back to the
+              // screen there.
+              const dr = document.getElementById("drawer").getBoundingClientRect();
+              if (rr.width > 0) {
+                if (pr.width > rr.width + 1)
+                  out.wider.push(Math.round(pr.width) + " over " + Math.round(rr.width));
+                if (pr.left < dr.left - 1 || pr.right > dr.right + 1)
+                  out.outside.push(
+                    Math.round(pr.left) + ".." + Math.round(pr.right) + " in " + Math.round(dr.left) + ".." + Math.round(dr.right),
+                  );
+              }
             }
             pop.click();
             await frame();
@@ -5439,10 +5464,14 @@ console.log("\ndescriptions behind a ?");
         covering.push(...r.covering);
         offscreen += r.offscreen;
         moved = Math.max(moved, r.moved);
+        wider.push(...r.wider);
+        outside.push(...r.outside);
       }
       ok(label + ": none of " + checked + " descriptions cover their row", covering.length === 0, covering.slice(0, 4));
       ok(label + ": none open off the screen", offscreen === 0, "off screen " + offscreen);
       ok(label + ": opening one moves nothing", moved === 0, "moved " + moved);
+      ok(label + ": none are wider than their row", wider.length === 0, wider.slice(0, 4));
+      ok(label + ": none hang off the panel", outside.length === 0, outside.slice(0, 4));
     });
   }
 

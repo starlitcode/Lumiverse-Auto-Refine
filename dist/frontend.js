@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.8.0";
+const VERSION = "1.8.1";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -4170,18 +4170,6 @@ export function setup(ctx, overrides) {
         (document.body || document.documentElement).appendChild(box);
         const vw = vpW();
         const vh = vpH();
-        // The cap is room on the screen; width is written in the element's own
-        // units, and under a host applying its UI Scale as a zoom those are not the
-        // same. At 1.5 a cap of 300 rendered as 450 and ran off the side of a phone.
-        // So it is set once, measured, and set again against however much the host
-        // is scaling. Without a zoom the second pass divides by one and changes
-        // nothing.
-        const want = Math.min(300, vw - 24);
-        box.style.width = want + "px";
-        const first = box.getBoundingClientRect();
-        const zoom = box.offsetWidth > 0 ? first.width / box.offsetWidth : 1;
-        if (zoom > 0.01 && Math.abs(zoom - 1) > 0.01)
-            box.style.width = Math.floor(want / zoom) + "px";
         // Measured from the whole row, not from the "?" inside it. The button is
         // 18px tall and sits partway down a row that can be two lines high, so
         // hanging the description off the button would cover the setting it is
@@ -4190,6 +4178,35 @@ export function setup(ctx, overrides) {
         // assumed in advance.
         const row = (anchor.closest && anchor.closest("[data-arf-row]")) || anchor;
         const r = row.getBoundingClientRect();
+        // No wider than the setting it belongs to.
+        //
+        // The cap used to be room on the screen, which is the wrong thing to
+        // measure: the panel is a modal narrower than the screen, so 300 on a phone
+        // came out wider than the panel and hung off the side of it. Sized to the
+        // row instead, it lands in the same column as the setting with the panel's
+        // own gutter either side, which is what makes it read as belonging to that
+        // row rather than floating over everything.
+        //
+        // The row is the whole width of the panel, so on a wide screen this is the
+        // 300 cap as before and nothing changes there.
+        //
+        // Falling back to the screen where no row was found, since without one the
+        // anchor is the "?" itself and a description eighteen pixels wide is not a
+        // description.
+        const WIDEST = 300;
+        const roomW = row !== anchor && r.width > 180 ? Math.min(r.width, vw - 24) : vw - 24;
+        // Width is written in the element's own units, and under a host applying
+        // its UI Scale as a zoom those are not the screen units the row was
+        // measured in. At 1.5 a cap of 300 renders as 450, which runs off the side
+        // of a phone. So it is set once, measured, and set again against however
+        // much the host is scaling. Without a zoom the second pass divides by one
+        // and changes nothing.
+        const want = Math.min(WIDEST, roomW);
+        box.style.width = want + "px";
+        const first = box.getBoundingClientRect();
+        const zoom = box.offsetWidth > 0 ? first.width / box.offsetWidth : 1;
+        if (zoom > 0.01 && Math.abs(zoom - 1) > 0.01)
+            box.style.width = Math.floor(want / zoom) + "px";
         // Measured as it lands on screen, in the same units as the row's rect.
         const got = box.getBoundingClientRect();
         const h = got.height || box.offsetHeight || 0;
