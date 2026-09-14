@@ -7094,9 +7094,17 @@ export function setup(ctx, overrides) {
         }
         sel.value = setupPick;
         sel.addEventListener("change", () => {
+            const was = setupPick;
             setupPick = sel.value;
             setupName = sel.value;
             setupSaid = null;
+            // Picking loads it, the same as the presets above. Before this, picking
+            // moved the name into the box and left the Model tab alone, so Update
+            // selected wrote whatever was set over the setup that had just been
+            // picked.
+            const now = setups.find((x) => x.name === sel.value);
+            if (now)
+                loadSetup(now, was);
             paint();
         });
         wrap.appendChild(sel);
@@ -7112,7 +7120,10 @@ export function setup(ctx, overrides) {
         });
         wrap.appendChild(nameIn);
         const row = el("div", "arf-row");
-        const load = button("Load", false);
+        // Picking already loads, so this is for loading the one already picked a
+        // second time, which is how you throw away changes and get the saved
+        // numbers back.
+        const load = button("Load it again", false);
         load.setAttribute("data-arf-setup", "load");
         load.disabled = !chosen();
         load.style.opacity = load.disabled ? "0.45" : "1";
@@ -7120,9 +7131,21 @@ export function setup(ctx, overrides) {
             const one = chosen();
             if (!one)
                 return;
-            const took = applySetup(one);
-            setupSaid = took ? "Loaded " + one.name + "." : "There was nothing in that setup to load.";
-            log("loaded the model setup " + one.name, true);
+            loadSetup(one);
+            paint();
+        });
+        const putBack = button("Put it back", false);
+        putBack.setAttribute("data-arf-setup", "undo");
+        putBack.addEventListener("click", () => {
+            const back = setupUndo;
+            if (!back)
+                return;
+            applySetup({ name: "", at: 0, settings: back.settings });
+            setupPick = back.pick;
+            setupName = back.pick;
+            setupUndo = null;
+            setupSaid = "Put back what was here before.";
+            log("put back what the model setup replaced", true);
             paint();
         });
         const asNew = button("Save as new", false);
@@ -7143,6 +7166,7 @@ export function setup(ctx, overrides) {
             setups = setups.slice(-40);
             saveSetups();
             setupPick = name;
+            setupUndo = null;
             setupSaid = "Saved " + name + ".";
             paint();
         });
@@ -7157,6 +7181,7 @@ export function setup(ctx, overrides) {
             one.settings = setupFromNow();
             one.at = Date.now();
             saveSetups();
+            setupUndo = null;
             setupSaid = "Updated " + one.name + ".";
             paint();
         });
@@ -7207,6 +7232,8 @@ export function setup(ctx, overrides) {
                 paint();
             });
         });
+        if (setupUndo)
+            row.appendChild(putBack);
         row.appendChild(load);
         row.appendChild(asNew);
         row.appendChild(update);
@@ -8686,6 +8713,12 @@ export function setup(ctx, overrides) {
     // was left in the box from the last one looked at.
     let presetSetup = "";
     let presetSaid = null;
+    // What the panel held before the last pick loaded a preset over it, so a pick
+    // made to see what is in a preset can be taken back. One step, not a history:
+    // anyone wanting the step before that has the preset itself to load again.
+    // Cleared by a save, since Put it back after saving would mean two different
+    // things at once.
+    let presetUndo = null;
     // The two that ship with it, offered alongside your own. They are not stored
     // and cannot be renamed or deleted, so they are always there to go back to.
     function builtIn() {
@@ -8739,6 +8772,9 @@ export function setup(ctx, overrides) {
     let setups = [];
     let setupPick = "";
     let setupName = "";
+    // The Model tab as it stood before the last pick loaded a setup over it. Same
+    // one step back the presets get, for the same reason.
+    let setupUndo = null;
     let setupSaid = null;
     function cleanSetups(list) {
         return (Array.isArray(list) ? list : [])
@@ -8987,6 +9023,62 @@ export function setup(ctx, overrides) {
             persist(true);
         return took;
     }
+    // Loading a preset, from a pick or from the button. One function, because a
+    // pick that did a different thing from the button is how the panel and the
+    // picker come apart in the first place.
+    //
+    // The state it replaces is kept first, so a pick made to look inside a preset
+    // is not a one-way door.
+    // wasPick is the picker's value before the caller changed it. The change
+    // handler sets presetPick first, so reading it here would snapshot the preset
+    // being loaded and leave Put it back pointing at the thing it just undid.
+    function loadPreset(p, wasPick) {
+        const before = {
+            settings: presetFromNow(),
+            setup: setupFromNow(),
+            pick: wasPick === undefined ? presetPick : wasPick,
+        };
+        const took = applyPreset(p);
+        // Taking one of the eight marks them as seen. Changing them later is then
+        // worth a line, and changing them for somebody who has never touched one
+        // is not.
+        if (took && isBuiltIn(p.name))
+            markShippedSeen();
+        let alsoSaid = "";
+        const wants = String(p.setup || "");
+        if (wants) {
+            const one = setups.find((x) => x.name === wants);
+            if (one) {
+                applySetup(one);
+                alsoSaid = " Model setup " + wants + " went on with it.";
+                log("loaded the model setup " + wants + " with the preset", true);
+            }
+            else {
+                // Named but not here, which is what a shared preset looks like. Said
+                // out loud rather than passed over: the reader picked a preset that
+                // expects a particular model, and is now running it on whatever was
+                // already set.
+                alsoSaid =
+                    " It asks for the model setup " + wants + ", which is not saved on this device.";
+            }
+        }
+        // Nothing changed means nothing to put back, and an offer to undo a load
+        // that did nothing reads as though something happened.
+        presetUndo = took ? before : null;
+        presetSaid = took
+            ? "Loaded " + p.name + "." + alsoSaid
+            : "There was nothing in that preset to load." + alsoSaid;
+        log("loaded the preset " + p.name, true);
+    }
+    // Loading a model setup, from a pick or from the button, keeping what it
+    // replaces so the pick can be taken back.
+    function loadSetup(one, wasPick) {
+        const before = { settings: setupFromNow(), pick: wasPick === undefined ? setupPick : wasPick };
+        const took = applySetup(one);
+        setupUndo = took ? before : null;
+        setupSaid = took ? "Loaded " + one.name + "." : "There was nothing in that setup to load.";
+        log("loaded the model setup " + one.name, true);
+    }
     function buildPresetCard() {
         const wrap = card("Presets", "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
         const sel = document.createElement("select");
@@ -9053,11 +9145,17 @@ export function setup(ctx, overrides) {
         }
         sel.value = presetPick;
         sel.addEventListener("change", () => {
+            const was = presetPick;
             presetPick = sel.value;
             presetName = sel.value;
             const now = allPresets().find((p) => p.name === sel.value);
             presetSetup = String((now && now.setup) || "");
             presetSaid = null;
+            // Picking loads it. Before this, picking moved the name into the box and
+            // left the prompt alone, so Update selected wrote whatever was on screen
+            // over the preset that had just been picked, and the preset was gone.
+            if (now)
+                loadPreset(now, was);
             paint();
         });
         wrap.appendChild(sel);
@@ -9126,7 +9224,11 @@ export function setup(ctx, overrides) {
         withSetup.appendChild(shippedSaid);
         wrap.appendChild(withSetup);
         const row = el("div", "arf-row");
-        const load = button("Load", false);
+        // Picking already loads, so this is only for loading the one already picked
+        // a second time, which is how you throw away edits and get the saved
+        // wording back. Named for that, because "Load" next to a picker that loads
+        // reads as the thing you have to press to make the pick happen.
+        const load = button("Load it again", false);
         load.setAttribute("data-arf-preset", "load");
         load.disabled = !chosen();
         load.style.opacity = load.disabled ? "0.45" : "1";
@@ -9134,34 +9236,28 @@ export function setup(ctx, overrides) {
             const p = chosen();
             if (!p)
                 return;
-            const took = applyPreset(p);
-            // Taking one of the eight marks them as seen. Changing them later is then
-            // worth a line, and changing them for somebody who has never touched one
-            // is not.
-            if (took && isBuiltIn(p.name))
-                markShippedSeen();
-            let alsoSaid = "";
-            const wants = String(p.setup || "");
-            if (wants) {
-                const one = setups.find((x) => x.name === wants);
-                if (one) {
-                    applySetup(one);
-                    alsoSaid = " Model setup " + wants + " went on with it.";
-                    log("loaded the model setup " + wants + " with the preset", true);
-                }
-                else {
-                    // Named but not here, which is what a shared preset looks like. Said
-                    // out loud rather than passed over: the reader picked a preset that
-                    // expects a particular model, and is now running it on whatever was
-                    // already set.
-                    alsoSaid =
-                        " It asks for the model setup " + wants + ", which is not saved on this device.";
-                }
-            }
-            presetSaid = took
-                ? "Loaded " + p.name + "." + alsoSaid
-                : "There was nothing in that preset to load." + alsoSaid;
-            log("loaded the preset " + p.name, true);
+            loadPreset(p);
+            paint();
+        });
+        // Only there when a load has something behind it. A button offering to put
+        // back nothing is worse than no button.
+        const putBack = button("Put it back", false);
+        putBack.setAttribute("data-arf-preset", "undo");
+        putBack.addEventListener("click", () => {
+            const back = presetUndo;
+            if (!back)
+                return;
+            applyPreset({ name: "", at: 0, settings: back.settings });
+            applySetup({ name: "", at: 0, settings: back.setup });
+            // The picker goes back with it. Leaving it on the preset that was just
+            // undone is the same mismatch this whole change is here to stop.
+            presetPick = back.pick;
+            presetName = back.pick;
+            const was = allPresets().find((x) => x.name === back.pick);
+            presetSetup = String((was && was.setup) || "");
+            presetUndo = null;
+            presetSaid = "Put back what was here before.";
+            log("put back what the preset replaced", true);
             paint();
         });
         const asNew = button("Save as new", false);
@@ -9187,6 +9283,7 @@ export function setup(ctx, overrides) {
             presets = presets.slice(-60);
             savePresets();
             presetPick = name;
+            presetUndo = null;
             presetSaid = "Saved " + name + ".";
             paint();
         });
@@ -9202,6 +9299,7 @@ export function setup(ctx, overrides) {
             p.setup = presetSetup || undefined;
             p.at = Date.now();
             savePresets();
+            presetUndo = null;
             presetSaid = "Updated " + p.name + ".";
             paint();
         });
@@ -9253,6 +9351,8 @@ export function setup(ctx, overrides) {
                 paint();
             });
         });
+        if (presetUndo)
+            row.appendChild(putBack);
         row.appendChild(load);
         row.appendChild(asNew);
         row.appendChild(update);

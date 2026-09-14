@@ -375,7 +375,15 @@ The link lives on a preset you saved. The eight that ship with the extension are
 
 It is stored as the setup's name rather than its values, which is what lets a preset still be shared: a setup holds a connection id, and an id from another account names nothing on yours. If you load a preset that asks for a setup this device does not have, the preset still loads and the card tells you which setup it wanted.
 
-The buttons work the way you would expect: **Load** switches to the preset in the list, **Save as new** stores the current setup under the name in the box, **Update selected** overwrites the chosen one, **Rename selected** renames it, and **Delete** removes it. Loading takes effect at once and is saved, so there is no separate Save step.
+**Picking a preset loads it.** The moment you choose one in the list, its rules are on screen and in effect. Nothing is saved separately, so there is no Save step to remember.
+
+That matters because of what used to happen without it. Picking a preset put its name in the box and left your rules alone, so the panel showed one preset while the picker named another. Pressing **Update selected** then wrote what was on screen over the preset you had just picked, and the preset you overwrote was gone.
+
+**Put it back** appears next to the buttons after a pick has loaded something over what you had. One press restores exactly what was on screen before, the picker included, so you can look inside a preset without losing work you had not saved. It only shows when there is something to put back, and it goes once you save.
+
+The rest work the way you would expect: **Load it again** reloads the preset already picked, which is how you throw away edits and get the saved wording back, **Save as new** stores what is on screen under the name in the box, **Update selected** overwrites the chosen one, **Rename selected** renames it, and **Delete** removes it.
+
+The **Model setups** card below works exactly the same way, for the same reason.
 
 Presets live in your browser. To move them to another device, use the export below, which includes them.
 

@@ -10,6 +10,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-09-14_
 
+### Fixed
+
+- **Picking a preset loads it now, so a save can no longer land on the wrong one.** Picking one put its name in the name box and left your rules exactly as they were. The panel then showed one preset while the picker named another, and pressing **Update selected** wrote what was on screen over the preset you had just picked. The preset you overwrote was gone, with nothing to get it back from.
+
+  Choosing one in the list loads it straight away. What you are looking at always matches what the picker says, which is what makes **Update selected** safe to press.
+
+  **Put it back** appears beside the buttons after a pick has loaded over something. One press restores exactly what was there before, the picker included, so looking inside a preset cannot cost you work you had not saved yet. It only shows when there is something to put back.
+
+  **Load** is now **Load it again**, since picking already loads. Its job is reloading the preset you are already on, which is how you throw away edits and get the saved wording back.
+
+  The **Model setups** card had the same fault and got the same fix.
+
 ### Changed
 
 - **The two chat buttons no longer say where on screen they end up.** Their names and descriptions said one goes at the end of Lumiverse's row of chat buttons and the other sits under the message text. Both were true of a stock Lumiverse, and neither is something this extension decides. A theme is CSS and can put anything anywhere, so anything naming a position is wrong for whoever moved it.

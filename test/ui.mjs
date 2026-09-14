@@ -6887,6 +6887,217 @@ console.log("\nthe rows that only appear when switched on, at both sizes");
   }
 }
 
+console.log("\npicking a preset loads it, so a save cannot land on the wrong one");
+{
+  // The bug: picking moved the name into the box and left the prompt alone, so
+  // the panel showed one preset's rules while the picker named another. Update
+  // selected then wrote what was on screen over the preset just picked, and the
+  // preset it overwrote was gone with no way back.
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+
+    const setBlock = (text) =>
+      page.evaluate((t) => {
+        const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+        ta.value = t;
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        ta.dispatchEvent(new Event("blur", { bubbles: true }));
+      }, text);
+    const saveAs = (name) =>
+      page.evaluate((n) => {
+        const box = document.querySelector('#drawer [data-arf-field="presetName"]');
+        box.value = n;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="new"]').click();
+      }, name);
+    const pick = (name) =>
+      page.evaluate((n) => {
+        const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+        sel.value = n;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }, name);
+    const blockText = () =>
+      page.evaluate(
+        () => document.querySelector('#drawer [data-arf-field^="blocktext:"]').value,
+      );
+
+    await setBlock("<my_rule>ALPHA</my_rule>");
+    await saveAs("Alpha");
+    await settle(page);
+    await setBlock("<my_rule>BETA</my_rule>");
+    await saveAs("Beta");
+    await settle(page);
+
+    // Loads are forced with the button through this part, so the same check
+    // runs against a build where picking does not load and still gets each
+    // preset's real contents on screen to compare.
+    const forceLoad = (name) =>
+      page
+        .evaluate((n) => {
+          const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+          sel.value = n;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        }, name)
+        .then(() => settle(page))
+        .then(() =>
+          page.evaluate(() =>
+            document.querySelector('#drawer [data-arf-preset="load"]').click(),
+          ),
+        )
+        .then(() => settle(page));
+
+    // Standing on Alpha's rules.
+    await forceLoad("Alpha");
+    ok("picking one loads its rules", (await blockText()) === "<my_rule>ALPHA</my_rule>", await blockText());
+
+    // The move that used to destroy a preset: Alpha on screen, pick Beta, save.
+    await pick("Beta");
+    await settle(page);
+    const afterPick = await blockText();
+    ok("picking the other one loads that one instead", afterPick === "<my_rule>BETA</my_rule>", afterPick);
+
+    await page.evaluate(() =>
+      document.querySelector('#drawer [data-arf-preset="update"]').click(),
+    );
+    await settle(page);
+    await forceLoad("Alpha");
+    await forceLoad("Beta");
+    const betaNow = await blockText();
+    ok(
+      "and updating it writes its own rules back, not the ones it replaced",
+      betaNow === "<my_rule>BETA</my_rule>",
+      betaNow,
+    );
+
+    // Put it back, for a pick made to see what was in there.
+    await setBlock("<my_rule>UNSAVED</my_rule>");
+    await settle(page);
+    await pick("Alpha");
+    await settle(page);
+    ok("a pick over unsaved work loads the preset", (await blockText()) === "<my_rule>ALPHA</my_rule>");
+    const undoThere = await page.evaluate(
+      () => !!document.querySelector('#drawer [data-arf-preset="undo"]'),
+    );
+    ok("and offers to put it back", undoThere);
+    if (undoThere) {
+      await page.evaluate(() =>
+        document.querySelector('#drawer [data-arf-preset="undo"]').click(),
+      );
+      await settle(page);
+    }
+    const restored = await blockText();
+    ok("which brings the unsaved work back", restored === "<my_rule>UNSAVED</my_rule>", restored);
+    const pickNow = await page.evaluate(
+      () => document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+    );
+    ok("and takes the picker back with it", pickNow === "Beta", pickNow);
+    const undoGone = await page.evaluate(
+      () => !!document.querySelector('#drawer [data-arf-preset="undo"]'),
+    );
+    ok("with nothing left to put back", !undoGone);
+  });
+  for (const e of errors) ok("no console errors", false, e);
+  if (!errors.length) ok("no console errors", true);
+}
+
+console.log("\npicking a model setup loads it, the same as a preset");
+{
+  // The presets card and the setups card had the same fault, one above the
+  // other. Fixed in both, and checked in both, because a fix that landed on
+  // one of two identical cards is the kind that gets found by a user.
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+
+    const setWait = (n) =>
+      page.evaluate((v) => {
+        const el = document.querySelector('[data-arf-field="timeoutSecs"]');
+        el.value = String(v);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        el.dispatchEvent(new Event("blur", { bubbles: true }));
+      }, n);
+    const wait = () =>
+      page.evaluate(
+        () => document.querySelector('[data-arf-field="timeoutSecs"]').value,
+      );
+    const saveAs = (name) =>
+      page.evaluate((n) => {
+        const box = document.querySelector('#drawer [data-arf-field="setupName"]');
+        box.value = n;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-setup="new"]').click();
+      }, name);
+    const pick = (name) =>
+      page.evaluate((n) => {
+        const sel = document.querySelector('#drawer [data-arf-field="setupPick"]');
+        sel.value = n;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }, name);
+    const forceLoad = async (name) => {
+      await pick(name);
+      await settle(page);
+      await page.evaluate(() =>
+        document.querySelector('#drawer [data-arf-setup="load"]').click(),
+      );
+      await settle(page);
+    };
+
+    await setWait(111);
+    await settle(page);
+    await saveAs("Slow");
+    await settle(page);
+    await setWait(222);
+    await settle(page);
+    await saveAs("Fast");
+    await settle(page);
+
+    await forceLoad("Slow");
+    ok("picking one loads its numbers", (await wait()) === "111", await wait());
+
+    await pick("Fast");
+    await settle(page);
+    const afterPick = await wait();
+    ok("picking the other one loads that one instead", afterPick === "222", afterPick);
+
+    await page.evaluate(() =>
+      document.querySelector('#drawer [data-arf-setup="update"]').click(),
+    );
+    await settle(page);
+    await forceLoad("Slow");
+    await forceLoad("Fast");
+    const fastNow = await wait();
+    ok(
+      "and updating it writes its own numbers back, not the ones it replaced",
+      fastNow === "222",
+      fastNow,
+    );
+
+    await setWait(333);
+    await settle(page);
+    await pick("Slow");
+    await settle(page);
+    ok("a pick over unsaved changes loads the setup", (await wait()) === "111", await wait());
+    const undoThere = await page.evaluate(
+      () => !!document.querySelector('#drawer [data-arf-setup="undo"]'),
+    );
+    ok("and offers to put it back", undoThere);
+    if (undoThere) {
+      await page.evaluate(() =>
+        document.querySelector('#drawer [data-arf-setup="undo"]').click(),
+      );
+      await settle(page);
+    }
+    const restored = await wait();
+    ok("which brings the unsaved changes back", restored === "333", restored);
+    const pickNow = await page.evaluate(
+      () => document.querySelector('#drawer [data-arf-field="setupPick"]').value,
+    );
+    ok("and takes the picker back with it", pickNow === "Fast", pickNow);
+  });
+  for (const e of errors) ok("no console errors", false, e);
+  if (!errors.length) ok("no console errors", true);
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
