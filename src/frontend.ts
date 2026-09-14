@@ -9474,6 +9474,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   //
   // The state it replaces is kept first, so a pick made to look inside a preset
   // is not a one-way door.
+  //
   // wasPick is the picker's value before the caller changed it. The change
   // handler sets presetPick first, so reading it here would snapshot the preset
   // being loaded and leave Put it back pointing at the thing it just undid.
@@ -9826,7 +9827,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (which) wrap.appendChild(note(which.what));
       wrap.appendChild(
         note(
-          "One of the ones that ship with the extension. Load it, change it however you like, then save it under a name of your own.",
+          "One of the ones that ship with the extension. Picking it loaded it, so change it however you like and save it under a name of your own.",
         ),
       );
     }
