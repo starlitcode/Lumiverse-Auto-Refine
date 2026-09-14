@@ -8013,13 +8013,13 @@ export function setup(ctx, overrides) {
         }));
         wrap.appendChild(fieldRow({
             key: "barButton",
-            label: "A button in the row above the input box",
+            label: "A button in the chat's row of controls",
             type: "bool",
             hint: "One tap refines the latest reply. It goes in Lumiverse's own row of chat buttons, in the place the app leaves there for extensions.",
         }));
         wrap.appendChild(fieldRow({
             key: "messageButton",
-            label: "A button under every message",
+            label: "A button on every message",
             type: "bool",
             hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It goes in the place Lumiverse leaves for extensions inside each message.",
         }));

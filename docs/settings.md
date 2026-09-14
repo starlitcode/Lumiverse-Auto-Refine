@@ -106,9 +106,9 @@ Three things never move, whichever tab you left open, because they are what you 
 
   A refine of your draft asks the chat for nothing, so it works in a chat the panel is still working out, and outside a chat entirely. Switching Auto Refine off, here or everywhere, still stops it.
 
-  **A button in the row above the input box** goes in Lumiverse's own row of chat buttons, in the place the app leaves there for extensions. One tap refines the latest reply, the same as a tap on the floating button.
+  **A button in the chat's row of controls** goes in Lumiverse's own row of chat buttons, in the place the app leaves there for extensions. One tap refines the latest reply, the same as a tap on the floating button.
 
-  **A button under every message** refines that message in one tap. It is the only way to refine a message that is not the latest without selecting all of it first, and it works on your own messages as well as on replies. On the greeting it says the greeting is never refined, which is true of every other way in too.
+  **A button on every message** refines that message in one tap. It is the only way to refine a message that is not the latest without selecting all of it first, and it works on your own messages as well as on replies. On the greeting it says the greeting is never refined, which is true of every other way in too.
 
   It goes in the place Lumiverse leaves for extensions inside the message rather than among the app's own message buttons. Both of these buttons are drawn in the places the app hands out, so a Lumiverse update that moves its own controls does not take them with it.
 

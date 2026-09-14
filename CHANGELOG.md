@@ -12,9 +12,11 @@ _2026-09-14_
 
 ### Changed
 
-- **The two chat buttons no longer say where on screen they end up.** Their descriptions said one goes at the end of Lumiverse's row of chat buttons and the other sits under the message text. Both were true of a stock Lumiverse, and neither is something this extension decides. A theme is CSS and can put anything anywhere, so a description naming a position is wrong for anyone who moved it.
+- **The two chat buttons no longer say where on screen they end up.** Their names and descriptions said one goes at the end of Lumiverse's row of chat buttons and the other sits under the message text. Both were true of a stock Lumiverse, and neither is something this extension decides. A theme is CSS and can put anything anywhere, so anything naming a position is wrong for whoever moved it.
 
-  They now name the place the app hands them and stop there. Neither button has moved, and nothing about how they work has changed.
+  **A button in the row above the input box** is now **A button in the chat's row of controls**, and **A button under every message** is now **A button on every message**. Both descriptions name the place the app hands the button and stop there.
+
+  Only the wording changed. Neither button has moved, both are still where you left them on the Setup tab, and switching either on or off works exactly as it did.
 
 ## 1.9.1
 
