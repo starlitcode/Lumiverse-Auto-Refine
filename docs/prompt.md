@@ -166,7 +166,7 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 This is worth more than it sounds. Without it, a model that opens with "Sure! Here is the rewritten message:" has its whole answer dropped, because saving that line into your chat is worse than saving nothing. With it, the sentence outside the tags is simply ignored and the rewrite lands. It also catches an answer that ran out of room: an opening tag with nothing closing it means the rewrite was cut off, and a half-written message is never saved.
 
-**Asking for the tags is your prompt's job, not a macro's.** The prompts that ship with it ask in the **How to answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` filling it in for you, and that is the point: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
+**Asking for the tags is your prompt's job, not a macro's.** The prompts that ship with it ask in the **How to Answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` filling it in for you, and that is the point: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
 
 **Take the answer from between the tags**, under Limits, is the reading half and is on by default. It decides what is done with an answer, never what is asked for. Off, the whole answer is taken as the rewrite and the older checks catch a preamble instead.
 
@@ -197,7 +197,7 @@ Both tags are shouted. A model skimming a long prompt for the shape of the answe
 
 Nothing outside the `<REFINED>` tags is ever saved into your chat. That makes the space around them somewhere a prompt can safely ask for anything it likes, and the obvious thing to ask for is a report: what was cut, what was added, what it chose to leave.
 
-Add the tags you want to the **How to answer** block, in your own words. For example:
+Add the tags you want to the **How to Answer** block, in your own words. For example:
 
 ```
 Before the rewrite, list what you changed:

@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.9.1
+
+_2026-09-13_
+
+### Fixed
+
+- **The description of A button under every message gave the wrong reason for where it sits.** It said Lumiverse leaves no room inside its own row of message buttons. That is not the reason. The button goes under the message text because that is where it is wanted, and [Settings](docs/settings.md) says the same now.
+
+  Nothing about the button has changed. It is in the same place, and it works the same way.
+
 ## 1.9.0
 
 _2026-09-13_
