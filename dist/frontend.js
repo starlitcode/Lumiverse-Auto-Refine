@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.9.1";
+const VERSION = "1.9.2";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -8015,13 +8015,13 @@ export function setup(ctx, overrides) {
             key: "barButton",
             label: "A button in the row above the input box",
             type: "bool",
-            hint: "One tap refines the latest reply. It goes at the end of Lumiverse's own row of chat buttons, in the place the app leaves there for extensions.",
+            hint: "One tap refines the latest reply. It goes in Lumiverse's own row of chat buttons, in the place the app leaves there for extensions.",
         }));
         wrap.appendChild(fieldRow({
             key: "messageButton",
             label: "A button under every message",
             type: "bool",
-            hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It sits under the message text, above Lumiverse's own row of buttons.",
+            hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It goes in the place Lumiverse leaves for extensions inside each message.",
         }));
         return wrap;
     }
@@ -10147,9 +10147,9 @@ export function setup(ctx, overrides) {
     // those names carry a build hash that changes when Lumiverse rebuilds its
     // CSS.
     //
-    // The message one goes in the footer slot, the last thing inside the message,
-    // which puts it under the message text and directly above the host's own row
-    // of buttons. That is where it is wanted, not the only place it could go.
+    // The message one goes in the footer slot, which the host puts inside the
+    // message. Where either of them lands on screen is not this file's to state:
+    // a theme is CSS and can move anything, so nothing here says above or below.
     const BAR_SLOT = '[data-spindle-mount="chat_actions"]';
     const MSG_SLOT = '[data-spindle-mount="message_footer"]';
     // Set while this is writing into the page, so the watcher below does not

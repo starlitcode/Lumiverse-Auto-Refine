@@ -12,7 +12,7 @@ Each finished reply is sent to a model along with the prompt you wrote, and what
 
 Automatic refining is off until you turn it on. Until then there is a button that refines the latest reply when you press it, and one that goes through every reply in a chat you already have. Refining the draft in your input box is a third, behind a switch of its own, because it is the one part that writes into the box you are typing in.
 
-Select part of a reply and you can refine only that. Two optional buttons put a refine in the chat itself: one at the end of Lumiverse's own row of chat controls, and one under each message that refines that message. Both are off until you ask for them, and both sit in the places the app hands out to extensions.
+Select part of a reply and you can refine only that. Two optional buttons put a refine in the chat itself: one in Lumiverse's own row of chat controls, and one on each message that refines that message. Both are off until you ask for them, and both sit in the places the app hands out to extensions.
 
 Your own messages can be refined too, by hand, never automatically. They get their own prompt, which repairs what went wrong and leaves the writing alone.
 

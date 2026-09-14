@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.9.2
+
+_2026-09-14_
+
+### Changed
+
+- **The two chat buttons no longer say where on screen they end up.** Their descriptions said one goes at the end of Lumiverse's row of chat buttons and the other sits under the message text. Both were true of a stock Lumiverse, and neither is something this extension decides. A theme is CSS and can put anything anywhere, so a description naming a position is wrong for anyone who moved it.
+
+  They now name the place the app hands them and stop there. Neither button has moved, and nothing about how they work has changed.
+
 ## 1.9.1
 
 _2026-09-13_
