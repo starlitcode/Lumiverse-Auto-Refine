@@ -6,6 +6,22 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.10.0
+
+_2026-09-14_
+
+### Added
+
+- **The softening check now reads what the model put in, not only what it took out.** Counting the strong words that went missing only sees half of a toned-down rewrite. The other half is the word that arrives in their place: killed becomes unalived, blood becomes crimson liquid, sex becomes intimacy. A list of those pairs ships with the extension and is read on every refine.
+
+  It only counts when **both halves happen**: the soft word is in the rewrite and was not in your reply, and the blunt word it stands in for was in your reply and is gone. Either on its own proves nothing, since a model can write eliminate about a possibility and a refine can drop the word kill while tightening a line. Needing both is what lets ordinary words like defeat, intimacy and shaft sit on the list without it firing all day.
+
+  One confirmed swap is enough, with no fraction to clear. That is what this half is for: a reply whose only killed came back unalived was softened, and the counting check cannot see it, because one word going is below the floor it needs before it will speak.
+
+  A refused rewrite is refused the same way as any other: your reply is left exactly as it was, and **Ask again when a check fails** covers it if you have that on.
+
+- **Swaps of your own to watch**, under the same switch as the words. One per line as `soft => blunt`. An exported find-and-replace list pastes in as it stands, and a line with nothing on the right is skipped, since a deletion has no pair in it.
+
 ## 1.9.2
 
 _2026-09-14_

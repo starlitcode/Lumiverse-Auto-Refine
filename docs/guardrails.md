@@ -28,6 +28,20 @@ It is built to stay quiet. The built-in list holds only words that are hard to u
 
 That narrowness misses some real softening, and it is the right way round: a missed one leaves you where you already were, while a false one throws away a good rewrite and teaches you to distrust the feature. **Words of your own to watch** is there because you know better than any list what softening looks like in what you write.
 
+### The word that arrives in its place
+
+Counting what left only sees half of it. When a model tones a scene down it does not just take the blunt word out, it puts a softer one in: killed becomes unalived, blood becomes crimson liquid, sex becomes intimacy. The same check reads that end too, from a list of pairs that ships with the extension.
+
+A pair is refused only when **both halves happen**. The soft word has to be in the rewrite and not in your reply, and the blunt word it stands in for has to have been in your reply and gone from the rewrite. Either half on its own proves nothing: a model can write eliminate about a possibility, and a refine can drop the word kill while tightening a line. Together they are the model swapping one for the other.
+
+Needing both is what lets ordinary English sit on the list at all. Half the terms on it, eliminate, defeat, intimacy, folds, shaft, are unremarkable by themselves, and a check that fired on them appearing would fire all day.
+
+One confirmed swap is enough, with no fraction to clear. That is the point of this half: a reply whose only killed came back unalived has been softened, and the counting check above cannot see it, because one strong word going is below the floor it needs before it will speak.
+
+**Swaps of your own to watch** takes lines written the way a word swap is written, `soft => blunt`. An exported find-and-replace list pastes in as it stands. A line with nothing on the right is skipped, since a deletion has no pair in it.
+
+What it cannot catch: a rewrite that keeps every word and drains the scene some other way, by fading out at the moment that mattered or going vague where it was plain. Nothing here reads for that. It can also be wrong in the other direction on an idiom, where a reply said killed the engine and the rewrite says eliminated the noise. That is refused, and refusing it costs you the rewrite rather than your reply, which is the way round this whole page is built.
+
 ## Asking again
 
 **Ask again when a check fails** is 0 by default. A refusal, a preamble or a sanitised rewrite is usually the same model having a bad turn, not a settled answer, and the same request often comes back clean.

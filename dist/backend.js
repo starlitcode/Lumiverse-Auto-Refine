@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.9.2';
+const VERSION = '1.10.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -1550,6 +1550,153 @@ function softenedAway(original, rewrite) {
     const bar = Number.isFinite(softenPct) ? Math.min(100, Math.max(1, softenPct)) : 60;
     return pct >= bar ? gone : [];
 }
+// ---- the other half of a softened reply ----
+// The check above sees strong words leaving. This one sees what arrives in
+// their place, which is the same event read from the other end and a far
+// narrower signal, because it takes both halves before it says anything.
+//
+// A pair is the soft word and the blunt one it stands in for. Softening is
+// called only when the soft word is in the rewrite and was not in the reply,
+// AND one of its blunt partners was in the reply and came out. Either half
+// alone proves nothing: a model can write eliminate about a possibility, and a
+// refine can drop the word kill while tightening a line. Together they are the
+// model swapping one for the other, which is the thing worth catching.
+//
+// Needing both is what lets ordinary English sit on this list at all. Half of
+// these terms, eliminate, defeat, intimacy, folds, shaft, are unremarkable on
+// their own, and a list that fired on them appearing would fire constantly.
+//
+// One confirmed swap is enough. There is no fraction here because there is
+// nothing to average: a reply whose only killed became unalived has been
+// softened, and the count check above cannot see it, since one strong word
+// going is below the floor it needs before it will speak.
+const SOFT_PAIRS = [
+    ['shafts', ['cocks', 'dicks', 'penises']],
+    ['shaft', ['cock', 'dick', 'penis']],
+    ['manhood', ['cock', 'dick', 'penis']],
+    ['defeat', ['kill', 'murder']],
+    ['defeating', ['killing']],
+    ['defeated', ['killed', 'murdered']],
+    ['vanquish', ['murder', 'slaughter']],
+    ['vanquishing', ['murdering', 'slaughtering']],
+    ['vanquished', ['murdered', 'slaughtered']],
+    ['red fluid', ['blood']],
+    ['pass away', ['die', 'bleed out']],
+    ['passing away', ['dying', 'bleeding out']],
+    ['passed away', ['died', 'bled out']],
+    ['intimacy', ['sex', 'fucking']],
+    ['engaging in conflict', ['engaging in violence']],
+    ['engaged in conflict', ['engaged in violence']],
+    ['mistreatment', ['abuse']],
+    ['mistreating', ['abusing']],
+    ['mistreated', ['abused']],
+    ['unalive', ['kill', 'murder']],
+    ['unaliving', ['killing', 'murdering']],
+    ['unalived', ['killed', 'murdered']],
+    ['eliminate', ['kill', 'assassinate']],
+    ['eliminating', ['killing', 'assassinating']],
+    ['eliminated', ['killed', 'assassinated']],
+    ['neutralize', ['kill', 'execute']],
+    ['neutralizing', ['killing', 'executing']],
+    ['neutralized', ['killed', 'executed']],
+    ['crimson liquid', ['blood']],
+    ['coppery liquid', ['blood']],
+    ['vital fluid', ['blood']],
+    ['make love', ['fuck', 'screw']],
+    ['making love', ['fucking', 'screwing']],
+    ['made love', ['fucked', 'screwed']],
+    ['self-pleasure', ['masturbation', 'jerking off', 'fingering']],
+    ['self-pleasuring', ['masturbating', 'jerking off', 'fingering']],
+    ['self-pleasured', ['masturbated', 'jerked off', 'fingered']],
+    ['force oneself', ['rape']],
+    ['forcing oneself', ['raping']],
+    ['forced oneself', ['raped']],
+    ['non-consensual', ['rape', 'forced']],
+    ['physical altercation', ['fight', 'brawl']],
+    ['engaging in a physical altercation', ['fighting']],
+    ['engaged in a physical altercation', ['fought']],
+    ['inebriated', ['drunk', 'wasted']],
+    ['intoxicated', ['drunk', 'high']],
+    ['end their life', ['commit suicide']],
+    ['ending their life', ['committing suicide']],
+    ['ended their life', ['committed suicide']],
+    ['darn', ['damn']],
+    ['heck', ['hell']],
+    ['defile', ['rape']],
+    ['defiling', ['raping']],
+    ['defiled', ['raped']],
+    ['ravish', ['rape', 'fuck']],
+    ['ravishing', ['raping', 'fucking']],
+    ['ravished', ['raped', 'fucked']],
+    ['folds', ['labia', 'pussy lips']],
+];
+// The reader's own, on top of the built-in list. Written the way a swap is
+// written, soft on the left and blunt on the right, so an exported word swap
+// list can be pasted in as it stands.
+let extraPairs = [];
+function setPairs(raw) {
+    const out = [];
+    for (const line of String(raw == null ? '' : raw).split(/\n/)) {
+        const at = line.indexOf('=>');
+        if (at < 0)
+            continue;
+        const soft = line.slice(0, at).trim().toLowerCase();
+        const blunt = line.slice(at + 2).trim().toLowerCase();
+        // A swap list can carry a deletion, which is a soft side and nothing to put
+        // in its place. There is no pair in that, so there is nothing to detect.
+        if (!soft || !blunt)
+            continue;
+        const had = out.filter((x) => x[0] === soft)[0];
+        if (had) {
+            if (had[1].indexOf(blunt) < 0)
+                had[1].push(blunt);
+        }
+        else {
+            out.push([soft, [blunt]]);
+        }
+        if (out.length >= 200)
+            break;
+    }
+    extraPairs = out;
+}
+// Whole words, and phrases as whole words at each end, so intimacy does not
+// match intimacies and shaft does not match shafted. Built through RegExp
+// rather than written as a literal: a term is the reader's text and can carry
+// anything, so it is escaped first.
+function saysIt(text, term) {
+    const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+        return new RegExp('(^|[^a-z0-9])' + safe + '($|[^a-z0-9])', 'i').test(text);
+    }
+    catch (_) {
+        return false;
+    }
+}
+// Returns what was swapped, as "soft for blunt", or an empty list.
+function swappedIn(original, rewrite) {
+    if (!guardSoften)
+        return [];
+    const was = String(original || '').toLowerCase();
+    const now = String(rewrite || '').toLowerCase();
+    if (!was || !now)
+        return [];
+    const found = [];
+    for (const [soft, blunts] of SOFT_PAIRS.concat(extraPairs)) {
+        // Arrived: in the rewrite, and not something the reply already said.
+        if (!saysIt(now, soft) || saysIt(was, soft))
+            continue;
+        for (const blunt of blunts) {
+            // And gone: the reply said it, the rewrite does not.
+            if (!saysIt(was, blunt) || saysIt(now, blunt))
+                continue;
+            found.push(soft + ' for ' + blunt);
+            break;
+        }
+        if (found.length >= 8)
+            break;
+    }
+    return found;
+}
 let guardRefusal = true;
 let guardPreamble = true;
 // How many extra asks a failed check is worth. Zero by default: every retry is
@@ -1726,6 +1873,18 @@ function judgeInner(answer, original) {
             why: 'the rewrite softened the reply, dropping ' +
                 soft.slice(0, 4).join(', ') +
                 (soft.length > 4 ? ' and ' + (soft.length - 4) + ' more' : ''),
+        };
+    // The same failure read from the other end. Kept separate from the count
+    // above because it says something the count cannot: which word went in which
+    // word's place. That is worth putting in front of the reader as it stands.
+    const swapped = swappedIn(orig, text);
+    if (swapped.length)
+        return {
+            ok: false,
+            text: '',
+            why: 'the rewrite softened the reply, putting ' +
+                swapped.slice(0, 3).join(', ') +
+                (swapped.length > 3 ? ' and ' + (swapped.length - 3) + ' more' : ''),
         };
     // Length. A refine that doubles a reply has written new scene, and one that
     // halves it has thrown writing away. Both are judged against what the reader
@@ -3127,6 +3286,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
             softenPct = Number(s.softenPct);
             softenPct = Number.isFinite(softenPct) ? softenPct : 60;
             setStrong(s.softenWords);
+            setPairs(s.softenSwaps);
             retryRefine = Number(s.retryRefine);
             retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
             rateWaits = Number(s.rateWaits);

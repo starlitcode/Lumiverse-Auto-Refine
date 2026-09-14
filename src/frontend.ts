@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.9.2";
+const VERSION = "1.10.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -87,6 +87,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "guardSoften",
       "softenPct",
       "softenWords",
+      "softenSwaps",
       "retryRefine",
       "rateWaits",
       "wrapOutput",
@@ -337,6 +338,7 @@ const CONFIG = {
   guardSoften: true,
   softenPct: 60,
   softenWords: "",
+  softenSwaps: "",
   // Extra asks after a failed check. None by default: somebody who never opened
   // this has not agreed to pay for three refines where they asked for one.
   retryRefine: 0,
@@ -1616,6 +1618,14 @@ const GUARD_FIELDS: Field[] = [
     needs: { key: "guardSoften" },
     under: true,
     hint: "Optional, one per line, added to the built-in list. That list holds only words that are hard to use innocently, so add what softening looks like in what you write.",
+  },
+  {
+    key: "softenSwaps",
+    label: "Swaps of your own to watch",
+    type: "lines",
+    needs: { key: "guardSoften" },
+    under: true,
+    hint: "Optional, one per line as soft => blunt, added to the built-in list. A refine is refused when it puts the soft word in and takes the blunt one out, so both halves have to happen before it counts.",
   },
   {
     key: "retryRefine",

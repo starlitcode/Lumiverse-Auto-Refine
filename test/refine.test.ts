@@ -2087,6 +2087,219 @@ describe("stopping a refine", () => {
 // The failure the other checks cannot see. A softened reply is not a refusal,
 // is the right length, and keeps every protected token. It is only wrong beside
 // the original, which is the one thing nothing else here looks at.
+describe("a rewrite that swapped the word for a softer one", () => {
+  // The count check needs three strong words in the reply before it will speak,
+  // so a reply whose one killed came back unalived walks straight past it. The
+  // pair check is for that: one confirmed swap, named as a swap.
+  const killed = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i go in" },
+    {
+      id: "m2",
+      role: "assistant",
+      content: "She killed him where he stood, and did not look back at the door.",
+    },
+  ];
+
+  test("a euphemism put in where the blunt word came out is refused", async () => {
+    const h = await armed(
+      ["<REFINED>She unalived him where he stood, and did not look back at the door.</REFINED>"],
+      {},
+      killed(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/softened the reply/i);
+    expect(h.skipped().join(" ")).toMatch(/unalived for killed/i);
+  });
+
+  // Both halves, or nothing. These two are the whole reason ordinary English
+  // can sit on the list at all, and each of them fired on an earlier draft that
+  // only looked at one end.
+  test("the soft word arriving on its own is not softening", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She killed him where he stood. It did not eliminate the problem, " +
+          "and she did not look back at the door.</REFINED>",
+      ],
+      {},
+      killed(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("the blunt word leaving on its own is not softening", async () => {
+    const h = await armed(
+      ["<REFINED>She shot him where he stood, and did not look back at the door.</REFINED>"],
+      {},
+      killed(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  // A reply that always said it, and a rewrite that kept it. The model did not
+  // put it there, so there is no swap to find, list or no list.
+  test("a soft word the reply already used is left alone", async () => {
+    const h = await armed(
+      [
+        "<REFINED>The order was to eliminate him. She killed him where he stood, " +
+          "and did not look back at the door.</REFINED>",
+      ],
+      {},
+      [
+        { id: "m0", role: "assistant", content: "The gate stands open." },
+        { id: "m1", role: "user", content: "i go in" },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "The order was to eliminate him, so she killed him where he stood.",
+        },
+      ],
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("whole words only, so a longer word carrying one is not a match", async () => {
+    const h = await armed(
+      ["<REFINED>She killed him where he stood, and the intimacies went unmentioned.</REFINED>"],
+      {},
+      [
+        { id: "m0", role: "assistant", content: "The gate stands open." },
+        { id: "m1", role: "user", content: "i go in" },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "She killed him where he stood, and the sex went unmentioned.",
+        },
+      ],
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("a pair of the reader's own is watched too", async () => {
+    const h = await armed(
+      ["<REFINED>She bested him where he stood, and did not look back at the door.</REFINED>"],
+      { softenSwaps: "bested => killed" },
+      killed(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/bested for killed/i);
+  });
+
+  test("switched off with the rest of the softening check", async () => {
+    const h = await armed(
+      ["<REFINED>She unalived him where he stood, and did not look back at the door.</REFINED>"],
+      { guardSoften: false },
+      killed(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.writes.length).toBe(1);
+  });
+});
+
+// A judgement call over prose is only as good as what it leaves alone, so this
+// runs both directions. The quiet half is the one that matters: a check that
+// fires on ordinary writing gets switched off, and then it catches nothing.
+//
+// Every soft term that is also ordinary English gets a line here, because those
+// are the ones a one-ended check would have fired on.
+describe("the swap check against prose that only looks like softening", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+
+  const quiet: Array<[string, string, string]> = [
+    [
+      "a soft term used in its ordinary sense, in both",
+      "She defeated him in the duel and he bled out on the sand.",
+      "She defeated him in the duel. He bled out on the sand before the horn went.",
+    ],
+    [
+      "eliminate about a possibility, not a person",
+      "He killed the lamp and eliminated every reason to stay.",
+      "He killed the lamp. Every reason to stay was eliminated with it.",
+    ],
+    [
+      "intimacy meaning closeness",
+      "There was an intimacy to the room that she killed with one sentence.",
+      "The room had an intimacy she killed with a single sentence.",
+    ],
+    [
+      "folds of cloth",
+      "Blood ran into the folds of her cloak and would not come out.",
+      "The blood ran down into the folds of her cloak and set there.",
+    ],
+    [
+      "shaft of a weapon",
+      "The shaft of the spear went through him and the blood came fast.",
+      "The spear shaft went through him. The blood came fast after it.",
+    ],
+    [
+      "neutralize in a laboratory",
+      "She neutralized the acid before it ate through the corpse.",
+      "She neutralized the acid before it got through to the corpse.",
+    ],
+    [
+      "a blunt word that simply stayed",
+      "She killed him where he stood, and the blood went everywhere.",
+      "She killed him where he stood. The blood went everywhere after.",
+    ],
+    [
+      "a blunt word swapped for another blunt word",
+      "She killed him where he stood, and did not look back.",
+      "She murdered him where he stood, and did not look back at all.",
+    ],
+    [
+      "tightening that loses nothing on either list",
+      "He was bleeding out on the stones, slowly, before she got the knife free.",
+      "He was bleeding out on the stones before she got the knife free.",
+    ],
+  ];
+
+  for (const [name, was, now] of quiet) {
+    test(name + ", saved", async () => {
+      const h = await armed(["<REFINED>" + now + "</REFINED>"], {}, reply(was));
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.skipped().join(" ")).not.toMatch(/softened the reply/i);
+      expect(h.writes.length).toBe(1);
+    });
+  }
+
+  const softened: Array<[string, string, string]> = [
+    ["kill for unalive", "She killed him where he stood.", "She unalived him where he stood."],
+    ["die for pass away", "He died on the stones before dawn.", "He passed away on the stones before dawn."],
+    ["blood for crimson liquid", "The blood came fast and soaked her sleeve.", "The crimson liquid came fast and soaked her sleeve."],
+    ["sex for intimacy", "They had been talking about the sex for a week.", "They had been talking about the intimacy for a week."],
+    ["fuck for make love", "He said he wanted to fuck her against the door.", "He said he wanted to make love to her against the door."],
+    ["rape for defile", "He was raped in that house and never said so.", "He was defiled in that house and never said so."],
+  ];
+
+  for (const [name, was, now] of softened) {
+    test(name + ", refused", async () => {
+      const h = await armed(["<REFINED>" + now + "</REFINED>"], {}, reply(was));
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.skipped().join(" ")).toMatch(/softened the reply/i);
+      expect(h.writes.length).toBe(0);
+    });
+  }
+});
+
 describe("a rewrite that sanitised the reply", () => {
   const bloody = (): Msg[] => [
     { id: "m0", role: "assistant", content: "The gate stands open." },
