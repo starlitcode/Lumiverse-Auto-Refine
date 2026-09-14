@@ -8008,7 +8008,7 @@ export function setup(ctx, overrides) {
             key: "messageButton",
             label: "A button under every message",
             type: "bool",
-            hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It sits under the message, above Lumiverse's own row of buttons, because the app leaves no room inside that row.",
+            hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It sits under the message text, above Lumiverse's own row of buttons.",
         }));
         return wrap;
     }
@@ -10134,9 +10134,9 @@ export function setup(ctx, overrides) {
     // those names carry a build hash that changes when Lumiverse rebuilds its
     // CSS.
     //
-    // There is no slot inside the host's own row of message buttons, so the
-    // message one goes in the footer slot, which is the last thing inside the
-    // message and sits directly above that row.
+    // The message one goes in the footer slot, the last thing inside the message,
+    // which puts it under the message text and directly above the host's own row
+    // of buttons. That is where it is wanted, not the only place it could go.
     const BAR_SLOT = '[data-spindle-mount="chat_actions"]';
     const MSG_SLOT = '[data-spindle-mount="message_footer"]';
     // Set while this is writing into the page, so the watcher below does not

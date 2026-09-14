@@ -44,7 +44,7 @@ _2026-09-13_
 
   **A button under every message** refines that message. It is the only way to refine a message that is not the latest without selecting all of it first, and it works on your own messages as well as on replies.
 
-  Both sit in the places Lumiverse hands out to extensions, which is the difference between these and the button on every message that came out in an earlier version: that one reached for a row by class name, and those names change whenever Lumiverse rebuilds its CSS. The message one sits under the message, above the app's own row of buttons, because the app leaves no room inside that row.
+  Both sit in the places Lumiverse hands out to extensions, which is the difference between these and the button on every message that came out in an earlier version: that one reached for a row by class name, and those names change whenever Lumiverse rebuilds its CSS. The message one sits under the message text, above the app's own row of buttons rather than among them.
 
 ### Changed
 
