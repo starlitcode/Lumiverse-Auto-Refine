@@ -1693,6 +1693,33 @@ describe("sampler settings", () => {
   });
 });
 
+describe("the backend says which build it is", () => {
+  // The panel prints its own version in a problem report. It can only print
+  // this side's by asking, and the two can differ: a tab open across an update
+  // keeps the frontend it loaded with while the server reloads this one.
+  const manifest = JSON.parse(
+    readFileSync(new URL("../spindle.json", import.meta.url), "utf8"),
+  ).version;
+
+  test("unprompted at startup, for a panel that was already open", async () => {
+    const h = host(chat(), ["x"]);
+    const said = h.sent.filter((m: any) => m.type === "backend_version");
+    expect(said.length).toBe(1);
+    expect(said[0].version).toBe(manifest);
+  });
+
+  test("and on request, for a panel that opened later and missed it", async () => {
+    const h = host(chat(), ["x"]);
+    h.sent.length = 0;
+    await h.front({ type: "get_backend_version", requestId: "r1" });
+    await wait(10);
+    const said = h.sent.filter((m: any) => m.type === "backend_version");
+    expect(said.length).toBe(1);
+    expect(said[0].version).toBe(manifest);
+    expect(said[0].requestId).toBe("r1");
+  });
+});
+
 describe("the backend after a restart", () => {
   test("it announces itself so the panel knows to tell it everything again", async () => {
     const h = host(chat(), ["x"]);

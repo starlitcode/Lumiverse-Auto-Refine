@@ -3032,6 +3032,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     permsAsk = id;
     send({ type: "get_permissions", requestId: id });
   }
+
+  // What the backend says it is running. The two halves ship together and load
+  // separately, so this is not always the version above. Empty until it answers,
+  // which is the honest reading on a build with no backend up.
+  let backendVersion = "";
+  function askBackendVersion() {
+    send({ type: "get_backend_version", requestId: newId() });
+  }
   const hasPerm = (id: string) => !granted || granted.indexOf(id) >= 0;
   function missing(): typeof PERMS {
     const have = granted;
@@ -7969,6 +7977,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     const on = (id: string) => partOn("debugParts", id);
     const lines: string[] = [];
     lines.push("Auto Refine " + VERSION);
+    lines.push(
+      "backend: " +
+        (!backendVersion
+          ? "has not answered"
+          : backendVersion === VERSION
+            ? "the same version"
+            : backendVersion + ", which is not the version above"),
+    );
     lines.push("when: " + new Date().toISOString());
 
     if (on("chat")) {
@@ -11036,7 +11052,18 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (msg.type === "backend_ready") {
             armBackend();
             askPermissions();
+            askBackendVersion();
             send({ type: "list_connections", requestId: newId() });
+            return;
+          }
+          if (msg.type === "backend_version") {
+            const said = typeof msg.version === "string" ? msg.version : "";
+            // Logged only on a change, since this arrives on every panel load
+            // and on every backend restart, and a line saying the halves agree
+            // is one the reader has no use for.
+            if (said && said !== backendVersion && said !== VERSION)
+              log("the backend is running " + said + ", this panel is " + VERSION);
+            backendVersion = said;
             return;
           }
           // Progress from the backend. A model that streams reports as it
@@ -11701,6 +11728,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // looking for.
   startUrlWatch();
   askPermissions();
+  askBackendVersion();
   // After armBackend, so the replies have somewhere to land. Both are
   // fire and forget: the panel is already drawn from the browser's cache, and
   // the account copy repaints it when it arrives.

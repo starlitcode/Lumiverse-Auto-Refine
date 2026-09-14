@@ -74,6 +74,8 @@ Three things never move, whichever tab you left open, because they are what you 
 - **What it has been doing** is the running list, newest first.
 - **Reporting a problem** copies everything somebody would otherwise have to ask you for. **What it carries** decides which parts go in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser. What your blocks actually say is never in it, only their names, roles and macros, so it is safe to paste in public. **Read and edit it first** opens the whole thing so you can take out anything you would rather not post before it is copied.
 
+  The first two lines are always there and cannot be ticked off. They name the version the panel is running and the version the server side is running. Those are usually the same. They can differ if you leave a tab open across an update, and a report that says so saves the first round of questions.
+
 ## Setup
 
 - **This chat** leaves one chat completely alone while every other chat carries on. It is written down in your browser, so it survives a reload, and it is a list of chat ids and nothing else.

@@ -19,6 +19,13 @@
  * it back. A rewrite with no way back is the thing that makes people afraid to
  * turn a feature like this on.
  */
+// The build this half is running. The two halves ship in one repo and are
+// loaded separately, the frontend by the browser and this by the server, so
+// they can come up on different builds: a tab left open across an update keeps
+// the frontend it loaded with, and this side reloads on the server's terms. A
+// problem report naming only the panel's version would be speaking for a file
+// it cannot see, so the panel asks for this one and prints both.
+const VERSION = '1.9.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3599,6 +3606,13 @@ spindle.onFrontendMessage(async (payload, userId) => {
             }
             return;
         }
+        // Which build this half is on. Asked on every panel load rather than only
+        // announced at startup: this module comes up once and stays up, so a panel
+        // opened at any point after that missed the announcement.
+        if (payload.type === 'get_backend_version') {
+            replyTo(userId, { type: 'backend_version', requestId: payload.requestId, version: VERSION });
+            return;
+        }
         // What the host is actually letting this extension do. Asked rather than
         // assumed: a permission can be granted or taken away while the extension is
         // running, and nothing restarts when it happens.
@@ -3798,8 +3812,14 @@ try {
     spindle.sendToFrontend({ type: 'backend_ready' });
 }
 catch (_) { }
+// Sent unprompted as well as on request, so a panel that was already open when
+// this module restarted hears about a build change without asking again.
 try {
-    spindle.log.info('Auto Refine backend loaded.');
+    spindle.sendToFrontend({ type: 'backend_version', version: VERSION });
+}
+catch (_) { }
+try {
+    spindle.log.info('Auto Refine ' + VERSION + ' backend loaded.');
 }
 catch (_) { }
 // No exports here on purpose. This file has no imports either, so Lumiverse
