@@ -6,6 +6,46 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.11.0
+
+_2026-09-14_
+
+### Added
+
+- **Four more reasoning formats are recognised, so the working inside them is no longer rewritten and saved over the reply.** Harmony, which gpt-oss writes, Gemma 4, Cohere Command A Reasoning, and Seed-OSS.
+
+  None of these could be reached by adding a name under **Extra reasoning tag names**. The three wrappers already recognised are matched by tag name, with the same name closing the block. In all four of these the tag is not what names the reasoning: the word sits in the content, and the block closes on a different token again. Harmony has no closer of its own at all, and runs to the next control token.
+
+  The `final` channel is the reply, not working, and is refined like any other passage. A pattern that had taken it would have deleted the answer rather than the reasoning in front of it.
+
+  Adding a name to the list is still the answer for an unusual tag. These four are matched whatever is in that list, since their tag is not what names the reasoning.
+
+- **The markers that open and close a turn are held back with the reasoning and put back around the rewrite.** A local backend can pass `<|turn>model`, `<turn|>`, `<|im_start|>`, `<|eot_id|>` and the rest through into the message text. They are not prose, and a refiner handed one either drops it or rewords it.
+
+  This holds whether or not **Keep the reply's own reasoning out of the refine** is on. That switch governs the model's working, which is writing of a kind; a turn marker is not, and letting one through would leave the reply framed differently from the one Auto Retry reads.
+
+- **The markers come off the refiner's answer whether or not the reasoning switches are on.** Both switches govern the model's working, which is writing of a kind. A turn marker is not, and one left in the answer is saved into your chat as text.
+
+- **A hard line break in a rewrite survives.** Two spaces before a line break are a hard break in markdown. Tidying up after a marker was removed swept the whole answer, so a break the model meant to write was deleted on a rewrite that had no markers in it at all. The tidy now acts only where something actually came out.
+
+- **A marker with no role after it keeps the first word of the reply.** The markers that name a speaker take the name with them, and a bare one sitting straight in front of the reply was taking the first word of it instead. That word is your writing.
+
+- **A message that is nothing but the model working is refused rather than refined.** It has no prose in it to rewrite, and the refiner used to be handed an empty passage and asked to improve it.
+
+### Fixed
+
+- **A reasoning block sitting behind a turn marker was treated as prose.** The wrapper had to be the very first thing in the message, so one `<|turn>model` in front of it was enough to defeat every wrapper and every name in the list. This is the shape a local backend actually hands over.
+
+- **The refiner's own working, when it answers in one of these formats, no longer reaches the chat.** It was already caught for the three tag-name wrappers and went through for the rest.
+
+Cloud connections are unaffected by all of this. They hand reasoning back in a field of its own, so it never reaches the reply text and there has never been anything to cut off. This is what a local backend needs.
+
+### Removed
+
+- **Everything about prompt caching is gone from the panel and the pages.** The line under the block list that counted blocks below the passage, the paragraphs on the prompts page, and the clause on the cost note.
+
+  The order the shipped prompts use has not changed and neither has anything the extension sends. What is gone is the commentary about it. The prompts page still says what the order is and why the shape of the answer sits at the bottom.
+
 ## 1.10.0
 
 _2026-09-14_

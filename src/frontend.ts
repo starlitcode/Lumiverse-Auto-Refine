@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.10.0";
+const VERSION = "1.11.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -506,7 +506,7 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
-// volatile ones for caching, which is explained where the presets are built.
+// ones that change every turn.
 const SCENE_BLOCKS: Block[] = [
   {
     id: "character",
@@ -623,10 +623,6 @@ const TURN_BLOCK: Block = {
 //
 // The role is yours because it is your instruction to the model rather than the
 // setup's, and it sits beside the passage in the same message that way.
-//
-// It costs a little where prompts are cached: it used to sit in the run that
-// never changes and now sits under the part that changes every turn, so it is
-// sent as new each time. It is a short block and the trade is the point.
 const HOW_TO_ANSWER: Block = {
   id: "answer",
   name: "How to Answer",
@@ -866,11 +862,9 @@ const LEAVE_ALONE: Block = {
 };
 
 // ---- a model that does not reason, short ----
-// The rules first, because they are the same on every refine in every chat and
-// a provider that caches prompts reuses everything up to the first thing that
-// changed. Setting comes after them, the earlier pages after that, and the
-// passage last. Ordered the other way round, as this was, the run-up sat near
-// the top and every rule below it counted as new on every single turn.
+// The rules first, because they are the same on every refine in every chat.
+// Setting comes after them, the earlier pages after that, and the passage last,
+// so the prompt runs from what never changes to what changes every time.
 const PLAIN_SHORT: Block[] = [
   JOB_BLOCK,
   CUT_THESE,
@@ -3971,54 +3965,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       (b) => b.on && String(b.text || "").indexOf("{{overused}}") >= 0,
     );
 
-  // A provider that caches prompts reuses the front of one up to the first
-  // thing that changed. The passage is different on every refine and the run-up
-  // is redrawn every turn, so a block holding either pushes everything under it
-  // out of the reuse.
-  //
-  // This is a trade rather than a mistake, which is why it is a line and not a
-  // warning: a rule below the passage reads as an instruction about it and is
-  // followed more closely. Worth knowing, not worth stopping for.
-  // Macros whose answer is different on every refine. A block carrying one can
-  // never be reused, so anything stable below it is sent as new for nothing.
-  //
-  // {{whole_reply}} is in here because it is the reply, which is the most
-  // changeable thing in the prompt. Left out, the block carrying it read as a
-  // block that never changes and the shipped order reported itself as costing
-  // caching, which it does not: that block is empty on an ordinary refine and
-  // leaves the prompt entirely.
-  //
-  // {{protect_notes}} is in here for the same reason as {{whole_reply}}. It
-  // answers to what the passage had in it, so it is empty on a refine with
-  // nothing to protect and its block leaves the prompt. Left out, that block
-  // read as one that never changes and every shipped prompt reported itself as
-  // costing caching, which it does not.
-  //
-  // {{overused}} is not in here. It changes as a chat goes on, but it is the same
-  // for every refine in the same stretch of one, so a provider can reuse it.
-  const VOLATILE = ["{{message}}", "{{history}}", "{{whole_reply}}", "{{protect_notes}}"];
-  const movesEveryTurn = (b: Block) =>
-    VOLATILE.some((m) => String(b.text || "").indexOf(m) >= 0);
-
-  // Blocks that never change and sit after one that does. Those are the wasted
-  // ones: above the change they would be reused, below it they are re-sent
-  // every refine for nothing. A volatile block below another volatile one is
-  // not counted, since it was never going to be reused either way, which is why
-  // the shipped order can put the passage under the run-up and say nothing.
-  // Blocks below the first thing that changes every turn, which is what ends a
-  // provider's reuse of the front of the prompt.
-  //
-  // The block holding the shape of the answer is not counted. Every shipped
-  // prompt puts it down there on purpose, so counting it would put a line about
-  // somebody's own ordering on a panel where nobody has ordered anything. The
-  // line is for a block the reader moved, which is what it says.
-  function strandedBlocks(list: Block[]): number {
-    const on = list.filter((b) => b && b.on);
-    const at = on.findIndex(movesEveryTurn);
-    if (at < 0) return 0;
-    return on.slice(at + 1).filter((b) => !movesEveryTurn(b) && b.id !== "answer").length;
-  }
-
   function statusLine(): { text: string; tone: "off" | "idle" | "busy" } {
     if (!cfg.enabled) return { text: "Off", tone: "off" };
     if (busy) return { text: "Refining a reply", tone: "busy" };
@@ -6686,24 +6632,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       noTurnSaid.hidden = holdsTurn(list);
       wrap.appendChild(noTurnSaid);
     }
-    // What this order costs where prompts are cached. Said here because here is
-    // where the order is decided, and because getting it wrong is invisible:
-    // nothing breaks, every refine just costs more.
-    {
-      const under = strandedBlocks(list);
-      const cacheSaid = note(
-        under === 0
-          ? ""
-          : under +
-              (under === 1 ? " block that never changes sits" : " blocks that never change sit") +
-              " below the passage or the run-up. If your provider caches prompts, reuse stops at the first thing that changed, so " +
-              (under === 1 ? "it is" : "they are") +
-              " sent as new on every refine instead of being reused. This is a trade rather than a mistake: a rule down there is the last thing read and is followed more closely for it, which is why How to Answer ships at the bottom.",
-      );
-      cacheSaid.setAttribute("data-arf-cacheorder", "1");
-      cacheSaid.hidden = under === 0;
-      wrap.appendChild(cacheSaid);
-    }
     // One press for the whole list, since folding twenty blocks one at a time is
     // the thing folding was meant to save.
     //
@@ -7324,7 +7252,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (hasPrices())
       wrap.appendChild(
         note(
-          "Read every cost here as a ceiling rather than your bill. It is worked out from the prompt this extension builds, so anything your provider wraps around it is missing, and it prices every token at the full rate: whatever your provider reuses from a cache is charged at less than this says. Lumiverse counts the tokens with its own tokeniser for the model, which is not the counter your provider bills you against.",
+          "Read every cost here as a ceiling rather than your bill. It is worked out from the prompt this extension builds, so anything your provider wraps around it is missing, and it prices every token at the full rate, which is the most you could be charged rather than what you will be. Lumiverse counts the tokens with its own tokeniser for the model, which is not the counter your provider bills you against.",
         ),
       );
     if (lostConnection())
@@ -7677,7 +7605,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               key: "thinkTags",
               label: "Extra reasoning tag names",
               type: "lines",
-              hint: "Optional, one per line, just the name with no brackets or pipes. The eight common wrappers are known already. Working that is not recognised is rewritten and saved over the reply.",
+              hint: "Optional, one per line, just the name with no brackets or pipes. The common tag names and the channel formats are known already. Working that is not recognised is rewritten and saved over the reply.",
             }),
           );
         }),

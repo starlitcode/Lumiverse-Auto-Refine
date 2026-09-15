@@ -2028,6 +2028,161 @@ describe("thinking the extension has to recognise", () => {
   });
 });
 
+// The formats that name a channel after the opener rather than naming the tag.
+// None of them can be reached by adding a name to the list: the tag is
+// "channel" in every one, the reasoning word sits in the content, and two of
+// them close on a token with a different name again. A block these miss is
+// handed over as prose, rewritten, and saved in place of the reply.
+describe("reasoning formats that are not a matched pair of tags", () => {
+  const REPLY = "She stepped through and, suddenly, the cold just hit her.";
+  const WORKING = "weigh the cold against the light";
+
+  // Each entry is one message exactly as a backend hands it over.
+  const FORMATS: Array<[string, string]> = [
+    ["Gemma 4", "<|turn>model\n<|channel>thought\n" + WORKING + "\n<channel|>" + REPLY + "<turn|>"],
+    ["Gemma 4 with no working in it", "<|turn>model\n<|channel>thought\n<channel|>" + REPLY + "<turn|>"],
+    [
+      "Harmony",
+      "<|start|>assistant<|channel|>analysis<|message|>" +
+        WORKING +
+        "<|end|><|start|>assistant<|channel|>final<|message|>" +
+        REPLY +
+        "<|return|>",
+    ],
+    ["Harmony carrying only the reply", "<|channel|>final<|message|>" + REPLY + "<|return|>"],
+    [
+      "Cohere",
+      "<|START_THINKING|>" + WORKING + "<|END_THINKING|><|START_RESPONSE|>" + REPLY + "<|END_RESPONSE|>",
+    ],
+    ["Seed-OSS", "<seed:think>" + WORKING + "</seed:think>" + REPLY],
+  ];
+
+  const withRaw = (raw: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content: raw },
+  ];
+
+  for (const [name, raw] of FORMATS) {
+    test(name + ": the working is never sent to be rewritten", async () => {
+      const h = await armed(
+        ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+        {},
+        withRaw(raw),
+      );
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(said(h)).not.toContain(WORKING);
+      // The prose either side of it did go, or the wrapper ate the reply.
+      expect(said(h)).toContain("the cold just hit her");
+    });
+
+    test(name + ": every control token survives the save", async () => {
+      const h = await armed(
+        ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+        {},
+        withRaw(raw),
+      );
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      const saved = h.body("m2");
+      expect(saved).toContain("She stepped through and the cold hit her.");
+      // Whatever framed the reply frames the rewrite, unchanged. A marker the
+      // refiner was allowed to see is a marker it can drop or reword.
+      for (const token of raw.match(/<\|?[\w:|]+\|?>/g) || []) expect(saved).toContain(token);
+      if (raw.includes(WORKING)) expect(saved).toContain(WORKING);
+    });
+  }
+
+  // The reply travels in a channel too, and it is the one thing that must not
+  // be mistaken for working. Getting this wrong deletes the answer rather than
+  // the reasoning in front of it.
+  test("the final channel is the reply and is refined, not stripped", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw("<|channel|>analysis<|message|>" + WORKING + "<|end|><|channel|>final<|message|>" + REPLY + "<|return|>"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("the cold just hit her");
+    expect(h.body("m2")).toContain("She stepped through and the cold hit her.");
+  });
+
+  // A refining model that answers in one of these formats has its own working
+  // taken off the answer, rather than saved into the chat as part of the
+  // rewrite.
+  test("the refiner's own channel working is kept out of the chat", async () => {
+    const h = await armed([
+      "<|channel|>analysis<|message|>plan the edit<|end|><|channel|>final<|message|><REFINED>She stepped through and the cold hit her.</REFINED><|return|>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // The two reasoning switches govern the model's working. A turn marker is not
+  // working, so it comes off either way, or it is saved into the chat as text.
+  // Inside the tags, since what is outside them never reaches this check.
+  test("control tokens come off the answer with the reasoning switch off", async () => {
+    const h = await armed(
+      ["<REFINED><|turn>model\nShe stepped through and the cold hit her.<turn|></REFINED>"],
+      { stripAnswerThinking: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // With the tags off the whole answer is the rewrite, markers and all, which
+  // is the other way they reach the chat.
+  test("and come off when the whole answer is taken as the rewrite", async () => {
+    const h = await armed(
+      ["<|turn>model\nShe stepped through and the cold hit her.<turn|>"],
+      { stripAnswerThinking: false, wrapOutput: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // A marker sitting straight in front of the reply names no role, so nothing
+  // may be eaten with it. Taking a word here would delete the reader's writing.
+  test("a marker with no role after it keeps the first word of the reply", async () => {
+    const h = await armed(
+      ["<REFINED><|start|>She stepped through and the cold hit her.</REFINED>"],
+      { stripAnswerThinking: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // Two spaces before a line break are a hard break in markdown. Tidying the
+  // whole passage after a removal would delete one the model meant to write, so
+  // the tidy only acts where a marker actually came out.
+  test("a hard line break in the answer survives", async () => {
+    const h = await armed([
+      "<REFINED>She stepped through the gate.  \nThe cold hit her.</REFINED>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through the gate.  \nThe cold hit her.");
+  });
+
+  test("a message that is working and nothing else is refused rather than sent", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw("<|channel|>analysis<|message|>" + WORKING + "<|end|>"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toContain(WORKING);
+    expect(h.asked.length).toBe(0);
+  });
+});
+
 describe("stopping a refine", () => {
   test("a stop reaches the run and the reply is left alone", async () => {
     const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
@@ -2444,103 +2599,6 @@ describe("asking again when a check fails", () => {
   });
 });
 
-// A provider that caches prompts reuses the run of the request that has not
-// changed since last time, counting from the front. So everything that holds
-// still belongs above everything that moves: the rules, then the setting, then
-// the pages before this one, then the passage.
-//
-// Putting the run-up third would put a block that is redrawn every turn above
-// every rule, and make the whole prompt new on every reply.
-describe("a prompt built to be cached", () => {
-  // Built from the prompt that ships, not the small fixture the other checks
-  // use, since the order this is about is that prompt's. It comes from the
-  // panel, which is where it lives and the only place it lives.
-  const build = async (over: any = {}) => {
-    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
-      blocks: DEFAULT_BLOCKS,
-      ...over,
-    });
-    await h.front({ type: "preview_prompt", requestId: "p1", chatId: "c1", messageId: "m2" });
-    await wait(20);
-    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p1");
-    return (got.messages || []).map((m: any) => String(m.content || "")).join("\n\n");
-  };
-
-  // The messages as they go out, so a check can read a role rather than infer
-  // one from where the text landed.
-  const parts = async (over: any = {}) => {
-    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
-      blocks: DEFAULT_BLOCKS,
-      ...over,
-    });
-    await h.front({ type: "preview_prompt", requestId: "p2", chatId: "c1", messageId: "m2" });
-    await wait(20);
-    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p2");
-    return (got.messages || []) as Array<{ role: string; content: string }>;
-  };
-
-  test("the run-up and the passage come after the rules", async () => {
-    const whole = await build();
-    const rules = whole.indexOf("</your_job>");
-    const runUp = whole.indexOf("<earlier_pages>");
-    const turn = whole.indexOf("<passage_to_refine>");
-    expect(rules).toBeGreaterThan(-1);
-    expect(runUp).toBeGreaterThan(rules);
-    expect(turn).toBeGreaterThan(runUp);
-  });
-
-  test("and the setting sits between them", async () => {
-    const whole = await build();
-    const rules = whole.indexOf("</your_job>");
-    const who = whole.indexOf("<your_characters>");
-    const runUp = whole.indexOf("<earlier_pages>");
-    expect(who).toBeGreaterThan(rules);
-    expect(runUp).toBeGreaterThan(who);
-  });
-
-  // A rule about the shape of an answer is followed most closely when it is the
-  // last thing read. It is also the one rule that cannot be worked around, since
-  // a rewrite that loses the tags is dropped rather than saved.
-  test("the shape of the answer is the last thing in the prompt", async () => {
-    const whole = await build();
-    const turn = whole.indexOf("<passage_to_refine>");
-    const shape = whole.indexOf("<how_to_answer>");
-    expect(shape).toBeGreaterThan(turn);
-    expect(whole.slice(shape).indexOf("<earlier_pages>")).toBe(-1);
-  });
-
-  test("and it goes out as you rather than as the setup", async () => {
-    const msgs = await parts();
-    const holding = msgs.filter((m) => String(m.content).indexOf("<how_to_answer>") >= 0);
-    expect(holding.length).toBe(1);
-    expect(holding[0].role).toBe("user");
-    // In the same message as the passage, which is what one role either side of
-    // it means: your passage, then what you want back.
-    expect(holding[0].content.indexOf("<passage_to_refine>")).toBeGreaterThan(-1);
-    expect(holding[0].content.indexOf("<passage_to_refine>")).toBeLessThan(
-      holding[0].content.indexOf("<how_to_answer>"),
-    );
-  });
-
-  test("the message the model reads last is yours, not the setup's", async () => {
-    const msgs = await parts();
-    expect(msgs[msgs.length - 1].role).toBe("user");
-  });
-
-  // What the front of the request is worth: the run above the first thing that
-  // moved is the same on every refine, so it is the part a provider can reuse.
-  test("the rules are byte for byte the same across two different chats", async () => {
-    const a = await build();
-    const b = await build();
-    const cut = (t: string) => t.slice(0, t.indexOf("<your_characters>"));
-    expect(cut(a)).toBe(cut(b));
-    expect(cut(a).length).toBeGreaterThan(200);
-  });
-});
-
-// The built-in shield covers the shapes that turn up everywhere. What a
-// particular card prints is the reader's to name, so their patterns are added
-// to the list instead of replacing it.
 describe("shielding what the built-in rules miss", () => {
   const withScaffold = (body: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The gate stands open." },

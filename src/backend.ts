@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -659,6 +659,57 @@ const THINK_TAGS = [
   'analysis',
 ];
 
+// The channel names that carry working rather than the reply, for the formats
+// that name a channel after the opener instead of naming the tag. "final" is
+// absent on purpose: that channel is the reply, and a pattern reaching it would
+// delete the answer rather than the working in front of it.
+const THINK_CHANNELS = 'analysis|commentary|thinking|thought|reasoning';
+
+// What a turn marker names after itself, and what a channel marker does. Only
+// these are eaten with the marker: a bare marker followed straight by the reply
+// would otherwise take the first word of it, which is the reader's writing.
+// The stand-in left where a marker was, so the tidy can act on those places
+// and nowhere else. Stripped from the input first, so it can only ever mean
+// this.
+const HOLE = '\u0000';
+
+const TURN_ROLES = 'system|user|assistant|model|tool|developer|human';
+const CHANNEL_NAMES = THINK_CHANNELS + '|final';
+
+// Harmony closes a channel at the next control token rather than by name, so a
+// block ends at whichever of these comes first.
+const HARMONY_END = '<\\|(?:end|return|start|call)\\|>';
+
+// The markers a local backend can leave around the reply: the ones that open a
+// turn, and the ones that introduce the answer once the working is over. A
+// reasoning block behind one of these is still the first thing in the message,
+// so they are allowed both in front of a wrapper and after it. They go into the
+// head and are put back untouched, never sent to be rewritten.
+const LEAD_MARKS = [
+  '<\\|turn\\|?>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // Gemma 4
+  '<start_of_turn>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // Gemma 2 and 3
+  '<\\|im_start\\|>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // ChatML
+  '<\\|start\\|>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // Harmony
+  '<\\|channel\\|>[ \\t]*\\w+[ \\t]*<\\|message\\|>', // Harmony, the header on the reply
+  '<\\|channel>[ \\t]*\\w*[ \\t]*<channel\\|>', // Gemma 4, an empty thought channel
+  '<\\|start_header_id\\|>[\\s\\S]*?<\\|end_header_id\\|>', // Llama 3
+  '<\\|START_RESPONSE\\|>', // Cohere
+  '<\\|START_OF_TURN_TOKEN\\|>',
+  '<\\|CHATBOT_TOKEN\\|>',
+].join('|');
+
+const LEAD = '(?:\\s|' + LEAD_MARKS + ')*';
+
+const LEAD_RE = new RegExp('^' + LEAD, 'i');
+
+// The markers that close a turn. They sit after the reply, they belong to the
+// backend rather than to the reader, and a refiner handed one either drops it
+// or rewords it, so they come off with the tail and go back on after.
+const END_MARK =
+  '(?:<turn\\|>|<end_of_turn>|<\\|(?:end|return|call|eot_id|im_end|endoftext|END_RESPONSE)\\|>)';
+
+const TAIL_RE = new RegExp('(?:\\s*' + END_MARK + ')+\\s*$', 'i');
+
 // Names the reader added, because no built-in list can cover every model. A
 // name here is not cosmetic: a reasoning block this fails to recognise is
 // handed to the refiner as prose, rewritten, and saved into the chat in place
@@ -694,22 +745,68 @@ function setThinkTags(raw: any): void {
   extraThinkTags = out;
 }
 
-// The four shapes a model wraps its working in. Built per call from the current
-// list rather than once at load, because the reader can add a name at any time.
-function thinkWraps(): RegExp[] {
+// Every shape a model wraps its working in, as source strings so one list can
+// be anchored for the head split and left loose for the answer strip. Built per
+// call from the current names rather than once at load, because the reader can
+// add a name at any time.
+//
+// Each entry is its own pattern rather than one alternation, so a backreference
+// inside it counts from its own first group.
+//
+// `needs` is the cheapest thing that has to be present for the pattern to match
+// at all, checked with indexOf before the pattern runs. Every one of these
+// walks forward from an opener looking for a closer, so a passage full of
+// openers and no closer made each of them scan the whole remainder and find
+// nothing. One indexOf makes that case linear.
+function thinkShapes(): Array<{ needs: string; pattern: string }> {
   const alt = thinkNames().join('|');
   return [
     // <think> ... </think>, attributes allowed on the opener.
-    new RegExp('^\\s*<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>\\s*', 'i'),
+    { needs: '</', pattern: '<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>' },
     // [thinking] ... [/thinking]
-    new RegExp('^\\s*\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]\\s*', 'i'),
+    { needs: '[/', pattern: '\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]' },
     // <|think|> ... <|/think|>, and the variants that put the pipe the other
     // way round. Builds disagree about which way it goes, so either closes
     // either.
-    new RegExp('^\\s*<\\|(?:' + alt + ')\\|?>[\\s\\S]*?<\\|?\\/?(?:' + alt + ')\\|?>\\s*', 'i'),
+    { needs: '|>', pattern: '<\\|(?:' + alt + ')\\|?>[\\s\\S]*?<\\|?\\/?(?:' + alt + ')\\|?>' },
+    // Gemma 4. The pipe sits inside the opener and outside the closer, and the
+    // channel is named after the opener rather than being the tag, so no name
+    // in the list above can reach it. Every assistant turn carries one of
+    // these, empty when the model is not thinking, so the empty pair matches
+    // too.
+    {
+      needs: '<|channel>',
+      pattern: '<\\|channel>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*?<channel\\|>',
+    },
+    // Harmony, which gpt-oss writes. No closer of its own: the block runs to
+    // the next control token.
+    {
+      needs: '<|channel|>',
+      pattern: '<\\|channel\\|>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*?' + HARMONY_END,
+    },
+    // Cohere Command A Reasoning.
+    {
+      needs: '<|start_thinking|>',
+      pattern: '<\\|START_THINKING\\|>[\\s\\S]*?<\\|END_THINKING\\|>',
+    },
+    // Seed-OSS, whose tag carries a namespace the name list cannot hold.
+    { needs: '<seed:think>', pattern: '<seed:think>[\\s\\S]*?<\\/seed:think>' },
+    {
+      needs: '<seed:cot_budget_reflect>',
+      pattern: '<seed:cot_budget_reflect>[\\s\\S]*?<\\/seed:cot_budget_reflect>',
+    },
     // The named pair some builds use instead of a tag name.
-    /^\s*<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>\s*/i,
+    {
+      needs: '<|begin_of_thought|>',
+      pattern: '<\\|begin_of_thought\\|>[\\s\\S]*?<\\|end_of_thought\\|>',
+    },
   ];
+}
+
+// The same shapes, anchored to the front of a message and allowed to sit
+// between the markers that open the turn and the ones that introduce the reply.
+function thinkWraps(): RegExp[] {
+  return thinkShapes().map((s) => new RegExp('^' + LEAD + '(?:' + s.pattern + ')' + LEAD, 'i'));
 }
 
 // The same wrappers, taken out of the model's own answer wherever they sit.
@@ -727,37 +824,115 @@ function stripThinkingFrom(text: string): string {
   const alt = thinkNames().join('|');
   let t = String(text);
   try {
-    // Closed pairs first, in each of the four shapes.
-    if (t.indexOf('</') >= 0)
-      t = t.replace(new RegExp('<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>', 'gi'), '');
-    if (t.indexOf('[/') >= 0)
-      t = t.replace(
-        new RegExp('\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]', 'gi'),
-        '',
-      );
-    if (t.indexOf('|>') >= 0)
-      t = t.replace(
-        new RegExp('<\\|(?:' + alt + ')\\|?>[\\s\\S]*?<\\|?\\/?(?:' + alt + ')\\|?>', 'gi'),
-        '',
-      );
-    t = t.replace(/<\|begin_of_thought\|>[\s\S]*?<\|end_of_thought\|>/gi, '');
+    // Closed pairs first, in every shape.
+    const low = t.toLowerCase();
+    for (const shape of thinkShapes())
+      if (low.indexOf(shape.needs) >= 0) t = t.replace(new RegExp(shape.pattern, 'gi'), '');
     // An opener with nothing closing it, which is working that ran to the end.
     // Only from the front: cutting from an opener in the middle would throw
     // away a rewrite that merely mentions the word.
-    t = t.replace(new RegExp('^\\s*<\\|?(?:' + alt + ')\\|?>[\\s\\S]*$', 'i'), '');
+    t = t.replace(new RegExp('^' + LEAD + '<\\|?(?:' + alt + ')\\|?>[\\s\\S]*$', 'i'), '');
+    // The same for a channel, which has no closer to be missing: an opened
+    // thinking channel with no control token after it ran to the end.
+    t = t.replace(
+      new RegExp('^' + LEAD + '<\\|channel\\|?>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*$', 'i'),
+      '',
+    );
   } catch (_) {
     return text;
   }
   return t.trim();
 }
 
-function splitThinking(text: string): { head: string; body: string } {
-  if (!protectThinking) return { head: '', body: text };
-  for (const rule of thinkWraps()) {
-    const hit = rule.exec(text);
-    if (hit && hit.index === 0) return { head: hit[0], body: text.slice(hit[0].length) };
+// The markers a backend wraps a turn in. They are not reasoning and they are
+// not anybody's writing, so they come off whatever the two reasoning switches
+// are set to: those govern the model's working, and a marker left in the answer
+// is saved into the chat as text. Runs after the working has been taken out,
+// since a channel block is closed by one of these and removing them first would
+// leave the block with nothing to close it.
+function stripControlTokens(text: string): string {
+  const src = String(text).replace(/\u0000/g, '');
+  let t = src;
+  try {
+    // Each marker leaves a hole rather than a space, so the tidy below can see
+    // where a removal happened and touch only that. A name is eaten with its
+    // marker only when it is a name these formats use: a bare marker sitting
+    // straight in front of the reply would otherwise take the first word of it.
+    t = t.replace(new RegExp('<\\|channel\\|>[ \\t]*\\w+[ \\t]*<\\|message\\|>', 'gi'), HOLE);
+    t = t.replace(
+      new RegExp('<\\|channel\\|>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?', 'gi'),
+      HOLE,
+    );
+    t = t.replace(
+      new RegExp('(?:<\\|channel>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?|<channel\\|>)', 'gi'),
+      HOLE,
+    );
+    t = t.replace(
+      new RegExp(
+        '(?:<\\|(?:start|turn|im_start)\\|?>|<start_of_turn>)(?:[ \\t]*(?:' +
+          TURN_ROLES +
+          ')\\b)?',
+        'gi',
+      ),
+      HOLE,
+    );
+    t = t.replace(/<\|start_header_id\|>[\s\S]*?<\|end_header_id\|>/gi, HOLE);
+    t = t.replace(
+      /(?:<\|(?:end|return|call|message|constrain|endoftext|eot_id|im_end)\|>|<turn\|>|<end_of_turn>)/gi,
+      HOLE,
+    );
+    t = t.replace(/<\|(?:START|END)_(?:THINKING|RESPONSE)\|>/gi, HOLE);
+    t = t.replace(/<\|(?:START_OF_TURN_TOKEN|CHATBOT_TOKEN|USER_TOKEN|SYSTEM_TOKEN)\|>/gi, HOLE);
+  } catch (_) {
+    return text;
   }
-  return { head: '', body: text };
+  if (t.indexOf(HOLE) < 0) return src;
+  // Close each hole the way its surroundings ask. Whitespace elsewhere is left
+  // alone: two spaces before a line break are a hard break in markdown, and a
+  // sweep over the whole passage would delete one the model meant to write.
+  return t
+    .replace(new RegExp('^[ \\t]*' + HOLE + '[ \\t]*$', 'gm'), '')
+    .replace(new RegExp('[ \\t]*' + HOLE + '[ \\t]*(?=\\n)', 'g'), '')
+    .replace(new RegExp('\\n[ \\t]*' + HOLE + '[ \\t]*', 'g'), '\n')
+    .replace(new RegExp('[ \\t]*' + HOLE + '[ \\t]*', 'g'), ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Splits a message into the model's working, the prose to refine, and the
+// markers that close the turn. Only the middle is sent to be rewritten; the
+// other two are put back exactly as they were.
+function splitThinking(text: string): { head: string; body: string; tail: string } {
+  const src = String(text);
+  let head = '';
+  // The wrapper is matched against the whole message, before anything is taken
+  // off the end. Harmony closes a block on the same token that ends a turn, so
+  // trimming the end first takes away the closer and leaves the working looking
+  // like prose.
+  if (protectThinking) {
+    for (const rule of thinkWraps()) {
+      const hit = rule.exec(src);
+      if (hit && hit.index === 0) {
+        head = hit[0];
+        break;
+      }
+    }
+  }
+  // No working in front of the reply, but the markers that open the turn and
+  // introduce the answer are still not prose and still must not be rewritten.
+  if (!head) {
+    const lead = LEAD_RE.exec(src);
+    head = lead ? lead[0] : '';
+  }
+  const rest = src.slice(head.length);
+  // The markers that close the turn come off the end, for the same reason.
+  const endHit = TAIL_RE.exec(rest);
+  const tail = endHit ? endHit[0] : '';
+  return {
+    head: head,
+    body: tail ? rest.slice(0, rest.length - tail.length) : rest,
+    tail: tail,
+  };
 }
 
 // Ours, turned into something the host's resolver will not touch and nothing in
@@ -1950,7 +2125,7 @@ function judge(answer: any, original: string): Verdict {
 
 function judgeInner(answer: any, original: string): Verdict {
   const raw = String(answer == null ? '' : answer);
-  const text = unwrapQuotes(unfence(stripThinkingFrom(raw))).trim();
+  const text = unwrapQuotes(unfence(stripControlTokens(stripThinkingFrom(raw)))).trim();
   const orig = original.trim();
 
   if (!text) return { ok: false, text: '', why: 'the model sent nothing back' };
@@ -2848,6 +3023,14 @@ async function refineMessage(
   // The model's own working is cut off rather than sent. It is not prose, and a
   // rewrite of it would be invisible in the place people look.
   const split = splitThinking(original);
+  // A message that is working and nothing else has no prose in it to rewrite.
+  // Without this the refiner is sent an empty passage and answers whatever a
+  // model answers to that.
+  if (!split.body.trim())
+    return {
+      ok: false,
+      why: 'that message is only the model working, so there is nothing to refine',
+    };
   // Where the selection sits in the body. Worked out against the body rather
   // than the whole message, because the model's own working is in front of it
   // and counting through that would put every offset out by its length.
@@ -3086,12 +3269,14 @@ async function refineMessage(
         (back.lost.length === 1 ? ' piece' : ' pieces') +
         ' of formatting it was told to keep',
     };
-  // The thinking goes back exactly as it was, in front of the rewrite. A
-  // selection puts the rewrite back where it came from, with the rest of the
-  // reply either side of it untouched.
-  const whole = pickAt
-    ? split.head + split.body.slice(0, pickAt.start) + back.text + split.body.slice(pickAt.end)
-    : split.head + back.text;
+  // The thinking goes back exactly as it was, in front of the rewrite, and the
+  // markers that close the turn go back behind it. A selection puts the rewrite
+  // back where it came from, with the rest of the reply either side of it
+  // untouched.
+  const whole =
+    (pickAt
+      ? split.head + split.body.slice(0, pickAt.start) + back.text + split.body.slice(pickAt.end)
+      : split.head + back.text) + split.tail;
 
   if (confirmBeforeSave) {
     replyTo(userId, {
