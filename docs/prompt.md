@@ -312,6 +312,8 @@ Gemma 4 names a channel the same way but spells the tokens differently, with the
 
 The markers that open and close a turn are held back with it, whichever format they come from, and put back around the rewrite untouched. A marker the refiner is allowed to see is a marker it can drop or reword, and the reply is framed by them.
 
+That holds whether or not either reasoning switch is on. Both govern the model's working, which is writing of a kind. A turn marker is not, so it comes off the answer and goes back around the rewrite either way.
+
 **Extra reasoning tag names** is under it, for a model that wraps its working in a tag the built-in names do not cover. Write just the name, with no brackets or pipes; a name you add is recognised in the three tag-name wrappers. The four formats above are matched whatever is in that list, since their tag is not what names the reasoning.
 
 Most cloud providers hand reasoning back in a field of its own rather than inside the reply. None of this applies there: it never reaches the reply text, so there is nothing to cut off. This is what a local backend needs, where the tokens come through as written.

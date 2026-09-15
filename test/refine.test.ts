@@ -2121,6 +2121,31 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
+  // The two reasoning switches govern the model's working. A turn marker is not
+  // working, so it comes off either way, or it is saved into the chat as text.
+  // Inside the tags, since what is outside them never reaches this check.
+  test("control tokens come off the answer with the reasoning switch off", async () => {
+    const h = await armed(
+      ["<REFINED><|turn>model\nShe stepped through and the cold hit her.<turn|></REFINED>"],
+      { stripAnswerThinking: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // With the tags off the whole answer is the rewrite, markers and all, which
+  // is the other way they reach the chat.
+  test("and come off when the whole answer is taken as the rewrite", async () => {
+    const h = await armed(
+      ["<|turn>model\nShe stepped through and the cold hit her.<turn|>"],
+      { stripAnswerThinking: false, wrapOutput: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
   test("a message that is working and nothing else is refused rather than sent", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],

@@ -827,13 +827,24 @@ function stripThinkingFrom(text: string): string {
       new RegExp('^' + LEAD + '<\\|channel\\|?>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*$', 'i'),
       '',
     );
-    // Control tokens a local backend passes through. They are markers rather
-    // than anything anybody wrote, and until they are gone they count towards
-    // every length check and sit in the middle of phrases the guards match on.
-    // The header that introduces the visible reply goes with them: the reply
-    // between the markers is what is being kept.
+  } catch (_) {
+    return text;
+  }
+  return t.trim();
+}
+
+// The markers a backend wraps a turn in. They are not reasoning and they are
+// not anybody's writing, so they come off whatever the two reasoning switches
+// are set to: those govern the model's working, and a marker left in the answer
+// is saved into the chat as text. Runs after the working has been taken out,
+// since a channel block is closed by one of these and removing them first would
+// leave the block with nothing to close it.
+function stripControlTokens(text: string): string {
+  let t = String(text);
+  try {
     // The ones that name the speaker take the name with them, or the role is
-    // left sitting in the reply as a word.
+    // left sitting in the reply as a word. The header that introduces the
+    // visible reply goes too: the reply between the markers is what is kept.
     t = t.replace(/[ \t]*<\|channel\|>[ \t]*\w*[ \t]*(?:<\|message\|>)?[ \t]*/gi, ' ');
     t = t.replace(/[ \t]*(?:<\|channel>[ \t]*\w*|<channel\|>)[ \t]*/gi, ' ');
     t = t.replace(
@@ -2087,7 +2098,7 @@ function judge(answer: any, original: string): Verdict {
 
 function judgeInner(answer: any, original: string): Verdict {
   const raw = String(answer == null ? '' : answer);
-  const text = unwrapQuotes(unfence(stripThinkingFrom(raw))).trim();
+  const text = unwrapQuotes(unfence(stripControlTokens(stripThinkingFrom(raw)))).trim();
   const orig = original.trim();
 
   if (!text) return { ok: false, text: '', why: 'the model sent nothing back' };

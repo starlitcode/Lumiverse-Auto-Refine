@@ -24,6 +24,8 @@ _2026-09-15_
 
   This holds whether or not **Keep the reply's own reasoning out of the refine** is on. That switch governs the model's working, which is writing of a kind; a turn marker is not, and letting one through would leave the reply framed differently from the one Auto Retry reads.
 
+- **The markers come off the refiner's answer whether or not the reasoning switches are on.** Both switches govern the model's working, which is writing of a kind. A turn marker is not, and one left in the answer is saved into your chat as text.
+
 - **A message that is nothing but the model working is refused rather than refined.** It has no prose in it to rewrite, and the refiner used to be handed an empty passage and asked to improve it.
 
 ### Fixed
