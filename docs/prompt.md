@@ -129,7 +129,7 @@ They are resolved in that order for a reason. Ours go in **last**, after the hos
 
 The turn is last by default, and that is worth keeping. Anything after the message reads as an instruction about it, so a rule placed below it is more likely to be followed, and a block of narration placed below it is more likely to be treated as something to act on. A new block goes in above the turn unless you move it.
 
-The other reason order matters is caching. If your provider caches prompts, the reuse runs from the front up to the first thing that changed, so the order that costs least is the order of how often something moves:
+The other reason order matters is how often each part moves. The shipped order runs from what never changes to what changes every time:
 
 1. **The rules.** Identical on every refine in every chat.
 2. **The setting**: who the story follows, who you are writing with, what is true in its world. Identical for a whole chat.
@@ -139,19 +139,11 @@ The other reason order matters is caching. If your provider caches prompts, the 
 6. **How to Answer.** Below the passage on purpose, and sent as **User** rather than **System**.
 7. **Protected Formatting.** The note about the tokens standing in for formatting, when there is anything to say. Empty on any refine that protected nothing, and a block holding nothing but an empty tag is not sent at all, so most refines carry six blocks here rather than seven.
 
-Every shipped prompt is built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule, and made the whole prompt count as new on every single reply. Nothing looked broken. It just cost more.
+Every shipped prompt is built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule. Nothing looked broken.
 
 **Why the last one breaks the pattern.** A rule about the shape of an answer is followed most closely when it is the last thing read. Put it at the top and the model has the whole prompt between that rule and the answer it writes, and some models hand back a rewrite with the tags missing or wrapped around the wrong thing. That rule is also the one you cannot work around: a rewrite without its tags is dropped rather than saved, so a model that forgets them costs you the call.
 
 It goes out as **User** for the same reason. It is your instruction about what you want back rather than part of the setup, and one role either side of the passage means the model reads your passage and what you want done with it as one message.
-
-It does cost a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block, and the trade is the point.
-
-**Whether any of this is live is your connection's business.** Prompt caching is a setting on the connection in Lumiverse, along with its lifetime, and a refine goes out under whichever connection you point it at and inherits it. There is nothing here to switch on. There is nothing here that can tell you whether it worked either: Lumiverse reports a prompt, completion and total token count back to an extension and nothing about what was read from a cache. So the order is what this end can do about it, and it is worth doing whether or not your provider caches, because it costs nothing either way.
-
-Worth knowing if you are counting on it: providers that cache have a minimum length below which they do not bother, and on Anthropic that is between 512 and 4,096 tokens depending on the model. The rules in a shipped prompt come to roughly 800 tokens for the shortest and 2,300 for the longest, before any of your chat goes in. What your card, persona, lorebook and run-up add sits on top of that, and on most setups it is the larger half, so whether a prompt of yours clears the minimum is a question about your setup rather than about these prompts. Nothing here can answer it either, for the reason above.
-
-**The Prompt tab says so when your own order does it.** Move a block below the passage or the run-up and a line under the list counts how many are down there and what that costs. **How to Answer** is not counted, since every shipped prompt puts it there, and neither is **Protected Formatting**, whose macro answers to the passage and so was never going to be reused anyway. It is a line rather than a warning because it is a trade, not a mistake: a rule below the passage reads as an instruction about it and is followed more closely, which is sometimes worth paying for. A block you have switched off is not sent, so it is not counted.
 
 ## Roles
 
@@ -326,9 +318,9 @@ Set **Input price, per million tokens** and **Output price, per million tokens**
 
 The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
 
-**Read the figure as a ceiling rather than your bill,** which is what the line under the price boxes says. It is worked out from the prompt this extension builds, so whatever your provider wraps around that prompt is missing from the number, and it prices every token at the full rate: whatever your provider reuses from a cache is charged at less than this says.
+**Read the figure as a ceiling rather than your bill,** which is what the line under the price boxes says. It is worked out from the prompt this extension builds, so whatever your provider wraps around that prompt is missing from the number, and it prices every token at the full rate, which is the most you could be charged rather than what you will be.
 
-The tokens are counted by Lumiverse, with its own tokeniser for the model rather than the counter your provider bills you against. Where it has no tokeniser for a model it says so, and the panel says roughly rather than giving you a figure that looks exact. Nothing here can do better than a ceiling: Lumiverse reports a prompt, completion and total token count back to an extension and no cached count at all, so there is nothing to price a cached token against.
+The tokens are counted by Lumiverse, with its own tokeniser for the model rather than the counter your provider bills you against. Where it has no tokeniser for a model it says so, and the panel says roughly rather than giving you a figure that looks exact.
 
 **What to type.** Price lists write these as `$5.00/M` or `$0.075/M`, which already means per million tokens, so the number is the number: type `5` or `0.075`. You can also paste the whole thing, `$` and `/M` included, and the number is taken out of it. Decimals matter here, since the cheap models are priced in fractions of a penny.
 

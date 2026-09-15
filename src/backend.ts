@@ -665,6 +665,12 @@ const THINK_TAGS = [
 // delete the answer rather than the working in front of it.
 const THINK_CHANNELS = 'analysis|commentary|thinking|thought|reasoning';
 
+// What a turn marker names after itself, and what a channel marker does. Only
+// these are eaten with the marker: a bare marker followed straight by the reply
+// would otherwise take the first word of it, which is the reader's writing.
+const TURN_ROLES = 'system|user|assistant|model|tool|developer|human';
+const CHANNEL_NAMES = THINK_CHANNELS + '|final';
+
 // Harmony closes a channel at the next control token rather than by name, so a
 // block ends at whichever of these comes first.
 const HARMONY_END = '<\\|(?:end|return|start|call)\\|>';
@@ -675,10 +681,10 @@ const HARMONY_END = '<\\|(?:end|return|start|call)\\|>';
 // so they are allowed both in front of a wrapper and after it. They go into the
 // head and are put back untouched, never sent to be rewritten.
 const LEAD_MARKS = [
-  '<\\|turn\\|?>[ \\t]*\\w*', // Gemma 4
-  '<start_of_turn>[ \\t]*\\w*', // Gemma 2 and 3
-  '<\\|im_start\\|>[ \\t]*\\w*', // ChatML
-  '<\\|start\\|>[ \\t]*\\w*', // Harmony
+  '<\\|turn\\|?>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // Gemma 4
+  '<start_of_turn>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // Gemma 2 and 3
+  '<\\|im_start\\|>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // ChatML
+  '<\\|start\\|>(?:[ \\t]*(?:' + TURN_ROLES + '))?', // Harmony
   '<\\|channel\\|>[ \\t]*\\w+[ \\t]*<\\|message\\|>', // Harmony, the header on the reply
   '<\\|channel>[ \\t]*\\w*[ \\t]*<channel\\|>', // Gemma 4, an empty thought channel
   '<\\|start_header_id\\|>[\\s\\S]*?<\\|end_header_id\\|>', // Llama 3
@@ -845,10 +851,25 @@ function stripControlTokens(text: string): string {
     // The ones that name the speaker take the name with them, or the role is
     // left sitting in the reply as a word. The header that introduces the
     // visible reply goes too: the reply between the markers is what is kept.
-    t = t.replace(/[ \t]*<\|channel\|>[ \t]*\w*[ \t]*(?:<\|message\|>)?[ \t]*/gi, ' ');
-    t = t.replace(/[ \t]*(?:<\|channel>[ \t]*\w*|<channel\|>)[ \t]*/gi, ' ');
+    // A name is only eaten with its marker when it is a name these formats use.
+    // A bare marker sitting straight in front of the reply would otherwise take
+    // the first word of it, and that word is the reader's writing.
+    t = t.replace(new RegExp('[ \\t]*<\\|channel\\|>[ \\t]*\\w+[ \\t]*<\\|message\\|>[ \\t]*', 'gi'), ' ');
     t = t.replace(
-      /[ \t]*(?:<\|(?:start|turn|im_start)\|?>|<start_of_turn>)[ \t]*\w*[ \t]*/gi,
+      new RegExp('[ \\t]*<\\|channel\\|>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?[ \\t]*', 'gi'),
+      ' ',
+    );
+    t = t.replace(
+      new RegExp('[ \\t]*(?:<\\|channel>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?|<channel\\|>)[ \\t]*', 'gi'),
+      ' ',
+    );
+    t = t.replace(
+      new RegExp(
+        '[ \\t]*(?:<\\|(?:start|turn|im_start)\\|?>|<start_of_turn>)(?:[ \\t]*(?:' +
+          TURN_ROLES +
+          ')\\b)?[ \\t]*',
+        'gi',
+      ),
       ' ',
     );
     t = t.replace(/[ \t]*<\|start_header_id\|>[\s\S]*?<\|end_header_id\|>[ \t]*/gi, ' ');

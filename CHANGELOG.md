@@ -26,6 +26,8 @@ _2026-09-15_
 
 - **The markers come off the refiner's answer whether or not the reasoning switches are on.** Both switches govern the model's working, which is writing of a kind. A turn marker is not, and one left in the answer is saved into your chat as text.
 
+- **A marker with no role after it keeps the first word of the reply.** The markers that name a speaker take the name with them, and a bare one sitting straight in front of the reply was taking the first word of it instead. That word is your writing.
+
 - **A message that is nothing but the model working is refused rather than refined.** It has no prose in it to rewrite, and the refiner used to be handed an empty passage and asked to improve it.
 
 ### Fixed
@@ -35,6 +37,12 @@ _2026-09-15_
 - **The refiner's own working, when it answers in one of these formats, no longer reaches the chat.** It was already caught for the three tag-name wrappers and went through for the rest.
 
 Cloud connections are unaffected by all of this. They hand reasoning back in a field of its own, so it never reaches the reply text and there has never been anything to cut off. This is what a local backend needs.
+
+### Removed
+
+- **Everything about prompt caching is gone from the panel and the pages.** The line under the block list that counted blocks below the passage, the paragraphs on the prompts page, and the clause on the cost note.
+
+  The order the shipped prompts use has not changed and neither has anything the extension sends. What is gone is the commentary about it. The prompts page still says what the order is and why the shape of the answer sits at the bottom.
 
 ## 1.10.0
 

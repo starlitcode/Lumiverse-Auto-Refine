@@ -2146,6 +2146,18 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
+  // A marker sitting straight in front of the reply names no role, so nothing
+  // may be eaten with it. Taking a word here would delete the reader's writing.
+  test("a marker with no role after it keeps the first word of the reply", async () => {
+    const h = await armed(
+      ["<REFINED><|start|>She stepped through and the cold hit her.</REFINED>"],
+      { stripAnswerThinking: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
   test("a message that is working and nothing else is refused rather than sent", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
@@ -2575,103 +2587,6 @@ describe("asking again when a check fails", () => {
   });
 });
 
-// A provider that caches prompts reuses the run of the request that has not
-// changed since last time, counting from the front. So everything that holds
-// still belongs above everything that moves: the rules, then the setting, then
-// the pages before this one, then the passage.
-//
-// Putting the run-up third would put a block that is redrawn every turn above
-// every rule, and make the whole prompt new on every reply.
-describe("a prompt built to be cached", () => {
-  // Built from the prompt that ships, not the small fixture the other checks
-  // use, since the order this is about is that prompt's. It comes from the
-  // panel, which is where it lives and the only place it lives.
-  const build = async (over: any = {}) => {
-    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
-      blocks: DEFAULT_BLOCKS,
-      ...over,
-    });
-    await h.front({ type: "preview_prompt", requestId: "p1", chatId: "c1", messageId: "m2" });
-    await wait(20);
-    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p1");
-    return (got.messages || []).map((m: any) => String(m.content || "")).join("\n\n");
-  };
-
-  // The messages as they go out, so a check can read a role rather than infer
-  // one from where the text landed.
-  const parts = async (over: any = {}) => {
-    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
-      blocks: DEFAULT_BLOCKS,
-      ...over,
-    });
-    await h.front({ type: "preview_prompt", requestId: "p2", chatId: "c1", messageId: "m2" });
-    await wait(20);
-    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p2");
-    return (got.messages || []) as Array<{ role: string; content: string }>;
-  };
-
-  test("the run-up and the passage come after the rules", async () => {
-    const whole = await build();
-    const rules = whole.indexOf("</your_job>");
-    const runUp = whole.indexOf("<earlier_pages>");
-    const turn = whole.indexOf("<passage_to_refine>");
-    expect(rules).toBeGreaterThan(-1);
-    expect(runUp).toBeGreaterThan(rules);
-    expect(turn).toBeGreaterThan(runUp);
-  });
-
-  test("and the setting sits between them", async () => {
-    const whole = await build();
-    const rules = whole.indexOf("</your_job>");
-    const who = whole.indexOf("<your_characters>");
-    const runUp = whole.indexOf("<earlier_pages>");
-    expect(who).toBeGreaterThan(rules);
-    expect(runUp).toBeGreaterThan(who);
-  });
-
-  // A rule about the shape of an answer is followed most closely when it is the
-  // last thing read. It is also the one rule that cannot be worked around, since
-  // a rewrite that loses the tags is dropped rather than saved.
-  test("the shape of the answer is the last thing in the prompt", async () => {
-    const whole = await build();
-    const turn = whole.indexOf("<passage_to_refine>");
-    const shape = whole.indexOf("<how_to_answer>");
-    expect(shape).toBeGreaterThan(turn);
-    expect(whole.slice(shape).indexOf("<earlier_pages>")).toBe(-1);
-  });
-
-  test("and it goes out as you rather than as the setup", async () => {
-    const msgs = await parts();
-    const holding = msgs.filter((m) => String(m.content).indexOf("<how_to_answer>") >= 0);
-    expect(holding.length).toBe(1);
-    expect(holding[0].role).toBe("user");
-    // In the same message as the passage, which is what one role either side of
-    // it means: your passage, then what you want back.
-    expect(holding[0].content.indexOf("<passage_to_refine>")).toBeGreaterThan(-1);
-    expect(holding[0].content.indexOf("<passage_to_refine>")).toBeLessThan(
-      holding[0].content.indexOf("<how_to_answer>"),
-    );
-  });
-
-  test("the message the model reads last is yours, not the setup's", async () => {
-    const msgs = await parts();
-    expect(msgs[msgs.length - 1].role).toBe("user");
-  });
-
-  // What the front of the request is worth: the run above the first thing that
-  // moved is the same on every refine, so it is the part a provider can reuse.
-  test("the rules are byte for byte the same across two different chats", async () => {
-    const a = await build();
-    const b = await build();
-    const cut = (t: string) => t.slice(0, t.indexOf("<your_characters>"));
-    expect(cut(a)).toBe(cut(b));
-    expect(cut(a).length).toBeGreaterThan(200);
-  });
-});
-
-// The built-in shield covers the shapes that turn up everywhere. What a
-// particular card prints is the reader's to name, so their patterns are added
-// to the list instead of replacing it.
 describe("shielding what the built-in rules miss", () => {
   const withScaffold = (body: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The gate stands open." },

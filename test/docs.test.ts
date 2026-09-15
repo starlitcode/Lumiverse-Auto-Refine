@@ -61,36 +61,6 @@ describe("the prompts page keeps up with the panel", () => {
     expect(rows.map((r) => r.needs)).toEqual(fromCode);
   });
 
-  // The page quotes how big a shipped prompt is, for working out whether one
-  // would clear a provider's minimum cacheable length. A figure written by hand
-  // goes stale the first time a block is edited, and the last one on this page
-  // was wrong at both ends: it claimed a whole prompt with a card in it, which
-  // is mostly the reader's own material and not something this end can know.
-  // What is quoted now is the shipped wording alone, which is measurable.
-  test("the size it quotes for a shipped prompt is the size they are", () => {
-    const sizes = (__testing as any).BUILT_IN_PROMPTS.map((p: any) =>
-      (p.blocks as any[])
-        .filter((b) => b.on)
-        // Macros emptied, since what they carry is the reader's chat and the
-        // figure is about the wording that ships.
-        .map((b) => String(b.text).replace(/\{\{[a-z_]+\}\}/gi, ""))
-        .join("\n\n").length,
-    );
-    // The same characters over four that Lumiverse falls back to, which is why
-    // the page says roughly.
-    const tokens = sizes.map((n: number) => n / 4);
-    const quoted = /roughly ([\d,]+) tokens for the shortest and ([\d,]+) for the longest/.exec(page);
-    expect(quoted).toBeTruthy();
-    const low = Number(quoted![1].replace(/,/g, ""));
-    const high = Number(quoted![2].replace(/,/g, ""));
-    // Rounded to the nearest hundred in the prose, so it is allowed to be that
-    // far out and no further, and it has to bracket every one of them.
-    expect(Math.abs(Math.min(...tokens) - low)).toBeLessThanOrEqual(100);
-    expect(Math.abs(Math.max(...tokens) - high)).toBeLessThanOrEqual(100);
-    expect(Math.min(...tokens)).toBeGreaterThanOrEqual(low - 100);
-    expect(Math.max(...tokens)).toBeLessThanOrEqual(high + 100);
-  });
-
   test("and none of the reasoning ones is described as a question", () => {
     const asked = rows
       .filter((r) => /for a model that thinks/.test(r.name) && r.what.includes("?"))

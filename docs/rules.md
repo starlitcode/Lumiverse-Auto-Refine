@@ -57,7 +57,7 @@ Both go wrong quietly, which is why the eight shipped prompts say them and why a
 
 Order changes how strongly a rule lands. Anything below the turn reads as an instruction about it, so a rule you cannot get a model to follow is worth moving down, closer to the message.
 
-Blocks that never change belong at the top. If your provider caches prompts, everything up to the first change is reused, and a rule you edit every day at the top of the prompt costs you that reuse on every refine.
+Blocks that never change belong at the top, and the ones that move every turn belong near the passage.
 
 ## Trying one
 
