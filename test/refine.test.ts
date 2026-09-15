@@ -2028,6 +2028,112 @@ describe("thinking the extension has to recognise", () => {
   });
 });
 
+// The formats that name a channel after the opener rather than naming the tag.
+// None of them can be reached by adding a name to the list: the tag is
+// "channel" in every one, the reasoning word sits in the content, and two of
+// them close on a token with a different name again. A block these miss is
+// handed over as prose, rewritten, and saved in place of the reply.
+describe("reasoning formats that are not a matched pair of tags", () => {
+  const REPLY = "She stepped through and, suddenly, the cold just hit her.";
+  const WORKING = "weigh the cold against the light";
+
+  // Each entry is one message exactly as a backend hands it over.
+  const FORMATS: Array<[string, string]> = [
+    ["Gemma 4", "<|turn>model\n<|channel>thought\n" + WORKING + "\n<channel|>" + REPLY + "<turn|>"],
+    ["Gemma 4 with no working in it", "<|turn>model\n<|channel>thought\n<channel|>" + REPLY + "<turn|>"],
+    [
+      "Harmony",
+      "<|start|>assistant<|channel|>analysis<|message|>" +
+        WORKING +
+        "<|end|><|start|>assistant<|channel|>final<|message|>" +
+        REPLY +
+        "<|return|>",
+    ],
+    ["Harmony carrying only the reply", "<|channel|>final<|message|>" + REPLY + "<|return|>"],
+    [
+      "Cohere",
+      "<|START_THINKING|>" + WORKING + "<|END_THINKING|><|START_RESPONSE|>" + REPLY + "<|END_RESPONSE|>",
+    ],
+    ["Seed-OSS", "<seed:think>" + WORKING + "</seed:think>" + REPLY],
+  ];
+
+  const withRaw = (raw: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content: raw },
+  ];
+
+  for (const [name, raw] of FORMATS) {
+    test(name + ": the working is never sent to be rewritten", async () => {
+      const h = await armed(
+        ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+        {},
+        withRaw(raw),
+      );
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(said(h)).not.toContain(WORKING);
+      // The prose either side of it did go, or the wrapper ate the reply.
+      expect(said(h)).toContain("the cold just hit her");
+    });
+
+    test(name + ": every control token survives the save", async () => {
+      const h = await armed(
+        ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+        {},
+        withRaw(raw),
+      );
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      const saved = h.body("m2");
+      expect(saved).toContain("She stepped through and the cold hit her.");
+      // Whatever framed the reply frames the rewrite, unchanged. A marker the
+      // refiner was allowed to see is a marker it can drop or reword.
+      for (const token of raw.match(/<\|?[\w:|]+\|?>/g) || []) expect(saved).toContain(token);
+      if (raw.includes(WORKING)) expect(saved).toContain(WORKING);
+    });
+  }
+
+  // The reply travels in a channel too, and it is the one thing that must not
+  // be mistaken for working. Getting this wrong deletes the answer rather than
+  // the reasoning in front of it.
+  test("the final channel is the reply and is refined, not stripped", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw("<|channel|>analysis<|message|>" + WORKING + "<|end|><|channel|>final<|message|>" + REPLY + "<|return|>"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("the cold just hit her");
+    expect(h.body("m2")).toContain("She stepped through and the cold hit her.");
+  });
+
+  // A refining model that answers in one of these formats has its own working
+  // taken off the answer, rather than saved into the chat as part of the
+  // rewrite.
+  test("the refiner's own channel working is kept out of the chat", async () => {
+    const h = await armed([
+      "<|channel|>analysis<|message|>plan the edit<|end|><|channel|>final<|message|><REFINED>She stepped through and the cold hit her.</REFINED><|return|>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a message that is working and nothing else is refused rather than sent", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw("<|channel|>analysis<|message|>" + WORKING + "<|end|>"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toContain(WORKING);
+    expect(h.asked.length).toBe(0);
+  });
+});
+
 describe("stopping a refine", () => {
   test("a stop reaches the run and the reply is left alone", async () => {
     const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {

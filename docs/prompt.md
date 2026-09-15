@@ -287,7 +287,34 @@ Braces are left alone on purpose. A macro sitting in a reply is already safe, be
 
 Protection catches what it can find. The prompts that ship with it also carry a **What to leave** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
-**Keep the reply's own reasoning out of the refine** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was. **Extra reasoning tag names** is under it, for a model that wraps its working in something the built-in eight do not cover. Write just the name, with no brackets or pipes; a name you add is recognised in all four wrappers.
+**Keep the reply's own reasoning out of the refine** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was.
+
+Seven wrappers are recognised. Three are matched by tag name:
+
+| Form | Example |
+| --- | --- |
+| Angle brackets | `<think>` … `</think>` |
+| Square brackets | `[thinking]` … `[/thinking]` |
+| Pipes | `<\|think\|>` … `<\|/think\|>`, and `<\|think>` … `<think\|>` |
+
+The other four close on a token with a different name from the one that opened them, so no tag name can reach them and each is recognised as a format in its own right:
+
+| Form | Example |
+| --- | --- |
+| Harmony, used by gpt-oss | `<\|channel\|>analysis<\|message\|>` … `<\|end\|>` |
+| Gemma 4 | `<\|channel>thought` … `<channel\|>` |
+| Cohere | `<\|START_THINKING\|>` … `<\|END_THINKING\|>` |
+| Seed-OSS | `<seed:think>` … `</seed:think>` |
+
+Harmony has no closer of its own: the block runs to the next control token. The channels treated as working are `analysis`, `thinking`, `thought`, `reasoning` and `commentary`. The `final` channel is the reply itself and is refined like any other, because a pattern that took it would delete the answer rather than the working in front of it.
+
+Gemma 4 names a channel the same way but spells the tokens differently, with the pipe inside the opener and outside the closer. Every assistant turn carries one, empty when the model is not thinking, so an empty pair is held back too.
+
+The markers that open and close a turn are held back with it, whichever format they come from, and put back around the rewrite untouched. A marker the refiner is allowed to see is a marker it can drop or reword, and the reply is framed by them.
+
+**Extra reasoning tag names** is under it, for a model that wraps its working in a tag the built-in names do not cover. Write just the name, with no brackets or pipes; a name you add is recognised in the three tag-name wrappers. The four formats above are matched whatever is in that list, since their tag is not what names the reasoning.
+
+Most cloud providers hand reasoning back in a field of its own rather than inside the reply. None of this applies there: it never reaches the reply text, so there is nothing to cut off. This is what a local backend needs, where the tokens come through as written.
 
 **Keep the refiner's own reasoning out of your chat** is the other direction: working the refining model adds when it answers, as opposed to working already in the reply. The tags catch most of it, since anything outside `<REFINED>` is ignored, but two cases got through and this closes them: an answer with the tags switched off, where the whole thing is taken as the rewrite, and a model that puts its working inside the tags.
 

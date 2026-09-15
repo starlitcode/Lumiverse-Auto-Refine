@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.10.0";
+const VERSION = "1.11.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -7677,7 +7677,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               key: "thinkTags",
               label: "Extra reasoning tag names",
               type: "lines",
-              hint: "Optional, one per line, just the name with no brackets or pipes. The eight common wrappers are known already. Working that is not recognised is rewritten and saved over the reply.",
+              hint: "Optional, one per line, just the name with no brackets or pipes. The common tag names and the channel formats are known already. Working that is not recognised is rewritten and saved over the reply.",
             }),
           );
         }),

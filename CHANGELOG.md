@@ -6,6 +6,34 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.11.0
+
+_2026-09-15_
+
+### Added
+
+- **Four more reasoning formats are recognised, so the working inside them is no longer rewritten and saved over the reply.** Harmony, which gpt-oss writes, Gemma 4, Cohere Command A Reasoning, and Seed-OSS.
+
+  None of these could be reached by adding a name under **Extra reasoning tag names**. The three wrappers already recognised are matched by tag name, with the same name closing the block. In all four of these the tag is not what names the reasoning: the word sits in the content, and the block closes on a different token again. Harmony has no closer of its own at all, and runs to the next control token.
+
+  The `final` channel is the reply, not working, and is refined like any other passage. A pattern that had taken it would have deleted the answer rather than the reasoning in front of it.
+
+  Adding a name to the list is still the answer for an unusual tag. These four are matched whatever is in that list, since their tag is not what names the reasoning.
+
+- **The markers that open and close a turn are held back with the reasoning and put back around the rewrite.** A local backend can pass `<|turn>model`, `<turn|>`, `<|im_start|>`, `<|eot_id|>` and the rest through into the message text. They are not prose, and a refiner handed one either drops it or rewords it.
+
+  This holds whether or not **Keep the reply's own reasoning out of the refine** is on. That switch governs the model's working, which is writing of a kind; a turn marker is not, and letting one through would leave the reply framed differently from the one Auto Retry reads.
+
+- **A message that is nothing but the model working is refused rather than refined.** It has no prose in it to rewrite, and the refiner used to be handed an empty passage and asked to improve it.
+
+### Fixed
+
+- **A reasoning block sitting behind a turn marker was treated as prose.** The wrapper had to be the very first thing in the message, so one `<|turn>model` in front of it was enough to defeat every wrapper and every name in the list. This is the shape a local backend actually hands over.
+
+- **The refiner's own working, when it answers in one of these formats, no longer reaches the chat.** It was already caught for the three tag-name wrappers and went through for the rest.
+
+Cloud connections are unaffected by all of this. They hand reasoning back in a field of its own, so it never reaches the reply text and there has never been anything to cut off. This is what a local backend needs.
+
 ## 1.10.0
 
 _2026-09-14_
