@@ -2158,6 +2158,18 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
+  // Two spaces before a line break are a hard break in markdown. Tidying the
+  // whole passage after a removal would delete one the model meant to write, so
+  // the tidy only acts where a marker actually came out.
+  test("a hard line break in the answer survives", async () => {
+    const h = await armed([
+      "<REFINED>She stepped through the gate.  \nThe cold hit her.</REFINED>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through the gate.  \nThe cold hit her.");
+  });
+
   test("a message that is working and nothing else is refused rather than sent", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],

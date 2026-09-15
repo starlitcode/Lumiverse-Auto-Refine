@@ -634,6 +634,10 @@ const THINK_CHANNELS = 'analysis|commentary|thinking|thought|reasoning';
 // What a turn marker names after itself, and what a channel marker does. Only
 // these are eaten with the marker: a bare marker followed straight by the reply
 // would otherwise take the first word of it, which is the reader's writing.
+// The stand-in left where a marker was, so the tidy can act on those places
+// and nowhere else. Stripped from the input first, so it can only ever mean
+// this.
+const HOLE = '\u0000';
 const TURN_ROLES = 'system|user|assistant|model|tool|developer|human';
 const CHANNEL_NAMES = THINK_CHANNELS + '|final';
 // Harmony closes a channel at the next control token rather than by name, so a
@@ -800,32 +804,37 @@ function stripThinkingFrom(text) {
 // since a channel block is closed by one of these and removing them first would
 // leave the block with nothing to close it.
 function stripControlTokens(text) {
-    let t = String(text);
+    const src = String(text).replace(/\u0000/g, '');
+    let t = src;
     try {
-        // The ones that name the speaker take the name with them, or the role is
-        // left sitting in the reply as a word. The header that introduces the
-        // visible reply goes too: the reply between the markers is what is kept.
-        // A name is only eaten with its marker when it is a name these formats use.
-        // A bare marker sitting straight in front of the reply would otherwise take
-        // the first word of it, and that word is the reader's writing.
-        t = t.replace(new RegExp('[ \\t]*<\\|channel\\|>[ \\t]*\\w+[ \\t]*<\\|message\\|>[ \\t]*', 'gi'), ' ');
-        t = t.replace(new RegExp('[ \\t]*<\\|channel\\|>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?[ \\t]*', 'gi'), ' ');
-        t = t.replace(new RegExp('[ \\t]*(?:<\\|channel>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?|<channel\\|>)[ \\t]*', 'gi'), ' ');
-        t = t.replace(new RegExp('[ \\t]*(?:<\\|(?:start|turn|im_start)\\|?>|<start_of_turn>)(?:[ \\t]*(?:' +
+        // Each marker leaves a hole rather than a space, so the tidy below can see
+        // where a removal happened and touch only that. A name is eaten with its
+        // marker only when it is a name these formats use: a bare marker sitting
+        // straight in front of the reply would otherwise take the first word of it.
+        t = t.replace(new RegExp('<\\|channel\\|>[ \\t]*\\w+[ \\t]*<\\|message\\|>', 'gi'), HOLE);
+        t = t.replace(new RegExp('<\\|channel\\|>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?', 'gi'), HOLE);
+        t = t.replace(new RegExp('(?:<\\|channel>(?:[ \\t]*(?:' + CHANNEL_NAMES + ')\\b)?|<channel\\|>)', 'gi'), HOLE);
+        t = t.replace(new RegExp('(?:<\\|(?:start|turn|im_start)\\|?>|<start_of_turn>)(?:[ \\t]*(?:' +
             TURN_ROLES +
-            ')\\b)?[ \\t]*', 'gi'), ' ');
-        t = t.replace(/[ \t]*<\|start_header_id\|>[\s\S]*?<\|end_header_id\|>[ \t]*/gi, ' ');
-        t = t.replace(/[ \t]*(?:<\|(?:end|return|call|message|constrain|endoftext|eot_id|im_end)\|>|<turn\|>|<end_of_turn>)[ \t]*/gi, ' ');
-        t = t.replace(/[ \t]*<\|(?:START|END)_(?:THINKING|RESPONSE)\|>[ \t]*/gi, ' ');
-        t = t.replace(/[ \t]*<\|(?:START_OF_TURN_TOKEN|CHATBOT_TOKEN|USER_TOKEN|SYSTEM_TOKEN)\|>[ \t]*/gi, ' ');
+            ')\\b)?', 'gi'), HOLE);
+        t = t.replace(/<\|start_header_id\|>[\s\S]*?<\|end_header_id\|>/gi, HOLE);
+        t = t.replace(/(?:<\|(?:end|return|call|message|constrain|endoftext|eot_id|im_end)\|>|<turn\|>|<end_of_turn>)/gi, HOLE);
+        t = t.replace(/<\|(?:START|END)_(?:THINKING|RESPONSE)\|>/gi, HOLE);
+        t = t.replace(/<\|(?:START_OF_TURN_TOKEN|CHATBOT_TOKEN|USER_TOKEN|SYSTEM_TOKEN)\|>/gi, HOLE);
     }
     catch (_) {
         return text;
     }
-    // A removal in the middle of a line leaves the space that stood in for it,
-    // and one at the end of a line leaves that space stranded before the break.
+    if (t.indexOf(HOLE) < 0)
+        return src;
+    // Close each hole the way its surroundings ask. Whitespace elsewhere is left
+    // alone: two spaces before a line break are a hard break in markdown, and a
+    // sweep over the whole passage would delete one the model meant to write.
     return t
-        .replace(/[ \t]+\n/g, '\n')
+        .replace(new RegExp('^[ \\t]*' + HOLE + '[ \\t]*$', 'gm'), '')
+        .replace(new RegExp('[ \\t]*' + HOLE + '[ \\t]*(?=\\n)', 'g'), '')
+        .replace(new RegExp('\\n[ \\t]*' + HOLE + '[ \\t]*', 'g'), '\n')
+        .replace(new RegExp('[ \\t]*' + HOLE + '[ \\t]*', 'g'), ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
