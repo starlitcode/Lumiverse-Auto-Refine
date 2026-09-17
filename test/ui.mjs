@@ -1098,7 +1098,10 @@ console.log("\nthe tabs");
       const cards = await page.evaluate(
         () => document.querySelectorAll("#drawer .arf-body .arf-card").length,
       );
-      ok(label + " shows its own cards", cards >= 1 && cards <= 5, "found " + cards);
+      // A sanity bound rather than a count anybody promised: what it catches is
+      // a tab rendering the whole panel, not a tab gaining a card. Setup holds
+      // the most at six.
+      ok(label + " shows its own cards", cards >= 1 && cards <= 6, "found " + cards);
     }
 
     await goTab(page, "Log");
@@ -6065,6 +6068,56 @@ console.log("\nsaying the shipped prompts have changed");
     ok("the shipped prompt really was the one loaded", /A close read/.test(out.picked), JSON.stringify(out));
     ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
     ok("so the line goes with it", !out.line, JSON.stringify(out));
+  });
+}
+
+console.log("\nwhere the input box is");
+{
+  // The one card that reads Lumiverse's own layout. A release that moves the
+  // box breaks refining a draft and nothing else, so the reader has to be able
+  // to see what is being tried and put their own selector in front of it.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    const seen = await page.evaluate(() => {
+      const card = document.querySelector('#drawer [data-arf-card="Where the input box is"]');
+      const list = document.querySelector("#drawer [data-arf-inputlist]");
+      return {
+        card: !!card,
+        test: !!document.querySelector("#drawer [data-arf-testinput]"),
+        picker: !!Array.from(document.querySelectorAll("#drawer button")).find((b) =>
+          /pick it for me/i.test(b.textContent || ""),
+        ),
+        lines: list ? list.children.length : 0,
+        text: list ? list.textContent : "",
+      };
+    });
+    ok("the card is on Setup", seen.card, JSON.stringify(seen).slice(0, 200));
+    ok("with a Test button", seen.test, JSON.stringify(seen).slice(0, 200));
+    // A picker has to watch for a click on the page, and a drawer eats that
+    // click on the way out, which leaves it armed with nothing to show.
+    ok("and no pick-it-for-me", !seen.picker, JSON.stringify(seen).slice(0, 200));
+    // Every selector, not a count of them: the reader needs to compare what is
+    // being tried against their own page.
+    ok("every built-in selector is listed", seen.lines >= 6, JSON.stringify(seen).slice(0, 200));
+    ok("and each says whether it is on screen", /on screen/.test(seen.text), seen.text.slice(0, 160));
+  });
+
+  // Whatever the reader typed goes in front of the built-in list, and is marked
+  // as theirs so they can see it did.
+  await inTab(browser, { saved: { inputSelector: "textarea.mine" } }, async (page) => {
+    await goTab(page, "Setup");
+    const seen = await page.evaluate(() => {
+      const list = document.querySelector("#drawer [data-arf-inputlist]");
+      const lines = list ? Array.from(list.children).map((c) => c.textContent || "") : [];
+      return {
+        mine: list ? list.getAttribute("data-arf-mine") : "?",
+        first: lines[1] || "",
+        all: lines.join(" | "),
+      };
+    });
+    ok("the reader's selector is tried first", /textarea\.mine/.test(seen.first), JSON.stringify(seen).slice(0, 320));
+    ok("and is marked as theirs", /yours/.test(seen.first), seen.first);
+    ok("the built-in list is still under it", /built in/.test(seen.all), seen.all.slice(0, 200));
   });
 }
 

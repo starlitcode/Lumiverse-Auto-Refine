@@ -18,7 +18,19 @@ _2026-09-17_
 
 - **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs give way at the sides rather than the last one dropping to a second line.
 
+### Added
+
+- **Where the input box is**, a new card on the **Setup** tab. Refining a draft is the one thing here that reads Lumiverse's own layout, so a release that moves the input box breaks that and nothing else. Until now the only fix was waiting for a new version.
+
+  Your own selectors go in the box, one per line or separated by commas, and are tried before the built-in list. The built-in list is still tried behind them, so a selector that turns out to be wrong costs nothing.
+
+  Every selector in use is listed in the order it is tried, marked as yours or built in, and each says whether it is on screen right now. **Test** answers for what you typed.
+
+  There is no button that picks the box for you. A picker has to watch for a click somewhere on the page, and the drawer closing takes that click, which leaves the picker waiting with nothing to show.
+
 ### Changed
+
+- **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one read as cramped next to the wide ones.
 
 - **Plainer words in the shipped prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.
 

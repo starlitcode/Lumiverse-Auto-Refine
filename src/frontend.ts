@@ -104,7 +104,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The floating button, the buttons in the chat, and the input bar row.",
-    keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton"],
+    keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton", "inputSelector"],
   },
   {
     id: "switches",
@@ -236,8 +236,13 @@ const PRESET_KEYS = [
 
 // Where the input box is, tried in this order: the first names it exactly, and
 // the last names any text box on the page. Refining a draft is the one part of
-// this extension that reads Lumiverse's own layout, so if an update moves that
-// box, this list is what needs a new entry.
+// this extension that reads Lumiverse's own layout, so an update that moves
+// that box breaks it until this list has a new entry.
+//
+// A reader can put their own selectors in front of these without waiting for a
+// release, under Where the input box is on the Setup tab. These stay behind
+// whatever they type, so a selector that turns out to be wrong costs nothing:
+// the built-in list still answers.
 const INPUT_PICKS = [
   '[data-component="InputArea"] textarea[name="chat-message"]',
   'textarea[name="chat-message"]',
@@ -246,9 +251,44 @@ const INPUT_PICKS = [
   "textarea",
 ];
 
+// Splits a selector list on its top-level commas only. A comma inside brackets,
+// parentheses or quotes belongs to the selector rather than separating the
+// list, so :is(a, b) and [title="x, y"] survive being pasted in.
+//
+// The same splitter Auto Retry uses, so a selector written for one reads the
+// same way in the other.
+function splitSelectorList(raw: string): string[] {
+  const src = String(raw == null ? "" : raw);
+  const out: string[] = [];
+  let buf = "";
+  let depth = 0;
+  let quote = "";
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      buf += c;
+      if (c === "\\" && i + 1 < src.length) { buf += src[i + 1]; i++; continue; }
+      if (c === quote) quote = "";
+      continue;
+    }
+    if (c === "\\" && i + 1 < src.length) { buf += c + src[i + 1]; i++; continue; }
+    if (c === '"' || c === "'") { quote = c; buf += c; continue; }
+    if (c === "(" || c === "[" || c === "{") { depth++; buf += c; continue; }
+    if (c === ")" || c === "]" || c === "}") { if (depth > 0) depth--; buf += c; continue; }
+    if (c === "," && depth === 0) { out.push(buf.trim()); buf = ""; continue; }
+    buf += c;
+  }
+  out.push(buf.trim());
+  return out.filter((p) => p.length > 0);
+}
+
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
   enabled: true,
+  // Selectors for the chat input box, tried ahead of the built-in list. Blank
+  // is the normal state: this exists for the release where Lumiverse moves the
+  // box and the built-in list has not caught up.
+  inputSelector: "",
   // The automatic pass is off until asked for. This rewrites saved messages
   // with a model, which is not something to start doing to somebody's chat
   // because they installed an extension.
@@ -3612,9 +3652,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The weight never changes with the state. A label that goes bold on select
     // is a label that gets wider, and the whole row shifts under the finger that
     // just tapped it.
-    ".arf-tab{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
+    // Equal shares rather than each tab sized to its own label. Sized to the
+    // label, the gaps between them all differ and the selected pill reads as
+    // cramped next to the wide ones, which is the uneven look. Equal shares
+    // give one rhythm across the row and one pill size.
+    ".arf-tab{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
+    "text-align:center;" +
     "cursor:pointer;background:transparent;border:0;" +
-    "padding:8px 10px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
+    "padding:8px 4px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
     "font:12.5px var(--lumiverse-font-family,system-ui);" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
     "transition:color var(--lumiverse-transition-fast,150ms ease)," +
@@ -3862,7 +3907,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-btn{min-height:40px;padding:10px 14px}" +
     ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
     ".arf-fold{min-height:44px}" +
-    ".arf-tab{padding:12px 9px}" +
+    ".arf-tab{padding:12px 4px}" +
     ".arf-box{width:46px;height:26px;border-radius:13px}" +
     ".arf-box::after{width:18px;height:18px}" +
     ".arf-box:checked::after{left:23px}" +
@@ -4808,6 +4853,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       buildChatCard(),
       buildAlertCard(),
       buildReachCard(),
+      buildInputCard(),
       buildTransferCard(),
     ];
   }
@@ -8405,6 +8451,98 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Ways in other than the drawer. Both are off until asked for, because an
   // extension that adds a floating button and an input bar row on install is
   // one that redecorated somebody's screen without asking.
+  // Where the input box is, and a way to fix it without waiting for a release.
+  //
+  // Refining a draft is the one thing here that reads Lumiverse's own layout,
+  // so a release that moves the box breaks it and nothing else. The list is
+  // shown in full rather than described, because the reader who needs this is
+  // reading their own page's markup and has to see what is already being tried
+  // before writing anything.
+  //
+  // There is no button that picks the box for you. A picker has to watch for a
+  // click somewhere on the page, and a panel that lives in a drawer loses that
+  // click to the drawer closing, which leaves the picker armed and nothing to
+  // show for it.
+  function buildInputCard(): HTMLElement {
+    const wrap = card(
+      "Where the input box is",
+      "Only needed if Refine what I have typed stops finding your box after a Lumiverse update.",
+    );
+    wrap.appendChild(
+      fieldRow({
+        key: "inputSelector",
+        label: "Your own selectors",
+        type: "lines",
+        hint: "Optional, one per line or separated by commas. These are tried before the built-in list below, and the built-in list still answers if yours finds nothing.",
+      }),
+    );
+
+    const row = el("div", "arf-row");
+    row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
+    const test = button("Test", false);
+    const said = el("span", "arf-note");
+    said.style.minHeight = "16px";
+    const WORDS: Record<string, string> = {
+      match: "found it, and it can be typed into",
+      "found, not usable": "found something, but it cannot be typed into right now",
+      "no match": "nothing on the page matches",
+      invalid: "that is not a selector the browser can read",
+      blank: "nothing here yet, so only the built-in list is used",
+    };
+    // Reads the page at the moment it is pressed rather than on a timer. The
+    // answer is only true for what is on screen now, and a line that went stale
+    // while somebody read it would be worse than no line.
+    const run = () => {
+      const state = inputSelectorState(String(cfg.inputSelector || ""));
+      said.textContent = WORDS[state] || state;
+      said.style.color =
+        state === "match"
+          ? "var(--lumiverse-success,#22c55e)"
+          : state === "invalid"
+            ? "var(--lumiverse-danger,#ef4444)"
+            : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+      paintList();
+    };
+    test.addEventListener("click", run);
+    test.setAttribute("data-arf-testinput", "1");
+    row.appendChild(test);
+    row.appendChild(said);
+    wrap.appendChild(row);
+
+    const list = el("div", "arf-col");
+    list.setAttribute("data-arf-inputlist", "1");
+    list.style.cssText = "display:flex;flex-direction:column;gap:4px;margin-top:8px";
+    // Every selector in the order it is tried, with the reader's own marked so
+    // they can see theirs went in front. Whether each one matches is only
+    // filled in after Test, since reading the page on every repaint would say
+    // "no match" while the drawer is over the input box.
+    function paintList() {
+      list.replaceChildren();
+      const mine = splitSelectorList(String(cfg.inputSelector || ""));
+      list.setAttribute("data-arf-mine", String(mine.length));
+      const picks = inputPicks();
+      const head = el("div", "arf-note", "Tried in this order:");
+      list.appendChild(head);
+      for (const pick of picks) {
+        const line = el("div", "arf-note");
+        line.style.cssText =
+          "font-family:ui-monospace,monospace;font-size:11.5px;word-break:break-all";
+        const ownName = mine.indexOf(pick) >= 0 ? "yours" : "built in";
+        let mark = "";
+        try {
+          mark = document.querySelector(pick) ? " · on screen" : " · not on screen";
+        } catch (_) {
+          mark = " · not a selector the browser can read";
+        }
+        line.textContent = pick + "  (" + ownName + mark + ")";
+        list.appendChild(line);
+      }
+    }
+    paintList();
+    wrap.appendChild(list);
+    return wrap;
+  }
+
   function buildReachCard(): HTMLElement {
     const wrap = card("Ways to reach it", "The drawer tab is always there. These are extra.");
     wrap.appendChild(
@@ -10003,10 +10141,54 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // Every selector the box is looked for under, the reader's first. Duplicates
+  // are dropped so a selector already in the built-in list is not tried twice
+  // and does not appear twice on the card that lists them.
+  function inputPicks(): string[] {
+    const mine = splitSelectorList(String(cfg.inputSelector || ""));
+    const out: string[] = [];
+    for (const pick of mine.concat(INPUT_PICKS)) if (out.indexOf(pick) < 0) out.push(pick);
+    return out;
+  }
+
+  // Whether a selector finds the input box right now, in the words the card
+  // shows. Split from the finder because the card has to say why nothing
+  // matched, and the finder only has to return the box or nothing.
+  function inputSelectorState(sel: string): string {
+    const raw = String(sel || "").trim();
+    if (!raw) return "blank";
+    const parts = splitSelectorList(raw);
+    if (!parts.length) return "blank";
+    let anyValid = false;
+    let anyFound = false;
+    for (const part of parts) {
+      let found: any = null;
+      try {
+        found = document.querySelectorAll(part);
+        anyValid = true;
+      } catch (_) {
+        continue;
+      }
+      for (let i = found.length - 1; i >= 0; i--) {
+        const node: any = found[i];
+        if (!node) continue;
+        anyFound = true;
+        if (node.disabled || node.readOnly) continue;
+        if (!typeable(node)) continue;
+        if (node.closest && node.closest(".arf")) continue;
+        const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+        if (box && (!box.width || !box.height)) continue;
+        return "match";
+      }
+    }
+    if (!anyValid) return "invalid";
+    return anyFound ? "found, not usable" : "no match";
+  }
+
   // The box to write into. Each selector is asked separately so the list keeps
   // its order: one query holding all of them answers in page order instead.
   function composer(): any | null {
-    for (const pick of INPUT_PICKS) {
+    for (const pick of inputPicks()) {
       try {
         const found = document.querySelectorAll(pick);
         // The last on the page, since our own panel holds a textarea too and
@@ -11801,6 +11983,8 @@ export function setup(ctx: Ctx, overrides?: any) {
 // against each other. A setting in one and not the other looks fine and quietly
 // never loads.
 export const __testing = {
+  splitSelectorList,
+  INPUT_PICKS,
   CONFIG,
   PARTS,
   COST_FIELDS,
