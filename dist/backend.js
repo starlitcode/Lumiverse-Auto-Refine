@@ -1241,8 +1241,8 @@ function pickedSpan(raw, picked, ordinal) {
 // Takes a span out of a passage and closes the gap the way a person would.
 //
 // Only the point where the two halves meet is touched. Tidying the whole
-// passage would change spacing the reader never selected, which on a message
-// full of deliberate line breaks is its own kind of damage.
+// passage would change spacing the reader never selected, which matters on a
+// message whose line breaks are part of how it is written.
 function snipSpan(raw, start, end) {
     const left = raw.slice(0, start);
     const right = raw.slice(end);

@@ -9605,7 +9605,8 @@ export function setup(ctx, overrides) {
     function buildResetInto(wrap) {
         wrap.appendChild(el("div", "arf-rule"));
         const head = el("div", "arf-row");
-        head.appendChild(el("span", "arf-sign arf-bad-ink", "!"));
+        // No mark on the heading. The warning under it carries one, and the same
+        // mark twice in one card reads as two separate warnings.
         head.appendChild(el("span", "arf-lab arf-grow", "Start again"));
         wrap.appendChild(head);
         wrap.appendChild(bad("This cannot be undone. If your prompt is among the parts below, every block you wrote and every rule in them is gone. Export first if there is any chance you want it back."));

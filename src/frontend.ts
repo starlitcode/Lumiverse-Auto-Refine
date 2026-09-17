@@ -10058,7 +10058,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildResetInto(wrap: HTMLElement) {
     wrap.appendChild(el("div", "arf-rule"));
     const head = el("div", "arf-row");
-    head.appendChild(el("span", "arf-sign arf-bad-ink", "!"));
+    // No mark on the heading. The warning under it carries one, and the same
+    // mark twice in one card reads as two separate warnings.
     head.appendChild(el("span", "arf-lab arf-grow", "Start again"));
     wrap.appendChild(head);
     wrap.appendChild(
