@@ -29,9 +29,9 @@ describe("the prompts that ship with it", () => {
   const forReplies = () => BUILT_IN_PROMPTS.filter((p: any) => !p.mine);
   const forMine = () => BUILT_IN_PROMPTS.filter((p: any) => p.mine);
 
-  test("there are four for each of the two prompts", () => {
-    expect(forReplies().length).toBe(4);
-    expect(forMine().length).toBe(4);
+  test("there are two for each of the two prompts", () => {
+    expect(forReplies().length).toBe(2);
+    expect(forMine().length).toBe(2);
   });
 
   // Stored under a name of its own, shown under the heading's. Two entries
@@ -42,9 +42,16 @@ describe("the prompts that ship with it", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  test("and the two sets read the same, since the heading says which is which", () => {
-    expect(forMine().map((p: any) => p.label).sort())
-      .toEqual(forReplies().map((p: any) => p.label).sort());
+  // The two sets used to share their labels and lean on the heading above to
+  // say which was which. They name their own job now, so the label agrees with
+  // the role the first block hands out and the heading is no longer carrying
+  // the difference on its own.
+  test("and the two sets are named apart, since they are different jobs", () => {
+    const mine = forMine().map((p: any) => p.label);
+    const replies = forReplies().map((p: any) => p.label);
+    for (const one of mine) expect(replies).not.toContain(one);
+    expect(mine.every((l: string) => /copy edit/i.test(l))).toBe(true);
+    expect(replies.every((l: string) => /line edit/i.test(l))).toBe(true);
   });
 
   // A prompt for your own turn loaded over the prompt for replies would be the
@@ -53,13 +60,13 @@ describe("the prompts that ship with it", () => {
     for (const p of BUILT_IN_PROMPTS) expect(typeof p.mine).toBe("boolean");
   });
 
-  // One name for the quick pair and one for the thorough pair, so which two go
-  // together is visible without reading either.
-  test("each pair shares a name", () => {
-    for (const set of [forReplies(), forMine()]) {
+  // Both entries in a set share one name, which is the job the first block
+  // hands the model: a line edit on a reply, a copy edit on your own turn. The
+  // only thing separating them is which model they were written for.
+  test("each set is named for the job it does", () => {
+    for (const [set, job] of [[forReplies(), "The line edit"], [forMine(), "The copy edit"]] as any) {
       const stems = set.map((p: any) => p.label.split(",")[0].trim());
-      expect(stems.filter((n: string) => n === "A quick read").length).toBe(2);
-      expect(stems.filter((n: string) => n === "A close read").length).toBe(2);
+      expect(stems.filter((n: string) => n === job).length).toBe(2);
     }
   });
 
@@ -73,18 +80,16 @@ describe("the prompts that ship with it", () => {
     }
   });
 
-  test("the fuller one of each pair really is fuller", () => {
+  // The one for a reasoning model leans on the model to fill in the rest, so it
+  // ships fewer words than the one written for any model. Its description says
+  // so, and this is what holds that claim to the text.
+  test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
-      ["A close read", "A quick read"],
-      ["A close read, for a model that thinks", "A quick read, for a model that thinks"],
-      ["Your writing, a close read", "Your writing, a quick read"],
-      [
-        "Your writing, a close read, for a model that thinks",
-        "Your writing, a quick read, for a model that thinks",
-      ],
+      ["The line edit, for a model that thinks", "The line edit"],
+      ["Your writing, the copy edit, for a model that thinks", "Your writing, the copy edit"],
     ];
-    for (const [big, small] of pairs)
-      expect(sizeOf(named(big))).toBeGreaterThan(sizeOf(named(small)) * 1.25);
+    for (const [small, big] of pairs)
+      expect(sizeOf(named(small))).toBeLessThan(sizeOf(named(big)));
   });
 
   // The whole reason there is a second set. A prompt for your own turn is about
@@ -104,9 +109,9 @@ describe("the prompts that ship with it", () => {
   // each other, because they cannot: a close read for a thinking model is about
   // the size of a quick read for a plain one. That belongs in the description,
   // where it can be said in words rather than implied by a label.
-  test("and the description of each says what it costs", () => {
+  test("and the description of each says what will run it", () => {
     for (const p of BUILT_IN_PROMPTS)
-      expect({ name: p.name, said: /size|short|smallest|half again|prompt/i.test(p.what) })
+      expect({ name: p.name, said: /any model|model that reasons/i.test(p.what) })
         .toEqual({ name: p.name, said: true });
   });
 
@@ -143,7 +148,10 @@ describe("the prompts that ship with it", () => {
   // around rather than a check that ever fires.
   const STOCK = [
     /\bsecond pair of eyes\b/i,
-    /\byou are (?:a|an|the) \w+/i,
+    // Narrowed rather than dropped. A role with a job in it is what the
+    // opening block is for now, and it is the generic ones that read as
+    // filler: a helpful assistant, an expert writer, a master storyteller.
+    /\byou are (?:a|an) (?:helpful|expert|professional|skilled|talented|seasoned|world.class|master)\b/i,
     /\bbeats?\b/i,
     /\blands?\b/i,
     /\blose the thread\b/i,

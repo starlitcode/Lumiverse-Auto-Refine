@@ -38,8 +38,8 @@ const rows = page
   .map((cells) => ({ name: cells[1].replace(/\*\*/g, ""), what: cells[2], needs: cells[3] }));
 
 describe("the prompts page keeps up with the panel", () => {
-  test("the code has eight prompts to check against", () => {
-    expect(shipped.length).toBe(8);
+  test("the code has four prompts to check against", () => {
+    expect(shipped.length).toBe(4);
   });
 
   test("the page has a row for each of them", () => {
@@ -51,7 +51,7 @@ describe("the prompts page keeps up with the panel", () => {
     // is the order the array is in. A prompt renamed in one and not the other
     // lands here.
     expect(rows.map((r) => r.name)).toEqual(shipped.map((p) => p.label));
-    expect(shipped.map((p) => p.mine)).toEqual([false, false, false, false, true, true, true, true]);
+    expect(shipped.map((p) => p.mine)).toEqual([false, false, true, true]);
   });
 
   test("the page agrees about which ones need a reasoning model", () => {

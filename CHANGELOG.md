@@ -42,6 +42,8 @@ _2026-09-17_
 
 ### Fixed
 
+- **A rewrite is now told not to take things out.** Every block guarded against the model adding to your writing, and none of them guarded against it quietly removing a line that read plainly. Instructions hold a model back from adding much better than from cutting, so the cutting is now named on its own.
+
 - **A connection that refuses one of the fields sent with a refine no longer stops the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
 
   The refusal is read and the refine is asked again without the fields it named, once. Only fields that actually went out are dropped, so a message mentioning something the extension never sent changes nothing, and a second refusal is treated as real.
@@ -49,6 +51,18 @@ _2026-09-17_
 - **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs get narrower rather than the last one dropping to a second line.
 
 ### Changed
+
+- **Every shipped prompt now opens by telling the model which job it has.** The first block used to describe the work without ever naming the worker. A line editor and a copy editor are two different jobs with a real boundary between them, and handing the model one of those names carries more than a paragraph of instructions does.
+
+  **The line edit** puts the model on how a reply reads and keeps it off what happens in it. **The copy edit** puts it on what went wrong on the way to the page and keeps it off your style.
+
+  The blocks also say plainly what they only implied before: change a sentence the moment it matches something named, without weighing whether this one is borderline, and leave every sentence that matches nothing. A passage coming back changed in every line is a worse edit than one carrying four good changes.
+
+- **Eight shipped prompts are now four.** The quick and close pairs were two sizes of the same prompt, and the smaller of each was a saving that did not amount to much on a prompt this size. What is left is one line edit and one copy edit, each once for any model and once for a model that reasons, which is the split that genuinely changes the prompt.
+
+  A fresh install starts on the fuller one of each pair, which is what the old close read was.
+
+  Your own prompt is untouched. If you had loaded one of the eight, the panel says the shipped set has changed and leaves it to you to load a new one.
 
 - **Typing in the search box no longer stalls between letters.** Every keystroke rebuilt the whole tab and then re-measured every line on it against your theme, which on the **Prompt** tab is about forty milliseconds a character. Typing one word cost nearly three tenths of a second of that, and it was felt as the field being slow to take letters.
 

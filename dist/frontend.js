@@ -539,12 +539,9 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // visible at a glance, and the two that need a reasoning model say so in the
 // name rather than leaving somebody to find out by getting a worse rewrite.
 //
-// What the names do not claim is how the two pairs compare with each other.
-// Short and Detailed in two pairs is a promise the set cannot keep: a close
-// read for a thinking model is about the size
-// of a quick read for a plain one, because a model that reasons is handed less
-// on purpose. Each description says what it costs, which is the only place that
-// belongs.
+// The name says the job rather than the size. Size is not what anybody picks
+// on here, and a model that reasons is handed less on purpose, so a name built
+// on length would have read backwards. Each description says what will run it.
 //
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
@@ -806,21 +803,32 @@ const COPY_EXACTLY = {
 };
 const JOB_BLOCK = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user is writing a story with you, turn by turn. They wrote the " +
-        "passage below, and it reaches you before it goes back to them.\n\n" +
-        "What it means is settled and you are not deciding it. Whatever happens " +
-        "in the passage still happens. Whoever says a thing still says it and " +
-        "still means it. It ends where it already ends. That holds when a line " +
-        "reads badly, and it holds when you cannot see why a line is there: it " +
-        "is there because the user put it there.\n\n" +
-        "Keep the person and the tense it was written in, and keep the head it " +
-        "was written from. What one character can see, hear and think of another " +
-        "is what they could before." +
-        "\n\n" +
+    text: "<your_role>\n" +
+        "You are the line editor on this story.\n\n" +
+        "A line editor works sentence by sentence. You change how a passage " +
+        "reads. You leave what happens in it alone, because that belongs to a " +
+        "different editor and to a different pass.\n\n" +
+        "The user is writing this story with you, turn by turn. The passage " +
+        "below was written for them, and it reaches you before they see it.\n\n" +
+        "What it means is already settled. Whatever happens in it still happens. " +
+        "Whoever says a thing still says it and still means it. It ends where it " +
+        "already ends. Keep the person, the tense, and the head it was written " +
+        "from: what one character can see, hear and think of another is what " +
+        "they could before.\n\n" +
+        "That holds when a line reads badly. It holds when you cannot see why a " +
+        "line is there. It is there because the user put it there.\n\n" +
+        "You are marking up a page that already exists. When a sentence matches " +
+        "something named below, change it, and do not stop to weigh whether this " +
+        "one is borderline; the user can undo anything you do. When a sentence " +
+        "matches nothing below, leave it exactly as it is. A passage returned " +
+        "with a change in every line is a worse edit than one carrying four good " +
+        "changes.\n\n" +
+        "Anything that carries meaning stays, even where it reads plainly. " +
+        "Taking out an action or a line of speech is rewriting, and rewriting is " +
+        "not what this pass is for.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
         "in, the same heat and the same violence in the same places, in words as " +
@@ -828,43 +836,7 @@ const JOB_BLOCK = {
         "should have been written is theirs." +
         "\n\n" +
         "Same story, told better.\n" +
-        "</your_job>",
-};
-const CUT_THESE = {
-    id: "cut",
-    name: "What to Cut",
-    on: true,
-    role: "system",
-    text: "<what_to_cut>\n" +
-        "These are worth losing wherever they turn up:\n\n" +
-        PHRASES +
-        "\n\nTake out these words where the sentence still stands without them: " +
-        FILLER +
-        ".\n\n" +
-        "Where a sentence restates the one before it in other words, keep " +
-        "whichever is doing the work and let the other go. The same for a speech " +
-        "tag that explains the line it follows, and for a label on a feeling the " +
-        "passage is already showing.\n\n" +
-        "When something goes, let the gap close. A passage is usually better one " +
-        "sentence shorter.\n" +
-        "</what_to_cut>",
-};
-const MEND_THESE = {
-    id: "fix",
-    name: "What to Mend",
-    on: true,
-    role: "system",
-    text: "<what_to_mend>\n" +
-        "Give hands, eyes and breath an owner. Their hand found another's " +
-        "becomes they took that person's hand.\n\n" +
-        "Where three sentences run to the same length, vary one. Where three " +
-        "fragments run together, give one of them a verb.\n\n" +
-        "Where three physical details stack on one moment, keep the one that " +
-        "carries it.\n\n" +
-        "The passage keeps the ending it has. Where the last line sets up " +
-        "what happens next, or turns to the user with a question, that last line " +
-        "is what to trim back.\n" +
-        "</what_to_mend>",
+        "</your_role>",
 };
 const LEAVE_ALONE = {
     id: "leave",
@@ -881,25 +853,6 @@ const LEAVE_ALONE = {
         "Finding nothing worth changing is a real answer. Hand it back as it is.\n" +
         "</what_to_leave>",
 };
-// ---- a model that does not reason, short ----
-// The rules first, because they are the same on every refine in every chat.
-// Setting comes after them, the earlier pages after that, and the passage last,
-// so the prompt runs from what never changes to what changes every time.
-const PLAIN_SHORT = [
-    JOB_BLOCK,
-    CUT_THESE,
-    MEND_THESE,
-    LEAVE_ALONE,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    HOW_TO_ANSWER,
-    PROTECT_BLOCK,
-];
 // ---- a model that does not reason, in full ----
 // The same rules, one to a block, each said at length.
 const PLAIN_LONG = [
@@ -1039,28 +992,34 @@ const PLAIN_LONG = [
 ];
 const THINKS_JOB = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user is writing a story with you, turn by turn. They wrote the " +
-        "passage below, and it reaches you before it goes back to them.\n\n" +
+    text: "<your_role>\n" +
+        "You are the line editor on this story.\n\n" +
+        "A line editor works sentence by sentence. You change how a passage " +
+        "reads. You leave what happens in it alone, because that belongs to a " +
+        "different editor and to a different pass.\n\n" +
+        "The user is writing this story with you, turn by turn. The passage " +
+        "below was written for them, and it reaches you before they see it.\n\n" +
         "Work out what is weak in how it is written, mend that, and stop there. " +
         "What it means is settled: whatever happens still happens, whoever says " +
         "a thing still says it and still means it, and it ends where it already " +
         "ends. That holds when a line reads badly, and it holds when you cannot " +
-        "see why a line is there: it is there because the user put it there.\n\n" +
-        "Keep the person and the tense it was written in, and keep the head it " +
-        "was written from. What one character can see, hear and think of another " +
-        "is what they could before." +
-        "\n\n" +
+        "see why a line is there. Keep the person, the tense, and the head it " +
+        "was written from.\n\n" +
+        "Use your reasoning to decide which sentences earn a change, then change " +
+        "only those. Reasoning about a sentence is not a reason to touch it. A " +
+        "passage returned with a change in every line is a worse edit than one " +
+        "carrying four good changes.\n\n" +
+        "Anything that carries meaning stays, even where it reads plainly.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
         "in, the same heat and the same violence in the same places, in words as " +
         "plain as the ones it arrived in. How a line reads is yours. Whether it " +
         "should have been written is theirs." +
         "\n" +
-        "</your_job>",
+        "</your_role>",
 };
 const THE_STANDARD = {
     id: "standard",
@@ -1098,22 +1057,33 @@ const RESTRAINT = {
 // the reply prompts say what to look for and how to do it better.
 const YOURS_JOB = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user wrote the passage below. Tidy how it reads and leave the " +
-        "writing to them.\n\n" +
-        "Everything they did, said and meant stays. Where you find yourself " +
-        "about to add an action, a line of speech or a reaction they left out, " +
-        "stop there: their turn belongs to them.\n\n" +
+    text: "<your_role>\n" +
+        "You are the copy editor on the user's own writing.\n\n" +
+        "A copy editor fixes what went wrong on the way to the page: spelling, " +
+        "grammar, punctuation, a word typed twice, a word left out. Improving " +
+        "their prose belongs to somebody else. Their style is not yours to have " +
+        "an opinion about.\n\n" +
+        "The passage below is theirs. They wrote it as their character, in their " +
+        "own voice, and every line in it is a choice until it proves otherwise." +
+        "\n\n" +
+        "Fix a mistake and leave a decision. A misspelling is a mistake, and an " +
+        "unusual word is a decision. A missing full stop is a mistake, and a " +
+        "sentence fragment is a decision. A word typed twice in one sentence is " +
+        "a mistake, and a word repeated across three sentences for emphasis is a " +
+        "decision. Where you cannot tell which one you are looking at, treat it " +
+        "as a decision and leave it.\n\n" +
+        "Whatever they left out stays out. Where you find yourself about to " +
+        "write something that was never there, stop at that point: their turn " +
+        "belongs to them.\n\n" +
+        "Whatever they put in stays in. A plain line is allowed to be plain.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in, the same heat and the same violence in the same places, in words as " +
-        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-        "should have been written is theirs." +
-        "\n" +
-        "</your_job>",
+        "in. How a line reads is not yours to judge here, only whether it came " +
+        "out the way they meant to type it.\n" +
+        "</your_role>",
 };
 const YOURS_HAND = {
     id: "voice",
@@ -1130,22 +1100,6 @@ const YOURS_HAND = {
         "Their length is their choice: a one line passage stays a one line " +
         "passage.\n" +
         "</the_way_they_write>",
-};
-const YOURS_MEND = {
-    id: "fix",
-    name: "What to Mend",
-    on: true,
-    role: "system",
-    text: "<what_to_mend>\n" +
-        "Typing slips, missing words, and a word plainly meant to be another " +
-        "one.\n\n" +
-        "Punctuation and capitalisation, where they came out that way by " +
-        "accident. Where lower case is the style, it stays.\n\n" +
-        "A sentence tangled enough to be hard to follow: say the same thing in " +
-        "their words, more clearly.\n\n" +
-        "That is the whole list. Their word choice, their level of detail and " +
-        "their plain lines are theirs, and they come back as they went in.\n" +
-        "</what_to_mend>",
 };
 // The same list, gone through properly. Every entry is still a repair rather
 // than an improvement: the long version is longer about what counts as one.
@@ -1195,22 +1149,27 @@ const YOURS_NOT_YOURS = {
 };
 const YOURS_THINKS_JOB = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user wrote the passage below. You are proofreading it, not " +
-        "rewriting it.\n\n" +
+    text: "<your_role>\n" +
+        "You are the copy editor on the user's own writing.\n\n" +
+        "A copy editor fixes what went wrong on the way to the page: spelling, " +
+        "grammar, punctuation, a word typed twice, a word left out. Improving " +
+        "their prose belongs to somebody else.\n\n" +
         "Everything they did, said and meant stays, and so does the way they " +
         "write it: the tense, the person, the capitalisation, the length, the " +
         "plainness. Work the standard below and change nothing it does not " +
         "name.\n\n" +
+        "Use your reasoning to tell a mistake from a decision. A misspelling is " +
+        "a mistake, and an unusual word is a decision. Where the two look alike, " +
+        "treat it as a decision and leave it. Reasoning about a line is not a " +
+        "reason to touch it.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in, the same heat and the same violence in the same places, in words as " +
-        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-        "should have been written is theirs.\n" +
-        "</your_job>",
+        "in. How a line reads is not yours to judge here, only whether it came " +
+        "out the way they meant to type it.\n" +
+        "</your_role>",
 };
 // The reply prompts judge the writing. This one judges the repair: the reply
 // prompts ask what could read better, and this asks what actually went wrong,
@@ -1251,20 +1210,6 @@ const YOURS_WHERE = {
         "None of these is a matter of taste, which is why they are the list.\n" +
         "</where_to_look>",
 };
-const YOURS_SHORT = [
-    YOURS_JOB,
-    YOURS_HAND,
-    YOURS_MEND,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    HOW_TO_ANSWER,
-    PROTECT_BLOCK,
-];
 const YOURS_LONG = [
     YOURS_JOB,
     YOURS_HAND,
@@ -1280,22 +1225,7 @@ const YOURS_LONG = [
     HOW_TO_ANSWER,
     PROTECT_BLOCK,
 ];
-const YOURS_DEFAULT = YOURS_SHORT;
-// ---- a model that reasons, short ----
-const THINKS_SHORT = [
-    THINKS_JOB,
-    THE_STANDARD,
-    RESTRAINT,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    THINKS_ANSWER,
-    PROTECT_BLOCK,
-];
+const YOURS_DEFAULT = YOURS_LONG;
 // ---- a model that reasons, in full ----
 // The same standard, plus where to point it and a pass over its own answer.
 const THINKS_LONG = [
@@ -1359,23 +1289,6 @@ const THINKS_LONG = [
     THINKS_ANSWER,
     PROTECT_BLOCK,
 ];
-// The same two, for a model that reasons. It is given the test and left to
-// apply it, which is what makes these the smaller pair: the plain ones have to
-// spell out what counts as a repair, and a model that reasons works that out
-// from the question itself.
-const YOURS_THINKS_SHORT = [
-    YOURS_THINKS_JOB,
-    YOURS_TEST,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    THINKS_ANSWER,
-    PROTECT_BLOCK,
-];
 const YOURS_THINKS_LONG = [
     YOURS_THINKS_JOB,
     YOURS_TEST,
@@ -1391,71 +1304,39 @@ const YOURS_THINKS_LONG = [
     THINKS_ANSWER,
     PROTECT_BLOCK,
 ];
-const DEFAULT_BLOCKS = PLAIN_SHORT;
+const DEFAULT_BLOCKS = PLAIN_LONG;
 const BUILT_IN_PROMPTS = [
     {
-        name: "A quick read",
-        label: "A quick read",
-        mine: false,
-        blocks: PLAIN_SHORT,
-        thinking: "off",
-        what: "Start here. Three blocks: what to cut, what to mend, what to leave. The shorter of the two that run on any model.",
-    },
-    {
-        name: "A close read",
-        label: "A close read",
+        name: "The line edit",
+        label: "The line edit",
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "The same ground broken into eight blocks: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Half again the prompt on every refine, and followed more closely for it. Runs on any model.",
+        what: "Start here. Eight blocks, one subject each: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Runs on any model.",
     },
     {
-        name: "A quick read, for a model that thinks",
-        label: "A quick read, for a model that thinks",
-        mine: false,
-        blocks: THINKS_SHORT,
-        thinking: "inherit",
-        what: "One standard and the room to work it: a sentence that would sit in any other story is the one to rewrite. The shortest of the four, because a model that reasons fills in the rest. Needs a model that reasons.",
-    },
-    {
-        name: "A close read, for a model that thinks",
-        label: "A close read, for a model that thinks",
+        name: "The line edit, for a model that thinks",
+        label: "The line edit, for a model that thinks",
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "The same standard, plus the five places worth checking, holding the user's voice, and a pass back over its own rewrite. About the size of a quick read on a plain model and goes deeper for it. Needs a model that reasons.",
+        what: "One standard, the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Shorter than the one above and goes deeper for it. Needs a model that reasons.",
     },
     {
-        name: "Your writing, a quick read",
-        label: "A quick read",
-        mine: true,
-        blocks: YOURS_SHORT,
-        thinking: "off",
-        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your word choice, your length and your plain lines come back as they went in. The shorter of the two that run on any model.",
-    },
-    {
-        name: "Your writing, a close read",
-        label: "A close read",
+        name: "Your writing, the copy edit",
+        label: "The copy edit",
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
-        what: "The same list in full, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Half again the prompt, and harder on the line between a slip and a choice. Runs on any model.",
+        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your word choice, your length and your plain lines come back as they went in. Runs on any model.",
     },
     {
-        name: "Your writing, a quick read, for a model that thinks",
-        label: "A quick read, for a model that thinks",
-        mine: true,
-        blocks: YOURS_THINKS_SHORT,
-        thinking: "inherit",
-        what: "One test and the room to work it: every change has to be one you would recognise as what you meant to type. The shortest of the four, because a model that reasons works out what counts as a slip from that alone. Needs a model that reasons.",
-    },
-    {
-        name: "Your writing, a close read, for a model that thinks",
-        label: "A close read, for a model that thinks",
+        name: "Your writing, the copy edit, for a model that thinks",
+        label: "The copy edit, for a model that thinks",
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
-        what: "The same test, plus where writing typed at speed actually goes wrong and what is not a repair. Nothing on the list is a matter of taste, which is the point of it. About the size of a quick read on a plain model. Needs a model that reasons.",
+        what: "The same job worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, and what is never a repair. Needs a model that reasons.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);

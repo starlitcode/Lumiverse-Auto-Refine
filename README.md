@@ -78,11 +78,11 @@ Put your provider's prices in on the **Model** tab and the panel stops dealing i
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
 
-Eight prompts ship with it and work as they stand: the same four shapes once for replies and once for your own messages, under a heading each where you pick them.
+Four prompts ship with it and work as they stand: a line edit for replies and a copy edit for your own messages, each once for any model and once for a model that reasons, under a heading each where you pick them.
 
-**A quick read** is the one to start with. **A close read** goes over the same ground properly, for a bit more prompt. Both work on any model.
+Each one opens by telling the model which job it has. **The line edit** puts it on how a reply reads and keeps it off what happens in it. **The copy edit** puts it on what went wrong on the way to the page and keeps it off your style.
 
-The other two say **for a model that thinks** in their names. Those hand the model the standard and let it apply it, which is why they are the smaller pair; a model that does not reason is given the list instead.
+The two that say **for a model that thinks** hand the model the standard and let it apply it, which is why they are the smaller pair. A model that does not reason is given the list instead.
 
 The four for your own writing do a different job: repair what is there and change nothing else.
 

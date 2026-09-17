@@ -213,14 +213,12 @@ Eight, which is the same four shapes twice: once for refining a reply, and once 
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **A quick read** | What to cut, what to mend, what to leave, a block each. The one to start with. | no |
-| **A close read** | The same ground gone over properly, one block apiece for phrases, words, repetition, rhythm, speech, bodies and endings. | no |
-| **A quick read, for a model that thinks** | One standard and the room to work it: a sentence that would sit in any other story is the one to rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
-| **A close read, for a model that thinks** | The same standard, the five places worth checking, holding the writer's voice, and a pass back over its own rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **The line edit** | Opens by handing the model the job: line editor, so how a passage reads is theirs and what happens in it is yours. Then one block apiece for phrases, words, repetition, rhythm, speech, bodies, endings and restraint. The one to start with. | no |
+| **The line edit, for a model that thinks** | The same role, then one standard, the five places worth checking, holding the writer's voice, and a pass back over its own rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
 
 Each pair shares a name, so which two go together is visible without reading either, and the two that need a reasoning model say so where you pick them rather than leaving you to find out from a worse rewrite.
 
-What the names do not claim is how the two pairs compare with each other. **Short** and **Detailed** in two pairs is a promise the set cannot keep: a close read for a thinking model is about the size of a quick read for a plain one. Per refine, smallest first: **a quick read for a model that thinks**, then **a quick read**, then **a close read for a model that thinks** a shade above it, then **a close read** at about half again on top.
+The name says the job rather than the size, because the size is not the thing worth picking on. Per refine, the smaller of each pair is the one for a model that reasons.
 
 The reasoning pair is the smaller one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 
@@ -236,10 +234,8 @@ The same four shapes, written for a different job. A reply is prose to improve; 
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **A quick read** | What to mend, and then a full stop: slips, missing words, punctuation that came out wrong by accident. | no |
-| **A close read** | The same list gone through properly, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. | no |
-| **A quick read, for a model that thinks** | One test and the room to work it: every change has to be one you would recognise as what you meant to type. Asks for its working in `<REFINE_NOTES>`. | yes |
-| **A close read, for a model that thinks** | The same test, plus where writing typed at speed actually goes wrong. Nothing on that list is a matter of taste, which is the point of it. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **The copy edit** | Opens by handing the model the job: copy editor, so it fixes what went wrong on the way to the page and leaves your style alone. Then the list in full, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. | no |
+| **The copy edit, for a model that thinks** | The same role, then one test for telling a mistake from a decision, and where writing typed at speed actually goes wrong. Asks for its working in `<REFINE_NOTES>`. | yes |
 
 Where the two sets differ is restraint. Every one of these ends by saying that where you cannot tell a slip from a choice, it is a choice: understatement is a decision, a fragment can be how somebody writes, and a plain line that says she left means she left.
 

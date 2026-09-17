@@ -1386,7 +1386,7 @@ console.log("\na preset that names a model setup");
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }, value);
 
-    await pickPreset("A close read");
+    await pickPreset("The line edit");
     await settle(page);
     ok("nothing is said about a shipped prompt before a setup is picked", (await shippedNote()) === false);
     await page.evaluate(() => {
@@ -1815,11 +1815,22 @@ console.log("\nloading a preset from where you were reading");
       const s = document.getElementById("scroller");
       const seen = () =>
         document.querySelector('#drawer [data-arf-card="Presets"]').getBoundingClientRect().top;
-      const was = { scroll: s.scrollTop, card: seen() };
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const load = (re) => {
+        const o = Array.from(pick.options).find((x) => re.test(x.textContent.trim()));
+        pick.value = o.value;
+        pick.dispatchEvent(new Event("change", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="load"]').click();
+        return o;
+      };
+      // Start on the smaller of the pair, since a fresh install already holds
+      // the bigger one and loading it again would grow nothing to follow.
+      load(/^The line edit, for a model that thinks$/);
+      await new Promise((r) => setTimeout(r, 120));
+      const was = { scroll: s.scrollTop, card: seen() };
       // The biggest one, which is the one that grows the panel most when it
       // loads and so the one most likely to throw the scroll.
-      const detailed = Array.from(pick.options).find((o) => /^A close read$/.test(o.textContent.trim()));
+      const detailed = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
       pick.value = detailed.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       document.querySelector('#drawer [data-arf-preset="load"]').click();
@@ -4817,7 +4828,7 @@ console.log("\nlists with headings on them");
     // changes the prompt you are not looking at.
     ok("the presets are under a heading", got.heads.length === 1, got && got.heads);
     ok("naming the list being edited", got.heads[0] === "For replies", got.heads);
-    ok("with its four under it", got.under.every((g) => g.items.length === 4), got.under);
+    ok("with its two under it", got.under.every((g) => g.items.length === 2), got.under);
     // The heading says which prompt it is for, so the entry does not repeat it.
     ok("and the entries under them do not repeat the heading",
       got.under.every((g) => g.items.every((t) => !/your writing/i.test(t))), got.under);
@@ -5789,8 +5800,8 @@ console.log("\nthe preset menu shows one list at a time");
     await goTab(page, "Prompt");
     const forReplies = await menu(page);
     ok(
-      "on the replies list, only its own four are offered",
-      forReplies && forReplies.length === 1 && forReplies[0].head === "For replies" && forReplies[0].of.length === 4,
+      "on the replies list, only its own two are offered",
+      forReplies && forReplies.length === 1 && forReplies[0].head === "For replies" && forReplies[0].of.length === 2,
       JSON.stringify(forReplies),
     );
 
@@ -5799,7 +5810,7 @@ console.log("\nthe preset menu shows one list at a time");
     const forYours = await menu(page);
     ok(
       "and on your own messages, only theirs",
-      forYours && forYours.length === 1 && forYours[0].head === "For your messages" && forYours[0].of.length === 4,
+      forYours && forYours.length === 1 && forYours[0].head === "For your messages" && forYours[0].of.length === 2,
       JSON.stringify(forYours),
     );
   });
@@ -6058,7 +6069,7 @@ console.log("\nsaying the shipped prompts have changed");
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
       const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const shipped = Array.from(sel.options).find((o) => /A close read/.test(o.textContent));
+      const shipped = Array.from(sel.options).find((o) => /The line edit/.test(o.textContent));
       sel.value = shipped.value;
       sel.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 60));
@@ -6071,7 +6082,7 @@ console.log("\nsaying the shipped prompts have changed");
         line: !!document.querySelector("#drawer [data-arf-shippedmoved]"),
       };
     });
-    ok("the shipped prompt really was the one loaded", /A close read/.test(out.picked), JSON.stringify(out));
+    ok("the shipped prompt really was the one loaded", /The line edit/.test(out.picked), JSON.stringify(out));
     ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
     ok("so the line goes with it", !out.line, JSON.stringify(out));
   });
@@ -7128,7 +7139,7 @@ console.log("\nthe rows that only appear when switched on, at both sizes");
   const ON = {
     enabled: true,
     passMode: "many",
-    passNames: ["A close read", "A quick read, for a model that thinks"],
+    passNames: ["The line edit", "The line edit, for a model that thinks"],
     wornOn: true,
     wornBack: 60,
     wornLeast: 3,
