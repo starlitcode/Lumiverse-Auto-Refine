@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.11.0";
+const VERSION = "1.11.1";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -3400,8 +3400,13 @@ export function setup(ctx, overrides) {
         // could show: a drag up moved the titles by that pixel and stacked the
         // tab's underline on the line, which reads as the line thickening. The tray
         // has nothing under it to sit over, so there is nothing to scroll.
-        ".arf-tabs{display:flex;gap:3px;overflow-x:auto;overflow-y:hidden;" +
-        "overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none;" +
+        // Wrapped rather than scrolled. A scrolling strip slides under a finger even
+        // when every tab already fits, because the padding and border put the
+        // content a few pixels over the box, and a row that drifts sideways when
+        // you meant to scroll the panel reads as the panel coming apart. Wrapping
+        // costs a second row on a narrow screen and nothing anywhere else.
+        ".arf-tabs{display:flex;flex-wrap:wrap;gap:3px;overflow:hidden;" +
+        "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
         "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
         "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +

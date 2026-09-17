@@ -1047,6 +1047,13 @@ console.log("\nthe tabs");
       const fill = (n) => (n ? getComputedStyle(n).backgroundColor : "");
       return {
         canScrollSideways: el.scrollWidth > el.clientWidth,
+        // Wrapped, so every tab sits inside the tray rather than off the end
+        // of a strip somebody has to find by dragging.
+        clipped: Array.from(el.querySelectorAll("[role=tab]")).filter((t) => {
+          const box = t.getBoundingClientRect();
+          const tray = el.getBoundingClientRect();
+          return box.right > tray.right + 1 || box.left < tray.left - 1;
+        }).length,
         overflowY: seen.overflowY,
         over: el.scrollHeight - el.clientHeight,
         movedTo: el.scrollTop,
@@ -1066,7 +1073,10 @@ console.log("\nthe tabs");
       };
     });
     const clear = (c) => /rgba\(0, 0, 0, 0\)|transparent/.test(c);
-    ok("the strip really does scroll sideways", !!strip.canScrollSideways, JSON.stringify(strip));
+    // It used to scroll. A strip that scrolls slides under a finger even when
+    // every tab already fits, so it wraps now and nothing moves sideways.
+    ok("the strip does not scroll sideways", !strip.canScrollSideways, JSON.stringify(strip));
+    ok("and no tab is pushed outside the tray", strip.clipped === 0, JSON.stringify(strip));
     ok("there is nothing to scroll up and down", strip.over === 0, JSON.stringify(strip));
     ok("and it will not scroll if asked", strip.movedTo === 0 && strip.overflowY === "hidden", JSON.stringify(strip));
     ok("nothing is pulled down past the strip", strip.pulled === "0px", JSON.stringify(strip));

@@ -2183,6 +2183,79 @@ describe("reasoning formats that are not a matched pair of tags", () => {
   });
 });
 
+// A strict OpenAI-compatible endpoint rejects the whole request over one field
+// it does not take, rather than ignoring it. NVIDIA's build does this with
+// max_context and reasoning, and the refine died with a 400 that read like a
+// fault in somebody's rules.
+describe("a connection that refuses a field", () => {
+  const REFUSAL =
+    "Custom (OpenAI-compatible) generate failed (400): Validation: Unsupported parameter(s): `max_context`, `reasoning`";
+
+  const withFields = {
+    samplers: { max_context: 250000, temperature: 0.5 },
+    thinkingMode: "custom",
+    thinkingEffort: "medium",
+  };
+
+  test("the refine lands, after asking again without the fields it named", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 1, why: REFUSAL } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    expect(h.asked.length).toBe(2);
+  });
+
+  test("the second ask drops only what was named", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 1, why: REFUSAL } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const first = h.asked[0];
+    const second = h.asked[1];
+    expect(first.parameters.max_context).toBe(250000);
+    expect(first.reasoning).toBeTruthy();
+    expect(second.parameters.max_context).toBeUndefined();
+    expect(second.reasoning).toBeUndefined();
+    // The one it did not complain about is still sent.
+    expect(second.parameters.temperature).toBe(0.5);
+  });
+
+  test("a refusal about something never sent changes nothing", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 1, why: "400: Unsupported parameter(s): `logit_bias`" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toContain("the cold just hit her");
+  });
+
+  test("and it only asks again once", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 2, why: REFUSAL } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toContain("the cold just hit her");
+  });
+});
+
 describe("stopping a refine", () => {
   test("a stop reaches the run and the reply is left alone", async () => {
     const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {

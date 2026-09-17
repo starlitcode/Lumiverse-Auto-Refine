@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.11.0';
+const VERSION = '1.11.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -2677,12 +2677,41 @@ function pause(ms: number, userId?: string): Promise<boolean> {
 }
 
 // ---- running one refine ----
+// What a provider named when it turned the request down, kept to the fields
+// this extension actually sent.
+//
+// A strict OpenAI-compatible endpoint rejects the whole request over one field
+// it does not know, rather than ignoring it, and the refine fails with a 400
+// that reads like a fault in the rules. NVIDIA's build does this with
+// max_context and reasoning. Which fields a given endpoint accepts cannot be
+// known ahead of the call, so the answer is to read the refusal and ask again
+// without them.
+//
+// Only names that went out are returned, so a message mentioning a field this
+// extension never sent cannot make it drop something it needs.
+function rejectedFields(msg: string, sent: string[]): string[] {
+  if (!msg || !sent.length) return [];
+  if (!/unsupported|unrecognized|unknown|not supported|invalid.{0,20}(param|argument|field)/i.test(msg))
+    return [];
+  const named = new Set<string>();
+  // Providers quote the offending name in backticks, single or double quotes.
+  for (const m of msg.matchAll(/[`'"]([A-Za-z_][A-Za-z0-9_]*)[`'"]/g)) named.add(m[1]);
+  // And some list them bare after the colon.
+  const tail = /(?:parameter\(s\)|parameters|arguments?|fields?)\s*:?\s*([^.\n]+)/i.exec(msg);
+  if (tail) for (const bit of tail[1].split(/[,\s]+/)) {
+    const name = bit.replace(/[`'"]/g, '').trim();
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) named.add(name);
+  }
+  return sent.filter((f) => named.has(f));
+}
+
 async function askModel(
   text: string,
   isUser: boolean,
   scene: Scene,
   userId?: string,
   use?: Block[],
+  drop?: string[],
 ): Promise<{ content: string; error: string }> {
   const controller: any = typeof (globalThis as any).AbortController === 'function'
     ? new (globalThis as any).AbortController()
@@ -2744,7 +2773,12 @@ async function askModel(
     // Only the values the reader actually changed. An empty object is left out
     // so the connection's own preset stays in charge, which is what somebody
     // who never opened the sampler section expects.
-    const params = cleanSamplers();
+    let params = cleanSamplers();
+    if (params && drop && drop.length) {
+      const kept: Record<string, number> = {};
+      for (const key of Object.keys(params)) if (drop.indexOf(key) < 0) kept[key] = params[key];
+      params = Object.keys(kept).length ? kept : null;
+    }
     if (params) req.parameters = params;
     // The connection the reader picked for refining, which is the point of
     // being able to pick one: a rewrite does not need the model you roleplay
@@ -2759,7 +2793,7 @@ async function askModel(
     // bill arrives. Inherit leaves the field off entirely, which is what hands
     // the question back to the connection's own settings.
     const think = reasoningFor();
-    if (think) req.reasoning = think;
+    if (think && !(drop && drop.indexOf('reasoning') >= 0)) req.reasoning = think;
     if (controller) req.signal = controller.signal;
 
     // Streamed when the host can, and not otherwise. Nothing about the refine
@@ -2828,6 +2862,21 @@ async function askModel(
       const why = controller && controller.__arfWhy;
       if (why === 'stopped') return { content: '', error: 'you stopped it' };
       return { content: '', error: 'the model did not answer within ' + Math.round(ms / 1000) + 's' };
+    }
+    // The provider turned the request down over a field it does not take. Ask
+    // again without the fields it named, once: a second refusal is a real one.
+    if (!drop) {
+      const sentParams = cleanSamplers();
+      const sent = (sentParams ? Object.keys(sentParams) : []).concat(
+        reasoningFor() ? ['reasoning'] : [],
+      );
+      const bad = rejectedFields(String(msg), sent);
+      if (bad.length) {
+        say('warn', 'the connection refused ' + bad.join(', ') + ', asking again without');
+        if (timer != null) clearTimeout(timer);
+        dropRun(userId, controller);
+        return askModel(text, isUser, scene, userId, use, bad);
+      }
     }
     if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
       return { content: '', error: 'the generation permission is not granted' };
