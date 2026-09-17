@@ -104,7 +104,13 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The floating button, the buttons in the chat, and the input bar row.",
-    keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton", "inputSelector"],
+    keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton"],
+  },
+  {
+    id: "inputbox",
+    label: "Where the input box is",
+    what: "The selectors that find the chat input box. Its own part, so putting it back does not take the widget and the buttons with it.",
+    keys: ["inputSelector"],
   },
   {
     id: "switches",
@@ -282,13 +288,60 @@ function splitSelectorList(raw: string): string[] {
   return out.filter((p) => p.length > 0);
 }
 
+// A class or id a build generates fresh on every release, which makes a
+// selector built on one stop matching after an update. Skipped when a selector
+// is derived from something pressed.
+const UNSTABLE_NAME = /(^_)|(_[a-z0-9]{4,}_\d+$)|(_[a-z0-9]{6,}$)|([-_][a-f0-9]{6,}$)/i;
+const SAFE_NAME = /^[A-Za-z_-][\w-]*$/;
+
+// Turns the box somebody held down on into a selector for it, preferring the
+// names a build is least likely to change between releases.
+function deriveInputSelector(start: any): string | null {
+  let node: any = start;
+  let hops = 0;
+  // A hold can land on a wrapper around the box rather than the box itself.
+  while (node && hops < 5) {
+    const tag = String(node.tagName || "").toLowerCase();
+    if (tag === "textarea" || tag === "input" || node.isContentEditable === true) break;
+    const inner = node.querySelector ? node.querySelector("textarea,input,[contenteditable]") : null;
+    if (inner) {
+      node = inner;
+      break;
+    }
+    node = node.parentElement;
+    hops++;
+  }
+  if (!node || !node.getAttribute) return null;
+  const tag = String(node.tagName || "").toLowerCase() || "*";
+  const q = (v: string) => '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+  for (const attr of ["name", "data-testid", "data-test-id", "aria-label", "placeholder", "id"]) {
+    const v = node.getAttribute(attr);
+    if (!v || !String(v).trim()) continue;
+    if (attr === "id" && !(SAFE_NAME.test(v) && !UNSTABLE_NAME.test(v))) continue;
+    if (attr === "id") return "#" + v;
+    return tag + "[" + attr + "=" + q(String(v).trim()) + "]";
+  }
+  // A wrapper with a stable data-component is worth more than the box's own
+  // generated class, since that is the name a build keeps.
+  const holder = node.closest ? node.closest("[data-component]") : null;
+  const comp = holder && holder.getAttribute ? holder.getAttribute("data-component") : null;
+  if (comp) return "[data-component=" + q(comp) + "] " + tag;
+  const cls = String(node.className || "")
+    .split(/\s+/)
+    .filter((c: string) => c && SAFE_NAME.test(c) && !UNSTABLE_NAME.test(c));
+  if (cls.length) return tag + "." + cls.slice(0, 2).join(".");
+  return null;
+}
+
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
   enabled: true,
-  // Selectors for the chat input box, tried ahead of the built-in list. Blank
-  // is the normal state: this exists for the release where Lumiverse moves the
-  // box and the built-in list has not caught up.
-  inputSelector: "",
+  // Selectors for the chat input box, tried in the order they are written.
+  // Starts holding the built-in list rather than sitting blank behind it: a box
+  // showing what is actually being tried can be edited, and one showing nothing
+  // has to be guessed at. Blank falls back to the built-in list, which is what
+  // an install from before this existed carries.
+  inputSelector: INPUT_PICKS.join(", "),
   // The automatic pass is off until asked for. This rewrites saved messages
   // with a model, which is not something to start doing to somebody's chat
   // because they installed an extension.
@@ -1778,7 +1831,9 @@ const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: numbe
 type Field = {
   key: string;
   label: string;
-  type: "bool" | "num" | "pick" | "lines";
+  // "text" is one line, "lines" is a box several deep. A list written on one
+  // line reads as one setting; the same list stacked reads as several.
+  type: "bool" | "num" | "pick" | "lines" | "text";
   hint: string;
   min?: number;
   max?: number;
@@ -6312,6 +6367,30 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
       row.appendChild(box);
       wrap.appendChild(row);
+    } else if (f.type === "text") {
+      wrap.appendChild(labelRow(f));
+      const box = document.createElement("input");
+      box.type = "text";
+      box.setAttribute("data-arf-field", f.key);
+      box.setAttribute("aria-label", f.label);
+      box.className = "arf-field arf-mono";
+      // Off for all four. A selector is not prose, and a phone correcting one
+      // to a capital or a smart quote gives back something that matches
+      // nothing, with no sign of what went wrong.
+      box.setAttribute("autocapitalize", "off");
+      box.setAttribute("autocorrect", "off");
+      box.setAttribute("autocomplete", "off");
+      box.setAttribute("spellcheck", "false");
+      box.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
+      box.addEventListener("input", () => {
+        cfg[f.key] = box.value;
+        persist();
+      });
+      box.addEventListener("blur", () => {
+        cfg[f.key] = box.value;
+        persist(true);
+      });
+      wrap.appendChild(box);
     } else if (f.type === "lines") {
       wrap.appendChild(labelRow(f));
       const ta = document.createElement("textarea");
@@ -8469,6 +8548,96 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Ways in other than the drawer. Both are off until asked for, because an
   // extension that adds a floating button and an input bar row on install is
   // one that redecorated somebody's screen without asking.
+  // Picking the box by holding it down.
+  //
+  // A picker that waits for a click cannot work from a drawer: the click that
+  // would name the box is the same click that closes the drawer, and the picker
+  // is left armed with nothing. Holding is what gets round that. The drawer can
+  // close on the way, the listeners are on the document rather than on anything
+  // the panel owns, and the hold finishing is what names the box.
+  //
+  // Pointer events rather than mouse or touch, so one path covers a finger, a
+  // pen and a mouse. Auto Retry's picker works on a click because its panel is
+  // a dialog over the page rather than a drawer beside it.
+  const HOLD_MS = 650;
+  let picking = false;
+  let holdTimer: any = null;
+  let holdFrom: any = null;
+  let pickSaid: ((text: string, good: boolean) => void) | null = null;
+
+  function stopPicking(why: string, good: boolean) {
+    picking = false;
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    holdFrom = null;
+    try {
+      document.removeEventListener("pointerdown", onHoldStart, true);
+      document.removeEventListener("pointerup", onHoldStop, true);
+      document.removeEventListener("pointercancel", onHoldStop, true);
+      document.removeEventListener("pointermove", onHoldMove, true);
+    } catch (_) {}
+    if (pickSaid) pickSaid(why, good);
+    paint();
+  }
+
+  function onHoldStart(e: any) {
+    if (!picking || !e) return;
+    // Anything inside our own panel is not what they meant to pick, and a hold
+    // on the button that armed this would name the button.
+    try {
+      if (e.target && e.target.closest && e.target.closest(".arf")) return;
+    } catch (_) {}
+    holdFrom = { x: e.clientX, y: e.clientY, target: e.target };
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      const sel = deriveInputSelector(holdFrom && holdFrom.target);
+      if (!sel) {
+        stopPicking("that is not a box this can name. Type a selector instead.", false);
+        return;
+      }
+      cfg.inputSelector = sel;
+      persist(true);
+      stopPicking("picked: " + sel, true);
+    }, HOLD_MS);
+  }
+
+  // Moving off what they started on is a scroll, not a hold.
+  function onHoldMove(e: any) {
+    if (!holdTimer || !holdFrom || !e) return;
+    const dx = Math.abs(e.clientX - holdFrom.x);
+    const dy = Math.abs(e.clientY - holdFrom.y);
+    if (dx > 12 || dy > 12) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  }
+
+  function onHoldStop() {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  }
+
+  function startPicking(say: (text: string, good: boolean) => void) {
+    if (picking) {
+      stopPicking("picking cancelled", false);
+      return;
+    }
+    picking = true;
+    pickSaid = say;
+    try {
+      document.addEventListener("pointerdown", onHoldStart, true);
+      document.addEventListener("pointerup", onHoldStop, true);
+      document.addEventListener("pointercancel", onHoldStop, true);
+      document.addEventListener("pointermove", onHoldMove, true);
+    } catch (_) {}
+    say("hold your finger or mouse on the chat input box for a second", false);
+  }
+
   // Where the input box is, and a way to fix it without waiting for a release.
   //
   // Refining a draft is the one thing here that reads Lumiverse's own layout,
@@ -8489,9 +8658,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(
       fieldRow({
         key: "inputSelector",
-        label: "Your own selectors",
-        type: "lines",
-        hint: "Optional, one per line or separated by commas. These are tried before the built-in list below, and the built-in list still answers if yours finds nothing.",
+        label: "The selectors it looks under",
+        type: "text",
+        hint: "Tried in the order they are written, separated by commas. Emptying the box falls back to the list this shipped with.",
       }),
     );
 
@@ -8524,6 +8693,30 @@ export function setup(ctx: Ctx, overrides?: any) {
     test.addEventListener("click", run);
     test.setAttribute("data-arf-testinput", "1");
     row.appendChild(test);
+    // The way back, beside the thing it puts back. Editing a selector is how
+    // somebody ends up with a box that finds nothing, and hunting for a reset
+    // on another card is the wrong thing to ask of them at that moment.
+    const put = button("Use the shipped list", false);
+    put.setAttribute("data-arf-resetinput", "1");
+    put.addEventListener("click", () => {
+      cfg.inputSelector = INPUT_PICKS.join(", ");
+      persist(true);
+      paint();
+    });
+    row.appendChild(put);
+    // Named for what it asks of you rather than what it does, because what it
+    // does is nothing until you hold something down.
+    const pick = button(picking ? "Cancel picking" : "Hold to pick it", false);
+    pick.setAttribute("data-arf-pickinput", picking ? "on" : "off");
+    pick.addEventListener("click", () => {
+      startPicking((text, good) => {
+        said.textContent = text;
+        said.style.color = good
+          ? "var(--lumiverse-success,#22c55e)"
+          : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+      });
+    });
+    row.appendChild(pick);
     row.appendChild(said);
     wrap.appendChild(row);
 
@@ -8536,23 +8729,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     // "no match" while the drawer is over the input box.
     function paintList() {
       list.replaceChildren();
-      const mine = splitSelectorList(String(cfg.inputSelector || ""));
-      list.setAttribute("data-arf-mine", String(mine.length));
       const picks = inputPicks();
-      const head = el("div", "arf-note", "Tried in this order:");
-      list.appendChild(head);
+      list.setAttribute("data-arf-mine", String(picks.length));
+      const blank = !splitSelectorList(String(cfg.inputSelector || "")).length;
+      list.appendChild(
+        el(
+          "div",
+          "arf-note",
+          blank
+            ? "The box is empty, so the list this shipped with is used:"
+            : "Tried in this order:",
+        ),
+      );
       for (const pick of picks) {
         const line = el("div", "arf-note");
         line.style.cssText =
           "font-family:ui-monospace,monospace;font-size:11.5px;word-break:break-all";
-        const ownName = mine.indexOf(pick) >= 0 ? "yours" : "built in";
         let mark = "";
         try {
           mark = document.querySelector(pick) ? " · on screen" : " · not on screen";
         } catch (_) {
           mark = " · not a selector the browser can read";
         }
-        line.textContent = pick + "  (" + ownName + mark + ")";
+        line.textContent = pick + mark;
         list.appendChild(line);
       }
     }
@@ -10164,8 +10363,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and does not appear twice on the card that lists them.
   function inputPicks(): string[] {
     const mine = splitSelectorList(String(cfg.inputSelector || ""));
+    // An empty box is not an instruction to stop looking. It is what an install
+    // from before this setting existed carries, and what somebody clearing the
+    // box leaves behind, and neither of them meant to switch refining a draft
+    // off.
+    const src = mine.length ? mine : INPUT_PICKS;
     const out: string[] = [];
-    for (const pick of mine.concat(INPUT_PICKS)) if (out.indexOf(pick) < 0) out.push(pick);
+    for (const pick of src) if (out.indexOf(pick) < 0) out.push(pick);
     return out;
   }
 
@@ -11994,6 +12198,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       clearTimeout(huntTimer);
       huntTimer = null;
     }
+    if (picking) stopPicking("", false);
     for (const d of disposers.splice(0)) {
       try {
         d();

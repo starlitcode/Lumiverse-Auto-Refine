@@ -22,11 +22,13 @@ _2026-09-17_
 
 - **Where the input box is**, a new card on the **Setup** tab. Refining a draft is the one thing here that reads Lumiverse's own layout, so a release that moves the input box breaks that and nothing else. Until now the only fix was waiting for a new version.
 
-  Your own selectors go in the box, one per line or separated by commas, and are tried before the built-in list. The built-in list is still tried behind them, so a selector that turns out to be wrong costs nothing.
+  The box holds the list itself rather than sitting blank behind a hidden one, so what is being tried can be read and edited in place. Separated by commas, tried in the order they are written. Emptying the box falls back to the list this shipped with.
 
-  Every selector in use is listed in the order it is tried, marked as yours or built in, and each says whether it is on screen right now. **Test** answers for what you typed.
+  Every selector in use is listed under the box in the order it is tried, and each says whether it is on screen right now. **Test** answers for the box as a whole.
 
-  There is no button that picks the box for you. A picker has to watch for a click somewhere on the page, and the drawer closing takes that click, which leaves the picker waiting with nothing to show.
+  **Hold to pick it** names the box for you: press it, then hold your finger or your mouse on the chat input box for about a second. Holding rather than clicking is what lets this work from a drawer at all, since the click that would name the box is the same click that closes the drawer. Moving off what you started on is a scroll, so it picks nothing.
+
+  **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
 
 ### Changed
 
