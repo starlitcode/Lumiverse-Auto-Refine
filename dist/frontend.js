@@ -4655,6 +4655,10 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     let hunt = "";
+    // Held out here rather than inside the search box, which is rebuilt on every
+    // repaint: a timer owned by a discarded box still fires, and a repaint after
+    // teardown is an error nobody can see the cause of.
+    let huntTimer = null;
     function buildSearch() {
         const wrap = el("div", "arf-col");
         const row = el("div", "arf-row");
@@ -4667,9 +4671,24 @@ export function setup(ctx, overrides) {
         box.setAttribute("data-arf-field", "hunt");
         // Filters as you type. Held out of cfg because a search is about the next
         // ten seconds, not a setting to carry between sessions.
+        // Waits for a gap in the typing rather than repainting per character.
+        //
+        // A repaint rebuilds the tab and then re-measures every line on it against
+        // the theme, which on the Prompt tab is about forty milliseconds. Per
+        // keystroke that is the whole word spent blocking the main thread, and it
+        // is felt as the field itself being slow to take letters. One repaint after
+        // the typing stops costs the same forty milliseconds once.
+        //
+        // Short enough that a reader who types a word and looks up sees the list
+        // already filtered, long enough to swallow a normal typing rate.
         box.addEventListener("input", () => {
             hunt = box.value;
-            paint();
+            if (huntTimer)
+                clearTimeout(huntTimer);
+            huntTimer = setTimeout(() => {
+                huntTimer = null;
+                paint();
+            }, 120);
         });
         // No Clear button beside it. A search field already carries one, drawn by
         // the browser, and the rule above gives it a colour that follows the theme
@@ -11590,6 +11609,12 @@ export function setup(ctx, overrides) {
         if (saveTimer) {
             clearTimeout(saveTimer);
             saveTimer = null;
+        }
+        // A search typed into a moment before the tab closed would otherwise
+        // repaint a panel that is no longer there.
+        if (huntTimer) {
+            clearTimeout(huntTimer);
+            huntTimer = null;
         }
         for (const d of disposers.splice(0)) {
             try {

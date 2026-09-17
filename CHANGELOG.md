@@ -30,6 +30,10 @@ _2026-09-17_
 
 ### Changed
 
+- **Typing in the search box no longer stalls between letters.** Every keystroke rebuilt the whole tab and then re-measured every line on it against your theme, which on the **Prompt** tab is about forty milliseconds a character. Typing one word cost nearly three tenths of a second of that, and it was felt as the field being slow to take letters.
+
+  It waits for a gap in the typing now and repaints once. Measured on the **Prompt** tab: 42ms a keystroke before, under 1ms after.
+
 - **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one read as cramped next to the wide ones.
 
 - **Plainer words in the shipped prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.

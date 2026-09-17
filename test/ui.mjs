@@ -2513,6 +2513,9 @@ console.log("\nsearch");
       box.value = "temperature";
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    // The search waits for a gap in the typing before it repaints, so the
+    // filtered list is not there the instant a key goes in.
+    await page.waitForTimeout(220);
     await settle(page);
     const found = await page.evaluate(() => {
       const body = document.querySelector("#drawer .arf-body");
@@ -2530,6 +2533,9 @@ console.log("\nsearch");
       box.value = "zzzznothing";
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    // The search waits for a gap in the typing before it repaints, so the
+    // filtered list is not there the instant a key goes in.
+    await page.waitForTimeout(220);
     await settle(page);
     const empty = await page.evaluate(() =>
       document.querySelector("#drawer .arf-body").textContent,
