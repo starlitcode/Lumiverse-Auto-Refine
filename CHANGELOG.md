@@ -12,6 +12,16 @@ _2026-09-17_
 
 ### Added
 
+- **Where the input box is**, a new card on the **Setup** tab. Refining a draft is the one thing here that reads Lumiverse's own layout, so a release that moves the input box stops that and nothing else. Until now the only fix was waiting for a new version.
+
+  The box holds the list itself, so what is being tried can be read and edited in place. Separate the selectors with commas. They are tried in the order you write them, and emptying the box falls back to the list this shipped with.
+
+  Every selector is listed under the box in the order it is tried. The one finding the box is highlighted, and the rest are shown plainly, so you can see where yours sits in the order.
+
+  A selector the browser cannot read is marked in red. **Test** covers the box as a whole, and a box with one typo and four good selectors still passes, so the mark goes on the line instead.
+
+  **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
+
 - **Tap a running refine to stop it.** The buttons in the chat already turned into a spinner while one was working, and tapping the spinner did nothing but say a refine was already running.
 
   Now the first tap starts it and the next one calls it off. While it runs the button names itself **Stop this refine**, so a screen reader says the same thing the mark shows.
@@ -30,14 +40,6 @@ _2026-09-17_
 
   Selecting the whole message is refused rather than emptying it. **Put it back** works on a snip exactly as it works on a refine.
 
-### Changed
-
-- **A clearer line when a refine is already running.** It said "Press it again to stop that one", which was only ever true of the panel's own button, and that button is replaced by **Stop this refine** while one runs. It now says to stop it first or wait for it to finish.
-
-## 1.11.1
-
-_2026-09-17_
-
 ### Fixed
 
 - **A connection that refuses one of the fields sent with a refine no longer stops the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
@@ -46,18 +48,6 @@ _2026-09-17_
 
 - **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs get narrower rather than the last one dropping to a second line.
 
-### Added
-
-- **Where the input box is**, a new card on the **Setup** tab. Refining a draft is the one thing here that reads Lumiverse's own layout, so a release that moves the input box breaks that and nothing else. Until now the only fix was waiting for a new version.
-
-  The box holds the list itself, so what is being tried can be read and edited in place. Separate the selectors with commas. They are tried in the order you write them, and emptying the box falls back to the list this shipped with.
-
-  Every selector is listed under the box in the order it is tried. The one finding the box is highlighted, and the rest are shown plainly, so you can see where yours sits in the order.
-
-  A selector the browser cannot read is marked in red. **Test** covers the box as a whole, and a box with one typo and four good selectors still passes, so the mark goes on the line instead.
-
-  **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
-
 ### Changed
 
 - **Typing in the search box no longer stalls between letters.** Every keystroke rebuilt the whole tab and then re-measured every line on it against your theme, which on the **Prompt** tab is about forty milliseconds a character. Typing one word cost nearly three tenths of a second of that, and it was felt as the field being slow to take letters.
@@ -65,6 +55,8 @@ _2026-09-17_
   It waits for a gap in the typing now and repaints once. Measured on the **Prompt** tab: 42ms a keystroke before, under 1ms after.
 
 - **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one looked cramped next to the wide ones.
+
+- **A clearer line when a refine is already running.** It said "Press it again to stop that one", which was only ever true of the panel's own button, and that button is replaced by **Stop this refine** while one runs. It now says to stop it first or wait for it to finish.
 
 - **Plainer words in the shipped prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.
 
