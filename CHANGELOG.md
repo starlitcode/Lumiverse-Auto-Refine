@@ -24,7 +24,7 @@ _2026-09-17_
 
   The box holds the list itself rather than sitting blank behind a hidden one, so what is being tried can be read and edited in place. Separated by commas, tried in the order they are written. Emptying the box falls back to the list this shipped with.
 
-  Every selector in use is listed under the box in the order it is tried, and the one actually finding the box is highlighted. The others are shown plainly, because the order is the point. **Test** answers for the box as a whole.
+  Every selector in use is listed under the box in the order it is tried, and the one actually finding the box is highlighted. The others are shown plainly, because the order is the point. A selector the browser cannot read is marked in red, since **Test** answers for the box as a whole and would still read as valid with one typo among several good selectors.
 
   **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
 

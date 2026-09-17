@@ -118,9 +118,19 @@ Three things never move, whichever tab you left open, because they are what you 
 
   The floating button offers your draft back the same way it offers a reply back. Both stop offering once you have typed over the rewrite, since putting it back then would throw away the newer writing.
 
-  Finding that input box is the one thing this extension reads Lumiverse's own layout for, and it does that from a built-in list with nothing to set.
+  Finding that input box is the one thing this extension reads Lumiverse's own layout for. It works from a built-in list that needs nothing set, and **Where the input box is** on the Setup tab is there for the day an update moves the box.
 
 Those last two live in one place at a time. While the floating button is on screen, its menu holds anything that would otherwise be a row in the chat input's Extras menu. With the button off, or refused because the permission is not granted, or on a Lumiverse too old to draw a menu, the rows come back to Extras, which is the only way to reach them on a phone. Two ways to reach one thing is one more than anybody needs.
+- **Where the input box is** is the way to point **Refine what I am typing** at a box a Lumiverse update has moved. Nothing here needs setting until that happens.
+
+  **The selectors it looks under** holds the list itself, so you can read what is being tried and edit it in place. Separated by commas, tried in the order they are written. Emptying the box falls back to the list this shipped with, so a cleared box never means stop looking.
+
+  Under it, every selector in the order it is tried. The one actually finding the box is highlighted, and the rest are shown plainly, because the order is the point. A selector the browser cannot read is marked in red: **Test** answers for the box as a whole and would still read as valid with one typo among several good selectors, so the line carries that instead.
+
+  **Test** reads the page at the moment you press it and says whether the box was found, found but not something that can be typed into, not matched at all, or not a selector the browser can read. It answers for now, not on a timer, because a line that went stale while you read it would be worse than no line.
+
+  **Use the shipped list** puts the box back. It is also its own part in the export, import and reset lists, so putting your selectors back does not take the buttons and switches with them.
+
 - **Your whole setup** exports to a file, imports one back, and puts things back to their defaults. All three work in the same list of parts: your prompt, context, model, samplers, limits, alerts, buttons, switches, presets and the chats you switched off. **What goes in the file**, **What to take from a file** and **What to put back** each have their own choice, so you can export only your prompt, take only somebody's samplers, or start your prompt again without losing your connection. In [Import and export](prompt.md#import-and-export) and [Starting again](prompt.md#starting-again).
 
 ---

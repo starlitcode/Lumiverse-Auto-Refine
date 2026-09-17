@@ -6130,6 +6130,28 @@ console.log("\nwhere the input box is");
     ok("and the card points at the mark", /highlighted one is the one in use/.test(seen.text), seen.text.slice(0, 200));
   });
 
+  // A selector the browser cannot read is a typo. Test answers for the box as a
+  // whole and reads a box with one bad selector and four good ones as valid, so
+  // without a mark on the line there is nowhere the typo shows at all.
+  await inTab(browser, { saved: { inputSelector: 'textarea[name="chat-message"], textarea[[[broken' } }, async (page) => {
+    await page.evaluate(() => window.__makeComposer(""));
+    await goTab(page, "Setup");
+    const seen = await page.evaluate(() => {
+      const list = document.querySelector("#drawer [data-arf-inputlist]");
+      const lines = Array.from(list.querySelectorAll("[data-arf-pick]"));
+      return {
+        states: lines.map((n) => n.getAttribute("data-arf-pick")),
+        badText: (lines.find((n) => n.getAttribute("data-arf-pick") === "bad") || {}).textContent || "",
+        text: list.textContent,
+      };
+    });
+    ok("an unreadable selector is marked on its own line", seen.states.indexOf("bad") >= 0, JSON.stringify(seen).slice(0, 200));
+    ok("and it is the broken one, not a good one", /broken/.test(seen.badText), seen.badText.slice(0, 90));
+    ok("and the card says what the mark means", /not a selector the browser can read/.test(seen.text), seen.text.slice(0, 220));
+    // The good selector still wins, so one typo does not stop refining a draft.
+    ok("the good selector is still the one in use", seen.states.indexOf("on") >= 0, JSON.stringify(seen).slice(0, 200));
+  });
+
   // The mark follows the same rule the writer does. A selector matching only
   // our own panel, or a box that cannot be typed into, is not in use, and the
   // card saying it is would send somebody hunting for a bug that is not there.

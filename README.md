@@ -109,7 +109,7 @@ The refining runs in a backend module, because editing a saved message is a back
 
 It declares six permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` to know which chat it is and what Lumiverse remembers of it, `characters` to read the card, `world_books` to read the lore the chat has active, and `ui_panels` for the floating button. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
 
-One part reaches into the page rather than going through an API, because Lumiverse does not offer one: **Refine what I am typing** reads and writes the chat input box. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box.
+One part reaches into the page rather than going through an API, because Lumiverse does not offer one: **Refine what I am typing** reads and writes the chat input box. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box. **Where the input box is**, on the Setup tab, is where you point it at the new one without waiting for a release.
 
 Auditing it, or pointing a scanner at it? The two files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`, named in `spindle.json`. They are committed as plain readable JavaScript, not minified or bundled.
 

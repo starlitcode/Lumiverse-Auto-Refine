@@ -3657,6 +3657,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-pick-on{border-left-color:var(--lumiverse-success,#22c55e);" +
     "background:var(--lumiverse-fill-subtle,rgba(255,255,255,.04));" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+    ".arf-pick-bad{border-left-color:var(--lumiverse-danger,#ef4444);" +
+    "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf-tabs{display:flex;flex-wrap:nowrap;gap:3px;overflow:hidden;" +
     "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
     "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
@@ -8602,31 +8604,48 @@ export function setup(ctx: Ctx, overrides?: any) {
           blank ? "The box is empty, so the list this shipped with is used." : "Tried in this order.",
         ),
       );
+      // A selector the browser cannot read is a typo, and Test cannot point at
+      // it: that answers for the box as a whole, and one bad selector among
+      // several good ones leaves the whole box still reading as valid. So the
+      // line carries it.
+      const bad: boolean[] = [];
+      for (let i = 0; i < picks.length; i++) {
+        try {
+          document.querySelector(picks[i]);
+          bad.push(false);
+        } catch (_) {
+          bad.push(true);
+        }
+      }
       // Only the first one that finds the box is doing anything, and saying so
       // about one line is worth more than a state repeated down every line. The
       // rest are shown plainly because the order is the point.
       let used = -1;
       for (let i = 0; i < picks.length && used < 0; i++) {
-        if (boxUnder(picks[i])) used = i;
+        if (!bad[i] && boxUnder(picks[i])) used = i;
       }
+      let anyBad = false;
       for (let i = 0; i < picks.length; i++) {
         const line = el("div", "arf-pick");
         if (i === used) line.className += " arf-pick-on";
-        // Wraps between the parts of a selector rather than mid-word, so a long
-        // one stays readable on a phone instead of breaking across a bracket.
+        else if (bad[i]) {
+          line.className += " arf-pick-bad";
+          anyBad = true;
+        }
+        // Breaks at the spaces in a selector where it can, and inside one part
+        // only when that part is wider than the card, so a long selector stays
+        // readable on a phone instead of pushing the card sideways.
         line.textContent = picks[i];
-        line.setAttribute("data-arf-pick", i === used ? "on" : "off");
+        line.setAttribute("data-arf-pick", i === used ? "on" : bad[i] ? "bad" : "off");
         list.appendChild(line);
       }
-      list.appendChild(
-        el(
-          "div",
-          "arf-note",
-          used < 0
-            ? "None of them finds a box on this page right now."
-            : "The highlighted one is the one in use.",
-        ),
-      );
+      const notes = [
+        used < 0
+          ? "None of them finds a box on this page right now."
+          : "The highlighted one is the one in use.",
+      ];
+      if (anyBad) notes.push("The one marked in red is not a selector the browser can read.");
+      list.appendChild(el("div", "arf-note", notes.join(" ")));
     }
     paintList();
     wrap.appendChild(list);
