@@ -2824,7 +2824,7 @@ async function askModel(
             said = now;
             // The length, and the working, and not the rewrite.
             //
-            // The rewrite is what the card shows when the refine lands, marked
+            // The rewrite is what the card shows when the refine finishes, marked
             // against what was there before, so streaming it as well would be
             // sending the same words twice. The working is different: it is
             // written before the rewrite and is gone by the time anything

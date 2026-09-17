@@ -267,7 +267,7 @@ const CONFIG = {
     keepOriginal: true,
     confirmBeforeSave: false,
     toast: true,
-    // A sound when a refine lands, off until asked for. An extension that starts
+    // A sound when a refine finishes, off until asked for. An extension that starts
     // making noise because it was installed is an extension people uninstall.
     soundOn: false,
     // Empty means the built-in two-note blip, which is synthesised rather than
@@ -278,7 +278,7 @@ const CONFIG = {
     // The floating button: one tap to refine the latest reply without opening the
     // drawer. Needs the ui_panels permission, and says so if it is missing.
     widgetOn: false,
-    // The card that comes up on the page when a refine lands, with the before,
+    // The card that comes up on the page when a refine finishes, with the before,
     // the after and the way back on it. On by default: a refine changes writing
     // somebody was reading, and making them find a tab to see what changed is
     // the wrong way round.
@@ -789,7 +789,7 @@ const MEND_THESE = {
         "fragments run together, give one of them a verb.\n\n" +
         "Where three physical details stack on one moment, keep the one that " +
         "carries it.\n\n" +
-        "The passage keeps the ending it has. Where the last line reaches for " +
+        "The passage keeps the ending it has. Where the last line sets up " +
         "what happens next, or turns to the user with a question, that last line " +
         "is what to trim back.\n" +
         "</what_to_mend>",
@@ -918,8 +918,8 @@ const PLAIN_LONG = [
             "Cut a soft name added to take the edge off a line: champ, friend, " +
             "buddy, chief, boss. A character who already talks that way keeps " +
             "it.\n\n" +
-            "A character who speaks badly goes on speaking badly. Clipped, " +
-            "rambling, plain or crude is a voice, and smoothing it hands back a " +
+            "A character who speaks badly goes on speaking badly. Short, " +
+            "rambling, plain or crude is a voice, and smoothing it returns a " +
             "different character.\n" +
             "</speech>",
     },
@@ -947,7 +947,7 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<how_it_ends>\n" +
-            "The passage ends where it ends. Where the last line reaches for what " +
+            "The passage ends where it ends. Where the last line sets up what " +
             "happens next, or turns into a question aimed at the user, that " +
             "last line is what to trim back.\n\n" +
             "Where it already ends on a hook, keep the hook. The shape of the turn " +
@@ -1002,7 +1002,7 @@ const THE_STANDARD = {
         "Put in its place what is true of these characters, in this room, now. " +
         "Where nothing is true there, let the line go and close the gap.\n\n" +
         "Hold speech to it, hold gesture to it, hold description to it, and hold " +
-        "your own rewrite to it before you hand it back.\n" +
+        "your own rewrite to it before you return it.\n" +
         "</the_standard>",
 };
 const RESTRAINT = {
@@ -1053,7 +1053,7 @@ const YOURS_HAND = {
         "same. Keep the way they write.\n\n" +
         "Short plain lines stay short and plain. Lower case stays lower case. " +
         "Present tense stays present tense, and first person stays first person. " +
-        "A passage handed back in polished third person is one they will read as " +
+        "A passage returned in polished third person is one they will read as " +
         "somebody else's.\n\n" +
         "Their length is their choice: a one line passage stays a one line " +
         "passage.\n" +
@@ -1256,9 +1256,9 @@ const THINKS_LONG = [
         role: "system",
         text: "<voice>\n" +
             "The passage has a voice, and yours is a different one. Mend what is weak " +
-            "in the voice that is there and hand it back still sounding like itself.\n\n" +
+            "in the voice that is there and return it still sounding like itself.\n\n" +
             "This matters most with a character who speaks badly on purpose: " +
-            "clipped, rambling, plain, crude. Smoothing that hands back a different " +
+            "short, rambling, plain, crude. Smoothing that returns a different " +
             "character.\n" +
             "</voice>",
     },
@@ -3400,12 +3400,13 @@ export function setup(ctx, overrides) {
         // could show: a drag up moved the titles by that pixel and stacked the
         // tab's underline on the line, which reads as the line thickening. The tray
         // has nothing under it to sit over, so there is nothing to scroll.
-        // Wrapped rather than scrolled. A scrolling strip slides under a finger even
-        // when every tab already fits, because the padding and border put the
+        // One row, and it does not scroll. A scrolling strip slides under a finger
+        // even when every tab already fits, because the padding and border put the
         // content a few pixels over the box, and a row that drifts sideways when
         // you meant to scroll the panel reads as the panel coming apart. Wrapping
-        // costs a second row on a narrow screen and nothing anywhere else.
-        ".arf-tabs{display:flex;flex-wrap:wrap;gap:3px;overflow:hidden;" +
+        // instead dropped the last tab onto a second line, so the tabs give way at
+        // the sides rather than the row breaking.
+        ".arf-tabs{display:flex;flex-wrap:nowrap;gap:3px;overflow:hidden;" +
         "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
         "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
@@ -3421,8 +3422,9 @@ export function setup(ctx, overrides) {
         // The weight never changes with the state. A label that goes bold on select
         // is a label that gets wider, and the whole row shifts under the finger that
         // just tapped it.
-        ".arf-tab{flex:none;cursor:pointer;background:transparent;border:0;" +
-        "padding:8px 12px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
+        ".arf-tab{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
+        "cursor:pointer;background:transparent;border:0;" +
+        "padding:8px 10px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
         "font:12.5px var(--lumiverse-font-family,system-ui);" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
         "transition:color var(--lumiverse-transition-fast,150ms ease)," +
@@ -3542,7 +3544,7 @@ export function setup(ctx, overrides) {
         "opacity:0;transition:opacity 140ms ease-out}" +
         '.arf-hint[data-arf-open]{opacity:1}' +
         "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none}}" +
-        // The card that comes up on the page when a refine lands, so the answer to
+        // The card that comes up on the page when a refine finishes, so the answer to
         // "what did it change" is in front of you rather than behind a tab you have
         // to know to open. Bottom right on a desktop, across the bottom on a phone,
         // and never over the message box.
@@ -3670,7 +3672,7 @@ export function setup(ctx, overrides) {
         ".arf-btn{min-height:40px;padding:10px 14px}" +
         ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
         ".arf-fold{min-height:44px}" +
-        ".arf-tab{padding:12px 13px}" +
+        ".arf-tab{padding:12px 9px}" +
         ".arf-box{width:46px;height:26px;border-radius:13px}" +
         ".arf-box::after{width:18px;height:18px}" +
         ".arf-box:checked::after{left:23px}" +
@@ -6338,7 +6340,7 @@ export function setup(ctx, overrides) {
         if (asksForWorking())
             return cfg.popup
                 ? "It asks the model for its working, which comes up on screen while it writes."
-                : "It asks the model for its working, but Show the before and after on screen is off under When a refine lands, and that card is where the working appears.";
+                : "It asks the model for its working, but Show the before and after on screen is off under When a refine finishes, and that card is where the working appears.";
         return "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks do.";
     }
     // A block switched on or off, taken in where it stands.
@@ -7467,7 +7469,7 @@ export function setup(ctx, overrides) {
         const wrap = card("What the model worked out", undefined, keptNotes ? (keptNotes.ok ? "saved" : "dropped") : undefined);
         if (!keptNotes) {
             wrap.appendChild(note(asksForWorking()
-                ? "Nothing yet. The working from the last refine that finishes lands here, and a refine you stop leaves what is already here alone."
+                ? "Nothing yet. The working from the last refine that finishes is shown here, and a refine you stop leaves what is already here alone."
                 : "The prompt you are on does not ask the model for its working, so there is none to keep. The two for a model that thinks ask for it."));
             return wrap;
         }
@@ -7821,12 +7823,12 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildAlertCard() {
-        const wrap = card("When a refine lands", "How you find out, other than the tab's badge.");
+        const wrap = card("When a refine finishes", "How you find out, other than the tab's badge.");
         wrap.appendChild(fieldRow({
             key: "popup",
             label: "Show the before and after on screen",
             type: "bool",
-            hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+            hint: "On by default. A card comes up on the page itself when a refine finishes, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
         }));
         wrap.appendChild(fieldRow({
             key: "toast",

@@ -1049,6 +1049,11 @@ console.log("\nthe tabs");
         canScrollSideways: el.scrollWidth > el.clientWidth,
         // Wrapped, so every tab sits inside the tray rather than off the end
         // of a strip somebody has to find by dragging.
+        // How many rows the tabs landed on. Wrapping put the last one on a
+        // second line, which is the fault this counts.
+        rows: new Set(
+          Array.from(el.querySelectorAll("[role=tab]")).map((t) => Math.round(t.offsetTop)),
+        ).size,
         clipped: Array.from(el.querySelectorAll("[role=tab]")).filter((t) => {
           const box = t.getBoundingClientRect();
           const tray = el.getBoundingClientRect();
@@ -1077,6 +1082,7 @@ console.log("\nthe tabs");
     // every tab already fits, so it wraps now and nothing moves sideways.
     ok("the strip does not scroll sideways", !strip.canScrollSideways, JSON.stringify(strip));
     ok("and no tab is pushed outside the tray", strip.clipped === 0, JSON.stringify(strip));
+    ok("and every tab is on the one row", strip.rows === 1, JSON.stringify(strip));
     ok("there is nothing to scroll up and down", strip.over === 0, JSON.stringify(strip));
     ok("and it will not scroll if asked", strip.movedTo === 0 && strip.overflowY === "hidden", JSON.stringify(strip));
     ok("nothing is pulled down past the strip", strip.pulled === "0px", JSON.stringify(strip));

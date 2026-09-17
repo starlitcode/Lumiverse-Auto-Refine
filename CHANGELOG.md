@@ -16,7 +16,13 @@ _2026-09-17_
 
   The refusal is read and the refine is asked again without the fields it named, once. Only fields that actually went out are dropped, so a message mentioning something the extension never sent changes nothing, and a second refusal is treated as real.
 
-- **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It wraps now. On a narrow screen that costs a second row and nothing anywhere else.
+- **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs give way at the sides rather than the last one dropping to a second line.
+
+### Changed
+
+- **Plainer words in the shipped prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.
+
+  Your own prompt is not touched. To take the new wording, load a shipped prompt from the **Prompt** tab.
 
 ## 1.11.0
 

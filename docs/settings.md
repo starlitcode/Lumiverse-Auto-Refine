@@ -81,7 +81,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **This chat** leaves one chat completely alone while every other chat carries on. It is written down in your browser, so it survives a reload, and it is a list of chat ids and nothing else.
 
   A **temporary chat**, the scratch conversation with no character card on it, is told apart from an ordinary one and the card says so. The switch works there for as long as the chat is open, but it is not written down: the chat is discarded on the way out and the next one carries a different id, so a remembered entry could never match anything again. It would sit in storage looking like a setting and doing nothing. A chat whose card could not be read at all is not a temporary chat, and is not treated as one.
-- **When a refine lands** is how you find out.
+- **When a refine finishes** is how you find out.
 
   **Show the before and after on screen** puts a card on the page itself, not in this tab: what the reply said before, what it says now, and a button to put it back. On by default, because a refine changes writing you were reading, and having to find a tab to see what changed is the wrong way round.
 
