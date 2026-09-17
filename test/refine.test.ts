@@ -4438,3 +4438,151 @@ describe("a chain stops when the reply is on its way out", () => {
     expect(h.sent.map((x: any) => String(x.why || "")).join(" ")).toMatch(/stopped after pass 2 of 6/i);
   });
 });
+
+// Taking a selection out. No model call at all: the same mapping from rendered
+// text back onto the raw source that a refine of a selection uses, then the gap
+// is closed and the message is saved. The checks here are about the gap, since
+// that is the part a person notices and the part nothing else covers.
+describe("taking out what you selected", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+
+  const cut = (h: any, picked: string, ahead = "") =>
+    h.front({
+      type: "snip_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m2",
+      picked: picked,
+      ahead: ahead,
+    });
+
+  test("the selection goes and the rest of the message stays", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.body("m2")).toBe("She set the crate down. Nobody was in.");
+  });
+
+  test("and no model is asked anything", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("one space is left between the two halves, not two", async () => {
+    const h = await armed([], {}, reply("He waited a while, counting, and then he knocked."));
+    await cut(h, "counting, ", "He waited a while, ");
+    await wait(50);
+    expect(h.body("m2")).toBe("He waited a while, and then he knocked.");
+  });
+
+  // The space in front of the selection, not inside it, which is what a double
+  // click hands over. Closing the gap with a space would put one before the
+  // full stop.
+  test("a space is not left sitting in front of a full stop", async () => {
+    const h = await armed([], {}, reply("She counted the coins twice over."));
+    await cut(h, "twice over", "She counted the coins ");
+    await wait(50);
+    expect(h.body("m2")).toBe("She counted the coins.");
+  });
+
+  test("taking the front off does not leave the line starting with a space", async () => {
+    const h = await armed([], {}, reply("Even so, the door held."));
+    await cut(h, "Even so, ");
+    await wait(50);
+    expect(h.body("m2")).toBe("the door held.");
+  });
+
+  test("a whole paragraph out leaves one blank line, not two", async () => {
+    const h = await armed([], {}, reply("The first thing.\n\nThe middle thing.\n\nThe last thing."));
+    await cut(h, "The middle thing.", "The first thing.\n\n");
+    await wait(50);
+    expect(h.body("m2")).toBe("The first thing.\n\nThe last thing.");
+  });
+
+  test("the second of two identical runs is the one taken", async () => {
+    const h = await armed([], {}, reply("She nodded. He spoke. She nodded. It ended."));
+    await cut(h, "She nodded. ", "She nodded. He spoke. ");
+    await wait(50);
+    expect(h.body("m2")).toBe("She nodded. He spoke. It ended.");
+  });
+
+  test("a selection inside italics never leaves a marker unclosed", async () => {
+    const h = await armed([], {}, reply("*She waited there, counting, for a long while.*"));
+    await cut(h, "counting, ", "She waited there, ");
+    await wait(50);
+    // Whatever the span came out as, the emphasis still opens and closes.
+    const marks = (h.body("m2").match(/\*/g) || []).length;
+    expect(marks % 2).toBe(0);
+    expect(h.body("m2")).not.toContain("counting");
+  });
+
+  test("selecting the whole message is refused rather than emptying it", async () => {
+    const body = "There was nothing else to say.";
+    const h = await armed([], {}, reply(body));
+    await cut(h, body);
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+    expect(done.why).toMatch(/empty/i);
+  });
+
+  test("a selection that is not in the message any more takes nothing", async () => {
+    const body = "She set the crate down.";
+    const h = await armed([], {}, reply(body));
+    await cut(h, "a line from some other reply");
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+  });
+
+  test("an empty selection takes nothing", async () => {
+    const body = "She set the crate down.";
+    const h = await armed([], {}, reply(body));
+    await cut(h, "   ");
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+  });
+
+  test("the model's own working is left where it is", async () => {
+    const h = await armed(
+      [],
+      {},
+      reply("<think>weigh the cold against the light</think>She went in. The hall was dark."),
+    );
+    await cut(h, "The hall was dark.", "She went in. ");
+    await wait(50);
+    expect(h.body("m2")).toContain("<think>weigh the cold against the light</think>");
+    expect(h.body("m2")).not.toContain("The hall was dark.");
+  });
+
+  test("it is offered back the same way a refine is", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    const told = h.sent.find((m: any) => m.type === "refined");
+    expect(told.kind).toBe("snip");
+    expect(told.before).toContain("The lock had been changed.");
+    expect(told.after).not.toContain("The lock had been changed.");
+  });
+
+  test("a chat switched off is left alone", async () => {
+    const body = "She set the crate down. The lock had been changed.";
+    const h = await armed([], {}, reply(body));
+    await h.front({ type: "set_chats_off", chats: ["c1"] });
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+  });
+});

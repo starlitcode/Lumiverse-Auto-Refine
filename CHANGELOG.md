@@ -6,6 +6,34 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.12.0
+
+_2026-09-17_
+
+### Added
+
+- **Tap a running refine to stop it.** The buttons in the chat already turned into a spinner while one was working, and tapping the spinner did nothing but say a refine was already running.
+
+  Now the first tap starts it and the next one calls it off. While it runs the button names itself **Stop this refine**, so a screen reader says the same thing the mark shows.
+
+  This is the two buttons in the chat: the one in the toolbar and the one under a message. The panel and the floating button already had a stop of their own.
+
+- **Two buttons for the part you selected**, on the message you selected it in.
+
+  **Refine the part I selected** does what the panel entry of the same name does, without opening the panel.
+
+  **Take out what I selected** deletes the selection. There is no model call, so it costs nothing and is as quick as pressing it.
+
+  Both appear only while text is selected, and only on the message holding the selection, so neither is ever a button sitting there doing nothing. Both need **A button on each message** switched on, under **Ways to reach it**.
+
+  Taking text out closes the gap the way a person would. One space between two halves rather than two, no space left in front of a full stop, and a paragraph taken out leaves one blank line rather than two. Nothing else in the message is touched.
+
+  Selecting the whole message is refused rather than emptying it. **Put it back** works on a snip exactly as it works on a refine.
+
+### Changed
+
+- **A clearer line when a refine is already running.** It said "Press it again to stop that one", which was only ever true of the panel's own button, and that button is replaced by **Stop this refine** while one runs. It now says to stop it first or wait for it to finish.
+
 ## 1.11.1
 
 _2026-09-17_

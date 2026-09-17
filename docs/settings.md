@@ -112,6 +112,19 @@ Three things never move, whichever tab you left open, because they are what you 
 
   It goes in the place Lumiverse leaves for extensions inside the message rather than among the app's own message buttons. Both of these buttons are drawn in the places the app hands out, so a Lumiverse update that moves its own controls does not take them with it.
 
+  Both of these turn into a stop while a refine is running. The first tap starts it, the next one calls it off, and the button names itself **Stop this refine** while it works.
+
+  With **A button on every message** on, two more appear when you select text inside a message, on that message only:
+
+  - **Refine the part I selected** rewrites the selection and leaves the rest of the message alone. It is the same thing the panel and the menus offer, without opening either.
+  - **Take out what I selected** deletes the selection. No model is asked anything, so it costs nothing and happens straight away.
+
+  Both go away when you put the selection down, and they follow the selection if you make a new one in another message.
+
+  Taking text out closes the gap the way you would: one space between the two halves rather than two, no space left sitting in front of a full stop, and a whole paragraph out leaves one blank line rather than two. Nothing else in the message is touched.
+
+  Selecting the whole message and pressing it is refused rather than leaving you with an empty message. **Put it back** undoes a snip exactly as it undoes a refine.
+
   Neither page says where on screen either button lands, because that is not this extension's to decide. A theme is CSS and can put anything anywhere.
 
   It shows itself the way a reply's refine does: the button turns while it runs, **Stop this refine** ends it, a card lands with the before and after on it, and the working goes to the Log. **Your draft, refined** then stands at the top of the tab, carrying what changed, **Put it back**, **Dismiss** and **Read it in full**.

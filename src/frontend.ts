@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.11.1";
+const VERSION = "1.12.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -2184,6 +2184,34 @@ function spinIcon(): string {
     '<svg class="arf-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
     'stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
     '<path d="M21 12a9 9 0 1 1-6.2-8.6" />' +
+    "</svg>"
+  );
+}
+
+// The part you selected, refined: the same lines as the refine mark with a
+// bracket around the middle one, so the pair reads as "all of it" and "this
+// much of it" rather than as two unrelated marks.
+function partIcon(): string {
+  return (
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M4 6.5h9" /><path d="M4 17.5h9" />' +
+    '<path d="M3.2 11h10.6" stroke-width="3.2" opacity="0.35" />' +
+    '<path d="M18.5 3.2l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9z" ' +
+    'fill="currentColor" stroke="none" />' +
+    "</svg>"
+  );
+}
+
+// Scissors, because that is what taking a selection out is.
+function snipIcon(): string {
+  return (
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="6" cy="6" r="2.6" /><circle cx="6" cy="18" r="2.6" />' +
+    '<path d="M8.2 7.6L20 18" /><path d="M8.2 16.4L20 6" />' +
     "</svg>"
   );
 }
@@ -10961,19 +10989,36 @@ export function setup(ctx: Ctx, overrides?: any) {
   let slotEye: MutationObserver | null = null;
   let slotTimer: any = null;
 
-  function slotButton(kind: string, title: string, run: () => void): HTMLButtonElement {
+  // A button in one of the host's own slots. The two refine buttons turn into
+  // a stop while one is running, which is what the spinner on them was already
+  // promising: a reader who can see it is working expects pressing it again to
+  // call it off, and the panel saying "press it again to stop" was only ever
+  // true of the panel's own button.
+  function slotButton(
+    kind: string,
+    title: string,
+    run: () => void,
+    art?: () => string,
+  ): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "arf-slot";
     b.setAttribute("data-arf-slot", kind);
     b.title = title;
     b.setAttribute("aria-label", title);
-    b.innerHTML = refineIcon();
+    b.innerHTML = art ? art() : refineIcon();
     b.addEventListener("click", (e: any) => {
       try {
         e.preventDefault();
         e.stopPropagation();
       } catch (_) {}
+      // Stopping comes first, and only on the buttons that start a refine.
+      // The two selection buttons keep doing their own thing, since neither of
+      // them is what is running.
+      if (busy && !art) {
+        cancelRefine();
+        return;
+      }
       run();
     });
     return b;
@@ -11020,17 +11065,51 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       if (wantMsg) {
         const slots = document.querySelectorAll(MSG_SLOT);
+        const holding = pickedHere();
         for (let i = 0; i < slots.length; i++) {
           const slot = slots[i];
-          if (slot.querySelector('[data-arf-slot="message"]')) continue;
           const id = slotId(slot);
           if (!id) continue;
-          const row = document.createElement("div");
-          row.className = "arf-slot-row";
-          row.appendChild(
-            slotButton("message", "Refine this message", () => refineOne(id)),
-          );
-          slot.appendChild(row);
+          let row = slot.querySelector(".arf-slot-row") as HTMLElement | null;
+          if (!row) {
+            row = document.createElement("div");
+            row.className = "arf-slot-row";
+            row.appendChild(
+              slotButton("message", "Refine this message", () => refineOne(id)),
+            );
+            slot.appendChild(row);
+          }
+          // The two that only make sense against a selection, and only on the
+          // message the selection is in. A button that is always there and
+          // usually does nothing is one people press once and stop trusting,
+          // which is the same rule the menu entry follows.
+          const mine = !!holding && String(holding.messageId) === id;
+          const part = row.querySelector('[data-arf-slot="part"]');
+          const snip = row.querySelector('[data-arf-slot="snip"]');
+          if (mine && !part)
+            row.appendChild(
+              slotButton(
+                "part",
+                "Refine the part I selected",
+                () => refinePicked(),
+                partIcon,
+              ),
+            );
+          if (mine && !snip)
+            row.appendChild(
+              slotButton(
+                "snip",
+                "Take out what I selected",
+                () => snipPicked(),
+                snipIcon,
+              ),
+            );
+          if (!mine) {
+            try {
+              if (part) part.remove();
+              if (snip) snip.remove();
+            } catch (_) {}
+          }
         }
       }
       paintSlots();
@@ -11061,10 +11140,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     for (let i = 0; i < found.length; i++) {
       const one = found[i] as HTMLElement;
+      const slot = one.getAttribute("data-arf-slot");
+      // The selection buttons draw their own mark and never spin: neither of
+      // them is the thing that is running.
+      if (slot === "part" || slot === "snip") {
+        const off = slot === "snip" ? snipping || busy : busy;
+        if (off) one.setAttribute("aria-busy", "true");
+        else one.removeAttribute("aria-busy");
+        continue;
+      }
       const kind = busy ? "working" : "ready";
       if (one.getAttribute("data-arf-icon") !== kind) {
         one.setAttribute("data-arf-icon", kind);
         one.innerHTML = busy ? spinIcon() : refineIcon();
+        // Named for what pressing it does now, so the label a screen reader
+        // reads matches the mark beside it.
+        const said = busy
+          ? "Stop this refine"
+          : slot === "bar"
+            ? "Refine the latest reply"
+            : "Refine this message";
+        one.title = said;
+        one.setAttribute("aria-label", said);
       }
       if (busy) one.setAttribute("aria-busy", "true");
       else one.removeAttribute("aria-busy");
@@ -11211,11 +11308,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!sel || !text.trim() || sel.isCollapsed) {
         if (pickedRun) {
           pickedRun = null;
-          // Both, because they are two different surfaces: paint redraws the
-          // panel's own button and syncExtras puts the row in the chat input's
-          // menu up or takes it down.
+          // Three different surfaces: paint redraws the panel's own button,
+          // syncExtras puts the row in the chat input's menu up or takes it
+          // down, and fillSlots does the same for the two buttons that sit on
+          // the message itself.
           paint();
           syncExtrasSoon();
+          fillSlotsSoon();
         }
         return;
       }
@@ -11248,6 +11347,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!was || was.messageId !== pickedRun.messageId) {
         paint();
         syncExtrasSoon();
+        fillSlotsSoon();
       }
     } catch (_) {}
   }
@@ -11260,6 +11360,42 @@ export function setup(ctx: Ctx, overrides?: any) {
     return pickedRun;
   }
 
+  // Taking the selection out, with no model call. Guarded on its own rather
+  // than on busy: a snip is a write and a refine is a write, so two at once
+  // would race, but a snip is quick enough that it never needs the running
+  // state a refine puts on screen.
+  let snipping = false;
+
+  function snipPicked() {
+    const one = pickedHere();
+    if (!one) {
+      toast("Select part of a reply first.", true);
+      return;
+    }
+    if (snipping) return;
+    if (busy) {
+      toast("A refine is running. Let it finish, or stop it first.", true);
+      return;
+    }
+    const why = whyNot();
+    if (why) {
+      toast(why, true);
+      log("nothing taken out: " + why.toLowerCase().replace(/\.$/, ""));
+      return;
+    }
+    snipping = true;
+    paint();
+    log("taking out the part you selected, " + one.text.trim().length + " characters of it");
+    send({
+      type: "snip_selection",
+      requestId: newId(),
+      chatId: one.chatId != null ? one.chatId : lastChatId,
+      messageId: one.messageId,
+      picked: one.text,
+      ahead: one.ahead,
+    });
+  }
+
   function refinePicked() {
     const one = pickedHere();
     if (!one) {
@@ -11267,7 +11403,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     if (busy) {
-      toast("A refine is already running. Press it again to stop that one.", true);
+      toast("A refine is already running. Stop it first, or wait for it to finish.", true);
       return;
     }
     const why = whyNot();
@@ -11302,7 +11438,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // One at a time. Two against the same reply means whichever finishes last
     // wins, and which one that is cannot be predicted.
     if (busy) {
-      toast("A refine is already running. Press it again to stop that one.", true);
+      toast("A refine is already running. Stop it first, or wait for it to finish.", true);
       return;
     }
     const why = whyNot();
@@ -11569,10 +11705,13 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           if (msg.type === "refined") {
-            markBusy(false);
-                  keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
-            tally.saved++;
-            lastRun = { ms: lastRunMs, ok: true, why: "" };
+            const wasSnip = msg.kind === "snip";
+            if (!wasSnip) {
+              markBusy(false);
+              keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
+              tally.saved++;
+              lastRun = { ms: lastRunMs, ok: true, why: "" };
+            }
             // A refine only happens in the chat the reader is in, so this is
             // also the chat. Adopted when nothing else has said so yet, or the
             // panel would hold a refine it could not show anybody.
@@ -11595,8 +11734,14 @@ export function setup(ctx: Ctx, overrides?: any) {
             // The badge is the point of the tab being closable: something
             // happened to your writing and you can see that without opening it.
             setBadge(String(undoHere().length || 1));
-            log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
-            toast("Reply refined.");
+            if (wasSnip) {
+              const gone = String(msg.before || "").length - String(msg.after || "").length;
+              log("took " + (gone > 0 ? gone : 0) + " characters out of a reply", true);
+              toast("Taken out. Put it back is on the card.");
+            } else {
+              log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+              toast("Reply refined.");
+            }
             ping();
             paint();
             return;
@@ -11619,6 +11764,19 @@ export function setup(ctx: Ctx, overrides?: any) {
             const what = String(msg.what || "settings");
             log("your " + what + " could not be saved to your account. They are still saved in this browser.");
             toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
+            paint();
+            return;
+          }
+          if (msg.type === "snip_result") {
+            snipping = false;
+            // The write itself arrives as "refined" with kind snip, which is
+            // what registers the way back. This only has to report a refusal
+            // and let the panel go again.
+            if (!msg.ok) {
+              const why = String(msg.why || "it could not be taken out");
+              log("nothing taken out: " + why);
+              toast(why.charAt(0).toUpperCase() + why.slice(1), true);
+            }
             paint();
             return;
           }

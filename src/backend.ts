@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.11.1';
+const VERSION = '1.12.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -1317,6 +1317,32 @@ function pickedSpan(
   const end = map.from[lastSeen];
   if (start == null || end == null) return null;
   return balanced(raw, start, end + 1);
+}
+
+// Takes a span out of a passage and closes the gap the way a person would.
+//
+// Only the point where the two halves meet is touched. Tidying the whole
+// passage would change spacing the reader never selected, which on a message
+// full of deliberate line breaks is its own kind of damage.
+function snipSpan(raw: string, start: number, end: number): string {
+  const left = raw.slice(0, start);
+  const right = raw.slice(end);
+  const hadSpace = /[ \t]$/.test(left) || /^[ \t]/.test(right);
+  const lTrim = left.replace(/[ \t]+$/, '');
+  const rTrim = right.replace(/^[ \t]+/, '');
+  // A whole paragraph taken out leaves the blank line from each side. One
+  // break is kept, and a blank line only where there was one before.
+  const lNl = (lTrim.match(/\n+$/) || [''])[0].length;
+  const rNl = (rTrim.match(/^\n+/) || [''])[0].length;
+  if (lNl || rNl) {
+    const keep = Math.max(lNl, rNl) > 1 ? '\n\n' : '\n';
+    return lTrim.replace(/\n+$/, '') + keep + rTrim.replace(/^\n+/, '');
+  }
+  // Nothing on one side means the span ran to an edge, so no space is owed.
+  if (!lTrim || !rTrim) return lTrim + rTrim;
+  // A space before a comma or a full stop is not how the sentence read before.
+  if (/^[,.!?;:)\]]/.test(rTrim)) return lTrim + rTrim;
+  return lTrim + (hadSpace ? ' ' : '') + rTrim;
 }
 
 // A block that is nothing but empty tags once its macros came back empty. A
@@ -3359,12 +3385,63 @@ async function currentContent(chatId: string, messageId: any): Promise<string | 
   }
 }
 
+// Takes the selected run out of a message and saves what is left.
+//
+// No model call, so none of the prompt building applies. What it does share
+// with a refine of a selection is how the span is found: the selection is made
+// in rendered markdown and has to be mapped back onto the raw text, and the
+// model's own working is held aside so an offset is never counted through it.
+async function snipMessage(
+  chatId: string,
+  messageId: any,
+  picked: string,
+  ahead: string,
+  userId?: string,
+): Promise<RefineOutcome> {
+  if (!masterOn) return { ok: false, why: 'Auto Refine is switched off' };
+  if (chatsOff.has(String(chatId)))
+    return { ok: false, why: 'Auto Refine is switched off in this chat' };
+  let msgs: any[] = [];
+  try {
+    msgs = await spindle.chat.getMessages(chatId);
+  } catch (e: any) {
+    return { ok: false, why: 'the chat could not be read: ' + ((e && e.message) || 'no reason given') };
+  }
+  if (!Array.isArray(msgs) || !msgs.length) return { ok: false, why: 'the chat came back empty' };
+  const m =
+    messageId == null || messageId === ''
+      ? latestReply(msgs, greetingIdOf(msgs))
+      : msgs.find((x: any) => x && x.id === messageId) || null;
+  if (!m) return { ok: false, why: 'that message is not in this chat any more' };
+
+  const original = String(m.content == null ? '' : m.content);
+  const split = splitThinking(original);
+  if (!split.body.trim())
+    return { ok: false, why: 'that message is only the model working, so there is nothing to take out' };
+
+  const at = pickedSpan(split.body, picked, ordinalOf(ahead, picked));
+  if (!at)
+    return { ok: false, why: 'what you selected is not in that message any more, so nothing was taken out' };
+
+  const body = snipSpan(split.body, at.start, at.end);
+  // Everything selected. An empty message is not something to leave somebody
+  // with by accident, and deleting the message is not what was asked for.
+  if (!body.trim())
+    return { ok: false, why: 'that would empty the message, so it was left as it is' };
+  const next = split.head + body + split.tail;
+  if (next === original) return { ok: false, why: 'that selection is already gone' };
+  return saveRefined(chatId, m, original, next, userId, 'snip');
+}
+
 async function saveRefined(
   chatId: string,
   m: any,
   original: string,
   next: string,
   userId?: string,
+  // What the write was. A snip takes text out with no model call, so the panel
+  // words it and counts it differently, but the way back is the same one.
+  kind?: 'refine' | 'snip',
 ): Promise<RefineOutcome> {
   const k = key(chatId, m.id);
   try {
@@ -3433,6 +3510,7 @@ async function saveRefined(
       before: original,
       after: next,
       canUndo: keepOriginal,
+      kind: kind === 'snip' ? 'snip' : 'refine',
     });
     return { ok: true, why: '' };
   } catch (e: any) {
@@ -3899,6 +3977,38 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         same: !!done.same,
         stood: !!done.stood,
         notes: done.notes || '',
+      });
+      return;
+    }
+
+    // Taking a selection out, with no model call. The panel sends what was
+    // selected and the text in front of it, exactly as a refine of a selection
+    // does, so the span is found the same way.
+    if (payload.type === 'snip_selection') {
+      const picked = String(payload.picked == null ? '' : payload.picked);
+      if (!picked.trim()) {
+        replyTo(userId, {
+          type: 'snip_result',
+          requestId: payload.requestId,
+          ok: false,
+          why: 'nothing was selected, so nothing was taken out',
+        });
+        return;
+      }
+      const done = await snipMessage(
+        payload.chatId,
+        payload.messageId,
+        picked,
+        String(payload.ahead == null ? '' : payload.ahead),
+        userId,
+      );
+      replyTo(userId, {
+        type: 'snip_result',
+        requestId: payload.requestId,
+        chatId: payload.chatId,
+        messageId: payload.messageId,
+        ok: done.ok,
+        why: done.why,
       });
       return;
     }

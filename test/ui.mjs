@@ -6605,6 +6605,151 @@ console.log("\nthe buttons in Lumiverse's own slots");
     ok("with no message named, which means the latest", !!barSent[0] && !barSent[0].messageId, JSON.stringify(barSent[0]));
   });
 
+  // Tapping a running refine calls it off. The spinner on these buttons was
+  // already saying it was working, and a reader who can see that expects the
+  // next tap to stop it.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      document.querySelector('[data-arf-slot="bar"]').click();
+      await new Promise((r) => setTimeout(r, 60));
+      const started = window.__sent.filter((m) => m.type === "refine_now").length;
+      const label = document.querySelector('[data-arf-slot="bar"]').getAttribute("aria-label");
+      window.__sent.length = 0;
+      // The second tap, while that one is still running.
+      document.querySelector('[data-arf-slot="bar"]').click();
+      await new Promise((r) => setTimeout(r, 60));
+      return {
+        started: started,
+        label: label,
+        stops: window.__sent.filter((m) => m.type === "cancel_refine").length,
+        more: window.__sent.filter((m) => m.type === "refine_now").length,
+      };
+    });
+    ok("the first tap starts a refine", out.started === 1, JSON.stringify(out));
+    ok("and the button then names itself a stop", /stop/i.test(out.label || ""), JSON.stringify(out));
+    ok("the second tap stops it", out.stops === 1, JSON.stringify(out));
+    ok("rather than starting another", out.more === 0, JSON.stringify(out));
+  });
+
+  // The two that only make sense against a selection. They are on the message
+  // holding it and nowhere else, so neither is ever a button that does nothing.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const pick = (which, text) => {
+        const host = document.querySelector(
+          '[data-spindle-scope^="message:' + which + '"]',
+        ).parentElement.querySelector("p");
+        const node = host.firstChild;
+        const at = node.nodeValue.indexOf(text);
+        const r = document.createRange();
+        r.setStart(node, at);
+        r.setEnd(node, at + text.length);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      };
+      const count = () => ({
+        part: document.querySelectorAll('[data-arf-slot="part"]').length,
+        snip: document.querySelectorAll('[data-arf-slot="snip"]').length,
+        onOne: !!document.querySelector(
+          '[data-spindle-scope^="message:msg-one"] [data-arf-slot="part"]',
+        ),
+        onTwo: !!document.querySelector(
+          '[data-spindle-scope^="message:msg-two"] [data-arf-slot="part"]',
+        ),
+      });
+      const before = count();
+      pick("msg-one", "The lamp");
+      await new Promise((r) => setTimeout(r, 400));
+      const after = count();
+      // Moving the selection to the other message moves the buttons with it.
+      pick("msg-two", "She left the crate");
+      await new Promise((r) => setTimeout(r, 400));
+      const moved = count();
+      getSelection().removeAllRanges();
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      const cleared = count();
+      return { before, after, moved, cleared };
+    });
+    ok("with nothing selected neither button is there", out.before.part === 0 && out.before.snip === 0, JSON.stringify(out.before));
+    ok("selecting part of a message puts both on it", out.after.part === 1 && out.after.snip === 1, JSON.stringify(out.after));
+    ok("on the message the selection is in", out.after.onOne && !out.after.onTwo, JSON.stringify(out.after));
+    ok("selecting in another message moves them", out.moved.onTwo && !out.moved.onOne, JSON.stringify(out.moved));
+    ok("and putting the selection away takes them off", out.cleared.part === 0 && out.cleared.snip === 0, JSON.stringify(out.cleared));
+  });
+
+  // What the two of them send.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const host = document
+        .querySelector('[data-spindle-scope^="message:msg-one"]')
+        .parentElement.querySelector("p");
+      const node = host.firstChild;
+      const at = node.nodeValue.indexOf("had been out");
+      const r = document.createRange();
+      r.setStart(node, at);
+      r.setEnd(node, at + "had been out".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      window.__sent.length = 0;
+      document.querySelector('[data-arf-slot="snip"]').click();
+      await new Promise((r) => setTimeout(r, 80));
+      const cut = window.__sent.filter((m) => m.type === "snip_selection");
+      // Anything that would cost a model call, sent alongside it.
+      const paid = window.__sent.filter(
+        (m) => m.type === "refine_selection" || m.type === "refine_now" || m.type === "refine_all",
+      ).length;
+      return { cut: cut, one: cut[0] || null, paid: paid };
+    });
+    ok("the scissors send a snip", out.cut.length === 1, JSON.stringify(out.cut));
+    ok("naming the host's own message id", !!out.one && out.one.messageId === "msg-one", JSON.stringify(out.one));
+    ok("and what was selected", !!out.one && out.one.picked === "had been out", JSON.stringify(out.one));
+    // The text in front of it, which is how the backend tells one run of an
+    // identical phrase from another.
+    ok("with the text ahead of it, for counting", !!out.one && /^The lamp over the bench $/.test(out.one.ahead || ""), JSON.stringify(out.one));
+    // No model call: a snip is a delete, and paying for one would be a surprise.
+    ok("and nothing that costs a model call goes with it", out.paid === 0, JSON.stringify(out));
+  });
+
+  // A snip is a write, and so is a refine, so the two cannot overlap.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const host = document
+        .querySelector('[data-spindle-scope^="message:msg-one"]')
+        .parentElement.querySelector("p");
+      const node = host.firstChild;
+      const r = document.createRange();
+      r.setStart(node, 0);
+      r.setEnd(node, 8);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      // Start a refine, then try to snip while it runs.
+      document.querySelector('[data-arf-slot="bar"]').click();
+      await new Promise((r) => setTimeout(r, 60));
+      window.__sent.length = 0;
+      const snip = document.querySelector('[data-arf-slot="snip"]');
+      const dimmed = snip ? snip.getAttribute("aria-busy") : null;
+      if (snip) snip.click();
+      await new Promise((r) => setTimeout(r, 80));
+      return {
+        dimmed: dimmed,
+        sent: window.__sent.filter((m) => m.type === "snip_selection").length,
+      };
+    });
+    ok("while a refine runs the scissors say so", out.dimmed === "true", JSON.stringify(out));
+    ok("and pressing them sends nothing", out.sent === 0, JSON.stringify(out));
+  });
+
   // Off is off. Nothing of this extension's goes near the chat for somebody who
   // has not asked for it, which is the rule every other way in keeps.
   await inTab(browser, { saved: { enabled: true } }, async (page) => {
