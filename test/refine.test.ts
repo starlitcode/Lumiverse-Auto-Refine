@@ -4586,3 +4586,62 @@ describe("taking out what you selected", () => {
     expect(done.ok).toBe(false);
   });
 });
+
+// The two buttons sit next to each other on a message, so what one refuses the
+// other has to refuse too. A snip is a person's own edit rather than a model
+// rewrite, which is an argument for allowing it, but not an argument anybody
+// could guess from two marks side by side.
+describe("what a snip refuses, matching the refine beside it", () => {
+  const withGreeting = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: "She went in and the hall was dark." },
+  ];
+
+  test("the greeting is not edited", async () => {
+    const was = "The yard gate was already open when she got there.";
+    const h = await armed([], {}, withGreeting());
+    await h.front({
+      type: "snip_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m0",
+      picked: "already open ",
+      ahead: "The yard gate was ",
+    });
+    await wait(50);
+    expect(h.body("m0")).toBe(was);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+    expect(done.why).toMatch(/greeting/i);
+  });
+
+  test("and the refine beside it refuses the greeting the same way", async () => {
+    const was = "The yard gate was already open when she got there.";
+    const h = await armed(["<REFINED>The gate stood open.</REFINED>"], {}, withGreeting());
+    await h.front({
+      type: "refine_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m0",
+      picked: "already open ",
+      ahead: "The yard gate was ",
+    });
+    await wait(60);
+    expect(h.body("m0")).toBe(was);
+  });
+
+  test("your own message is still yours to snip", async () => {
+    const h = await armed([], {}, withGreeting());
+    await h.front({
+      type: "snip_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m1",
+      picked: " in",
+      ahead: "i go",
+    });
+    await wait(50);
+    expect(h.body("m1")).toBe("i go");
+  });
+});

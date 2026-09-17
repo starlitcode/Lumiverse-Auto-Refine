@@ -6750,6 +6750,92 @@ console.log("\nthe buttons in Lumiverse's own slots");
     ok("and pressing them sends nothing", out.sent === 0, JSON.stringify(out));
   });
 
+  // Those two buttons follow what is selected on the page and nothing else. A
+  // snip that worked does not put the selection down by hand: while the old
+  // text is still on screen the selection is still real, and the host redrawing
+  // the message is what ends it. An earlier attempt to clear it here was undone
+  // by the next selectionchange, which is the DOM being right and the panel
+  // being wrong.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const host = document
+        .querySelector('[data-spindle-scope^="message:msg-one"]')
+        .parentElement.querySelector("p");
+      const node = host.firstChild;
+      const r = document.createRange();
+      r.setStart(node, 0);
+      r.setEnd(node, 8);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 400));
+      const up = document.querySelectorAll('[data-arf-slot="snip"]').length;
+      document.querySelector('[data-arf-slot="snip"]').click();
+      await new Promise((r2) => setTimeout(r2, 80));
+      const asked = window.__sent.filter((m) => m.type === "snip_selection").pop();
+      window.__fromBackend({ type: "snip_result", requestId: asked.requestId, chatId: "c1", messageId: "msg-one", ok: true, why: "" });
+      await new Promise((r2) => setTimeout(r2, 400));
+      const held = document.querySelectorAll('[data-arf-slot="snip"]').length;
+      // The host redraws the message it came out of, which is what really ends
+      // the selection.
+      getSelection().removeAllRanges();
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 400));
+      return {
+        up: up,
+        held: held,
+        afterRedraw: document.querySelectorAll('[data-arf-slot="snip"]').length,
+        part: document.querySelectorAll('[data-arf-slot="part"]').length,
+      };
+    });
+    ok("the scissors are up while the selection is", out.up === 1, JSON.stringify(out));
+    ok("and stay up while the same text is still selected", out.held === 1, JSON.stringify(out));
+    ok("going when the selection does", out.afterRedraw === 0, JSON.stringify(out));
+    ok("and taking the other one with them", out.part === 0, JSON.stringify(out));
+  });
+
+  // A backend that never answers must not leave the scissors dead for the rest
+  // of the session. The flag is the only thing stopping two snips at once, and
+  // nothing but the answer clears it.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const host = document
+        .querySelector('[data-spindle-scope^="message:msg-one"]')
+        .parentElement.querySelector("p");
+      const node = host.firstChild;
+      const r = document.createRange();
+      r.setStart(node, 0);
+      r.setEnd(node, 8);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 400));
+      window.__sent.length = 0;
+      // Pressed, and nothing is ever sent back.
+      document.querySelector('[data-arf-slot="snip"]').click();
+      await new Promise((r2) => setTimeout(r2, 80));
+      const first = window.__sent.filter((m) => m.type === "snip_selection").length;
+      // Still stuck a moment later, which is the point of the guard.
+      document.querySelector('[data-arf-slot="snip"]').click();
+      await new Promise((r2) => setTimeout(r2, 80));
+      const whileWaiting = window.__sent.filter((m) => m.type === "snip_selection").length;
+      // Past the five seconds the rest of the panel gives a silent backend.
+      await new Promise((r2) => setTimeout(r2, 5400));
+      document.querySelector('[data-arf-slot="snip"]').click();
+      await new Promise((r2) => setTimeout(r2, 80));
+      return {
+        first: first,
+        whileWaiting: whileWaiting,
+        afterGivingUp: window.__sent.filter((m) => m.type === "snip_selection").length,
+      };
+    });
+    ok("one press sends one snip", out.first === 1, JSON.stringify(out));
+    ok("and a second press while it waits sends nothing", out.whileWaiting === 1, JSON.stringify(out));
+    ok("but it gives up rather than staying dead", out.afterGivingUp === 2, JSON.stringify(out));
+  });
+
   // Off is off. Nothing of this extension's goes near the chat for somebody who
   // has not asked for it, which is the rule every other way in keeps.
   await inTab(browser, { saved: { enabled: true } }, async (page) => {

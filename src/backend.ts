@@ -3408,11 +3408,21 @@ async function snipMessage(
     return { ok: false, why: 'the chat could not be read: ' + ((e && e.message) || 'no reason given') };
   }
   if (!Array.isArray(msgs) || !msgs.length) return { ok: false, why: 'the chat came back empty' };
+  const greetingId = greetingIdOf(msgs);
   const m =
     messageId == null || messageId === ''
-      ? latestReply(msgs, greetingIdOf(msgs))
+      ? latestReply(msgs, greetingId)
       : msgs.find((x: any) => x && x.id === messageId) || null;
   if (!m) return { ok: false, why: 'that message is not in this chat any more' };
+  // The same two the refiner refuses. Taking text out is a different act from
+  // rewriting it, but these two buttons sit next to each other on the same
+  // message, and one of them quietly editing what the other will not touch is
+  // not something anybody could predict. Lumiverse's own edit is still there
+  // for a greeting somebody does want to change.
+  if (m.id === greetingId)
+    return { ok: false, why: 'the greeting is written by a person, so it is never edited from here' };
+  if (m.role !== 'assistant' && m.role !== 'user')
+    return { ok: false, why: 'only replies and your own messages can be edited from here' };
 
   const original = String(m.content == null ? '' : m.content);
   const split = splitThinking(original);

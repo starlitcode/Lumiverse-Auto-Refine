@@ -10923,6 +10923,17 @@ export function setup(ctx, overrides) {
     // would race, but a snip is quick enough that it never needs the running
     // state a refine puts on screen.
     let snipping = false;
+    let snipTimer = null;
+    // The flag is what stops two snips overlapping, and nothing else clears it.
+    // A backend that never answers would leave the button dead for the rest of
+    // the session, so it is given the same five seconds every other request gets.
+    function snipDone() {
+        snipping = false;
+        if (snipTimer) {
+            clearTimeout(snipTimer);
+            snipTimer = null;
+        }
+    }
     function snipPicked() {
         const one = pickedHere();
         if (!one) {
@@ -10942,6 +10953,18 @@ export function setup(ctx, overrides) {
             return;
         }
         snipping = true;
+        if (snipTimer)
+            clearTimeout(snipTimer);
+        snipTimer = setTimeout(() => {
+            snipTimer = null;
+            if (!snipping)
+                return;
+            snipping = false;
+            log("no answer from the backend. Nothing was taken out.");
+            toast("Auto Refine's backend is not answering. Nothing was taken out.", true);
+            paint();
+            fillSlotsSoon();
+        }, ACK_MS);
         paint();
         log("taking out the part you selected, " + one.text.trim().length + " characters of it");
         send({
@@ -11343,7 +11366,12 @@ export function setup(ctx, overrides) {
                         return;
                     }
                     if (msg.type === "snip_result") {
-                        snipping = false;
+                        snipDone();
+                        // The selection is not cleared from here. What is selected on the
+                        // page is the only thing that decides whether those two buttons are
+                        // up, and the host redrawing the message it came out of is what
+                        // ends it. Clearing it here as well would be undone by the next
+                        // selectionchange while the old text is still on screen.
                         // The write itself arrives as "refined" with kind snip, which is
                         // what registers the way back. This only has to report a refusal
                         // and let the panel go again.
@@ -11840,6 +11868,10 @@ export function setup(ctx, overrides) {
         if (huntTimer) {
             clearTimeout(huntTimer);
             huntTimer = null;
+        }
+        if (snipTimer) {
+            clearTimeout(snipTimer);
+            snipTimer = null;
         }
         for (const d of disposers.splice(0)) {
             try {
