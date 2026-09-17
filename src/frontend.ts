@@ -318,7 +318,7 @@ const CONFIG = {
   // going up on every reply.
   asSwipe: false,
   // Phrases this chat has worn out. Off by default, since it reads the chat's
-  // replies and nobody asked for that until they put {{overused}} in a block.
+  // replies. Turned on by putting {{overused}} in a block.
   wornOn: false,
   wornBack: 60,
   wornLeast: 3,
@@ -345,9 +345,9 @@ const CONFIG = {
   // drawer. Needs the ui_panels permission, and says so if it is missing.
   widgetOn: false,
   // The card that comes up on the page when a refine finishes, with the before,
-  // the after and the way back on it. On by default: a refine changes writing
-  // somebody was reading, and making them find a tab to see what changed is
-  // the wrong way round.
+  // the after and the way back on it. On by default, because a refine changes
+  // writing somebody was reading, and the change should be visible without
+  // opening a tab to find it.
   popup: true,
   // What one tap does when there is a refine to put back. On, the button turns
   // into an undo; off, a tap always refines.
@@ -402,9 +402,8 @@ const CONFIG = {
   // Streaming the refine so the panel can show it arriving. The answer is the
   // same either way; this only decides whether you can watch it.
   streamProgress: true,
-  // Rows in the chat input's Extras menu. Off until asked for: they reach into
-  // the page, and an extension that redecorates somebody's chat on install is
-  // one they uninstall.
+  // Rows in the chat input's Extras menu. Off until asked for, because they
+  // add to the page, and a fresh install should not change the chat.
   //
   // Refining what you are about to send, from the input bar, before it is sent.
   // Off by default: it edits the box you are typing in, which is not something
@@ -778,7 +777,7 @@ const PHRASES =
   "- a sound placed out of reach: somewhere, a door slams\n" +
   "- time slowing, the world falling away, the world narrowing\n" +
   "- a pause named instead of filled: a long moment, a beat, a silence that stretches\n" +
-  // Shapes rather than particular phrases. A model reaches for these whatever
+  // Shapes rather than particular phrases. A model produces these whatever
   // the scene is, so naming the shape catches every filling of it where naming
   // one example catches one.
   "- a thing said by what it is not, then corrected: not a question, an order\n" +
@@ -1131,8 +1130,8 @@ const RESTRAINT: Block = {
     "</restraint>",
 };
 
-// The prompt for your own passages. A different job: your writing is already in
-// your hand, and the failure to watch for is a refine that hands it back in the
+// The prompt for your own passages. A different job: the text is already in
+// your voice, and the failure to watch for is a refine that returns it in the
 // narrator's.
 // ---- refining what you wrote yourself ----
 // A different job from refining a reply, and the difference is restraint. A
@@ -3357,9 +3356,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Everything the panel draws from the chat you are in, in one string. The
   // address is watched on a timer and asks the backend where we are whenever
   // the two disagree, and most of those answers say exactly what the last one
-  // said. Rebuilding for one of those is a rebuild nobody asked for, landing
-  // in the middle of whatever somebody was reading or typing, which is what a
-  // panel that jumps on its own looks like from the outside.
+  // said. Rebuilding for one of those interrupts whatever somebody is reading
+  // or typing, and the panel appears to jump on its own.
   const chatShape = () =>
     [
       String(lastChatId),
@@ -3646,10 +3644,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // you meant to scroll the panel reads as the panel coming apart. Wrapping
     // instead dropped the last tab onto a second line, so the tabs give way at
     // the sides rather than the row breaking.
-    // A selector is one unbroken string with no spaces to wrap at, so it is
-    // allowed to break anywhere rather than pushing the card sideways. The one
-    // in use is marked by its edge and its ink rather than by a word after it:
-    // a state repeated down every line is what made the list read as a wall.
+    // A selector can be one long string with nowhere to wrap, so it is allowed
+    // to break anywhere rather than push the card sideways. The one in use is
+    // marked by its border and its text colour, not by a word after it. A
+    // status after every line is harder to read.
     ".arf-pick{font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.5;" +
     "overflow-wrap:anywhere;padding:3px 7px;border-radius:var(--lumiverse-radius-sm,5px);" +
     "border-left:2px solid transparent;" +
@@ -4493,8 +4491,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.setAttribute("data-arf-open", "1");
     } catch (_) {}
 
-    // Tapping the description closes it. On a phone that is the first thing a
-    // thumb reaches for.
+    // Tapping the description closes it. On a phone that is the easiest place
+    // to tap.
     box.addEventListener("click", () => hideHint());
     hintPop = box;
     hintAnchor = anchor;
@@ -4624,11 +4622,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Closing happens on the way down, and the click that follows lands on
     // whatever was under the finger, so dismissing a description by tapping the
     // page also flipped whichever tick or button it happened to land on. The
-    // next click is eaten, once, and only when a description was open to close.
+    // next click is blocked, once, and only when a description was open to close.
     // A gesture that never produces one, a drag or a scroll, drops the guard on
     // its own rather than leaving it armed for the next real press.
     let eatClick: (() => void) | null = null;
-    function swallowNext() {
+    function blockNextClick() {
       const eat = (e: any) => {
         drop();
         if (!e) return;
@@ -4666,7 +4664,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (t && hintPop.contains && hintPop.contains(t)) return;
       } catch (_) {}
       hideHint();
-      swallowNext();
+      blockNextClick();
     };
     // A long description scrolls inside itself. That scroll is somebody reading
     // it, not the row moving, so it is the one scroll that leaves it open.
@@ -4721,8 +4719,8 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // ---- the tabs ----
   // Six boxes, and everything belongs in exactly one of them. The panel was one
-  // column with every setting in it, which reads as a wall however carefully
-  // each row is written: nothing tells the eye where one subject ends.
+  // column holding every setting, which is hard to read however carefully each
+  // row is written, because nothing shows where one subject ends.
   const TABS: Array<{ id: string; label: string }> = [
     { id: "prompt", label: "Prompt" },
     { id: "context", label: "Context" },
@@ -4819,7 +4817,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // the typing stops costs the same forty milliseconds once.
     //
     // Short enough that a reader who types a word and looks up sees the list
-    // already filtered, long enough to swallow a normal typing rate.
+    // already filtered, long enough to cover a normal typing rate.
     box.addEventListener("input", () => {
       hunt = box.value;
       if (huntTimer) clearTimeout(huntTimer);
@@ -5345,8 +5343,8 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // ---- the control card, which never moves ----
   // Above the tabs, because the switch and the button are what somebody came
-  // for, and hunting for the master switch on the tab it happens to live on is
-  // the thing that makes a tabbed panel worse than a list.
+  // for. Looking through tabs for the master switch is slower than a single
+  // list would have been.
   function buildHeader(): HTMLElement {
     headerHeldTurn = holdsTurn(blockList("blocks"));
     const wrap = card();
@@ -5466,10 +5464,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     every.addEventListener("click", () => askSweep());
     row.appendChild(every);
 
-    // The third thing a refine can be pointed at, standing next to the other
-    // two rather than living only in a menu over the chat or a row inside
-    // Extras. Both of those are a hunt, and this is the one people reach for
-    // while the panel is already open in front of them.
+    // The third thing a refine can be pointed at, next to the other two rather
+    // than only in a menu over the chat or a row inside Extras. Both of those
+    // take looking for. This one is already on screen while the panel is open.
     {
       const draft = button("Refine what I am typing", false);
       const noDraft = whyNotDraft();
@@ -8513,21 +8510,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // Ways in other than the drawer. Both are off until asked for, because an
-  // extension that adds a floating button and an input bar row on install is
-  // one that redecorated somebody's screen without asking.
-  // Where the input box is, and a way to fix it without waiting for a release.
+  // Where the input box is.
   //
-  // Refining a draft is the one thing here that reads Lumiverse's own layout,
-  // so a release that moves the box breaks it and nothing else. The list is
-  // shown in full rather than described, because the reader who needs this is
-  // reading their own page's markup and has to see what is already being tried
+  // Refining a draft is the one part that reads Lumiverse's own layout, so a
+  // release that moves the box stops that and nothing else. The selectors are
+  // listed in full rather than described, because anybody who needs this card
+  // is reading their own page's markup and has to see what is already tried
   // before writing anything.
   //
   // There is no button that picks the box for you. A click-based picker loses
-  // its click to the drawer closing, and holding instead was tried and did not
-  // work reliably enough to keep. Reading the page's own markup and typing a
-  // selector is the way that works every time.
+  // its click to the drawer closing, and a press-and-hold picker was tried and
+  // did not work reliably. Typing a selector works every time.
   function buildInputCard(): HTMLElement {
     const wrap = card(
       "Where the input box is",
@@ -8572,8 +8565,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     test.setAttribute("data-arf-testinput", "1");
     row.appendChild(test);
     // The way back, beside the thing it puts back. Editing a selector is how
-    // somebody ends up with a box that finds nothing, and hunting for a reset
-    // on another card is the wrong thing to ask of them at that moment.
+    // somebody ends up with a box that finds nothing, so the reset is here
+    // rather than on another card.
     const put = button("Use the shipped list", false);
     put.setAttribute("data-arf-resetinput", "1");
     put.addEventListener("click", () => {
@@ -8652,6 +8645,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // Ways in other than the drawer. Both are off until asked for, so a fresh
+  // install adds nothing to the screen.
   function buildReachCard(): HTMLElement {
     const wrap = card("Ways to reach it", "The drawer tab is always there. These are extra.");
     wrap.appendChild(
@@ -10365,9 +10360,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       toast("Your prompt has no {{message}} block, so there is nothing to rewrite.", true);
       return;
     }
-    // One at a time, the same rule the reply button follows. Not only because
-    // two model calls at once is not what anybody asked for: everything on
-    // screen that says a refine is running is one state, and a second refine
+    // One at a time, the same rule the reply button follows. Two model calls at
+    // once cost twice over, and everything on screen that says a refine is
+    // running is one state, so a second refine
     // ending would clear it out from under the first while that one was still
     // going, taking the live line, the countdown and both watchdogs with it.
     if (busy) {
@@ -10512,7 +10507,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // more than a few pixels cancels it too. Waiting for the button's own
       // pointerup does not work: the host captures the pointer to drag the
       // widget, so that pointerup never arrives, every tap becomes a hold, and
-      // the click behind it is swallowed by a flag nothing clears.
+      // the click behind it is blocked by a flag nothing clears.
       let held: any = null;
       let downAt: { x: number; y: number } | null = null;
       let menuOpened = false;
@@ -10883,9 +10878,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The Extras row.
     //
     // In one place at a time. While the floating button is on screen its menu
-    // holds these, and Extras holds them only when there is no button to. Two
-    // ways to reach one thing is one more than anybody needs, and it clutters a
-    // menu that was opened for something else. With the button off, or refused
+    // holds these, and Extras holds them only when there is no button to. One
+    // way in at a time, so a menu opened for something else stays short. With the button off, or refused
     // because ui_panels was not granted, Extras is the only way to reach them
     // on a phone, so they come back.
     //
@@ -10894,8 +10888,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // without the floating button needs this to be somewhere, and it is not
     // worth a second switch: anybody who has asked for a row in Extras has
     // asked for the row, not for one particular entry in it. Nothing appears on
-    // a fresh install either way, which is the rule this extension keeps: it
-    // does not redecorate a screen because it was installed.
+    // a fresh install either way.
     const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
     extra("auto-refine-now", "Refine the latest reply", inExtras, () => refineNow());
     extra("auto-refine-input", "Refine what I am typing", inExtras, () => refineInput());
@@ -11079,7 +11072,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The host redraws this chrome on its own terms: a new reply, a swipe, a chat
-  // change, a re-render nobody asked for. Watched only while a button is wanted,
+  // change, or a re-render with no visible cause. Watched only while a button is wanted,
   // because a chat that is streaming mutates constantly and there is no reason
   // to answer any of it for somebody who has both of these switched off.
   function watchSlots() {
@@ -11307,7 +11300,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // to watch arrive.
   function refineOne(messageId: any) {
     // One at a time. Two against the same reply means whichever finishes last
-    // wins, which is not a thing anybody asked for.
+    // wins, and which one that is cannot be predicted.
     if (busy) {
       toast("A refine is already running. Press it again to stop that one.", true);
       return;

@@ -12,19 +12,21 @@ _2026-09-17_
 
 ### Fixed
 
-- **A connection that refuses one of the fields sent with a refine no longer kills the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
+- **A connection that refuses one of the fields sent with a refine no longer stops the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
 
   The refusal is read and the refine is asked again without the fields it named, once. Only fields that actually went out are dropped, so a message mentioning something the extension never sent changes nothing, and a second refusal is treated as real.
 
-- **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs give way at the sides rather than the last one dropping to a second line.
+- **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs get narrower rather than the last one dropping to a second line.
 
 ### Added
 
 - **Where the input box is**, a new card on the **Setup** tab. Refining a draft is the one thing here that reads Lumiverse's own layout, so a release that moves the input box breaks that and nothing else. Until now the only fix was waiting for a new version.
 
-  The box holds the list itself rather than sitting blank behind a hidden one, so what is being tried can be read and edited in place. Separated by commas, tried in the order they are written. Emptying the box falls back to the list this shipped with.
+  The box holds the list itself, so what is being tried can be read and edited in place. Separate the selectors with commas. They are tried in the order you write them, and emptying the box falls back to the list this shipped with.
 
-  Every selector in use is listed under the box in the order it is tried, and the one actually finding the box is highlighted. The others are shown plainly, because the order is the point. A selector the browser cannot read is marked in red, since **Test** answers for the box as a whole and would still read as valid with one typo among several good selectors.
+  Every selector is listed under the box in the order it is tried. The one finding the box is highlighted, and the rest are shown plainly, so you can see where yours sits in the order.
+
+  A selector the browser cannot read is marked in red. **Test** covers the box as a whole, and a box with one typo and four good selectors still passes, so the mark goes on the line instead.
 
   **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
 
@@ -34,7 +36,7 @@ _2026-09-17_
 
   It waits for a gap in the typing now and repaints once. Measured on the **Prompt** tab: 42ms a keystroke before, under 1ms after.
 
-- **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one read as cramped next to the wide ones.
+- **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one looked cramped next to the wide ones.
 
 - **Plainer words in the shipped prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.
 

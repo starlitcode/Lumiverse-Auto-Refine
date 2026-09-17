@@ -83,7 +83,7 @@ Three things never move, whichever tab you left open, because they are what you 
   A **temporary chat**, the scratch conversation with no character card on it, is told apart from an ordinary one and the card says so. The switch works there for as long as the chat is open, but it is not written down: the chat is discarded on the way out and the next one carries a different id, so a remembered entry could never match anything again. It would sit in storage looking like a setting and doing nothing. A chat whose card could not be read at all is not a temporary chat, and is not treated as one.
 - **When a refine finishes** is how you find out.
 
-  **Show the before and after on screen** puts a card on the page itself, not in this tab: what the reply said before, what it says now, and a button to put it back. On by default, because a refine changes writing you were reading, and having to find a tab to see what changed is the wrong way round.
+  **Show the before and after on screen** puts a card on the page itself, not in this tab: what the reply said before, what it says now, and a button to put it back. On by default, because a refine changes writing you were reading, so the change is shown on the page instead of only in this tab.
 
   **Show a brief message** is the one-line note at the edge of the screen. A sound is off by default, and with nothing attached it is a short built-in blip made in the browser, so there is no file to ship.
 
@@ -120,14 +120,26 @@ Three things never move, whichever tab you left open, because they are what you 
 
   Finding that input box is the one thing this extension reads Lumiverse's own layout for. It works from a built-in list that needs nothing set, and **Where the input box is** on the Setup tab is there for the day an update moves the box.
 
-Those last two live in one place at a time. While the floating button is on screen, its menu holds anything that would otherwise be a row in the chat input's Extras menu. With the button off, or refused because the permission is not granted, or on a Lumiverse too old to draw a menu, the rows come back to Extras, which is the only way to reach them on a phone. Two ways to reach one thing is one more than anybody needs.
-- **Where the input box is** is the way to point **Refine what I am typing** at a box a Lumiverse update has moved. Nothing here needs setting until that happens.
+Those last two live in one place at a time. While the floating button is on screen, its menu holds anything that would otherwise be a row in the chat input's Extras menu. With the button off, or refused because the permission is not granted, or on a Lumiverse too old to draw a menu, the rows come back to Extras, which is the only way to reach them on a phone. Only one of the two carries them at a time, so a menu opened for something else stays short.
+- **Where the input box is** points **Refine what I am typing** at a box that a Lumiverse update has moved. Nothing here needs setting until that happens.
 
-  **The selectors it looks under** holds the list itself, so you can read what is being tried and edit it in place. Separated by commas, tried in the order they are written. Emptying the box falls back to the list this shipped with, so a cleared box never means stop looking.
+  **The selectors it looks under** holds the list itself, so you can read what is being tried and edit it in place. Separate them with commas. They are tried in the order you write them.
 
-  Under it, every selector in the order it is tried. The one actually finding the box is highlighted, and the rest are shown plainly, because the order is the point. A selector the browser cannot read is marked in red: **Test** answers for the box as a whole and would still read as valid with one typo among several good selectors, so the line carries that instead.
+  Emptying the box does not switch anything off. It falls back to the list this shipped with.
 
-  **Test** reads the page at the moment you press it and says whether the box was found, found but not something that can be typed into, not matched at all, or not a selector the browser can read. It answers for now, not on a timer, because a line that went stale while you read it would be worse than no line.
+  Under the box, every selector is listed in the order it is tried. The one finding the box is highlighted. The rest are shown plainly, so you can see where yours sits in the order.
+
+  A selector the browser cannot read is marked in red. **Test** covers the box as a whole, and a box with one typo and four good selectors still passes, so the mark goes on the line instead.
+
+  **Test** reads the page at the moment you press it. It says one of:
+
+  - the box was found, and can be typed into
+  - something was found, but it cannot be typed into right now
+  - nothing on the page matches
+  - that is not a selector the browser can read
+  - the box is empty, so only the built-in list is used
+
+  It reads the page when pressed rather than on a timer, so the answer is never left over from earlier.
 
   **Use the shipped list** puts the box back. It is also its own part in the export, import and reset lists, so putting your selectors back does not take the buttons and switches with them.
 

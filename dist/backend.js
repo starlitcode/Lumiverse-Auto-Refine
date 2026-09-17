@@ -1055,8 +1055,8 @@ function overusedIn(replies, opts) {
     for (const one of worn) {
         // Inside something already reported, and appearing no more often than it
         // does: the same habit, said once already.
-        const swallowed = kept.some((had) => had.phrase.indexOf(one.phrase) >= 0 && had.replies >= one.replies);
-        if (!swallowed)
+        const alreadyCovered = kept.some((had) => had.phrase.indexOf(one.phrase) >= 0 && had.replies >= one.replies);
+        if (!alreadyCovered)
             kept.push(one);
     }
     kept.sort((a, b) => b.replies - a.replies || b.count - a.count || a.phrase.localeCompare(b.phrase));
@@ -1150,8 +1150,8 @@ function loosen(s) {
     return { text: out.join(''), at: at };
 }
 // Emphasis markers come in pairs. A span that starts or ends between a pair
-// takes one marker with it, and replacing it leaves the other one stranded,
-// which turns the rest of the message italic. The span is widened outward to
+// takes one marker with it, and replacing it leaves the other one with no
+// partner, which turns the rest of the message italic. The span is widened outward to
 // whichever marker it is inside, so the pair travels together.
 function balanced(raw, start, end) {
     let from = start;
@@ -1866,8 +1866,8 @@ let rateWaits = 2;
 // count going up on every reply.
 let asSwipe = false;
 // Phrases this chat has worn out, and how far back to look for them. Off by
-// default: it reads the chat's replies, which is a call to Lumiverse nobody asked
-// for until they put the macro in a block.
+// default, because it reads the chat's replies, which is an extra call to
+// Lumiverse. Turned on by putting the macro in a block.
 let wornOn = false;
 let wornBack = 60;
 let wornLeast = 3;
@@ -2004,7 +2004,7 @@ function judgeInner(answer, original) {
     if (!text)
         return { ok: false, text: '', why: 'the model sent nothing back' };
     // Not a failure. The prompt says a passage that already reads well comes back
-    // exactly as it was, so a model that hands it back is doing what it was told:
+    // exactly as it was, so a model that returns it unchanged did what it was told:
     // calling that "the model changed nothing" reported the extension's own
     // instruction as a fault, and on a short piece of writing, which is most of
     // what an input box holds, it was the usual answer.
@@ -2335,7 +2335,7 @@ function gatherWorn(msgs, upTo, name, canon) {
         if (wornFine.some((fine) => one.phrase.indexOf(fine) >= 0))
             continue;
         // Written down somewhere as part of the story, so it is the story rather
-        // than a reach for the same words twice.
+        // than the same words being used twice.
         //
         // A run of it rather than all of it, because a finding drifts from the words
         // it came from: a card saying "has crossed the same water" against a reply
@@ -2593,8 +2593,8 @@ async function askModel(text, isUser, scene, userId, use, drop) {
     let timer = null;
     if (controller) {
         controller.__arfWhy = '';
-        // Held whether or not there is a timer, because this is also what Stop
-        // reaches for, and with the timeout off it is the only way to end a run.
+        // Held whether or not there is a timer, because Stop uses this too, and
+        // with the timeout off it is the only way to end a run.
         holdRun(userId, controller);
         if (ms)
             timer = setTimeout(() => {
@@ -3015,7 +3015,7 @@ pick) {
     // them, so the tokens standing in for markup are the same throughout and the
     // instruction about them stays true for every pass.
     let carried = armed.text;
-    // What each pass was given and what it handed back. A chain that came out
+    // What each pass was given and what it returned. A chain that came out
     // worse is otherwise one before and one after with three calls somewhere in
     // between, and no way to tell which of them did it.
     //
@@ -3724,8 +3724,8 @@ spindle.onFrontendMessage(async (payload, userId) => {
         if (payload.type === 'refine_selection') {
             const picked = String(payload.picked == null ? '' : payload.picked);
             // Nothing picked is not a reason to rewrite the whole reply. Falling
-            // through to an ordinary refine here would rewrite the lot on a selection
-            // that had already been cleared, which is the one answer nobody asked for.
+            // through to an ordinary refine here would rewrite the whole reply on a
+            // selection that had already been cleared.
             if (!picked.trim()) {
                 replyTo(userId, {
                     type: 'refine_result',
@@ -4133,7 +4133,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
     catch (e) {
         const why = (e && e.message) || String(e);
         say('warn', 'a message from the panel could not be handled: ' + why);
-        // The panel is waiting. Swallowing this into a log line left it spinning
+        // The panel is waiting. Hiding this in a log line left it spinning
         // with no way to know the answer was never coming, so whatever it asked
         // for is answered with the failure.
         try {
