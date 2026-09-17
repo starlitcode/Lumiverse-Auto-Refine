@@ -6091,21 +6091,62 @@ console.log("\nwhere the input box is");
         card: !!card,
         test: !!document.querySelector("#drawer [data-arf-testinput]"),
         reset: !!document.querySelector("#drawer [data-arf-resetinput]"),
-        pick: !!document.querySelector("#drawer [data-arf-pickinput]"),
-        lines: list ? list.children.length : 0,
+        lines: list ? list.querySelectorAll("[data-arf-pick]").length : 0,
+        marked: list ? list.querySelectorAll('[data-arf-pick="on"]').length : 0,
         text: list ? list.textContent : "",
       };
     });
     ok("the card is on Setup", seen.card, JSON.stringify(seen).slice(0, 200));
     ok("with a Test button", seen.test, JSON.stringify(seen).slice(0, 200));
-    // A picker has to watch for a click on the page, and a drawer eats that
-    // click on the way out, which leaves it armed with nothing to show.
     ok("with a way back to the shipped list", seen.reset, JSON.stringify(seen).slice(0, 200));
-    ok("and a hold-to-pick button", seen.pick, JSON.stringify(seen).slice(0, 200));
     // Every selector, not a count of them: the reader needs to compare what is
     // being tried against their own page.
-    ok("every built-in selector is listed", seen.lines >= 6, JSON.stringify(seen).slice(0, 200));
-    ok("and each says whether it is on screen", /on screen/.test(seen.text), seen.text.slice(0, 160));
+    ok("every built-in selector is listed", seen.lines === 5, JSON.stringify(seen).slice(0, 200));
+    // Nothing on this page is a chat box, and the card says so rather than
+    // highlighting a line that is doing nothing.
+    ok("with nothing on the page, no line is marked", seen.marked === 0, JSON.stringify(seen).slice(0, 200));
+    ok("and the card says as much", /finds a box on this page/.test(seen.text), seen.text.slice(0, 200));
+  });
+
+  // With a box on the page, one line carries the mark: the first that finds it.
+  // The old card put a state after every line, which is what made it read as a
+  // wall of text.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => window.__makeComposer(""));
+    await goTab(page, "Setup");
+    const seen = await page.evaluate(() => {
+      const list = document.querySelector("#drawer [data-arf-inputlist]");
+      const lines = Array.from(list.querySelectorAll("[data-arf-pick]"));
+      return {
+        lines: lines.length,
+        marked: lines.filter((n) => n.getAttribute("data-arf-pick") === "on").length,
+        first: lines.findIndex((n) => n.getAttribute("data-arf-pick") === "on"),
+        text: list.textContent,
+      };
+    });
+    ok("one line is marked as the one in use", seen.marked === 1, JSON.stringify(seen).slice(0, 200));
+    ok("and it is the first one that finds the box", seen.first === 0, JSON.stringify(seen).slice(0, 200));
+    ok("and the rest are left plain", seen.lines === 5, JSON.stringify(seen).slice(0, 200));
+    ok("and the card points at the mark", /highlighted one is the one in use/.test(seen.text), seen.text.slice(0, 200));
+  });
+
+  // The mark follows the same rule the writer does. A selector matching only
+  // our own panel, or a box that cannot be typed into, is not in use, and the
+  // card saying it is would send somebody hunting for a bug that is not there.
+  await inTab(browser, {}, async (page) => {
+    await page.evaluate(() => {
+      const box = window.__makeComposer("");
+      box.readOnly = true;
+    });
+    await goTab(page, "Setup");
+    const seen = await page.evaluate(() => {
+      const list = document.querySelector("#drawer [data-arf-inputlist]");
+      return {
+        marked: list.querySelectorAll('[data-arf-pick="on"]').length,
+        text: list.textContent,
+      };
+    });
+    ok("a box that cannot be typed into is not called the one in use", seen.marked === 0, JSON.stringify(seen).slice(0, 200));
   });
 
   // The box holds the list itself rather than sitting blank behind a hidden
@@ -6142,70 +6183,6 @@ console.log("\nwhere the input box is");
     });
     ok("an empty box falls back to the shipped list", /chat-message/.test(seen.all), seen.all.slice(0, 160));
     ok("and says that is what happened", /box is empty/.test(seen.all), seen.all.slice(0, 120));
-  });
-}
-
-console.log("\nholding the input box to pick it");
-{
-  // A picker that waits for a click cannot work from a drawer: the click that
-  // would name the box closes the drawer instead. Holding gets round that, and
-  // the same path has to work for a finger and for a mouse.
-  const holdCheck = async (page, label) => {
-    await goTab(page, "Setup");
-    await page.evaluate(() => {
-      // A box outside the panel, standing in for the chat input.
-      const ta = document.createElement("textarea");
-      ta.setAttribute("name", "chat-message");
-      ta.style.cssText = "position:fixed;left:8px;bottom:8px;width:120px;height:40px";
-      ta.id = "__fakeInput";
-      document.body.appendChild(ta);
-      document.querySelector("#drawer [data-arf-pickinput]").click();
-    });
-    await page.evaluate(() => {
-      const ta = document.getElementById("__fakeInput");
-      const r = ta.getBoundingClientRect();
-      const at = { clientX: r.left + 10, clientY: r.top + 10, bubbles: true };
-      ta.dispatchEvent(new PointerEvent("pointerdown", at));
-    });
-    // Longer than the hold, so the timer has fired.
-    await page.waitForTimeout(900);
-    const out = await page.evaluate(() => {
-      const box = document.querySelector('#drawer [data-arf-field="inputSelector"]');
-      return { value: box ? box.value : "" };
-    });
-    ok(label + ": holding names the box", /chat-message/.test(out.value), out.value.slice(0, 90));
-  };
-
-  await inTab(browser, {}, async (page) => holdCheck(page, "a mouse"));
-  await inTab(browser, { viewport: { width: 380, height: 780 }, touch: true }, async (page) =>
-    holdCheck(page, "a finger"),
-  );
-
-  // Moving off what the hold started on is a scroll, not a pick.
-  await inTab(browser, {}, async (page) => {
-    await goTab(page, "Setup");
-    const before = await page.evaluate(() => {
-      const ta = document.createElement("textarea");
-      ta.setAttribute("name", "chat-message");
-      ta.id = "__fakeInput";
-      ta.style.cssText = "position:fixed;left:8px;bottom:8px;width:120px;height:40px";
-      document.body.appendChild(ta);
-      document.querySelector("#drawer [data-arf-pickinput]").click();
-      const box = document.querySelector('#drawer [data-arf-field="inputSelector"]');
-      return box ? box.value : "";
-    });
-    await page.evaluate(() => {
-      const ta = document.getElementById("__fakeInput");
-      const r = ta.getBoundingClientRect();
-      ta.dispatchEvent(new PointerEvent("pointerdown", { clientX: r.left + 10, clientY: r.top + 10, bubbles: true }));
-      document.dispatchEvent(new PointerEvent("pointermove", { clientX: r.left + 10, clientY: r.top + 90, bubbles: true }));
-    });
-    await page.waitForTimeout(900);
-    const after = await page.evaluate(() => {
-      const box = document.querySelector('#drawer [data-arf-field="inputSelector"]');
-      return box ? box.value : "";
-    });
-    ok("a scroll does not pick anything", after === before, after.slice(0, 90));
   });
 }
 

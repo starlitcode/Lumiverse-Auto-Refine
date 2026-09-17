@@ -288,51 +288,6 @@ function splitSelectorList(raw: string): string[] {
   return out.filter((p) => p.length > 0);
 }
 
-// A class or id a build generates fresh on every release, which makes a
-// selector built on one stop matching after an update. Skipped when a selector
-// is derived from something pressed.
-const UNSTABLE_NAME = /(^_)|(_[a-z0-9]{4,}_\d+$)|(_[a-z0-9]{6,}$)|([-_][a-f0-9]{6,}$)/i;
-const SAFE_NAME = /^[A-Za-z_-][\w-]*$/;
-
-// Turns the box somebody held down on into a selector for it, preferring the
-// names a build is least likely to change between releases.
-function deriveInputSelector(start: any): string | null {
-  let node: any = start;
-  let hops = 0;
-  // A hold can land on a wrapper around the box rather than the box itself.
-  while (node && hops < 5) {
-    const tag = String(node.tagName || "").toLowerCase();
-    if (tag === "textarea" || tag === "input" || node.isContentEditable === true) break;
-    const inner = node.querySelector ? node.querySelector("textarea,input,[contenteditable]") : null;
-    if (inner) {
-      node = inner;
-      break;
-    }
-    node = node.parentElement;
-    hops++;
-  }
-  if (!node || !node.getAttribute) return null;
-  const tag = String(node.tagName || "").toLowerCase() || "*";
-  const q = (v: string) => '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
-  for (const attr of ["name", "data-testid", "data-test-id", "aria-label", "placeholder", "id"]) {
-    const v = node.getAttribute(attr);
-    if (!v || !String(v).trim()) continue;
-    if (attr === "id" && !(SAFE_NAME.test(v) && !UNSTABLE_NAME.test(v))) continue;
-    if (attr === "id") return "#" + v;
-    return tag + "[" + attr + "=" + q(String(v).trim()) + "]";
-  }
-  // A wrapper with a stable data-component is worth more than the box's own
-  // generated class, since that is the name a build keeps.
-  const holder = node.closest ? node.closest("[data-component]") : null;
-  const comp = holder && holder.getAttribute ? holder.getAttribute("data-component") : null;
-  if (comp) return "[data-component=" + q(comp) + "] " + tag;
-  const cls = String(node.className || "")
-    .split(/\s+/)
-    .filter((c: string) => c && SAFE_NAME.test(c) && !UNSTABLE_NAME.test(c));
-  if (cls.length) return tag + "." + cls.slice(0, 2).join(".");
-  return null;
-}
-
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
   enabled: true,
@@ -3691,6 +3646,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     // you meant to scroll the panel reads as the panel coming apart. Wrapping
     // instead dropped the last tab onto a second line, so the tabs give way at
     // the sides rather than the row breaking.
+    // A selector is one unbroken string with no spaces to wrap at, so it is
+    // allowed to break anywhere rather than pushing the card sideways. The one
+    // in use is marked by its edge and its ink rather than by a word after it:
+    // a state repeated down every line is what made the list read as a wall.
+    ".arf-pick{font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.5;" +
+    "overflow-wrap:anywhere;padding:3px 7px;border-radius:var(--lumiverse-radius-sm,5px);" +
+    "border-left:2px solid transparent;" +
+    "color:var(--lumiverse-text-muted,rgba(255,255,255,.55))}" +
+    ".arf-pick-on{border-left-color:var(--lumiverse-success,#22c55e);" +
+    "background:var(--lumiverse-fill-subtle,rgba(255,255,255,.04));" +
+    "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf-tabs{display:flex;flex-wrap:nowrap;gap:3px;overflow:hidden;" +
     "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
     "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
@@ -8548,96 +8514,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Ways in other than the drawer. Both are off until asked for, because an
   // extension that adds a floating button and an input bar row on install is
   // one that redecorated somebody's screen without asking.
-  // Picking the box by holding it down.
-  //
-  // A picker that waits for a click cannot work from a drawer: the click that
-  // would name the box is the same click that closes the drawer, and the picker
-  // is left armed with nothing. Holding is what gets round that. The drawer can
-  // close on the way, the listeners are on the document rather than on anything
-  // the panel owns, and the hold finishing is what names the box.
-  //
-  // Pointer events rather than mouse or touch, so one path covers a finger, a
-  // pen and a mouse. Auto Retry's picker works on a click because its panel is
-  // a dialog over the page rather than a drawer beside it.
-  const HOLD_MS = 650;
-  let picking = false;
-  let holdTimer: any = null;
-  let holdFrom: any = null;
-  let pickSaid: ((text: string, good: boolean) => void) | null = null;
-
-  function stopPicking(why: string, good: boolean) {
-    picking = false;
-    if (holdTimer) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-    }
-    holdFrom = null;
-    try {
-      document.removeEventListener("pointerdown", onHoldStart, true);
-      document.removeEventListener("pointerup", onHoldStop, true);
-      document.removeEventListener("pointercancel", onHoldStop, true);
-      document.removeEventListener("pointermove", onHoldMove, true);
-    } catch (_) {}
-    if (pickSaid) pickSaid(why, good);
-    paint();
-  }
-
-  function onHoldStart(e: any) {
-    if (!picking || !e) return;
-    // Anything inside our own panel is not what they meant to pick, and a hold
-    // on the button that armed this would name the button.
-    try {
-      if (e.target && e.target.closest && e.target.closest(".arf")) return;
-    } catch (_) {}
-    holdFrom = { x: e.clientX, y: e.clientY, target: e.target };
-    if (holdTimer) clearTimeout(holdTimer);
-    holdTimer = setTimeout(() => {
-      holdTimer = null;
-      const sel = deriveInputSelector(holdFrom && holdFrom.target);
-      if (!sel) {
-        stopPicking("that is not a box this can name. Type a selector instead.", false);
-        return;
-      }
-      cfg.inputSelector = sel;
-      persist(true);
-      stopPicking("picked: " + sel, true);
-    }, HOLD_MS);
-  }
-
-  // Moving off what they started on is a scroll, not a hold.
-  function onHoldMove(e: any) {
-    if (!holdTimer || !holdFrom || !e) return;
-    const dx = Math.abs(e.clientX - holdFrom.x);
-    const dy = Math.abs(e.clientY - holdFrom.y);
-    if (dx > 12 || dy > 12) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-    }
-  }
-
-  function onHoldStop() {
-    if (holdTimer) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-    }
-  }
-
-  function startPicking(say: (text: string, good: boolean) => void) {
-    if (picking) {
-      stopPicking("picking cancelled", false);
-      return;
-    }
-    picking = true;
-    pickSaid = say;
-    try {
-      document.addEventListener("pointerdown", onHoldStart, true);
-      document.addEventListener("pointerup", onHoldStop, true);
-      document.addEventListener("pointercancel", onHoldStop, true);
-      document.addEventListener("pointermove", onHoldMove, true);
-    } catch (_) {}
-    say("hold your finger or mouse on the chat input box for a second", false);
-  }
-
   // Where the input box is, and a way to fix it without waiting for a release.
   //
   // Refining a draft is the one thing here that reads Lumiverse's own layout,
@@ -8646,10 +8522,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // reading their own page's markup and has to see what is already being tried
   // before writing anything.
   //
-  // There is no button that picks the box for you. A picker has to watch for a
-  // click somewhere on the page, and a panel that lives in a drawer loses that
-  // click to the drawer closing, which leaves the picker armed and nothing to
-  // show for it.
+  // There is no button that picks the box for you. A click-based picker loses
+  // its click to the drawer closing, and holding instead was tried and did not
+  // work reliably enough to keep. Reading the page's own markup and typing a
+  // selector is the way that works every time.
   function buildInputCard(): HTMLElement {
     const wrap = card(
       "Where the input box is",
@@ -8660,7 +8536,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "inputSelector",
         label: "The selectors it looks under",
         type: "text",
-        hint: "Tried in the order they are written, separated by commas. Emptying the box falls back to the list this shipped with.",
+        hint: "Separated by commas. Emptying the box falls back to the list this shipped with.",
       }),
     );
 
@@ -8704,19 +8580,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       paint();
     });
     row.appendChild(put);
-    // Named for what it asks of you rather than what it does, because what it
-    // does is nothing until you hold something down.
-    const pick = button(picking ? "Cancel picking" : "Hold to pick it", false);
-    pick.setAttribute("data-arf-pickinput", picking ? "on" : "off");
-    pick.addEventListener("click", () => {
-      startPicking((text, good) => {
-        said.textContent = text;
-        said.style.color = good
-          ? "var(--lumiverse-success,#22c55e)"
-          : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
-      });
-    });
-    row.appendChild(pick);
     row.appendChild(said);
     wrap.appendChild(row);
 
@@ -8736,24 +8599,34 @@ export function setup(ctx: Ctx, overrides?: any) {
         el(
           "div",
           "arf-note",
-          blank
-            ? "The box is empty, so the list this shipped with is used:"
-            : "Tried in this order:",
+          blank ? "The box is empty, so the list this shipped with is used." : "Tried in this order.",
         ),
       );
-      for (const pick of picks) {
-        const line = el("div", "arf-note");
-        line.style.cssText =
-          "font-family:ui-monospace,monospace;font-size:11.5px;word-break:break-all";
-        let mark = "";
-        try {
-          mark = document.querySelector(pick) ? " · on screen" : " · not on screen";
-        } catch (_) {
-          mark = " · not a selector the browser can read";
-        }
-        line.textContent = pick + mark;
+      // Only the first one that finds the box is doing anything, and saying so
+      // about one line is worth more than a state repeated down every line. The
+      // rest are shown plainly because the order is the point.
+      let used = -1;
+      for (let i = 0; i < picks.length && used < 0; i++) {
+        if (boxUnder(picks[i])) used = i;
+      }
+      for (let i = 0; i < picks.length; i++) {
+        const line = el("div", "arf-pick");
+        if (i === used) line.className += " arf-pick-on";
+        // Wraps between the parts of a selector rather than mid-word, so a long
+        // one stays readable on a phone instead of breaking across a bracket.
+        line.textContent = picks[i];
+        line.setAttribute("data-arf-pick", i === used ? "on" : "off");
         list.appendChild(line);
       }
+      list.appendChild(
+        el(
+          "div",
+          "arf-note",
+          used < 0
+            ? "None of them finds a box on this page right now."
+            : "The highlighted one is the one in use.",
+        ),
+      );
     }
     paintList();
     wrap.appendChild(list);
@@ -10391,40 +10264,46 @@ export function setup(ctx: Ctx, overrides?: any) {
       } catch (_) {
         continue;
       }
-      for (let i = found.length - 1; i >= 0; i--) {
-        const node: any = found[i];
-        if (!node) continue;
-        anyFound = true;
-        if (node.disabled || node.readOnly) continue;
-        if (!typeable(node)) continue;
-        if (node.closest && node.closest(".arf")) continue;
-        const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-        if (box && (!box.width || !box.height)) continue;
-        return "match";
-      }
+      if (found.length) anyFound = true;
+      if (boxIn(found)) return "match";
     }
     if (!anyValid) return "invalid";
     return anyFound ? "found, not usable" : "no match";
+  }
+
+  // The one box in a list of matches that can actually be written into. Shared
+  // so the card cannot say a selector is in use while the writer skips it.
+  function boxIn(found: any): any | null {
+    if (!found) return null;
+    // The last on the page, since our own panel holds a textarea too and the
+    // chat input sits below anything it could be confused with.
+    for (let i = found.length - 1; i >= 0; i--) {
+      const node: any = found[i];
+      if (!node || node.disabled || node.readOnly) continue;
+      if (!typeable(node)) continue;
+      if (node.closest && node.closest(".arf")) continue;
+      const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+      if (box && (!box.width || !box.height)) continue;
+      return node;
+    }
+    return null;
+  }
+
+  // The box one selector finds, or nothing.
+  function boxUnder(pick: string): any | null {
+    try {
+      return boxIn(document.querySelectorAll(pick));
+    } catch (_) {
+      return null;
+    }
   }
 
   // The box to write into. Each selector is asked separately so the list keeps
   // its order: one query holding all of them answers in page order instead.
   function composer(): any | null {
     for (const pick of inputPicks()) {
-      try {
-        const found = document.querySelectorAll(pick);
-        // The last on the page, since our own panel holds a textarea too and
-        // the chat input sits below anything it could be confused with.
-        for (let i = found.length - 1; i >= 0; i--) {
-          const node: any = found[i];
-          if (!node || node.disabled || node.readOnly) continue;
-          if (!typeable(node)) continue;
-          if (node.closest && node.closest(".arf")) continue;
-          const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-          if (box && (!box.width || !box.height)) continue;
-          return node;
-        }
-      } catch (_) {}
+      const node = boxUnder(pick);
+      if (node) return node;
     }
     return null;
   }
@@ -12198,7 +12077,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       clearTimeout(huntTimer);
       huntTimer = null;
     }
-    if (picking) stopPicking("", false);
     for (const d of disposers.splice(0)) {
       try {
         d();
