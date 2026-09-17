@@ -6088,6 +6088,56 @@ console.log("\nsaying the shipped prompts have changed");
   });
 }
 
+console.log("\nwhen the prompt stops matching the preset named in the box");
+{
+  // Loading a preset sets the picker and nothing cleared it, so editing a block
+  // afterwards left the box naming a preset the prompt no longer matched.
+  //
+  // The fields are not locked while a shipped preset is picked. Loading one and
+  // changing it is how somebody is meant to start, and locking the field would
+  // stop the thing the card exists for. What was missing was the panel saying
+  // the two had parted company, and where to keep the change.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const out = await page.evaluate(async () => {
+      const seen = () => {
+        const n = document.querySelector("#drawer [data-arf-preset-drift]");
+        return n ? { kind: n.getAttribute("data-arf-preset-drift"), text: n.textContent } : null;
+      };
+      const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const shipped = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
+      pick.value = shipped.value;
+      pick.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const afterLoading = seen();
+      const box = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+      if (box) {
+        box.focus();
+        box.value = box.value + "\nOne more line of my own.";
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        // Leaving the box is what redraws the card, which the panel already
+        // relies on elsewhere: an edit can take {{message}} out of the whole
+        // prompt, and the warning for that lands on blur too.
+        box.blur();
+        box.dispatchEvent(new Event("blur", { bubbles: true }));
+      }
+      await new Promise((r) => setTimeout(r, 350));
+      return { afterLoading: afterLoading, afterEditing: seen(), edited: !!box };
+    });
+    // The half that kept getting this wrong: a preset that has only just loaded
+    // matches itself, and saying otherwise would put the line on screen for
+    // everybody the moment they picked anything.
+    ok("a freshly loaded preset says nothing", out.afterLoading === null, JSON.stringify(out.afterLoading));
+    ok("there was a block to edit", out.edited, JSON.stringify(out));
+    ok("editing one says the prompt has changed", !!out.afterEditing, JSON.stringify(out.afterEditing));
+    ok(
+      "and on a shipped one it says to keep it under a name of your own",
+      !!out.afterEditing && out.afterEditing.kind === "shipped" && /Save as new/.test(out.afterEditing.text),
+      JSON.stringify(out.afterEditing),
+    );
+  });
+}
+
 console.log("\nwhere the input box is");
 {
   // The one card that reads Lumiverse's own layout. A release that moves the

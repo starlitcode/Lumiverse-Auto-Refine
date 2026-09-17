@@ -44,6 +44,16 @@ _2026-09-17_
 
 - **A rewrite is now told not to take things out.** Every block guarded against the model adding to your writing, and none of them guarded against it quietly removing a line that read plainly. Instructions hold a model back from adding much better than from cutting, so the cutting is now named on its own.
 
+- **A shipped prompt no longer claims to be loaded after you have changed it.** Loading one set the picker and nothing cleared it, so editing a block afterwards left the box naming a prompt your list no longer matched.
+
+  The card now says so once the two part company, and says where to keep the change: a prompt that ships with the extension cannot be written over, so it goes under a name of your own with **Save as new**.
+
+  The blocks are not locked while a shipped prompt is picked. Loading one and changing it is how you are meant to start.
+
+- **The thinking setting on a shipped prompt was never applied.** Each of them carried one, and loading a prompt walks past it, because that setting belongs to a model setup rather than to a prompt. It has been taken off them.
+
+  Nothing changes in what a refine does. Which model a prompt is written for is still said in its name and its description, which is advice about what to pick rather than a switch thrown on your behalf.
+
 - **A connection that refuses one of the fields sent with a refine no longer stops the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
 
   The refusal is read and the refine is asked again without the fields it named, once. Only fields that actually went out are dropped, so a message mentioning something the extension never sent changes nothing, and a second refusal is treated as real.

@@ -1372,9 +1372,13 @@ const YOURS_THINKS_LONG: Block[] = [
 const DEFAULT_BLOCKS: Block[] = PLAIN_LONG;
 
 // Four that ship with it: a line edit and a copy edit, each once for any model
-// and once for a model that reasons. name is what it is stored and looked up as
-// and has to be unique across both sets; label is what the list shows, which can
-// repeat because the heading above it already says which prompt it is for.
+// and once for a model that reasons.
+//
+// name is what it is stored and looked up as, label is what the list shows, and
+// the two are the same on all four. They were not always: both sets used to be
+// called a quick read and a close read, so a stored name needed a prefix saying
+// which set it came from. Naming the sets for their job took the collision away
+// and the prefix with it.
 type Shipped = {
   name: string;
   label: string;
@@ -1402,7 +1406,7 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     what: "One standard, the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Shorter than the one above and goes deeper for it. Needs a model that reasons.",
   },
   {
-    name: "Your writing, the copy edit",
+    name: "The copy edit",
     label: "The copy edit",
     mine: true,
     blocks: YOURS_LONG,
@@ -1410,7 +1414,7 @@ const BUILT_IN_PROMPTS: Shipped[] = [
     what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your word choice, your length and your plain lines come back as they went in. Runs on any model.",
   },
   {
-    name: "Your writing, the copy edit, for a model that thinks",
+    name: "The copy edit, for a model that thinks",
     label: "The copy edit, for a model that thinks",
     mine: true,
     blocks: YOURS_THINKS_LONG,
@@ -9275,9 +9279,19 @@ export function setup(ctx: Ctx, overrides?: any) {
       // Into the list it was written for, and only that one. A prompt for your
       // own turn loaded over the prompt for replies would be the wrong job
       // asked of every reply in the chat.
+      //
+      // The prompt and nothing else. thinkingMode used to be in here, and it
+      // was never once applied: it belongs to a model setup rather than a
+      // preset, so applyPreset walks past it. A preset keeps the prompt and a
+      // setup keeps what runs it, and loading a prompt reaching over to change
+      // your model would break that in the direction nobody would want.
+      //
+      // Which model a prompt is written for is still said, in its name and in
+      // its description, because that is advice about what to pick rather than
+      // a switch to flip on somebody's behalf.
       settings: p.mine
-        ? { userBlocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking }
-        : { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
+        ? { userBlocks: p.blocks.map((b) => ({ ...b })) }
+        : { blocks: p.blocks.map((b) => ({ ...b })) },
     }));
   }
   const isBuiltIn = (name: string) => BUILT_IN.indexOf(name) >= 0;
@@ -9618,6 +9632,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     log("loaded the model setup " + one.name, true);
   }
 
+  // The preset the box names, whether it ships with the extension or is one of
+  // yours. Read in two places, so it is named once.
+  function chosenPreset(): any {
+    return allPresets().find((p: any) => p.name === presetPick) || null;
+  }
+
   function buildPresetCard(): HTMLElement {
     const wrap = card(
       "Presets",
@@ -9684,6 +9704,34 @@ export function setup(ctx: Ctx, overrides?: any) {
       presetSaid = null;
     }
     sel.value = presetPick;
+    // Whether what is on screen still matches the preset the box names.
+    //
+    // Loading one sets the box and nothing clears it, so editing a block after
+    // loading left the box naming a preset the prompt no longer matched. The
+    // fields are not locked while a shipped preset is picked, because loading
+    // one and changing it is how you are meant to start; what was missing was
+    // the panel saying so.
+    const driftedFromPick = () => {
+      const p = chosenPreset();
+      if (!p || !p.settings) return false;
+      try {
+        // Only the keys the preset actually carries. A shipped one holds the
+        // block list it was written for and the thinking setting, and nothing
+        // else, so measuring it against every setting on the panel would call
+        // it changed the moment it loaded.
+        // steady rather than JSON.stringify: loading a preset rebuilds every
+        // block as id, on, role, text, name, and the shipped ones are written
+        // id, name, on, role, text. Same values, different order, and a plain
+        // stringify called them different the moment one was loaded.
+        const now: Record<string, any> = presetFromNow();
+        for (const k of Object.keys(p.settings)) {
+          if (steady(now[k]) !== steady(p.settings[k])) return true;
+        }
+        return false;
+      } catch (_) {
+        return false;
+      }
+    };
     sel.addEventListener("change", () => {
       const was = presetPick;
       presetPick = sel.value;
@@ -9711,7 +9759,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     wrap.appendChild(nameIn);
 
-    const chosen = () => allPresets().find((p) => p.name === presetPick) || null;
+    const chosen = () => chosenPreset();
     const chosenIsYours = () => !!presetPick && !isBuiltIn(presetPick);
 
     // Which saved model setup, if any, loads with this preset. Sits above the
@@ -9771,6 +9819,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     sayShipped();
     withSetup.appendChild(shippedSaid);
     wrap.appendChild(withSetup);
+
+    // Said once the prompt stops matching the preset the box names. A shipped
+    // preset cannot be written over, so the way to keep a change is to save it
+    // under a name of your own, and this is where somebody is told that while
+    // it still matters.
+    if (driftedFromPick()) {
+      const drift = note(
+        isBuiltIn(presetPick)
+          ? "You have changed the prompt since loading " +
+            presetPick +
+            ". A prompt that ships with the extension cannot be written over, so put a name in the box and press Save as new to keep this."
+          : "You have changed the prompt since loading " +
+            presetPick +
+            ". Press Update selected to keep it, or Save as new for a second copy.",
+      );
+      drift.setAttribute("data-arf-preset-drift", isBuiltIn(presetPick) ? "shipped" : "yours");
+      wrap.appendChild(drift);
+    }
 
     const row = el("div", "arf-row");
 

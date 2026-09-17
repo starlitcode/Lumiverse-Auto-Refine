@@ -37,6 +37,37 @@ describe("the prompts that ship with it", () => {
   // Stored under a name of its own, shown under the heading's. Two entries
   // sharing a stored name would overwrite each other; two sharing a shown one
   // read fine, because the heading above says which prompt it is for.
+  // Stored under exactly what it shows. The two used to differ: both sets were
+  // called a quick read and a close read, so a stored name carried a prefix
+  // saying which set it came from. Naming the sets for their job took the
+  // collision away, and a name that no longer matches its label is a prefix
+  // that outlived its reason.
+  // A preset keeps the prompt and a model setup keeps what runs it. The shipped
+  // ones used to carry thinkingMode in their settings, which is a setup key and
+  // not a preset key, so applyPreset walked straight past it and it was never
+  // once applied. Left there it would have been worse than useless the day
+  // somebody added it to PRESET_KEYS: loading a prompt would have reached over
+  // and changed the model.
+  test("none of them carries a setting that belongs to a model setup", () => {
+    const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+    // The object literal builtIn() hands each shipped preset as its settings.
+    // Code only. The comment above the settings names thinkingMode to say why it
+    // is not in there, and a check that reads its own explanation as a breach
+    // would fail the moment somebody documented the rule.
+    const made = src
+      .slice(src.indexOf("function builtIn("), src.indexOf("const isBuiltIn"))
+      .split("\n")
+      .filter((line) => !/^\s*\/\//.test(line))
+      .join("\n");
+    const setupOnly = ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "costIn", "costOut"];
+    for (const k of setupOnly) expect({ key: k, inSettings: made.indexOf(k) >= 0 }).toEqual({ key: k, inSettings: false });
+  });
+
+  test("every one is stored under the name it shows", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      expect({ name: p.name, label: p.label }).toEqual({ name: p.name, label: p.name });
+  });
+
   test("every one is stored under a name of its own", () => {
     const names = BUILT_IN_PROMPTS.map((p: any) => p.name);
     expect(new Set(names).size).toBe(names.length);
@@ -86,7 +117,7 @@ describe("the prompts that ship with it", () => {
   test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
       ["The line edit, for a model that thinks", "The line edit"],
-      ["Your writing, the copy edit, for a model that thinks", "Your writing, the copy edit"],
+      ["The copy edit, for a model that thinks", "The copy edit"],
     ];
     for (const [small, big] of pairs)
       expect(sizeOf(named(small))).toBeLessThan(sizeOf(named(big)));
