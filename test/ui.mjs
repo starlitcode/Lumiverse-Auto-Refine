@@ -2628,8 +2628,7 @@ console.log("\nthe eye on the floating button");
     ok("still resting shut", after && after.open === 0 && after.lidOn === 1,
       JSON.stringify(after));
 
-    // The one that holds a state never wakes, or the button would open itself
-    // every time the panel was rebuilt.
+    // Nor does the floating button, which holds a state of its own.
     const onButton = await page.evaluate(() => {
       const svg = document.querySelector("#float .arf-eye");
       if (!svg) return null;
@@ -2727,13 +2726,23 @@ console.log("\nthe eye on the floating button");
     await settle(page);
     ok("and it is one that answers a pointer", found && /arf-opens/.test(found.cls),
       JSON.stringify(found));
-    // Read straight after the button is drawn. The pass that keeps these in
-    // step with whether a refine is running used to find no mark on a button it
-    // had just been handed and write a fresh one over it, which threw the
-    // waking eye away before it had a frame to play.
-    ok("and it wakes, rather than being overwritten before it can",
-      found && /arf-wakes/.test(found.cls) && found.wakes === "arf-wake",
-      JSON.stringify(found));
+    // The selection buttons are the ones this bit most: they are built the
+    // moment text is highlighted and thrown away when it is let go, so anything
+    // that plays on being drawn plays on every highlight.
+    const onPick = await page.evaluate(() => {
+      const svg = document.querySelector('[data-arf-slot="part"] .arf-eye');
+      if (!svg) return null;
+      return getComputedStyle(svg.querySelector(".arf-eye-ball")).animationName;
+    });
+    if (onPick !== null)
+      ok("and the mark for a selection does not play on being drawn", onPick === "none",
+        String(onPick));
+    // Nothing wakes. A CSS animation replays whenever its element is built
+    // again, and this button is built again for every new reply, while the two
+    // selection buttons are built the moment something is highlighted and
+    // thrown away when it is let go. A wake on any of them fired over and over
+    // and read as the marks flickering out of step.
+    ok("and nothing on it wakes", found && found.wakes === "none", JSON.stringify(found));
 
     // Waited out, or the read catches the wake still running rather than where
     // the eye rests.

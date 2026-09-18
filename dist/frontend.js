@@ -1974,11 +1974,6 @@ function backdropOf(el, style) {
 // length as everything else that answers a press, so the eye settles with the
 // rest of the button rather than on its own clock.
 const EYE_MS = 260;
-// How long an eye takes to wake: open, hold open long enough to be read, and
-// settle shut. Every mark does this once when it is drawn, so the set moves the
-// way the floating button does rather than the button being the only part of
-// this that is alive.
-const EYE_WAKE_MS = 1500;
 // The blink a refine ends on, and the shut after it.
 const EYE_DONE_MS = 900;
 // Shutting on being called off. Quicker than finishing, because that is what
@@ -2029,23 +2024,23 @@ function holdRingSvg() {
 }
 const EYE_OPEN = "M3 12C6.5 6.6 17.5 6.6 21 12 17.5 17.4 6.5 17.4 3 12Z";
 const EYE_SHUT = "M3 12Q12 15.1 21 12M7.2 15l-.5 1.1M12 15.8v1.3M16.8 15l.5 1.1";
-// Waking and opening to a pointer are two different things, and an eye can want
-// one without the other.
+// An eye rests shut and opens to a pointer. Nothing wakes.
 //
-// "quiet" is the one that needs both apart. A button's mark is rewritten every
-// time a refine starts and ends, and a waking eye there opened and settled after
-// every single refine, on top of the card that already landed. It still has to
-// answer a pointer, though, so it keeps the opening and loses the waking.
+// Waking was tried and taken out. A CSS animation replays whenever its element
+// is built again, and every mark here is built again by something: the panel
+// redraws on a tab change, the host redraws the drawer tab when you move
+// between extensions, the button under a message is built again for each new
+// reply, and the two selection buttons are built the moment you highlight
+// something and thrown away when you let go. There was no mark left that a wake
+// would fire on once rather than over and over, so the movement only ever read
+// as the marks flickering out of step with each other.
 //
-// "shut" is neither: a mark sitting in a panel that is redrawn on every repaint,
-// where waking means blinking at somebody each time they change tabs.
+// "shut" is for a mark that carries its own state, which is the floating
+// button: it rests shut because nothing is running, and a pointer on it changes
+// nothing.
 function eyeIcon(state, size) {
     const px = String(size || 20);
-    const how = state === "quiet"
-        ? " arf-opens"
-        : state
-            ? " arf-eye-" + state
-            : " arf-wakes arf-opens";
+    const how = state ? " arf-eye-" + state : " arf-opens";
     return ('<svg class="arf-eye' + how + '" viewBox="0 0 24 24" ' +
         'width="' + px + '" height="' + px + '" fill="none" stroke="currentColor" ' +
         'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -2068,7 +2063,7 @@ function partIcon(state) {
     // On the floating button it is drawn already reading, since it is only put
     // there while it is the thing running. Everywhere else it is a button's mark
     // and rests like the rest of them.
-    const how = state === "read" ? "arf-eye arf-eye-read" : "arf-eye arf-wakes arf-opens";
+    const how = state === "read" ? "arf-eye arf-eye-read" : "arf-eye arf-opens";
     return ('<svg class="' + how + '" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
         'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
         'stroke-linejoin="round" aria-hidden="true">' +
@@ -2106,7 +2101,7 @@ function snipIcon(state) {
 // drawers. Waking is only safe where this extension creates the element itself
 // and knows it will not be replaced, which is the button under a message.
 function refineIcon() {
-    return eyeIcon("quiet");
+    return eyeIcon();
 }
 export function setup(ctx, overrides) {
     const disposers = [];
@@ -3976,20 +3971,6 @@ export function setup(ctx, overrides) {
         "[role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-lid{opacity:0}}" +
         "button:focus-visible .arf-eye.arf-opens .arf-eye-ball{transform:none;opacity:1}" +
         "button:focus-visible .arf-eye.arf-opens .arf-eye-lid{opacity:0}" +
-        // Waking. An eye that has just been drawn opens, stays open long enough to
-        // be seen, and settles shut again. No fill mode on purpose: once it has
-        // played the element falls back to the rules above, so a hover straight
-        // afterwards still opens it rather than fighting a finished animation.
-        "@keyframes arf-wake{0%{transform:scaleY(.1);opacity:0}" +
-        "16%{transform:scaleY(1);opacity:1}" +
-        "64%{transform:scaleY(1);opacity:1}" +
-        "100%{transform:scaleY(.1);opacity:0}}" +
-        "@keyframes arf-wake-lid{0%{opacity:1}16%{opacity:0}64%{opacity:0}100%{opacity:1}}" +
-        // Carried by the eyes that stand for the extension rather than for a state
-        // of it. The floating button's eye is left out: it is shut because nothing
-        // is running, not because it has just been drawn.
-        ".arf-eye.arf-wakes .arf-eye-ball{animation:arf-wake " + EYE_WAKE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
-        ".arf-eye.arf-wakes .arf-eye-lid{animation:arf-wake-lid " + EYE_WAKE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
         // Reading: the pupil crosses the eye at the pace of somebody scanning a
         // line, then snaps back to the start the way an eye does at the end of one.
         // Linear across, eased on the way back, which is what makes it read as

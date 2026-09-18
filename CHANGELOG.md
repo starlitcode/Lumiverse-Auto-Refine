@@ -88,7 +88,7 @@ _2026-09-17_
 
   What this does to a reply is read it and put it back in better words, and an eye is the part of that anybody can see happening. It also gives one shape three things to say, which a row of lines and a sparkle could not.
 
-  On the floating button the eye is shut while nothing is running and opens when a refine starts. Everywhere else it is drawn open, since a mark standing for the extension has to be recognisable on its own.
+  Every eye rests shut and opens when a refine starts. Pointing at a button that carries one opens it too, so a mark you can press answers before you press it. The floating button is the exception there: it is shut because nothing is running, which is a fact about the extension rather than about where your pointer is.
 
   **Refine the part I selected** carries the same eye with a bracket at either side of it, so the pair reads as "all of it" and "this much of it". **Take out what I selected** is still a pair of scissors, because taking text out is a different thing from reading it.
 
