@@ -2559,6 +2559,12 @@ console.log("\nthe eye on the floating button");
     ok("the button under a message carries the eye", !!found, JSON.stringify(found));
     ok("and it is one that answers a pointer", found && /arf-opens/.test(found.cls),
       JSON.stringify(found));
+    // Read straight after the button is drawn. The pass that keeps these in
+    // step with whether a refine is running used to find no mark on a button it
+    // had just been handed and write a fresh one over it, which threw the
+    // waking eye away before it had a frame to play.
+    ok("and it wakes, rather than being overwritten before it can",
+      found && /arf-wakes/.test(found.cls), JSON.stringify(found));
 
     // Waited out, or the read catches the wake still running rather than where
     // the eye rests.

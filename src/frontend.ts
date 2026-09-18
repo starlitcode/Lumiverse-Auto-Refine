@@ -11519,6 +11519,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     b.title = title;
     b.setAttribute("aria-label", title);
     b.innerHTML = art ? art() : refineIcon();
+    // Marked as already drawn for the pass that keeps these in step with
+    // whether a refine is running. Without it that pass found no mark on a
+    // button it had just been handed, decided the icon was out of date and
+    // wrote a fresh one over it, which threw away the waking eye before the
+    // animation had a frame to play. The wake was dead on every button in the
+    // chat and nothing said so, because a mark that never moves looks exactly
+    // like a mark that has finished moving.
+    if (!art) b.setAttribute("data-arf-icon", "ready");
     b.addEventListener("click", (e: any) => {
       try {
         e.preventDefault();
