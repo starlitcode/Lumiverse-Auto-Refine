@@ -2552,6 +2552,10 @@ console.log("\nthe eye on the floating button");
         return {
           cls: svg.getAttribute("class"),
           open: Number(getComputedStyle(svg.querySelector(".arf-eye-ball")).opacity),
+          // The animation itself, not the class asking for it. Reading the
+          // class only proved the markup was right, so taking the whole
+          // animation out of the stylesheet left this green.
+          wakes: getComputedStyle(svg.querySelector(".arf-eye-ball")).animationName,
         };
       }, s2);
 
@@ -2564,7 +2568,8 @@ console.log("\nthe eye on the floating button");
     // had just been handed and write a fresh one over it, which threw the
     // waking eye away before it had a frame to play.
     ok("and it wakes, rather than being overwritten before it can",
-      found && /arf-wakes/.test(found.cls), JSON.stringify(found));
+      found && /arf-wakes/.test(found.cls) && found.wakes === "arf-wake",
+      JSON.stringify(found));
 
     // Waited out, or the read catches the wake still running rather than where
     // the eye rests.
