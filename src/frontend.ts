@@ -2131,6 +2131,10 @@ const EYE_WAKE_MS = 1500;
 // The blink a refine ends on, and the shut after it.
 const EYE_DONE_MS = 900;
 
+// Shutting on being called off. Quicker than finishing, because that is what
+// being stopped is.
+const EYE_STOP_MS = 420;
+
 // Long enough that a normal tap never reaches it, short enough that holding the
 // button does not feel broken. Auto Retry holds for the same length.
 const HOLD_MS = 500;
@@ -2214,17 +2218,6 @@ function eyeIcon(state?: "shut" | "read" | "quiet", size?: number): string {
     '<path class="arf-eye-lid" d="' + EYE_SHUT + '" />' +
     "</svg>"
   );
-}
-
-// The mark while a refine is running. The same eye, reading: the pupil crosses
-// from one side to the other at the pace of somebody scanning a line, snaps
-// back to the start the way your eye does at the end of one, and blinks on the
-// way back.
-//
-// A turning ring was here before. Every extension has one, it says only that
-// something is happening, and this one can say what.
-function readIcon(size?: number): string {
-  return eyeIcon("read", size || 14);
 }
 
 // The part you selected, refined: the same eye with a bracket at either side of
@@ -3400,6 +3393,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (!on && busy && runStartedAt) lastRunMs = Date.now() - runStartedAt;
     busy = on;
+    paintEyes(on);
     stage = on ? why || stage || "asking" : "";
     tickLive();
     if (on) {
@@ -3408,6 +3402,37 @@ export function setup(ctx: Ctx, overrides?: any) {
       clearInterval(clock);
       clock = null;
     }
+  }
+
+  // Every mark this extension has drawn, told the same thing at the same time.
+  //
+  // They were each answering to something different: the buttons in the chat
+  // swapped their whole icon, the floating button had a state of its own, and
+  // the drawer tab and the mark on the panel answered to nothing at all. So the
+  // set agreed while nothing was happening and came apart the moment something
+  // was, which is exactly when marks standing for one extension should agree.
+  //
+  // The floating button is left out because it has more to say than the rest:
+  // it blinks on the way to shut when a refine lands. Its own paint owns it.
+  //
+  // The class each mark rests at is kept on the element, since they do not all
+  // rest at the same one: the button under a message wakes and opens to a
+  // pointer, the mark on the panel does neither.
+  function paintEyes(on: boolean) {
+    if (typeof document === "undefined") return;
+    try {
+      const all = document.querySelectorAll(".arf-eye");
+      for (let i = 0; i < all.length; i++) {
+        const eye = all[i] as HTMLElement;
+        if (eye.closest && eye.closest(".arf-float")) continue;
+        let base = eye.getAttribute("data-arf-eyebase");
+        if (base == null) {
+          base = String(eye.getAttribute("class") || "").replace(/\s*arf-eye-read\b/g, "");
+          eye.setAttribute("data-arf-eyebase", base);
+        }
+        eye.setAttribute("class", on ? base + " arf-eye-read" : base);
+      }
+    } catch (_) {}
   }
 
   // The status line as it should read this instant. One definition, used both
@@ -3874,16 +3899,34 @@ export function setup(ctx: Ctx, overrides?: any) {
     // stays reachable either way, since it is how somebody switches the
     // extension off and reaches the tab.
     ".arf-float.arf-idle{border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
-    // Running. The accent goes on the fill, the edge, the ink and the ring
-    // around it at once, so the button reads as lit rather than as the same
-    // button with a different icon in it.
+    // Running. The accent goes on the fill and the edge, and a ring grows out of
+    // the button and fades, over and over, for as long as it lasts.
+    //
+    // The pulse was taken out once on the grounds that the hold ring already
+    // rings this button. That was wrong: the hold ring is only on screen while a
+    // finger is down, and this is only on screen while a refine is running, so
+    // the two are almost never up together, and they say different things in
+    // different places. One grows outward from the edge, the other fills along
+    // it.
+    //
+    // The shadow the button always has is carried in every frame of the
+    // animation. An animation on box-shadow replaces the property outright, so
+    // leaving it out dropped the button flat against the chat each time round.
     ".arf-float.arf-working{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
     "background-image:linear-gradient(var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
     "var(--lumiverse-primary-020,rgba(147,112,219,.2)))," +
     "linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9))," +
     "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
     "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
-    "0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.18))}" +
+    "0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.18));" +
+    "animation:arf-pulse 1400ms ease-out infinite}" +
+    "@keyframes arf-pulse{" +
+    "0%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+    "0 0 0 0 var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+    "70%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+    "0 0 0 10px rgba(0,0,0,0)}" +
+    "100%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+    "0 0 0 0 rgba(0,0,0,0)}}" +
     // A press dips the whole button a little, so a tap answers whether or not it
     // changed anything. A press is also how the menu is opened, and the ring
     // below is what tells the two apart: a dip on its own is a tap, a dip with
@@ -3918,6 +3961,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@media (prefers-reduced-motion: reduce){" +
     ".arf-float{transition:none}" +
     ".arf-float:active{transform:none}" +
+    // The ring that grows is movement and nothing else. What it says, that a
+    // refine is running, is said by the fill, the edge and the tooltip too.
+    ".arf-float.arf-working{animation:none}" +
     // The ring is movement and nothing else: it says how far through a hold you
     // are and carries no state worth showing still. Somebody who asked for less
     // movement gets the menu on the same hold with nothing drawn.
@@ -4132,6 +4178,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     "animation:arf-done " + EYE_DONE_MS + "ms cubic-bezier(.2,.7,.3,1) both}" +
     ".arf-eye.arf-eye-done .arf-eye-lid{" +
     "animation:arf-done-lid " + EYE_DONE_MS + "ms cubic-bezier(.2,.7,.3,1) both}" +
+    // Called off. The eye shuts at once and keeps going a little past flat
+    // before it settles, which is a thing stopping short does and finishing does
+    // not. No blink: a blink is what an eye does when it has read something.
+    "@keyframes arf-stop{0%{transform:scaleY(1);opacity:1}" +
+    "62%{transform:scaleY(.06);opacity:.85}" +
+    "100%{transform:scaleY(.1);opacity:0}}" +
+    "@keyframes arf-stop-lid{0%{opacity:0}46%{opacity:.5}100%{opacity:1}}" +
+    ".arf-eye.arf-eye-stop .arf-eye-ball{" +
+    "animation:arf-stop " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
+    ".arf-eye.arf-eye-stop .arf-eye-lid{" +
+    "animation:arf-stop-lid " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
     // A reader who has asked for less movement gets the eye open and still
     // wherever it is drawn. A mark that never moves is better open than shut:
     // shut is only readable next to the open one, and there would be no open one
@@ -4140,7 +4197,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-eye .arf-eye-ball{transform:none;opacity:1;transition:none;animation:none}" +
     ".arf-eye .arf-eye-lid{opacity:0;transition:none;animation:none}" +
     ".arf-eye.arf-eye-read .arf-eye-pupil,.arf-eye.arf-eye-read .arf-eye-ball," +
-    ".arf-eye.arf-eye-done .arf-eye-ball,.arf-eye.arf-eye-done .arf-eye-lid{" +
+    ".arf-eye.arf-eye-done .arf-eye-ball,.arf-eye.arf-eye-done .arf-eye-lid," +
+    ".arf-eye.arf-eye-stop .arf-eye-ball,.arf-eye.arf-eye-stop .arf-eye-lid{" +
     "animation:none}}" +
     // ---- saying something is wrong, in the theme's own colours ----
     // Lumiverse has a danger colour and a success colour, and a warning drawn
@@ -10955,6 +11013,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // nothing running.
   let eyeWasWorking = false;
   let eyeDoneTimer: any = null;
+  // Whether the refine now ending was called off rather than finished.
+  let eyeStopped = false;
   disposers.push(() => {
     if (eyeDoneTimer) clearTimeout(eyeDoneTimer);
     eyeDoneTimer = null;
@@ -11258,16 +11318,26 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (now !== "arf-eye arf-eye-read") eye.setAttribute("class", "arf-eye arf-eye-read");
         } else if (eyeWasWorking) {
           eyeWasWorking = false;
-          eye.setAttribute("class", "arf-eye arf-eye-done");
+          const how = eyeStopped ? "arf-eye-stop" : "arf-eye-done";
+          // Held before the flag is cleared, since the wait to settle has to
+          // match whichever of the two is actually playing.
+          const overIn = eyeStopped ? EYE_STOP_MS : EYE_DONE_MS;
+          eyeStopped = false;
+          eye.setAttribute("class", "arf-eye " + how);
           if (eyeDoneTimer) clearTimeout(eyeDoneTimer);
           eyeDoneTimer = setTimeout(() => {
             eyeDoneTimer = null;
             try {
-              if (String(eye.getAttribute("class") || "").indexOf("arf-eye-done") >= 0)
+              const held = String(eye.getAttribute("class") || "");
+              if (held.indexOf("arf-eye-done") >= 0 || held.indexOf("arf-eye-stop") >= 0)
                 eye.setAttribute("class", "arf-eye arf-eye-shut");
             } catch (_) {}
-          }, EYE_DONE_MS + 60);
-        } else if (now.indexOf("arf-eye-done") < 0 && now !== "arf-eye arf-eye-shut") {
+          }, overIn + 60);
+        } else if (
+          now.indexOf("arf-eye-done") < 0 &&
+          now.indexOf("arf-eye-stop") < 0 &&
+          now !== "arf-eye arf-eye-shut"
+        ) {
           eye.setAttribute("class", "arf-eye arf-eye-shut");
         }
       }
@@ -11704,11 +11774,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       const kind = busy ? "working" : "ready";
       if (one.getAttribute("data-arf-icon") !== kind) {
         one.setAttribute("data-arf-icon", kind);
-        // Shut rather than waking on the way back. This runs every time a
-        // refine starts and ends, and a waking eye here would open and settle
-        // after every single one, which is a second announcement nobody asked
-        // for on top of the card that already landed.
-        one.innerHTML = busy ? readIcon() : eyeIcon("quiet");
+        // The mark itself is left alone. It used to be swapped for a different
+        // drawing whenever a refine started or ended, which replaced the element
+        // and threw away whatever it was in the middle of. The two drawings were
+        // different sizes as well, so the mark shrank from twenty pixels to
+        // fourteen the moment a refine began. Whether an eye is reading is a
+        // class on it now, set for every mark at once.
         // Named for what pressing it does now, so the label a screen reader
         // reads matches the mark beside it.
         const said = busy
@@ -11774,6 +11845,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // one moment it was most likely to be pressed.
   function cancelRefine() {
     if (!busy && !sweep) return;
+    // Noted before the answer comes back, so the eye can close on being called
+    // off rather than on having finished. The two used to look identical: a
+    // refine you stopped gave the same contented blink as one that read the
+    // whole reply, which tells you the opposite of what happened.
+    eyeStopped = true;
     send({ type: "cancel_refine", requestId: newId() });
     log("asked it to stop");
   }
