@@ -4908,9 +4908,15 @@ console.log("\nthe widget, while your draft is being refined");
       ok("and stops the moment the answer lands", !done.working, done);
 
       // The button goes back to its own mark rather than becoming an arrow.
-      // The way back is in the menu behind it.
-      ok("and the eye shuts again rather than becoming another mark",
-        /arf-eye-shut/.test(done.eye || ""), done.eye);
+      // The way back is in the menu behind it. A refine ending blinks the eye
+      // before shutting it, so this waits that out: mid-blink is still the eye,
+      // and settling shut is the thing worth holding it to.
+      ok("the eye is still the mark the moment the refine lands",
+        /arf-eye-(done|shut)/.test(done.eye || ""), done.eye);
+      await page.evaluate(() => new Promise((r) => setTimeout(r, 1100)));
+      const rested = await face(page);
+      ok("and it shuts again rather than becoming another mark",
+        /arf-eye-shut/.test(rested.eye || ""), rested.eye);
       ok("and stops offering to put anything back",
         !/put the last refine back/i.test(done.title), done.title);
 
