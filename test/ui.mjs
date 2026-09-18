@@ -2599,6 +2599,12 @@ console.log("\nthe eye on the floating button");
           cls: svg.getAttribute("class"),
           wakes: getComputedStyle(ball).animationName,
           lidWakes: getComputedStyle(lid).animationName,
+          // Shut is what it looks like, not what it is called. An eye carrying
+          // no state class rests shut, since that is what the shape does with
+          // nothing asked of it, so reading the class name here would have been
+          // reading the label rather than the result.
+          open: Number(getComputedStyle(ball).opacity),
+          lidOn: Number(getComputedStyle(lid).opacity),
         };
       });
     const m = await mark();
@@ -2608,7 +2614,7 @@ console.log("\nthe eye on the floating button");
     // the start, so a waking eye here blinked at somebody every time they moved
     // between tabs.
     ok("and it rests shut, since this one is redrawn constantly",
-      m && /arf-eye-shut/.test(m.cls), JSON.stringify(m));
+      m && m.open === 0 && m.lidOn === 1, JSON.stringify(m));
     ok("so it never wakes", m && m.wakes === "none" && m.lidWakes === "none",
       JSON.stringify(m));
 
@@ -2619,7 +2625,8 @@ console.log("\nthe eye on the floating button");
     ok("it is still there after moving between tabs", !!after, JSON.stringify(after));
     ok("and does not start blinking on any of them",
       after && after.wakes === "none" && after.lidWakes === "none", JSON.stringify(after));
-    ok("still resting shut", after && /arf-eye-shut/.test(after.cls), JSON.stringify(after));
+    ok("still resting shut", after && after.open === 0 && after.lidOn === 1,
+      JSON.stringify(after));
 
     // The one that holds a state never wakes, or the button would open itself
     // every time the panel was rebuilt.

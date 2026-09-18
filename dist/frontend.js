@@ -2064,8 +2064,12 @@ function eyeIcon(state, size) {
 // when it is drawn and opens to a pointer along with the rest of them. The
 // brackets sit outside the group that moves: they are what the eye is looking
 // at, so they stay put while it opens.
-function partIcon() {
-    return ('<svg class="arf-eye arf-wakes arf-opens" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+function partIcon(state) {
+    // On the floating button it is drawn already reading, since it is only put
+    // there while it is the thing running. Everywhere else it is a button's mark
+    // and rests like the rest of them.
+    const how = state === "read" ? "arf-eye arf-eye-read" : "arf-eye arf-wakes arf-opens";
+    return ('<svg class="' + how + '" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
         'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
         'stroke-linejoin="round" aria-hidden="true">' +
         '<g class="arf-eye-ball">' +
@@ -2078,12 +2082,18 @@ function partIcon() {
         "</svg>");
 }
 // Scissors, because that is what taking a selection out is.
-function snipIcon() {
-    return ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+//
+// Each arm is its own group: a handle and the blade it drives, which is how a
+// real pair is put together and what lets them work. They turn about the point
+// the two blades actually cross, so the tips close on each other rather than the
+// whole mark rocking.
+function snipIcon(state) {
+    return ('<svg class="arf-snip' + (state ? " arf-snip-" + state : "") + '" ' +
+        'viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
         'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
         'stroke-linejoin="round" aria-hidden="true">' +
-        '<circle cx="6" cy="6" r="2.6" /><circle cx="6" cy="18" r="2.6" />' +
-        '<path d="M8.2 7.6L20 18" /><path d="M8.2 16.4L20 6" />' +
+        '<g class="arf-snip-a"><circle cx="6" cy="6" r="2.6" /><path d="M8.2 7.6L20 18" /></g>' +
+        '<g class="arf-snip-b"><circle cx="6" cy="18" r="2.6" /><path d="M8.2 16.4L20 6" /></g>' +
         "</svg>");
 }
 // The mark, at rest. Every place that draws the extension rather than a state
@@ -3213,6 +3223,8 @@ export function setup(ctx, overrides) {
         if (!on && busy && runStartedAt)
             lastRunMs = Date.now() - runStartedAt;
         busy = on;
+        if (!on)
+            runKind = "";
         paintEyes(on);
         stage = on ? why || stage || "asking" : "";
         tickLive();
@@ -3250,10 +3262,22 @@ export function setup(ctx, overrides) {
                     continue;
                 let base = eye.getAttribute("data-arf-eyebase");
                 if (base == null) {
-                    base = String(eye.getAttribute("class") || "").replace(/\s*arf-eye-read\b/g, "");
+                    // Every state stripped, not just the reading one. A mark drawn as
+                    // shut kept that class in what it rests at, so switching it on gave
+                    // it shut and reading together: the reading animations ran on an eye
+                    // styled closed, and each repaint made a fresh element and started
+                    // the blink again. Resting is the shut one anyway, since that is what
+                    // an eye with no state does.
+                    base = String(eye.getAttribute("class") || "")
+                        .replace(/\s*arf-eye-(read|shut|done|stop)\b/g, "")
+                        .trim();
                     eye.setAttribute("data-arf-eyebase", base);
                 }
-                eye.setAttribute("class", on ? base + " arf-eye-read" : base);
+                const want = on ? base + " arf-eye-read" : base;
+                // Only when it would change something. Writing the same class back on
+                // every repaint is what restarts an animation that was already running.
+                if (String(eye.getAttribute("class") || "") !== want)
+                    eye.setAttribute("class", want);
             }
         }
         catch (_) { }
@@ -4005,6 +4029,18 @@ export function setup(ctx, overrides) {
         "animation:arf-stop " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
         ".arf-eye.arf-eye-stop .arf-eye-lid{" +
         "animation:arf-stop-lid " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
+        // ---- the scissors ----
+        // The two arms turn about the point their blades cross, which is where a
+        // real pair is pinned. Opposite directions and the same amount, so the tips
+        // meet in the middle rather than the mark drifting to one side.
+        ".arf-snip .arf-snip-a,.arf-snip .arf-snip-b{" +
+        "transform-box:view-box;transform-origin:13.2px 12px}" +
+        "@keyframes arf-snip-a{0%,100%{transform:none}52%{transform:rotate(-8deg)}}" +
+        "@keyframes arf-snip-b{0%,100%{transform:none}52%{transform:rotate(8deg)}}" +
+        ".arf-snip.arf-snip-cut .arf-snip-a{animation:arf-snip-a 720ms ease-in-out infinite}" +
+        ".arf-snip.arf-snip-cut .arf-snip-b{animation:arf-snip-b 720ms ease-in-out infinite}" +
+        "@media (prefers-reduced-motion: reduce){" +
+        ".arf-snip.arf-snip-cut .arf-snip-a,.arf-snip.arf-snip-cut .arf-snip-b{animation:none}}" +
         // A reader who has asked for less movement gets the eye open and still
         // wherever it is drawn. A mark that never moves is better open than shut:
         // shut is only readable next to the open one, and there would be no open one
@@ -5587,6 +5623,11 @@ export function setup(ctx, overrides) {
                 catch (_) { }
             }
         }
+        // Whatever this rebuild has just put on the screen, brought into line with
+        // whether a refine is running. A repaint draws fresh marks at rest, so
+        // changing tabs in the middle of a refine left the one on the panel shut
+        // among a set that was reading.
+        paintEyes(busy);
     }
     // ---- the control card, which never moves ----
     // Above the tabs, because the switch and the button are what somebody came
@@ -10542,6 +10583,11 @@ export function setup(ctx, overrides) {
     let eyeDoneTimer = null;
     // Whether the refine now ending was called off rather than finished.
     let eyeStopped = false;
+    // Which of the three is running, so the floating button can show the mark for
+    // the thing it is actually doing. Empty means a plain refine, which is the
+    // eye. Refining a selection and taking one out have marks of their own, and a
+    // button showing an eye while it cuts is a button describing something else.
+    let runKind = "";
     disposers.push(() => {
         if (eyeDoneTimer)
             clearTimeout(eyeDoneTimer);
@@ -10832,13 +10878,28 @@ export function setup(ctx, overrides) {
             // leaves nothing old enough to move from: the lid would pop open rather
             // than open. This runs from the clock, two and a half times a second
             // while a refine is in flight, so that is every state change lost.
+            // Which mark this button is showing. The eye at rest and for a plain
+            // refine, and the mark for the thing itself while it refines a selection
+            // or takes one out: a button drawing an eye while it cuts is a button
+            // describing something other than what it is doing.
+            const doingNow = (busy || snipping) && runKind ? runKind : "eye";
             const box = el2.querySelector && el2.querySelector(".arf-glyph");
-            if (box && el2.getAttribute("data-arf-icon") !== mark) {
-                el2.setAttribute("data-arf-icon", mark);
+            if (box && el2.getAttribute("data-arf-icon") !== mark + ":" + doingNow) {
+                el2.setAttribute("data-arf-icon", mark + ":" + doingNow);
                 // Shut from the first frame. Drawn without a state it would carry the
                 // waking animation, and the button would open itself every time it was
                 // resized while nothing was running.
-                box.innerHTML = eyeIcon("shut", Number(mark));
+                box.innerHTML =
+                    doingNow === "snip"
+                        ? snipIcon("cut")
+                        : doingNow === "part"
+                            ? partIcon("read")
+                            : eyeIcon("shut", Number(mark));
+                const drawn = box.querySelector("svg");
+                if (drawn) {
+                    drawn.setAttribute("width", mark);
+                    drawn.setAttribute("height", mark);
+                }
             }
             // Shut while nothing is running, open and reading while a refine is. The
             // state is a class on the eye rather than a different icon, which is what
@@ -10850,7 +10911,7 @@ export function setup(ctx, overrides) {
             // moment the button has something to tell them. It is left alone while it
             // plays, because this runs from the clock two and a half times a second
             // and rewriting the class would restart the blink on every tick.
-            const eye = el2.querySelector && el2.querySelector(".arf-eye");
+            const eye = doingNow === "eye" && el2.querySelector ? el2.querySelector(".arf-eye") : null;
             if (eye) {
                 const now = String(eye.getAttribute("class") || "");
                 if (working) {
@@ -11567,6 +11628,10 @@ export function setup(ctx, overrides) {
     // the session, so it is given the same five seconds every other request gets.
     function snipDone() {
         snipping = false;
+        if (runKind === "snip") {
+            runKind = "";
+            paintFloat();
+        }
         if (snipTimer) {
             clearTimeout(snipTimer);
             snipTimer = null;
@@ -11591,6 +11656,8 @@ export function setup(ctx, overrides) {
             return;
         }
         snipping = true;
+        runKind = "snip";
+        paintFloat();
         if (snipTimer)
             clearTimeout(snipTimer);
         snipTimer = setTimeout(() => {
@@ -11632,6 +11699,7 @@ export function setup(ctx, overrides) {
         }
         retryAt = 0;
         retryOf = 0;
+        runKind = "part";
         markBusy(true);
         paint();
         log("refining the part you selected, " + one.text.trim().length + " characters of it");

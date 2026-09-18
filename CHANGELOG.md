@@ -92,11 +92,11 @@ _2026-09-17_
 
   **Refine the part I selected** carries the same eye with a bracket at either side of it, so the pair reads as "all of it" and "this much of it". **Take out what I selected** is still a pair of scissors, because taking text out is a different thing from reading it.
 
-- **Every mark moves together.** The drawer tab, the heading on the panel, the buttons in the chat and the floating button were each answering to something different, so the set agreed while nothing was happening and came apart the moment something was. While a refine runs, every eye reads.
+  The floating button shows the mark for whatever it is running. Refining a selection puts that mark up, reading. Taking one out puts the scissors up, and their blades close and open while they work: each arm is a handle and the blade it drives, turning about the point the two blades cross, which is where a real pair is pinned. A plain refine is the eye.
 
-  The mark also stopped changing size. The resting drawing was twenty pixels and the reading one fourteen, and the buttons in the chat swapped between them, so the mark shrank the instant a refine began.
+- **Every mark moves together.** The drawer tab, the heading on the panel, the buttons in the chat and the floating button all read while a refine is running, and all rest shut when nothing is.
 
-- **Stopping a refine looks like stopping.** It used to give the same contented blink as one that read the whole reply, which says the opposite of what happened. It shuts quickly now, with no blink, and carries a little past flat before settling.
+  A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something.
 
 - **Taking a selection out can be reached without the buttons in the chat.** It lived on the button under a message and nowhere else, while refining a selection had four ways in. It is in the chat input's Extras menu and the floating button's menu now, beside the refine, and only while something is selected.
 
@@ -105,8 +105,6 @@ _2026-09-17_
 - **A refine no longer spins a ring. The eye reads.** The pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back.
 
   A turning ring says only that something is happening. This one says what is happening, and it is the same shape the button already had rather than an unrelated mark swapped in for the duration.
-
-  The ring that used to grow out of the floating button while a refine ran has gone with it. Two rings on one button said one thing between them.
 
   Somebody who has asked their device for less movement gets the eye open and still, and the button's tooltip still says it is working.
 
