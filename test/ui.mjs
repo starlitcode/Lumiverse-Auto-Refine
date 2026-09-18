@@ -2485,6 +2485,18 @@ console.log("\nthe eye on the floating button");
     ok(where + ": and drawn at no length at all", idle && idle.offset === idle.len, JSON.stringify(idle));
     ok(where + ": it starts at the top rather than at three o'clock", idle && idle.spins, JSON.stringify(idle));
 
+    // A tap, read while the finger is still down and well inside one. The ring
+    // is what tells a hold from a tap, so drawing one on every press is the
+    // button saying it does not know which you meant.
+    await press(70);
+    const tapRing = await ring();
+    await page.evaluate(() => {
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      return new Promise((r) => setTimeout(r, 340));
+    });
+    ok(where + ": a tap draws no ring, so it never reads as a hold",
+      tapRing && tapRing.shown === 0, JSON.stringify(tapRing));
+
     await press(240);
     const mid = await ring();
 

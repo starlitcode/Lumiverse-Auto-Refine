@@ -1990,6 +1990,14 @@ const HOLD_MS = 500;
 const HOLD_RING_MS = HOLD_MS - 70;
 // How far a finger may drift and still be holding rather than dragging.
 const HOLD_SLOP = 10;
+// How long a press has to last before the ring is drawn at all. A tap is over
+// well inside this, so tapping shows nothing and the two gestures stay apart:
+// a ring on screen means a hold is running. Without the wait every tap flashed
+// a ring, which read as the button not knowing which one you meant.
+//
+// It only holds back the fade. The ring is already filling underneath, so when
+// it does appear it appears at how far through the hold you actually are.
+const HOLD_RING_WAIT = 150;
 // The ring that fills while the button is held down. A hold opens the menu, and
 // nothing on screen used to say a hold was under way, so the half second before
 // the menu appeared read as a tap that did nothing.
@@ -3653,7 +3661,8 @@ export function setup(ctx, overrides) {
         // grows rather than a circle that appears.
         ".arf-float .arf-hold circle{stroke-dasharray:" + HOLD_RING_LEN + ";" +
         "stroke-dashoffset:" + HOLD_RING_LEN + ";transition:stroke-dashoffset 160ms ease-out}" +
-        ".arf-float[data-arf-holding] .arf-hold{opacity:1;transition:opacity 90ms linear}" +
+        ".arf-float[data-arf-holding] .arf-hold{opacity:1;" +
+        "transition:opacity 90ms linear " + HOLD_RING_WAIT + "ms}" +
         // Linear, so the ring fills at one steady rate and how far round it has gone
         // is how far through the hold you are. Eased would run ahead or behind.
         ".arf-float[data-arf-holding] .arf-hold circle{stroke-dashoffset:0;" +
