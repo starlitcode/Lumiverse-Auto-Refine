@@ -102,6 +102,8 @@ Three things never move, whichever tab you left open, because they are what you 
 
   The button carries the extension's mark, which is an eye. It is shut while nothing is running. A refine opens it and sets it reading: the pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back. That is often the only part of the extension on screen, so it says what is happening rather than only that something is.
 
+  A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something. While it refines a selection the button shows the mark for that, and while it takes one out it shows the scissors, whose blades close and open while they work.
+
   Holding the button fills a ring around its edge, which closes a moment before the menu opens. Letting go early wipes it back. A press also dips the button a little: a dip on its own is a tap, a dip with the ring running is a hold. Auto Retry's floating button does the same.
 
   Asking your device for less movement leaves the eye open and still and draws no ring. The hold still opens the menu and the tooltip still says when a refine is running.

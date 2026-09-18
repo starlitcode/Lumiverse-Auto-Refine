@@ -3947,12 +3947,12 @@ export function setup(ctx, overrides) {
         "opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
         ".arf-eye .arf-eye-lid{opacity:1;" +
         "transition:opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
-        // Open, however it was asked for. The lid lifts and the eye comes up from
-        // its own centre line rather than being swapped for a second drawing, so
-        // opening and shutting are one movement in either direction.
-        ".arf-eye.arf-eye-open .arf-eye-ball,.arf-eye.arf-eye-read .arf-eye-ball{" +
+        // Reading. The lid lifts and the eye comes up from its own centre line
+        // rather than being swapped for a second drawing, so opening and shutting
+        // are one movement in either direction.
+        ".arf-eye.arf-eye-read .arf-eye-ball{" +
         "transform:none;opacity:1}" +
-        ".arf-eye.arf-eye-open .arf-eye-lid,.arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
+        ".arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
         // Pointing at a button opens the eye on it. A mark that answers the pointer
         // is the cheapest way to say a thing can be pressed, and it is the same
         // movement the rest of this does rather than a second idea.
