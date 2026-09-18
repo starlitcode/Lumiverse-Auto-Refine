@@ -54,6 +54,14 @@ _2026-09-17_
 
   Nothing changes in what a refine does. Which model a prompt is written for is still said in its name and its description, which is advice about what to pick rather than a switch thrown on your behalf.
 
+- **A built-in prompt cannot be typed into.** Picking one from the list locks its blocks: the text, the switch, the role, the reordering, the delete, and **Add a block**. A line above them says why and says what to do instead.
+
+  Those four cannot be written over, so editing them was typing into something the panel was about to refuse to save. The rule is now one sentence: the ones built in are there to read and to start from, and the ones you save are yours to change.
+
+  To change one, put a name in the box under **Presets** and press **Save as new**. The copy is yours and opens for editing straight away.
+
+  A fresh install is not affected. The picker starts on nothing, so somebody who has never opened the list can type into every block. The text stays selectable while locked, so a line can still be copied out of a prompt you want to borrow from.
+
 - **The wait before a refine is given up on is four minutes, not ninety seconds.** Two of the four shipped prompts are written for a model that reasons, and such a model can think for minutes before it writes a character. A local model can spend that long loading. Both were being cut off mid-thought by the number they shipped beside, and the settings page told you to raise it yourself.
 
   Four minutes is the slow end on purpose. A fast model answers in seconds and never reaches it, so all the number really decides is how long you wait before being told a refine that was never coming back has been given up on.

@@ -6098,6 +6098,80 @@ console.log("\nsaying the shipped prompts have changed");
   });
 }
 
+console.log("\na built-in prompt cannot be typed into");
+{
+  // A built-in prompt cannot be written over, so editing its blocks would be
+  // typing into something the panel is about to refuse to save. The fields say
+  // so before the typing rather than after it.
+  //
+  // A fresh install is not in this state. The picker starts on nothing and is
+  // only ever set by picking, so somebody who has never opened the list can
+  // type into every block.
+  const look = (page) =>
+    page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+      const row = ta ? ta.closest("[data-arf-block]") : null;
+      const sw = row ? row.querySelector('input[type="checkbox"]') : null;
+      const add = [...document.querySelectorAll("#drawer button")].find(
+        (b) => (b.textContent || "").trim() === "Add a block",
+      );
+      return {
+        said: !!document.querySelector("#drawer [data-arf-promptlocked]"),
+        text: document.querySelector("#drawer [data-arf-promptlocked]")?.textContent || "",
+        readOnly: ta ? !!ta.readOnly : null,
+        switchOff: sw ? !!sw.disabled : null,
+        addOff: add ? !!add.disabled : null,
+      };
+    });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const fresh = await look(page);
+    ok("a fresh install can type into its blocks", fresh.readOnly === false, JSON.stringify(fresh));
+    ok("and is told nothing about a locked prompt", !fresh.said, JSON.stringify(fresh));
+
+    const picked = await page.evaluate(async () => {
+      const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const one = [...pick.options].find((o) => /^The line edit$/.test(o.textContent.trim()));
+      pick.value = one.value;
+      pick.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      return true;
+    });
+    ok("one of the built-in prompts was picked", picked, "");
+    const held = await look(page);
+    ok("the blocks stop taking typing", held.readOnly === true, JSON.stringify(held));
+    ok("the switch beside each one goes with them", held.switchOff === true, JSON.stringify(held));
+    ok("and so does adding another", held.addOff === true, JSON.stringify(held));
+    ok("a line says why", held.said, JSON.stringify(held));
+    ok("and says Save as new is the way round it", /Save as new/.test(held.text), held.text.slice(0, 200));
+  });
+
+  // Saving it under a name of your own hands the copy back, open for editing.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const out = await page.evaluate(async () => {
+      const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
+      const one = [...pick.options].find((o) => /^The line edit$/.test(o.textContent.trim()));
+      pick.value = one.value;
+      pick.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 250));
+      const name = document.querySelector('#drawer [data-arf-field="presetName"]');
+      name.value = "Mine, off the line edit";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('#drawer [data-arf-preset="new"]').click();
+      await new Promise((r) => setTimeout(r, 300));
+      const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+      return {
+        readOnly: ta ? !!ta.readOnly : null,
+        said: !!document.querySelector("#drawer [data-arf-promptlocked]"),
+      };
+    });
+    ok("the copy opens for editing", out.readOnly === false, JSON.stringify(out));
+    ok("and the line about it goes", !out.said, JSON.stringify(out));
+  });
+}
+
 console.log("\nwhen the prompt stops matching the preset named in the box");
 {
   // Loading a preset sets the picker and nothing cleared it, so editing a block

@@ -6773,7 +6773,26 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (let i = 0; i < list.length; i++) wrap.appendChild(buildBlockRow(list, i));
 
     const acts = el("div", "arf-row");
+    // Said above the list, once, whenever the picker names a built-in prompt.
+    // The fields below are locked and this is the only place that explains why,
+    // so it does not wait for a change that can no longer be made.
+    if (onBuiltInPrompt()) {
+      const held = el("div", "arf-row arf-note");
+      held.setAttribute("data-arf-promptlocked", "1");
+      const what = el(
+        "span",
+        "",
+        "You are looking at " +
+          presetPick +
+          ", one of the prompts built in. It cannot be written over, so the blocks below are read-only. To change it, put a name in the box under Presets and press Save as new. The copy is yours and opens for editing.",
+      );
+      what.style.flex = "1";
+      held.appendChild(what);
+      wrap.appendChild(held);
+    }
+
     const add = button("Add a block", false);
+    if (onBuiltInPrompt()) lockForBuiltIn(add);
     add.addEventListener("click", () => {
       const next = blockList();
       const made: Block = {
@@ -6804,9 +6823,36 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // Whether the picker is on one of the built-in prompts.
+  //
+  // Those cannot be written over, so editing the blocks while one is named
+  // would be editing something the panel is about to refuse to save. Locking
+  // the fields says that before the typing rather than after it.
+  //
+  // A fresh install is not in this state: the picker starts on nothing and is
+  // only ever set by picking, so somebody who has never opened the list can
+  // still type into every block.
+  function onBuiltInPrompt(): boolean {
+    return !!presetPick && isBuiltIn(presetPick);
+  }
+
+  // Turns a control off and says why, so a screen reader gets the reason and
+  // not just a dead field.
+  function lockForBuiltIn(node: any) {
+    try {
+      node.disabled = true;
+      node.style.opacity = "0.55";
+      node.style.cursor = "not-allowed";
+      node.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+    } catch (_) {}
+  }
+
   function buildBlockRow(list: Block[], i: number): HTMLElement {
     const b = list[i];
     const holdsTurn = String(b.text || "").indexOf(TURN_MACRO) >= 0;
+    // Reading one is why somebody picked it, so the fold stays live and every
+    // control that would change it does not.
+    const locked = onBuiltInPrompt();
 
     const wrap = el("div", "arf-block" + (b.on ? "" : " arf-hushed"));
     wrap.setAttribute("data-arf-block", b.id);
@@ -6851,6 +6897,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const box = document.createElement("input");
     box.type = "checkbox";
+    if (locked) lockForBuiltIn(box);
     box.className = "arf-box";
     box.checked = b.on;
     box.setAttribute("aria-label", "Send " + blockLabel(b));
@@ -6873,6 +6920,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     nameIn.type = "text";
     nameIn.className = "arf-field arf-grow";
     nameIn.value = b.name || "";
+    if (locked) lockForBuiltIn(nameIn);
     nameIn.placeholder = "What to call it";
     nameIn.setAttribute("aria-label", "Name for this block");
     nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
@@ -6889,8 +6937,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const btn = button(sign, false);
       btn.className += " arf-mini";
       btn.setAttribute("aria-label", label + " " + blockLabel(b));
-      btn.disabled = to < 0 || to >= list.length;
+      btn.disabled = to < 0 || to >= list.length || locked;
       btn.style.opacity = btn.disabled ? "0.45" : "1";
+      if (locked) lockForBuiltIn(btn);
       btn.addEventListener("click", () => {
         const next = blockList();
         const held = next[i];
@@ -6919,6 +6968,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     ta.placeholder = "What you want it to do.";
     ta.setAttribute("aria-label", "Text for " + blockLabel(b));
     ta.setAttribute("data-arf-field", "blocktext:" + b.id);
+    // Readable rather than disabled, so the text can still be selected and
+    // copied out of a prompt somebody wants to borrow a line from.
+    if (locked) {
+      ta.readOnly = true;
+      ta.style.opacity = "0.75";
+      ta.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+    }
     ta.addEventListener("input", () => {
       const next = blockList();
       next[i].text = ta.value;
@@ -6944,6 +7000,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     sel.className = "arf-field";
     sel.style.maxWidth = "140px";
     sel.setAttribute("aria-label", "Role for " + blockLabel(b));
+    if (locked) lockForBuiltIn(sel);
     for (const o of ROLE_OPTIONS) {
       const op = document.createElement("option");
       op.value = o.value;
@@ -6963,6 +7020,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const drop = button("Delete", false);
     drop.className += " arf-danger";
     drop.setAttribute("aria-label", "Delete " + blockLabel(b));
+    if (locked) lockForBuiltIn(drop);
     drop.addEventListener("click", () => {
       askFirst(
         "block:" + b.id,
