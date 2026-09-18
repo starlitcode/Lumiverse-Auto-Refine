@@ -89,8 +89,8 @@ const PARTS = [
     {
         id: "alerts",
         label: "Alerts and sound",
-        what: "The card that comes up on the page, the brief message, and the sound.",
-        keys: ["popup", "toast", "soundOn", "soundUrl", "soundVolume"],
+        what: "The card that comes up on the page, how it draws the before and the after, the brief message, and the sound.",
+        keys: ["popup", "toast", "sideBySide", "soundOn", "soundUrl", "soundVolume"],
     },
     {
         id: "reach",
@@ -455,6 +455,13 @@ const CONFIG = {
     maxHistoryTokens: 4500,
     // Which tab the panel opens on, remembered so it comes back where you left it.
     tab: "prompt",
+    // How a before and an after are drawn. Off puts one text on the screen with
+    // the changes coloured where they happened, which is the shorter read when a
+    // rewrite moved a word here and there. On puts the two in their own columns,
+    // which is the easier read when whole sentences were replaced and the marked
+    // version is more colour than text. Remembered, so the one you prefer is the
+    // one every card comes back on.
+    sideBySide: false,
     // What each of the three carries. Empty means everything, which is what a
     // fresh install wants and what somebody who never opens these expects.
     exportParts: {},
@@ -1372,7 +1379,7 @@ const BUILT_IN_SHAPES = BUILT_IN_PROMPTS.map((p) => ({
     mine: p.mine,
     shape: promptShape(p.blocks),
 }));
-// A short mark for the eight prompts as they ship, so a reader can be told when
+// A short mark for the four prompts as they ship, so a reader can be told when
 // they have changed. FNV-1a over their shapes: it only has to differ when the
 // prompts differ, and it goes in storage, so short matters more than anything a
 // hash is usually chosen for.
@@ -2187,7 +2194,7 @@ export function setup(ctx, overrides) {
         cfg.movedSeen = MOVED_MARK;
         persist(true);
     }
-    // Whether the eight have changed since this reader last took one. Empty means
+    // Whether the four have changed since this reader last took one. Empty means
     // they never have, or that this panel came up before any of this existed, and
     // neither is worth a line about a change nobody can point at.
     function shippedMoved() {
@@ -3359,6 +3366,12 @@ export function setup(ctx, overrides) {
         "text-decoration-thickness:1px;opacity:.85}" +
         ".arf-add{color:var(--lumiverse-success,#22c55e)}" +
         ".arf-scroll{max-height:130px;overflow-y:auto}" +
+        // The two versions in their own columns. They wrap to one on top of the
+        // other once there is not room for two readable ones, which is what a
+        // phone gives: two columns of twenty characters is worse than a scroll.
+        ".arf-sbs{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}" +
+        ".arf-sbs-col{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:4px}" +
+        ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-well.arf-tall{max-height:340px}" +
         ".arf-dot{flex:none;width:7px;height:7px;border-radius:50%;" +
         "background:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
@@ -5545,30 +5558,121 @@ export function setup(ctx, overrides) {
             add(1, b[j++]);
         return out;
     }
-    function diffWell(before, after) {
+    // Every before-and-after currently on the screen, so pressing the switch on
+    // one of them redraws all of them. Without this the card you pressed changes
+    // and the two behind it stay as they were, which reads as a button that only
+    // half worked.
+    //
+    // Capped rather than pruned on every call: a card built and not yet put on
+    // the page would be dropped by a pruning pass before it ever arrived.
+    let diffSpots = [];
+    function redrawDiffs() {
+        diffSpots = diffSpots.filter((s) => s.wrap.isConnected);
+        for (const s of diffSpots)
+            fillDiff(s.wrap, s.before, s.after);
+    }
+    // One column of the side by side view. The before column keeps what was taken
+    // out and leaves out what was put in; the after column does the opposite. Both
+    // keep everything that did not change, so each column reads as the whole text
+    // it stands for rather than a list of edits.
+    function diffColumn(lab, whole, parts, keep) {
+        const col = el("div", "arf-sbs-col");
+        col.appendChild(el("div", "arf-sbs-lab", lab));
         const well = el("div", "arf-well arf-scroll");
-        well.setAttribute("data-arf-diff", "1");
+        well.setAttribute("data-arf-side", keep === -1 ? "before" : "after");
+        // The heading above it is a line of text beside a box, which says nothing to
+        // a screen reader about which box it belongs to. Named here as well, so the
+        // column announces itself.
+        well.setAttribute("aria-label", lab);
+        if (!parts)
+            well.appendChild(el("span", "", whole));
+        else
+            for (const p of parts) {
+                if (p.how === 0)
+                    well.appendChild(el("span", "", p.text));
+                else if (p.how === keep)
+                    well.appendChild(el("span", keep === -1 ? "arf-cut" : "arf-add", p.text));
+            }
+        col.appendChild(well);
+        return col;
+    }
+    function fillDiff(wrap, before, after) {
+        wrap.innerHTML = "";
+        const side = !!cfg.sideBySide;
+        wrap.setAttribute("data-arf-diff-mode", side ? "side" : "inline");
         const a = words(before);
         const b = words(after);
-        if (a.length + b.length > DIFF_MAX) {
-            // Too big to mark word by word without a visible pause. Both are shown
-            // whole, which is what this replaced, rather than nothing.
+        // Too big to mark word by word without a visible pause. Both are shown
+        // whole, which is what this replaced, rather than nothing.
+        const big = a.length + b.length > DIFF_MAX;
+        const parts = big ? null : diffWords(a, b);
+        if (side) {
+            const cols = el("div", "arf-sbs");
+            cols.appendChild(diffColumn("Before", before, parts, -1));
+            cols.appendChild(diffColumn("After", after, parts, 1));
+            wrap.appendChild(cols);
+            if (big)
+                wrap.appendChild(el("div", "arf-note", "Too long to mark up, so both are shown whole."));
+            return;
+        }
+        const well = el("div", "arf-well arf-scroll");
+        wrap.appendChild(well);
+        if (!parts) {
             well.appendChild(el("div", "arf-note", "Too long to mark up. Before:"));
             well.appendChild(el("div", "arf-dim", before));
             well.appendChild(el("div", "arf-note", "After:"));
             well.appendChild(el("span", "", after));
-            return well;
+            return;
         }
-        const parts = diffWords(a, b);
         // Nothing marked means the two are the same, which is worth saying rather
         // than showing an unmarked paragraph that looks like a failed diff.
         if (!parts.some((p) => p.how !== 0)) {
             well.appendChild(el("span", "", after));
-            return well;
+            return;
         }
         for (const p of parts)
             well.appendChild(el("span", p.how === -1 ? "arf-cut" : p.how === 1 ? "arf-add" : "", p.text));
-        return well;
+    }
+    function diffWell(before, after) {
+        const wrap = el("div", "arf-diff");
+        wrap.setAttribute("data-arf-diff", "1");
+        fillDiff(wrap, before, after);
+        diffSpots.push({ wrap: wrap, before: before, after: after });
+        if (diffSpots.length > 40)
+            diffSpots.splice(0, diffSpots.length - 40);
+        return wrap;
+    }
+    function switchLabel() {
+        return cfg.sideBySide ? "Read them together" : "Read them side by side";
+    }
+    // The button that flips every before-and-after on the screen between the two
+    // views. It says what pressing it does rather than which view you are on, so
+    // there is nothing to work out before pressing it.
+    function diffSwitch() {
+        const b = button(switchLabel(), false);
+        b.className = "arf-btn arf-mini2";
+        b.setAttribute("data-arf-diff-switch", "1");
+        b.addEventListener("click", () => {
+            cfg.sideBySide = !cfg.sideBySide;
+            persist(true);
+            redrawDiffs();
+            const all = document.querySelectorAll("[data-arf-diff-switch]");
+            for (let i = 0; i < all.length; i++) {
+                const one = all[i];
+                one.textContent = switchLabel();
+                one.setAttribute("data-arf-btn", switchLabel());
+            }
+        });
+        return b;
+    }
+    // The line above a before-and-after, with the switch on the end of it. The
+    // switch lives beside what it changes rather than in the settings, since the
+    // moment you want the other view is the moment you are looking at this one.
+    function changedHead(label) {
+        const row = el("div", "arf-between");
+        row.appendChild(el("span", "arf-note arf-grow", label));
+        row.appendChild(diffSwitch());
+        return row;
     }
     // The same card a reply's refine gets, for the one you asked for on your own
     // draft. It is not in undoable with the replies, since a draft has no message
@@ -5577,7 +5681,7 @@ export function setup(ctx, overrides) {
     function buildLastDraft(one) {
         const wrap = card("Your draft, refined", "Only while the box still holds it. Type over it and there is nothing to put back.", new Date(one.at).toTimeString().slice(0, 5));
         wrap.setAttribute("data-arf-draft-undo", "1");
-        wrap.appendChild(el("div", "arf-note", "What changed"));
+        wrap.appendChild(changedHead("What changed"));
         wrap.appendChild(diffWell(one.before, one.after));
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
@@ -5599,7 +5703,7 @@ export function setup(ctx, overrides) {
     }
     function buildUndoRow(one) {
         const box = el("div", "arf-col");
-        box.appendChild(el("div", "arf-note", "What changed"));
+        box.appendChild(changedHead("What changed"));
         box.appendChild(diffWell(one.before, one.after));
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
@@ -6050,7 +6154,7 @@ export function setup(ctx, overrides) {
             // rather than an arrival, so the contents are what fades.
             if (held)
                 body.className += " arf-arrive";
-            body.appendChild(el("div", "arf-note", "What changed"));
+            body.appendChild(changedHead("What changed"));
             body.appendChild(diffWell(spec.before, spec.after));
             // This card lands on top of the one that was showing the model's working,
             // which is a second of reading for something worth more than that. Said
@@ -7608,6 +7712,7 @@ export function setup(ctx, overrides) {
         if (lastSteps.length > 1) {
             wrap.appendChild(el("div", "arf-rule"));
             wrap.appendChild(fold("What each pass changed", (body) => {
+                body.appendChild(changedHead("Each pass, before and after"));
                 for (let i = 0; i < lastSteps.length; i++) {
                     const one = lastSteps[i];
                     const head = el("div", "arf-between");

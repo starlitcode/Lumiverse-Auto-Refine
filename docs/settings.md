@@ -89,6 +89,10 @@ Three things never move, whichever tab you left open, because they are what you 
 
   **Show the before and after on screen** puts a card on the page itself, not in this tab: what the reply said before, what it says now, and a button to put it back. On by default, because a refine changes writing you were reading, so the change is shown on the page instead of only in this tab.
 
+  **Read them side by side** sits above every before and after there is: the card on the page, the **Put it back** card on the tab, and each pass under **What each pass changed** on the Log tab. It puts the original in one column and the rewrite in the other. Each column reads as the whole text it stands for, and each keeps its own marks, so what was taken out is on the left and what was put in is on the right. **Read them together** goes back to one text with the changes coloured where they happened.
+
+  Pressing it changes every before and after on screen at once, and the view you were last on is the one the next card opens on. On a narrow screen the two columns stack one above the other rather than squeeze.
+
   **Show a brief message** is the one-line note at the edge of the screen. A sound is off by default, and with nothing attached it is a short built-in blip made in the browser, so there is no file to ship.
 
   Closing the card loses nothing: every refine stays under **The last refine** here until you dismiss it.

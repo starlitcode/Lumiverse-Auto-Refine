@@ -3060,6 +3060,118 @@ console.log("\nthe card that comes up on the page");
     // "It" and "him" survive the rewrite in the fixture below, unmarked.
     ok("and what did not change is left plain", marks.plain.trim().length > 0, JSON.stringify(marks.plain));
 
+    // The same two versions, in their own columns. Marked up together is the
+    // quicker read when a rewrite moved a word here and there, and the harder
+    // one when whole sentences were replaced, so both are on offer and the
+    // choice is remembered.
+    const switchSays = (page) =>
+      page.evaluate(() => {
+        const b = document.querySelector("[data-arf-diff-switch]");
+        return b ? b.textContent : null;
+      });
+    ok("there is a switch beside what changed", (await switchSays(page)) === "Read them side by side",
+      String(await switchSays(page)));
+    await page.evaluate(() => document.querySelector("[data-arf-diff-switch]").click());
+    await settle(page);
+    ok("and pressing it turns the label round", (await switchSays(page)) === "Read them together",
+      String(await switchSays(page)));
+
+    const cols = await page.evaluate(() => {
+      const w = document.querySelector("[data-arf-pop] [data-arf-diff]");
+      const b = w.querySelector('[data-arf-side="before"]');
+      const a = w.querySelector('[data-arf-side="after"]');
+      const grab = (n, cls) => Array.from(n.querySelectorAll("." + cls)).map((x) => x.textContent).join("|");
+      const bb = b && b.getBoundingClientRect();
+      const ab = a && a.getBoundingClientRect();
+      return {
+        mode: w.getAttribute("data-arf-diff-mode"),
+        before: b ? b.textContent : null,
+        after: a ? a.textContent : null,
+        beforeCut: b ? grab(b, "arf-cut") : "",
+        beforeAdds: b ? b.querySelectorAll(".arf-add").length : -1,
+        afterAdd: a ? grab(a, "arf-add") : "",
+        afterCuts: a ? a.querySelectorAll(".arf-cut").length : -1,
+        beside: !!(bb && ab) && Math.abs(bb.top - ab.top) < 2 && bb.left < ab.left,
+        labels: Array.from(w.querySelectorAll(".arf-sbs-lab")).map((n) => n.textContent).join("|"),
+      };
+    });
+    ok("the card knows which view it is drawing", cols.mode === "side", String(cols.mode));
+    ok("the left column reads as the whole original",
+      cols.before === "It hit him like an electric shock, and his whole upper body went stiff.", String(cols.before));
+    ok("the right column reads as the whole rewrite",
+      cols.after === "It hit him hard, and his whole upper body locked rigid.", String(cols.after));
+    ok("what was taken out is marked on the left", /electric shock/.test(cols.beforeCut), cols.beforeCut);
+    ok("and nothing put in is on the left", cols.beforeAdds === 0, String(cols.beforeAdds));
+    ok("what was put in is marked on the right", /locked rigid/.test(cols.afterAdd), cols.afterAdd);
+    ok("and nothing taken out is on the right", cols.afterCuts === 0, String(cols.afterCuts));
+    ok("the two sit beside each other where there is room", cols.beside, JSON.stringify(cols));
+    ok("and each says which one it is", cols.labels === "Before|After", cols.labels);
+
+    // Back to the marked-up view, and the card knows it.
+    await page.evaluate(() => document.querySelector("[data-arf-diff-switch]").click());
+    await settle(page);
+    const backAgain = await page.evaluate(() => ({
+      mode: document.querySelector("[data-arf-pop] [data-arf-diff]").getAttribute("data-arf-diff-mode"),
+      cols: document.querySelectorAll("[data-arf-side]").length,
+    }));
+    ok("pressing it again puts them back together", backAgain.mode === "inline" && backAgain.cols === 0,
+      JSON.stringify(backAgain));
+  });
+
+  // The choice is a setting, so the next card comes up the way the last one was
+  // left rather than back on the default.
+  await inTab(browser, { saved: { sideBySide: true } }, async (page) => {
+    await land(page);
+    const kept = await page.evaluate(() => ({
+      mode: document.querySelector("[data-arf-pop] [data-arf-diff]").getAttribute("data-arf-diff-mode"),
+      cols: document.querySelectorAll("[data-arf-pop] [data-arf-side]").length,
+      all: Array.from(document.querySelectorAll("[data-arf-diff]"))
+        .map((n) => n.getAttribute("data-arf-diff-mode")),
+    }));
+    ok("the view you chose is the one the next card opens on", kept.mode === "side" && kept.cols === 2,
+      JSON.stringify(kept));
+
+    // The card on the page and the one on the tab are both showing this refine,
+    // so there are two of these on screen at once and a switch that changed one
+    // of them would read as a button that half worked.
+    ok("there is more than one before and after on screen to check", kept.all.length > 1, JSON.stringify(kept.all));
+    ok("and every one of them opens on the view you chose",
+      kept.all.every((m) => m === "side"), JSON.stringify(kept.all));
+
+    await page.evaluate(() => document.querySelector("[data-arf-diff-switch]").click());
+    await settle(page);
+    const wrote = await page.evaluate(() => {
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      return raw ? JSON.parse(raw).sideBySide : "nothing saved";
+    });
+    ok("and turning it off is written down", wrote === false, JSON.stringify(wrote));
+    const turned = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-arf-diff]"))
+        .map((n) => n.getAttribute("data-arf-diff-mode")));
+    ok("pressing the switch on one turns all of them round",
+      turned.length > 1 && turned.every((m) => m === "inline"), JSON.stringify(turned));
+  });
+
+  // On a narrow phone two columns of twenty characters would be worse than a
+  // scroll, so they stack instead of squeezing.
+  await inTab(browser, { viewport: { width: 320, height: 568 }, touch: true, saved: { sideBySide: true } }, async (page) => {
+    await land(page);
+    const stacked = await page.evaluate(() => {
+      const b = document.querySelector('[data-arf-side="before"]');
+      const a = document.querySelector('[data-arf-side="after"]');
+      if (!b || !a) return null;
+      const bb = b.getBoundingClientRect();
+      const ab = a.getBoundingClientRect();
+      return { sameLeft: Math.abs(bb.left - ab.left) < 2, below: ab.top > bb.top, wide: bb.width };
+    });
+    ok("on a narrow phone the two stack rather than squeeze",
+      !!stacked && stacked.sameLeft && stacked.below, JSON.stringify(stacked));
+    ok("and each one gets the full width", !!stacked && stacked.wide > 200, JSON.stringify(stacked));
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await land(page);
+
     // A dim behind it, so the eye goes to the card.
     const shade = await page.evaluate(() => {
       const el = document.querySelector("[data-arf-shade]");
@@ -4811,7 +4923,7 @@ console.log("\nthe prompt on screen is the prompt that runs");
 
 console.log("\nlists with headings on them");
 {
-  // A dropdown of eight shipped prompts and however many of your own is a
+  // A dropdown of the shipped prompts and however many of your own is a
   // column nobody reads. A heading is a real optgroup rather than an entry that
   // does nothing: the browser draws it greyed and refuses to select it, which
   // is what makes it a heading.
@@ -6033,7 +6145,7 @@ console.log("\nthe macro list");
 
 console.log("\nsaying the shipped prompts have changed");
 {
-  // The mark is a fingerprint of the eight as they ship, so a saved one that
+  // The mark is a fingerprint of the four as they ship, so a saved one that
   // does not match means they moved since the reader last took one. A made-up
   // mark stands in for "you were here two versions ago".
   const OLD = "notthemark";
@@ -6074,7 +6186,7 @@ console.log("\nsaying the shipped prompts have changed");
     ok("and it stays away, because the mark was written down", after.stamped && after.stamped !== OLD, JSON.stringify(after));
   });
 
-  // Loading one of the eight is the other way to be up to date.
+  // Loading one of the four is the other way to be up to date.
   await inTab(browser, { saved: { shippedSeen: OLD } }, async (page) => {
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {

@@ -16,7 +16,7 @@ Select part of a reply and you can refine only that. Two optional buttons put a 
 
 Your own messages can be refined too, by hand, never automatically. They get their own prompt, which repairs what went wrong and leaves the writing alone.
 
-It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
+It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking. What changed can be read as one text with the changes coloured in place, or as the two versions in columns beside each other, whichever is the easier read.
 
 ## Install
 

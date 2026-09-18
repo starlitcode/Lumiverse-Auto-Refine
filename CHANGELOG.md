@@ -22,13 +22,13 @@ _2026-09-17_
 
   **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
 
-- **Tap a running refine to stop it.** The buttons in the chat already turned into a spinner while one was working, and tapping the spinner did nothing but say a refine was already running.
+- **Tap a running refine to stop it.** Suggested by a Discord user. The buttons in the chat already turned into a spinner while one was working, and tapping the spinner did nothing but say a refine was already running.
 
   Now the first tap starts it and the next one calls it off. While it runs the button names itself **Stop this refine**, so a screen reader says the same thing the mark shows.
 
   This is the two buttons in the chat: the one in the toolbar and the one under a message. The panel and the floating button already had a stop of their own.
 
-- **Two buttons for the part you selected**, on the message you selected it in.
+- **Two buttons for the part you selected**, on the message you selected it in. Suggested by a Discord user.
 
   **Refine the part I selected** does what the panel entry of the same name does, without opening the panel.
 
@@ -39,6 +39,14 @@ _2026-09-17_
   Taking text out closes the gap the way a person would. One space between two halves rather than two, no space left in front of a full stop, and a paragraph taken out leaves one blank line rather than two. Nothing else in the message is touched.
 
   Selecting the whole message is refused rather than emptying it. **Put it back** works on a snip exactly as it works on a refine.
+
+- **The before and the after, side by side.** Suggested by a Discord user. Every card showing what a refine changed marked the two versions up as one piece of text, with what was taken out struck through and what was put in next to it. That is the quicker read when a rewrite moved a word here and there, and the harder one when whole sentences were replaced and the result is more colour than writing.
+
+  **Read them side by side** puts the original in one column and the rewrite in the other. Each column reads as the whole text it stands for, and each still carries its own marks: what was taken out on the left, what was put in on the right. **Read them together** puts it back.
+
+  The button sits above every before and after there is: the card that comes up on the page, the **Put it back** card in the panel, and each pass under **What each pass changed** on the Log tab. Pressing it changes all of them at once, and the view you were last on is the one the next card opens on.
+
+  On a narrow screen the two columns stack one above the other rather than squeeze, because two columns of twenty characters each is a worse read than a scroll.
 
 ### Fixed
 

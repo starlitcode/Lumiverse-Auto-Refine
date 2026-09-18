@@ -1,4 +1,4 @@
-// The eight shipped prompts are described twice: in the panel, where the text
+// The four shipped prompts are described twice: in the panel, where the text
 // lives in the code, and in docs/prompt.md, where it is written out again by
 // hand. Nothing makes the second copy follow the first, so a rewording lands in
 // one and sits in the other until somebody reads both.
