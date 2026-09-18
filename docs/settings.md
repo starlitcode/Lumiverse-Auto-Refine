@@ -130,7 +130,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   How it looks is not decided here. Both of these buttons take their appearance from the button standing next to them: the same classes, so the same size, spacing, colour, hover and focus. That means a theme reaches them, and so does CSS you wrote yourself. A rule you write for Lumiverse's own buttons applies to these without knowing they exist.
 
-  Both of these buttons are drawn in the places the app hands out where it hands one out, so a Lumiverse update that moves its own controls does not take them with it.
+  Both of these buttons sit where Lumiverse puts its own, so an update that moves its controls carries these along with them rather than leaving them behind.
 
   Both of these turn into a stop while a refine is running. The first tap starts it, the next one calls it off, and the button names itself **Stop this refine** while it works.
 
