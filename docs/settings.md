@@ -24,7 +24,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 - **Your prompt** is the whole request, block by block. Rename them, reorder them, switch them off, change the role each is sent as, write your own. **Expand** opens one in an editor the size of the screen, and does not focus the box, so no keyboard jumps up on a phone. In [How the prompt is built](prompt.md).
 - **Macros you can use** is the list of what a block can carry, with a tap to copy each one and a **?** beside it for what it becomes, the same **?** every other row on the panel uses.
-- **Presets** save how a refine reads under a name, and can name a model setup to load with them. Eight ship with the extension and work as they stand, and the menu offers the four for the list you are editing rather than all eight, in [Presets](prompt.md#presets).
+- **Presets** save how a refine reads under a name, and can name a model setup to load with them. Four are built in and work as they stand, and the menu offers the two for the list you are editing rather than all four, in [Presets](prompt.md#presets).
 
 ## Context
 
@@ -64,7 +64,7 @@ Three things never move, whichever tab you left open, because they are what you 
 - **Add the refine as a reroll instead of writing over the reply** is off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back. That is worth knowing about because it is the only way back that survives a reload: **Keep what a refine replaced** is held in memory and is gone when you close the tab, while a reroll is Lumiverse's own, with the arrows already on the message. **Put it back** then takes the reroll off again rather than writing over it, and refuses where you have rolled another one since, because cutting the end off a list you have been working in is not an undo. A build that does not give a message rerolls writes over the reply as before.
 - **Keep what a refine replaced** holds the original so you can put it back.
 - **Ask before saving a refine** holds every refine until you say. Both versions appear in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**, and the tab carries a badge until you answer. Where Lumiverse can draw one, the same question also opens as a window; answering either settles both. The floating button's menu can answer it too, though a tap on the button only opens the tab, since accepting a rewrite of your writing on a stray tap is the one thing it must not do.
-- **Your own messages** are refined only when you press a button on one, and never by the automatic pass. They get their own prompt, under **For your messages** on the Prompt tab, so tidying your own line does not turn it into the narrator's. It ships written and runs as it stands; edit it and yours runs instead.
+- **Your own messages** are refined only when you press a button on one, and never by the automatic pass. They get their own prompt, under **For your messages** on the Prompt tab, so tidying your own line does not turn it into the narrator's. It arrives written and runs as it stands; edit it and yours runs instead.
 
 ## Log
 
@@ -142,7 +142,7 @@ Those last two live in one place at a time. While the floating button is on scre
 
   **The selectors it looks under** holds the list itself, so you can read what is being tried and edit it in place. Separate them with commas. They are tried in the order you write them.
 
-  Emptying the box does not switch anything off. It falls back to the list this shipped with.
+  Emptying the box does not switch anything off. It falls back to the built-in list.
 
   Under the box, every selector is listed in the order it is tried. The one finding the box is highlighted. The rest are shown plainly, so you can see where yours sits in the order.
 
@@ -158,7 +158,7 @@ Those last two live in one place at a time. While the floating button is on scre
 
   It reads the page when pressed rather than on a timer, so the answer is never left over from earlier.
 
-  **Use the shipped list** puts the box back. It is also its own part in the export, import and reset lists, so putting your selectors back does not take the buttons and switches with them.
+  **Use the built-in list** puts the box back. It is also its own part in the export, import and reset lists, so putting your selectors back does not take the buttons and switches with them.
 
 - **Your whole setup** exports to a file, imports one back, and puts things back to their defaults. All three work in the same list of parts: your prompt, context, model, samplers, limits, alerts, buttons, switches, presets and the chats you switched off. **What goes in the file**, **What to take from a file** and **What to put back** each have their own choice, so you can export only your prompt, take only somebody's samplers, or start your prompt again without losing your connection. In [Import and export](prompt.md#import-and-export) and [Starting again](prompt.md#starting-again).
 

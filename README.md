@@ -92,7 +92,7 @@ Under **Context**, **Show me the request** builds the real request for the reply
 
 ## Documentation
 
-- [How the prompt is built](docs/prompt.md) - the blocks, the macros, the roles, the eight prompts that ship with it, and the preview
+- [How the prompt is built](docs/prompt.md) - the blocks, the macros, the roles, the four built-in prompts, and the preview
 - [Writing rules](docs/rules.md) - what to ask a refine for, and what not to
 - [What it refuses to save](docs/guardrails.md) - the checks on what comes back
 - [Settings](docs/settings.md) - every tab, with what is on it and why

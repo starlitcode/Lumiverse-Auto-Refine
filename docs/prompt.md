@@ -42,11 +42,11 @@ Anything in double braces is filled in at the moment of the refine. There are tw
 
 A refine is one model call by default. **How many passes a refine makes** on the Limits tab can make it several, each pass handed what the one before it wrote. Two cheap passes often beat one expensive one: cut the filler first, fix the rhythm second, and neither prompt has to do both jobs at once.
 
-**The passes, in order** takes one preset name per line, top to bottom. Either one of yours or one that ships with it, and yours wins where the two share a name. Names rather than copies, so editing a preset changes every pass that uses it.
+**The passes, in order** takes one preset name per line, top to bottom. Either one of yours or one of the built-in prompts, and yours wins where the two share a name. Names rather than copies, so editing a preset changes every pass that uses it.
 
-The prompts that ship with it are whole refines rather than single jobs, so running two of them in sequence does the same work twice. A chain is worth building out of passes that each do one thing: one that only cuts, one that only fixes rhythm. Save those as presets of your own and name them here.
+The built-in prompts are whole refines rather than single jobs, so running two of them in sequence does the same work twice. A chain is worth building out of passes that each do one thing: one that only cuts, one that only fixes rhythm. Save those as presets of your own and name them here.
 
-What it costs: one call per pass, and each pass sends a whole prompt of its own. Measured against the shipped prompt, one refine is about 1,600 tokens in, so a chain of six is nearer ten thousand before a word comes back. Three passes is three times the bill of one, and the Log adds them up rather than reporting the last one.
+What it costs: one call per pass, and each pass sends a whole prompt of its own. Measured against a built-in prompt, one refine is about 1,600 tokens in, so a chain of six is nearer ten thousand before a word comes back. Three passes is three times the bill of one, and the Log adds them up rather than reporting the last one.
 
 What happens when something is wrong with a line:
 
@@ -85,14 +85,14 @@ The count is there because it is the part a model can act on. A phrase reached f
 What it counts, and what it refuses to count:
 
 - **Across replies, not within one.** Five times in a single reply is that reply's choice. Five times across five replies is a habit. **How many replies a phrase has to be in** sets the number, three by default.
-- **Narration only.** Everything in quotation marks comes out first, because a character repeating a phrase is characterisation rather than a habit. Counting it would hand a character's own way of talking back as something to remove. Dialogue clichés are a prompt's job instead: the **Speech** block in the prompts that ship with the extension covers them.
+- **Narration only.** Everything in quotation marks comes out first, because a character repeating a phrase is characterisation rather than a habit. Counting it would hand a character's own way of talking back as something to remove. Dialogue clichés are a prompt's job instead: the **Speech** block in the built-in prompts covers them.
 - **Three words at least.** One word is vocabulary. A run made only of common words is grammar, so "out of the" is never a finding.
 - **The longest phrase wins.** A finding of six words does not also report the four-word run inside it, which is the same habit counted twice.
 - **Your own messages are left out,** and so is the character's name, which is in every reply by definition.
 - **The story's own words are left out.** Anything written into your character card, or into your lorebook where a block was already asking for it, is the story rather than a habit. A place or an institution the chat is about will repeat, and that is the chat working.
 - **Code is left out.** Anything in backticks is not prose.
 
-It reads replies the refine already has, so it costs no extra call. It does cost tokens, though: measured against the shipped prompt it adds around 150 to a request of about 1,600, so roughly a tenth more on every refine while it is on. **Phrases to leave alone** takes one per line: a repeated line can be the point of a story, and nothing listed there is ever reported.
+It reads replies the refine already has, so it costs no extra call. It does cost tokens, though: measured against a built-in prompt it adds around 150 to a request of about 1,600, so roughly a tenth more on every refine while it is on. **Phrases to leave alone** takes one per line: a repeated line can be the point of a story, and nothing listed there is ever reported.
 
 Honest about the limits: the thresholds are a starting point rather than a tuned answer, and a long chat with a consistent setting will eventually flag that setting's own vocabulary. **Phrases to leave alone** is the way out of that, not cleverness on this end.
 
@@ -111,7 +111,7 @@ and a chat with no memories sends `Keep these in mind.` on its own, pointing at 
 
 `{{memories}}` is Lumiverse's own name for this, and it holds Lumiverse's own answer: the pieces it would have retrieved for the chat, as many as your chat memory settings ask for, written out with your own header and chunk templates. How many is not a setting here on purpose, because your chat and your refine working from different amounts of the same thing is a difference nobody would think to look for. A chat with memory switched off, or one with nothing vectorised yet, gives nothing back and the block is left out.
 
-**The block that carries it, What has happened before now, ships switched off.** It is the one block whose size is decided by your chat memory settings rather than by anything on this tab, and it is sent on every refine. Switch it on under **Prompt** when you want the refine to read the story from further back than the run-up. Nothing else about the macro changes: it works the moment the block is on.
+**The block that carries it, What has happened before now, starts switched off.** It is the one block whose size is decided by your chat memory settings rather than by anything on this tab, and it is sent on every refine. Switch it on under **Prompt** when you want the refine to read the story from further back than the run-up. Nothing else about the macro changes: it works the moment the block is on.
 
 `{{protect_notes}}` is the one exception and is written out here so nothing goes unread. It has a block of its own, **Protected Formatting**, which is what lets it sit in a tag like the other macros: a block that comes out as nothing but its tags is dropped whole, so on a refine that protected nothing the tag goes with the words. Kept inside **How to Answer**, which always has writing in it, an empty pair would be sent every time instead. When protection is on and it has hidden something, it becomes: *Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.* Those tokens are this extension's own invention, so nothing in your chat could describe them; when protection finds nothing to hide, the macro becomes nothing.
 
@@ -129,17 +129,17 @@ They are resolved in that order for a reason. Ours go in **last**, after the hos
 
 The turn is last by default, and that is worth keeping. Anything after the message reads as an instruction about it, so a rule placed below it is more likely to be followed, and a block of narration placed below it is more likely to be treated as something to act on. A new block goes in above the turn unless you move it.
 
-The other reason order matters is how often each part moves. The shipped order runs from what never changes to what changes every time:
+The other reason order matters is how often each part moves. The built-in order runs from what never changes to what changes every time:
 
 1. **The rules.** Identical on every refine in every chat.
 2. **The setting**: who the story follows, who you are writing with, what is true in its world. Identical for a whole chat.
-3. **What has happened before now.** Lumiverse's own memory of the chat, which grows as the chat does. Off in every shipped prompt, and this is where it goes when you switch it on.
+3. **What has happened before now.** Lumiverse's own memory of the chat, which grows as the chat does. Off in all four built-in prompts, and this is where it goes when you switch it on.
 4. **The pages before this one.** Redrawn every turn.
 5. **The passage.** Different every time.
 6. **How to Answer.** Below the passage on purpose, and sent as **User** rather than **System**.
 7. **Protected Formatting.** The note about the tokens standing in for formatting, when there is anything to say. Empty on any refine that protected nothing, and a block holding nothing but an empty tag is not sent at all, so most refines carry six blocks here rather than seven.
 
-Every shipped prompt is built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule. Nothing looked broken.
+All four are built this way, and there is a check that fails if one stops being. It is worth knowing because getting it wrong is invisible: an earlier version put the run-up third, which put a block that is redrawn every turn above every rule. Nothing looked broken.
 
 **Why the last one breaks the pattern.** A rule about the shape of an answer is followed most closely when it is the last thing read. Put it at the top and the model has the whole prompt between that rule and the answer it writes, and some models hand back a rewrite with the tags missing or wrapped around the wrong thing. That rule is also the one you cannot work around: a rewrite without its tags is dropped rather than saved, so a model that forgets them costs you the call.
 
@@ -158,7 +158,7 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 This is worth more than it sounds. Without it, a model that opens with "Sure! Here is the rewritten message:" has its whole answer dropped, because saving that line into your chat is worse than saving nothing. With it, the sentence outside the tags is simply ignored and the rewrite lands. It also catches an answer that ran out of room: an opening tag with nothing closing it means the rewrite was cut off, and a half-written message is never saved.
 
-**Asking for the tags is your prompt's job, not a macro's.** The prompts that ship with it ask in the **How to Answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` filling it in for you, and that is the point: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
+**Asking for the tags is your prompt's job, not a macro's.** The built-in prompts ask in the **How to Answer** block, in plain words sitting in a text box you can reword, move or delete. There is no `{{output_format}}` filling it in for you, and that is the point: an instruction you cannot see is one you cannot argue with, and this one is worth arguing with.
 
 **Take the answer from between the tags**, under Limits, is the reading half and is on by default. It decides what is done with an answer, never what is asked for. Off, the whole answer is taken as the rewrite and the older checks catch a preamble instead.
 
@@ -205,9 +205,9 @@ What comes back outside the tags is dropped rather than written into the message
 
 The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<REFINED>` and `</REFINED>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 
-## The prompts that ship with it
+## The prompts built in
 
-Eight, which is the same four shapes twice: once for refining a reply, and once for refining what you wrote yourself. Two questions decide which of the four you want: does your model reason, and how much of the ground do you want covered.
+Four: a line edit for a reply and a copy edit for what you wrote yourself, each written twice. One question decides which of the two you want, and that is whether your model reasons.
 
 ### For replies
 
@@ -222,15 +222,15 @@ The name says the job rather than the size, because the size is not the thing wo
 
 The reasoning pair is the smaller one on purpose. A model that reasons is given the standard and left to apply it. A model that does not is given the list, because it will match a list and will not derive one from a principle.
 
-The rules themselves are specific, not general. "Cut clichés" gives a model nothing to act on; the shipped prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
+The rules themselves are specific, not general. "Cut clichés" gives a model nothing to act on; the built-in prompts name the phrases, and they are the ones that turn up in machine-written roleplay several times a session and in published fiction almost never: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, an emotion given as a mixture of two others.
 
 All four work as they stand. Load one, change whatever you like, save it under a name of your own.
 
-**When these change in a later version, the Prompt tab says so.** One line with a **Got it** that puts it away. It appears only if you have loaded one of the eight before, since a prompt that is your own is not affected by theirs moving. It never touches your prompt and it never loads one for you: loading writes over the list you are on, so that stays your call.
+**When these change in a later version, the Prompt tab says so.** One line with a **Got it** that puts it away. It appears only if you have loaded one of the four before, since a prompt of your own is not affected by theirs moving. It never touches your prompt and it never loads one for you: loading writes over the list you are on, so that stays your call.
 
 ### For your own messages
 
-The same four shapes, written for a different job. A reply is prose to improve; your own turn is writing to leave alone except where it went wrong, so these say what to mend and then stop.
+The same two, written for a different job. A reply is prose to improve; your own turn is writing to leave alone except where it went wrong, so these say what to mend and then stop.
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
@@ -273,7 +273,7 @@ Braces are left alone on purpose. A macro sitting in a reply is already safe, be
 
 **Bare inline formatting stays visible.** `<i>`, `<b>`, `<em>` and the rest wrap words in the middle of a sentence, and replacing them with tokens hands the model a sentence with holes in it. That made the rewrite worse to protect something the model was unlikely to break. They stay where they are, and the prompt tells it to leave them alone. **Hide plain italic and bold too** puts them behind tokens as well if you would rather. A tag carrying an attribute, a colour span for instance, is hidden either way: the attribute is the part a rewrite is likely to lose.
 
-Protection catches what it can find. The prompts that ship with it also carry a **What to leave** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
+Protection catches what it can find. The built-in prompts also carry a **What to leave** block, because the two cover different holes: a stat block, a translation line beside the original, a tracker somebody's card prints every turn, none of those are wrapped in tags, so nothing can lift them out and only the instruction keeps them intact.
 
 **Keep the reply's own reasoning out of the refine** is separate and also on by default. A reasoning model's working is not your writing, and a rewrite of it would sit in a place nobody looks. It is cut off before the refine and put back exactly as it was.
 
@@ -366,15 +366,15 @@ If no reply can be found it still builds, with a stand-in where your message wou
 
 ## Starting a block from nothing
 
-A new block is empty. The prompts that ship with it use XML tags because that is what works, but a tag is a style, not a rule, and a new block should not arrive already written in somebody else's.
+A new block is empty. The built-in prompts use XML tags because that is what works, but a tag is a style, not a rule, and a new block should not arrive already written in somebody else's.
 
 **Expand** opens a block in an editor the size of the screen, which is where a paragraph is actually comfortable to write. It does not put the cursor in the box: focusing a textarea is what raises the keyboard on a phone, and it would cover the thing you just opened. The preview has one too, for reading, with no editing.
 
 ## Presets
 
-At the bottom of the **Prompt** tab, presets save a whole setup under a name and switch between them without copying anything by hand. The eight that ship with it are always in the list and cannot be renamed or deleted, so there is always something to go back to.
+At the bottom of the **Prompt** tab, presets save a whole setup under a name and switch between them without copying anything by hand. The four built in are always in the list and cannot be renamed or deleted, so there is always something to go back to.
 
-**The menu shows the four for the list you are editing, not all eight.** Each shipped preset carries one prompt and not the other, so loading a **For your messages** one while you are editing replies would change the prompt you are not looking at and leave the one you are looking at alone. Switching lists switches which four are offered. Your own are not filtered: one of yours can carry either prompt, or both, and you are the one who saved it.
+**The menu shows the two for the list you are editing, not all four.** Each built-in preset carries one prompt and not the other, so loading a **For your messages** one while you are editing replies would change the prompt you are not looking at and leave the one you are looking at alone. Switching lists switches which two are offered. Your own are not filtered: one of yours can carry either prompt, or both, and you are the one who saved it.
 
 What a preset carries is everything that decides how a refine reads:
 
@@ -388,7 +388,7 @@ What stays yours whichever preset you load is everything else: whether refining 
 
 **Model setup to load with it** is how to use the two together anyway. Pick one of your saved model setups on the preset card and loading that preset loads that setup as well, so a way of reading and the model that runs it arrive in one press. Leave it at **None** and the Model tab is left alone.
 
-The link lives on a preset you saved. The eight that ship with the extension are fixed, so there is nowhere on one of those to write it, and **Update selected** is greyed out on them. Picking a setup with a shipped prompt selected still works: press **Save as new** and your copy keeps the link. The card says so while you are there, so the pick does not look like it took and then go quietly.
+The link lives on a preset you saved. The four built in are fixed, so there is nowhere on one of those to write it, and **Update selected** is greyed out on them. Picking a setup with a built-in prompt selected still works: press **Save as new** and your copy keeps the link. The card says so while you are there, so the pick does not look like it took and then go quietly.
 
 It is stored as the setup's name rather than its values, which is what lets a preset still be shared: a setup holds a connection id, and an id from another account names nothing on yours. If you load a preset that asks for a setup this device does not have, the preset still loads and the card tells you which setup it wanted.
 

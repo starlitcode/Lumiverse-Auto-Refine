@@ -1705,7 +1705,7 @@ const LIMIT_FIELDS = [
         type: "lines",
         needs: { key: "passMode", is: "many" },
         under: true,
-        hint: "One preset name per line, top to bottom, up to six. Yours or one that ships with it, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass. Each pass is one model call, so six passes cost six times one.",
+        hint: "One preset name per line, top to bottom, up to six. Yours or one of the built-in prompts, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass. Each pass is one model call, so six passes cost six times one.",
     },
     {
         key: "wornOn",
@@ -5110,8 +5110,8 @@ export function setup(ctx, overrides) {
             const line = el("div", "arf-row arf-note");
             line.setAttribute("data-arf-moveddefault", "1");
             const what = el("span", "", (moved.length === 1
-                ? "A setting this ships with has changed in this update, and you were on the old one. "
-                : "Some settings this ships with have changed in this update, and you were on the old ones. ") +
+                ? "A default setting has changed in this update, and you were on the old one. "
+                : "Some default settings have changed in this update, and you were on the old ones. ") +
                 moved.map((m) => m.label + ": " + m.why).join(" ") +
                 " Yours is still the old value until you take the new one.");
             what.style.flex = "1";
@@ -6175,7 +6175,7 @@ export function setup(ctx, overrides) {
                 // since that setting is about refines rather than about this.
                 if (f.key === "wornOn" && box.checked && noWornBlock()) {
                     const why = "No block in your prompt has {{overused}} in it, so there is nowhere to put " +
-                        "the worn phrases. Add one under Prompt, or load a prompt that ships with it.";
+                        "the worn phrases. Add one under Prompt, or load one of the built-in prompts.";
                     toast(why, true);
                     log("worn phrases are on, but " + why.charAt(0).toLowerCase() + why.slice(1));
                 }
@@ -6566,7 +6566,7 @@ export function setup(ctx, overrides) {
         if (shippedMoved()) {
             const moved = el("div", "arf-row arf-note");
             moved.setAttribute("data-arf-shippedmoved", "1");
-            const what = el("span", "", "The prompts that ship with Auto Refine have changed since you last loaded one. Yours is untouched. To take the new wording, load one from the card below, which writes over the list you are on.");
+            const what = el("span", "", "The built-in prompts have changed since you last loaded one. Yours is untouched. To take the new wording, load one from the card below, which writes over the list you are on.");
             what.style.flex = "1";
             moved.appendChild(what);
             const gotIt = button("Got it", false);
@@ -8097,7 +8097,7 @@ export function setup(ctx, overrides) {
             key: "inputSelector",
             label: "The selectors it looks under",
             type: "text",
-            hint: "Separated by commas. Emptying the box falls back to the list this shipped with.",
+            hint: "Separated by commas. Emptying the box falls back to the built-in list.",
         }));
         const row = el("div", "arf-row");
         row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
@@ -8131,7 +8131,7 @@ export function setup(ctx, overrides) {
         // The way back, beside the thing it puts back. Editing a selector is how
         // somebody ends up with a box that finds nothing, so the reset is here
         // rather than on another card.
-        const put = button("Use the shipped list", false);
+        const put = button("Use the built-in list", false);
         put.setAttribute("data-arf-resetinput", "1");
         put.addEventListener("click", () => {
             cfg.inputSelector = INPUT_PICKS.join(", ");
@@ -8153,7 +8153,7 @@ export function setup(ctx, overrides) {
             const picks = inputPicks();
             list.setAttribute("data-arf-mine", String(picks.length));
             const blank = !splitSelectorList(String(cfg.inputSelector || "")).length;
-            list.appendChild(el("div", "arf-note", blank ? "The box is empty, so the list this shipped with is used." : "Tried in this order."));
+            list.appendChild(el("div", "arf-note", blank ? "The box is empty, so the built-in list is used." : "Tried in this order."));
             // A selector the browser cannot read is a typo, and Test cannot point at
             // it: that answers for the box as a whole, and one bad selector among
             // several good ones leaves the whole box still reading as valid. So the
@@ -8769,7 +8769,7 @@ export function setup(ctx, overrides) {
             {
                 id: PART_PRESETS,
                 label: "Saved presets",
-                what: "The ones you saved. The eight that ship with the extension are always there and are never in a file.",
+                what: "The ones you saved. The four built in are always there and are never in a file.",
             },
             {
                 id: PART_SETUPS,
@@ -9286,7 +9286,7 @@ export function setup(ctx, overrides) {
         return allPresets().find((p) => p.name === presetPick) || null;
     }
     function buildPresetCard() {
-        const wrap = card("Presets", "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
+        const wrap = card("Presets", "Four are built in and work as they stand: a line edit for replies and a copy edit for your own messages, each written once for any model and once for a model that reasons. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
         const sel = document.createElement("select");
         sel.className = "arf-field";
         sel.setAttribute("aria-label", "Saved presets");
@@ -9446,7 +9446,7 @@ export function setup(ctx, overrides) {
         // selected is greyed out on a shipped prompt and switching the picker puts
         // the box back to what the next preset carries. Without this line the pick
         // looks like it took and then goes without a word.
-        const shippedSaid = note("The prompts that ship with the extension cannot hold this. Press Save as new and the copy keeps it.");
+        const shippedSaid = note("A built-in prompt cannot hold this. Press Save as new and the copy keeps it.");
         shippedSaid.setAttribute("data-arf-shipped-setup", "1");
         const sayShipped = () => {
             shippedSaid.hidden = !presetSetup || !isBuiltIn(presetPick);
@@ -9468,7 +9468,7 @@ export function setup(ctx, overrides) {
             const drift = note(isBuiltIn(presetPick)
                 ? "You have changed the prompt since loading " +
                     presetPick +
-                    ". A prompt that ships with the extension cannot be written over, so put a name in the box and press Save as new to keep this."
+                    ". A built-in prompt cannot be written over, so put a name in the box and press Save as new to keep this."
                 : "You have changed the prompt since loading " +
                     presetPick +
                     ". Press Update selected to keep it, or Save as new for a second copy.");
@@ -9522,7 +9522,7 @@ export function setup(ctx, overrides) {
                 return;
             }
             if (isBuiltIn(name)) {
-                presetSaid = "That name belongs to a prompt that ships with the extension. Pick another.";
+                presetSaid = "That name belongs to a built-in prompt. Pick another.";
                 paint();
                 return;
             }
@@ -9615,7 +9615,7 @@ export function setup(ctx, overrides) {
             const which = BUILT_IN_PROMPTS.find((p) => p.name === presetPick);
             if (which)
                 wrap.appendChild(note(which.what));
-            wrap.appendChild(note("One of the ones that ship with the extension. Picking it loaded it, so change it however you like and save it under a name of your own."));
+            wrap.appendChild(note("One of the four built in. Picking it loaded it, so change it however you like and save it under a name of your own."));
         }
         if (presetSaid) {
             const said = note(presetSaid);

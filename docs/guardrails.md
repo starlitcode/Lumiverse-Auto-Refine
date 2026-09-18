@@ -30,7 +30,7 @@ That narrowness misses some real softening, and it is the right way round: a mis
 
 ### The word that arrives in its place
 
-Counting what left only sees half of it. When a model tones a scene down it does not just take the blunt word out, it puts a softer one in: killed becomes unalived, blood becomes crimson liquid, sex becomes intimacy. The same check reads that end too, from a list of pairs that ships with the extension.
+Counting what left only sees half of it. When a model tones a scene down it does not just take the blunt word out, it puts a softer one in: killed becomes unalived, blood becomes crimson liquid, sex becomes intimacy. The same check reads that end too, from a built-in list of pairs.
 
 A pair is refused only when **both halves happen**. The soft word has to be in the rewrite and not in your reply, and the blunt word it stands in for has to have been in your reply and gone from the rewrite. Either half on its own proves nothing: a model can write eliminate about a possibility, and a refine can drop the word kill while tightening a line. Together they are the model swapping one for the other.
 
