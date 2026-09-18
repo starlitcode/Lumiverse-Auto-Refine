@@ -4249,29 +4249,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-slot:hover{color:var(--lumiverse-text,rgba(255,255,255,.92))}" +
     ".arf-slot:focus-visible{outline:2px solid var(--lumiverse-primary,#8b5cf6);" +
     "outline-offset:2px}" +
-    // The metrics of the host's own buttons in the row above the input box:
-    // fourteen across, drawn with a stroke of 2. The mark is written with a
-    // finer stroke than that, which is right at the sizes it is drawn large,
-    // and beside a row of heavier marks reads as the faint one. The weight is
-    // set here rather than in the mark, so only the marks standing in somebody
-    // else's row are changed by it.
-    ".arf-slot svg{display:block;width:14px;height:14px;stroke-width:2}" +
-    // The row of actions on a message draws a pixel smaller than the row above
-    // the input box does. Standing in either at any other size is the one mark
-    // in it that reads as an addition.
-    ".arf-slot-in svg{width:13px;height:13px}" +
+    ".arf-slot svg{display:block;width:14px;height:14px}" +
     // While a refine is running. It stays pressable, because pressing it is how
-    // somebody is told one is already going.
-    ".arf-slot[aria-busy=true]{opacity:.55}" +
+    // somebody is told one is already going. On the attribute rather than the
+    // class, because a button standing in one of the host's rows wears the
+    // host's classes and not this extension's.
+    "[data-arf-slot][aria-busy=true]{opacity:.55}" +
     // The message one is a block in the message's own column, so it needs a row
     // of its own to sit in. Centred, which is where the host puts the row of
     // buttons under it.
     ".arf-slot-row{display:flex;justify-content:center;align-items:center;" +
     "padding:2px 0}" +
-    // A finger gets a wider target in the row that is ours to lay out. In one
-    // of the host's own rows the row sets the height, and a taller button of
-    // ours would push it out for the sake of a target the buttons either side
-    // of it do not have.
+    // A finger gets a wider target in the row that is this extension's to lay
+    // out. A button in one of the host's rows is padded the way that row pads
+    // its own, since a taller one would push the row out for the sake of a
+    // target the buttons either side of it do not have.
     "@media (pointer:coarse){.arf-slot-row .arf-slot{padding:9px}}";
 
   let styleEl: any = null;
@@ -11653,8 +11645,74 @@ export function setup(ctx: Ctx, overrides?: any) {
   const MSG_FOOT = '[data-spindle-mount="message_footer"]';
   const MSG_SLOT = MSG_ACTIONS + "," + MSG_FOOT;
 
-  const inActions = (node: Element): boolean =>
-    String(node.getAttribute("data-spindle-mount") || "") === "message_actions";
+  // The row the host puts a message's own buttons in. There is one in every
+  // display mode and it is found differently in each: the bubble marks its row
+  // with a component name, and the row in the other mode carries nothing but
+  // hashed classes, so it is found from a button that is in it either way.
+  // Whichever it turns out to be, the buttons belong in it, so that a message
+  // has one row of things you can do to it rather than two.
+  function actionBar(msg: Element): Element | null {
+    try {
+      const pill = msg.querySelector('[data-component="BubbleActions"]');
+      if (pill) return pill;
+      const edit = msg.querySelector('button[title="Edit"]');
+      if (edit && edit.parentElement) return edit.parentElement;
+    } catch (_) {}
+    return null;
+  }
+
+  // The button the host put in a row, for the next one to be made in its image.
+  // The first, because the last is often a delete carrying a warning colour of
+  // its own and the one before the end of the input bar is a gear with a class
+  // of its own, and neither is what the rest of the row looks like.
+  function hostButton(bar: Element): HTMLElement | null {
+    try {
+      const all = bar.querySelectorAll("button");
+      for (let i = 0; i < all.length; i++) {
+        const one = all[i] as HTMLElement;
+        if (!one.hasAttribute("data-arf-slot")) return one;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // How a button in one of the host's rows looks, taken off the button beside
+  // it rather than written down in here.
+  //
+  // The host's classes carry a build hash, so they cannot be written into this
+  // file: read off the live button they are on, they are right on every build,
+  // and a build that changes them is followed rather than broken by. It also
+  // means a theme, or CSS somebody wrote themselves, reaches these buttons the
+  // same way it reaches the host's own, because to a stylesheet they are the
+  // host's own. Matching the look by hand instead was four numbers guessed from
+  // one screenshot, and it was only ever going to be right on that theme.
+  //
+  // The mark is sized and weighted from the host's too. It is drawn with a
+  // finer stroke than the host uses, which is right where it is drawn large and
+  // reads as the faint one in a row of heavier marks.
+  function dressLikeHost(b: HTMLElement, like: HTMLElement | null): boolean {
+    if (!like) return false;
+    try {
+      // Only when there is something to wear. The host's own buttons in one of
+      // the display modes carry no class at all, because the row styles the
+      // buttons in it, and a button of ours carrying an empty class attribute
+      // where the host's carry none is one more thing that is not quite the
+      // same as the rest of the row.
+      const worn = String(like.className || "");
+      if (worn) b.className = worn;
+      const ours = b.querySelector("svg");
+      const theirs = like.querySelector("svg");
+      if (ours && theirs) {
+        const carry = ["width", "height", "stroke-width"];
+        for (let i = 0; i < carry.length; i++) {
+          const v = theirs.getAttribute(carry[i]);
+          if (v) ours.setAttribute(carry[i], v);
+        }
+      }
+      return true;
+    } catch (_) {}
+    return false;
+  }
   // Set while this is writing into the page, so the watcher below does not
   // answer its own insertions.
   let filling = false;
@@ -11671,18 +11729,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     title: string,
     run: () => void,
     art?: () => string,
-    inline?: boolean,
+    like?: HTMLElement | null,
   ): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
-    // Standing in the host's own row means being the size of the buttons it is
-    // standing in. A mark drawn a pixel larger, or a target padded wider for a
-    // finger, is the one thing in that row that does not line up with the rest.
-    b.className = inline ? "arf-slot arf-slot-in" : "arf-slot";
     b.setAttribute("data-arf-slot", kind);
     b.title = title;
     b.setAttribute("aria-label", title);
     b.innerHTML = art ? art() : eyeIcon();
+    // Dressed as one of the host's own where there is one to copy, and left to
+    // this extension's own look only where there is not.
+    if (!dressLikeHost(b, like || null)) b.className = "arf-slot";
     // Marked as already drawn for the pass that keeps these in step with
     // whether a refine is running. Without it that pass found no mark on a
     // button it had just been handed, decided the icon was out of date and
@@ -11751,8 +11808,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (wantBar) {
         const bar = document.querySelector(BAR_SLOT);
         if (bar) {
+          // The host leaves this mount inside its own row of controls rather
+          // than beside it, so what goes in it is laid out by that row. The
+          // button to copy is therefore one of that row's, not one of the
+          // mount's, which holds only ours.
+          const like = hostButton(bar.parentElement || bar);
           if (!bar.querySelector('[data-arf-slot="bar"]'))
-            bar.appendChild(slotButton("bar", "Refine the latest reply", () => refineNow()));
+            bar.appendChild(
+              slotButton("bar", "Refine the latest reply", () => refineNow(), undefined, like),
+            );
           // The toolbar answers a selection the same way the row under a
           // message does. Somebody who would rather not have a button under
           // every reply can keep those switched off and still reach the two
@@ -11769,6 +11833,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 "Refine the part I selected",
                 () => refinePicked(),
                 partIcon,
+                like,
               ),
             );
           if (holding && !snip)
@@ -11778,6 +11843,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 "Take out what I selected",
                 () => snipPicked(),
                 snipIcon,
+                like,
               ),
             );
           if (!holding) {
@@ -11794,36 +11860,38 @@ export function setup(ctx: Ctx, overrides?: any) {
         // buttons. Picked per message rather than once for the page, because a
         // mode change redraws the messages one at a time and a page holding
         // both for a moment would otherwise draw the buttons twice on one.
+        // One message per id, whichever of its mounts was found first. The
+        // mount is only how a message and its id are come by; where the buttons
+        // actually go is decided from the message itself, below.
         const picked: Record<string, Element> = {};
         for (let i = 0; i < slots.length; i++) {
           const slot = slots[i];
           const id = slotId(slot);
-          if (!id) continue;
-          const held = picked[id];
-          if (!held || (!inActions(held) && inActions(slot))) picked[id] = slot;
-        }
-        for (let i = 0; i < slots.length; i++) {
-          const slot = slots[i];
-          const id = slotId(slot);
-          // Whatever was left in the mount this message is no longer using,
-          // which is what a change of display mode leaves behind.
-          if (!id || picked[id] === slot) continue;
-          try {
-            const stale2 = slot.querySelectorAll("[data-arf-slot]");
-            for (let k = 0; k < stale2.length; k++) stale2[k].remove();
-            const oldRow = slot.querySelector(".arf-slot-row");
-            if (oldRow) oldRow.remove();
-          } catch (_) {}
+          if (!id || picked[id]) continue;
+          picked[id] = slot;
         }
         for (const id in picked) {
           const slot = picked[id];
-          const inline = inActions(slot);
-          // In the row of actions the buttons stand beside the host's own, so
-          // there is nothing to put them in: the mount lays its children out as
-          // though it were not there. Under a message they are a block in the
-          // message's own column and need a row of their own.
-          let into: Element = slot;
-          if (!inline) {
+          // The message this mount belongs to, and the row of buttons the host
+          // drew on it. Only one display mode leaves a mount inside that row,
+          // and the row is there in both, so the row is what is looked for.
+          const msg = (slot as any).closest
+            ? (slot as any).closest("[data-message-id]") || slot.parentElement
+            : slot.parentElement;
+          const bar = msg ? actionBar(msg) : null;
+          // Inside the row: the host's own mount when it left one there, and
+          // the row itself when it did not. Either way the buttons end up laid
+          // out by that row, beside the host's own.
+          //
+          // With no row at all, a row of this extension's own under the
+          // message, which is what that row was always for.
+          let into: Element;
+          let like: HTMLElement | null = null;
+          if (bar) {
+            like = hostButton(bar);
+            const mount = bar.querySelector(MSG_ACTIONS);
+            into = mount || bar;
+          } else {
             let row = slot.querySelector(".arf-slot-row") as HTMLElement | null;
             if (!row) {
               row = document.createElement("div");
@@ -11832,6 +11900,23 @@ export function setup(ctx: Ctx, overrides?: any) {
             }
             into = row;
           }
+          // Anything this message is holding anywhere else, which is what a
+          // change of display mode leaves behind: a row under a message that
+          // has since grown one of its own, or buttons in a row that has since
+          // gone away.
+          if (msg)
+            try {
+              const stale2 = msg.querySelectorAll("[data-arf-slot]");
+              for (let k = 0; k < stale2.length; k++) {
+                const one = stale2[k] as HTMLElement;
+                if (one.parentElement !== into) one.remove();
+              }
+              const rows = msg.querySelectorAll(".arf-slot-row");
+              for (let k = 0; k < rows.length; k++) {
+                const one = rows[k] as HTMLElement;
+                if (one !== into && !one.querySelector("[data-arf-slot]")) one.remove();
+              }
+            } catch (_) {}
           if (!into.querySelector('[data-arf-slot="message"]'))
             into.appendChild(
               slotButton(
@@ -11839,7 +11924,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 "Refine this message",
                 () => refineOne(id),
                 undefined,
-                inline,
+                like,
               ),
             );
           // The two that only make sense against a selection, and only on the
@@ -11863,7 +11948,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 "Refine the part I selected",
                 () => refinePicked(),
                 partIcon,
-                inline,
+                like,
               ),
             );
           if (mine && !snip)
@@ -11873,7 +11958,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 "Take out what I selected",
                 () => snipPicked(),
                 snipIcon,
-                inline,
+                like,
               ),
             );
           if (!mine) {

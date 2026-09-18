@@ -104,11 +104,13 @@ _2026-09-17_
 
 - **The button that refines a whole message steps aside while you have text selected in it.** Three marks sat in a row, two of them eyes, and the one that ignored your selection looked like the one that used it. Only on that message: a selection in one says nothing about what you might want in another.
 
-- **The buttons in the chat stand in Lumiverse's own rows now.** The one under a message sat in a row of its own, centred under the text, with the app's Copy, Edit and the rest in their row above it. Two rows of buttons on one message, one of them holding a single button, and nothing about the lower one said it belonged to the same message as the upper one.
+- **The buttons in the chat stand in Lumiverse's own rows, dressed as its own buttons.** The one under a message sat in a row of its own, centred under the text, with the app's Copy, Edit and the rest in their row above it. Two rows of buttons on one message, one of them holding a single button, and nothing about the lower one said it belonged to the same message as the upper one.
 
-  Lumiverse leaves a place for extensions at the end of its row of message buttons, so that is where it goes now. A display mode that lays no such row out gets the old row under the message, which is what that row was for.
+  Every display mode draws a row of buttons on a message, in a different place and under a different name, so the row is found rather than assumed. The buttons go in it. A display mode that draws no row at all gets the old row under the message, which is what that row was for.
 
-  Both buttons are drawn at the size the row they stand in draws its own, and with the same weight of line. The mark is written with a finer stroke than Lumiverse uses, which is right at the sizes it is drawn large and reads as the faint one in a row of heavier marks, so standing in one of those rows sets the weight to match. A finger is given a wider target only in the row that is this extension's to lay out: in one of Lumiverse's rows the row sets the height, and a taller button would push it out for the sake of a target the buttons either side of it do not have.
+  How they look is no longer decided by this extension at all. Each one takes the classes off the button standing next to it, and its mark takes that button's size and line weight. Those classes carry a build hash, so they could never have been written down in here; read off the button they are already on, they are right on every build and follow a Lumiverse update rather than break on one.
+
+  That is also what puts these buttons inside your own styling. A theme reaches them, and so does CSS you wrote yourself, because to a stylesheet they are Lumiverse's buttons. Matching the look by hand instead, which is what this did first, was a set of numbers guessed from one screenshot on one theme, and it was never going to hold on anybody else's.
 
 - **A refine no longer spins a ring. The eye reads.** The pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back.
 

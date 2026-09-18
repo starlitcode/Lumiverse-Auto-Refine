@@ -7352,28 +7352,64 @@ console.log("\nthe buttons in Lumiverse's own slots");
     </div>
   </div>`;
 
-  // The same two messages in a display mode that lays out a row of actions.
-  // The host's own buttons come first and its mount sits at the end of the row,
-  // laying its children out as though it were not there, so anything put in it
-  // stands in the row rather than under it. The footer mount is on the page as
-  // well, because the host offers both and only one of them should be used.
-  const MESSAGES_WITH_ACTIONS = `
+  // The bubble display mode. The host's own buttons in the pill carry no class
+  // at all: the pill styles the buttons in it, which is why a button put in it
+  // has to be bare rather than dressed by this extension. Its mount sits at the
+  // end of the pill and lays its children out as though it were not there.
+  const MESSAGES_BUBBLE = `
   <div id="wrap">
-    <div class="_bubble_86318_171">
+  <style>
+    ._actionsPill{display:flex;align-items:center;gap:2px;padding:3px}
+    ._actionsPill button{width:26px;height:26px;padding:0;background:none;border:0;
+      border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+  </style>
+    <div class="_bubble_86318_171" data-message-id="msg-one">
       <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>The lamp over the bench had been out for a week.</p></div></div>
-      <div data-component="BubbleActions" class="_actionsPill" style="display:flex;align-items:center;gap:2px">
-        <button type="button" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24"></svg></button>
-        <button type="button" title="Edit" aria-label="Edit"><svg width="13" height="13" viewBox="0 0 24 24"></svg></button>
+      <div data-component="BubbleActions" class="_pill_yv4ev_2 _actionsPill">
+        <button type="button" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"></rect></svg></button>
+        <button type="button" title="Edit" aria-label="Edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5 4 4"></path></svg></button>
         <span data-spindle-mount="message_actions" data-spindle-scope="message:msg-one:actions" style="display:contents"></span>
       </div>
       <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:footer" style="display:contents"></span>
     </div>
-    <div class="_bubble_86318_171">
+    <div class="_bubble_86318_171" data-message-id="msg-two">
       <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>She left the crate where it was and went back inside.</p></div></div>
-      <div data-component="BubbleActions" class="_actionsPill" style="display:flex;align-items:center;gap:2px">
-        <button type="button" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24"></svg></button>
+      <div data-component="BubbleActions" class="_pill_yv4ev_2 _actionsPill">
+        <button type="button" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"></rect></svg></button>
         <span data-spindle-mount="message_actions" data-spindle-scope="message:msg-two:actions" style="display:contents"></span>
       </div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-two:footer" style="display:contents"></span>
+    </div>
+  </div>`;
+
+  // The other display mode. Its row of actions carries nothing but hashed
+  // classes and the host leaves no mount inside it, so the row has to be found
+  // from a button that is in it and the buttons put in the row itself. Each of
+  // the host's own carries the classes that decide how it looks, which is what
+  // a button of this extension's has to be wearing to look like one of them.
+  const MESSAGES_MINIMAL = `
+  <div id="wrap">
+  <style>
+    ._actions_zwpor_1{display:flex;align-items:center;gap:2px}
+    ._btnIconSm_1jhj2_239{width:24px;height:24px;padding:4px;background:none;border:0;
+      border-radius:5px;display:inline-flex;align-items:center;justify-content:center}
+    ._btnGhost_1jhj2_218{color:rgba(255,255,255,.6)}
+    ._btnDangerGhost_1jhj2_247{color:#ef4444}
+  </style>
+    <div class="_bubble_86318_171" data-message-id="msg-one">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>The lamp over the bench had been out for a week.</p></div></div>
+      <div class="_actionsWrap_86318_304"><div class="_actions_zwpor_1">
+        <button type="button" class="_btn_1jhj2_166 _btnGhost_1jhj2_218 _btnIconSm_1jhj2_239" title="Edit" aria-label="Edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5 4 4"></path></svg></button>
+        <button type="button" class="_btn_1jhj2_166 _btnGhost_1jhj2_218 _btnIconSm_1jhj2_239" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2"></rect></svg></button>
+        <button type="button" class="_btn_1jhj2_166 _btnDangerGhost_1jhj2_247 _btnIconSm_1jhj2_239" title="Delete" aria-label="Delete"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path></svg></button>
+      </div></div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:footer" style="display:contents"></span>
+    </div>
+    <div class="_bubble_86318_171" data-message-id="msg-two">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>She left the crate where it was and went back inside.</p></div></div>
+      <div class="_actionsWrap_86318_304"><div class="_actions_zwpor_1">
+        <button type="button" class="_btn_1jhj2_166 _btnGhost_1jhj2_218 _btnIconSm_1jhj2_239" title="Edit" aria-label="Edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 5 4 4"></path></svg></button>
+      </div></div>
       <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-two:footer" style="display:contents"></span>
     </div>
   </div>`;
@@ -7534,73 +7570,76 @@ console.log("\nthe buttons in Lumiverse's own slots");
       JSON.stringify(out.cleared));
   });
 
-  // Standing in the row above the input box means being drawn the way that row
-  // is drawn. The host's own buttons there are the neighbours, so they are what
-  // this measures against rather than a number written down here.
+  // The row above the input box, where the host does leave a mount, but inside
+  // its own row rather than beside it. The mount holds only this extension's
+  // buttons, so the one to copy is one of the row's, and what it is copied for
+  // is the same thing: the app's stylesheet and anybody's own CSS reach these
+  // buttons because to a stylesheet they are the host's own.
   await inTab(browser, { saved: { enabled: true, barButton: true } }, async (page) => {
     await draw(page, MESSAGES);
     const out = await page.evaluate(async () => {
-      const bar = document.querySelector('[data-spindle-mount="chat_actions"]');
-      const ours = bar.querySelector('[data-arf-slot="bar"]');
-      const row = bar.parentElement;
-      // Every button the host put in that row, ours left out.
+      const mount = document.querySelector('[data-spindle-mount="chat_actions"]');
+      const ours = mount.querySelector('[data-arf-slot="bar"]');
+      const row = mount.parentElement;
       const theirs = Array.from(row.querySelectorAll("button")).filter(
         (b) => !b.hasAttribute("data-arf-slot"),
       );
-      const size = (n) => {
-        const box = n.querySelector("svg").getBoundingClientRect();
-        return { w: Math.round(box.width), h: Math.round(box.height) };
-      };
-      const weight = (n) => getComputedStyle(n.querySelector("svg")).strokeWidth;
+      const svg = (n) => n.querySelector("svg");
+      const numbers = (n) => ({
+        w: svg(n).getAttribute("width"),
+        h: svg(n).getAttribute("height"),
+        ink: svg(n).getAttribute("stroke-width"),
+      });
       return {
         count: theirs.length,
-        mark: size(ours),
-        theirMarks: theirs.map(size),
-        ink: weight(ours),
-        theirInk: theirs.map(weight),
-        tall: Math.round(ours.getBoundingClientRect().height),
-        theirTall: theirs.map((n) => Math.round(n.getBoundingClientRect().height)),
-        // In the row itself, not in a box of ours sitting in the row.
-        sibling: ours.parentElement === bar && getComputedStyle(bar).display === "contents",
+        wears: ours.getAttribute("class"),
+        // The first of the host's, which is the plain one. The last in this row
+        // is a gear carrying a class of its own.
+        theirWears: theirs[0].getAttribute("class"),
+        gearWears: theirs[theirs.length - 1].getAttribute("class"),
+        mark: numbers(ours),
+        theirMark: numbers(theirs[0]),
+        box: Math.round(ours.getBoundingClientRect().height),
+        theirBox: theirs.map((n) => Math.round(n.getBoundingClientRect().height)),
       };
     });
-    ok("the host's row really has its own buttons to match", out.count >= 8, JSON.stringify(out.count));
-    ok("our mark is the size the host draws its own",
-      out.theirMarks.every((m) => m.w === out.mark.w && m.h === out.mark.h),
-      JSON.stringify({ ours: out.mark, theirs: out.theirMarks[0] }));
-    ok("and drawn at the same weight",
-      out.theirInk.every((w) => w === out.ink),
-      JSON.stringify({ ours: out.ink, theirs: out.theirInk[0] }));
-    ok("so the row does not grow around ours",
-      out.theirTall.every((h) => Math.abs(h - out.tall) <= 1),
-      JSON.stringify({ ours: out.tall, theirs: out.theirTall }));
-    ok("and it stands in the row rather than in a box of its own", out.sibling,
-      JSON.stringify(out.sibling));
+    ok("the host's row really has its own buttons to copy", out.count >= 8, JSON.stringify(out.count));
+    ok("ours wears exactly what the host's own buttons wear",
+      out.wears === out.theirWears, JSON.stringify({ ours: out.wears, theirs: out.theirWears }));
+    ok("copied from a plain one rather than from the gear",
+      out.gearWears !== out.theirWears && out.wears !== out.gearWears,
+      JSON.stringify({ ours: out.wears, gear: out.gearWears }));
+    ok("and its mark carries the host's own numbers",
+      JSON.stringify(out.mark) === JSON.stringify(out.theirMark),
+      JSON.stringify({ ours: out.mark, theirs: out.theirMark }));
+    ok("so the row does not grow around it",
+      out.theirBox.every((h) => Math.abs(h - out.box) <= 1),
+      JSON.stringify({ ours: out.box, theirs: out.theirBox }));
   });
 
-  // A finger gets the wider target only where the row is ours to lay out. In
-  // one of the host's rows a taller button of ours pushes the row out.
+  // Somebody's own CSS, written against the host's own class, reaches these
+  // buttons too. That is the thing hand-matching a look could never do, and the
+  // reason the classes are copied rather than approximated.
   await inTab(
     browser,
-    { saved: { enabled: true, barButton: true }, viewport: { width: 390, height: 844 }, touch: true },
+    {
+      saved: { enabled: true, barButton: true },
+      css: "._actionBtn_1unc0_113{padding:11px !important;border-radius:14px !important}",
+    },
     async (page) => {
       await draw(page, MESSAGES);
       const out = await page.evaluate(async () => {
-        const bar = document.querySelector('[data-spindle-mount="chat_actions"]');
-        const ours = bar.querySelector('[data-arf-slot="bar"]');
-        const theirs = Array.from(bar.parentElement.querySelectorAll("button")).filter(
-          (b) => !b.hasAttribute("data-arf-slot"),
-        );
-        return {
-          pad: getComputedStyle(ours).paddingTop,
-          tall: Math.round(ours.getBoundingClientRect().height),
-          theirTall: Math.round(theirs[0].getBoundingClientRect().height),
+        const mount = document.querySelector('[data-spindle-mount="chat_actions"]');
+        const ours = mount.querySelector('[data-arf-slot="bar"]');
+        const theirs = mount.parentElement.querySelector("button:not([data-arf-slot])");
+        const read = (n) => {
+          const c = getComputedStyle(n);
+          return c.paddingTop + "/" + c.borderTopLeftRadius;
         };
+        return { ours: read(ours), theirs: read(theirs) };
       });
-      ok("on a phone, the one in the host's row keeps the host's padding", out.pad === "5px",
-        JSON.stringify(out));
-      ok("so it is still the height of the buttons beside it",
-        Math.abs(out.tall - out.theirTall) <= 1, JSON.stringify(out));
+      ok("a rule somebody wrote for the host's buttons lands on ours as well",
+        out.ours === out.theirs && out.ours === "11px/14px", JSON.stringify(out));
     },
   );
 
@@ -7688,79 +7727,150 @@ console.log("\nthe buttons in Lumiverse's own slots");
       JSON.stringify(out.after));
   });
 
-  // Standing in the host's own row of actions rather than in a row of our own
-  // under the message. Everything a message can have done to it then reads as
-  // one row, which is what it is.
+  // Dressed as one of the host's own buttons rather than styled to look like
+  // one. The classes it wears are read off the button beside it, so the app's
+  // stylesheet and anything somebody wrote themselves reach it the same way
+  // they reach the rest of the row. Those classes carry a build hash, so they
+  // could never have been written into the extension.
   await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
-    await draw(page, MESSAGES_WITH_ACTIONS);
+    await draw(page, MESSAGES_BUBBLE);
     const out = await page.evaluate(async () => {
-      const mount = document.querySelector('[data-spindle-scope^="message:msg-one"][data-spindle-mount="message_actions"]');
-      const pill = mount.parentElement;
+      const pill = document.querySelector('[data-message-id="msg-one"] [data-component="BubbleActions"]');
       const ours = pill.querySelector('[data-arf-slot="message"]');
+      const theirs = pill.querySelector("button:not([data-arf-slot])");
+      const svg = (n) => n.querySelector("svg");
       return {
-        // In the row, not under it, and on both messages.
-        inRow: document.querySelectorAll(
-          '[data-spindle-mount="message_actions"] [data-arf-slot="message"]',
+        inPill: document.querySelectorAll(
+          '[data-component="BubbleActions"] [data-arf-slot="message"]',
         ).length,
-        // The footer mount is on the page too and must stay empty, or the
-        // buttons are drawn twice on one message.
+        rows: document.querySelectorAll(".arf-slot-row").length,
+        // Nothing of this extension's own left on it.
+        wears: ours.getAttribute("class"),
+        theirWears: theirs.getAttribute("class"),
+        // The mark carries the host's own numbers, taken off its svg.
+        mark: {
+          w: svg(ours).getAttribute("width"),
+          h: svg(ours).getAttribute("height"),
+          ink: svg(ours).getAttribute("stroke-width"),
+        },
+        theirMark: {
+          w: svg(theirs).getAttribute("width"),
+          h: svg(theirs).getAttribute("height"),
+          ink: svg(theirs).getAttribute("stroke-width"),
+        },
+        // Which is the whole point: the pill's own rule for the buttons in it
+        // lands on this one, so it is the size the row makes its buttons.
+        box: Math.round(ours.getBoundingClientRect().width) + "x" +
+          Math.round(ours.getBoundingClientRect().height),
+        theirBox: Math.round(theirs.getBoundingClientRect().width) + "x" +
+          Math.round(theirs.getBoundingClientRect().height),
+      };
+    });
+    ok("the bubble's pill gets the button, on both messages", out.inPill === 2, JSON.stringify(out.inPill));
+    ok("with no row of this extension's own drawn", out.rows === 0, JSON.stringify(out.rows));
+    ok("it wears exactly what the host's own buttons wear",
+      out.wears === out.theirWears, JSON.stringify({ ours: out.wears, theirs: out.theirWears }));
+    ok("and its mark carries the host's own numbers",
+      JSON.stringify(out.mark) === JSON.stringify(out.theirMark),
+      JSON.stringify({ ours: out.mark, theirs: out.theirMark }));
+    ok("so the row's own rule sizes it exactly as it sizes the rest",
+      out.box === out.theirBox, JSON.stringify({ ours: out.box, theirs: out.theirBox }));
+  });
+
+  // The other display mode, where the host leaves no mount in the row at all.
+  // The row is found from a button that is in it, and the classes come off that
+  // button, which is the only way to wear a name carrying a build hash.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES_MINIMAL);
+    const out = await page.evaluate(async () => {
+      const row = document.querySelector('[data-message-id="msg-one"] ._actions_zwpor_1');
+      const ours = row.querySelector('[data-arf-slot="message"]');
+      const theirs = row.querySelector("button:not([data-arf-slot])");
+      return {
+        found: !!ours,
+        // In the row itself, since there is no mount in it to go in.
+        inRow: ours ? ours.parentElement === row : false,
+        // On both messages, and not left under them.
+        count: document.querySelectorAll('._actions_zwpor_1 [data-arf-slot="message"]').length,
+        rows: document.querySelectorAll(".arf-slot-row").length,
         inFooter: document.querySelectorAll(
           '[data-spindle-mount="message_footer"] [data-arf-slot]',
         ).length,
-        // No row of our own anywhere, since the host's row is the row.
-        rows: document.querySelectorAll(".arf-slot-row").length,
-        // In the host's own mount and nothing else. The mount lays its children
-        // out as though it were not there, so a button in it is laid out by the
-        // row; a box of ours in between would be one flex item holding all of
-        // them, which is the row under the message all over again.
-        sibling: !!ours && ours.parentElement === mount &&
-          getComputedStyle(mount).display === "contents",
-        // After everything the host put in the row, since the mount is where
-        // the host chose to leave room and it left it at the end.
-        last: pill.lastElementChild === mount && mount.lastElementChild === ours,
-        // The same height as the buttons it stands next to, so the row does
-        // not grow around ours.
-        tall: ours ? Math.round(ours.getBoundingClientRect().height) : -1,
-        theirs: Math.round(pill.querySelector("button").getBoundingClientRect().height),
-        mark: ours ? Math.round(ours.querySelector("svg").getBoundingClientRect().width) : -1,
+        wears: ours ? ours.getAttribute("class") : "",
+        // The first of the host's, not the last: the last is a delete and
+        // carries a warning colour that has nothing to do with a refine.
+        theirWears: theirs.getAttribute("class"),
+        danger: /danger/i.test(ours ? ours.getAttribute("class") || "" : ""),
+        box: ours
+          ? Math.round(ours.getBoundingClientRect().width) + "x" +
+            Math.round(ours.getBoundingClientRect().height)
+          : "",
+        theirBox: Math.round(theirs.getBoundingClientRect().width) + "x" +
+          Math.round(theirs.getBoundingClientRect().height),
       };
     });
-    ok("the buttons stand in the host's row of actions", out.inRow === 2, JSON.stringify(out));
-    ok("and nothing is left in the footer under it", out.inFooter === 0, JSON.stringify(out));
-    ok("with no row of our own drawn at all", out.rows === 0, JSON.stringify(out));
-    ok("each one a sibling of the host's own buttons", out.sibling, JSON.stringify(out));
-    ok("sitting after them rather than among them", out.last, JSON.stringify(out));
-    ok("the same height as the buttons beside it", Math.abs(out.tall - out.theirs) <= 1,
-      JSON.stringify(out));
-    ok("and the mark drawn at the size the host draws its own", out.mark === 13,
-      JSON.stringify(out));
+    ok("a row with no mount in it still gets the button", out.found && out.inRow, JSON.stringify(out));
+    ok("on every message", out.count === 2, JSON.stringify(out.count));
+    ok("and nothing is left under them", out.inFooter === 0 && out.rows === 0, JSON.stringify(out));
+    ok("it wears the hashed classes the host's own buttons wear",
+      out.wears === out.theirWears, JSON.stringify({ ours: out.wears, theirs: out.theirWears }));
+    ok("copied from a plain one rather than from the delete", !out.danger, JSON.stringify(out.wears));
+    ok("so the host's own rules size it exactly as they size the rest",
+      out.box === out.theirBox, JSON.stringify({ ours: out.box, theirs: out.theirBox }));
+  });
+
+  // Changing display mode mid-chat. The host tears its row out and draws a
+  // different one, and the buttons have to follow it rather than stay in the
+  // row that went away or sit in both at once.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES_MINIMAL);
+    const out = await page.evaluate(async (bubble) => {
+      const where = () => ({
+        inMinimal: document.querySelectorAll('._actions_zwpor_1 [data-arf-slot]').length,
+        inPill: document.querySelectorAll(
+          '[data-component="BubbleActions"] [data-arf-slot]',
+        ).length,
+        rows: document.querySelectorAll(".arf-slot-row").length,
+        // Every one of ours on the page, so a button stranded anywhere at all
+        // shows up as more than the two that should exist.
+        all: document.querySelectorAll("[data-arf-slot]").length,
+      });
+      const before = where();
+      // The host swaps the whole list out for the other mode's markup.
+      const old = document.getElementById("wrap");
+      const next = document.createElement("div");
+      next.innerHTML = bubble;
+      old.replaceWith(next.firstElementChild);
+      await new Promise((r) => setTimeout(r, 700));
+      return { before, after: where() };
+    }, MESSAGES_BUBBLE);
+    ok("before the change they are in the row that mode draws",
+      out.before.inMinimal === 2 && out.before.inPill === 0, JSON.stringify(out.before));
+    ok("after it they are in the row the other mode draws",
+      out.after.inPill === 2 && out.after.inMinimal === 0, JSON.stringify(out.after));
+    ok("with none stranded anywhere and no row of ours left behind",
+      out.after.all === 2 && out.after.rows === 0, JSON.stringify(out.after));
   });
 
   // A selection puts the same two in the host's row, and takes the plain one
-  // out of it, exactly as it does in a row of our own.
+  // out of it, exactly as it does in a row of this extension's own.
   await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
-    await draw(page, MESSAGES_WITH_ACTIONS);
+    await draw(page, MESSAGES_BUBBLE);
     const out = await page.evaluate(async () => {
-      const count = () => {
-        const pill = document.querySelector('[data-spindle-scope^="message:msg-one"][data-spindle-mount="message_actions"]')
-          .parentElement;
-        return {
-          part: pill.querySelectorAll('[data-arf-slot="part"]').length,
-          snip: pill.querySelectorAll('[data-arf-slot="snip"]').length,
-          whole: Array.from(pill.querySelectorAll('[data-arf-slot="message"]')).filter(
-            (n) => getComputedStyle(n).display !== "none",
-          ).length,
-          // The host's own buttons are untouched by any of this.
-          theirs: pill.querySelectorAll("button:not([data-arf-slot])").length,
-        };
-      };
+      const pill = () =>
+        document.querySelector('[data-message-id="msg-one"] [data-component="BubbleActions"]');
+      const count = () => ({
+        part: pill().querySelectorAll('[data-arf-slot="part"]').length,
+        snip: pill().querySelectorAll('[data-arf-slot="snip"]').length,
+        whole: Array.from(pill().querySelectorAll('[data-arf-slot="message"]')).filter(
+          (n) => getComputedStyle(n).display !== "none",
+        ).length,
+        // The host's own are untouched by any of this.
+        theirs: pill().querySelectorAll("button:not([data-arf-slot])").length,
+      });
       const before = count();
-      // By the footer mount, since that is the one sitting in the message
-      // itself. The actions mount is inside the row of buttons, which holds no
-      // text to select.
       const host = document
-        .querySelector('[data-spindle-scope^="message:msg-one"][data-spindle-mount="message_footer"]')
-        .parentElement.querySelector("p");
+        .querySelector('[data-message-id="msg-one"] [data-component="MessageContent"] p');
       const node = host.firstChild;
       const at = node.nodeValue.indexOf("The lamp");
       const r = document.createRange();
@@ -7771,30 +7881,35 @@ console.log("\nthe buttons in Lumiverse's own slots");
       document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
       await new Promise((r2) => setTimeout(r2, 400));
       const after = count();
-      // The ones actually on screen. The plain button is stepped aside while
-      // the selection is up, and something set to display:none measures zero
-      // wide, which is not a mark drawn at the wrong size.
-      const marks = Array.from(
-        document.querySelectorAll('[data-spindle-mount="message_actions"] [data-arf-slot]'),
-      )
+      // Every one of ours on screen, measured against one of the host's.
+      const theirBox = (() => {
+        const n = pill().querySelector("button:not([data-arf-slot])");
+        const b = n.getBoundingClientRect();
+        return Math.round(b.width) + "x" + Math.round(b.height);
+      })();
+      const boxes = Array.from(pill().querySelectorAll("[data-arf-slot]"))
         .filter((n) => getComputedStyle(n).display !== "none")
-        .map((n) => Math.round(n.querySelector("svg").getBoundingClientRect().width));
+        .map((n) => {
+          const b = n.getBoundingClientRect();
+          return Math.round(b.width) + "x" + Math.round(b.height);
+        });
       getSelection().removeAllRanges();
       document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
       await new Promise((r2) => setTimeout(r2, 400));
-      return { before, after, cleared: count(), marks };
+      return { before, after, cleared: count(), boxes, theirBox };
     });
-    ok("nothing selected, one button of ours in the row", out.before.whole === 1 && out.before.part === 0,
-      JSON.stringify(out.before));
-    ok("a selection puts both of the others in it", out.after.part === 1 && out.after.snip === 1,
-      JSON.stringify(out.after));
-    ok("and the plain one steps aside in the row", out.after.whole === 0, JSON.stringify(out.after));
-    ok("every mark on screen drawn at the host's size",
-      out.marks.length === 3 && out.marks.every((w) => w === 13), JSON.stringify(out.marks));
-    ok("the host's own buttons are left alone throughout", out.before.theirs === 2 && out.after.theirs === 2,
-      JSON.stringify(out));
-    ok("putting the selection away leaves the row as it was", out.cleared.whole === 1 && out.cleared.part === 0,
-      JSON.stringify(out.cleared));
+    ok("nothing selected, one button of this extension's in the pill",
+      out.before.whole === 1 && out.before.part === 0, JSON.stringify(out.before));
+    ok("a selection puts both of the others in it",
+      out.after.part === 1 && out.after.snip === 1, JSON.stringify(out.after));
+    ok("and the plain one steps aside in the pill", out.after.whole === 0, JSON.stringify(out.after));
+    ok("all three sized by the row, the same as the host's own",
+      out.boxes.length === 2 && out.boxes.every((b) => b === out.theirBox),
+      JSON.stringify({ ours: out.boxes, theirs: out.theirBox }));
+    ok("the host's own buttons are left alone throughout",
+      out.before.theirs === 2 && out.after.theirs === 2, JSON.stringify(out));
+    ok("putting the selection away leaves the pill as it was",
+      out.cleared.whole === 1 && out.cleared.part === 0, JSON.stringify(out.cleared));
   });
 
   // What the two of them send.
