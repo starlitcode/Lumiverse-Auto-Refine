@@ -4033,12 +4033,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Only the eyes with nothing else to say. The floating button is shut
     // because no refine is running, which is a fact about the extension rather
     // than about where your pointer is, so pointing at it changes nothing.
+    // Only where there is a real pointer. A phone has no hover, and tapping a
+    // button leaves it matching :hover in most mobile browsers until something
+    // else is tapped, so without this the eye sat open on whichever button you
+    // last used. Focus is outside the guard: reaching a button by keyboard
+    // should open its eye on any device.
+    "@media (hover: hover){" +
     "button:hover .arf-eye.arf-wakes .arf-eye-ball," +
-    "button:focus-visible .arf-eye.arf-wakes .arf-eye-ball," +
     "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-ball{transform:none;opacity:1}" +
     "button:hover .arf-eye.arf-wakes .arf-eye-lid," +
-    "button:focus-visible .arf-eye.arf-wakes .arf-eye-lid," +
-    "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-lid{opacity:0}" +
+    "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-lid{opacity:0}}" +
+    "button:focus-visible .arf-eye.arf-wakes .arf-eye-ball{transform:none;opacity:1}" +
+    "button:focus-visible .arf-eye.arf-wakes .arf-eye-lid{opacity:0}" +
     // Waking. An eye that has just been drawn opens, stays open long enough to
     // be seen, and settles shut again. No fill mode on purpose: once it has
     // played the element falls back to the rules above, so a hover straight

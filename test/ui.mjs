@@ -2559,7 +2559,54 @@ console.log("\nthe eye on the floating button");
     const hovered = await ball(sel);
     ok("and opens when the pointer is on it", hovered && hovered.open === 1,
       JSON.stringify(hovered));
+
+    // Keyboard reaches the same state, on any device.
+    await page.evaluate((q) => {
+      document.querySelector(q).blur();
+      document.querySelector(q).focus();
+    }, sel);
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 340)));
+    const focused = await ball(sel);
+    ok("and to a keyboard as well as a pointer", focused && focused.open === 1,
+      JSON.stringify(focused));
   });
+
+  // A phone has no hover, and tapping a button leaves it matching :hover in most
+  // mobile browsers until something else is tapped. Without a guard the eye sat
+  // open on whichever button was last used, which is the one state it must never
+  // be left in by a tap.
+  await inTab(
+    browser,
+    { saved: { enabled: true, messageButton: true }, viewport: { width: 390, height: 844 }, touch: true },
+    async (page) => {
+      await page.evaluate(async (markup) => {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = markup;
+        document.body.appendChild(wrap.firstElementChild);
+        (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+        await new Promise((r) => setTimeout(r, 700));
+      }, ONE_MESSAGE);
+      const sel = '[data-arf-slot="message"]';
+      // Past the wake, so what is read is where the eye rests.
+      await page.evaluate(() => new Promise((r) => setTimeout(r, 1700)));
+      await page.hover(sel);
+      await page.evaluate(() => new Promise((r) => setTimeout(r, 340)));
+      const after = await page.evaluate((q) => {
+        const b = document.querySelector(q);
+        const svg = b && b.querySelector(".arf-eye");
+        return svg
+          ? {
+              open: Number(getComputedStyle(svg.querySelector(".arf-eye-ball")).opacity),
+              stuck: b.matches(":hover"),
+            }
+          : null;
+      }, sel);
+      ok("the button really is left matching hover, or this proves nothing",
+        after && after.stuck === true, JSON.stringify(after));
+      ok("and the eye stays shut on a touch screen all the same",
+        after && after.open === 0, JSON.stringify(after));
+    },
+  );
 
   // The ring that fills while the button is held, which is the only thing
   // saying a hold is under way before the menu arrives. Auto Retry draws the
