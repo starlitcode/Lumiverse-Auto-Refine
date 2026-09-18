@@ -7508,6 +7508,90 @@ console.log("\nthe buttons in Lumiverse's own slots");
       JSON.stringify(out.cleared));
   });
 
+  // The same thing in the toolbar, with the message buttons switched off, so
+  // the toolbar is carrying them on its own. Somebody who wants one button in
+  // the chat rather than one under every reply can still reach both of the
+  // actions that work on a selection.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: false } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const pick = (text) => {
+        const host = document
+          .querySelector('[data-spindle-scope^="message:msg-one"]')
+          .parentElement.querySelector("p");
+        const node = host.firstChild;
+        const at = node.nodeValue.indexOf(text);
+        const r = document.createRange();
+        r.setStart(node, at);
+        r.setEnd(node, at + text.length);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      };
+      const bar = '[data-spindle-mount="chat_actions"] ';
+      const count = () => ({
+        part: document.querySelectorAll(bar + '[data-arf-slot="bar-part"]').length,
+        snip: document.querySelectorAll(bar + '[data-arf-slot="bar-snip"]').length,
+        // The plain one, and whether it is drawn. It steps aside for the same
+        // reason the one under a message does: two eyes side by side, one of
+        // them ignoring the selection, is a guess rather than a choice.
+        whole: Array.from(document.querySelectorAll(bar + '[data-arf-slot="bar"]')).filter(
+          (n) => getComputedStyle(n).display !== "none",
+        ).length,
+        // Nothing appeared under the messages, which are switched off here.
+        under: document.querySelectorAll('[data-spindle-mount="message_footer"] [data-arf-slot]').length,
+      });
+      const before = count();
+      pick("The lamp");
+      await new Promise((r) => setTimeout(r, 400));
+      const after = count();
+      // The same two buttons, not two new ones drawn over the old ones every
+      // pass. Marked here and looked for again after several redraws: a button
+      // that is thrown away and rebuilt loses whatever its mark was in the
+      // middle of, and the host redraws this chrome constantly.
+      const marked = document.querySelector(bar + '[data-arf-slot="bar-part"]');
+      if (marked) marked.__kept = true;
+      const cutter = document.querySelector(bar + '[data-arf-slot="bar-snip"]');
+      if (cutter) cutter.__kept = true;
+      await new Promise((r) => setTimeout(r, 700));
+      const kept = {
+        part: !!(document.querySelector(bar + '[data-arf-slot="bar-part"]') || {}).__kept,
+        snip: !!(document.querySelector(bar + '[data-arf-slot="bar-snip"]') || {}).__kept,
+        // Its own label, not the one the plain button carries.
+        said: (document.querySelector(bar + '[data-arf-slot="bar-snip"]') || {}).getAttribute
+          ? document.querySelector(bar + '[data-arf-slot="bar-snip"]').getAttribute("aria-label")
+          : "",
+      };
+      window.__sent.length = 0;
+      document.querySelector(bar + '[data-arf-slot="bar-snip"]').click();
+      await new Promise((r) => setTimeout(r, 80));
+      const cut = window.__sent.filter((m) => m.type === "snip_selection");
+      getSelection().removeAllRanges();
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      const cleared = count();
+      return { before, after, cleared, cut, kept, one: cut[0] || null };
+    });
+    ok("with nothing selected the toolbar holds one button", out.before.whole === 1 && out.before.part === 0 && out.before.snip === 0,
+      JSON.stringify(out.before));
+    ok("selecting part of a reply puts both in the toolbar", out.after.part === 1 && out.after.snip === 1,
+      JSON.stringify(out.after));
+    ok("and the plain one steps aside there too", out.after.whole === 0, JSON.stringify(out.after));
+    ok("the toolbar pair survives the host's redraws", out.kept.part && out.kept.snip,
+      JSON.stringify(out.kept));
+    ok("and keeps the label for what it does", out.kept.said === "Take out what I selected",
+      JSON.stringify(out.kept));
+    ok("the toolbar scissors send a snip", out.cut.length === 1, JSON.stringify(out.cut));
+    ok("naming the message the selection was in", !!out.one && out.one.messageId === "msg-one",
+      JSON.stringify(out.one));
+    ok("putting the selection away takes both off", out.cleared.part === 0 && out.cleared.snip === 0,
+      JSON.stringify(out.cleared));
+    ok("and brings the plain one back", out.cleared.whole === 1, JSON.stringify(out.cleared));
+    ok("with the message buttons off, nothing is drawn under a reply", out.after.under === 0,
+      JSON.stringify(out.after));
+  });
+
   // What the two of them send.
   await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
     await draw(page, MESSAGES);

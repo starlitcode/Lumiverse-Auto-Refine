@@ -2243,18 +2243,16 @@ function partIcon(state?: "read"): string {
 
 // Scissors, because that is what taking a selection out is.
 //
-// Each arm is its own group: a handle and the blade it drives, which is how a
-// real pair is put together and what lets them work. They turn about the point
-// the two blades actually cross, so the tips close on each other rather than the
-// whole mark rocking.
-function snipIcon(state?: "cut"): string {
+// Still, and meant to be. Taking a selection out asks no model anything and is
+// over the moment it is pressed, so there is no stretch of time for a mark to
+// fill. The eye moves because a refine takes long enough to be waited on.
+function snipIcon(): string {
   return (
-    '<svg class="arf-snip' + (state ? " arf-snip-" + state : "") + '" ' +
-    'viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
     'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
     'stroke-linejoin="round" aria-hidden="true">' +
-    '<g class="arf-snip-a"><circle cx="6" cy="6" r="2.6" /><path d="M8.2 7.6L20 18" /></g>' +
-    '<g class="arf-snip-b"><circle cx="6" cy="18" r="2.6" /><path d="M8.2 16.4L20 6" /></g>' +
+    '<circle cx="6" cy="6" r="2.6" /><circle cx="6" cy="18" r="2.6" />' +
+    '<path d="M8.2 7.6L20 18" /><path d="M8.2 16.4L20 6" />' +
     "</svg>"
   );
 }
@@ -3396,7 +3394,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     if (!on && busy && runStartedAt) lastRunMs = Date.now() - runStartedAt;
     busy = on;
-    if (!on) runKind = "";
     paintEyes(on);
     stage = on ? why || stage || "asking" : "";
     tickLive();
@@ -4192,18 +4189,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     "animation:arf-stop " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
     ".arf-eye.arf-eye-stop .arf-eye-lid{" +
     "animation:arf-stop-lid " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
-    // ---- the scissors ----
-    // The two arms turn about the point their blades cross, which is where a
-    // real pair is pinned. Opposite directions and the same amount, so the tips
-    // meet in the middle rather than the mark drifting to one side.
-    ".arf-snip .arf-snip-a,.arf-snip .arf-snip-b{" +
-    "transform-box:view-box;transform-origin:13.2px 12px}" +
-    "@keyframes arf-snip-a{0%,100%{transform:none}52%{transform:rotate(-8deg)}}" +
-    "@keyframes arf-snip-b{0%,100%{transform:none}52%{transform:rotate(8deg)}}" +
-    ".arf-snip.arf-snip-cut .arf-snip-a{animation:arf-snip-a 720ms ease-in-out infinite}" +
-    ".arf-snip.arf-snip-cut .arf-snip-b{animation:arf-snip-b 720ms ease-in-out infinite}" +
-    "@media (prefers-reduced-motion: reduce){" +
-    ".arf-snip.arf-snip-cut .arf-snip-a,.arf-snip.arf-snip-cut .arf-snip-b{animation:none}}" +
     // A reader who has asked for less movement gets the eye open and still
     // wherever it is drawn. A mark that never moves is better open than shut:
     // shut is only readable next to the open one, and there would be no open one
@@ -11318,10 +11303,18 @@ export function setup(ctx: Ctx, overrides?: any) {
       // than open. This runs from the clock, two and a half times a second
       // while a refine is in flight, so that is every state change lost.
       // Which mark this button is showing. The eye at rest and for a plain
-      // refine, and the mark for the thing itself while it refines a selection
-      // or takes one out: a button drawing an eye while it cuts is a button
-      // describing something other than what it is doing.
-      const doingNow = (busy || snipping) && runKind ? runKind : "eye";
+      // refine, and the selection mark while it refines a selection, which is a
+      // model call and takes as long as one. Taking a selection out is not on
+      // this list: it is over the moment it is pressed, so a mark for it would
+      // be put up and taken down inside a frame.
+      //
+      // Held past the end of the refine, until the closing has played out.
+      // Keyed on whether a refine is running, the mark was swapped back the
+      // instant one stopped, so the selection mark vanished and a plain eye
+      // appeared to do the closing. The mark you were watching has to be the
+      // one that closes, and it can: it is the same eye underneath, with the
+      // same lid and the same pupil, drawn narrower with a bracket either side.
+      const doingNow = runKind === "part" ? "part" : "eye";
       const box = el2.querySelector && el2.querySelector(".arf-glyph");
       if (box && el2.getAttribute("data-arf-icon") !== mark + ":" + doingNow) {
         el2.setAttribute("data-arf-icon", mark + ":" + doingNow);
@@ -11329,11 +11322,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // waking animation, and the button would open itself every time it was
         // resized while nothing was running.
         box.innerHTML =
-          doingNow === "snip"
-            ? snipIcon("cut")
-            : doingNow === "part"
-              ? partIcon("read")
-              : eyeIcon("shut", Number(mark));
+          doingNow === "part" ? partIcon("read") : eyeIcon("shut", Number(mark));
         const drawn = box.querySelector("svg");
         if (drawn) {
           drawn.setAttribute("width", mark);
@@ -11350,7 +11339,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // moment the button has something to tell them. It is left alone while it
       // plays, because this runs from the clock two and a half times a second
       // and rewriting the class would restart the blink on every tick.
-      const eye = doingNow === "eye" && el2.querySelector ? el2.querySelector(".arf-eye") : null;
+      const eye = el2.querySelector ? el2.querySelector(".arf-eye") : null;
       if (eye) {
         const now = String(eye.getAttribute("class") || "");
         if (working) {
@@ -11372,6 +11361,12 @@ export function setup(ctx: Ctx, overrides?: any) {
               if (held.indexOf("arf-eye-done") >= 0 || held.indexOf("arf-eye-stop") >= 0)
                 eye.setAttribute("class", "arf-eye arf-eye-shut");
             } catch (_) {}
+            // Only now does the selection mark hand back to the plain one. Any
+            // earlier and it would be taken off the screen mid-close.
+            if (runKind) {
+              runKind = "";
+              paintFloat();
+            }
           }, overIn + 60);
         } else if (
           now.indexOf("arf-eye-done") < 0 &&
@@ -11722,8 +11717,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         const stale = document.querySelectorAll("[data-arf-slot]");
         for (let i = 0; i < stale.length; i++) {
           const one = stale[i] as HTMLElement;
-          const kind = one.getAttribute("data-arf-slot");
-          if (kind === "bar" ? wantBar : wantMsg) continue;
+          const kind = String(one.getAttribute("data-arf-slot") || "");
+          // The toolbar carries three of these now, so which setting a button
+          // answers to is read from where it sits rather than from one name.
+          if (kind.indexOf("bar") === 0 ? wantBar : wantMsg) continue;
           const row = one.parentElement;
           try {
             one.remove();
@@ -11731,14 +11728,52 @@ export function setup(ctx: Ctx, overrides?: any) {
           } catch (_) {}
         }
       }
+      // Read once for both sets of buttons. The toolbar and the row under a
+      // message are answering the same question, so they should be answering it
+      // off the same reading of it.
+      const holding = pickedHere();
       if (wantBar) {
         const bar = document.querySelector(BAR_SLOT);
-        if (bar && !bar.querySelector('[data-arf-slot="bar"]'))
-          bar.appendChild(slotButton("bar", "Refine the latest reply", () => refineNow()));
+        if (bar) {
+          if (!bar.querySelector('[data-arf-slot="bar"]'))
+            bar.appendChild(slotButton("bar", "Refine the latest reply", () => refineNow()));
+          // The toolbar answers a selection the same way the row under a
+          // message does. Somebody who would rather not have a button under
+          // every reply can keep those switched off and still reach the two
+          // that work on a selection, and what the marks mean does not change
+          // between the two places they appear.
+          const whole = bar.querySelector('[data-arf-slot="bar"]') as HTMLElement | null;
+          if (whole) whole.style.display = holding ? "none" : "";
+          const part = bar.querySelector('[data-arf-slot="bar-part"]');
+          const snip = bar.querySelector('[data-arf-slot="bar-snip"]');
+          if (holding && !part)
+            bar.appendChild(
+              slotButton(
+                "bar-part",
+                "Refine the part I selected",
+                () => refinePicked(),
+                partIcon,
+              ),
+            );
+          if (holding && !snip)
+            bar.appendChild(
+              slotButton(
+                "bar-snip",
+                "Take out what I selected",
+                () => snipPicked(),
+                snipIcon,
+              ),
+            );
+          if (!holding) {
+            try {
+              if (part) part.remove();
+              if (snip) snip.remove();
+            } catch (_) {}
+          }
+        }
       }
       if (wantMsg) {
         const slots = document.querySelectorAll(MSG_SLOT);
-        const holding = pickedHere();
         for (let i = 0; i < slots.length; i++) {
           const slot = slots[i];
           const id = slotId(slot);
@@ -11824,11 +11859,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     for (let i = 0; i < found.length; i++) {
       const one = found[i] as HTMLElement;
-      const slot = one.getAttribute("data-arf-slot");
+      const slot = String(one.getAttribute("data-arf-slot") || "");
       // The selection buttons draw their own mark and never spin: neither of
-      // them is the thing that is running.
-      if (slot === "part" || slot === "snip") {
-        const off = slot === "snip" ? snipping || busy : busy;
+      // them is the thing that is running. Both places they sit in are read the
+      // same way here, so a toolbar pair behaves like the pair under a message.
+      const cuts = slot === "snip" || slot === "bar-snip";
+      if (cuts || slot === "part" || slot === "bar-part") {
+        const off = cuts ? snipping || busy : busy;
         if (off) one.setAttribute("aria-busy", "true");
         else one.removeAttribute("aria-busy");
         continue;
@@ -12004,8 +12041,8 @@ export function setup(ctx: Ctx, overrides?: any) {
           pickedRun = null;
           // Three different surfaces: paint redraws the panel's own button,
           // syncExtras puts the row in the chat input's menu up or takes it
-          // down, and fillSlots does the same for the two buttons that sit on
-          // the message itself.
+          // down, and fillSlots does the same for the two buttons in the
+          // toolbar and the two that sit on the message itself.
           paint();
           syncExtrasSoon();
           fillSlotsSoon();
@@ -12066,10 +12103,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the session, so it is given the same five seconds every other request gets.
   function snipDone() {
     snipping = false;
-    if (runKind === "snip") {
-      runKind = "";
-      paintFloat();
-    }
     if (snipTimer) {
       clearTimeout(snipTimer);
       snipTimer = null;
@@ -12094,8 +12127,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       return;
     }
     snipping = true;
-    runKind = "snip";
-    paintFloat();
     if (snipTimer) clearTimeout(snipTimer);
     snipTimer = setTimeout(() => {
       snipTimer = null;

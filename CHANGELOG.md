@@ -28,13 +28,15 @@ _2026-09-17_
 
   This is the two buttons in the chat: the one in the toolbar and the one under a message. The panel and the floating button already had a stop of their own.
 
-- **Two buttons for the part you selected**, on the message you selected it in. Suggested by a Discord user.
+- **Two buttons for the part you selected.** Suggested by a Discord user.
 
   **Refine the part I selected** does what the panel entry of the same name does, without opening the panel.
 
   **Take out what I selected** deletes the selection. There is no model call, so it costs nothing and is as quick as pressing it.
 
-  Both appear only while text is selected, and only on the message holding the selection, so neither is ever a button sitting there doing nothing. Both need **A button on each message** switched on, under **Ways to reach it**.
+  Both appear only while text is selected, so neither is ever a button sitting there doing nothing. With **A button on every message** on they appear under the message holding the selection, and nowhere else. With **A button in the chat's row of controls** on they appear in the toolbar too, wherever in the chat the selection is. Either switch on its own is enough, and both are under **Ways to reach it**.
+
+  In both places the button that starts a plain refine steps aside while something is selected, so what is in front of you is what to do with the text you picked. It comes back when you put the selection down.
 
   Taking text out closes the gap the way a person would. One space between two halves rather than two, no space left in front of a full stop, and a paragraph taken out leaves one blank line rather than two. Nothing else in the message is touched.
 
@@ -92,7 +94,7 @@ _2026-09-17_
 
   **Refine the part I selected** carries the same eye with a bracket at either side of it, so the pair reads as "all of it" and "this much of it". **Take out what I selected** is still a pair of scissors, because taking text out is a different thing from reading it.
 
-  The floating button shows the mark for whatever it is running. Refining a selection puts that mark up, reading. Taking one out puts the scissors up, and their blades close and open while they work: each arm is a handle and the blade it drives, turning about the point the two blades cross, which is where a real pair is pinned. A plain refine is the eye.
+  The floating button shows the mark for whatever it is running: the selection mark while it refines a selection, the eye for a plain refine. Taking a selection out is not on that list, since it is over the moment it is pressed.
 
 - **Every mark moves together.** The drawer tab, the heading on the panel, the buttons in the chat and the floating button all read while a refine is running, and all rest shut when nothing is.
 

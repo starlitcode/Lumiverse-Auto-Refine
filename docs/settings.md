@@ -102,7 +102,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   The button carries the extension's mark, which is an eye. It is shut while nothing is running. A refine opens it and sets it reading: the pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back. That is often the only part of the extension on screen, so it says what is happening rather than only that something is.
 
-  A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something. While it refines a selection the button shows the mark for that, and while it takes one out it shows the scissors, whose blades close and open while they work.
+  A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something. While it refines a selection the button shows the mark for that. Taking a selection out never changes it, since that is over the moment you press it.
 
   Holding the button fills a ring around its edge, which closes a moment before the menu opens. Letting go early wipes it back. A press also dips the button a little: a dip on its own is a tap, a dip with the ring running is a hold. Auto Retry's floating button does the same.
 
@@ -116,7 +116,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   The automatic pass and the per chat switch stay on the tab rather than in that menu, so their explanations are next to them instead of appearing as bare labels over the chat.
 
-  **Refining part of a reply** is not a setting and has nothing to switch on. Select part of a reply and **Refine the part I selected** appears in three places: on the panel, in the chat input's Extras menu, and in the floating button's menu while that button is on screen. It rewrites what you picked and leaves the rest of the reply alone. It is only there while something is selected. A selection that runs out of italics takes the whole italic run with it, because leaving one marker behind would turn the rest of the reply into emphasis. It works in your own messages as well as in replies, and it uses the prompt for your own writing when it does.
+  **Refining part of a reply** is not a setting and has nothing to switch on. Select part of a reply and **Refine the part I selected** appears on the panel, in the chat input's Extras menu, and in the floating button's menu while that button is on screen. The two buttons in the chat carry it as well when they are switched on, which is covered further down. It rewrites what you picked and leaves the rest of the reply alone. It is only there while something is selected. A selection that runs out of italics takes the whole italic run with it, because leaving one marker behind would turn the rest of the reply into emphasis. It works in your own messages as well as in replies, and it uses the prompt for your own writing when it does.
 
   **Refining the draft in your input box** is the other way in, off by default because it writes into the box you are typing in. On, a **Refine what I am typing** button joins the other two above the tabs, and an entry for it appears in the chat input's Extras menu, or in the floating button's menu while that button is on screen. It greys out alongside the other two when no chat is open, since there is no input box out there to read, and the menu entry comes off on the same terms.
 
@@ -130,14 +130,16 @@ Three things never move, whichever tab you left open, because they are what you 
 
   Both of these turn into a stop while a refine is running. The first tap starts it, the next one calls it off, and the button names itself **Stop this refine** while it works.
 
-  With **A button on every message** on, two more appear when you select text inside a message, on that message only:
+  Select text inside a message and two more appear:
 
   - **Refine the part I selected** rewrites the selection and leaves the rest of the message alone. It is the same thing the panel and the menus offer, without opening either.
   - **Take out what I selected** deletes the selection. No model is asked anything, so it costs nothing and happens straight away.
 
-  While text is selected in a message, the button that refines the whole of that message steps aside, so what you are offered is what to do with the text you picked. It comes back when you put the selection down, and the other messages keep theirs.
+  Where they appear follows the two switches above them. With **A button on every message** on they appear under the message holding the selection, and on no other message. With **A button in the chat's row of controls** on they appear in the toolbar as well, since the toolbar belongs to the chat rather than to one message. Either switch on its own is enough, and with both on you get both sets.
 
-  Both actions are also in the chat input's Extras menu, and in the floating button's menu while that button is on screen, so neither needs **A button on each message** switched on.
+  In either place, the button that starts a plain refine steps aside while something is selected, so what you are offered is what to do with the text you picked. It comes back when you put the selection down, and the other messages keep theirs.
+
+  Both actions are also in the chat input's Extras menu, and in the floating button's menu while that button is on screen, so neither needs a button in the chat switched on at all.
 
   Both go away when you put the selection down, and they follow the selection if you make a new one in another message.
 
