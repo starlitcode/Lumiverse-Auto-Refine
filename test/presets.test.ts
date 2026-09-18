@@ -136,10 +136,10 @@ describe("the prompts that come with it", () => {
     }
   });
 
-  // What the names do not claim is how the two pairs compare with
-  // each other, because they cannot: a close read for a thinking model is about
-  // the size of a quick read for a plain one. That belongs in the description,
-  // where it can be said in words rather than implied by a label.
+  // What the names do not claim is which of the two on a side is the better
+  // one, because that is not a question a name can answer: it depends entirely
+  // on the model somebody is running. That belongs in the description, where it
+  // can be said in words rather than implied by a label.
   test("and the description of each says what will run it", () => {
     for (const p of BUILT_IN_PROMPTS)
       expect({ name: p.name, said: /any model|model that reasons/i.test(p.what) })

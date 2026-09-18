@@ -104,6 +104,12 @@ _2026-09-17_
 
 - **The button that refines a whole message steps aside while you have text selected in it.** Three marks sat in a row, two of them eyes, and the one that ignored your selection looked like the one that used it. Only on that message: a selection in one says nothing about what you might want in another.
 
+- **The buttons in the chat stand in Lumiverse's own rows now.** The one under a message sat in a row of its own, centred under the text, with the app's Copy, Edit and the rest in their row above it. Two rows of buttons on one message, one of them holding a single button, and nothing about the lower one said it belonged to the same message as the upper one.
+
+  Lumiverse leaves a place for extensions at the end of its row of message buttons, so that is where it goes now. A display mode that lays no such row out gets the old row under the message, which is what that row was for.
+
+  Both buttons are drawn at the size the row they stand in draws its own, and with the same weight of line. The mark is written with a finer stroke than Lumiverse uses, which is right at the sizes it is drawn large and reads as the faint one in a row of heavier marks, so standing in one of those rows sets the weight to match. A finger is given a wider target only in the row that is this extension's to lay out: in one of Lumiverse's rows the row sets the height, and a taller button would push it out for the sake of a target the buttons either side of it do not have.
+
 - **A refine no longer spins a ring. The eye reads.** The pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back.
 
   A turning ring says only that something is happening. This one says what is happening, and it is the same shape the button already had rather than an unrelated mark swapped in for the duration.
@@ -135,6 +141,8 @@ _2026-09-17_
 - **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one looked cramped next to the wide ones.
 
 - **A clearer line when a refine is already running.** It said "Press it again to stop that one", which was only ever true of the panel's own button, and that button is replaced by **Stop this refine** while one runs. It now says to stop it first or wait for it to finish.
+
+- **The four built-in prompts describe themselves by the job rather than by the size.** Two of the descriptions were left over from when there were eight in a quick pair and a thorough pair: one counted its blocks and one said it was shorter than the one above it. There are four now, a line edit for a reply and a copy edit for what you wrote yourself, and on each of those two sides one for a model that reasons and one for a model that does not. The only question left is which model you are running, so that is the question each description answers.
 
 - **Plainer words in the built-in prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.
 

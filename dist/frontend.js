@@ -540,20 +540,20 @@ const TURN_MACRO = "{{message}}";
 // prompt that does not ask for it has nothing to show while it writes.
 const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // ---- the prompts that come with it ----
-// Two questions, four answers. Does your model reason, and how much of the
-// ground do you want covered.
+// One question, four answers. A line edit for a reply and a copy edit for what
+// you wrote yourself, and on each of those two sides one for a model that
+// reasons and one for a model that does not. The question is which model you
+// are running, and nothing else.
 //
-// One name for the quick pair and one for the thorough pair, so the pairing is
-// visible at a glance, and the two that need a reasoning model say so in the
-// name rather than leaving somebody to find out by getting a worse rewrite.
+// One name for each job, with the two that need a reasoning model saying so in
+// the name rather than leaving somebody to find out by getting a worse rewrite.
 //
-// The name says the job rather than the size. Size is not what anybody picks
-// on here, and a model that reasons is handed less on purpose, so a name built
-// on length would have read backwards. Each description says what will run it.
+// The name says the job, because the job is the thing anybody is choosing here.
+// Each description says what will run it.
 //
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
-// one. That is why the reasoning pair is the smaller pair.
+// one. That is the whole of the difference between the two on a side.
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
 // ones that change every turn.
@@ -1320,7 +1320,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "Start here. Eight blocks, one subject each: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Runs on any model.",
+        what: "Start here. It is handed the job, then one subject at a time: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Everything to look at is set out for it rather than left to be worked out. Runs on any model.",
     },
     {
         name: "The line edit, for a model that thinks",
@@ -1328,7 +1328,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "One standard, the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Shorter than the one above and goes deeper for it. Needs a model that reasons.",
+        what: "The same job, given as a standard to apply rather than a list to match: the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Needs a model that reasons.",
     },
     {
         name: "The copy edit",
@@ -1336,7 +1336,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
-        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your word choice, your length and your plain lines come back as they went in. Runs on any model.",
+        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your wording, your sentences and your plain lines come back as they went in. Runs on any model.",
     },
     {
         name: "The copy edit, for a model that thinks",
@@ -1344,7 +1344,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
-        what: "The same job worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, and what is never a repair. Needs a model that reasons.",
+        what: "The same job, worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, and what is never a repair. Needs a model that reasons.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
@@ -4066,7 +4066,17 @@ export function setup(ctx, overrides) {
         ".arf-slot:hover{color:var(--lumiverse-text,rgba(255,255,255,.92))}" +
         ".arf-slot:focus-visible{outline:2px solid var(--lumiverse-primary,#8b5cf6);" +
         "outline-offset:2px}" +
-        ".arf-slot svg{display:block;width:14px;height:14px}" +
+        // The metrics of the host's own buttons in the row above the input box:
+        // fourteen across, drawn with a stroke of 2. The mark is written with a
+        // finer stroke than that, which is right at the sizes it is drawn large,
+        // and beside a row of heavier marks reads as the faint one. The weight is
+        // set here rather than in the mark, so only the marks standing in somebody
+        // else's row are changed by it.
+        ".arf-slot svg{display:block;width:14px;height:14px;stroke-width:2}" +
+        // The row of actions on a message draws a pixel smaller than the row above
+        // the input box does. Standing in either at any other size is the one mark
+        // in it that reads as an addition.
+        ".arf-slot-in svg{width:13px;height:13px}" +
         // While a refine is running. It stays pressable, because pressing it is how
         // somebody is told one is already going.
         ".arf-slot[aria-busy=true]{opacity:.55}" +
@@ -4075,7 +4085,11 @@ export function setup(ctx, overrides) {
         // buttons under it.
         ".arf-slot-row{display:flex;justify-content:center;align-items:center;" +
         "padding:2px 0}" +
-        "@media (pointer:coarse){.arf-slot{padding:9px}}";
+        // A finger gets a wider target in the row that is ours to lay out. In one
+        // of the host's own rows the row sets the height, and a taller button of
+        // ours would push it out for the sake of a target the buttons either side
+        // of it do not have.
+        "@media (pointer:coarse){.arf-slot-row .arf-slot{padding:9px}}";
     let styleEl = null;
     function injectStyle() {
         try {
@@ -11170,7 +11184,15 @@ export function setup(ctx, overrides) {
     // message. Where either of them lands on screen is not this file's to state:
     // a theme is CSS and can move anything, so nothing here says above or below.
     const BAR_SLOT = '[data-spindle-mount="chat_actions"]';
-    const MSG_SLOT = '[data-spindle-mount="message_footer"]';
+    // Two mounts, because a message carries two and which one it carries depends
+    // on the display mode. The row of actions is the one to join: it is where the
+    // host already puts everything you can do to a message, and standing in it
+    // means one row of buttons rather than a second row under the first. The
+    // footer is the fallback for a mode that lays no row out.
+    const MSG_ACTIONS = '[data-spindle-mount="message_actions"]';
+    const MSG_FOOT = '[data-spindle-mount="message_footer"]';
+    const MSG_SLOT = MSG_ACTIONS + "," + MSG_FOOT;
+    const inActions = (node) => String(node.getAttribute("data-spindle-mount") || "") === "message_actions";
     // Set while this is writing into the page, so the watcher below does not
     // answer its own insertions.
     let filling = false;
@@ -11181,10 +11203,13 @@ export function setup(ctx, overrides) {
     // promising: a reader who can see it is working expects pressing it again to
     // call it off, and the panel saying "press it again to stop" was only ever
     // true of the panel's own button.
-    function slotButton(kind, title, run, art) {
+    function slotButton(kind, title, run, art, inline) {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "arf-slot";
+        // Standing in the host's own row means being the size of the buttons it is
+        // standing in. A mark drawn a pixel larger, or a target padded wider for a
+        // finger, is the one thing in that row that does not line up with the rest.
+        b.className = inline ? "arf-slot arf-slot-in" : "arf-slot";
         b.setAttribute("data-arf-slot", kind);
         b.title = title;
         b.setAttribute("aria-label", title);
@@ -11290,18 +11315,56 @@ export function setup(ctx, overrides) {
             }
             if (wantMsg) {
                 const slots = document.querySelectorAll(MSG_SLOT);
+                // One message can offer both mounts, and only one of them gets the
+                // buttons. Picked per message rather than once for the page, because a
+                // mode change redraws the messages one at a time and a page holding
+                // both for a moment would otherwise draw the buttons twice on one.
+                const picked = {};
                 for (let i = 0; i < slots.length; i++) {
                     const slot = slots[i];
                     const id = slotId(slot);
                     if (!id)
                         continue;
-                    let row = slot.querySelector(".arf-slot-row");
-                    if (!row) {
-                        row = document.createElement("div");
-                        row.className = "arf-slot-row";
-                        row.appendChild(slotButton("message", "Refine this message", () => refineOne(id)));
-                        slot.appendChild(row);
+                    const held = picked[id];
+                    if (!held || (!inActions(held) && inActions(slot)))
+                        picked[id] = slot;
+                }
+                for (let i = 0; i < slots.length; i++) {
+                    const slot = slots[i];
+                    const id = slotId(slot);
+                    // Whatever was left in the mount this message is no longer using,
+                    // which is what a change of display mode leaves behind.
+                    if (!id || picked[id] === slot)
+                        continue;
+                    try {
+                        const stale2 = slot.querySelectorAll("[data-arf-slot]");
+                        for (let k = 0; k < stale2.length; k++)
+                            stale2[k].remove();
+                        const oldRow = slot.querySelector(".arf-slot-row");
+                        if (oldRow)
+                            oldRow.remove();
                     }
+                    catch (_) { }
+                }
+                for (const id in picked) {
+                    const slot = picked[id];
+                    const inline = inActions(slot);
+                    // In the row of actions the buttons stand beside the host's own, so
+                    // there is nothing to put them in: the mount lays its children out as
+                    // though it were not there. Under a message they are a block in the
+                    // message's own column and need a row of their own.
+                    let into = slot;
+                    if (!inline) {
+                        let row = slot.querySelector(".arf-slot-row");
+                        if (!row) {
+                            row = document.createElement("div");
+                            row.className = "arf-slot-row";
+                            slot.appendChild(row);
+                        }
+                        into = row;
+                    }
+                    if (!into.querySelector('[data-arf-slot="message"]'))
+                        into.appendChild(slotButton("message", "Refine this message", () => refineOne(id), undefined, inline));
                     // The two that only make sense against a selection, and only on the
                     // message the selection is in. A button that is always there and
                     // usually does nothing is one people press once and stop trusting,
@@ -11312,15 +11375,15 @@ export function setup(ctx, overrides) {
                     // of them eyes, and the one that ignored the selection looked exactly
                     // like the one that used it. What you are being offered while you
                     // have text selected is what to do with that text.
-                    const whole = row.querySelector('[data-arf-slot="message"]');
+                    const whole = into.querySelector('[data-arf-slot="message"]');
                     if (whole)
                         whole.style.display = mine ? "none" : "";
-                    const part = row.querySelector('[data-arf-slot="part"]');
-                    const snip = row.querySelector('[data-arf-slot="snip"]');
+                    const part = into.querySelector('[data-arf-slot="part"]');
+                    const snip = into.querySelector('[data-arf-slot="snip"]');
                     if (mine && !part)
-                        row.appendChild(slotButton("part", "Refine the part I selected", () => refinePicked(), partIcon));
+                        into.appendChild(slotButton("part", "Refine the part I selected", () => refinePicked(), partIcon, inline));
                     if (mine && !snip)
-                        row.appendChild(slotButton("snip", "Take out what I selected", () => snipPicked(), snipIcon));
+                        into.appendChild(slotButton("snip", "Take out what I selected", () => snipPicked(), snipIcon, inline));
                     if (!mine) {
                         try {
                             if (part)

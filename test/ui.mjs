@@ -7352,6 +7352,32 @@ console.log("\nthe buttons in Lumiverse's own slots");
     </div>
   </div>`;
 
+  // The same two messages in a display mode that lays out a row of actions.
+  // The host's own buttons come first and its mount sits at the end of the row,
+  // laying its children out as though it were not there, so anything put in it
+  // stands in the row rather than under it. The footer mount is on the page as
+  // well, because the host offers both and only one of them should be used.
+  const MESSAGES_WITH_ACTIONS = `
+  <div id="wrap">
+    <div class="_bubble_86318_171">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>The lamp over the bench had been out for a week.</p></div></div>
+      <div data-component="BubbleActions" class="_actionsPill" style="display:flex;align-items:center;gap:2px">
+        <button type="button" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24"></svg></button>
+        <button type="button" title="Edit" aria-label="Edit"><svg width="13" height="13" viewBox="0 0 24 24"></svg></button>
+        <span data-spindle-mount="message_actions" data-spindle-scope="message:msg-one:actions" style="display:contents"></span>
+      </div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:footer" style="display:contents"></span>
+    </div>
+    <div class="_bubble_86318_171">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>She left the crate where it was and went back inside.</p></div></div>
+      <div data-component="BubbleActions" class="_actionsPill" style="display:flex;align-items:center;gap:2px">
+        <button type="button" title="Copy" aria-label="Copy"><svg width="13" height="13" viewBox="0 0 24 24"></svg></button>
+        <span data-spindle-mount="message_actions" data-spindle-scope="message:msg-two:actions" style="display:contents"></span>
+      </div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-two:footer" style="display:contents"></span>
+    </div>
+  </div>`;
+
   // What every run here needs on the page: the real input area, so the toolbar
   // slot is the host's own rather than one invented to match the selector, and
   // two messages with their footer slots.
@@ -7508,6 +7534,76 @@ console.log("\nthe buttons in Lumiverse's own slots");
       JSON.stringify(out.cleared));
   });
 
+  // Standing in the row above the input box means being drawn the way that row
+  // is drawn. The host's own buttons there are the neighbours, so they are what
+  // this measures against rather than a number written down here.
+  await inTab(browser, { saved: { enabled: true, barButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const bar = document.querySelector('[data-spindle-mount="chat_actions"]');
+      const ours = bar.querySelector('[data-arf-slot="bar"]');
+      const row = bar.parentElement;
+      // Every button the host put in that row, ours left out.
+      const theirs = Array.from(row.querySelectorAll("button")).filter(
+        (b) => !b.hasAttribute("data-arf-slot"),
+      );
+      const size = (n) => {
+        const box = n.querySelector("svg").getBoundingClientRect();
+        return { w: Math.round(box.width), h: Math.round(box.height) };
+      };
+      const weight = (n) => getComputedStyle(n.querySelector("svg")).strokeWidth;
+      return {
+        count: theirs.length,
+        mark: size(ours),
+        theirMarks: theirs.map(size),
+        ink: weight(ours),
+        theirInk: theirs.map(weight),
+        tall: Math.round(ours.getBoundingClientRect().height),
+        theirTall: theirs.map((n) => Math.round(n.getBoundingClientRect().height)),
+        // In the row itself, not in a box of ours sitting in the row.
+        sibling: ours.parentElement === bar && getComputedStyle(bar).display === "contents",
+      };
+    });
+    ok("the host's row really has its own buttons to match", out.count >= 8, JSON.stringify(out.count));
+    ok("our mark is the size the host draws its own",
+      out.theirMarks.every((m) => m.w === out.mark.w && m.h === out.mark.h),
+      JSON.stringify({ ours: out.mark, theirs: out.theirMarks[0] }));
+    ok("and drawn at the same weight",
+      out.theirInk.every((w) => w === out.ink),
+      JSON.stringify({ ours: out.ink, theirs: out.theirInk[0] }));
+    ok("so the row does not grow around ours",
+      out.theirTall.every((h) => Math.abs(h - out.tall) <= 1),
+      JSON.stringify({ ours: out.tall, theirs: out.theirTall }));
+    ok("and it stands in the row rather than in a box of its own", out.sibling,
+      JSON.stringify(out.sibling));
+  });
+
+  // A finger gets the wider target only where the row is ours to lay out. In
+  // one of the host's rows a taller button of ours pushes the row out.
+  await inTab(
+    browser,
+    { saved: { enabled: true, barButton: true }, viewport: { width: 390, height: 844 }, touch: true },
+    async (page) => {
+      await draw(page, MESSAGES);
+      const out = await page.evaluate(async () => {
+        const bar = document.querySelector('[data-spindle-mount="chat_actions"]');
+        const ours = bar.querySelector('[data-arf-slot="bar"]');
+        const theirs = Array.from(bar.parentElement.querySelectorAll("button")).filter(
+          (b) => !b.hasAttribute("data-arf-slot"),
+        );
+        return {
+          pad: getComputedStyle(ours).paddingTop,
+          tall: Math.round(ours.getBoundingClientRect().height),
+          theirTall: Math.round(theirs[0].getBoundingClientRect().height),
+        };
+      });
+      ok("on a phone, the one in the host's row keeps the host's padding", out.pad === "5px",
+        JSON.stringify(out));
+      ok("so it is still the height of the buttons beside it",
+        Math.abs(out.tall - out.theirTall) <= 1, JSON.stringify(out));
+    },
+  );
+
   // The same thing in the toolbar, with the message buttons switched off, so
   // the toolbar is carrying them on its own. Somebody who wants one button in
   // the chat rather than one under every reply can still reach both of the
@@ -7590,6 +7686,115 @@ console.log("\nthe buttons in Lumiverse's own slots");
     ok("and brings the plain one back", out.cleared.whole === 1, JSON.stringify(out.cleared));
     ok("with the message buttons off, nothing is drawn under a reply", out.after.under === 0,
       JSON.stringify(out.after));
+  });
+
+  // Standing in the host's own row of actions rather than in a row of our own
+  // under the message. Everything a message can have done to it then reads as
+  // one row, which is what it is.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES_WITH_ACTIONS);
+    const out = await page.evaluate(async () => {
+      const mount = document.querySelector('[data-spindle-scope^="message:msg-one"][data-spindle-mount="message_actions"]');
+      const pill = mount.parentElement;
+      const ours = pill.querySelector('[data-arf-slot="message"]');
+      return {
+        // In the row, not under it, and on both messages.
+        inRow: document.querySelectorAll(
+          '[data-spindle-mount="message_actions"] [data-arf-slot="message"]',
+        ).length,
+        // The footer mount is on the page too and must stay empty, or the
+        // buttons are drawn twice on one message.
+        inFooter: document.querySelectorAll(
+          '[data-spindle-mount="message_footer"] [data-arf-slot]',
+        ).length,
+        // No row of our own anywhere, since the host's row is the row.
+        rows: document.querySelectorAll(".arf-slot-row").length,
+        // In the host's own mount and nothing else. The mount lays its children
+        // out as though it were not there, so a button in it is laid out by the
+        // row; a box of ours in between would be one flex item holding all of
+        // them, which is the row under the message all over again.
+        sibling: !!ours && ours.parentElement === mount &&
+          getComputedStyle(mount).display === "contents",
+        // After everything the host put in the row, since the mount is where
+        // the host chose to leave room and it left it at the end.
+        last: pill.lastElementChild === mount && mount.lastElementChild === ours,
+        // The same height as the buttons it stands next to, so the row does
+        // not grow around ours.
+        tall: ours ? Math.round(ours.getBoundingClientRect().height) : -1,
+        theirs: Math.round(pill.querySelector("button").getBoundingClientRect().height),
+        mark: ours ? Math.round(ours.querySelector("svg").getBoundingClientRect().width) : -1,
+      };
+    });
+    ok("the buttons stand in the host's row of actions", out.inRow === 2, JSON.stringify(out));
+    ok("and nothing is left in the footer under it", out.inFooter === 0, JSON.stringify(out));
+    ok("with no row of our own drawn at all", out.rows === 0, JSON.stringify(out));
+    ok("each one a sibling of the host's own buttons", out.sibling, JSON.stringify(out));
+    ok("sitting after them rather than among them", out.last, JSON.stringify(out));
+    ok("the same height as the buttons beside it", Math.abs(out.tall - out.theirs) <= 1,
+      JSON.stringify(out));
+    ok("and the mark drawn at the size the host draws its own", out.mark === 13,
+      JSON.stringify(out));
+  });
+
+  // A selection puts the same two in the host's row, and takes the plain one
+  // out of it, exactly as it does in a row of our own.
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES_WITH_ACTIONS);
+    const out = await page.evaluate(async () => {
+      const count = () => {
+        const pill = document.querySelector('[data-spindle-scope^="message:msg-one"][data-spindle-mount="message_actions"]')
+          .parentElement;
+        return {
+          part: pill.querySelectorAll('[data-arf-slot="part"]').length,
+          snip: pill.querySelectorAll('[data-arf-slot="snip"]').length,
+          whole: Array.from(pill.querySelectorAll('[data-arf-slot="message"]')).filter(
+            (n) => getComputedStyle(n).display !== "none",
+          ).length,
+          // The host's own buttons are untouched by any of this.
+          theirs: pill.querySelectorAll("button:not([data-arf-slot])").length,
+        };
+      };
+      const before = count();
+      // By the footer mount, since that is the one sitting in the message
+      // itself. The actions mount is inside the row of buttons, which holds no
+      // text to select.
+      const host = document
+        .querySelector('[data-spindle-scope^="message:msg-one"][data-spindle-mount="message_footer"]')
+        .parentElement.querySelector("p");
+      const node = host.firstChild;
+      const at = node.nodeValue.indexOf("The lamp");
+      const r = document.createRange();
+      r.setStart(node, at);
+      r.setEnd(node, at + "The lamp".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 400));
+      const after = count();
+      // The ones actually on screen. The plain button is stepped aside while
+      // the selection is up, and something set to display:none measures zero
+      // wide, which is not a mark drawn at the wrong size.
+      const marks = Array.from(
+        document.querySelectorAll('[data-spindle-mount="message_actions"] [data-arf-slot]'),
+      )
+        .filter((n) => getComputedStyle(n).display !== "none")
+        .map((n) => Math.round(n.querySelector("svg").getBoundingClientRect().width));
+      getSelection().removeAllRanges();
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await new Promise((r2) => setTimeout(r2, 400));
+      return { before, after, cleared: count(), marks };
+    });
+    ok("nothing selected, one button of ours in the row", out.before.whole === 1 && out.before.part === 0,
+      JSON.stringify(out.before));
+    ok("a selection puts both of the others in it", out.after.part === 1 && out.after.snip === 1,
+      JSON.stringify(out.after));
+    ok("and the plain one steps aside in the row", out.after.whole === 0, JSON.stringify(out.after));
+    ok("every mark on screen drawn at the host's size",
+      out.marks.length === 3 && out.marks.every((w) => w === 13), JSON.stringify(out.marks));
+    ok("the host's own buttons are left alone throughout", out.before.theirs === 2 && out.after.theirs === 2,
+      JSON.stringify(out));
+    ok("putting the selection away leaves the row as it was", out.cleared.whole === 1 && out.cleared.part === 0,
+      JSON.stringify(out.cleared));
   });
 
   // What the two of them send.

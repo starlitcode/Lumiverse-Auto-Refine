@@ -126,7 +126,9 @@ Three things never move, whichever tab you left open, because they are what you 
 
   **A button on every message** refines that message in one tap. It is the only way to refine a message that is not the latest without selecting all of it first, and it works on your own messages as well as on replies. On the greeting it says the greeting is never refined, which is true of every other way in too.
 
-  It goes in the place Lumiverse leaves for extensions inside the message rather than among the app's own message buttons. Both of these buttons are drawn in the places the app hands out, so a Lumiverse update that moves its own controls does not take them with it.
+  It stands in Lumiverse's own row of message buttons, beside Copy, Edit and the rest, drawn at the size that row draws them. Lumiverse leaves a place for extensions at the end of that row, and that is the place it takes. A display mode that lays no row of buttons out gets it under the message instead, centred, which is where Lumiverse would have put the row.
+
+  Both of these buttons are drawn in the places the app hands out, so a Lumiverse update that moves its own controls does not take them with it.
 
   Both of these turn into a stop while a refine is running. The first tap starts it, the next one calls it off, and the button names itself **Stop this refine** while it works.
 
