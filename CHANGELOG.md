@@ -92,6 +92,16 @@ _2026-09-17_
 
   **Refine the part I selected** carries the same eye with a bracket at either side of it, so the pair reads as "all of it" and "this much of it". **Take out what I selected** is still a pair of scissors, because taking text out is a different thing from reading it.
 
+- **Every mark moves together.** The drawer tab, the heading on the panel, the buttons in the chat and the floating button were each answering to something different, so the set agreed while nothing was happening and came apart the moment something was. While a refine runs, every eye reads.
+
+  The mark also stopped changing size. The resting drawing was twenty pixels and the reading one fourteen, and the buttons in the chat swapped between them, so the mark shrank the instant a refine began.
+
+- **Stopping a refine looks like stopping.** It used to give the same contented blink as one that read the whole reply, which says the opposite of what happened. It shuts quickly now, with no blink, and carries a little past flat before settling.
+
+- **Taking a selection out can be reached without the buttons in the chat.** It lived on the button under a message and nowhere else, while refining a selection had four ways in. It is in the chat input's Extras menu and the floating button's menu now, beside the refine, and only while something is selected.
+
+- **The button that refines a whole message steps aside while you have text selected in it.** Three marks sat in a row, two of them eyes, and the one that ignored your selection looked like the one that used it. Only on that message: a selection in one says nothing about what you might want in another.
+
 - **A refine no longer spins a ring. The eye reads.** The pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back.
 
   A turning ring says only that something is happening. This one says what is happening, and it is the same shape the button already had rather than an unrelated mark swapped in for the duration.

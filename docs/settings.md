@@ -133,6 +133,10 @@ Three things never move, whichever tab you left open, because they are what you 
   - **Refine the part I selected** rewrites the selection and leaves the rest of the message alone. It is the same thing the panel and the menus offer, without opening either.
   - **Take out what I selected** deletes the selection. No model is asked anything, so it costs nothing and happens straight away.
 
+  While text is selected in a message, the button that refines the whole of that message steps aside, so what you are offered is what to do with the text you picked. It comes back when you put the selection down, and the other messages keep theirs.
+
+  Both actions are also in the chat input's Extras menu, and in the floating button's menu while that button is on screen, so neither needs **A button on each message** switched on.
+
   Both go away when you put the selection down, and they follow the selection if you make a new one in another message.
 
   Taking text out closes the gap the way you would: one space between the two halves rather than two, no space left sitting in front of a full stop, and a whole paragraph out leaves one blank line rather than two. Nothing else in the message is touched.

@@ -1902,7 +1902,7 @@ describe("the working a reasoning prompt asks for", () => {
   const answer =
     "<REFINE_NOTES>\n" +
     "The second sentence restates the first. Cutting the held breath.\n" +
-    "Leaving the dialogue alone: the clipped voice is deliberate.\n" +
+    "Leaving the dialogue alone: the short voice is how she talks.\n" +
     "</REFINE_NOTES>\n" +
     "<REFINED>She stepped through and the cold hit her.</REFINED>";
 
