@@ -413,6 +413,65 @@ async function overreached(page) {
 }
 
 // The measured contrast of every visible text node against what is behind it.
+// The mark on the floating button, measured against what is actually behind it.
+//
+// worstText walks text nodes, and the button has none: its mark is an SVG drawn
+// in currentColor. So the one part of this extension that sits over somebody
+// else's chat, in their theme, has never been measured at all. A colour change
+// could have taken it to nothing and every check would have stayed green.
+//
+// Held to 3, which is what the standard asks of a graphic rather than the 4.5
+// it asks of body text.
+async function markContrast(page, sel) {
+  return page.evaluate((q) => {
+    const parse = (str) => {
+      const m = /rgba?\(([^)]+)\)/.exec(str || "");
+      if (!m) return null;
+      const p = m[1].split(",").map((x) => parseFloat(x.trim()));
+      return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+    };
+    const over = (fg, bg) => ({
+      r: fg.r * fg.a + bg.r * (1 - fg.a),
+      g: fg.g * fg.a + bg.g * (1 - fg.a),
+      b: fg.b * fg.a + bg.b * (1 - fg.a),
+      a: 1,
+    });
+    const lum = (c) => {
+      const f = (v) => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+    };
+    const ratio = (a, b) => {
+      const x = lum(a);
+      const y = lum(b);
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    };
+    const btn = document.querySelector(q);
+    if (!btn) return null;
+    // What is behind the mark: the button's own fill composited over whatever
+    // is under it, since a fill with alpha in it shows the page through.
+    let stack = [];
+    let el = btn;
+    while (el && el !== document.documentElement) {
+      const c = parse(getComputedStyle(el).backgroundColor);
+      if (c && c.a > 0) {
+        stack.push(c);
+        if (c.a >= 0.999) break;
+      }
+      el = el.parentElement;
+    }
+    let base = { r: 255, g: 255, b: 255, a: 1 };
+    const page = parse(getComputedStyle(document.body).backgroundColor);
+    if (page && page.a >= 0.999) base = page;
+    for (let i = stack.length - 1; i >= 0; i--) base = over(stack[i], base);
+    const ink = parse(getComputedStyle(btn).color);
+    if (!ink) return null;
+    return { r: Math.round(ratio(over(ink, base), base) * 100) / 100, want: 3 };
+  }, sel);
+}
+
 async function worstText(page) {
   return page.evaluate(() => {
     const parse = (s) => {
@@ -2374,6 +2433,60 @@ console.log("\na temporary chat");
     const said = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
     ok("a chat it could not look at is not called temporary", !/temporary chat/i.test(said));
   });
+}
+
+console.log("\nthe mark stays readable on the button it sits on");
+{
+  // The one part of this extension that sits over somebody else's chat, in
+  // their theme. worstText walks text nodes and the button has none, so until
+  // now nothing measured it at all: a colour change could have taken the mark
+  // to nothing and every check would have stayed green.
+  const themes = [
+    ["the stock theme", ""],
+    [
+      "a light theme",
+      ":root{--lumiverse-bg:#fff;--lumiverse-bg-elevated:#f4f2f8;" +
+        "--lumiverse-card-bg-solid:#fff;--lumiverse-text:rgba(0,0,0,.9);" +
+        "--lumiverse-text-muted:rgba(0,0,0,.55);--lumiverse-text-dim:rgba(0,0,0,.4);" +
+        "--lumiverse-fill:rgba(0,0,0,.05)}body{background:#fff}",
+    ],
+    [
+      "a pale accent",
+      ":root{--lumiverse-primary:#d9c8ff;--lumiverse-primary-text:#e6dcff;" +
+        "--lumiverse-primary-020:rgba(217,200,255,.2);" +
+        "--lumiverse-primary-050:rgba(217,200,255,.5)}",
+    ],
+  ];
+  for (const [what, css] of themes) {
+    await inTab(browser, { css, saved: { widgetOn: true, refineOn: true } }, async (page) => {
+      const sel = "#float .arf-float";
+      const rest = await markContrast(page, sel);
+      ok(what + ": the mark is measurable on the button", !!rest, JSON.stringify(rest));
+      ok(
+        what + ": and readable where it rests",
+        rest && rest.r >= rest.want,
+        rest ? rest.r + " against " + rest.want : "no reading",
+      );
+
+      // Running, which is the state with the accent on the fill and the ink.
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({
+          type: "active_chat", requestId: id, chatId: "c1",
+          character: "Wren", hasCharacter: true, resolved: true,
+        });
+        for (const f of window.__handlers.GENERATION_ENDED || []) f({ chatId: "c1", messageId: "m2" });
+      });
+      await settle(page);
+      await page.evaluate(() => new Promise((r) => setTimeout(r, 340)));
+      const busy = await markContrast(page, sel);
+      ok(
+        what + ": and readable while a refine is running",
+        busy && busy.r >= busy.want,
+        busy ? busy.r + " against " + busy.want : "no reading",
+      );
+    });
+  }
 }
 
 console.log("\nthe eye on the floating button");

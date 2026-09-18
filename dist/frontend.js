@@ -2093,10 +2093,17 @@ function snipIcon() {
         '<path d="M8.2 7.6L20 18" /><path d="M8.2 16.4L20 6" />' +
         "</svg>");
 }
-// The mark, open and still. Every place that draws the extension rather than a
-// state of it: the drawer tab, the menus, the buttons the host hands out.
+// The mark, at rest. Every place that draws the extension rather than a state
+// of it: the drawer tab, the menus, the buttons the host hands out.
+//
+// Quiet, not waking. Every one of these is drawn by the host, and the host
+// redraws them whenever it likes: moving between one extension's drawer and
+// another puts a fresh element on the screen, and a fresh element replays a CSS
+// animation from the start. The mark blinked every time somebody changed
+// drawers. Waking is only safe where this extension creates the element itself
+// and knows it will not be replaced, which is the button under a message.
 function refineIcon() {
-    return eyeIcon();
+    return eyeIcon("quiet");
 }
 export function setup(ctx, overrides) {
     const disposers = [];
@@ -3651,21 +3658,44 @@ export function setup(ctx, overrides) {
         // The floating button. Squared against the host's container rather than
         // trusting it, so it is a circle whatever shape the container turns out to
         // be: it was coming out as a squashed oval.
+        // The floating button. Squared against the host's container rather than
+        // trusting it, so it is a circle whatever shape the container turns out to
+        // be: it was coming out as a squashed oval.
+        //
+        // Three states, and the colour says which: quiet while nothing is running,
+        // quieter still when there is nothing here to refine, and the theme's accent
+        // while a refine is going. Auto Retry's button says on and off the same way,
+        // so somebody running both reads one control rather than two.
+        //
+        // The base is opaque. A floating control sits over whatever the chat is
+        // showing, and a fill with alpha in it takes the colour of the message
+        // underneath, so the same button is muddy over one reply and clear over the
+        // next. The accent goes on as a second layer over that solid base rather
+        // than replacing it.
         ".arf-float{width:100%;height:100%;aspect-ratio:1;display:flex;align-items:center;" +
         "justify-content:center;padding:0;cursor:pointer;border-radius:50%;" +
-        "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
         "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
         "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9))," +
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))}" +
-        ".arf-float:hover{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
-        // Dimmed rather than hidden. The button is how somebody switches the
-        // extension off and reaches the tab, so it stays reachable on a screen with
-        // nothing to refine; it just stops looking like it is offering a refine.
-        ".arf-float.arf-idle{opacity:.5}" +
-        ".arf-float.arf-idle:hover{opacity:.75}" +
-        ".arf-float.arf-working{color:var(--lumiverse-primary-text,rgba(186,135,255,.95));" +
+        ".arf-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        // Nothing here to refine. The ink goes quiet and the edge with it, rather
+        // than the whole button dropping to half opacity: dimming the lot dims the
+        // mark as well, so the one part that says which extension this is goes with
+        // it, and a faded control reads as broken rather than as idle. The button
+        // stays reachable either way, since it is how somebody switches the
+        // extension off and reaches the tab.
+        ".arf-float.arf-idle{border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
+        // Running. The accent goes on the fill, the edge, the ink and the ring
+        // around it at once, so the button reads as lit rather than as the same
+        // button with a different icon in it.
+        ".arf-float.arf-working{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
+        "background-image:linear-gradient(var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
+        "var(--lumiverse-primary-020,rgba(147,112,219,.2)))," +
+        "linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9))," +
+        "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
         "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
         "0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.18))}" +
         // A press dips the whole button a little, so a tap answers whether or not it
@@ -3678,7 +3708,9 @@ export function setup(ctx, overrides) {
         // the eye already says a refine is running by reading. The ring here is the
         // hold and nothing else.
         ".arf-float:active{transform:scale(.94)}" +
-        ".arf-float{transition:color var(--lumiverse-transition-fast,150ms ease)," +
+        ".arf-float{transition:color 260ms cubic-bezier(.2,.7,.3,1)," +
+        "border-color 260ms cubic-bezier(.2,.7,.3,1)," +
+        "background-image 260ms cubic-bezier(.2,.7,.3,1)," +
         "box-shadow 260ms cubic-bezier(.2,.7,.3,1),opacity 260ms cubic-bezier(.2,.7,.3,1)," +
         "transform 260ms cubic-bezier(.2,.7,.3,1);position:relative}" +
         ".arf-float .arf-glyph{display:flex;align-items:center;justify-content:center;line-height:0}" +
@@ -11053,7 +11085,7 @@ export function setup(ctx, overrides) {
         b.setAttribute("data-arf-slot", kind);
         b.title = title;
         b.setAttribute("aria-label", title);
-        b.innerHTML = art ? art() : refineIcon();
+        b.innerHTML = art ? art() : eyeIcon();
         // Marked as already drawn for the pass that keeps these in step with
         // whether a refine is running. Without it that pass found no mark on a
         // button it had just been handed, decided the icon was out of date and
