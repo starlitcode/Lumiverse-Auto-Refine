@@ -2674,6 +2674,50 @@ console.log("\nthe eye on the floating button");
 
     const found = await ball(sel);
     ok("the button under a message carries the eye", !!found, JSON.stringify(found));
+    // Every mark reads while a refine runs, including the ones drawn after it
+    // started. A message arriving mid-refine would otherwise sit shut among a
+    // set that is reading.
+    const together = await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop();
+      if (id) {
+        window.__fromBackend({
+          type: "active_chat", requestId: id.requestId, chatId: "c1",
+          character: "Wren", hasCharacter: true, resolved: true,
+        });
+      }
+      window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      return new Promise((r) =>
+        setTimeout(() => {
+          const eyes = Array.from(document.querySelectorAll(".arf-eye"))
+            .filter((n) => !n.closest(".arf-float"))
+            .map((n) => /arf-eye-read/.test(n.getAttribute("class") || ""));
+          r({ count: eyes.length, all: eyes.every(Boolean) });
+        }, 260),
+      );
+    });
+    ok("there are marks on the page to check", together.count > 0, JSON.stringify(together));
+    ok("and every one of them reads while a refine is running",
+      together.all, JSON.stringify(together));
+
+    // Put it back to rest before anything below reads these again. Left
+    // running, the checks after this one find an eye that is reading and call
+    // it a fault, which is this check's doing rather than the panel's.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined", chatId: "c1", messageId: "m2", canUndo: true,
+        before: "It hit him like an electric shock.",
+        after: "It hit him hard.",
+      });
+      return new Promise((r) => setTimeout(r, 1200));
+    });
+    // And take the card with it. A landed refine puts a card on the page with a
+    // dim behind it, and the dim sits over the button the checks below want to
+    // point at.
+    await page.evaluate(() => {
+      const keep = document.querySelector("[data-arf-pop-keep]");
+      if (keep) keep.click();
+    });
+    await settle(page);
     ok("and it is one that answers a pointer", found && /arf-opens/.test(found.cls),
       JSON.stringify(found));
     // Read straight after the button is drawn. The pass that keeps these in
@@ -7408,6 +7452,12 @@ console.log("\nthe buttons in Lumiverse's own slots");
       const count = () => ({
         part: document.querySelectorAll('[data-arf-slot="part"]').length,
         snip: document.querySelectorAll('[data-arf-slot="snip"]').length,
+        // The button that refines the whole message, and whether it is drawn.
+        // Three marks sat in a row with a selection up, two of them eyes, and
+        // the one that ignored the selection looked like the one that used it.
+        whole: Array.from(document.querySelectorAll('[data-arf-slot="message"]')).filter(
+          (n) => getComputedStyle(n).display !== "none",
+        ).length,
         onOne: !!document.querySelector(
           '[data-spindle-scope^="message:msg-one"] [data-arf-slot="part"]',
         ),
@@ -7434,6 +7484,12 @@ console.log("\nthe buttons in Lumiverse's own slots");
     ok("on the message the selection is in", out.after.onOne && !out.after.onTwo, JSON.stringify(out.after));
     ok("selecting in another message moves them", out.moved.onTwo && !out.moved.onOne, JSON.stringify(out.moved));
     ok("and putting the selection away takes them off", out.cleared.part === 0 && out.cleared.snip === 0, JSON.stringify(out.cleared));
+    ok("with nothing selected, the whole-message button is on both", out.before.whole === 2,
+      JSON.stringify(out.before));
+    ok("the one on the message you selected in steps aside", out.after.whole === 1,
+      JSON.stringify(out.after));
+    ok("and comes back when the selection goes", out.cleared.whole === 2,
+      JSON.stringify(out.cleared));
   });
 
   // What the two of them send.
@@ -7803,7 +7859,8 @@ console.log("\nreaching a selection refine without the floating button");
         return !!b && !b.hidden && getComputedStyle(b).display !== "none";
       };
 
-      const before = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part") };
+      const before = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part"),
+                       cut: extrasKeys().includes("auto-refine-snip") };
 
       const node = document.getElementById("pp").firstChild;
       const at = node.nodeValue.indexOf("wiped both hands");
@@ -7814,7 +7871,8 @@ console.log("\nreaching a selection refine without the floating button");
       getSelection().addRange(r);
       document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
       await new Promise((r2) => setTimeout(r2, 420));
-      const after = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part") };
+      const after = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part"),
+                      cut: extrasKeys().includes("auto-refine-snip") };
 
       // And pressing the panel one sends it.
       window.__sent.length = 0;
@@ -7826,16 +7884,25 @@ console.log("\nreaching a selection refine without the floating button");
       getSelection().removeAllRanges();
       document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
       await new Promise((r2) => setTimeout(r2, 420));
-      const gone = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part") };
+      const gone = { panel: shownOnPanel(), extras: extrasKeys().includes("auto-refine-part"),
+                     cut: extrasKeys().includes("auto-refine-snip") };
       return { before, after, gone, fired };
     }, BUBBLE);
 
     ok("the panel button is not there with nothing selected", !out.before.panel, JSON.stringify(out.before));
     ok("selecting part of a reply brings it up on the panel", out.after.panel, JSON.stringify(out.after));
     ok("and puts a row in the chat input's menu too", out.after.extras, JSON.stringify(out.after));
+    // Taking a selection out used to live on the button under a message and
+    // nowhere else, so running without that button and without the floating one
+    // left four ways to refine a selection and none to cut one.
+    ok("with taking it out beside it, which had no way in but the message button",
+      out.after.cut, JSON.stringify(out.after));
+    ok("and neither is there with nothing selected", !out.before.extras && !out.before.cut,
+      JSON.stringify(out.before));
     ok("pressing the panel button sends the refine", out.fired.length === 1, JSON.stringify(out.fired));
     ok("it carries the right message", out.fired[0] && out.fired[0].messageId === "msg-two", JSON.stringify(out.fired[0]));
-    ok("and putting the selection away takes both away", !out.gone.panel && !out.gone.extras, JSON.stringify(out.gone));
+    ok("and putting the selection away takes both away",
+      !out.gone.panel && !out.gone.extras && !out.gone.cut, JSON.stringify(out.gone));
   });
 
   // With the Extras row switched off as well, the panel is the only way left and

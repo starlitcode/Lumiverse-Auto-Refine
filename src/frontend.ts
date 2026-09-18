@@ -11420,7 +11420,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // this menu takes them over while the button is on screen.
     // Only while something is selected. An entry that is always there and
     // usually does nothing is an entry somebody presses once and stops trusting.
-    if (!busy && pickedHere()) doing.push({ key: "part", label: "Refine the part I selected" });
+    if (!busy && pickedHere()) {
+      doing.push({ key: "part", label: "Refine the part I selected" });
+      // Beside it, on the same terms. Taking a selection out used to live on
+      // the button under a message and nowhere else, so somebody running
+      // without that button and without this one could refine a selection four
+      // ways and cut one none.
+      doing.push({ key: "snip", label: "Take out what I selected" });
+    }
     // On the same terms as the panel button beside it: no chat means no input
     // box, and an entry that is always there and sometimes does nothing is one
     // people press once and stop trusting.
@@ -11476,6 +11483,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (back && back.kind === "draft") putDraftBack();
       else if (back) askUndo(back.one.chatId, back.one.messageId);
     } else if (picked === "part") refinePicked();
+    else if (picked === "snip") snipPicked();
     else if (picked === "draft") refineInput();
     else if (picked === "open") {
       try {
@@ -11542,6 +11550,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Only while there is a selection, so it is never an entry that does nothing.
     extra("auto-refine-part", "Refine the part I selected", inExtras && !!pickedHere(), () =>
       refinePicked(),
+    );
+    extra("auto-refine-snip", "Take out what I selected", inExtras && !!pickedHere(), () =>
+      snipPicked(),
     );
 
     // The two that live in the host's own slots. Last, because putting them up
@@ -11706,6 +11717,13 @@ export function setup(ctx: Ctx, overrides?: any) {
           // usually does nothing is one people press once and stop trusting,
           // which is the same rule the menu entry follows.
           const mine = !!holding && String(holding.messageId) === id;
+          // While something is selected in this message, the button that
+          // refines the whole of it steps aside. Three marks sat in a row, two
+          // of them eyes, and the one that ignored the selection looked exactly
+          // like the one that used it. What you are being offered while you
+          // have text selected is what to do with that text.
+          const whole = row.querySelector('[data-arf-slot="message"]') as HTMLElement | null;
+          if (whole) whole.style.display = mine ? "none" : "";
           const part = row.querySelector('[data-arf-slot="part"]');
           const snip = row.querySelector('[data-arf-slot="snip"]');
           if (mine && !part)
@@ -11735,6 +11753,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
       }
       paintSlots();
+      // Any mark this pass has just put on the page starts at rest, so one
+      // drawn while a refine is already running would sit shut among a set that
+      // is reading. A message arriving mid-refine is exactly when that happens.
+      paintEyes(busy);
     } catch (_) {
     } finally {
       filling = false;
