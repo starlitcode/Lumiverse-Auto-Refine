@@ -2185,11 +2185,24 @@ const EYE_OPEN = "M3 12C6.5 6.6 17.5 6.6 21 12 17.5 17.4 6.5 17.4 3 12Z";
 const EYE_SHUT =
   "M3 12Q12 15.1 21 12M7.2 15l-.5 1.1M12 15.8v1.3M16.8 15l.5 1.1";
 
-function eyeIcon(state?: "shut" | "read", size?: number): string {
+// Waking and opening to a pointer are two different things, and an eye can want
+// one without the other.
+//
+// "quiet" is the one that needs both apart. A button's mark is rewritten every
+// time a refine starts and ends, and a waking eye there opened and settled after
+// every single refine, on top of the card that already landed. It still has to
+// answer a pointer, though, so it keeps the opening and loses the waking.
+//
+// "shut" is neither: a mark sitting in a panel that is redrawn on every repaint,
+// where waking means blinking at somebody each time they change tabs.
+function eyeIcon(state?: "shut" | "read" | "quiet", size?: number): string {
   const px = String(size || 20);
-  // No state asked for means this eye stands for the extension rather than for
-  // something it is doing, so it wakes when it is drawn and opens to a pointer.
-  const how = state ? " arf-eye-" + state : " arf-wakes";
+  const how =
+    state === "quiet"
+      ? " arf-opens"
+      : state
+        ? " arf-eye-" + state
+        : " arf-wakes arf-opens";
   return (
     '<svg class="arf-eye' + how + '" viewBox="0 0 24 24" ' +
     'width="' + px + '" height="' + px + '" fill="none" stroke="currentColor" ' +
@@ -2224,7 +2237,7 @@ function readIcon(size?: number): string {
 // at, so they stay put while it opens.
 function partIcon(): string {
   return (
-    '<svg class="arf-eye arf-wakes" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+    '<svg class="arf-eye arf-wakes arf-opens" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
     'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
     'stroke-linejoin="round" aria-hidden="true">' +
     '<g class="arf-eye-ball">' +
@@ -4039,12 +4052,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     // last used. Focus is outside the guard: reaching a button by keyboard
     // should open its eye on any device.
     "@media (hover: hover){" +
-    "button:hover .arf-eye.arf-wakes .arf-eye-ball," +
-    "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-ball{transform:none;opacity:1}" +
-    "button:hover .arf-eye.arf-wakes .arf-eye-lid," +
-    "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-lid{opacity:0}}" +
-    "button:focus-visible .arf-eye.arf-wakes .arf-eye-ball{transform:none;opacity:1}" +
-    "button:focus-visible .arf-eye.arf-wakes .arf-eye-lid{opacity:0}" +
+    "button:hover .arf-eye.arf-opens .arf-eye-ball," +
+    "[role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-ball{transform:none;opacity:1}" +
+    "button:hover .arf-eye.arf-opens .arf-eye-lid," +
+    "[role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-lid{opacity:0}}" +
+    "button:focus-visible .arf-eye.arf-opens .arf-eye-ball{transform:none;opacity:1}" +
+    "button:focus-visible .arf-eye.arf-opens .arf-eye-lid{opacity:0}" +
     // Waking. An eye that has just been drawn opens, stays open long enough to
     // be seen, and settles shut again. No fill mode on purpose: once it has
     // played the element falls back to the rules above, so a hover straight
@@ -5606,7 +5619,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.setAttribute("data-arf-header", "1");
     const top = el("div", "arf-row");
     const mark = el("span", "arf-mark");
-    mark.innerHTML = refineIcon();
+    // Shut, and it stays shut. This header is rebuilt on every repaint, a tab
+    // switch included, and a fresh node replays a CSS animation from the start,
+    // so a waking eye here blinked every time somebody moved between tabs.
+    // Waking is for the marks that are drawn once and left alone.
+    mark.innerHTML = eyeIcon("shut");
     const name = el("div", "arf-cardh arf-grow", "Auto Refine");
     const sw = document.createElement("input");
     sw.type = "checkbox";
@@ -11647,7 +11664,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       const kind = busy ? "working" : "ready";
       if (one.getAttribute("data-arf-icon") !== kind) {
         one.setAttribute("data-arf-icon", kind);
-        one.innerHTML = busy ? readIcon() : refineIcon();
+        // Shut rather than waking on the way back. This runs every time a
+        // refine starts and ends, and a waking eye here would open and settle
+        // after every single one, which is a second announcement nobody asked
+        // for on top of the card that already landed.
+        one.innerHTML = busy ? readIcon() : eyeIcon("quiet");
         // Named for what pressing it does now, so the label a screen reader
         // reads matches the mark beside it.
         const said = busy

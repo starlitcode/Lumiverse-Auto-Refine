@@ -2490,11 +2490,23 @@ console.log("\nthe eye on the floating button");
       });
     const m = await mark();
     ok("the mark on the panel is an eye", !!m, JSON.stringify(m));
-    ok("with no state of its own, so shut is what it rests at",
-      m && /arf-wakes/.test(m.cls) && !/arf-eye-(shut|read|done)/.test(m.cls), JSON.stringify(m));
-    ok("and it wakes when it is drawn", m && m.wakes === "arf-wake", JSON.stringify(m));
-    ok("lid and all, or half of it would move", m && m.lidWakes === "arf-wake-lid",
+    // Waking belongs to a mark that is drawn once and left alone. This header is
+    // rebuilt on every repaint, and a fresh node replays a CSS animation from
+    // the start, so a waking eye here blinked at somebody every time they moved
+    // between tabs.
+    ok("and it rests shut, since this one is redrawn constantly",
+      m && /arf-eye-shut/.test(m.cls), JSON.stringify(m));
+    ok("so it never wakes", m && m.wakes === "none" && m.lidWakes === "none",
       JSON.stringify(m));
+
+    await goTab(page, "Context");
+    await goTab(page, "Log");
+    await goTab(page, "Prompt");
+    const after = await mark();
+    ok("it is still there after moving between tabs", !!after, JSON.stringify(after));
+    ok("and does not start blinking on any of them",
+      after && after.wakes === "none" && after.lidWakes === "none", JSON.stringify(after));
+    ok("still resting shut", after && /arf-eye-shut/.test(after.cls), JSON.stringify(after));
 
     // The one that holds a state never wakes, or the button would open itself
     // every time the panel was rebuilt.
@@ -2545,7 +2557,7 @@ console.log("\nthe eye on the floating button");
 
     const found = await ball(sel);
     ok("the button under a message carries the eye", !!found, JSON.stringify(found));
-    ok("and it is one of the waking ones", found && /arf-wakes/.test(found.cls),
+    ok("and it is one that answers a pointer", found && /arf-opens/.test(found.cls),
       JSON.stringify(found));
 
     // Waited out, or the read catches the wake still running rather than where
