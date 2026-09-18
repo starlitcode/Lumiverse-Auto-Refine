@@ -2440,6 +2440,125 @@ console.log("\nthe eye on the floating button");
     const kept = await eye();
     ok("and it survives the repaints, so the reading is not restarted every tick",
       kept && kept.same === "1", JSON.stringify(kept));
+
+    // The refine lands. The lid does not just drop: the eye blinks once and
+    // then shuts, which is the one moment the button has something to say.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "refined", chatId: "c1", messageId: "m2", canUndo: true,
+        before: "It hit him like an electric shock.",
+        after: "It hit him hard.",
+      });
+    });
+    await settle(page);
+    const done = await eye();
+    ok("a refine finishing blinks the eye rather than dropping the lid",
+      done && /arf-eye-done/.test(done.cls), JSON.stringify(done));
+    ok("and the blink is a state of its own, not the reading one",
+      done && !/arf-eye-read/.test(done.cls), JSON.stringify(done));
+
+    // It has to survive the clock, which repaints two and a half times a
+    // second: rewriting the class would restart the blink on every tick.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 450)));
+    const midBlink = await eye();
+    ok("the blink is left alone while it plays",
+      midBlink && /arf-eye-done/.test(midBlink.cls), JSON.stringify(midBlink));
+
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 900)));
+    const settled = await eye();
+    ok("and it settles shut once the blink is over",
+      settled && /arf-eye-shut/.test(settled.cls) && !/arf-eye-done/.test(settled.cls),
+      JSON.stringify(settled));
+  });
+
+  // Every other eye there is. The mark on the panel, the one in the drawer tab
+  // and the ones on the buttons are all drawn shut, wake when they appear, and
+  // open to a pointer. The floating button is the exception: it is shut because
+  // nothing is running rather than because it has just arrived.
+  await inTab(browser, { saved: { widgetOn: true } }, async (page) => {
+    const mark = () =>
+      page.evaluate(() => {
+        const svg = document.querySelector("#drawer [data-arf-header] .arf-eye");
+        if (!svg) return null;
+        const ball = svg.querySelector(".arf-eye-ball");
+        const lid = svg.querySelector(".arf-eye-lid");
+        return {
+          cls: svg.getAttribute("class"),
+          wakes: getComputedStyle(ball).animationName,
+          lidWakes: getComputedStyle(lid).animationName,
+        };
+      });
+    const m = await mark();
+    ok("the mark on the panel is an eye", !!m, JSON.stringify(m));
+    ok("with no state of its own, so shut is what it rests at",
+      m && /arf-wakes/.test(m.cls) && !/arf-eye-(shut|read|done)/.test(m.cls), JSON.stringify(m));
+    ok("and it wakes when it is drawn", m && m.wakes === "arf-wake", JSON.stringify(m));
+    ok("lid and all, or half of it would move", m && m.lidWakes === "arf-wake-lid",
+      JSON.stringify(m));
+
+    // The one that holds a state never wakes, or the button would open itself
+    // every time the panel was rebuilt.
+    const onButton = await page.evaluate(() => {
+      const svg = document.querySelector("#float .arf-eye");
+      if (!svg) return null;
+      return {
+        cls: svg.getAttribute("class"),
+        wakes: getComputedStyle(svg.querySelector(".arf-eye-ball")).animationName,
+      };
+    });
+    ok("the floating button's eye carries its own state", onButton && /arf-eye-shut/.test(onButton.cls),
+      JSON.stringify(onButton));
+    ok("and does not wake, since it is shut for a reason",
+      onButton && onButton.wakes === "none", JSON.stringify(onButton));
+  });
+
+  // Pointing at a button opens the eye on it. Done on a real one under a
+  // message, since those are the buttons that carry the mark rather than a
+  // word. One message as the host draws it, cut to the footer slot and the id
+  // the host writes into its scope. The prose is invented for this check.
+  const ONE_MESSAGE = `
+  <div id="wrap">
+    <div class="_bubble_86318_171">
+      <div data-component="MessageContent"><div class="_prose_1rr8k_181"><p>The lamp over the bench had been out for a week.</p></div></div>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
+    </div>
+  </div>`;
+  await inTab(browser, { saved: { enabled: true, messageButton: true } }, async (page) => {
+    await page.evaluate(async (markup) => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = markup;
+      document.body.appendChild(wrap.firstElementChild);
+      (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+      await new Promise((r) => setTimeout(r, 700));
+    }, ONE_MESSAGE);
+    const sel = '[data-arf-slot="message"]';
+    const ball = (s2) =>
+      page.evaluate((q) => {
+        const b = document.querySelector(q);
+        const svg = b && b.querySelector(".arf-eye");
+        if (!svg) return null;
+        return {
+          cls: svg.getAttribute("class"),
+          open: Number(getComputedStyle(svg.querySelector(".arf-eye-ball")).opacity),
+        };
+      }, s2);
+
+    const found = await ball(sel);
+    ok("the button under a message carries the eye", !!found, JSON.stringify(found));
+    ok("and it is one of the waking ones", found && /arf-wakes/.test(found.cls),
+      JSON.stringify(found));
+
+    // Waited out, or the read catches the wake still running rather than where
+    // the eye rests.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 1700)));
+    const rest = await ball(sel);
+    ok("which rests shut once it has woken", rest && rest.open === 0, JSON.stringify(rest));
+
+    await page.hover(sel);
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 340)));
+    const hovered = await ball(sel);
+    ok("and opens when the pointer is on it", hovered && hovered.open === 1,
+      JSON.stringify(hovered));
   });
 
   // The ring that fills while the button is held, which is the only thing

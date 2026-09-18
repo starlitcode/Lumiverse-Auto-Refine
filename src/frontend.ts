@@ -2122,6 +2122,15 @@ function backdropOf(el: any, style?: any): Rgb {
 // rest of the button rather than on its own clock.
 const EYE_MS = 260;
 
+// How long an eye takes to wake: open, hold open long enough to be read, and
+// settle shut. Every mark does this once when it is drawn, so the set moves the
+// way the floating button does rather than the button being the only part of
+// this that is alive.
+const EYE_WAKE_MS = 1500;
+
+// The blink a refine ends on, and the shut after it.
+const EYE_DONE_MS = 900;
+
 // Long enough that a normal tap never reaches it, short enough that holding the
 // button does not feel broken. Auto Retry holds for the same length.
 const HOLD_MS = 500;
@@ -2178,8 +2187,11 @@ const EYE_SHUT =
 
 function eyeIcon(state?: "shut" | "read", size?: number): string {
   const px = String(size || 20);
+  // No state asked for means this eye stands for the extension rather than for
+  // something it is doing, so it wakes when it is drawn and opens to a pointer.
+  const how = state ? " arf-eye-" + state : " arf-wakes";
   return (
-    '<svg class="arf-eye' + (state ? " arf-eye-" + state : "") + '" viewBox="0 0 24 24" ' +
+    '<svg class="arf-eye' + how + '" viewBox="0 0 24 24" ' +
     'width="' + px + '" height="' + px + '" fill="none" stroke="currentColor" ' +
     'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<g class="arf-eye-ball">' +
@@ -2205,13 +2217,21 @@ function readIcon(size?: number): string {
 // The part you selected, refined: the same eye with a bracket at either side of
 // it, so the pair reads as "all of it" and "this much of it" rather than as two
 // unrelated marks. The eye is drawn narrower to leave the brackets room.
+//
+// Built from the same classes as the plain mark, so it is shut at rest, wakes
+// when it is drawn and opens to a pointer along with the rest of them. The
+// brackets sit outside the group that moves: they are what the eye is looking
+// at, so they stay put while it opens.
 function partIcon(): string {
   return (
-    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+    '<svg class="arf-eye arf-wakes" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
     'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
     'stroke-linejoin="round" aria-hidden="true">' +
+    '<g class="arf-eye-ball">' +
     '<path d="M5.6 12C8.6 7.7 15.4 7.7 18.4 12 15.4 16.3 8.6 16.3 5.6 12Z" />' +
-    '<circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />' +
+    '<circle class="arf-eye-pupil" cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />' +
+    "</g>" +
+    '<path class="arf-eye-lid" d="M5.6 12Q12 14.4 18.4 12M8.6 14.3l-.4.9M12 15v1.1M15.4 14.3l.4.9" />' +
     '<path d="M2.9 8.8V15.2" opacity="0.55" />' +
     '<path d="M21.1 8.8V15.2" opacity="0.55" />' +
     "</svg>"
@@ -3914,23 +3934,31 @@ export function setup(ctx: Ctx, overrides?: any) {
     "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5));" +
     "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden;" +
-    "animation:arf-rise 180ms ease-out}" +
-    "@keyframes arf-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
+    "animation:arf-rise 320ms cubic-bezier(.2,.8,.28,1) both}" +
+    // The card comes up from under the corner it sits in, overshoots by a
+    // couple of pixels and settles. A straight slide of eight pixels in 180ms
+    // arrives and stops dead, which reads as something being placed there; this
+    // reads as something arriving. It grows very slightly on the way in as
+    // well, so the corner it comes from is the corner it came from.
+    "@keyframes arf-rise{" +
+    "0%{opacity:0;transform:translateY(14px) scale(.965)}" +
+    "62%{opacity:1;transform:translateY(-3px) scale(1.006)}" +
+    "100%{opacity:1;transform:none}}" +
     // A dim behind it, so the eye goes to the card rather than hunting the page
     // under it for what changed. Light enough to read the chat through, since
     // the card is about a message sitting right there, and a tap anywhere on it
     // closes, which is what everybody expects of a dim.
     ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
     "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
-    "animation:arf-fade 180ms ease-out}" +
+    "animation:arf-fade 320ms cubic-bezier(.2,.8,.28,1) both}" +
     "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
     "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
     "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
     // A row switched on where somebody is already looking. It fades down into
     // place rather than appearing between two frames, which is the difference
     // between a row arriving and the page having flinched.
-    ".arf-arrive{animation:arf-arrive 180ms ease-out both}" +
-    "@keyframes arf-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}" +
+    ".arf-arrive{animation:arf-arrive 260ms cubic-bezier(.2,.8,.28,1) both}" +
+    "@keyframes arf-arrive{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}" +
     "@media (prefers-reduced-motion: reduce){.arf-arrive{animation:none}}" +
     // On a phone it spans the width and sits above the input bar rather than on
     // top of it, so it can be read while you carry on.
@@ -3979,8 +4007,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // to sit with the host's own icon buttons rather than to stand out: it is
     // one more action in a row of them, not a badge.
     // ---- the eye ----
-    // Three states on one shape. Open and still is the extension sitting there,
-    // shut is nothing running, and reading is a refine in flight.
+    // One shape, and everywhere it is drawn it is drawn shut. Shut is the mark
+    // at rest: the extension is not reading anything, so the eye is not open.
     //
     // Everything moves around the middle of the 24 box rather than the middle of
     // whatever each part's own bounds happen to be, so the lid shuts onto the
@@ -3988,14 +4016,43 @@ export function setup(ctx: Ctx, overrides?: any) {
     // its own edge.
     ".arf-eye .arf-eye-ball,.arf-eye .arf-eye-lid,.arf-eye .arf-eye-pupil{" +
     "transform-box:view-box;transform-origin:12px 12px}" +
-    ".arf-eye .arf-eye-ball{transition:transform " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)," +
+    ".arf-eye .arf-eye-ball{transform:scaleY(.1);opacity:0;" +
+    "transition:transform " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)," +
     "opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
-    ".arf-eye .arf-eye-lid{opacity:0;" +
+    ".arf-eye .arf-eye-lid{opacity:1;" +
     "transition:opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
-    // Shut: the eye flattens onto its own centre line and the lashes come up
-    // under it. Not hidden and replaced, so the two states are one movement.
-    ".arf-eye.arf-eye-shut .arf-eye-ball{transform:scaleY(.1);opacity:0}" +
-    ".arf-eye.arf-eye-shut .arf-eye-lid{opacity:1}" +
+    // Open, however it was asked for. The lid lifts and the eye comes up from
+    // its own centre line rather than being swapped for a second drawing, so
+    // opening and shutting are one movement in either direction.
+    ".arf-eye.arf-eye-open .arf-eye-ball,.arf-eye.arf-eye-read .arf-eye-ball{" +
+    "transform:none;opacity:1}" +
+    ".arf-eye.arf-eye-open .arf-eye-lid,.arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
+    // Pointing at a button opens the eye on it. A mark that answers the pointer
+    // is the cheapest way to say a thing can be pressed, and it is the same
+    // movement the rest of this does rather than a second idea.
+    // Only the eyes with nothing else to say. The floating button is shut
+    // because no refine is running, which is a fact about the extension rather
+    // than about where your pointer is, so pointing at it changes nothing.
+    "button:hover .arf-eye.arf-wakes .arf-eye-ball," +
+    "button:focus-visible .arf-eye.arf-wakes .arf-eye-ball," +
+    "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-ball{transform:none;opacity:1}" +
+    "button:hover .arf-eye.arf-wakes .arf-eye-lid," +
+    "button:focus-visible .arf-eye.arf-wakes .arf-eye-lid," +
+    "[role=\"button\"]:hover .arf-eye.arf-wakes .arf-eye-lid{opacity:0}" +
+    // Waking. An eye that has just been drawn opens, stays open long enough to
+    // be seen, and settles shut again. No fill mode on purpose: once it has
+    // played the element falls back to the rules above, so a hover straight
+    // afterwards still opens it rather than fighting a finished animation.
+    "@keyframes arf-wake{0%{transform:scaleY(.1);opacity:0}" +
+    "16%{transform:scaleY(1);opacity:1}" +
+    "64%{transform:scaleY(1);opacity:1}" +
+    "100%{transform:scaleY(.1);opacity:0}}" +
+    "@keyframes arf-wake-lid{0%{opacity:1}16%{opacity:0}64%{opacity:0}100%{opacity:1}}" +
+    // Carried by the eyes that stand for the extension rather than for a state
+    // of it. The floating button's eye is left out: it is shut because nothing
+    // is running, not because it has just been drawn.
+    ".arf-eye.arf-wakes .arf-eye-ball{animation:arf-wake " + EYE_WAKE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
+    ".arf-eye.arf-wakes .arf-eye-lid{animation:arf-wake-lid " + EYE_WAKE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
     // Reading: the pupil crosses the eye at the pace of somebody scanning a
     // line, then snaps back to the start the way an eye does at the end of one.
     // Linear across, eased on the way back, which is what makes it read as
@@ -4010,11 +4067,29 @@ export function setup(ctx: Ctx, overrides?: any) {
     "73%{transform:scaleY(.28)}80%,100%{transform:scaleY(1)}}" +
     ".arf-eye.arf-eye-read .arf-eye-pupil{animation:arf-read 1700ms infinite}" +
     ".arf-eye.arf-eye-read .arf-eye-ball{animation:arf-blink 1700ms infinite}" +
-    // A reader who has asked for less movement gets the eye open and still, and
-    // the button's title still says it is working.
+    // Finished. One long blink and the eye shuts, rather than the lid dropping
+    // the instant the answer lands. A refine ending is the one moment the button
+    // has something to say, and a state that arrives and leaves in the same
+    // frame says it to nobody.
+    "@keyframes arf-done{0%{transform:scaleY(1);opacity:1}" +
+    "34%{transform:scaleY(1);opacity:1}" +
+    "52%{transform:scaleY(.12);opacity:1}" +
+    "70%{transform:scaleY(1);opacity:1}" +
+    "100%{transform:scaleY(.1);opacity:0}}" +
+    "@keyframes arf-done-lid{0%,70%{opacity:0}100%{opacity:1}}" +
+    ".arf-eye.arf-eye-done .arf-eye-ball{" +
+    "animation:arf-done " + EYE_DONE_MS + "ms cubic-bezier(.2,.7,.3,1) both}" +
+    ".arf-eye.arf-eye-done .arf-eye-lid{" +
+    "animation:arf-done-lid " + EYE_DONE_MS + "ms cubic-bezier(.2,.7,.3,1) both}" +
+    // A reader who has asked for less movement gets the eye open and still
+    // wherever it is drawn. A mark that never moves is better open than shut:
+    // shut is only readable next to the open one, and there would be no open one
+    // to read it against. The buttons still say in words what they are doing.
     "@media (prefers-reduced-motion: reduce){" +
-    ".arf-eye .arf-eye-ball,.arf-eye .arf-eye-lid{transition:none}" +
-    ".arf-eye.arf-eye-read .arf-eye-pupil,.arf-eye.arf-eye-read .arf-eye-ball{" +
+    ".arf-eye .arf-eye-ball{transform:none;opacity:1;transition:none;animation:none}" +
+    ".arf-eye .arf-eye-lid{opacity:0;transition:none;animation:none}" +
+    ".arf-eye.arf-eye-read .arf-eye-pupil,.arf-eye.arf-eye-read .arf-eye-ball," +
+    ".arf-eye.arf-eye-done .arf-eye-ball,.arf-eye.arf-eye-done .arf-eye-lid{" +
     "animation:none}}" +
     // ---- saying something is wrong, in the theme's own colours ----
     // Lumiverse has a danger colour and a success colour, and a warning drawn
@@ -10820,6 +10895,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // it would otherwise fire against a button that has gone and write its last
   // position over a newer one.
   let widgetSettle: any = null;
+  // Whether the eye on the button was reading last time it was painted, so the
+  // moment a refine ends can be told from every other repaint that finds
+  // nothing running.
+  let eyeWasWorking = false;
+  let eyeDoneTimer: any = null;
+  disposers.push(() => {
+    if (eyeDoneTimer) clearTimeout(eyeDoneTimer);
+    eyeDoneTimer = null;
+  });
 
   // Only the corner is taken from here, never the size: the size is widgetAt,
   // which is what this extension asked for. A box with nothing in any of the
@@ -11096,13 +11180,42 @@ export function setup(ctx: Ctx, overrides?: any) {
       const box = el2.querySelector && el2.querySelector(".arf-glyph");
       if (box && el2.getAttribute("data-arf-icon") !== mark) {
         el2.setAttribute("data-arf-icon", mark);
-        box.innerHTML = eyeIcon(undefined, Number(mark));
+        // Shut from the first frame. Drawn without a state it would carry the
+        // waking animation, and the button would open itself every time it was
+        // resized while nothing was running.
+        box.innerHTML = eyeIcon("shut", Number(mark));
       }
       // Shut while nothing is running, open and reading while a refine is. The
       // state is a class on the eye rather than a different icon, which is what
       // lets the lid open rather than appear.
+      //
+      // A refine ending gets a state of its own on the way through: one long
+      // blink, then shut. Dropping the lid the instant the answer lands says
+      // nothing to anybody who was not already looking, and this is the one
+      // moment the button has something to tell them. It is left alone while it
+      // plays, because this runs from the clock two and a half times a second
+      // and rewriting the class would restart the blink on every tick.
       const eye = el2.querySelector && el2.querySelector(".arf-eye");
-      if (eye) eye.setAttribute("class", "arf-eye " + (working ? "arf-eye-read" : "arf-eye-shut"));
+      if (eye) {
+        const now = String(eye.getAttribute("class") || "");
+        if (working) {
+          eyeWasWorking = true;
+          if (now !== "arf-eye arf-eye-read") eye.setAttribute("class", "arf-eye arf-eye-read");
+        } else if (eyeWasWorking) {
+          eyeWasWorking = false;
+          eye.setAttribute("class", "arf-eye arf-eye-done");
+          if (eyeDoneTimer) clearTimeout(eyeDoneTimer);
+          eyeDoneTimer = setTimeout(() => {
+            eyeDoneTimer = null;
+            try {
+              if (String(eye.getAttribute("class") || "").indexOf("arf-eye-done") >= 0)
+                eye.setAttribute("class", "arf-eye arf-eye-shut");
+            } catch (_) {}
+          }, EYE_DONE_MS + 60);
+        } else if (now.indexOf("arf-eye-done") < 0 && now !== "arf-eye arf-eye-shut") {
+          eye.setAttribute("class", "arf-eye arf-eye-shut");
+        }
+      }
       el2.className =
         "arf-float" +
         (working ? " arf-working" : "") +
