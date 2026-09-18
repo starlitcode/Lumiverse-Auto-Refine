@@ -26,7 +26,7 @@ In Lumiverse, open Extensions and install from the repository URL:
 https://github.com/starlitcode/Lumiverse-Auto-Refine
 ```
 
-Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt ships with it, so switching it on is the whole of the setup. Everything below is optional.
+Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt comes with it, so switching it on is the whole of the setup. Everything below is optional.
 
 ## You are always in charge
 
@@ -78,7 +78,7 @@ Put your provider's prices in on the **Model** tab and the panel stops dealing i
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
 
-Four prompts ship with it and work as they stand: a line edit for replies and a copy edit for your own messages, each once for any model and once for a model that reasons, under a heading each where you pick them.
+Four prompts come with it and work as they stand: a line edit for replies and a copy edit for your own messages, each once for any model and once for a model that reasons, under a heading each where you pick them.
 
 Each one opens by telling the model which job it has. **The line edit** puts it on how a reply reads and keeps it off what happens in it. **The copy edit** puts it on what went wrong on the way to the page and keeps it off your style.
 

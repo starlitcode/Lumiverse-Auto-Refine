@@ -25,8 +25,8 @@ import { join } from "node:path";
 // setting added without one is caught instead of being described twice.
 import { __testing } from "../src/frontend.ts";
 // The settings a fresh install starts on, so a check against "the defaults" is
-// reading the same numbers the panel ships rather than a copy that goes stale.
-const SHIPPED_DEFAULTS = __testing.CONFIG;
+// reading the same numbers the panel has rather than a copy that goes stale.
+const STOCK_DEFAULTS = __testing.CONFIG;
 
 const { CONFIG, MACROS } = __testing;
 
@@ -503,7 +503,7 @@ async function worstText(page) {
 // Where Chromium actually is.
 //
 // Left to itself Playwright looks under its own download directory for a build
-// named the way it would have downloaded it, and an image that ships a browser
+// named the way it would have downloaded it, and an image that carries a browser
 // under any other name sends it to a path that does not exist. So the
 // environment's own copy is looked for first, and CHROMIUM_PATH still wins.
 function findChromium() {
@@ -1373,13 +1373,13 @@ console.log("\na preset that names a model setup");
     });
     ok("the preset card offers the saved setups", !!offered && offered.indexOf("Careful model") >= 0, JSON.stringify(offered));
 
-    // A shipped prompt cannot hold the setup: Update selected is greyed out on
+    // A built-in prompt cannot hold the setup: Update selected is greyed out on
     // one, and switching the picker puts the box back to what the next preset
     // carries. So picking a setup with one selected has to say where the pick is
     // going, or it looks like it took and then goes without a word.
-    const shippedNote = () =>
+    const builtInNote = () =>
       page.evaluate(() => {
-        const n = document.querySelector('#drawer [data-arf-shipped-setup]');
+        const n = document.querySelector('#drawer [data-arf-builtin-setup]');
         return n ? !n.hidden : null;
       });
     const pickPreset = (value) =>
@@ -1391,13 +1391,13 @@ console.log("\na preset that names a model setup");
 
     await pickPreset("The line edit");
     await settle(page);
-    ok("nothing is said about a shipped prompt before a setup is picked", (await shippedNote()) === false);
+    ok("nothing is said about a built-in prompt before a setup is picked", (await builtInNote()) === false);
     await page.evaluate(() => {
       const sel = document.querySelector('#drawer [data-arf-field="presetSetup"]');
       sel.value = "Careful model";
       sel.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    ok("picking a setup on a shipped prompt says the copy is what keeps it", (await shippedNote()) === true);
+    ok("picking a setup on a built-in prompt says the copy is what keeps it", (await builtInNote()) === true);
     const cannotUpdate = await page.evaluate(
       () => document.querySelector('#drawer [data-arf-preset="update"]').disabled,
     );
@@ -1416,7 +1416,7 @@ console.log("\na preset that names a model setup");
       JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").map((p) => [p.name, p.setup]),
     );
     ok("the preset is saved with the setup it asks for", JSON.stringify(written).indexOf("Careful model") >= 0, JSON.stringify(written));
-    ok("and on a preset of your own there is nothing to say", (await shippedNote()) === false);
+    ok("and on a preset of your own there is nothing to say", (await builtInNote()) === false);
 
     // Turn thinking off, then load the preset. The setup should put it back.
     await goTab(page, "Model");
@@ -1469,12 +1469,12 @@ console.log("\nstarting again");
       JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
     );
     // Read from CONFIG rather than written out here, so a default that moves in
-    // a release does not leave this checking a number nothing ships any more.
+    // a release does not leave this checking a number nothing uses any more.
     ok(
       "the second press puts the defaults back",
-      after.contextMessages === SHIPPED_DEFAULTS.contextMessages &&
-        after.timeoutSecs === SHIPPED_DEFAULTS.timeoutSecs,
-      JSON.stringify({ after: after, want: SHIPPED_DEFAULTS }),
+      after.contextMessages === STOCK_DEFAULTS.contextMessages &&
+        after.timeoutSecs === STOCK_DEFAULTS.timeoutSecs,
+      JSON.stringify({ after: after, want: STOCK_DEFAULTS }),
     );
     },
   );
@@ -1814,7 +1814,7 @@ console.log("\nloading a preset from where you were reading");
     });
     ok("there is somewhere to scroll to", scrolled > 0, String(scrolled));
 
-    // Load the longest preset that ships, which is the one that moves the
+    // Load the longest preset there is, which is the one that moves the
     // content height the most.
     //
     // Where you were reading is a thing on the screen, not a pixel count. The
@@ -2376,15 +2376,42 @@ console.log("\na temporary chat");
   });
 }
 
-console.log("\nthe spinner on the floating button");
+console.log("\nthe eye on the floating button");
 {
-  // The ring is turned by the stylesheet over 900ms. The clock repaints the
-  // button two and a half times a second, and rewriting the icon on each
-  // repaint would throw the element away mid-turn and start the rotation again
-  // from the top, which stutters instead of turning. So the check is that the
-  // element survives, not that it looks right.
+  // One shape in three states rather than one icon per state. The clock
+  // repaints the button two and a half times a second, and rewriting the icon
+  // on each repaint would throw the element away: an element that was replaced
+  // has nothing to move from, so the lid would pop open rather than open, and
+  // the pupil would start its crossing again from the top every 400ms. So the
+  // check is that the same node survives and only its class changes.
   await inTab(browser, { saved: { widgetOn: true, refineOn: true } }, async (page) => {
+    const eye = () =>
+      page.evaluate(() => {
+        const svg = document.querySelector("#float .arf-eye");
+        if (!svg) return null;
+        const ball = svg.querySelector(".arf-eye-ball");
+        const lid = svg.querySelector(".arf-eye-lid");
+        const pupil = svg.querySelector(".arf-eye-pupil");
+        return {
+          cls: svg.getAttribute("class"),
+          same: svg.getAttribute("data-arf-same-node"),
+          lidShown: lid ? Number(getComputedStyle(lid).opacity) : null,
+          ballShown: ball ? Number(getComputedStyle(ball).opacity) : null,
+          reads: pupil ? getComputedStyle(pupil).animationName : null,
+          blinks: ball ? getComputedStyle(ball).animationName : null,
+        };
+      });
+
+    // Nothing running, so the eye is shut.
+    const resting = await eye();
+    ok("the button carries an eye", !!resting, JSON.stringify(resting));
+    ok("and it is shut while nothing is running",
+      resting && /arf-eye-shut/.test(resting.cls), JSON.stringify(resting));
+    ok("with the lid drawn and the open eye faded out",
+      resting && resting.lidShown === 1 && resting.ballShown === 0, JSON.stringify(resting));
+
     await page.evaluate(() => {
+      document.querySelector("#float .arf-eye").setAttribute("data-arf-same-node", "1");
       const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
       window.__fromBackend({
         type: "active_chat", requestId: id, chatId: "c1",
@@ -2393,19 +2420,94 @@ console.log("\nthe spinner on the floating button");
       for (const f of window.__handlers.GENERATION_ENDED || []) f({ chatId: "c1", messageId: "m2" });
     });
     await settle(page);
-    const spinning = await page.evaluate(() => {
-      const svg = document.querySelector("#float .arf-spin");
-      if (svg) svg.setAttribute("data-arf-same-node", "1");
-      return !!svg;
-    });
-    ok("a refine puts a spinner on the button", spinning);
+    // The lid takes 260ms to get out of the way, and two frames is not that. A
+    // read before it lands catches the eye half open, which is the transition
+    // working rather than a state to check.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 340)));
+    const working = await eye();
+    ok("a refine opens it and sets it reading",
+      working && /arf-eye-read/.test(working.cls) && !/arf-eye-shut/.test(working.cls),
+      JSON.stringify(working));
+    ok("the lid is out of the way", working && working.lidShown === 0, JSON.stringify(working));
+    ok("the pupil crosses the eye", working && working.reads === "arf-read", JSON.stringify(working));
+    ok("and it blinks on the way back", working && working.blinks === "arf-blink",
+      JSON.stringify(working));
+    ok("opening it did not throw the eye away and draw a new one",
+      working && working.same === "1", JSON.stringify(working));
+
     // Long enough for several ticks of the clock.
     await page.evaluate(() => new Promise((r) => setTimeout(r, 1400)));
-    const kept = await page.evaluate(() => {
-      const svg = document.querySelector("#float .arf-spin");
-      return !!svg && svg.getAttribute("data-arf-same-node") === "1";
+    const kept = await eye();
+    ok("and it survives the repaints, so the reading is not restarted every tick",
+      kept && kept.same === "1", JSON.stringify(kept));
+  });
+
+  // The ring that fills while the button is held, which is the only thing
+  // saying a hold is under way before the menu arrives. Auto Retry draws the
+  // same ring the same way.
+  // On a desk and in a hand. The hold is a touch gesture first, and the button
+  // is 44px, so a phone is where a fault in it turns up.
+  for (const [where, how] of [
+    ["on a desktop", { saved: { widgetOn: true, refineOn: true } }],
+    ["on a phone", {
+      saved: { widgetOn: true, refineOn: true },
+      viewport: { width: 390, height: 844 },
+      touch: true,
+    }],
+  ])
+  await inTab(browser, how, async (page) => {
+    const ring = () =>
+      page.evaluate(() => {
+        const b = document.querySelector("#float .arf-float");
+        const r = b && b.querySelector(".arf-hold");
+        if (!r) return null;
+        const c = r.querySelector("circle");
+        const rs = getComputedStyle(r);
+        const cs = getComputedStyle(c);
+        return {
+          held: b.getAttribute("data-arf-holding"),
+          shown: Number(rs.opacity),
+          offset: parseFloat(cs.strokeDashoffset),
+          len: parseFloat(cs.strokeDasharray),
+          spins: /rotate\(-?90deg\)|matrix/.test(rs.transform),
+        };
+      });
+    const press = (ms) =>
+      page.evaluate((hold) => {
+        const b = document.querySelector("#float .arf-float");
+        b.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 60, clientY: 60 }));
+        return new Promise((r) => setTimeout(r, hold));
+      }, ms);
+
+    const idle = await ring();
+    ok(where + ": there is a ring on the button", !!idle, JSON.stringify(idle));
+    ok(where + ": out of sight until something is held", idle && idle.shown === 0, JSON.stringify(idle));
+    ok(where + ": and drawn at no length at all", idle && idle.offset === idle.len, JSON.stringify(idle));
+    ok(where + ": it starts at the top rather than at three o'clock", idle && idle.spins, JSON.stringify(idle));
+
+    await press(240);
+    const mid = await ring();
+
+    // A hair before the hold is up, which is the moment the ring has to be
+    // closed by. It used to be given the same length as the hold, so the timer
+    // beat it by a frame every time and the menu opened over a ring stopped a
+    // few per cent short.
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 230)));
+    const nearlyUp = await ring();
+    ok(where + ": holding the button shows it", mid && mid.held === "1" && mid.shown > 0.5, JSON.stringify(mid));
+    ok(where + ": part way round, not all of it", mid && mid.offset > 0 && mid.offset < mid.len,
+      JSON.stringify(mid));
+
+    ok(where + ": the ring is all the way round before the menu opens",
+      nearlyUp && nearlyUp.offset === 0, JSON.stringify(nearlyUp));
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      return new Promise((r) => setTimeout(r, 340));
     });
-    ok("and leaves it alone across repaints, so the turn is not restarted", kept);
+    const after = await ring();
+    ok(where + ": letting go early wipes it back",
+      after && after.held === null && after.offset === after.len, JSON.stringify(after));
   });
 }
 
@@ -4615,10 +4717,11 @@ console.log("\nthe button and its menu do not say the same thing twice");
     await settle(page);
     const face = await page.evaluate(() => {
       const b = document.querySelector("#float .arf-float");
-      return { icon: b.getAttribute("data-arf-icon") || "", title: b.title };
+      const eye = b.querySelector(".arf-eye");
+      return { eye: eye ? eye.getAttribute("class") : null, title: b.title };
     });
     ok("a refine that has landed leaves the button as it was",
-      /^ready:/.test(face.icon), face);
+      !!face.eye && /arf-eye-shut/.test(face.eye), face);
     ok("and a tap still says it refines", /Refine the latest reply/.test(face.title), face.title);
   });
 }
@@ -4633,9 +4736,10 @@ console.log("\nthe widget, while your draft is being refined");
   const face = (page) =>
     page.evaluate(() => {
       const b = document.querySelector("#float .arf-float");
+      const eye = b && b.querySelector(".arf-eye");
       return b && {
         working: b.classList.contains("arf-working"),
-        icon: b.getAttribute("data-arf-icon") || "",
+        eye: eye ? eye.getAttribute("class") : null,
         title: b.title,
       };
     });
@@ -4652,7 +4756,7 @@ console.log("\nthe widget, while your draft is being refined");
       await settle(page);
       const mid = await face(page);
       ok("it turns from the moment the draft is sent, not when the answer lands",
-        mid.working && /^working:/.test(mid.icon), mid);
+        mid.working && /arf-eye-read/.test(mid.eye || ""), mid);
       ok("and says a tap would stop it", /stop it/i.test(mid.title), mid.title);
 
       const id = await page.evaluate(
@@ -4674,7 +4778,8 @@ console.log("\nthe widget, while your draft is being refined");
 
       // The button goes back to its own mark rather than becoming an arrow.
       // The way back is in the menu behind it.
-      ok("and comes back as the refine mark", /^ready:/.test(done.icon), done.icon);
+      ok("and the eye shuts again rather than becoming another mark",
+        /arf-eye-shut/.test(done.eye || ""), done.eye);
       ok("and stops offering to put anything back",
         !/put the last refine back/i.test(done.title), done.title);
 
@@ -4851,7 +4956,7 @@ console.log("\nthe live line, for a draft as for a reply");
 console.log("\nthe prompt on screen is the prompt that runs");
 {
   // An untouched prompt is stored as nothing, so that a later change to the
-  // shipped one reaches anybody who never edited theirs. What was sent was that
+  // built-in one reaches anybody who never edited theirs. What was sent was that
   // nothing, and the backend filled the gap with a copy of its own, which is
   // shorter than the one the panel draws. So the blocks under Prompt were not
   // the blocks that ran, on the install where somebody is most likely to be
@@ -4923,7 +5028,7 @@ console.log("\nthe prompt on screen is the prompt that runs");
 
 console.log("\nlists with headings on them");
 {
-  // A dropdown of the shipped prompts and however many of your own is a
+  // A dropdown of the built-in prompts and however many of your own is a
   // column nobody reads. A heading is a real optgroup rather than an entry that
   // does nothing: the browser draws it greyed and refuses to select it, which
   // is what makes it a heading.
@@ -4945,7 +5050,7 @@ console.log("\nlists with headings on them");
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const got = await shape(page, "presetPick");
-    // One heading, for the list being edited. Each shipped preset carries one
+    // One heading, for the list being edited. Each built-in preset carries one
     // prompt and not the other, so offering both invited loading the one that
     // changes the prompt you are not looking at.
     ok("the presets are under a heading", got.heads.length === 1, got && got.heads);
@@ -4973,7 +5078,7 @@ console.log("\nlists with headings on them");
   });
 
   // Saving one of your own puts it under a heading of its own rather than in
-  // among the shipped ones.
+  // among the built-in ones.
   await inTab(browser, { saved: { } }, async (page) => {
     await goTab(page, "Prompt");
     await page.evaluate(() => {
@@ -4985,7 +5090,7 @@ console.log("\nlists with headings on them");
     await settle(page);
     const got = await shape(page, "presetPick");
     ok("your own go under a heading of their own", got.heads.indexOf("Yours") >= 0, got.heads);
-    ok("and not in among the ones that ship with it",
+    ok("and not in among the ones built in",
       (got.under.find((g) => g.head === "Yours") || {}).items.join() === "Mine", got.under);
   });
 
@@ -5899,7 +6004,7 @@ console.log("\ndescriptions behind a ?");
 
 console.log("\nthe preset menu shows one list at a time");
 {
-  // Every shipped preset carries one list and not the other, so loading a "for
+  // Every built-in preset carries one list and not the other, so loading a "for
   // your messages" one while editing replies changes the prompt you are not
   // looking at and leaves the one you are looking at alone. The menu offered
   // both, under headings, which is a mistake it was inviting.
@@ -6143,15 +6248,15 @@ console.log("\nthe macro list");
   });
 }
 
-console.log("\nsaying the shipped prompts have changed");
+console.log("\nsaying the built-in prompts have changed");
 {
-  // The mark is a fingerprint of the four as they ship, so a saved one that
+  // The mark is a fingerprint of the four as they stand, so a saved one that
   // does not match means they moved since the reader last took one. A made-up
   // mark stands in for "you were here two versions ago".
   const OLD = "notthemark";
   const seen = (page) =>
     page.evaluate(() => {
-      const n = document.querySelector("#drawer [data-arf-shippedmoved]");
+      const n = document.querySelector("#drawer [data-arf-builtinmoved]");
       return n ? n.textContent.trim() : null;
     });
 
@@ -6161,50 +6266,66 @@ console.log("\nsaying the shipped prompts have changed");
     ok("a fresh install is told nothing", (await seen(page)) === null);
     const stamped = await page.evaluate(() => {
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
-      return raw ? !!JSON.parse(raw).shippedSeen : false;
+      return raw ? !!JSON.parse(raw).builtInSeen : false;
     });
     ok("and is stamped as having seen them", stamped);
   });
 
   // Somebody who took one, back when they were different.
-  await inTab(browser, { saved: { shippedSeen: OLD } }, async (page) => {
+  await inTab(browser, { saved: { builtInSeen: OLD } }, async (page) => {
     await goTab(page, "Prompt");
     const said = await seen(page);
     ok("somebody who took one before is told", !!said, String(said));
     ok("and told their own prompt is untouched", /Yours is untouched/.test(said || ""), String(said));
 
     const after = await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-shippedmoved="dismiss"]').click();
+      document.querySelector('#drawer [data-arf-builtinmoved="dismiss"]').click();
       await new Promise((r) => setTimeout(r, 120));
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
-        gone: !document.querySelector("#drawer [data-arf-shippedmoved]"),
-        stamped: raw ? JSON.parse(raw).shippedSeen : null,
+        gone: !document.querySelector("#drawer [data-arf-builtinmoved]"),
+        stamped: raw ? JSON.parse(raw).builtInSeen : null,
       };
     });
     ok("saying got it takes the line away", after.gone, JSON.stringify(after));
     ok("and it stays away, because the mark was written down", after.stamped && after.stamped !== OLD, JSON.stringify(after));
   });
 
-  // Loading one of the four is the other way to be up to date.
+  // The same reader, upgrading from a version that wrote this under its old
+  // name. Losing it would swallow the one line saying the prompts changed, and
+  // nothing on screen would say anything was missing.
   await inTab(browser, { saved: { shippedSeen: OLD } }, async (page) => {
+    await goTab(page, "Prompt");
+    const said = await seen(page);
+    ok("a stamp written under the old name is still read", !!said, String(said));
+    const moved = await page.evaluate(() => {
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      const held = raw ? JSON.parse(raw) : {};
+      return { now: held.builtInSeen || null, old: held.shippedSeen || null };
+    });
+    ok("and carried across to the name this version uses", moved.now === OLD, JSON.stringify(moved));
+    ok("with the old name dropped rather than left behind", moved.old === null, JSON.stringify(moved));
+  });
+
+  // Loading one of the four is the other way to be up to date.
+  await inTab(browser, { saved: { builtInSeen: OLD } }, async (page) => {
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
       const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const shipped = Array.from(sel.options).find((o) => /The line edit/.test(o.textContent));
-      sel.value = shipped.value;
+      const builtIn = Array.from(sel.options).find((o) => /The line edit/.test(o.textContent));
+      sel.value = builtIn.value;
       sel.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 60));
       document.querySelector('#drawer [data-arf-preset="load"]').click();
       await new Promise((r) => setTimeout(r, 200));
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
-        picked: shipped.textContent.trim(),
-        stamped: raw ? JSON.parse(raw).shippedSeen : null,
-        line: !!document.querySelector("#drawer [data-arf-shippedmoved]"),
+        picked: builtIn.textContent.trim(),
+        stamped: raw ? JSON.parse(raw).builtInSeen : null,
+        line: !!document.querySelector("#drawer [data-arf-builtinmoved]"),
       };
     });
-    ok("the shipped prompt really was the one loaded", /The line edit/.test(out.picked), JSON.stringify(out));
+    ok("the built-in prompt really was the one loaded", /The line edit/.test(out.picked), JSON.stringify(out));
     ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
     ok("so the line goes with it", !out.line, JSON.stringify(out));
   });
@@ -6289,7 +6410,7 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
   // Loading a preset sets the picker and nothing cleared it, so editing a block
   // afterwards left the box naming a preset the prompt no longer matched.
   //
-  // The fields are not locked while a shipped preset is picked. Loading one and
+  // The fields are not locked while a built-in preset is picked. Loading one and
   // changing it is how somebody is meant to start, and locking the field would
   // stop the thing the card exists for. What was missing was the panel saying
   // the two had parted company, and where to keep the change.
@@ -6301,8 +6422,8 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
         return n ? { kind: n.getAttribute("data-arf-preset-drift"), text: n.textContent } : null;
       };
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const shipped = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
-      pick.value = shipped.value;
+      const builtIn = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
+      pick.value = builtIn.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
       const afterLoading = seen();
@@ -6327,8 +6448,8 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
     ok("there was a block to edit", out.edited, JSON.stringify(out));
     ok("editing one says the prompt has changed", !!out.afterEditing, JSON.stringify(out.afterEditing));
     ok(
-      "and on a shipped one it says to keep it under a name of your own",
-      !!out.afterEditing && out.afterEditing.kind === "shipped" && /Save as new/.test(out.afterEditing.text),
+      "and on a built-in one it says to keep it under a name of your own",
+      !!out.afterEditing && out.afterEditing.kind === "built-in" && /Save as new/.test(out.afterEditing.text),
       JSON.stringify(out.afterEditing),
     );
   });
@@ -6411,7 +6532,7 @@ console.log("\nwhere the input box is");
     });
     ok("the card is on Setup", seen.card, JSON.stringify(seen).slice(0, 200));
     ok("with a Test button", seen.test, JSON.stringify(seen).slice(0, 200));
-    ok("with a way back to the shipped list", seen.reset, JSON.stringify(seen).slice(0, 200));
+    ok("with a way back to the built-in list", seen.reset, JSON.stringify(seen).slice(0, 200));
     // Every selector, not a count of them: the reader needs to compare what is
     // being tried against their own page.
     ok("every built-in selector is listed", seen.lines === 5, JSON.stringify(seen).slice(0, 200));
@@ -6493,7 +6614,7 @@ console.log("\nwhere the input box is");
       return { tag: box ? box.tagName : "", value: box ? box.value : "" };
     });
     ok("it is one line, not a stack of them", seen.tag === "INPUT", JSON.stringify(seen).slice(0, 120));
-    ok("and starts holding the shipped list", /chat-message/.test(seen.value), seen.value.slice(0, 90));
+    ok("and starts holding the built-in list", /chat-message/.test(seen.value), seen.value.slice(0, 90));
   });
 
   // What the reader writes replaces the list rather than being added in front
@@ -6505,7 +6626,7 @@ console.log("\nwhere the input box is");
       return { all: list ? list.textContent : "", count: list ? list.getAttribute("data-arf-mine") : "?" };
     });
     ok("only what they wrote is tried", seen.count === "1", seen.all.slice(0, 160));
-    ok("and the shipped list is not added to it", !/chat-message/.test(seen.all), seen.all.slice(0, 160));
+    ok("and the built-in list is not added to it", !/chat-message/.test(seen.all), seen.all.slice(0, 160));
   });
 
   // Emptying the box is not an instruction to stop looking: it is what an
@@ -6516,7 +6637,7 @@ console.log("\nwhere the input box is");
       const list = document.querySelector("#drawer [data-arf-inputlist]");
       return { all: list ? list.textContent : "" };
     });
-    ok("an empty box falls back to the shipped list", /chat-message/.test(seen.all), seen.all.slice(0, 160));
+    ok("an empty box falls back to the built-in list", /chat-message/.test(seen.all), seen.all.slice(0, 160));
     ok("and says that is what happened", /box is empty/.test(seen.all), seen.all.slice(0, 120));
   });
 }
@@ -7345,7 +7466,7 @@ console.log("\nreaching a selection refine without the floating button");
     <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-two:minimal:footer" style="display:contents"></span>
   </div>`;
 
-  // The floating button off, which is how it ships, and the Extras row on. The
+  // The floating button off, which is how it starts, and the Extras row on. The
   // panel is the way in nobody can switch off, so it is checked either way.
   await inTab(browser, { saved: { widgetOn: false, inputRefine: true, enabled: true } }, async (page) => {
     const out = await page.evaluate(async (html) => {

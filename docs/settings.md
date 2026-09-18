@@ -93,12 +93,18 @@ Three things never move, whichever tab you left open, because they are what you 
 
   Pressing it changes every before and after on screen at once, and the view you were last on is the one the next card opens on. On a narrow screen the two columns stack one above the other rather than squeeze.
 
-  **Show a brief message** is the one-line note at the edge of the screen. A sound is off by default, and with nothing attached it is a short built-in blip made in the browser, so there is no file to ship.
+  **Show a brief message** is the one-line note at the edge of the screen. A sound is off by default, and with nothing attached it is a short built-in blip made in the browser, so there is no file to include.
 
   Closing the card loses nothing: every refine stays under **The last refine** here until you dismiss it.
 - **Ways to reach it** are four optional ways in, all off by default.
 
-  **A floating button** puts a round button over the chat. One tap refines the latest reply, and that is the only thing a tap does. It pulses while a refine is running, which is often the only part of the extension on screen. It needs the interface panels permission.
+  **A floating button** puts a round button over the chat. One tap refines the latest reply, and that is the only thing a tap does. It needs the interface panels permission.
+
+  The button carries the extension's mark, which is an eye. It is shut while nothing is running. A refine opens it and sets it reading: the pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back. That is often the only part of the extension on screen, so it says what is happening rather than only that something is.
+
+  Holding the button fills a ring around its edge, which closes a moment before the menu opens. Letting go early wipes it back. A press also dips the button a little: a dip on its own is a tap, a dip with the ring running is a hold. Auto Retry's floating button does the same.
+
+  Asking your device for less movement leaves the eye open and still and draws no ring. The hold still opens the menu and the tooltip still says when a refine is running.
 
   Holding it, or right clicking, opens Lumiverse's own menu. That menu carries the tab, refining every reply in the chat, stopping one that is running, an undo when there is one, refining your draft when that is switched on, a way to hide the button, and the master switch.
 

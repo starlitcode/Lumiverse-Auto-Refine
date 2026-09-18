@@ -115,12 +115,12 @@ describe("the extension's own mark", () => {
   });
 });
 
-// The default wait, against the prompts that ship with it.
+// The default wait, against the prompts that come with it.
 //
 // Two of the four are written for a model that reasons, and the backend's own
 // note on the timeout says such a model can think for minutes before it writes
 // a character. The default was 90 seconds, so those two could be cut off
-// mid-thought by the setting they shipped beside.
+// mid-thought by the setting beside them.
 //
 // A fast model never reaches this number at all, which is why the slow end is
 // the right place to put it: all it decides is how long somebody waits before
@@ -135,7 +135,7 @@ describe("the default wait suits the models the prompts are written for", () => 
     expect(__testing.CONFIG.timeoutSecs).toBeLessThanOrEqual(3600);
   });
 
-  test("the backend falls back to the same number the panel ships", () => {
+  test("the backend falls back to the same number the panel has", () => {
     const back = readFileSync(new URL("../src/backend.ts", import.meta.url), "utf8");
     const starts = back.match(/let timeoutSecs = (\d+);/);
     expect(starts && Number(starts[1])).toBe(__testing.CONFIG.timeoutSecs);

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-// The prompts that ship with it, held to what they promise.
+// The prompts that come with it, held to what they promise.
 //
 // Run with: bun test
 
@@ -12,7 +12,7 @@ import { __testing } from "../src/frontend";
 // the names no longer claim a size, and these hold the two things that are
 // left: that each pair really does get fuller, and that every one of them says
 // the passage means what it already meant.
-describe("the prompts that ship with it", () => {
+describe("the prompts that come with it", () => {
   const { BUILT_IN_PROMPTS } = __testing as any;
   // The blocks that carry the chat rather than the rules, by the ids they are
   // built under. "world" was in this list and is not a block id: the lore block
@@ -42,7 +42,7 @@ describe("the prompts that ship with it", () => {
   // saying which set it came from. Naming the sets for their job took the
   // collision away, and a name that no longer matches its label is a prefix
   // that outlived its reason.
-  // A preset keeps the prompt and a model setup keeps what runs it. The shipped
+  // A preset keeps the prompt and a model setup keeps what runs it. The built-in
   // ones used to carry thinkingMode in their settings, which is a setup key and
   // not a preset key, so applyPreset walked straight past it and it was never
   // once applied. Left there it would have been worse than useless the day
@@ -50,7 +50,7 @@ describe("the prompts that ship with it", () => {
   // and changed the model.
   test("none of them carries a setting that belongs to a model setup", () => {
     const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
-    // The object literal builtIn() hands each shipped preset as its settings.
+    // The object literal builtIn() hands each built-in preset as its settings.
     // Code only. The comment above the settings names thinkingMode to say why it
     // is not in there, and a check that reads its own explanation as a breach
     // would fail the moment somebody documented the rule.
@@ -112,7 +112,7 @@ describe("the prompts that ship with it", () => {
   });
 
   // The one for a reasoning model leans on the model to fill in the rest, so it
-  // ships fewer words than the one written for any model. Its description says
+  // carries fewer words than the one written for any model. Its description says
   // so, and this is what holds that claim to the text.
   test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
@@ -125,7 +125,7 @@ describe("the prompts that ship with it", () => {
 
   // The whole reason there is a second set. A prompt for your own turn is about
   // repairing what is there; one for a reply is about improving it. If the two
-  // said the same thing there would be no reason to ship both.
+  // said the same thing there would be no reason to have both.
   test("the prompts for your own writing are about leaving it alone", () => {
     for (const p of forMine()) {
       const whole = rulesOf(p).map((b: any) => b.text).join(" ");
@@ -318,7 +318,7 @@ describe("every setting can leave the panel", () => {
     debugParts: "what to tick on the problem report card",
     hunt: "what is typed in the search box",
     tab: "which tab of the panel was last open",
-    shippedSeen: "the shipped prompts as they were when you last took one",
+    builtInSeen: "the built-in prompts as they were when you last took one",
     movedSeen: "which moved defaults you have already been told about, which is about this browser rather than about your setup",
   };
 
@@ -349,11 +349,11 @@ describe("every setting can leave the panel", () => {
 });
 
 
-// The blocks the shipped prompts are made of. A block with a role the panel does
+// The blocks the built-in prompts are made of. A block with a role the panel does
 // not offer is turned into a system block without a word, and a block with no id
 // is dropped on the way to the backend. Neither says anything, and both are the
 // kind of mistake that comes from adding a block by hand.
-describe("every block in a shipped prompt is one the panel can hold", () => {
+describe("every block in a built-in prompt is one the panel can hold", () => {
   const { BUILT_IN_PROMPTS, ROLE_OPTIONS, MACROS } = __testing as any;
   const roles = ROLE_OPTIONS.map((r: any) => r.value);
   const every = BUILT_IN_PROMPTS.flatMap((p: any) =>
@@ -402,7 +402,7 @@ describe("every block in a shipped prompt is one the panel can hold", () => {
   // empty on most refines. It gets a block to itself so the tag around it can go
   // when the words do: a block that comes out as nothing but tags is dropped
   // whole, and a block is the only thing that check can drop.
-  test("the token note has a block to itself in every shipped prompt", () => {
+  test("the token note has a block to itself in every built-in prompt", () => {
     const wrong: string[] = [];
     for (const p of BUILT_IN_PROMPTS as any[]) {
       const carry = (p.blocks as any[]).filter((b) => String(b.text).includes("{{protect_notes}}"));

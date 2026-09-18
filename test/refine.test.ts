@@ -539,7 +539,7 @@ describe("answers that must not be saved", () => {
     });
   }
 
-  // The shipped prompt says a passage that already reads well comes back exactly
+  // The built-in prompt says a passage that already reads well comes back exactly
   // as it was. Calling that "the model changed nothing" reported the extension's
   // own instruction as a fault, and on a short piece of writing, which is most
   // of what an input box holds, it was the usual answer: the button looked
@@ -777,7 +777,7 @@ const said = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).
 // doing that. {{whose}} expanded into two sentences of the extension's own
 // writing, chosen by the extension, and slid into a prompt the reader wrote
 // without appearing anywhere they could read it, let alone reword it. The
-// same words are in the shipped prompt for your own messages, where they can
+// same words are in the built-in prompt for your own messages, where they can
 // be read, reworded or deleted.
 describe("what a macro is allowed to put in the prompt", () => {
   const MINE = ["in their own hand", "the story is written in more than one", "the story in its own voice"];
@@ -1059,18 +1059,18 @@ describe("seeing what gets sent", () => {
     expect(whole).not.toContain("tokens shaped like");
   });
 
-  // A phrase from the token note and from nowhere else in a shipped prompt. The
+  // A phrase from the token note and from nowhere else in a built-in prompt. The
   // obvious one, "tokens shaped like", is no good here: What to Copy Exactly
   // says it too, in every prompt, whether anything was protected or not.
   const NOTE_ONLY = "a single character you cannot spell";
 
-  // The note about the tokens is a block of its own in every shipped prompt, so
+  // The note about the tokens is a block of its own in every built-in prompt, so
   // it can carry a tag like the other macros do. The two below are the pair that
   // decides whether that block was worth having: it has to arrive wrapped when
   // there is something to say, and it has to leave the prompt entirely when
   // there is not. An empty tag pair sent on every refine is what moving it out
   // of How to Answer was for.
-  test("the shipped prompt wraps the token note in a tag of its own", async () => {
+  test("the built-in prompt wraps the token note in a tag of its own", async () => {
     const h = await armed(["x"], { blocks: DEFAULT_BLOCKS }, [
       { id: "m1", role: "user", content: "i walk through it" },
       {
@@ -3251,9 +3251,9 @@ describe("what Lumiverse remembers of the chat", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
-  // The block ships switched off, so nobody pays for a read they never asked
+  // The block starts switched off, so nobody pays for a read they never asked
   // for. Nothing is asked of the host while it is.
-  test("the block ships off, so nothing is asked for", async () => {
+  test("the block starts off, so nothing is asked for", async () => {
     const memoryBlock = (DEFAULT_BLOCKS as any[]).find((b) => b.id === "memory");
     expect(memoryBlock).toBeTruthy();
     expect(memoryBlock.on).toBe(false);
@@ -3264,7 +3264,7 @@ describe("what Lumiverse remembers of the chat", () => {
     expect(said(h)).not.toContain("<what_has_happened>");
   });
 
-  test("switched on, the same shipped prompt asks for it", async () => {
+  test("switched on, the same built-in prompt asks for it", async () => {
     const on = (DEFAULT_BLOCKS as any[]).map((b) =>
       b.id === "memory" ? { ...b, on: true } : { ...b },
     );
@@ -3485,7 +3485,7 @@ describe("refining what you selected", () => {
   // ahead is the text in front of the selection, which is what the panel sends:
   // the backend counts through it to work out which of several identical runs was
   // picked. Driving it the way the panel does is the point, so a check cannot
-  // pass on a path nothing ships.
+  // pass on a path nothing uses.
   const ask = (h: any, picked: string, ahead = "") =>
     h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ahead: ahead });
 
@@ -4062,13 +4062,13 @@ describe("a chain of passes", () => {
   });
 });
 
-// The two blocks added for the new macros ship switched on, which is only safe
+// The two blocks added for the new macros start switched on, which is only safe
 // because a block whose macros came back empty leaves the prompt. If that ever
 // stopped being true, every refine would carry two empty headings.
-describe("the shipped prompt carries the new macros", () => {
+describe("the built-in prompt carries the new macros", () => {
   const blocks = (DEFAULT_BLOCKS as any[]).map((b) => ({ ...b }));
 
-  test("the shipped prompt has a block for each of them", () => {
+  test("the built-in prompt has a block for each of them", () => {
     const text = blocks.map((b) => String(b.text || "")).join("\n");
     expect(text).toContain("{{overused}}");
     expect(text).toContain("{{whole_reply}}");

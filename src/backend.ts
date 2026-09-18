@@ -329,7 +329,7 @@ interface Block {
   text?: string;
 }
 
-// The prompt a fresh install ships with, and the one people copy to write their
+// The prompt a fresh install starts on, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
 // to as, and XML tags as headings with a closing tag at the end, because a
 // model reads a tagged block as one instruction rather than as a paragraph that
