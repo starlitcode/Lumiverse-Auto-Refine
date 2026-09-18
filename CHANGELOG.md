@@ -54,6 +54,12 @@ _2026-09-17_
 
   Nothing changes in what a refine does. Which model a prompt is written for is still said in its name and its description, which is advice about what to pick rather than a switch thrown on your behalf.
 
+- **The wait before a refine is given up on is four minutes, not ninety seconds.** Two of the four shipped prompts are written for a model that reasons, and such a model can think for minutes before it writes a character. A local model can spend that long loading. Both were being cut off mid-thought by the number they shipped beside, and the settings page told you to raise it yourself.
+
+  Four minutes is the slow end on purpose. A fast model answers in seconds and never reaches it, so all the number really decides is how long you wait before being told a refine that was never coming back has been given up on.
+
+  If you were still on ninety seconds, the panel says so and offers to move you. If you had set your own, it says nothing, because nothing of yours changed.
+
 - **A connection that refuses one of the fields sent with a refine no longer stops the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
 
   The refusal is read and the refine is asked again without the fields it named, once. Only fields that actually went out are dropped, so a message mentioning something the extension never sent changes nothing, and a second refusal is treated as real.

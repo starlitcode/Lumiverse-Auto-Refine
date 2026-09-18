@@ -6,6 +6,7 @@
 // Auto Retry has the same check against its own schema. Both exist because the
 // drift is silent: a field added without a default looks right on screen and
 // comes back empty on the next load.
+import { readFileSync } from "node:fs";
 import { expect, test, describe } from "bun:test";
 import { __testing } from "../src/frontend";
 
@@ -111,5 +112,35 @@ describe("the extension's own mark", () => {
 
   test("and is hidden from a screen reader, since the label beside it says it", () => {
     expect(refineIcon()).toContain('aria-hidden="true"');
+  });
+});
+
+// The default wait, against the prompts that ship with it.
+//
+// Two of the four are written for a model that reasons, and the backend's own
+// note on the timeout says such a model can think for minutes before it writes
+// a character. The default was 90 seconds, so those two could be cut off
+// mid-thought by the setting they shipped beside.
+//
+// A fast model never reaches this number at all, which is why the slow end is
+// the right place to put it: all it decides is how long somebody waits before
+// being told a refine that was never coming back has been given up on.
+describe("the default wait suits the models the prompts are written for", () => {
+  test("it leaves a reasoning model room to think", () => {
+    expect(__testing.CONFIG.timeoutSecs).toBeGreaterThanOrEqual(180);
+  });
+
+  test("and still gives up rather than spinning forever", () => {
+    expect(__testing.CONFIG.timeoutSecs).toBeGreaterThan(0);
+    expect(__testing.CONFIG.timeoutSecs).toBeLessThanOrEqual(3600);
+  });
+
+  test("the backend falls back to the same number the panel ships", () => {
+    const back = readFileSync(new URL("../src/backend.ts", import.meta.url), "utf8");
+    const starts = back.match(/let timeoutSecs = (\d+);/);
+    expect(starts && Number(starts[1])).toBe(__testing.CONFIG.timeoutSecs);
+    // And where a saved setting comes back unreadable.
+    const falls = back.match(/Number\(s\.timeoutSecs\) : (\d+);/);
+    expect(falls && Number(falls[1])).toBe(__testing.CONFIG.timeoutSecs);
   });
 });

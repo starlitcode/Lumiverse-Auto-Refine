@@ -41,7 +41,7 @@ let refineAgain = false;       // whether the pass returns to a reply it refined
 let connectionId = '';         // empty means the reader's active connection
 let thinkingMode = 'off';      // off | inherit | custom
 let thinkingEffort = 'medium'; // only read when thinkingMode is custom
-let timeoutSecs = 90;
+let timeoutSecs = 240;
 // Who these settings came from, which is who the automatic pass runs as.
 //
 // A generation event carries the generation, the chat, the message, the content
@@ -2747,7 +2747,7 @@ async function askModel(
   // a high effort level can think for minutes before it writes a character, and
   // a cap that fires mid-thought throws away work that was about to arrive.
   const ms = !Number.isFinite(secs)
-    ? 90000
+    ? 240000
     : secs <= 0
       ? 0
       : Math.min(3600, Math.max(5, secs)) * 1000;
@@ -3657,7 +3657,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
       // Not `|| 90`. Zero is a setting here, meaning never give up, and the
       // short form would have quietly turned it back into a minute and a half.
-      timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 90;
+      timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;
       maxGrowthPct = Number(s.maxGrowthPct);
       maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
       minShrinkPct = Number(s.minShrinkPct);

@@ -305,7 +305,16 @@ const CONFIG = {
   connectionId: "",
   thinkingMode: "off",
   thinkingEffort: "medium",
-  timeoutSecs: 90,
+  // Four minutes, which is the slow end rather than the usual one. A fast model
+  // answers in seconds and never reaches this, so the only thing the number
+  // decides is how long somebody waits before being told a refine that was
+  // never coming back has been given up on.
+  //
+  // It was 90 seconds, which is under what two of the four shipped prompts ask
+  // for: a reasoning model on a high effort level can think for minutes before
+  // it writes a character, and a local model can spend that long loading before
+  // it starts. Both were cut off mid-thought by their own default.
+  timeoutSecs: 240,
   // What a million tokens costs, in and out. Nobody's prices are known here, so
   // 0 means the reader has not said and no cost is worked out.
   costIn: 0,
@@ -457,6 +466,10 @@ const CONFIG = {
   // already on the current ones, and an install from before this existed is not
   // worth a notice about a change nobody can point at.
   shippedSeen: "",
+  // Which set of moved defaults this reader has already been told about. Its
+  // own stamp rather than the prompts one, so saying got it to a line about a
+  // setting never quietly marks the shipped prompts as seen too.
+  movedSeen: "",
   // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
   // "userBlocks:id". A folded block draws its name and its switch and nothing
   // else, so a prompt of twenty is a list you can see at once rather than
@@ -1466,6 +1479,26 @@ function markText(text: string): string {
   return h.toString(36);
 }
 
+// Defaults that have moved, and what each one used to be.
+//
+// The notice built on this only reaches somebody still holding the old value,
+// because that is who was following the default. Anybody who set their own
+// number is told nothing: their setup did not change, and a line about a
+// default they are not on is a line to dismiss for no reason.
+//
+// One entry per default that moves, added in the release that moves it and
+// taken out once the release after has shipped. Empty is the normal state.
+const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string }> = [
+  {
+    key: "timeoutSecs",
+    was: 90,
+    label: "Give up waiting after",
+    why: "90 seconds was under what a reasoning model or a local one needs, so a refine could be cut off mid-thought. It is four minutes now.",
+  },
+];
+
+const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
+
 const SHIPPED_MARK = markText(BUILT_IN_SHAPES.map((p) => p.shape).join("\u0003"));
 
 const ROLE_OPTIONS = [
@@ -2298,6 +2331,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Written now rather than on the usual settle. This is what decides whether
     // somebody is told the same thing twice, and a panel closed inside the
     // settle would lose it.
+    persist(true);
+  }
+
+  // The moved defaults this reader is actually on. Anybody who set their own
+  // value is not on the list, because nothing about their setup moved.
+  function movedForMe(): Array<{ key: string; was: any; label: string; why: string }> {
+    if (String(cfg.movedSeen || "") === MOVED_MARK) return [];
+    return MOVED_DEFAULTS.filter((m) => steady((cfg as any)[m.key]) === steady(m.was));
+  }
+
+  function markMovedSeen() {
+    if (cfg.movedSeen === MOVED_MARK) return;
+    cfg.movedSeen = MOVED_MARK;
     persist(true);
   }
 
@@ -5161,6 +5207,46 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const p of missing())
       if (p.fatal)
         root.appendChild(bad(p.label + " is refused, so nothing can be refined. " + p.without));
+    // A default that moved under somebody who was following it. Said on every
+    // tab rather than tucked into Setup, because it is about a number they are
+    // running right now and did not choose.
+    //
+    // Only reaches a reader still holding the old value. Anybody who set their
+    // own is told nothing, since nothing of theirs changed.
+    const moved = movedForMe();
+    if (moved.length) {
+      const line = el("div", "arf-row arf-note");
+      line.setAttribute("data-arf-moveddefault", "1");
+      const what = el(
+        "span",
+        "",
+        (moved.length === 1
+          ? "A setting this ships with has changed in this update, and you were on the old one. "
+          : "Some settings this ships with have changed in this update, and you were on the old ones. ") +
+          moved.map((m) => m.label + ": " + m.why).join(" ") +
+          " Yours is still the old value until you take the new one.",
+      );
+      what.style.flex = "1";
+      line.appendChild(what);
+      const take = button("Take it", true);
+      take.setAttribute("data-arf-moveddefault", "take");
+      take.addEventListener("click", () => {
+        for (const m of moved) (cfg as any)[m.key] = (CONFIG as any)[m.key];
+        markMovedSeen();
+        persist(true);
+        toast(moved.length === 1 ? "Taken the new default." : "Taken the new defaults.");
+        paint();
+      });
+      line.appendChild(take);
+      const keep = button("Keep mine", false);
+      keep.setAttribute("data-arf-moveddefault", "keep");
+      keep.addEventListener("click", () => {
+        markMovedSeen();
+        paint();
+      });
+      line.appendChild(keep);
+      root.appendChild(line);
+    }
     // First, above everything. A refine waiting on an answer is the one thing on
     // this panel that is holding something up.
     if (pending) root.appendChild(buildPendingCard());

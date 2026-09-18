@@ -319,6 +319,7 @@ describe("every setting can leave the panel", () => {
     hunt: "what is typed in the search box",
     tab: "which tab of the panel was last open",
     shippedSeen: "the shipped prompts as they were when you last took one",
+    movedSeen: "which moved defaults you have already been told about, which is about this browser rather than about your setup",
   };
 
   test("there are parts to check, or this proves nothing", () => {

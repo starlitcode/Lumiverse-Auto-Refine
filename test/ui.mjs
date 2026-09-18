@@ -24,6 +24,9 @@ import { join } from "node:path";
 // The defaults, read from the panel's own source rather than copied here, so a
 // setting added without one is caught instead of being described twice.
 import { __testing } from "../src/frontend.ts";
+// The settings a fresh install starts on, so a check against "the defaults" is
+// reading the same numbers the panel ships rather than a copy that goes stale.
+const SHIPPED_DEFAULTS = __testing.CONFIG;
 
 const { CONFIG, MACROS } = __testing;
 
@@ -1465,7 +1468,14 @@ console.log("\nstarting again");
     const after = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")),
     );
-    ok("the second press puts the defaults back", after.contextMessages === 4 && after.timeoutSecs === 90);
+    // Read from CONFIG rather than written out here, so a default that moves in
+    // a release does not leave this checking a number nothing ships any more.
+    ok(
+      "the second press puts the defaults back",
+      after.contextMessages === SHIPPED_DEFAULTS.contextMessages &&
+        after.timeoutSecs === SHIPPED_DEFAULTS.timeoutSecs,
+      JSON.stringify({ after: after, want: SHIPPED_DEFAULTS }),
+    );
     },
   );
 }
@@ -6135,6 +6145,62 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
       !!out.afterEditing && out.afterEditing.kind === "shipped" && /Save as new/.test(out.afterEditing.text),
       JSON.stringify(out.afterEditing),
     );
+  });
+}
+
+console.log("\nwhen a default moves under somebody who was on it");
+{
+  // The line only reaches a reader still holding the old value, because that is
+  // who was following the default. Anybody who set their own number is told
+  // nothing: their setup did not change, and a line about a default they are
+  // not on is a line to dismiss for no reason.
+  const seen = (page) =>
+    page.evaluate(() => {
+      const n = document.querySelector("#drawer [data-arf-moveddefault]");
+      return n ? n.textContent : null;
+    });
+
+  // Still on the old 90 seconds, so this one is told.
+  await inTab(browser, { saved: { timeoutSecs: 90 } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody on the old default is told", !!said, JSON.stringify(said));
+    ok("and the line names the setting", !!said && /Give up waiting after/.test(said), JSON.stringify(said));
+    const after = await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      return {
+        now: raw ? JSON.parse(raw).timeoutSecs : null,
+        line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
+      };
+    });
+    ok("taking it moves them to the new one", after.now === 240, JSON.stringify(after));
+    ok("and the line goes with it", !after.line, JSON.stringify(after));
+  });
+
+  // Set their own, so nothing of theirs moved and nothing is said.
+  await inTab(browser, { saved: { timeoutSecs: 600 } }, async (page) => {
+    ok("somebody who chose their own is left alone", (await seen(page)) === null, "");
+  });
+
+  // Already on the new one, which is everybody installing fresh.
+  await inTab(browser, { saved: { timeoutSecs: 240 } }, async (page) => {
+    ok("and so is somebody already on the new one", (await seen(page)) === null, "");
+  });
+
+  // Keep mine puts it away without changing the setting.
+  await inTab(browser, { saved: { timeoutSecs: 90 } }, async (page) => {
+    const after = await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="keep"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+      return {
+        now: raw ? JSON.parse(raw).timeoutSecs : null,
+        line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
+      };
+    });
+    ok("keeping yours leaves the setting alone", after.now === 90, JSON.stringify(after));
+    ok("and still takes the line away", !after.line, JSON.stringify(after));
   });
 }
 
