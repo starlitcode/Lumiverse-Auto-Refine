@@ -100,7 +100,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   **A floating button** puts a round button over the chat. One tap refines the latest reply, and that is the only thing a tap does. It needs the interface panels permission.
 
-  The button carries the extension's mark, which is an eye. It is shut while nothing is running. A refine opens it and sets it reading: the pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back. That is often the only part of the extension on screen, so it says what is happening rather than only that something is.
+  The button carries the extension's mark, which is an eye. It is shut while nothing is running. A refine opens it and sets it reading: the pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back. The button itself pulses gently underneath, so it is visible as working from across the screen, at a glance that is too quick to read an eye by. That is often the only part of the extension on screen, so it says what is happening rather than only that something is.
 
   A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something. While it refines a selection the button shows the mark for that. Taking a selection out never changes it, since that is over the moment you press it.
 

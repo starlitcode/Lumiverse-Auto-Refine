@@ -365,13 +365,6 @@ const CONFIG = {
     // writing somebody was reading, and the change should be visible without
     // opening a tab to find it.
     popup: true,
-    // What one tap does when there is a refine to put back. On, the button turns
-    // into an undo; off, a tap always refines.
-    //
-    // Off by default. A button that silently becomes a different button is a
-    // button nobody can read, and while it stands there is no tap left for
-    // starting a refine. The card that comes up is where putting one back
-    // belongs: it says what it would be putting back.
     // How big the floating button is, across. The same default and the same 28
     // to 96 range as Auto Retry's floating button, so the two sit at matching
     // sizes when somebody runs both.
@@ -434,11 +427,6 @@ const CONFIG = {
     // without selecting the whole of it first. Off by default for the same
     // reason as the rest.
     messageButton: false,
-    // Where the input box is. Starts as the list above, so it can be read and
-    // corrected on the day a Lumiverse update moves the box rather than waiting
-    // for a release of this. Whatever is here is tried first and the list is
-    // still tried after it, so an edit that stops matching falls back rather than
-    // taking the feature down.
     // How many messages of the run-up go in the prompt. A rewrite that cannot see
     // what just happened flattens a scene into general prose, which is the
     // failure people blame on the model.
@@ -1416,9 +1404,6 @@ const ROLE_OPTIONS = [
     { value: "user", label: "User" },
     { value: "assistant", label: "Assistant" },
 ];
-// The sampler values that reach the request. Anything not on this list is not
-// passed on, on either side of the bridge. Blank means the connection decides,
-// which is why none of these carry a default.
 // Patterns of the reader's own, on top of the built-in ones. Added rather than
 // replacing: replacing is how somebody ends up with one pattern of their own,
 // none of the defaults, and a rewrite that ate a code block. What a particular
@@ -1525,6 +1510,9 @@ const WIDGET_FIELDS = [
         hint: "How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.",
     },
 ];
+// The sampler values that reach the request. Anything not on this list is not
+// passed on, on either side of the bridge. Blank means the connection decides,
+// which is why none of these carry a default.
 const SAMPLER_FIELDS = [
     {
         id: "temperature",
