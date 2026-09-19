@@ -6,6 +6,150 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.12.0
+
+_2026-09-19_
+
+### Added
+
+- **Where the input box is**, a new card on the **Setup** tab. Refining a draft is the one thing here that reads Lumiverse's own layout, so a release that moves the input box stops that and nothing else. Until now the only fix was waiting for a new version.
+
+  The box holds the list itself, so what is being tried can be read and edited in place. Separate the selectors with commas. They are tried in the order you write them, and emptying the box falls back to the list this came with.
+
+  Every selector is listed under the box in the order it is tried. The one finding the box is highlighted, and the rest are shown plainly, so you can see where yours sits in the order.
+
+  A selector the browser cannot read is marked in red. **Test** covers the box as a whole, and a box with one typo and four good selectors still passes, so the mark goes on the line instead.
+
+  **Use the built-in list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
+
+- **Tap a running refine to stop it.** Suggested by a Discord user. The buttons in the chat already turned into a spinner while one was working, and tapping the spinner did nothing but say a refine was already running.
+
+  Now the first tap starts it and the next one calls it off. While it runs the button names itself **Stop this refine**, so a screen reader says the same thing the mark shows.
+
+  This is the two buttons in the chat: the one in the toolbar and the one under a message. The panel and the floating button already had a stop of their own.
+
+- **Two buttons for the part you selected.** Suggested by a Discord user.
+
+  **Refine the part I selected** does what the panel entry of the same name does, without opening the panel.
+
+  **Take out what I selected** deletes the selection. There is no model call, so it costs nothing and is as quick as pressing it.
+
+  Both appear only while text is selected, so neither is ever a button sitting there doing nothing. With **A button on every message** on they appear under the message holding the selection, and nowhere else. With **A button in the chat's row of controls** on they appear in the toolbar too, wherever in the chat the selection is. Either switch on its own is enough, and both are under **Ways to reach it**.
+
+  In both places the button that starts a plain refine steps aside while something is selected, so what is in front of you is what to do with the text you picked. It comes back when you put the selection down, and the other messages keep theirs.
+
+  Neither needs a button in the chat switched on at all. Both are in the chat input's Extras menu as well, and in the floating button's menu while that button is on screen, and in both places only while something is selected.
+
+  Taking text out closes the gap the way a person would. One space between two halves rather than two, no space left in front of a full stop, and a paragraph taken out leaves one blank line rather than two. Nothing else in the message is touched.
+
+  Selecting the whole message is refused rather than emptying it. **Put it back** works on a snip exactly as it works on a refine.
+
+- **The before and the after, side by side.** Suggested by a Discord user. Every card showing what a refine changed marked the two versions up as one piece of text, with what was taken out struck through and what was put in next to it. That is the quicker read when a rewrite moved a word here and there, and the harder one when whole sentences were replaced and the result is more colour than writing.
+
+  **Read them side by side** puts the original in one column and the rewrite in the other. Each column reads as the whole text it stands for, and each still carries its own marks: what was taken out on the left, what was put in on the right. **Read them together** puts it back.
+
+  The button sits above every before and after there is: the card that comes up on the page, the **Put it back** card in the panel, and each pass under **What each pass changed** on the Log tab. Pressing it changes all of them at once, and the view you were last on is the one the next card opens on.
+
+  On a narrow screen the two columns stack one above the other rather than squeeze, because two columns of twenty characters each is a worse read than a scroll.
+
+### Fixed
+
+- **A rewrite is now told not to take things out.** Every block guarded against the model adding to your writing, and none of them guarded against it quietly removing a line that read plainly. Instructions hold a model back from adding much better than from cutting, so the cutting is now named on its own.
+
+- **A built-in prompt no longer claims to be loaded after you have changed it.** Loading one set the picker and nothing cleared it, so editing a block afterwards left the box naming a prompt your list no longer matched.
+
+  The card now says so once the two part company, and says where to keep the change: a prompt that comes with the extension cannot be written over, so it goes under a name of your own with **Save as new**.
+
+  The blocks are not locked while a built-in prompt is picked. Loading one and changing it is how you are meant to start.
+
+- **The thinking setting on a built-in prompt was never applied.** Each of them carried one, and loading a prompt walks past it, because that setting belongs to a model setup rather than to a prompt. It has been taken off them.
+
+  Nothing changes in what a refine does. Which model a prompt is written for is still said in its name and its description, which is advice about what to pick rather than a switch thrown on your behalf.
+
+- **A built-in prompt cannot be typed into.** Picking one from the list locks its blocks: the text, the switch, the role, the reordering, the delete, and **Add a block**. A line above them says why and says what to do instead.
+
+  Those four cannot be written over, so editing them was typing into something the panel was about to refuse to save. The rule is now one sentence: the ones built in are there to read and to start from, and the ones you save are yours to change.
+
+  To change one, put a name in the box under **Presets** and press **Save as new**. The copy is yours and opens for editing straight away.
+
+  A fresh install is not affected. The picker starts on nothing, so somebody who has never opened the list can type into every block. The text stays selectable while locked, so a line can still be copied out of a prompt you want to borrow from.
+
+- **The wait before a refine is given up on is four minutes, not ninety seconds.** Two of the four built-in prompts are written for a model that reasons, and such a model can think for minutes before it writes a character. A local model can spend that long loading. Both were being cut off mid-thought by the number they came with, and the settings page told you to raise it yourself.
+
+  Four minutes is the slow end on purpose. A fast model answers in seconds and never reaches it, so all the number really decides is how long you wait before being told a refine that was never coming back has been given up on.
+
+  If you were still on ninety seconds, the panel says so and offers to move you. If you had set your own, it says nothing, because nothing of yours changed.
+
+- **A connection that refuses one of the fields sent with a refine no longer stops the refine.** A strict OpenAI-compatible endpoint turns the whole request down over a single field it does not take, rather than ignoring it, and the panel showed a 400 that read like a fault in your rules. NVIDIA's build does this with the context size and the thinking setting.
+
+  The refusal is read and the refine is asked again without the fields it named, once. Only fields that actually went out are dropped, so a message mentioning something the extension never sent changes nothing, and a second refusal is treated as real.
+
+- **A hold that a thumb moved during was quietly dropped.** Holding the floating button opens its menu, and the hold was called off as soon as the finger moved more than six pixels. A thumb resting on glass moves further than six, so the menu simply never opened and nothing said why. Ten pixels now, which is the same allowance Auto Retry's button gives.
+
+- **The tab strip no longer slides sideways under a finger.** It scrolled, and the padding put its contents a few pixels over the box, so a drag meant for the panel moved the tabs instead. It is one row now and does not scroll. On a narrow screen the tabs get narrower rather than the last one dropping to a second line.
+
+### Changed
+
+- **The extension's mark is an eye.** Everywhere: the drawer tab, the panel heading, the menus, the button in the chat's row of controls, the button on each message, the floating button and the row in the input bar.
+
+  What this does to a reply is read it and put it back in better words, and an eye is the part of that anybody can see happening. It also gives one shape three things to say, which a row of lines and a sparkle could not.
+
+  Every eye rests shut and opens when a refine starts. Pointing at a button that carries one opens it too, so a mark you can press answers before you press it. The floating button is the exception there: it is shut because nothing is running, which is a fact about the extension rather than about where your pointer is.
+
+  **Refine the part I selected** carries the same eye with a bracket at either side of it, so the pair reads as "all of it" and "this much of it". **Take out what I selected** is still a pair of scissors, because taking text out is a different thing from reading it.
+
+  The floating button shows the mark for whatever it is running: the selection mark while it refines a selection, the eye for a plain refine. Taking a selection out is not on that list, since it is over the moment it is pressed.
+
+- **Every mark moves together.** The drawer tab, the heading on the panel, the buttons in the chat and the floating button all read while a refine is running, and all rest shut when nothing is.
+
+  A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something.
+
+- **The buttons in the chat stand in Lumiverse's own rows, dressed as its own buttons.** The one under a message sat in a row of its own, centred under the text, with the app's Copy, Edit and the rest in their row above it. Two rows of buttons on one message, one of them holding a single button, and nothing about the lower one said it belonged to the same message as the upper one.
+
+  Every display mode draws a row of buttons on a message, in a different place and under a different name, so the row is found rather than assumed. The buttons go in it. A display mode that draws no row at all gets the old row under the message, which is what that row was for.
+
+  How they look is no longer decided by this extension at all. Each one takes the classes off the button standing next to it, and its mark takes that button's size and line weight. Those classes carry a build hash, so they could never have been written down in here; read off the button they are already on, they are right on every build and follow a Lumiverse update rather than break on one.
+
+  That is also what puts these buttons inside your own styling. A theme reaches them, and so does CSS you wrote yourself, because to a stylesheet they are Lumiverse's buttons.
+
+- **A refine no longer spins a ring. The eye reads.** The pupil crosses from one side to the other at the pace of somebody scanning a line, snaps back to the start the way your eye does at the end of one, and blinks on the way back.
+
+  A turning ring says only that something is happening. This one says what is happening, and it is the same shape the button already had rather than an unrelated mark swapped in for the duration.
+
+  Somebody who has asked their device for less movement gets the eye open and still, and the button's tooltip still says it is working.
+
+- **A ring fills around the floating button while you hold it.** Holding the button opens its menu, and nothing on screen said a hold was under way, so the half second before the menu appeared read as a tap that did nothing.
+
+  The ring starts at the top and closes a moment before the menu opens. Letting go early wipes it back. A press also dips the button a little, so a tap answers whether or not it changed anything: a dip on its own is a tap, a dip with the ring running is a hold.
+
+  Auto Retry's floating button draws the same ring the same way, at the same length, so the two behave alike. Under less movement the menu opens on the same hold with no ring drawn.
+
+- **Every built-in prompt now opens by telling the model which job it has.** The first block used to describe the work without ever naming the worker. A line editor and a copy editor are two different jobs with a real boundary between them, and handing the model one of those names carries more than a paragraph of instructions does.
+
+  **The line edit** puts the model on how a reply reads and keeps it off what happens in it. **The copy edit** puts it on what went wrong on the way to the page and keeps it off your style.
+
+  The blocks also say plainly what they only implied before: change a sentence the moment it matches something named, without weighing whether this one is borderline, and leave every sentence that matches nothing. A passage coming back changed in every line is a worse edit than one carrying four good changes.
+
+- **Eight built-in prompts are now four.** The quick and close pairs were two sizes of the same prompt, and the smaller of each was a saving that did not amount to much on a prompt this size. What is left is one line edit and one copy edit, each once for any model and once for a model that reasons, which is the split that genuinely changes the prompt.
+
+  Each description says which of those it is for and stops there. They used to rank themselves by size, offering the shorter of two, which is not a thing anybody was choosing on and is not a choice that remains.
+
+  A fresh install starts on the fuller one of each pair, which is what the old close read was.
+
+  Your own prompt is untouched. If you had loaded one of the eight, the panel says the built-in set has changed and leaves it to you to load a new one.
+
+- **Typing in the search box no longer stalls between letters.** Every keystroke rebuilt the whole tab and then re-measured every line on it against your theme, which on the **Prompt** tab is about forty milliseconds a character. Typing one word cost nearly three tenths of a second of that, and it was felt as the field being slow to take letters.
+
+  It waits for a gap in the typing now and repaints once. Measured on the **Prompt** tab: 42ms a keystroke before, under 1ms after.
+
+- **The tabs share the row evenly.** Each was sized to its own label, so the gaps between them all differed and the selected one looked cramped next to the wide ones.
+
+- **A clearer line when a refine is already running.** It said "Press it again to stop that one", which was only ever true of the panel's own button, and that button is replaced by **Stop this refine** while one runs. It now says to stop it first or wait for it to finish.
+
+- **Plainer words in the built-in prompts and the panel.** A rewrite is returned rather than handed back, a last line sets up what comes next rather than reaching for it, a voice is short rather than clipped, and a refine finishes rather than lands. **When a refine lands** is **When a refine finishes**.
+
+  Your own prompt is not touched. To take the new wording, load a built-in prompt from the **Prompt** tab.
+
 ## 1.11.0
 
 _2026-09-15_
@@ -44,7 +188,7 @@ Cloud connections are unaffected by all of this. They hand reasoning back in a f
 
 - **Everything about prompt caching is gone from the panel and the pages.** The line under the block list that counted blocks below the passage, the paragraphs on the prompts page, and the clause on the cost note.
 
-  The order the shipped prompts use has not changed and neither has anything the extension sends. What is gone is the commentary about it. The prompts page still says what the order is and why the shape of the answer sits at the bottom.
+  The order the built-in prompts use has not changed and neither has anything the extension sends. What is gone is the commentary about it. The prompts page still says what the order is and why the shape of the answer sits at the bottom.
 
 ## 1.10.0
 
@@ -52,7 +196,7 @@ _2026-09-14_
 
 ### Added
 
-- **The softening check now reads what the model put in, not only what it took out.** Counting the strong words that went missing only sees half of a toned-down rewrite. The other half is the word that arrives in their place: killed becomes unalived, blood becomes crimson liquid, sex becomes intimacy. A list of those pairs ships with the extension and is read on every refine.
+- **The softening check now reads what the model put in, not only what it took out.** Counting the strong words that went missing only sees half of a toned-down rewrite. The other half is the word that arrives in their place: killed becomes unalived, blood becomes crimson liquid, sex becomes intimacy. A list of those pairs comes with the extension and is read on every refine.
 
   It only counts when **both halves happen**: the soft word is in the rewrite and was not in your reply, and the blunt word it stands in for was in your reply and is gone. Either on its own proves nothing, since a model can write eliminate about a possibility and a refine can drop the word kill while tightening a line. Needing both is what lets ordinary words like defeat, intimacy and shaft sit on the list without it firing all day.
 
@@ -116,7 +260,7 @@ _2026-09-13_
 
   It is not counted by the line about blocks below the passage, for the same reason the block carrying the reply around a part-refine is not: its macro answers to the passage, so it was never going to be reused.
 
-A prompt you already have is yours and is not touched by this. To take the new arrangement, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on. A prompt that still has the macro on the end of **How to Answer** goes on working exactly as it did.
+A prompt you already have is yours and is not touched by this. To take the new arrangement, load a built-in prompt from the **Prompt** tab, which overwrites the list you are on. A prompt that still has the macro on the end of **How to Answer** goes on working exactly as it did.
 
 ## 1.8.1
 
@@ -144,18 +288,18 @@ _2026-09-13_
 
 ### Changed
 
-- **The shipped prompts no longer assume one character on each side.** A card can hold a cast and a chat can be a group, so **Your Character** is now **Your Characters** holding `<your_characters>`, and **The User's Character** is **The User's Characters** holding `<the_users_characters>`. Four lines inside the prompts said the other person where they meant anybody else in the scene: something hanging between two people, a hand finding the other's, eyes tracing the other's face, speech repeating back what the other person said. All of them read for any number of characters now.
+- **The built-in prompts no longer assume one character on each side.** A card can hold a cast and a chat can be a group, so **Your Character** is now **Your Characters** holding `<your_characters>`, and **The User's Character** is **The User's Characters** holding `<the_users_characters>`. Four lines inside the prompts said the other person where they meant anybody else in the scene: something hanging between two people, a hand finding the other's, eyes tracing the other's face, speech repeating back what the other person said. All of them read for any number of characters now.
 - **One prompt still called you the other author.** That framing came out of the rest of them in 1.6.0 and this line was missed. A passage ending by pointing at what happens next is asking the user to do the work.
 
-A prompt you already have is yours and is not touched by any of this. To take the new wording, load a shipped prompt from the **Prompt** tab, which overwrites the list you are on.
+A prompt you already have is yours and is not touched by any of this. To take the new wording, load a built-in prompt from the **Prompt** tab, which overwrites the list you are on.
 
-- **It says when the prompts that ship with it have changed.** One line on the **Prompt** tab, with a **Got it** that puts it away for good. Your own prompt is never touched by it and it never loads anything for you: loading a shipped prompt writes over the list you are on, so that stays your call.
+- **It says when the prompts that come with it have changed.** One line on the **Prompt** tab, with a **Got it** that puts it away for good. Your own prompt is never touched by it and it never loads anything for you: loading a built-in prompt writes over the list you are on, so that stays your call.
 
-  Only for somebody who has loaded one of the eight before. A prompt that is entirely your own is not affected by the shipped ones changing, so there is nothing to tell you. A fresh install is marked as up to date, so this release is quiet for everybody and the first thing it says is about the next change.
+  Only for somebody who has loaded one of the eight before. A prompt that is entirely your own is not affected by the built-in ones changing, so there is nothing to tell you. A fresh install is marked as up to date, so this release is quiet for everybody and the first thing it says is about the next change.
 
 - **How to Answer is the last block now, and it goes out as you rather than as the setup.** It used to sit near the top with the rest of the rules. A rule about the shape of an answer is followed most closely when it is the last thing read: put it at the top and the model has the whole prompt between that rule and the answer, and some hand back a rewrite with the tags missing or wrapped around the wrong thing. That rule is also the one you cannot work around, since a rewrite without its tags is dropped rather than saved. The role is **User** because it is your instruction about what you want back rather than part of the setup, and it lands in the same message as the passage.
 
-  It costs a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block and the trade is the point. The line on the Prompt tab that counts blocks below the passage does not count this one, because every shipped prompt puts it there.
+  It costs a little where prompts are cached, since it used to sit in the run that never changes and now sits under the part that changes every turn. It is a short block and the trade is the point. The line on the Prompt tab that counts blocks below the passage does not count this one, because every built-in prompt puts it there.
 
 - **The tabs are a tray with the one you are on filled in.** They were a row of labels with a line under the selected one, which is the tab strip every panel has, and telling two of them apart at a glance is the one thing a tab strip has to do. The tab you are on is filled and its label is brighter; the rest are plain. Auto Retry marks its tabs the same way, so the two read as a pair. No label changes weight when you pick it, since a label that goes bold gets wider and shifts the row under the finger that just tapped it.
 
@@ -192,7 +336,7 @@ _2026-09-11_
 - **The phrase list the prompts cut from is half again as long.** It covered bodies and a few sentence shapes. It now covers feeling handed over in a container, faces and voices running stock business, the room doing the characters' work, pauses named instead of filled, and softened double negatives, alongside what it already had. Named as shapes wherever a shape catches more than an example does.
 - **The Speech block knows about register.** Lines that announce themselves before arriving, lines that only grade what was just said, counselling talk from characters who do not counsel for a living, and a soft name dropped in to take the edge off. None of it touches how a character is allowed to sound: somebody who speaks badly goes on speaking badly, and a character who already talks that way keeps it.
 
-- **The prompts that ship with it now name you and the user plainly.** They called the person writing with you your co-author, which put a word in the prompt that means nothing to a model and reads as a role it has to work out. The user is the user. Their character is **The User's Character**, yours is **Your Character**, and both are written with they and them throughout, so nothing in the prompt assumes a gender for either.
+- **The prompts that come with it now name you and the user plainly.** They called the person writing with you your co-author, which put a word in the prompt that means nothing to a model and reads as a role it has to work out. The user is the user. Their character is **The User's Character**, yours is **Your Character**, and both are written with they and them throughout, so nothing in the prompt assumes a gender for either.
 - **The rhetorical framing is gone.** Two prompts opened on a question asked for effect and four descriptions repeated it. A rule reads as a rule; the standard and the test say what they want outright now.
 - **Every block is named after the tag it holds.** The block called The Job holds `<your_job>`, What to Cut holds `<what_to_cut>`, Copy These Exactly holds `<copy_these_exactly>`. Reading the Prompt tab and reading the prompt are now the same thing, rather than two sets of names to hold in your head.
 - **The examples inside the prompts use they and them.** They were written with he and she, which reads as an instruction about who is in the scene.
@@ -227,8 +371,8 @@ _2026-09-11_
 
 ### Fixed
 
-- **Picking a model setup for a prompt that ships with the extension said nothing about where the pick was going.** The eight shipped prompts are fixed, so **Update selected** is greyed out on them and there is nowhere to write the link. **Save as new** does write it, onto your copy, which is the way to do it, but nothing said that: the box took the pick and then switching the preset list put it back to what the next preset carried. The card now says the copy is what keeps it, and only while a shipped prompt is the one selected.
-- **A name clash with a shipped prompt counted wrong.** Saving a preset under a name one of them already has is refused, and the refusal said there were two of them. There are eight.
+- **Picking a model setup for a prompt that comes with the extension said nothing about where the pick was going.** The eight built-in prompts are fixed, so **Update selected** is greyed out on them and there is nowhere to write the link. **Save as new** does write it, onto your copy, which is the way to do it, but nothing said that: the box took the pick and then switching the preset list put it back to what the next preset carried. The card now says the copy is what keeps it, and only while a built-in prompt is the one selected.
+- **A name clash with a built-in prompt counted wrong.** Saving a preset under a name one of them already has is refused, and the refusal said there were two of them. There are eight.
 
 ### Added
 
@@ -236,13 +380,13 @@ _2026-09-11_
 - **A chain stops when the reply is on its way out.** A chain is several model calls with real time between them, so the window for Auto Retry to swipe the reply, or for you to press regenerate, is as many times wider as there are passes. It was only checked before the first pass and after the last, which meant a reply replaced during the second of six bought four more calls that were never going to be saved. Checked between one pass and the next now, and the Log says which pass it stopped after.
 - **A chain runs at most six passes.** Each pass is a model call, so a list of fifty lines would have fired fifty calls off one button press, and the bill would have arrived before anybody noticed. Six is past any chain worth building.
 - **The Log tab says what each pass of a chain changed.** One before and one after, with three calls somewhere between them, tells you a chain came out worse and never which link did it. **What each pass changed** on the Log tab is a fold holding every pass in order, what each was handed, what it gave back, and how much it changed the length. A chain turned down on its total reports them too, which is when they matter most: the refusal says which limit was hit and this says which pass hit it. Nothing is there for a single pass, which has nothing to break down.
-- **The shipped prompts carry the two new macros.** A setting with nowhere to put its answer does nothing, and says nothing about why, so every prompt that ships with the extension now has a block for `{{overused}}` and one for `{{whole_reply}}`. Both are switched on, which costs nothing: each is empty until the thing that fills it happens, and a block whose macros came back empty leaves the prompt, tags and all. A prompt you saved before this version does not gain them, so switching **Find phrases this chat has worn out** on without a block for it now says so instead of filling nothing.
-- **A pass can name a prompt that ships with the extension.** Those are a separate list from the presets you save, and a pass naming one resolved to nothing and was skipped without saying why. Yours still wins where the two share a name.
+- **The built-in prompts carry the two new macros.** A setting with nowhere to put its answer does nothing, and says nothing about why, so every prompt that comes with the extension now has a block for `{{overused}}` and one for `{{whole_reply}}`. Both are switched on, which costs nothing: each is empty until the thing that fills it happens, and a block whose macros came back empty leaves the prompt, tags and all. A prompt you saved before this version does not gain them, so switching **Find phrases this chat has worn out** on without a block for it now says so instead of filling nothing.
+- **A pass can name a prompt that comes with the extension.** Those are a separate list from the presets you save, and a pass naming one resolved to nothing and was skipped without saying why. Yours still wins where the two share a name.
 - **A refine can make several passes instead of one.** **How many passes a refine makes** on the Limits tab, set to one pass by default, which is what every refine did before this. Several walks a list of your saved presets in order, each pass handed what the one before it wrote, so cutting the filler and fixing the rhythm can be two prompts rather than one doing both. **The passes, in order** takes one preset name per line. A name matching nothing is skipped, and so is a preset with no block carrying `{{message}}`; with no usable line the Prompt tab's own list runs as a single pass. Each pass is judged against what it was given rather than against the reply, since a pass that tightens by a fifth has not shrunk the reply by a fifth, and the end of the chain is judged once more against the reply it started from, because three passes each tightening by a third leave a reply half its length with no single pass doing anything the limits object to. A refusal stops the chain where it happens. It costs one call per pass, and the Log adds them up.
 - **This version's settings travel in an export, and so does the button's size.** Six of them did not: the passes, the mode, and the four for worn phrases. An export ran, a file came down, and the settings were quietly not in it, which turns restoring a backup on another device into finding out later. **How big it is** for the floating button was missing too, and had been for longer. A check holds every setting to it now, so one added later is either in a part or named as belonging to this screen.
 - **The words your story is made of are not counted as a habit.** A place, a job, an institution, a thing the chat is about, all repeat because the chat is about them. The phrases are checked against your character card, and against your lorebook where a block was already asking for it, and anything written into the story is left out of the report. Telling somebody their own setting is a habit is telling them to stop writing their story.
-- **Eight more shapes in the shipped prompts.** Shapes rather than particular phrases, because a model reaches for these whatever the scene is: a thing said by what it is not and then corrected, the same thing twice with the weaker one kept, three of anything in a row, a pause named instead of filled, actions strung onto one sentence with "as", a sound that escapes somebody, a sentence opened on a participle, and an action given and then graded.
-- **It can find the phrases this chat has worn out.** A refine judges one reply at a time, so a phrase reads as fine every time it is met; used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. **Find phrases this chat has worn out** on the Limits tab fills `{{overused}}` with them, so a block can name them and ask for something else. Counted across replies rather than within one, because five times in a single reply is that reply's choice. Dialogue is left out, since a character repeating a phrase is characterisation. So are your own messages, the character's name, runs of only common words, and anything in backticks. The longest phrase wins, so a finding is not also reported as the shorter runs inside it. **Phrases to leave alone** takes one per line for the times repetition is the point. It reads replies the refine already has, so it costs no extra call, and it ships off.
+- **Eight more shapes in the built-in prompts.** Shapes rather than particular phrases, because a model reaches for these whatever the scene is: a thing said by what it is not and then corrected, the same thing twice with the weaker one kept, three of anything in a row, a pause named instead of filled, actions strung onto one sentence with "as", a sound that escapes somebody, a sentence opened on a participle, and an action given and then graded.
+- **It can find the phrases this chat has worn out.** A refine judges one reply at a time, so a phrase reads as fine every time it is met; used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. **Find phrases this chat has worn out** on the Limits tab fills `{{overused}}` with them, so a block can name them and ask for something else. Counted across replies rather than within one, because five times in a single reply is that reply's choice. Dialogue is left out, since a character repeating a phrase is characterisation. So are your own messages, the character's name, runs of only common words, and anything in backticks. The longest phrase wins, so a finding is not also reported as the shorter runs inside it. **Phrases to leave alone** takes one per line for the times repetition is the point. It reads replies the refine already has, so it costs no extra call, and it sends it off.
 - **Refine part of a reply instead of all of it.** Select a sentence or a paragraph in a message, then press **Refine the part I selected**. It appears on the panel beside the other buttons, in the floating button's menu, and in the chat input's Extras menu on the same terms as the other rows there. The panel one is there whatever the button and the row are doing, so nobody who switched those off is shut out of it. The rest of the reply is left exactly as it was. The model is given the part and nothing else, so every check on the answer, its length included, is measured against the part rather than the reply around it. The entry is only in the menu while something is selected. Selecting inside your own message works too and uses your own prompt list, the same as pressing the button on one does, and the greeting is refused the same as ever. A selection that grew out of italics takes the whole italic run with it, since leaving one marker behind would turn the rest of the reply into emphasis.
 - **The length limits leave room on a short passage.** **How much longer** and **how much shorter** are shares of what was sent, and a share of one sentence is a handful of characters: sixty per cent of "it was fine" is six, which turns down every rewrite of it that is not nearly the same length. Each limit now gives the share or a floor in characters, whichever is larger. A reply long enough for the share to matter is judged by the share exactly as before. The two floors are not the same number, because a short passage coming back longer is the rewrite working and one coming back much shorter is a model answering with a stub.
 - **`{{whole_reply}}` shows the model what surrounds the part it was given.** The reply as it stands, with the part being rewritten wrapped in `<<<` and `>>>`, for a prompt that wants a fragment read in context. Empty on an ordinary refine, which leaves the block carrying it out of the prompt rather than sending an empty heading.
@@ -266,7 +410,7 @@ _2026-09-10_
 
 ### Added
 
-- **`{{memories}}` puts what Lumiverse remembers of the chat into the prompt.** Everything from further back than the run-up, and Lumiverse's own answer rather than one assembled here: the same pieces it would have retrieved, as many as your chat memory settings ask for, written out with your own header and chunk templates. Every shipped prompt carries it in a block of its own, **What has happened before now**, under the setting and above the pages before this one. That block ships switched off, because its size is decided by your chat memory settings rather than by anything on the Prompt tab and it would be sent on every refine; switch it on there when you want it. It needs no new permission, and a chat with memory switched off or nothing vectorised sends no block at all rather than an empty heading.
+- **`{{memories}}` puts what Lumiverse remembers of the chat into the prompt.** Everything from further back than the run-up, and Lumiverse's own answer rather than one assembled here: the same pieces it would have retrieved, as many as your chat memory settings ask for, written out with your own header and chunk templates. Every built-in prompt carries it in a block of its own, **What has happened before now**, under the setting and above the pages before this one. That block starts switched off, because its size is decided by your chat memory settings rather than by anything on the Prompt tab and it would be sent on every refine; switch it on there when you want it. It needs no new permission, and a chat with memory switched off or nothing vectorised sends no block at all rather than an empty heading.
 - **Refine a reply that has been refined before**, off by default, on the Limits tab under the automatic pass. Off means "still holding the refine it was given", not "has an id this pass has seen": a reply you swiped, regenerated, deleted a swipe from or edited is holding different words, and different words are a reply the pass has never seen, so it is refined either way. That is what keeps the pass working alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry), since every reply Auto Retry re-rolls is a new one. On, the same reply goes through again even when nothing about it changed. Either way a build that announces one generation twice buys one refine, not two, and pressing a button always refines what you pressed it on.
 - **It waits out a provider that will not take the call.** A "too many requests", a shared key at its limit, or a local server answering 503 while it loads a model is not a bad answer, because there was no answer and nothing was spent. **Wait out a provider that will not take the call** on the Limits tab does this twice by default, waiting longer each time, and where the provider says how long to wait, that is what it waits. It never waits on a wrong key or a prompt too long for the model, since waiting cannot fix either. The status line counts down while it waits, and Stop ends the wait as well as the call.
 - **Add the refine as a reroll instead of writing over the reply**, on the Limits tab, off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back. That is Lumiverse's own way back, it survives a reload, and the arrows for it are already on the message, where **Put it back** is held in memory and gone the moment you close the tab. **Put it back** then takes that reroll off again rather than writing the original over it, and it refuses where you have rolled another one since. A build that does not give a message rerolls writes over the reply as before.
@@ -287,9 +431,9 @@ _2026-09-06_
 ### Added
 
 - **The request is measured in tokens, and priced.** **Show me the request** gives the whole request in tokens, with Lumiverse's own tokeniser where it will answer and an estimate where it will not, saying which of the two you are reading. **Where the tokens go** breaks it down block by block, largest first with a share each, which counting the messages cannot do because blocks with the same role are joined before they are sent. Put your provider's input and output prices on the Model tab and the same card says what that request would cost and what a hundred replies at that size come to. Both prices start at 0, and with both at 0 no cost is shown anywhere. Fill in one and the line says which half of the sum it is pricing. Price lists write these as `$0.075/M`, so type the number on its own or paste the line and the number is taken out of it, and a saved model setup carries the prices of the model it names. No currency is shown either, because nothing here knows which one you are billed in.
-- **Every shipped prompt holds the point of view and the strength of what it is given.** A reply written in first person, present tense, from inside one head could come back in polished third with another character's thoughts in it, and nothing about that read as an error. And a model rewriting roleplay softens it: the heat comes down, the violence goes vague, the crude word turns polite. Limits could already refuse a rewrite that sanitised a reply, but that is a call already paid for, so the prompts ask first. Both are said in what the passage keeps rather than in what the model is forbidden.
+- **Every built-in prompt holds the point of view and the strength of what it is given.** A reply written in first person, present tense, from inside one head could come back in polished third with another character's thoughts in it, and nothing about that read as an error. And a model rewriting roleplay softens it: the heat comes down, the violence goes vague, the crude word turns polite. Limits could already refuse a rewrite that sanitised a reply, but that is a call already paid for, so the prompts ask first. Both are said in what the passage keeps rather than in what the model is forbidden.
 - **There is one prompt, and it is the one on the Prompt tab.** A second copy sat in the backend to fall back on before your settings had crossed over, and it had drifted: four blocks fewer, including the one that keeps markup away from the model, and an opening paragraph the panel stopped using. A refine that ran on it would have reported your prompt and sent that. The copy is gone, and a refine asked for in the moment before your settings arrive says so and sends nothing.
-- **The shipped prompts stop using the phrases they exist to cut.** Two opened on "you are the second pair of eyes", which is both the stock way to open a prompt and a stock phrase. "A beat" and "a fragment lands" used writing-workshop metaphors in the same breath as asking for plain writing, and "their hand" for the way somebody writes said nothing to anyone reading the block list. A check holds them to it, built from what was actually taken out rather than a guess at what might creep in.
+- **The built-in prompts stop using the phrases they exist to cut.** Two opened on "you are the second pair of eyes", which is both the stock way to open a prompt and a stock phrase. "A beat" and "a fragment lands" used writing-workshop metaphors in the same breath as asking for plain writing, and "their hand" for the way somebody writes said nothing to anyone reading the block list. A check holds them to it, built from what was actually taken out rather than a guess at what might creep in.
 - **The preset menu offers the four for the list you are editing.** All eight were listed under two headings, so loading a **For your messages** one while editing replies changed the prompt you were not looking at and left the one in front of you alone, with nothing saying so. Your own are still offered whichever list you are on, since one of yours can carry either.
 - **Importing the same file twice changes nothing.** Presets and model setups went in beside what you had, so a second import handed you the same preset again under a "(copy)" name, and with a cap on the list it pushed your own oldest one out to make room for it. They go by name now, the way [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry)'s always have: one that matches a name you have replaces it, one that matches it exactly is left alone, and the panel says which of the three happened to each.
 - **The macro list puts each meaning behind a ?**, the same one every other row on the panel uses. They were spelled out under each macro, which made a list you scan for a half remembered name into ten paragraphs; `{{protect_notes}}` alone ran longer than the other nine together.

@@ -539,7 +539,7 @@ describe("answers that must not be saved", () => {
     });
   }
 
-  // The shipped prompt says a passage that already reads well comes back exactly
+  // The built-in prompt says a passage that already reads well comes back exactly
   // as it was. Calling that "the model changed nothing" reported the extension's
   // own instruction as a fault, and on a short piece of writing, which is most
   // of what an input box holds, it was the usual answer: the button looked
@@ -777,7 +777,7 @@ const said = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).
 // doing that. {{whose}} expanded into two sentences of the extension's own
 // writing, chosen by the extension, and slid into a prompt the reader wrote
 // without appearing anywhere they could read it, let alone reword it. The
-// same words are in the shipped prompt for your own messages, where they can
+// same words are in the built-in prompt for your own messages, where they can
 // be read, reworded or deleted.
 describe("what a macro is allowed to put in the prompt", () => {
   const MINE = ["in their own hand", "the story is written in more than one", "the story in its own voice"];
@@ -1059,18 +1059,18 @@ describe("seeing what gets sent", () => {
     expect(whole).not.toContain("tokens shaped like");
   });
 
-  // A phrase from the token note and from nowhere else in a shipped prompt. The
+  // A phrase from the token note and from nowhere else in a built-in prompt. The
   // obvious one, "tokens shaped like", is no good here: What to Copy Exactly
   // says it too, in every prompt, whether anything was protected or not.
   const NOTE_ONLY = "a single character you cannot spell";
 
-  // The note about the tokens is a block of its own in every shipped prompt, so
+  // The note about the tokens is a block of its own in every built-in prompt, so
   // it can carry a tag like the other macros do. The two below are the pair that
   // decides whether that block was worth having: it has to arrive wrapped when
   // there is something to say, and it has to leave the prompt entirely when
   // there is not. An empty tag pair sent on every refine is what moving it out
   // of How to Answer was for.
-  test("the shipped prompt wraps the token note in a tag of its own", async () => {
+  test("the built-in prompt wraps the token note in a tag of its own", async () => {
     const h = await armed(["x"], { blocks: DEFAULT_BLOCKS }, [
       { id: "m1", role: "user", content: "i walk through it" },
       {
@@ -1902,7 +1902,7 @@ describe("the working a reasoning prompt asks for", () => {
   const answer =
     "<REFINE_NOTES>\n" +
     "The second sentence restates the first. Cutting the held breath.\n" +
-    "Leaving the dialogue alone: the clipped voice is deliberate.\n" +
+    "Leaving the dialogue alone: the short voice is how she talks.\n" +
     "</REFINE_NOTES>\n" +
     "<REFINED>She stepped through and the cold hit her.</REFINED>";
 
@@ -2180,6 +2180,79 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     await wait(50);
     expect(h.body("m2")).toContain(WORKING);
     expect(h.asked.length).toBe(0);
+  });
+});
+
+// A strict OpenAI-compatible endpoint rejects the whole request over one field
+// it does not take, rather than ignoring it. NVIDIA's build does this with
+// max_context and reasoning, and the refine died with a 400 that read like a
+// fault in somebody's rules.
+describe("a connection that refuses a field", () => {
+  const REFUSAL =
+    "Custom (OpenAI-compatible) generate failed (400): Validation: Unsupported parameter(s): `max_context`, `reasoning`";
+
+  const withFields = {
+    samplers: { max_context: 250000, temperature: 0.5 },
+    thinkingMode: "custom",
+    thinkingEffort: "medium",
+  };
+
+  test("the refine lands, after asking again without the fields it named", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 1, why: REFUSAL } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    expect(h.asked.length).toBe(2);
+  });
+
+  test("the second ask drops only what was named", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 1, why: REFUSAL } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const first = h.asked[0];
+    const second = h.asked[1];
+    expect(first.parameters.max_context).toBe(250000);
+    expect(first.reasoning).toBeTruthy();
+    expect(second.parameters.max_context).toBeUndefined();
+    expect(second.reasoning).toBeUndefined();
+    // The one it did not complain about is still sent.
+    expect(second.parameters.temperature).toBe(0.5);
+  });
+
+  test("a refusal about something never sent changes nothing", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 1, why: "400: Unsupported parameter(s): `logit_bias`" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toContain("the cold just hit her");
+  });
+
+  test("and it only asks again once", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      withFields,
+      chat(),
+      { failFirst: { times: 2, why: REFUSAL } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toContain("the cold just hit her");
   });
 });
 
@@ -3178,9 +3251,9 @@ describe("what Lumiverse remembers of the chat", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
-  // The block ships switched off, so nobody pays for a read they never asked
+  // The block starts switched off, so nobody pays for a read they never asked
   // for. Nothing is asked of the host while it is.
-  test("the block ships off, so nothing is asked for", async () => {
+  test("the block starts off, so nothing is asked for", async () => {
     const memoryBlock = (DEFAULT_BLOCKS as any[]).find((b) => b.id === "memory");
     expect(memoryBlock).toBeTruthy();
     expect(memoryBlock.on).toBe(false);
@@ -3191,7 +3264,7 @@ describe("what Lumiverse remembers of the chat", () => {
     expect(said(h)).not.toContain("<what_has_happened>");
   });
 
-  test("switched on, the same shipped prompt asks for it", async () => {
+  test("switched on, the same built-in prompt asks for it", async () => {
     const on = (DEFAULT_BLOCKS as any[]).map((b) =>
       b.id === "memory" ? { ...b, on: true } : { ...b },
     );
@@ -3412,7 +3485,7 @@ describe("refining what you selected", () => {
   // ahead is the text in front of the selection, which is what the panel sends:
   // the backend counts through it to work out which of several identical runs was
   // picked. Driving it the way the panel does is the point, so a check cannot
-  // pass on a path nothing ships.
+  // pass on a path nothing uses.
   const ask = (h: any, picked: string, ahead = "") =>
     h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ahead: ahead });
 
@@ -3989,13 +4062,13 @@ describe("a chain of passes", () => {
   });
 });
 
-// The two blocks added for the new macros ship switched on, which is only safe
+// The two blocks added for the new macros start switched on, which is only safe
 // because a block whose macros came back empty leaves the prompt. If that ever
 // stopped being true, every refine would carry two empty headings.
-describe("the shipped prompt carries the new macros", () => {
+describe("the built-in prompt carries the new macros", () => {
   const blocks = (DEFAULT_BLOCKS as any[]).map((b) => ({ ...b }));
 
-  test("the shipped prompt has a block for each of them", () => {
+  test("the built-in prompt has a block for each of them", () => {
     const text = blocks.map((b) => String(b.text || "")).join("\n");
     expect(text).toContain("{{overused}}");
     expect(text).toContain("{{whole_reply}}");
@@ -4363,5 +4436,212 @@ describe("a chain stops when the reply is on its way out", () => {
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
     await wait(400);
     expect(h.sent.map((x: any) => String(x.why || "")).join(" ")).toMatch(/stopped after pass 2 of 6/i);
+  });
+});
+
+// Taking a selection out. No model call at all: the same mapping from rendered
+// text back onto the raw source that a refine of a selection uses, then the gap
+// is closed and the message is saved. The checks here are about the gap, since
+// that is the part a person notices and the part nothing else covers.
+describe("taking out what you selected", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+
+  const cut = (h: any, picked: string, ahead = "") =>
+    h.front({
+      type: "snip_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m2",
+      picked: picked,
+      ahead: ahead,
+    });
+
+  test("the selection goes and the rest of the message stays", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.body("m2")).toBe("She set the crate down. Nobody was in.");
+  });
+
+  test("and no model is asked anything", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("one space is left between the two halves, not two", async () => {
+    const h = await armed([], {}, reply("He waited a while, counting, and then he knocked."));
+    await cut(h, "counting, ", "He waited a while, ");
+    await wait(50);
+    expect(h.body("m2")).toBe("He waited a while, and then he knocked.");
+  });
+
+  // The space in front of the selection, not inside it, which is what a double
+  // click hands over. Closing the gap with a space would put one before the
+  // full stop.
+  test("a space is not left sitting in front of a full stop", async () => {
+    const h = await armed([], {}, reply("She counted the coins twice over."));
+    await cut(h, "twice over", "She counted the coins ");
+    await wait(50);
+    expect(h.body("m2")).toBe("She counted the coins.");
+  });
+
+  test("taking the front off does not leave the line starting with a space", async () => {
+    const h = await armed([], {}, reply("Even so, the door held."));
+    await cut(h, "Even so, ");
+    await wait(50);
+    expect(h.body("m2")).toBe("the door held.");
+  });
+
+  test("a whole paragraph out leaves one blank line, not two", async () => {
+    const h = await armed([], {}, reply("The first thing.\n\nThe middle thing.\n\nThe last thing."));
+    await cut(h, "The middle thing.", "The first thing.\n\n");
+    await wait(50);
+    expect(h.body("m2")).toBe("The first thing.\n\nThe last thing.");
+  });
+
+  test("the second of two identical runs is the one taken", async () => {
+    const h = await armed([], {}, reply("She nodded. He spoke. She nodded. It ended."));
+    await cut(h, "She nodded. ", "She nodded. He spoke. ");
+    await wait(50);
+    expect(h.body("m2")).toBe("She nodded. He spoke. It ended.");
+  });
+
+  test("a selection inside italics never leaves a marker unclosed", async () => {
+    const h = await armed([], {}, reply("*She waited there, counting, for a long while.*"));
+    await cut(h, "counting, ", "She waited there, ");
+    await wait(50);
+    // Whatever the span came out as, the emphasis still opens and closes.
+    const marks = (h.body("m2").match(/\*/g) || []).length;
+    expect(marks % 2).toBe(0);
+    expect(h.body("m2")).not.toContain("counting");
+  });
+
+  test("selecting the whole message is refused rather than emptying it", async () => {
+    const body = "There was nothing else to say.";
+    const h = await armed([], {}, reply(body));
+    await cut(h, body);
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+    expect(done.why).toMatch(/empty/i);
+  });
+
+  test("a selection that is not in the message any more takes nothing", async () => {
+    const body = "She set the crate down.";
+    const h = await armed([], {}, reply(body));
+    await cut(h, "a line from some other reply");
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+  });
+
+  test("an empty selection takes nothing", async () => {
+    const body = "She set the crate down.";
+    const h = await armed([], {}, reply(body));
+    await cut(h, "   ");
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+  });
+
+  test("the model's own working is left where it is", async () => {
+    const h = await armed(
+      [],
+      {},
+      reply("<think>weigh the cold against the light</think>She went in. The hall was dark."),
+    );
+    await cut(h, "The hall was dark.", "She went in. ");
+    await wait(50);
+    expect(h.body("m2")).toContain("<think>weigh the cold against the light</think>");
+    expect(h.body("m2")).not.toContain("The hall was dark.");
+  });
+
+  test("it is offered back the same way a refine is", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    const told = h.sent.find((m: any) => m.type === "refined");
+    expect(told.kind).toBe("snip");
+    expect(told.before).toContain("The lock had been changed.");
+    expect(told.after).not.toContain("The lock had been changed.");
+  });
+
+  test("a chat switched off is left alone", async () => {
+    const body = "She set the crate down. The lock had been changed.";
+    const h = await armed([], {}, reply(body));
+    await h.front({ type: "set_chats_off", chats: ["c1"] });
+    await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.body("m2")).toBe(body);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+  });
+});
+
+// The two buttons sit next to each other on a message, so what one refuses the
+// other has to refuse too. A snip is a person's own edit rather than a model
+// rewrite, which is an argument for allowing it, but not an argument anybody
+// could guess from two marks side by side.
+describe("what a snip refuses, matching the refine beside it", () => {
+  const withGreeting = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },
+    { id: "m1", role: "user", content: "i go in" },
+    { id: "m2", role: "assistant", content: "She went in and the hall was dark." },
+  ];
+
+  test("the greeting is not edited", async () => {
+    const was = "The yard gate was already open when she got there.";
+    const h = await armed([], {}, withGreeting());
+    await h.front({
+      type: "snip_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m0",
+      picked: "already open ",
+      ahead: "The yard gate was ",
+    });
+    await wait(50);
+    expect(h.body("m0")).toBe(was);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+    expect(done.why).toMatch(/greeting/i);
+  });
+
+  test("and the refine beside it refuses the greeting the same way", async () => {
+    const was = "The yard gate was already open when she got there.";
+    const h = await armed(["<REFINED>The gate stood open.</REFINED>"], {}, withGreeting());
+    await h.front({
+      type: "refine_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m0",
+      picked: "already open ",
+      ahead: "The yard gate was ",
+    });
+    await wait(60);
+    expect(h.body("m0")).toBe(was);
+  });
+
+  test("your own message is still yours to snip", async () => {
+    const h = await armed([], {}, withGreeting());
+    await h.front({
+      type: "snip_selection",
+      requestId: "r",
+      chatId: "c1",
+      messageId: "m1",
+      picked: " in",
+      ahead: "i go",
+    });
+    await wait(50);
+    expect(h.body("m1")).toBe("i go");
   });
 });

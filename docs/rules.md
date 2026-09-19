@@ -47,7 +47,7 @@ Somewhere in your prompt, say that a passage which is already good comes back un
 
 ## Two things worth saying out loud
 
-Both go wrong quietly, which is why the eight shipped prompts say them and why a prompt of your own should too.
+Both go wrong quietly, which is why the four built-in prompts say them and why a prompt of your own should too.
 
 **The point of view.** A reply written in first person, in present tense, from inside one character's head can come back in polished third person with another character's thoughts in it, and nothing about that reads as an error. Say that the passage keeps the person and tense it was written in, and stays in the head it was written from.
 

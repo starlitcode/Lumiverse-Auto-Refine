@@ -1,4 +1,4 @@
-// The eight shipped prompts are described twice: in the panel, where the text
+// The four built-in prompts are described twice: in the panel, where the text
 // lives in the code, and in docs/prompt.md, where it is written out again by
 // hand. Nothing makes the second copy follow the first, so a rewording lands in
 // one and sits in the other until somebody reads both.
@@ -24,7 +24,7 @@ const array = code.slice(
   code.indexOf("const BUILT_IN_PROMPTS"),
   code.indexOf("const BUILT_IN =", code.indexOf("const BUILT_IN_PROMPTS")),
 );
-const shipped = [...array.matchAll(/\n\s+label: "([^"]+)",\n\s+mine: (true|false),/g)].map((m) => ({
+const builtIns = [...array.matchAll(/\n\s+label: "([^"]+)",\n\s+mine: (true|false),/g)].map((m) => ({
   label: m[1],
   mine: m[2] === "true",
 }));
@@ -38,20 +38,20 @@ const rows = page
   .map((cells) => ({ name: cells[1].replace(/\*\*/g, ""), what: cells[2], needs: cells[3] }));
 
 describe("the prompts page keeps up with the panel", () => {
-  test("the code has eight prompts to check against", () => {
-    expect(shipped.length).toBe(8);
+  test("the code has four prompts to check against", () => {
+    expect(builtIns.length).toBe(4);
   });
 
   test("the page has a row for each of them", () => {
-    expect(rows.length).toBe(shipped.length);
+    expect(rows.length).toBe(builtIns.length);
   });
 
   test("and names them in the same order, replies first", () => {
     // The page runs the replies table then the one for your own messages, which
     // is the order the array is in. A prompt renamed in one and not the other
     // lands here.
-    expect(rows.map((r) => r.name)).toEqual(shipped.map((p) => p.label));
-    expect(shipped.map((p) => p.mine)).toEqual([false, false, false, false, true, true, true, true]);
+    expect(rows.map((r) => r.name)).toEqual(builtIns.map((p) => p.label));
+    expect(builtIns.map((p) => p.mine)).toEqual([false, false, true, true]);
   });
 
   test("the page agrees about which ones need a reasoning model", () => {

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-// The prompts that ship with it, held to what they promise.
+// The prompts that come with it, held to what they promise.
 //
 // Run with: bun test
 
@@ -12,7 +12,7 @@ import { __testing } from "../src/frontend";
 // the names no longer claim a size, and these hold the two things that are
 // left: that each pair really does get fuller, and that every one of them says
 // the passage means what it already meant.
-describe("the prompts that ship with it", () => {
+describe("the prompts that come with it", () => {
   const { BUILT_IN_PROMPTS } = __testing as any;
   // The blocks that carry the chat rather than the rules, by the ids they are
   // built under. "world" was in this list and is not a block id: the lore block
@@ -29,22 +29,60 @@ describe("the prompts that ship with it", () => {
   const forReplies = () => BUILT_IN_PROMPTS.filter((p: any) => !p.mine);
   const forMine = () => BUILT_IN_PROMPTS.filter((p: any) => p.mine);
 
-  test("there are four for each of the two prompts", () => {
-    expect(forReplies().length).toBe(4);
-    expect(forMine().length).toBe(4);
+  test("there are two for each of the two prompts", () => {
+    expect(forReplies().length).toBe(2);
+    expect(forMine().length).toBe(2);
   });
 
   // Stored under a name of its own, shown under the heading's. Two entries
   // sharing a stored name would overwrite each other; two sharing a shown one
   // read fine, because the heading above says which prompt it is for.
+  // Stored under exactly what it shows. The two used to differ: both sets were
+  // called a quick read and a close read, so a stored name carried a prefix
+  // saying which set it came from. Naming the sets for their job took the
+  // collision away, and a name that no longer matches its label is a prefix
+  // that outlived its reason.
+  // A preset keeps the prompt and a model setup keeps what runs it. The built-in
+  // ones used to carry thinkingMode in their settings, which is a setup key and
+  // not a preset key, so applyPreset walked straight past it and it was never
+  // once applied. Left there it would have been worse than useless the day
+  // somebody added it to PRESET_KEYS: loading a prompt would have reached over
+  // and changed the model.
+  test("none of them carries a setting that belongs to a model setup", () => {
+    const src = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+    // The object literal builtIn() hands each built-in preset as its settings.
+    // Code only. The comment above the settings names thinkingMode to say why it
+    // is not in there, and a check that reads its own explanation as a breach
+    // would fail the moment somebody documented the rule.
+    const made = src
+      .slice(src.indexOf("function builtIn("), src.indexOf("const isBuiltIn"))
+      .split("\n")
+      .filter((line) => !/^\s*\/\//.test(line))
+      .join("\n");
+    const setupOnly = ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "costIn", "costOut"];
+    for (const k of setupOnly) expect({ key: k, inSettings: made.indexOf(k) >= 0 }).toEqual({ key: k, inSettings: false });
+  });
+
+  test("every one is stored under the name it shows", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      expect({ name: p.name, label: p.label }).toEqual({ name: p.name, label: p.name });
+  });
+
   test("every one is stored under a name of its own", () => {
     const names = BUILT_IN_PROMPTS.map((p: any) => p.name);
     expect(new Set(names).size).toBe(names.length);
   });
 
-  test("and the two sets read the same, since the heading says which is which", () => {
-    expect(forMine().map((p: any) => p.label).sort())
-      .toEqual(forReplies().map((p: any) => p.label).sort());
+  // The two sets used to share their labels and lean on the heading above to
+  // say which was which. They name their own job now, so the label agrees with
+  // the role the first block hands out and the heading is no longer carrying
+  // the difference on its own.
+  test("and the two sets are named apart, since they are different jobs", () => {
+    const mine = forMine().map((p: any) => p.label);
+    const replies = forReplies().map((p: any) => p.label);
+    for (const one of mine) expect(replies).not.toContain(one);
+    expect(mine.every((l: string) => /copy edit/i.test(l))).toBe(true);
+    expect(replies.every((l: string) => /line edit/i.test(l))).toBe(true);
   });
 
   // A prompt for your own turn loaded over the prompt for replies would be the
@@ -53,13 +91,13 @@ describe("the prompts that ship with it", () => {
     for (const p of BUILT_IN_PROMPTS) expect(typeof p.mine).toBe("boolean");
   });
 
-  // One name for the quick pair and one for the thorough pair, so which two go
-  // together is visible without reading either.
-  test("each pair shares a name", () => {
-    for (const set of [forReplies(), forMine()]) {
+  // Both entries in a set share one name, which is the job the first block
+  // hands the model: a line edit on a reply, a copy edit on your own turn. The
+  // only thing separating them is which model they were written for.
+  test("each set is named for the job it does", () => {
+    for (const [set, job] of [[forReplies(), "The line edit"], [forMine(), "The copy edit"]] as any) {
       const stems = set.map((p: any) => p.label.split(",")[0].trim());
-      expect(stems.filter((n: string) => n === "A quick read").length).toBe(2);
-      expect(stems.filter((n: string) => n === "A close read").length).toBe(2);
+      expect(stems.filter((n: string) => n === job).length).toBe(2);
     }
   });
 
@@ -73,23 +111,21 @@ describe("the prompts that ship with it", () => {
     }
   });
 
-  test("the fuller one of each pair really is fuller", () => {
+  // The one for a reasoning model leans on the model to fill in the rest, so it
+  // carries fewer words than the one written for any model. Its description says
+  // so, and this is what holds that claim to the text.
+  test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
-      ["A close read", "A quick read"],
-      ["A close read, for a model that thinks", "A quick read, for a model that thinks"],
-      ["Your writing, a close read", "Your writing, a quick read"],
-      [
-        "Your writing, a close read, for a model that thinks",
-        "Your writing, a quick read, for a model that thinks",
-      ],
+      ["The line edit, for a model that thinks", "The line edit"],
+      ["The copy edit, for a model that thinks", "The copy edit"],
     ];
-    for (const [big, small] of pairs)
-      expect(sizeOf(named(big))).toBeGreaterThan(sizeOf(named(small)) * 1.25);
+    for (const [small, big] of pairs)
+      expect(sizeOf(named(small))).toBeLessThan(sizeOf(named(big)));
   });
 
   // The whole reason there is a second set. A prompt for your own turn is about
   // repairing what is there; one for a reply is about improving it. If the two
-  // said the same thing there would be no reason to ship both.
+  // said the same thing there would be no reason to have both.
   test("the prompts for your own writing are about leaving it alone", () => {
     for (const p of forMine()) {
       const whole = rulesOf(p).map((b: any) => b.text).join(" ");
@@ -100,13 +136,13 @@ describe("the prompts that ship with it", () => {
     }
   });
 
-  // What the names do not claim is how the two pairs compare with
-  // each other, because they cannot: a close read for a thinking model is about
-  // the size of a quick read for a plain one. That belongs in the description,
-  // where it can be said in words rather than implied by a label.
-  test("and the description of each says what it costs", () => {
+  // What the names do not claim is which of the two on a side is the better
+  // one, because that is not a question a name can answer: it depends entirely
+  // on the model somebody is running. That belongs in the description, where it
+  // can be said in words rather than implied by a label.
+  test("and the description of each says what will run it", () => {
     for (const p of BUILT_IN_PROMPTS)
-      expect({ name: p.name, said: /size|short|smallest|half again|prompt/i.test(p.what) })
+      expect({ name: p.name, said: /any model|model that reasons/i.test(p.what) })
         .toEqual({ name: p.name, said: true });
   });
 
@@ -143,7 +179,10 @@ describe("the prompts that ship with it", () => {
   // around rather than a check that ever fires.
   const STOCK = [
     /\bsecond pair of eyes\b/i,
-    /\byou are (?:a|an|the) \w+/i,
+    // Narrowed rather than dropped. A role with a job in it is what the
+    // opening block is for now, and it is the generic ones that read as
+    // filler: a helpful assistant, an expert writer, a master storyteller.
+    /\byou are (?:a|an) (?:helpful|expert|professional|skilled|talented|seasoned|world.class|master)\b/i,
     /\bbeats?\b/i,
     /\blands?\b/i,
     /\blose the thread\b/i,
@@ -279,7 +318,8 @@ describe("every setting can leave the panel", () => {
     debugParts: "what to tick on the problem report card",
     hunt: "what is typed in the search box",
     tab: "which tab of the panel was last open",
-    shippedSeen: "the shipped prompts as they were when you last took one",
+    builtInSeen: "the built-in prompts as they were when you last took one",
+    movedSeen: "which moved defaults you have already been told about, which is about this browser rather than about your setup",
   };
 
   test("there are parts to check, or this proves nothing", () => {
@@ -309,11 +349,11 @@ describe("every setting can leave the panel", () => {
 });
 
 
-// The blocks the shipped prompts are made of. A block with a role the panel does
+// The blocks the built-in prompts are made of. A block with a role the panel does
 // not offer is turned into a system block without a word, and a block with no id
 // is dropped on the way to the backend. Neither says anything, and both are the
 // kind of mistake that comes from adding a block by hand.
-describe("every block in a shipped prompt is one the panel can hold", () => {
+describe("every block in a built-in prompt is one the panel can hold", () => {
   const { BUILT_IN_PROMPTS, ROLE_OPTIONS, MACROS } = __testing as any;
   const roles = ROLE_OPTIONS.map((r: any) => r.value);
   const every = BUILT_IN_PROMPTS.flatMap((p: any) =>
@@ -362,7 +402,7 @@ describe("every block in a shipped prompt is one the panel can hold", () => {
   // empty on most refines. It gets a block to itself so the tag around it can go
   // when the words do: a block that comes out as nothing but tags is dropped
   // whole, and a block is the only thing that check can drop.
-  test("the token note has a block to itself in every shipped prompt", () => {
+  test("the token note has a block to itself in every built-in prompt", () => {
     const wrong: string[] = [];
     for (const p of BUILT_IN_PROMPTS as any[]) {
       const carry = (p.blocks as any[]).filter((b) => String(b.text).includes("{{protect_notes}}"));

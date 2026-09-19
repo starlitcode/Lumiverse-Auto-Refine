@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.11.0";
+const VERSION = "1.12.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -89,14 +89,20 @@ const PARTS = [
     {
         id: "alerts",
         label: "Alerts and sound",
-        what: "The card that comes up on the page, the brief message, and the sound.",
-        keys: ["popup", "toast", "soundOn", "soundUrl", "soundVolume"],
+        what: "The card that comes up on the page, how it draws the before and the after, the brief message, and the sound.",
+        keys: ["popup", "toast", "sideBySide", "soundOn", "soundUrl", "soundVolume"],
     },
     {
         id: "reach",
         label: "Buttons and the widget",
         what: "The floating button, the buttons in the chat, and the input bar row.",
         keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton"],
+    },
+    {
+        id: "inputbox",
+        label: "Where the input box is",
+        what: "The selectors that find the chat input box. Its own part, so putting it back does not take the widget and the buttons with it.",
+        keys: ["inputSelector"],
     },
     {
         id: "switches",
@@ -219,8 +225,13 @@ const PRESET_KEYS = [
 ];
 // Where the input box is, tried in this order: the first names it exactly, and
 // the last names any text box on the page. Refining a draft is the one part of
-// this extension that reads Lumiverse's own layout, so if an update moves that
-// box, this list is what needs a new entry.
+// this extension that reads Lumiverse's own layout, so an update that moves
+// that box breaks it until this list has a new entry.
+//
+// A reader can put their own selectors in front of these without waiting for a
+// release, under Where the input box is on the Setup tab. These stay behind
+// whatever they type, so a selector that turns out to be wrong costs nothing:
+// the built-in list still answers.
 const INPUT_PICKS = [
     '[data-component="InputArea"] textarea[name="chat-message"]',
     'textarea[name="chat-message"]',
@@ -228,9 +239,71 @@ const INPUT_PICKS = [
     '[data-component="InputArea"] textarea',
     "textarea",
 ];
+// Splits a selector list on its top-level commas only. A comma inside brackets,
+// parentheses or quotes belongs to the selector rather than separating the
+// list, so :is(a, b) and [title="x, y"] survive being pasted in.
+//
+// The same splitter Auto Retry uses, so a selector written for one reads the
+// same way in the other.
+function splitSelectorList(raw) {
+    const src = String(raw == null ? "" : raw);
+    const out = [];
+    let buf = "";
+    let depth = 0;
+    let quote = "";
+    for (let i = 0; i < src.length; i++) {
+        const c = src[i];
+        if (quote) {
+            buf += c;
+            if (c === "\\" && i + 1 < src.length) {
+                buf += src[i + 1];
+                i++;
+                continue;
+            }
+            if (c === quote)
+                quote = "";
+            continue;
+        }
+        if (c === "\\" && i + 1 < src.length) {
+            buf += c + src[i + 1];
+            i++;
+            continue;
+        }
+        if (c === '"' || c === "'") {
+            quote = c;
+            buf += c;
+            continue;
+        }
+        if (c === "(" || c === "[" || c === "{") {
+            depth++;
+            buf += c;
+            continue;
+        }
+        if (c === ")" || c === "]" || c === "}") {
+            if (depth > 0)
+                depth--;
+            buf += c;
+            continue;
+        }
+        if (c === "," && depth === 0) {
+            out.push(buf.trim());
+            buf = "";
+            continue;
+        }
+        buf += c;
+    }
+    out.push(buf.trim());
+    return out.filter((p) => p.length > 0);
+}
 // Every setting, with the value a fresh install starts on.
 const CONFIG = {
     enabled: true,
+    // Selectors for the chat input box, tried in the order they are written.
+    // Starts holding the built-in list rather than sitting blank behind it: a box
+    // showing what is actually being tried can be edited, and one showing nothing
+    // has to be guessed at. Blank falls back to the built-in list, which is what
+    // an install from before this existed carries.
+    inputSelector: INPUT_PICKS.join(", "),
     // The automatic pass is off until asked for. This rewrites saved messages
     // with a model, which is not something to start doing to somebody's chat
     // because they installed an extension.
@@ -239,7 +312,16 @@ const CONFIG = {
     connectionId: "",
     thinkingMode: "off",
     thinkingEffort: "medium",
-    timeoutSecs: 90,
+    // Four minutes, which is the slow end rather than the usual one. A fast model
+    // answers in seconds and never reaches this, so the only thing the number
+    // decides is how long somebody waits before being told a refine that was
+    // never coming back has been given up on.
+    //
+    // It was 90 seconds, which is under what two of the four built-in prompts ask
+    // for: a reasoning model on a high effort level can think for minutes before
+    // it writes a character, and a local model can spend that long loading before
+    // it starts. Both were cut off mid-thought by their own default.
+    timeoutSecs: 240,
     // What a million tokens costs, in and out. Nobody's prices are known here, so
     // 0 means the reader has not said and no cost is worked out.
     costIn: 0,
@@ -252,7 +334,7 @@ const CONFIG = {
     // going up on every reply.
     asSwipe: false,
     // Phrases this chat has worn out. Off by default, since it reads the chat's
-    // replies and nobody asked for that until they put {{overused}} in a block.
+    // replies. Turned on by putting {{overused}} in a block.
     wornOn: false,
     wornBack: 60,
     wornLeast: 3,
@@ -267,29 +349,22 @@ const CONFIG = {
     keepOriginal: true,
     confirmBeforeSave: false,
     toast: true,
-    // A sound when a refine lands, off until asked for. An extension that starts
+    // A sound when a refine finishes, off until asked for. An extension that starts
     // making noise because it was installed is an extension people uninstall.
     soundOn: false,
     // Empty means the built-in two-note blip, which is synthesised rather than
-    // shipped so there is no audio file in the repository. A reader's own sound
+    // built in so there is no audio file in the repository. A reader's own sound
     // is held as a data URL, which is why it is capped.
     soundUrl: "",
     soundVolume: 60,
     // The floating button: one tap to refine the latest reply without opening the
     // drawer. Needs the ui_panels permission, and says so if it is missing.
     widgetOn: false,
-    // The card that comes up on the page when a refine lands, with the before,
-    // the after and the way back on it. On by default: a refine changes writing
-    // somebody was reading, and making them find a tab to see what changed is
-    // the wrong way round.
+    // The card that comes up on the page when a refine finishes, with the before,
+    // the after and the way back on it. On by default, because a refine changes
+    // writing somebody was reading, and the change should be visible without
+    // opening a tab to find it.
     popup: true,
-    // What one tap does when there is a refine to put back. On, the button turns
-    // into an undo; off, a tap always refines.
-    //
-    // Off by default. A button that silently becomes a different button is a
-    // button nobody can read, and while it stands there is no tap left for
-    // starting a refine. The card that comes up is where putting one back
-    // belongs: it says what it would be putting back.
     // How big the floating button is, across. The same default and the same 28
     // to 96 range as Auto Retry's floating button, so the two sit at matching
     // sizes when somebody runs both.
@@ -336,9 +411,8 @@ const CONFIG = {
     // Streaming the refine so the panel can show it arriving. The answer is the
     // same either way; this only decides whether you can watch it.
     streamProgress: true,
-    // Rows in the chat input's Extras menu. Off until asked for: they reach into
-    // the page, and an extension that redecorates somebody's chat on install is
-    // one they uninstall.
+    // Rows in the chat input's Extras menu. Off until asked for, because they
+    // add to the page, and a fresh install should not change the chat.
     //
     // Refining what you are about to send, from the input bar, before it is sent.
     // Off by default: it edits the box you are typing in, which is not something
@@ -353,11 +427,6 @@ const CONFIG = {
     // without selecting the whole of it first. Off by default for the same
     // reason as the rest.
     messageButton: false,
-    // Where the input box is. Starts as the list above, so it can be read and
-    // corrected on the day a Lumiverse update moves the box rather than waiting
-    // for a release of this. Whatever is here is tried first and the list is
-    // still tried after it, so an edit that stops matching falls back rather than
-    // taking the feature down.
     // How many messages of the run-up go in the prompt. A rewrite that cannot see
     // what just happened flattens a scene into general prose, which is the
     // failure people blame on the model.
@@ -374,6 +443,13 @@ const CONFIG = {
     maxHistoryTokens: 4500,
     // Which tab the panel opens on, remembered so it comes back where you left it.
     tab: "prompt",
+    // How a before and an after are drawn. Off puts one text on the screen with
+    // the changes coloured where they happened, which is the shorter read when a
+    // rewrite moved a word here and there. On puts the two in their own columns,
+    // which is the easier read when whole sentences were replaced and the marked
+    // version is more colour than text. Remembered, so the one you prefer is the
+    // one every card comes back on.
+    sideBySide: false,
     // What each of the three carries. Empty means everything, which is what a
     // fresh install wants and what somebody who never opens these expects.
     exportParts: {},
@@ -387,11 +463,15 @@ const CONFIG = {
     // The prompt used when the message being refined is one of yours. Empty means
     // you have not written one and the reply prompt is used instead.
     userBlocks: [],
-    // The shipped prompts as they were when you last took one, so a change to them
+    // The built-in prompts as they were when you last took one, so a change to them
     // can be mentioned once. Empty means nothing to say: a fresh install is
     // already on the current ones, and an install from before this existed is not
     // worth a notice about a change nobody can point at.
-    shippedSeen: "",
+    builtInSeen: "",
+    // Which set of moved defaults this reader has already been told about. Its
+    // own stamp rather than the prompts one, so saying got it to a line about a
+    // setting never quietly marks the built-in prompts as seen too.
+    movedSeen: "",
     // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
     // "userBlocks:id". A folded block draws its name and its switch and nothing
     // else, so a prompt of twenty is a list you can see at once rather than
@@ -459,24 +539,21 @@ const TURN_MACRO = "{{message}}";
 // back to the panel while the refine runs and never reaches the story, so a
 // prompt that does not ask for it has nothing to show while it writes.
 const NOTES_TAG = /<\s*refine_notes\s*>/i;
-// ---- the prompts that ship with it ----
-// Two questions, four answers. Does your model reason, and how much of the
-// ground do you want covered.
+// ---- the prompts that come with it ----
+// One question, four answers. A line edit for a reply and a copy edit for what
+// you wrote yourself, and on each of those two sides one for a model that
+// reasons and one for a model that does not. The question is which model you
+// are running, and nothing else.
 //
-// One name for the quick pair and one for the thorough pair, so the pairing is
-// visible at a glance, and the two that need a reasoning model say so in the
-// name rather than leaving somebody to find out by getting a worse rewrite.
+// One name for each job, with the two that need a reasoning model saying so in
+// the name rather than leaving somebody to find out by getting a worse rewrite.
 //
-// What the names do not claim is how the two pairs compare with each other.
-// Short and Detailed in two pairs is a promise the set cannot keep: a close
-// read for a thinking model is about the size
-// of a quick read for a plain one, because a model that reasons is handed less
-// on purpose. Each description says what it costs, which is the only place that
-// belongs.
+// The name says the job, because the job is the thing anybody is choosing here.
+// Each description says what will run it.
 //
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
-// one. That is why the reasoning pair is the smaller pair.
+// one. That is the whole of the difference between the two on a side.
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
 // ones that change every turn.
@@ -512,7 +589,7 @@ const SCENE_BLOCKS = [
 // granted the permission, is not carrying a heading for it: a block whose
 // macros all come back empty is left out, tags and all.
 //
-// Off in every shipped prompt. It is the one block whose size nobody here can
+// Off in every built-in prompt. It is the one block whose size nobody here can
 // see: the others are a card, a persona and a fixed run-up, and this one is
 // however many pieces the reader's chat memory setting retrieves, on every
 // single refine. A reader who wants it switches it on knowing what their own
@@ -524,10 +601,10 @@ const MEMORY_BLOCK = {
     role: "system",
     text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
 };
-// The phrases this chat keeps reaching for. On in every shipped prompt, and that
+// The phrases this chat keeps reaching for. On in every built-in prompt, and that
 // costs nothing: the macro is empty until Find phrases this chat has worn out is
 // switched on, and a block whose macros came back empty is left out, tags and
-// all. Shipping it off instead would mean switching the setting on did nothing
+// all. Sending it off instead would mean switching the setting on did nothing
 // anybody could see until they also found this block and switched it on too.
 //
 // The tag says where the list came from, which is the part a model can act on. A
@@ -578,7 +655,7 @@ const TURN_BLOCK = {
 //
 // Shouted, and read back case-insensitively so a prompt written in lower case
 // still works.
-// Last in every shipped prompt, under the passage, and sent as you rather than
+// Last in every built-in prompt, under the passage, and sent as you rather than
 // as the system.
 //
 // A rule about the shape of an answer is followed most closely when it is the
@@ -691,7 +768,7 @@ const PHRASES =
     "- a sound placed out of reach: somewhere, a door slams\n" +
     "- time slowing, the world falling away, the world narrowing\n" +
     "- a pause named instead of filled: a long moment, a beat, a silence that stretches\n" +
-    // Shapes rather than particular phrases. A model reaches for these whatever
+    // Shapes rather than particular phrases. A model produces these whatever
     // the scene is, so naming the shape catches every filling of it where naming
     // one example catches one.
     "- a thing said by what it is not, then corrected: not a question, an order\n" +
@@ -734,21 +811,32 @@ const COPY_EXACTLY = {
 };
 const JOB_BLOCK = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user is writing a story with you, turn by turn. They wrote the " +
-        "passage below, and it reaches you before it goes back to them.\n\n" +
-        "What it means is settled and you are not deciding it. Whatever happens " +
-        "in the passage still happens. Whoever says a thing still says it and " +
-        "still means it. It ends where it already ends. That holds when a line " +
-        "reads badly, and it holds when you cannot see why a line is there: it " +
-        "is there because the user put it there.\n\n" +
-        "Keep the person and the tense it was written in, and keep the head it " +
-        "was written from. What one character can see, hear and think of another " +
-        "is what they could before." +
-        "\n\n" +
+    text: "<your_role>\n" +
+        "You are the line editor on this story.\n\n" +
+        "A line editor works sentence by sentence. You change how a passage " +
+        "reads. You leave what happens in it alone, because that belongs to a " +
+        "different editor and to a different pass.\n\n" +
+        "The user is writing this story with you, turn by turn. The passage " +
+        "below was written for them, and it reaches you before they see it.\n\n" +
+        "What it means is already settled. Whatever happens in it still happens. " +
+        "Whoever says a thing still says it and still means it. It ends where it " +
+        "already ends. Keep the person, the tense, and the head it was written " +
+        "from: what one character can see, hear and think of another is what " +
+        "they could before.\n\n" +
+        "That holds when a line reads badly. It holds when you cannot see why a " +
+        "line is there. It is there because the user put it there.\n\n" +
+        "You are marking up a page that already exists. When a sentence matches " +
+        "something named below, change it, and do not stop to weigh whether this " +
+        "one is borderline; the user can undo anything you do. When a sentence " +
+        "matches nothing below, leave it exactly as it is. A passage returned " +
+        "with a change in every line is a worse edit than one carrying four good " +
+        "changes.\n\n" +
+        "Anything that carries meaning stays, even where it reads plainly. " +
+        "Taking out an action or a line of speech is rewriting, and rewriting is " +
+        "not what this pass is for.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
         "in, the same heat and the same violence in the same places, in words as " +
@@ -756,43 +844,7 @@ const JOB_BLOCK = {
         "should have been written is theirs." +
         "\n\n" +
         "Same story, told better.\n" +
-        "</your_job>",
-};
-const CUT_THESE = {
-    id: "cut",
-    name: "What to Cut",
-    on: true,
-    role: "system",
-    text: "<what_to_cut>\n" +
-        "These are worth losing wherever they turn up:\n\n" +
-        PHRASES +
-        "\n\nTake out these words where the sentence still stands without them: " +
-        FILLER +
-        ".\n\n" +
-        "Where a sentence restates the one before it in other words, keep " +
-        "whichever is doing the work and let the other go. The same for a speech " +
-        "tag that explains the line it follows, and for a label on a feeling the " +
-        "passage is already showing.\n\n" +
-        "When something goes, let the gap close. A passage is usually better one " +
-        "sentence shorter.\n" +
-        "</what_to_cut>",
-};
-const MEND_THESE = {
-    id: "fix",
-    name: "What to Mend",
-    on: true,
-    role: "system",
-    text: "<what_to_mend>\n" +
-        "Give hands, eyes and breath an owner. Their hand found another's " +
-        "becomes they took that person's hand.\n\n" +
-        "Where three sentences run to the same length, vary one. Where three " +
-        "fragments run together, give one of them a verb.\n\n" +
-        "Where three physical details stack on one moment, keep the one that " +
-        "carries it.\n\n" +
-        "The passage keeps the ending it has. Where the last line reaches for " +
-        "what happens next, or turns to the user with a question, that last line " +
-        "is what to trim back.\n" +
-        "</what_to_mend>",
+        "</your_role>",
 };
 const LEAVE_ALONE = {
     id: "leave",
@@ -809,25 +861,6 @@ const LEAVE_ALONE = {
         "Finding nothing worth changing is a real answer. Hand it back as it is.\n" +
         "</what_to_leave>",
 };
-// ---- a model that does not reason, short ----
-// The rules first, because they are the same on every refine in every chat.
-// Setting comes after them, the earlier pages after that, and the passage last,
-// so the prompt runs from what never changes to what changes every time.
-const PLAIN_SHORT = [
-    JOB_BLOCK,
-    CUT_THESE,
-    MEND_THESE,
-    LEAVE_ALONE,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    HOW_TO_ANSWER,
-    PROTECT_BLOCK,
-];
 // ---- a model that does not reason, in full ----
 // The same rules, one to a block, each said at length.
 const PLAIN_LONG = [
@@ -918,8 +951,8 @@ const PLAIN_LONG = [
             "Cut a soft name added to take the edge off a line: champ, friend, " +
             "buddy, chief, boss. A character who already talks that way keeps " +
             "it.\n\n" +
-            "A character who speaks badly goes on speaking badly. Clipped, " +
-            "rambling, plain or crude is a voice, and smoothing it hands back a " +
+            "A character who speaks badly goes on speaking badly. Short, " +
+            "rambling, plain or crude is a voice, and smoothing it returns a " +
             "different character.\n" +
             "</speech>",
     },
@@ -947,7 +980,7 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<how_it_ends>\n" +
-            "The passage ends where it ends. Where the last line reaches for what " +
+            "The passage ends where it ends. Where the last line sets up what " +
             "happens next, or turns into a question aimed at the user, that " +
             "last line is what to trim back.\n\n" +
             "Where it already ends on a hook, keep the hook. The shape of the turn " +
@@ -967,28 +1000,34 @@ const PLAIN_LONG = [
 ];
 const THINKS_JOB = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user is writing a story with you, turn by turn. They wrote the " +
-        "passage below, and it reaches you before it goes back to them.\n\n" +
+    text: "<your_role>\n" +
+        "You are the line editor on this story.\n\n" +
+        "A line editor works sentence by sentence. You change how a passage " +
+        "reads. You leave what happens in it alone, because that belongs to a " +
+        "different editor and to a different pass.\n\n" +
+        "The user is writing this story with you, turn by turn. The passage " +
+        "below was written for them, and it reaches you before they see it.\n\n" +
         "Work out what is weak in how it is written, mend that, and stop there. " +
         "What it means is settled: whatever happens still happens, whoever says " +
         "a thing still says it and still means it, and it ends where it already " +
         "ends. That holds when a line reads badly, and it holds when you cannot " +
-        "see why a line is there: it is there because the user put it there.\n\n" +
-        "Keep the person and the tense it was written in, and keep the head it " +
-        "was written from. What one character can see, hear and think of another " +
-        "is what they could before." +
-        "\n\n" +
+        "see why a line is there. Keep the person, the tense, and the head it " +
+        "was written from.\n\n" +
+        "Use your reasoning to decide which sentences earn a change, then change " +
+        "only those. Reasoning about a sentence is not a reason to touch it. A " +
+        "passage returned with a change in every line is a worse edit than one " +
+        "carrying four good changes.\n\n" +
+        "Anything that carries meaning stays, even where it reads plainly.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
         "in, the same heat and the same violence in the same places, in words as " +
         "plain as the ones it arrived in. How a line reads is yours. Whether it " +
         "should have been written is theirs." +
         "\n" +
-        "</your_job>",
+        "</your_role>",
 };
 const THE_STANDARD = {
     id: "standard",
@@ -1002,7 +1041,7 @@ const THE_STANDARD = {
         "Put in its place what is true of these characters, in this room, now. " +
         "Where nothing is true there, let the line go and close the gap.\n\n" +
         "Hold speech to it, hold gesture to it, hold description to it, and hold " +
-        "your own rewrite to it before you hand it back.\n" +
+        "your own rewrite to it before you return it.\n" +
         "</the_standard>",
 };
 const RESTRAINT = {
@@ -1016,8 +1055,8 @@ const RESTRAINT = {
         "answer more often than not.\n" +
         "</restraint>",
 };
-// The prompt for your own passages. A different job: your writing is already in
-// your hand, and the failure to watch for is a refine that hands it back in the
+// The prompt for your own passages. A different job: the text is already in
+// your voice, and the failure to watch for is a refine that returns it in the
 // narrator's.
 // ---- refining what you wrote yourself ----
 // A different job from refining a reply, and the difference is restraint. A
@@ -1026,22 +1065,33 @@ const RESTRAINT = {
 // the reply prompts say what to look for and how to do it better.
 const YOURS_JOB = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user wrote the passage below. Tidy how it reads and leave the " +
-        "writing to them.\n\n" +
-        "Everything they did, said and meant stays. Where you find yourself " +
-        "about to add an action, a line of speech or a reaction they left out, " +
-        "stop there: their turn belongs to them.\n\n" +
+    text: "<your_role>\n" +
+        "You are the copy editor on the user's own writing.\n\n" +
+        "A copy editor fixes what went wrong on the way to the page: spelling, " +
+        "grammar, punctuation, a word typed twice, a word left out. Improving " +
+        "their prose belongs to somebody else. Their style is not yours to have " +
+        "an opinion about.\n\n" +
+        "The passage below is theirs. They wrote it as their character, in their " +
+        "own voice, and every line in it is a choice until it proves otherwise." +
+        "\n\n" +
+        "Fix a mistake and leave a decision. A misspelling is a mistake, and an " +
+        "unusual word is a decision. A missing full stop is a mistake, and a " +
+        "sentence fragment is a decision. A word typed twice in one sentence is " +
+        "a mistake, and a word repeated across three sentences for emphasis is a " +
+        "decision. Where you cannot tell which one you are looking at, treat it " +
+        "as a decision and leave it.\n\n" +
+        "Whatever they left out stays out. Where you find yourself about to " +
+        "write something that was never there, stop at that point: their turn " +
+        "belongs to them.\n\n" +
+        "Whatever they put in stays in. A plain line is allowed to be plain.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in, the same heat and the same violence in the same places, in words as " +
-        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-        "should have been written is theirs." +
-        "\n" +
-        "</your_job>",
+        "in. How a line reads is not yours to judge here, only whether it came " +
+        "out the way they meant to type it.\n" +
+        "</your_role>",
 };
 const YOURS_HAND = {
     id: "voice",
@@ -1053,27 +1103,11 @@ const YOURS_HAND = {
         "same. Keep the way they write.\n\n" +
         "Short plain lines stay short and plain. Lower case stays lower case. " +
         "Present tense stays present tense, and first person stays first person. " +
-        "A passage handed back in polished third person is one they will read as " +
+        "A passage returned in polished third person is one they will read as " +
         "somebody else's.\n\n" +
         "Their length is their choice: a one line passage stays a one line " +
         "passage.\n" +
         "</the_way_they_write>",
-};
-const YOURS_MEND = {
-    id: "fix",
-    name: "What to Mend",
-    on: true,
-    role: "system",
-    text: "<what_to_mend>\n" +
-        "Typing slips, missing words, and a word plainly meant to be another " +
-        "one.\n\n" +
-        "Punctuation and capitalisation, where they came out that way by " +
-        "accident. Where lower case is the style, it stays.\n\n" +
-        "A sentence tangled enough to be hard to follow: say the same thing in " +
-        "their words, more clearly.\n\n" +
-        "That is the whole list. Their word choice, their level of detail and " +
-        "their plain lines are theirs, and they come back as they went in.\n" +
-        "</what_to_mend>",
 };
 // The same list, gone through properly. Every entry is still a repair rather
 // than an improvement: the long version is longer about what counts as one.
@@ -1123,22 +1157,27 @@ const YOURS_NOT_YOURS = {
 };
 const YOURS_THINKS_JOB = {
     id: "job",
-    name: "Your Job",
+    name: "Your Role",
     on: true,
     role: "system",
-    text: "<your_job>\n" +
-        "The user wrote the passage below. You are proofreading it, not " +
-        "rewriting it.\n\n" +
+    text: "<your_role>\n" +
+        "You are the copy editor on the user's own writing.\n\n" +
+        "A copy editor fixes what went wrong on the way to the page: spelling, " +
+        "grammar, punctuation, a word typed twice, a word left out. Improving " +
+        "their prose belongs to somebody else.\n\n" +
         "Everything they did, said and meant stays, and so does the way they " +
         "write it: the tense, the person, the capitalisation, the length, the " +
         "plainness. Work the standard below and change nothing it does not " +
         "name.\n\n" +
+        "Use your reasoning to tell a mistake from a decision. A misspelling is " +
+        "a mistake, and an unusual word is a decision. Where the two look alike, " +
+        "treat it as a decision and leave it. Reasoning about a line is not a " +
+        "reason to touch it.\n\n" +
         "The user decides where the story goes, and that takes in how dark, " +
         "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in, the same heat and the same violence in the same places, in words as " +
-        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-        "should have been written is theirs.\n" +
-        "</your_job>",
+        "in. How a line reads is not yours to judge here, only whether it came " +
+        "out the way they meant to type it.\n" +
+        "</your_role>",
 };
 // The reply prompts judge the writing. This one judges the repair: the reply
 // prompts ask what could read better, and this asks what actually went wrong,
@@ -1179,20 +1218,6 @@ const YOURS_WHERE = {
         "None of these is a matter of taste, which is why they are the list.\n" +
         "</where_to_look>",
 };
-const YOURS_SHORT = [
-    YOURS_JOB,
-    YOURS_HAND,
-    YOURS_MEND,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    HOW_TO_ANSWER,
-    PROTECT_BLOCK,
-];
 const YOURS_LONG = [
     YOURS_JOB,
     YOURS_HAND,
@@ -1208,22 +1233,7 @@ const YOURS_LONG = [
     HOW_TO_ANSWER,
     PROTECT_BLOCK,
 ];
-const YOURS_DEFAULT = YOURS_SHORT;
-// ---- a model that reasons, short ----
-const THINKS_SHORT = [
-    THINKS_JOB,
-    THE_STANDARD,
-    RESTRAINT,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    THINKS_ANSWER,
-    PROTECT_BLOCK,
-];
+const YOURS_DEFAULT = YOURS_LONG;
 // ---- a model that reasons, in full ----
 // The same standard, plus where to point it and a pass over its own answer.
 const THINKS_LONG = [
@@ -1256,9 +1266,9 @@ const THINKS_LONG = [
         role: "system",
         text: "<voice>\n" +
             "The passage has a voice, and yours is a different one. Mend what is weak " +
-            "in the voice that is there and hand it back still sounding like itself.\n\n" +
+            "in the voice that is there and return it still sounding like itself.\n\n" +
             "This matters most with a character who speaks badly on purpose: " +
-            "clipped, rambling, plain, crude. Smoothing that hands back a different " +
+            "short, rambling, plain, crude. Smoothing that returns a different " +
             "character.\n" +
             "</voice>",
     },
@@ -1287,23 +1297,6 @@ const THINKS_LONG = [
     THINKS_ANSWER,
     PROTECT_BLOCK,
 ];
-// The same two, for a model that reasons. It is given the test and left to
-// apply it, which is what makes these the smaller pair: the plain ones have to
-// spell out what counts as a repair, and a model that reasons works that out
-// from the question itself.
-const YOURS_THINKS_SHORT = [
-    YOURS_THINKS_JOB,
-    YOURS_TEST,
-    COPY_EXACTLY,
-    ...SCENE_BLOCKS,
-    MEMORY_BLOCK,
-    WORN_BLOCK,
-    RECENT_BLOCK,
-    AROUND_BLOCK,
-    TURN_BLOCK,
-    THINKS_ANSWER,
-    PROTECT_BLOCK,
-];
 const YOURS_THINKS_LONG = [
     YOURS_THINKS_JOB,
     YOURS_TEST,
@@ -1319,71 +1312,39 @@ const YOURS_THINKS_LONG = [
     THINKS_ANSWER,
     PROTECT_BLOCK,
 ];
-const DEFAULT_BLOCKS = PLAIN_SHORT;
+const DEFAULT_BLOCKS = PLAIN_LONG;
 const BUILT_IN_PROMPTS = [
     {
-        name: "A quick read",
-        label: "A quick read",
-        mine: false,
-        blocks: PLAIN_SHORT,
-        thinking: "off",
-        what: "Start here. Three blocks: what to cut, what to mend, what to leave. The shorter of the two that run on any model.",
-    },
-    {
-        name: "A close read",
-        label: "A close read",
+        name: "The line edit",
+        label: "The line edit",
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "The same ground broken into eight blocks: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Half again the prompt on every refine, and followed more closely for it. Runs on any model.",
+        what: "Start here. It is handed the job, then one subject at a time: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Everything to look at is set out for it rather than left to be worked out. Runs on any model.",
     },
     {
-        name: "A quick read, for a model that thinks",
-        label: "A quick read, for a model that thinks",
-        mine: false,
-        blocks: THINKS_SHORT,
-        thinking: "inherit",
-        what: "One standard and the room to work it: a sentence that would sit in any other story is the one to rewrite. The shortest of the four, because a model that reasons fills in the rest. Needs a model that reasons.",
-    },
-    {
-        name: "A close read, for a model that thinks",
-        label: "A close read, for a model that thinks",
+        name: "The line edit, for a model that thinks",
+        label: "The line edit, for a model that thinks",
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "The same standard, plus the five places worth checking, holding the user's voice, and a pass back over its own rewrite. About the size of a quick read on a plain model and goes deeper for it. Needs a model that reasons.",
+        what: "The same job, given as a standard to apply rather than a list to match: the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Needs a model that reasons.",
     },
     {
-        name: "Your writing, a quick read",
-        label: "A quick read",
-        mine: true,
-        blocks: YOURS_SHORT,
-        thinking: "off",
-        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your word choice, your length and your plain lines come back as they went in. The shorter of the two that run on any model.",
-    },
-    {
-        name: "Your writing, a close read",
-        label: "A close read",
+        name: "The copy edit",
+        label: "The copy edit",
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
-        what: "The same list in full, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Half again the prompt, and harder on the line between a slip and a choice. Runs on any model.",
+        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your wording, your sentences and your plain lines come back as they went in. Runs on any model.",
     },
     {
-        name: "Your writing, a quick read, for a model that thinks",
-        label: "A quick read, for a model that thinks",
-        mine: true,
-        blocks: YOURS_THINKS_SHORT,
-        thinking: "inherit",
-        what: "One test and the room to work it: every change has to be one you would recognise as what you meant to type. The shortest of the four, because a model that reasons works out what counts as a slip from that alone. Needs a model that reasons.",
-    },
-    {
-        name: "Your writing, a close read, for a model that thinks",
-        label: "A close read, for a model that thinks",
+        name: "The copy edit, for a model that thinks",
+        label: "The copy edit, for a model that thinks",
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
-        what: "The same test, plus where writing typed at speed actually goes wrong and what is not a repair. Nothing on the list is a matter of taste, which is the point of it. About the size of a quick read on a plain model. Needs a model that reasons.",
+        what: "The same job, worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, and what is never a repair. Needs a model that reasons.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
@@ -1406,7 +1367,7 @@ const BUILT_IN_SHAPES = BUILT_IN_PROMPTS.map((p) => ({
     mine: p.mine,
     shape: promptShape(p.blocks),
 }));
-// A short mark for the eight prompts as they ship, so a reader can be told when
+// A short mark for the four prompts as they stand, so a reader can be told when
 // they have changed. FNV-1a over their shapes: it only has to differ when the
 // prompts differ, and it goes in storage, so short matters more than anything a
 // hash is usually chosen for.
@@ -1419,15 +1380,30 @@ function markText(text) {
     }
     return h.toString(36);
 }
-const SHIPPED_MARK = markText(BUILT_IN_SHAPES.map((p) => p.shape).join("\u0003"));
+// Defaults that have moved, and what each one used to be.
+//
+// The notice built on this only reaches somebody still holding the old value,
+// because that is who was following the default. Anybody who set their own
+// number is told nothing: their setup did not change, and a line about a
+// default they are not on is a line to dismiss for no reason.
+//
+// One entry per default that moves, added in the release that moves it and
+// taken out one release later. Empty is the normal state.
+const MOVED_DEFAULTS = [
+    {
+        key: "timeoutSecs",
+        was: 90,
+        label: "Give up waiting after",
+        why: "90 seconds was under what a reasoning model or a local one needs, so a refine could be cut off mid-thought. It is four minutes now.",
+    },
+];
+const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
+const BUILT_IN_MARK = markText(BUILT_IN_SHAPES.map((p) => p.shape).join("\u0003"));
 const ROLE_OPTIONS = [
     { value: "system", label: "System" },
     { value: "user", label: "User" },
     { value: "assistant", label: "Assistant" },
 ];
-// The sampler values that reach the request. Anything not on this list is not
-// passed on, on either side of the bridge. Blank means the connection decides,
-// which is why none of these carry a default.
 // Patterns of the reader's own, on top of the built-in ones. Added rather than
 // replacing: replacing is how somebody ends up with one pattern of their own,
 // none of the defaults, and a rewrite that ate a code block. What a particular
@@ -1534,6 +1510,9 @@ const WIDGET_FIELDS = [
         hint: "How wide the button is, in pixels. 44 is about a comfortable thumb. Larger is easier to hit on a phone, smaller keeps it out of the way.",
     },
 ];
+// The sampler values that reach the request. Anything not on this list is not
+// passed on, on either side of the bridge. Blank means the connection decides,
+// which is why none of these carry a default.
 const SAMPLER_FIELDS = [
     {
         id: "temperature",
@@ -1721,7 +1700,7 @@ const LIMIT_FIELDS = [
         type: "lines",
         needs: { key: "passMode", is: "many" },
         under: true,
-        hint: "One preset name per line, top to bottom, up to six. Yours or one that ships with it, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass. Each pass is one model call, so six passes cost six times one.",
+        hint: "One preset name per line, top to bottom, up to six. Yours or one of the built-in prompts, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass. Each pass is one model call, so six passes cost six times one.",
     },
     {
         key: "wornOn",
@@ -1963,22 +1942,152 @@ function backdropOf(el, style) {
     return out;
 }
 // A ring with a gap, turned by the stylesheet rather than by a timer.
-function spinIcon() {
-    return ('<svg class="arf-spin" viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
-        'stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
-        '<path d="M21 12a9 9 0 1 1-6.2-8.6" />' +
+// The extension's mark: an eye.
+//
+// What this does to a reply is read it and put it back in better words, and an
+// eye is the part of that anybody can see happening. It also gives the mark
+// three things to say with one shape, which a row of lines and a sparkle could
+// not: shut while nothing is running, open while it is on, and reading while a
+// refine is in flight.
+//
+// One SVG in every case, with the state as a class on it rather than a
+// different icon per state. A swapped icon throws the old element away, and an
+// element that was replaced cannot animate from what it was: the lid would pop
+// open instead of opening.
+//
+// The shut lid is the open eye's width with three short lashes under it. A
+// plain curve on its own reads as a smile at 20 pixels, which is the size most
+// of these are drawn at.
+// How long the lid takes to open or shut. The same easing and roughly the same
+// length as everything else that answers a press, so the eye settles with the
+// rest of the button rather than on its own clock.
+const EYE_MS = 260;
+// The blink a refine ends on, and the shut after it.
+const EYE_DONE_MS = 900;
+// Shutting on being called off. Quicker than finishing, because that is what
+// being stopped is.
+const EYE_STOP_MS = 420;
+// Long enough that a normal tap never reaches it, short enough that holding the
+// button does not feel broken. Auto Retry holds for the same length.
+const HOLD_MS = 500;
+// How long the ring takes to close. Shorter than the hold on purpose.
+//
+// The timer starts the moment the finger lands. The ring cannot: it is a CSS
+// transition, and a transition only begins once the browser has recalculated
+// style for the attribute that started it, which is the next frame at best and
+// later than that on a busy page. Given the same length as the hold, the timer
+// always won by that gap, the menu opened, and the ring was wiped back a few
+// per cent short of closed. Landing early is the fix, because a ring that
+// closed and then waited a moment reads as finished, and one cut off at 95 per
+// cent reads as broken.
+const HOLD_RING_MS = HOLD_MS - 70;
+// How far a finger may drift and still be holding rather than dragging.
+const HOLD_SLOP = 10;
+// How long a press has to last before the ring is drawn at all. A tap is over
+// well inside this, so tapping shows nothing and the two gestures stay apart:
+// a ring on screen means a hold is running. Without the wait every tap flashed
+// a ring, which read as the button not knowing which one you meant.
+//
+// It only holds back the fade. The ring is already filling underneath, so when
+// it does appear it appears at how far through the hold you actually are.
+const HOLD_RING_WAIT = 150;
+// The ring that fills while the button is held down. A hold opens the menu, and
+// nothing on screen used to say a hold was under way, so the half second before
+// the menu appeared read as a tap that did nothing.
+//
+// Its own square rather than part of the mark: this belongs to the button's
+// edge, and the mark is drawn at about half the button's width. The viewBox is
+// 100 wide whatever size the button is, so one set of numbers covers every size,
+// and the stroke is held at 2 real pixels rather than scaled with the box, so it
+// looks the same on a 28px button and a 96px one.
+//
+// Auto Retry draws the same ring the same way.
+const HOLD_RING_R = 47;
+const HOLD_RING_LEN = (2 * Math.PI * HOLD_RING_R).toFixed(1);
+function holdRingSvg() {
+    return ('<svg class="arf-hold" viewBox="0 0 100 100" aria-hidden="true" focusable="false">' +
+        '<circle cx="50" cy="50" r="' + HOLD_RING_R + '" fill="none" stroke="currentColor"' +
+        ' stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke" />' +
         "</svg>");
 }
-function refineIcon() {
+const EYE_OPEN = "M3 12C6.5 6.6 17.5 6.6 21 12 17.5 17.4 6.5 17.4 3 12Z";
+const EYE_SHUT = "M3 12Q12 15.1 21 12M7.2 15l-.5 1.1M12 15.8v1.3M16.8 15l.5 1.1";
+// An eye rests shut and opens to a pointer. Nothing wakes.
+//
+// Waking was tried and taken out. A CSS animation replays whenever its element
+// is built again, and every mark here is built again by something: the panel
+// redraws on a tab change, the host redraws the drawer tab when you move
+// between extensions, the button under a message is built again for each new
+// reply, and the two selection buttons are built the moment you highlight
+// something and thrown away when you let go. There was no mark left that a wake
+// would fire on once rather than over and over, so the movement only ever read
+// as the marks flickering out of step with each other.
+//
+// "shut" is for a mark that carries its own state, which is the floating
+// button: it rests shut because nothing is running, and a pointer on it changes
+// nothing.
+function eyeIcon(state, size) {
+    const px = String(size || 20);
+    const how = state ? " arf-eye-" + state : " arf-opens";
+    return ('<svg class="arf-eye' + how + '" viewBox="0 0 24 24" ' +
+        'width="' + px + '" height="' + px + '" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<g class="arf-eye-ball">' +
+        '<path d="' + EYE_OPEN + '" />' +
+        '<circle class="arf-eye-pupil" cx="12" cy="12" r="2.7" fill="currentColor" stroke="none" />' +
+        "</g>" +
+        '<path class="arf-eye-lid" d="' + EYE_SHUT + '" />' +
+        "</svg>");
+}
+// The part you selected, refined: the same eye with a bracket at either side of
+// it, so the pair reads as "all of it" and "this much of it" rather than as two
+// unrelated marks. The eye is drawn narrower to leave the brackets room.
+//
+// Built from the same classes as the plain mark, so it is shut at rest, wakes
+// when it is drawn and opens to a pointer along with the rest of them. The
+// brackets sit outside the group that moves: they are what the eye is looking
+// at, so they stay put while it opens.
+function partIcon(state) {
+    // On the floating button it is drawn already reading, since it is only put
+    // there while it is the thing running. Everywhere else it is a button's mark
+    // and rests like the rest of them.
+    const how = state === "read" ? "arf-eye arf-eye-read" : "arf-eye arf-opens";
+    return ('<svg class="' + how + '" viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
+        'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
+        'stroke-linejoin="round" aria-hidden="true">' +
+        '<g class="arf-eye-ball">' +
+        '<path d="M5.6 12C8.6 7.7 15.4 7.7 18.4 12 15.4 16.3 8.6 16.3 5.6 12Z" />' +
+        '<circle class="arf-eye-pupil" cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />' +
+        "</g>" +
+        '<path class="arf-eye-lid" d="M5.6 12Q12 14.4 18.4 12M8.6 14.3l-.4.9M12 15v1.1M15.4 14.3l.4.9" />' +
+        '<path d="M2.9 8.8V15.2" opacity="0.55" />' +
+        '<path d="M21.1 8.8V15.2" opacity="0.55" />' +
+        "</svg>");
+}
+// Scissors, because that is what taking a selection out is.
+//
+// Still, and meant to be. Taking a selection out asks no model anything and is
+// over the moment it is pressed, so there is no stretch of time for a mark to
+// fill. The eye moves because a refine takes long enough to be waited on.
+function snipIcon() {
     return ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" ' +
         'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
         'stroke-linejoin="round" aria-hidden="true">' +
-        '<path d="M4 6.5h11" /><path d="M4 12h9" /><path d="M4 17.5h6.5" />' +
-        '<path d="M18.5 3.2l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9z" ' +
-        'fill="currentColor" stroke="none" />' +
-        '<path d="M17.8 14.6l.55 1.5 1.5.55-1.5.55-.55 1.5-.55-1.5-1.5-.55 1.5-.55z" ' +
-        'fill="currentColor" stroke="none" opacity="0.7" />' +
+        '<circle cx="6" cy="6" r="2.6" /><circle cx="6" cy="18" r="2.6" />' +
+        '<path d="M8.2 7.6L20 18" /><path d="M8.2 16.4L20 6" />' +
         "</svg>");
+}
+// The mark, at rest. Every place that draws the extension rather than a state
+// of it: the drawer tab, the menus, the buttons the host hands out.
+//
+// Quiet, not waking. Every one of these is drawn by the host, and the host
+// redraws them whenever it likes: moving between one extension's drawer and
+// another puts a fresh element on the screen, and a fresh element replays a CSS
+// animation from the start. The mark blinked every time somebody changed
+// drawers. Waking is only safe where this extension creates the element itself
+// and knows it will not be replaced, which is the button under a message.
+function refineIcon() {
+    return eyeIcon();
 }
 export function setup(ctx, overrides) {
     const disposers = [];
@@ -1995,13 +2104,31 @@ export function setup(ctx, overrides) {
         }
     }
     Object.assign(cfg, loadSaved(), overrides || {});
+    carryOldNames(cfg);
+    // Settings written under a name this version no longer uses. Read across once
+    // and the old name dropped, so upgrading keeps what the old one was holding
+    // rather than starting again from nothing.
+    //
+    // builtInSeen was shippedSeen. It holds which built-in prompts you were last
+    // shown, and losing it would quietly swallow the one line saying they changed.
+    function carryOldNames(into) {
+        if (!into || typeof into !== "object")
+            return into;
+        if (!into.builtInSeen && into.shippedSeen)
+            into.builtInSeen = into.shippedSeen;
+        try {
+            delete into.shippedSeen;
+        }
+        catch (_) { }
+        return into;
+    }
     // A panel with nothing saved is a fresh install, and a fresh install is
-    // already on the prompts that ship with this build. Stamped here rather than
+    // already on the prompts this build has. Stamped here rather than
     // left empty, so the first change after today is the first thing anybody is
     // told about. An install from before this existed is stamped the same way and
     // hears nothing about changes it cannot be shown.
-    if (!cfg.shippedSeen)
-        cfg.shippedSeen = SHIPPED_MARK;
+    if (!cfg.builtInSeen)
+        cfg.builtInSeen = BUILT_IN_MARK;
     // Settings arriving from the account, checked key by key against the shape
     // the default says they should be. The account copy is written by this same
     // extension, but it can be older than this version, half written by a save
@@ -2140,40 +2267,53 @@ export function setup(ctx, overrides) {
             .filter(Boolean)
             .map((name) => {
             const want = name.toLowerCase();
-            // Yours first, so a preset you saved under a shipped name is the one that
-            // runs. Then the shipped prompts, which are a separate list from your
+            // Yours first, so a preset you saved under a built-in name is the one that
+            // runs. Then the built-in prompts, which are a separate list from your
             // saved ones: without this line a pass named after one of them resolved
             // to nothing and was skipped without saying so.
             const mineNamed = presets.find((p) => p && String(p.name).toLowerCase() === want);
-            const shipped = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
+            const builtIn = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
             const list = mineNamed && mineNamed.settings
                 ? usable(mineNamed.settings.blocks)
-                : shipped
-                    ? usable(shipped.blocks)
+                : builtIn
+                    ? usable(builtIn.blocks)
                     : [];
             return { name: name, on: list.length > 0, blocks: list };
         })
             .filter((one) => one.blocks.length > 0);
         return out;
     }
-    // The shipped prompts as they stand, written down as seen. Called when one is
+    // The built-in prompts as they stand, written down as seen. Called when one is
     // loaded, when the panel opens on a fresh install, and when the line saying
     // they moved is dismissed.
-    function markShippedSeen() {
-        if (cfg.shippedSeen === SHIPPED_MARK)
+    function markBuiltInSeen() {
+        if (cfg.builtInSeen === BUILT_IN_MARK)
             return;
-        cfg.shippedSeen = SHIPPED_MARK;
+        cfg.builtInSeen = BUILT_IN_MARK;
         // Written now rather than on the usual settle. This is what decides whether
         // somebody is told the same thing twice, and a panel closed inside the
         // settle would lose it.
         persist(true);
     }
-    // Whether the eight have changed since this reader last took one. Empty means
+    // The moved defaults this reader is actually on. Anybody who set their own
+    // value is not on the list, because nothing about their setup moved.
+    function movedForMe() {
+        if (String(cfg.movedSeen || "") === MOVED_MARK)
+            return [];
+        return MOVED_DEFAULTS.filter((m) => steady(cfg[m.key]) === steady(m.was));
+    }
+    function markMovedSeen() {
+        if (cfg.movedSeen === MOVED_MARK)
+            return;
+        cfg.movedSeen = MOVED_MARK;
+        persist(true);
+    }
+    // Whether the four have changed since this reader last took one. Empty means
     // they never have, or that this panel came up before any of this existed, and
     // neither is worth a line about a change nobody can point at.
-    function shippedMoved() {
-        const seen = String(cfg.shippedSeen || "");
-        return !!seen && seen !== SHIPPED_MARK;
+    function builtInMoved() {
+        const seen = String(cfg.builtInSeen || "");
+        return !!seen && seen !== BUILT_IN_MARK;
     }
     let saveTimer = null;
     function persist(now) {
@@ -2228,7 +2368,7 @@ export function setup(ctx, overrides) {
         accountAsk = "";
         const s = msg.settings;
         if (s && typeof s === "object" && Object.keys(s).length) {
-            Object.assign(cfg, coerceSaved(s));
+            Object.assign(cfg, coerceSaved(carryOldNames(s)));
             try {
                 if (typeof localStorage !== "undefined")
                     localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
@@ -2858,7 +2998,7 @@ export function setup(ctx, overrides) {
         permsAsk = id;
         send({ type: "get_permissions", requestId: id });
     }
-    // What the backend says it is running. The two halves ship together and load
+    // What the backend says it is running. The two halves go out together and load
     // separately, so this is not always the version above. Empty until it answers,
     // which is the honest reading on a build with no backend up.
     let backendVersion = "";
@@ -3064,6 +3204,7 @@ export function setup(ctx, overrides) {
         if (!on && busy && runStartedAt)
             lastRunMs = Date.now() - runStartedAt;
         busy = on;
+        paintEyes(on);
         stage = on ? why || stage || "asking" : "";
         tickLive();
         if (on) {
@@ -3074,6 +3215,51 @@ export function setup(ctx, overrides) {
             clearInterval(clock);
             clock = null;
         }
+    }
+    // Every mark this extension has drawn, told the same thing at the same time.
+    //
+    // They were each answering to something different: the buttons in the chat
+    // swapped their whole icon, the floating button had a state of its own, and
+    // the drawer tab and the mark on the panel answered to nothing at all. So the
+    // set agreed while nothing was happening and came apart the moment something
+    // was, which is exactly when marks standing for one extension should agree.
+    //
+    // The floating button is left out because it has more to say than the rest:
+    // it blinks on the way to shut when a refine lands. Its own paint owns it.
+    //
+    // The class each mark rests at is kept on the element, since they do not all
+    // rest at the same one: the button under a message wakes and opens to a
+    // pointer, the mark on the panel does neither.
+    function paintEyes(on) {
+        if (typeof document === "undefined")
+            return;
+        try {
+            const all = document.querySelectorAll(".arf-eye");
+            for (let i = 0; i < all.length; i++) {
+                const eye = all[i];
+                if (eye.closest && eye.closest(".arf-float"))
+                    continue;
+                let base = eye.getAttribute("data-arf-eyebase");
+                if (base == null) {
+                    // Every state stripped, not just the reading one. A mark drawn as
+                    // shut kept that class in what it rests at, so switching it on gave
+                    // it shut and reading together: the reading animations ran on an eye
+                    // styled closed, and each repaint made a fresh element and started
+                    // the blink again. Resting is the shut one anyway, since that is what
+                    // an eye with no state does.
+                    base = String(eye.getAttribute("class") || "")
+                        .replace(/\s*arf-eye-(read|shut|done|stop)\b/g, "")
+                        .trim();
+                    eye.setAttribute("data-arf-eyebase", base);
+                }
+                const want = on ? base + " arf-eye-read" : base;
+                // Only when it would change something. Writing the same class back on
+                // every repaint is what restarts an animation that was already running.
+                if (String(eye.getAttribute("class") || "") !== want)
+                    eye.setAttribute("class", want);
+            }
+        }
+        catch (_) { }
     }
     // The status line as it should read this instant. One definition, used both
     // by the clock that writes it four times a second and by the panel that
@@ -3122,9 +3308,8 @@ export function setup(ctx, overrides) {
     // Everything the panel draws from the chat you are in, in one string. The
     // address is watched on a timer and asks the backend where we are whenever
     // the two disagree, and most of those answers say exactly what the last one
-    // said. Rebuilding for one of those is a rebuild nobody asked for, landing
-    // in the middle of whatever somebody was reading or typing, which is what a
-    // panel that jumps on its own looks like from the outside.
+    // said. Rebuilding for one of those interrupts whatever somebody is reading
+    // or typing, and the panel appears to jump on its own.
     const chatShape = () => [
         String(lastChatId),
         String(lastMessageId),
@@ -3341,6 +3526,12 @@ export function setup(ctx, overrides) {
         "text-decoration-thickness:1px;opacity:.85}" +
         ".arf-add{color:var(--lumiverse-success,#22c55e)}" +
         ".arf-scroll{max-height:130px;overflow-y:auto}" +
+        // The two versions in their own columns. They wrap to one on top of the
+        // other once there is not room for two readable ones, which is what a
+        // phone gives: two columns of twenty characters is worse than a scroll.
+        ".arf-sbs{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}" +
+        ".arf-sbs-col{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:4px}" +
+        ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-well.arf-tall{max-height:340px}" +
         ".arf-dot{flex:none;width:7px;height:7px;border-radius:50%;" +
         "background:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
@@ -3400,8 +3591,27 @@ export function setup(ctx, overrides) {
         // could show: a drag up moved the titles by that pixel and stacked the
         // tab's underline on the line, which reads as the line thickening. The tray
         // has nothing under it to sit over, so there is nothing to scroll.
-        ".arf-tabs{display:flex;gap:3px;overflow-x:auto;overflow-y:hidden;" +
-        "overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none;" +
+        // One row, and it does not scroll. A scrolling strip slides under a finger
+        // even when every tab already fits, because the padding and border put the
+        // content a few pixels over the box, and a row that drifts sideways when
+        // you meant to scroll the panel reads as the panel coming apart. Wrapping
+        // instead dropped the last tab onto a second line, so the tabs give way at
+        // the sides rather than the row breaking.
+        // A selector can be one long string with nowhere to wrap, so it is allowed
+        // to break anywhere rather than push the card sideways. The one in use is
+        // marked by its border and its text colour, not by a word after it. A
+        // status after every line is harder to read.
+        ".arf-pick{font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.5;" +
+        "overflow-wrap:anywhere;padding:3px 7px;border-radius:var(--lumiverse-radius-sm,5px);" +
+        "border-left:2px solid transparent;" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.55))}" +
+        ".arf-pick-on{border-left-color:var(--lumiverse-success,#22c55e);" +
+        "background:var(--lumiverse-fill-subtle,rgba(255,255,255,.04));" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-pick-bad{border-left-color:var(--lumiverse-danger,#ef4444);" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-tabs{display:flex;flex-wrap:nowrap;gap:3px;overflow:hidden;" +
+        "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
         "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
         "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
@@ -3416,8 +3626,14 @@ export function setup(ctx, overrides) {
         // The weight never changes with the state. A label that goes bold on select
         // is a label that gets wider, and the whole row shifts under the finger that
         // just tapped it.
-        ".arf-tab{flex:none;cursor:pointer;background:transparent;border:0;" +
-        "padding:8px 12px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
+        // Equal shares rather than each tab sized to its own label. Sized to the
+        // label, the gaps between them all differ and the selected pill reads as
+        // cramped next to the wide ones, which is the uneven look. Equal shares
+        // give one rhythm across the row and one pill size.
+        ".arf-tab{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
+        "text-align:center;" +
+        "cursor:pointer;background:transparent;border:0;" +
+        "padding:8px 4px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
         "font:12.5px var(--lumiverse-font-family,system-ui);" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
         "transition:color var(--lumiverse-transition-fast,150ms ease)," +
@@ -3472,29 +3688,105 @@ export function setup(ctx, overrides) {
         // The floating button. Squared against the host's container rather than
         // trusting it, so it is a circle whatever shape the container turns out to
         // be: it was coming out as a squashed oval.
+        // The floating button. Squared against the host's container rather than
+        // trusting it, so it is a circle whatever shape the container turns out to
+        // be: it was coming out as a squashed oval.
+        //
+        // Three states, and the colour says which: quiet while nothing is running,
+        // quieter still when there is nothing here to refine, and the theme's accent
+        // while a refine is going. Auto Retry's button says on and off the same way,
+        // so somebody running both reads one control rather than two.
+        //
+        // The base is opaque. A floating control sits over whatever the chat is
+        // showing, and a fill with alpha in it takes the colour of the message
+        // underneath, so the same button is muddy over one reply and clear over the
+        // next. The accent goes on as a second layer over that solid base rather
+        // than replacing it.
         ".arf-float{width:100%;height:100%;aspect-ratio:1;display:flex;align-items:center;" +
         "justify-content:center;padding:0;cursor:pointer;border-radius:50%;" +
-        "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
         "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
         "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9))," +
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
-        "transition:color var(--lumiverse-transition-fast,150ms ease)}" +
-        ".arf-float:hover{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
-        // Dimmed rather than hidden. The button is how somebody switches the
-        // extension off and reaches the tab, so it stays reachable on a screen with
-        // nothing to refine; it just stops looking like it is offering a refine.
-        ".arf-float.arf-idle{opacity:.5}" +
-        ".arf-float.arf-idle:hover{opacity:.75}" +
-        ".arf-float.arf-working{color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
-        // A ring that grows out of the button and fades, only while something is
-        // running. This is the one piece of movement in the whole extension, and it
-        // is here because a floating button is often the only part of it on screen.
-        "@keyframes arf-pulse{0%{box-shadow:0 0 0 0 var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
-        "70%{box-shadow:0 0 0 10px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}" +
-        ".arf-float.arf-working{animation:arf-pulse 1400ms ease-out infinite}" +
-        "@media (prefers-reduced-motion: reduce){.arf-float.arf-working{animation:none}}" +
+        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))}" +
+        ".arf-float:hover{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        // Nothing here to refine. The ink goes quiet and the edge with it, rather
+        // than the whole button dropping to half opacity: dimming the lot dims the
+        // mark as well, so the one part that says which extension this is goes with
+        // it, and a faded control reads as broken rather than as idle. The button
+        // stays reachable either way, since it is how somebody switches the
+        // extension off and reaches the tab.
+        ".arf-float.arf-idle{border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
+        // Running. The accent goes on the fill and the edge, and a ring grows out of
+        // the button and fades, over and over, for as long as it lasts.
+        //
+        // The pulse was taken out once on the grounds that the hold ring already
+        // rings this button. That was wrong: the hold ring is only on screen while a
+        // finger is down, and this is only on screen while a refine is running, so
+        // the two are almost never up together, and they say different things in
+        // different places. One grows outward from the edge, the other fills along
+        // it.
+        //
+        // The shadow the button always has is carried in every frame of the
+        // animation. An animation on box-shadow replaces the property outright, so
+        // leaving it out dropped the button flat against the chat each time round.
+        ".arf-float.arf-working{border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5));" +
+        "background-image:linear-gradient(var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
+        "var(--lumiverse-primary-020,rgba(147,112,219,.2)))," +
+        "linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.9))," +
+        "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
+        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+        "0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.18));" +
+        "animation:arf-pulse 1400ms ease-out infinite}" +
+        "@keyframes arf-pulse{" +
+        "0%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+        "0 0 0 0 var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        "70%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+        "0 0 0 10px rgba(0,0,0,0)}" +
+        "100%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
+        "0 0 0 0 rgba(0,0,0,0)}}" +
+        // A press dips the whole button a little, so a tap answers whether or not it
+        // changed anything. A press is also how the menu is opened, and the ring
+        // below is what tells the two apart: a dip on its own is a tap, a dip with
+        // the ring running is a hold.
+        //
+        // A ring that grew out of the button and faded used to run the whole time a
+        // refine was going. Two rings on one button said one thing between them, and
+        // the eye already says a refine is running by reading. The ring here is the
+        // hold and nothing else.
+        ".arf-float:active{transform:scale(.94)}" +
+        ".arf-float{transition:color 260ms cubic-bezier(.2,.7,.3,1)," +
+        "border-color 260ms cubic-bezier(.2,.7,.3,1)," +
+        "background-image 260ms cubic-bezier(.2,.7,.3,1)," +
+        "box-shadow 260ms cubic-bezier(.2,.7,.3,1),opacity 260ms cubic-bezier(.2,.7,.3,1)," +
+        "transform 260ms cubic-bezier(.2,.7,.3,1);position:relative}" +
+        ".arf-float .arf-glyph{display:flex;align-items:center;justify-content:center;line-height:0}" +
+        // The ring starts at the top and fills clockwise, which is the direction
+        // every progress ring people have already used goes.
+        ".arf-float .arf-hold{position:absolute;inset:0;width:100%;height:100%;" +
+        "pointer-events:none;transform:rotate(-90deg);opacity:0;" +
+        "color:var(--lumiverse-primary,rgba(147,112,219,.9));transition:opacity 200ms ease-out}" +
+        // Drawn at zero length when nothing is held, so there is one circle that
+        // grows rather than a circle that appears.
+        ".arf-float .arf-hold circle{stroke-dasharray:" + HOLD_RING_LEN + ";" +
+        "stroke-dashoffset:" + HOLD_RING_LEN + ";transition:stroke-dashoffset 160ms ease-out}" +
+        ".arf-float[data-arf-holding] .arf-hold{opacity:1;" +
+        "transition:opacity 90ms linear " + HOLD_RING_WAIT + "ms}" +
+        // Linear, so the ring fills at one steady rate and how far round it has gone
+        // is how far through the hold you are. Eased would run ahead or behind.
+        ".arf-float[data-arf-holding] .arf-hold circle{stroke-dashoffset:0;" +
+        "transition:stroke-dashoffset " + HOLD_RING_MS + "ms linear}" +
+        "@media (prefers-reduced-motion: reduce){" +
+        ".arf-float{transition:none}" +
+        ".arf-float:active{transform:none}" +
+        // The ring that grows is movement and nothing else. What it says, that a
+        // refine is running, is said by the fill, the edge and the tooltip too.
+        ".arf-float.arf-working{animation:none}" +
+        // The ring is movement and nothing else: it says how far through a hold you
+        // are and carries no state worth showing still. Somebody who asked for less
+        // movement gets the menu on the same hold with nothing drawn.
+        ".arf-float .arf-hold{display:none}}" +
         "@media (pointer: coarse){.arf-btn.arf-mini2{min-height:34px;padding:6px 12px}}" +
         // A setting's label with the "?" that holds its description, so the two sit
         // on one line and the row keeps its height whether or not it has one.
@@ -3537,7 +3829,7 @@ export function setup(ctx, overrides) {
         "opacity:0;transition:opacity 140ms ease-out}" +
         '.arf-hint[data-arf-open]{opacity:1}' +
         "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none}}" +
-        // The card that comes up on the page when a refine lands, so the answer to
+        // The card that comes up on the page when a refine finishes, so the answer to
         // "what did it change" is in front of you rather than behind a tab you have
         // to know to open. Bottom right on a desktop, across the bottom on a phone,
         // and never over the message box.
@@ -3552,23 +3844,31 @@ export function setup(ctx, overrides) {
         "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5));" +
         "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden;" +
-        "animation:arf-rise 180ms ease-out}" +
-        "@keyframes arf-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}" +
+        "animation:arf-rise 320ms cubic-bezier(.2,.8,.28,1) both}" +
+        // The card comes up from under the corner it sits in, overshoots by a
+        // couple of pixels and settles. A straight slide of eight pixels in 180ms
+        // arrives and stops dead, which reads as something being placed there; this
+        // reads as something arriving. It grows very slightly on the way in as
+        // well, so the corner it comes from is the corner it came from.
+        "@keyframes arf-rise{" +
+        "0%{opacity:0;transform:translateY(14px) scale(.965)}" +
+        "62%{opacity:1;transform:translateY(-3px) scale(1.006)}" +
+        "100%{opacity:1;transform:none}}" +
         // A dim behind it, so the eye goes to the card rather than hunting the page
         // under it for what changed. Light enough to read the chat through, since
         // the card is about a message sitting right there, and a tap anywhere on it
         // closes, which is what everybody expects of a dim.
         ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
         "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
-        "animation:arf-fade 180ms ease-out}" +
+        "animation:arf-fade 320ms cubic-bezier(.2,.8,.28,1) both}" +
         "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
         "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
         "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
         // A row switched on where somebody is already looking. It fades down into
         // place rather than appearing between two frames, which is the difference
         // between a row arriving and the page having flinched.
-        ".arf-arrive{animation:arf-arrive 180ms ease-out both}" +
-        "@keyframes arf-arrive{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}" +
+        ".arf-arrive{animation:arf-arrive 260ms cubic-bezier(.2,.8,.28,1) both}" +
+        "@keyframes arf-arrive{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}" +
         "@media (prefers-reduced-motion: reduce){.arf-arrive{animation:none}}" +
         // On a phone it spans the width and sits above the input bar rather than on
         // top of it, so it can be read while you carry on.
@@ -3616,11 +3916,95 @@ export function setup(ctx, overrides) {
         // The button this extension puts on a message and in the input bar. Styled
         // to sit with the host's own icon buttons rather than to stand out: it is
         // one more action in a row of them, not a badge.
-        "@keyframes arf-turn{to{transform:rotate(360deg)}}" +
-        ".arf-spin{animation:arf-turn 900ms linear infinite;transform-origin:50% 50%}" +
-        // A reader who has asked for less movement gets a still icon rather than a
-        // spinner, and the button's title still says it is working.
-        "@media (prefers-reduced-motion: reduce){.arf-spin{animation:none}}" +
+        // ---- the eye ----
+        // One shape, and everywhere it is drawn it is drawn shut. Shut is the mark
+        // at rest: the extension is not reading anything, so the eye is not open.
+        //
+        // Everything moves around the middle of the 24 box rather than the middle of
+        // whatever each part's own bounds happen to be, so the lid shuts onto the
+        // eye's centre line and the pupil crosses the eye rather than drifting off
+        // its own edge.
+        ".arf-eye .arf-eye-ball,.arf-eye .arf-eye-lid,.arf-eye .arf-eye-pupil{" +
+        "transform-box:view-box;transform-origin:12px 12px}" +
+        ".arf-eye .arf-eye-ball{transform:scaleY(.1);opacity:0;" +
+        "transition:transform " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)," +
+        "opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
+        ".arf-eye .arf-eye-lid{opacity:1;" +
+        "transition:opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
+        // Reading. The lid lifts and the eye comes up from its own centre line
+        // rather than being swapped for a second drawing, so opening and shutting
+        // are one movement in either direction.
+        ".arf-eye.arf-eye-read .arf-eye-ball{" +
+        "transform:none;opacity:1}" +
+        ".arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
+        // Pointing at a button opens the eye on it. A mark that answers the pointer
+        // is the cheapest way to say a thing can be pressed, and it is the same
+        // movement the rest of this does rather than a second idea.
+        // Only the eyes with nothing else to say. The floating button is shut
+        // because no refine is running, which is a fact about the extension rather
+        // than about where your pointer is, so pointing at it changes nothing.
+        // Only where there is a real pointer. A phone has no hover, and tapping a
+        // button leaves it matching :hover in most mobile browsers until something
+        // else is tapped, so without this the eye sat open on whichever button you
+        // last used. Focus is outside the guard: reaching a button by keyboard
+        // should open its eye on any device.
+        "@media (hover: hover){" +
+        "button:hover .arf-eye.arf-opens .arf-eye-ball," +
+        "[role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-ball{transform:none;opacity:1}" +
+        "button:hover .arf-eye.arf-opens .arf-eye-lid," +
+        "[role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-lid{opacity:0}}" +
+        "button:focus-visible .arf-eye.arf-opens .arf-eye-ball{transform:none;opacity:1}" +
+        "button:focus-visible .arf-eye.arf-opens .arf-eye-lid{opacity:0}" +
+        // Reading: the pupil crosses the eye at the pace of somebody scanning a
+        // line, then snaps back to the start the way an eye does at the end of one.
+        // Linear across, eased on the way back, which is what makes it read as
+        // reading rather than as something swinging.
+        "@keyframes arf-read{" +
+        "0%{transform:translateX(-4.6px);animation-timing-function:linear}" +
+        "66%{transform:translateX(4.6px);animation-timing-function:cubic-bezier(.65,0,.25,1)}" +
+        "100%{transform:translateX(-4.6px)}}" +
+        // A blink on the way back, which is when a real one happens. Shallow on
+        // purpose: shutting the eye fully at this size reads as the icon flickering.
+        "@keyframes arf-blink{0%,66%{transform:scaleY(1)}" +
+        "73%{transform:scaleY(.28)}80%,100%{transform:scaleY(1)}}" +
+        ".arf-eye.arf-eye-read .arf-eye-pupil{animation:arf-read 1700ms infinite}" +
+        ".arf-eye.arf-eye-read .arf-eye-ball{animation:arf-blink 1700ms infinite}" +
+        // Finished. One long blink and the eye shuts, rather than the lid dropping
+        // the instant the answer lands. A refine ending is the one moment the button
+        // has something to say, and a state that arrives and leaves in the same
+        // frame says it to nobody.
+        "@keyframes arf-done{0%{transform:scaleY(1);opacity:1}" +
+        "34%{transform:scaleY(1);opacity:1}" +
+        "52%{transform:scaleY(.12);opacity:1}" +
+        "70%{transform:scaleY(1);opacity:1}" +
+        "100%{transform:scaleY(.1);opacity:0}}" +
+        "@keyframes arf-done-lid{0%,70%{opacity:0}100%{opacity:1}}" +
+        ".arf-eye.arf-eye-done .arf-eye-ball{" +
+        "animation:arf-done " + EYE_DONE_MS + "ms cubic-bezier(.2,.7,.3,1) both}" +
+        ".arf-eye.arf-eye-done .arf-eye-lid{" +
+        "animation:arf-done-lid " + EYE_DONE_MS + "ms cubic-bezier(.2,.7,.3,1) both}" +
+        // Called off. The eye shuts at once and keeps going a little past flat
+        // before it settles, which is a thing stopping short does and finishing does
+        // not. No blink: a blink is what an eye does when it has read something.
+        "@keyframes arf-stop{0%{transform:scaleY(1);opacity:1}" +
+        "62%{transform:scaleY(.06);opacity:.85}" +
+        "100%{transform:scaleY(.1);opacity:0}}" +
+        "@keyframes arf-stop-lid{0%{opacity:0}46%{opacity:.5}100%{opacity:1}}" +
+        ".arf-eye.arf-eye-stop .arf-eye-ball{" +
+        "animation:arf-stop " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
+        ".arf-eye.arf-eye-stop .arf-eye-lid{" +
+        "animation:arf-stop-lid " + EYE_STOP_MS + "ms cubic-bezier(.35,0,.25,1) both}" +
+        // A reader who has asked for less movement gets the eye open and still
+        // wherever it is drawn. A mark that never moves is better open than shut:
+        // shut is only readable next to the open one, and there would be no open one
+        // to read it against. The buttons still say in words what they are doing.
+        "@media (prefers-reduced-motion: reduce){" +
+        ".arf-eye .arf-eye-ball{transform:none;opacity:1;transition:none;animation:none}" +
+        ".arf-eye .arf-eye-lid{opacity:0;transition:none;animation:none}" +
+        ".arf-eye.arf-eye-read .arf-eye-pupil,.arf-eye.arf-eye-read .arf-eye-ball," +
+        ".arf-eye.arf-eye-done .arf-eye-ball,.arf-eye.arf-eye-done .arf-eye-lid," +
+        ".arf-eye.arf-eye-stop .arf-eye-ball,.arf-eye.arf-eye-stop .arf-eye-lid{" +
+        "animation:none}}" +
         // ---- saying something is wrong, in the theme's own colours ----
         // Lumiverse has a danger colour and a success colour, and a warning drawn
         // in neither reads as one more muted paragraph. Tinted background, matching
@@ -3665,7 +4049,7 @@ export function setup(ctx, overrides) {
         ".arf-btn{min-height:40px;padding:10px 14px}" +
         ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
         ".arf-fold{min-height:44px}" +
-        ".arf-tab{padding:12px 13px}" +
+        ".arf-tab{padding:12px 4px}" +
         ".arf-box{width:46px;height:26px;border-radius:13px}" +
         ".arf-box::after{width:18px;height:18px}" +
         ".arf-box:checked::after{left:23px}" +
@@ -3684,14 +4068,20 @@ export function setup(ctx, overrides) {
         "outline-offset:2px}" +
         ".arf-slot svg{display:block;width:14px;height:14px}" +
         // While a refine is running. It stays pressable, because pressing it is how
-        // somebody is told one is already going.
-        ".arf-slot[aria-busy=true]{opacity:.55}" +
+        // somebody is told one is already going. On the attribute rather than the
+        // class, because a button standing in one of the host's rows wears the
+        // host's classes and not this extension's.
+        "[data-arf-slot][aria-busy=true]{opacity:.55}" +
         // The message one is a block in the message's own column, so it needs a row
         // of its own to sit in. Centred, which is where the host puts the row of
         // buttons under it.
         ".arf-slot-row{display:flex;justify-content:center;align-items:center;" +
         "padding:2px 0}" +
-        "@media (pointer:coarse){.arf-slot{padding:9px}}";
+        // A finger gets a wider target in the row that is this extension's to lay
+        // out. A button in one of the host's rows is padded the way that row pads
+        // its own, since a taller one would push the row out for the sake of a
+        // target the buttons either side of it do not have.
+        "@media (pointer:coarse){.arf-slot-row .arf-slot{padding:9px}}";
     let styleEl = null;
     function injectStyle() {
         try {
@@ -3858,7 +4248,7 @@ export function setup(ctx, overrides) {
                     continue;
                 // From the element itself, not its parent. A filled button's label sits
                 // on the button's own colour, and measuring it against the card behind
-                // instead is how white-on-lavender passed a contrast check and shipped
+                // instead is how white-on-lavender passed a contrast check and went out
                 // as an unreadable button.
                 const back = backdropOf(n, cs);
                 const shown = blendColor(fg, back);
@@ -4245,8 +4635,8 @@ export function setup(ctx, overrides) {
             box.setAttribute("data-arf-open", "1");
         }
         catch (_) { }
-        // Tapping the description closes it. On a phone that is the first thing a
-        // thumb reaches for.
+        // Tapping the description closes it. On a phone that is the easiest place
+        // to tap.
         box.addEventListener("click", () => hideHint());
         hintPop = box;
         hintAnchor = anchor;
@@ -4385,11 +4775,11 @@ export function setup(ctx, overrides) {
         // Closing happens on the way down, and the click that follows lands on
         // whatever was under the finger, so dismissing a description by tapping the
         // page also flipped whichever tick or button it happened to land on. The
-        // next click is eaten, once, and only when a description was open to close.
+        // next click is blocked, once, and only when a description was open to close.
         // A gesture that never produces one, a drag or a scroll, drops the guard on
         // its own rather than leaving it armed for the next real press.
         let eatClick = null;
-        function swallowNext() {
+        function blockNextClick() {
             const eat = (e) => {
                 drop();
                 if (!e)
@@ -4435,7 +4825,7 @@ export function setup(ctx, overrides) {
             }
             catch (_) { }
             hideHint();
-            swallowNext();
+            blockNextClick();
         };
         // A long description scrolls inside itself. That scroll is somebody reading
         // it, not the row moving, so it is the one scroll that leaves it open.
@@ -4503,8 +4893,8 @@ export function setup(ctx, overrides) {
     }
     // ---- the tabs ----
     // Six boxes, and everything belongs in exactly one of them. The panel was one
-    // column with every setting in it, which reads as a wall however carefully
-    // each row is written: nothing tells the eye where one subject ends.
+    // column holding every setting, which is hard to read however carefully each
+    // row is written, because nothing shows where one subject ends.
     const TABS = [
         { id: "prompt", label: "Prompt" },
         { id: "context", label: "Context" },
@@ -4578,6 +4968,10 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     let hunt = "";
+    // Held out here rather than inside the search box, which is rebuilt on every
+    // repaint: a timer owned by a discarded box still fires, and a repaint after
+    // teardown is an error nobody can see the cause of.
+    let huntTimer = null;
     function buildSearch() {
         const wrap = el("div", "arf-col");
         const row = el("div", "arf-row");
@@ -4590,9 +4984,24 @@ export function setup(ctx, overrides) {
         box.setAttribute("data-arf-field", "hunt");
         // Filters as you type. Held out of cfg because a search is about the next
         // ten seconds, not a setting to carry between sessions.
+        // Waits for a gap in the typing rather than repainting per character.
+        //
+        // A repaint rebuilds the tab and then re-measures every line on it against
+        // the theme, which on the Prompt tab is about forty milliseconds. Per
+        // keystroke that is the whole word spent blocking the main thread, and it
+        // is felt as the field itself being slow to take letters. One repaint after
+        // the typing stops costs the same forty milliseconds once.
+        //
+        // Short enough that a reader who types a word and looks up sees the list
+        // already filtered, long enough to cover a normal typing rate.
         box.addEventListener("input", () => {
             hunt = box.value;
-            paint();
+            if (huntTimer)
+                clearTimeout(huntTimer);
+            huntTimer = setTimeout(() => {
+                huntTimer = null;
+                paint();
+            }, 120);
         });
         // No Clear button beside it. A search field already carries one, drawn by
         // the browser, and the rule above gives it a colour that follows the theme
@@ -4666,6 +5075,7 @@ export function setup(ctx, overrides) {
             buildChatCard(),
             buildAlertCard(),
             buildReachCard(),
+            buildInputCard(),
             buildTransferCard(),
         ];
     }
@@ -5036,6 +5446,43 @@ export function setup(ctx, overrides) {
         for (const p of missing())
             if (p.fatal)
                 root.appendChild(bad(p.label + " is refused, so nothing can be refined. " + p.without));
+        // A default that moved under somebody who was following it. Said on every
+        // tab rather than tucked into Setup, because it is about a number they are
+        // running right now and did not choose.
+        //
+        // Only reaches a reader still holding the old value. Anybody who set their
+        // own is told nothing, since nothing of theirs changed.
+        const moved = movedForMe();
+        if (moved.length) {
+            const line = el("div", "arf-row arf-note");
+            line.setAttribute("data-arf-moveddefault", "1");
+            const what = el("span", "", (moved.length === 1
+                ? "A default setting has changed in this update, and you were on the old one. "
+                : "Some default settings have changed in this update, and you were on the old ones. ") +
+                moved.map((m) => m.label + ": " + m.why).join(" ") +
+                " Yours is still the old value until you take the new one.");
+            what.style.flex = "1";
+            line.appendChild(what);
+            const take = button("Take it", true);
+            take.setAttribute("data-arf-moveddefault", "take");
+            take.addEventListener("click", () => {
+                for (const m of moved)
+                    cfg[m.key] = CONFIG[m.key];
+                markMovedSeen();
+                persist(true);
+                toast(moved.length === 1 ? "Taken the new default." : "Taken the new defaults.");
+                paint();
+            });
+            line.appendChild(take);
+            const keep = button("Keep mine", false);
+            keep.setAttribute("data-arf-moveddefault", "keep");
+            keep.addEventListener("click", () => {
+                markMovedSeen();
+                paint();
+            });
+            line.appendChild(keep);
+            root.appendChild(line);
+        }
         // First, above everything. A refine waiting on an answer is the one thing on
         // this panel that is holding something up.
         if (pending)
@@ -5135,11 +5582,16 @@ export function setup(ctx, overrides) {
                 catch (_) { }
             }
         }
+        // Whatever this rebuild has just put on the screen, brought into line with
+        // whether a refine is running. A repaint draws fresh marks at rest, so
+        // changing tabs in the middle of a refine left the one on the panel shut
+        // among a set that was reading.
+        paintEyes(busy);
     }
     // ---- the control card, which never moves ----
     // Above the tabs, because the switch and the button are what somebody came
-    // for, and hunting for the master switch on the tab it happens to live on is
-    // the thing that makes a tabbed panel worse than a list.
+    // for. Looking through tabs for the master switch is slower than a single
+    // list would have been.
     function buildHeader() {
         headerHeldTurn = holdsTurn(blockList("blocks"));
         const wrap = card();
@@ -5148,7 +5600,11 @@ export function setup(ctx, overrides) {
         wrap.setAttribute("data-arf-header", "1");
         const top = el("div", "arf-row");
         const mark = el("span", "arf-mark");
-        mark.innerHTML = refineIcon();
+        // Shut, and it stays shut. This header is rebuilt on every repaint, a tab
+        // switch included, and a fresh node replays a CSS animation from the start,
+        // so a waking eye here blinked every time somebody moved between tabs.
+        // Waking is for the marks that are drawn once and left alone.
+        mark.innerHTML = eyeIcon("shut");
         const name = el("div", "arf-cardh arf-grow", "Auto Refine");
         const sw = document.createElement("input");
         sw.type = "checkbox";
@@ -5248,10 +5704,9 @@ export function setup(ctx, overrides) {
             stop || "Goes through this chat oldest first, one model call per reply. It asks first.";
         every.addEventListener("click", () => askSweep());
         row.appendChild(every);
-        // The third thing a refine can be pointed at, standing next to the other
-        // two rather than living only in a menu over the chat or a row inside
-        // Extras. Both of those are a hunt, and this is the one people reach for
-        // while the panel is already open in front of them.
+        // The third thing a refine can be pointed at, next to the other two rather
+        // than only in a menu over the chat or a row inside Extras. Both of those
+        // take looking for. This one is already on screen while the panel is open.
         {
             const draft = button("Refine what I am typing", false);
             const noDraft = whyNotDraft();
@@ -5446,30 +5901,121 @@ export function setup(ctx, overrides) {
             add(1, b[j++]);
         return out;
     }
-    function diffWell(before, after) {
+    // Every before-and-after currently on the screen, so pressing the switch on
+    // one of them redraws all of them. Without this the card you pressed changes
+    // and the two behind it stay as they were, which reads as a button that only
+    // half worked.
+    //
+    // Capped rather than pruned on every call: a card built and not yet put on
+    // the page would be dropped by a pruning pass before it ever arrived.
+    let diffSpots = [];
+    function redrawDiffs() {
+        diffSpots = diffSpots.filter((s) => s.wrap.isConnected);
+        for (const s of diffSpots)
+            fillDiff(s.wrap, s.before, s.after);
+    }
+    // One column of the side by side view. The before column keeps what was taken
+    // out and leaves out what was put in; the after column does the opposite. Both
+    // keep everything that did not change, so each column reads as the whole text
+    // it stands for rather than a list of edits.
+    function diffColumn(lab, whole, parts, keep) {
+        const col = el("div", "arf-sbs-col");
+        col.appendChild(el("div", "arf-sbs-lab", lab));
         const well = el("div", "arf-well arf-scroll");
-        well.setAttribute("data-arf-diff", "1");
+        well.setAttribute("data-arf-side", keep === -1 ? "before" : "after");
+        // The heading above it is a line of text beside a box, which says nothing to
+        // a screen reader about which box it belongs to. Named here as well, so the
+        // column announces itself.
+        well.setAttribute("aria-label", lab);
+        if (!parts)
+            well.appendChild(el("span", "", whole));
+        else
+            for (const p of parts) {
+                if (p.how === 0)
+                    well.appendChild(el("span", "", p.text));
+                else if (p.how === keep)
+                    well.appendChild(el("span", keep === -1 ? "arf-cut" : "arf-add", p.text));
+            }
+        col.appendChild(well);
+        return col;
+    }
+    function fillDiff(wrap, before, after) {
+        wrap.innerHTML = "";
+        const side = !!cfg.sideBySide;
+        wrap.setAttribute("data-arf-diff-mode", side ? "side" : "inline");
         const a = words(before);
         const b = words(after);
-        if (a.length + b.length > DIFF_MAX) {
-            // Too big to mark word by word without a visible pause. Both are shown
-            // whole, which is what this replaced, rather than nothing.
+        // Too big to mark word by word without a visible pause. Both are shown
+        // whole, which is what this replaced, rather than nothing.
+        const big = a.length + b.length > DIFF_MAX;
+        const parts = big ? null : diffWords(a, b);
+        if (side) {
+            const cols = el("div", "arf-sbs");
+            cols.appendChild(diffColumn("Before", before, parts, -1));
+            cols.appendChild(diffColumn("After", after, parts, 1));
+            wrap.appendChild(cols);
+            if (big)
+                wrap.appendChild(el("div", "arf-note", "Too long to mark up, so both are shown whole."));
+            return;
+        }
+        const well = el("div", "arf-well arf-scroll");
+        wrap.appendChild(well);
+        if (!parts) {
             well.appendChild(el("div", "arf-note", "Too long to mark up. Before:"));
             well.appendChild(el("div", "arf-dim", before));
             well.appendChild(el("div", "arf-note", "After:"));
             well.appendChild(el("span", "", after));
-            return well;
+            return;
         }
-        const parts = diffWords(a, b);
         // Nothing marked means the two are the same, which is worth saying rather
         // than showing an unmarked paragraph that looks like a failed diff.
         if (!parts.some((p) => p.how !== 0)) {
             well.appendChild(el("span", "", after));
-            return well;
+            return;
         }
         for (const p of parts)
             well.appendChild(el("span", p.how === -1 ? "arf-cut" : p.how === 1 ? "arf-add" : "", p.text));
-        return well;
+    }
+    function diffWell(before, after) {
+        const wrap = el("div", "arf-diff");
+        wrap.setAttribute("data-arf-diff", "1");
+        fillDiff(wrap, before, after);
+        diffSpots.push({ wrap: wrap, before: before, after: after });
+        if (diffSpots.length > 40)
+            diffSpots.splice(0, diffSpots.length - 40);
+        return wrap;
+    }
+    function switchLabel() {
+        return cfg.sideBySide ? "Read them together" : "Read them side by side";
+    }
+    // The button that flips every before-and-after on the screen between the two
+    // views. It says what pressing it does rather than which view you are on, so
+    // there is nothing to work out before pressing it.
+    function diffSwitch() {
+        const b = button(switchLabel(), false);
+        b.className = "arf-btn arf-mini2";
+        b.setAttribute("data-arf-diff-switch", "1");
+        b.addEventListener("click", () => {
+            cfg.sideBySide = !cfg.sideBySide;
+            persist(true);
+            redrawDiffs();
+            const all = document.querySelectorAll("[data-arf-diff-switch]");
+            for (let i = 0; i < all.length; i++) {
+                const one = all[i];
+                one.textContent = switchLabel();
+                one.setAttribute("data-arf-btn", switchLabel());
+            }
+        });
+        return b;
+    }
+    // The line above a before-and-after, with the switch on the end of it. The
+    // switch lives beside what it changes rather than in the settings, since the
+    // moment you want the other view is the moment you are looking at this one.
+    function changedHead(label) {
+        const row = el("div", "arf-between");
+        row.appendChild(el("span", "arf-note arf-grow", label));
+        row.appendChild(diffSwitch());
+        return row;
     }
     // The same card a reply's refine gets, for the one you asked for on your own
     // draft. It is not in undoable with the replies, since a draft has no message
@@ -5478,7 +6024,7 @@ export function setup(ctx, overrides) {
     function buildLastDraft(one) {
         const wrap = card("Your draft, refined", "Only while the box still holds it. Type over it and there is nothing to put back.", new Date(one.at).toTimeString().slice(0, 5));
         wrap.setAttribute("data-arf-draft-undo", "1");
-        wrap.appendChild(el("div", "arf-note", "What changed"));
+        wrap.appendChild(changedHead("What changed"));
         wrap.appendChild(diffWell(one.before, one.after));
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
@@ -5500,7 +6046,7 @@ export function setup(ctx, overrides) {
     }
     function buildUndoRow(one) {
         const box = el("div", "arf-col");
-        box.appendChild(el("div", "arf-note", "What changed"));
+        box.appendChild(changedHead("What changed"));
         box.appendChild(diffWell(one.before, one.after));
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
@@ -5951,7 +6497,7 @@ export function setup(ctx, overrides) {
             // rather than an arrival, so the contents are what fades.
             if (held)
                 body.className += " arf-arrive";
-            body.appendChild(el("div", "arf-note", "What changed"));
+            body.appendChild(changedHead("What changed"));
             body.appendChild(diffWell(spec.before, spec.after));
             // This card lands on top of the one that was showing the model's working,
             // which is a second of reading for something worth more than that. Said
@@ -6076,7 +6622,7 @@ export function setup(ctx, overrides) {
                 // since that setting is about refines rather than about this.
                 if (f.key === "wornOn" && box.checked && noWornBlock()) {
                     const why = "No block in your prompt has {{overused}} in it, so there is nowhere to put " +
-                        "the worn phrases. Add one under Prompt, or load a prompt that ships with it.";
+                        "the worn phrases. Add one under Prompt, or load one of the built-in prompts.";
                     toast(why, true);
                     log("worn phrases are on, but " + why.charAt(0).toLowerCase() + why.slice(1));
                 }
@@ -6085,6 +6631,31 @@ export function setup(ctx, overrides) {
             });
             row.appendChild(box);
             wrap.appendChild(row);
+        }
+        else if (f.type === "text") {
+            wrap.appendChild(labelRow(f));
+            const box = document.createElement("input");
+            box.type = "text";
+            box.setAttribute("data-arf-field", f.key);
+            box.setAttribute("aria-label", f.label);
+            box.className = "arf-field arf-mono";
+            // Off for all four. A selector is not prose, and a phone correcting one
+            // to a capital or a smart quote gives back something that matches
+            // nothing, with no sign of what went wrong.
+            box.setAttribute("autocapitalize", "off");
+            box.setAttribute("autocorrect", "off");
+            box.setAttribute("autocomplete", "off");
+            box.setAttribute("spellcheck", "false");
+            box.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
+            box.addEventListener("input", () => {
+                cfg[f.key] = box.value;
+                persist();
+            });
+            box.addEventListener("blur", () => {
+                cfg[f.key] = box.value;
+                persist(true);
+            });
+            wrap.appendChild(box);
         }
         else if (f.type === "lines") {
             wrap.appendChild(labelRow(f));
@@ -6281,11 +6852,11 @@ export function setup(ctx, overrides) {
         cfg.blocksShut = next.slice(-80);
         persist();
     }
-    // Which saved prompt this one is, if it is one of them. The eight that ship
+    // Which saved prompt this one is, if it is one of them. The four that come with it
     // with the extension are looked at first, so the one it starts on is named as
     // itself rather than as whatever you later saved on top of it.
     function promptNamed(now, which) {
-        // Each shipped prompt is for one of the two lists, so only its own half is
+        // Each built-in prompt is for one of the two lists, so only its own half is
         // worth comparing against: the four for replies and the four for your own
         // messages are different prompts and a match across the two would be
         // wrong. Their shapes are worked out once, at the top of this file, rather
@@ -6333,7 +6904,7 @@ export function setup(ctx, overrides) {
         if (asksForWorking())
             return cfg.popup
                 ? "It asks the model for its working, which comes up on screen while it writes."
-                : "It asks the model for its working, but Show the before and after on screen is off under When a refine lands, and that card is where the working appears.";
+                : "It asks the model for its working, but Show the before and after on screen is off under When a refine finishes, and that card is where the working appears.";
         return "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks do.";
     }
     // A block switched on or off, taken in where it stands.
@@ -6431,7 +7002,7 @@ export function setup(ctx, overrides) {
         const isLine = note(whatThisIs() + " " + aboutWorking());
         isLine.setAttribute("data-arf-whatthisis", "1");
         wrap.appendChild(isLine);
-        // The prompts that ship with the extension have changed since this reader
+        // The prompts that come with the extension have changed since this reader
         // last took one. Said once, here, where the prompt is, and only to somebody
         // who has actually loaded one: a reader whose prompt is their own has
         // nothing to act on and does not need telling.
@@ -6439,16 +7010,16 @@ export function setup(ctx, overrides) {
         // It says what to do and nothing else. Loading one is the reader's to
         // decide, because it writes over whatever is in the list, and a line that
         // offered to do it for them would be a button that throws work away.
-        if (shippedMoved()) {
+        if (builtInMoved()) {
             const moved = el("div", "arf-row arf-note");
-            moved.setAttribute("data-arf-shippedmoved", "1");
-            const what = el("span", "", "The prompts that ship with Auto Refine have changed since you last loaded one. Yours is untouched. To take the new wording, load one from the card below, which writes over the list you are on.");
+            moved.setAttribute("data-arf-builtinmoved", "1");
+            const what = el("span", "", "The built-in prompts have changed since you last loaded one. Yours is untouched. To take the new wording, load one from the card below, which writes over the list you are on.");
             what.style.flex = "1";
             moved.appendChild(what);
             const gotIt = button("Got it", false);
-            gotIt.setAttribute("data-arf-shippedmoved", "dismiss");
+            gotIt.setAttribute("data-arf-builtinmoved", "dismiss");
             gotIt.addEventListener("click", () => {
-                markShippedSeen();
+                markBuiltInSeen();
                 paint();
             });
             moved.appendChild(gotIt);
@@ -6495,7 +7066,22 @@ export function setup(ctx, overrides) {
         for (let i = 0; i < list.length; i++)
             wrap.appendChild(buildBlockRow(list, i));
         const acts = el("div", "arf-row");
+        // Said above the list, once, whenever the picker names a built-in prompt.
+        // The fields below are locked and this is the only place that explains why,
+        // so it does not wait for a change that can no longer be made.
+        if (onBuiltInPrompt()) {
+            const held = el("div", "arf-row arf-note");
+            held.setAttribute("data-arf-promptlocked", "1");
+            const what = el("span", "", "You are looking at " +
+                presetPick +
+                ", one of the prompts built in. It cannot be written over, so the blocks below are read-only. To change it, put a name in the box under Presets and press Save as new. The copy is yours and opens for editing.");
+            what.style.flex = "1";
+            held.appendChild(what);
+            wrap.appendChild(held);
+        }
         const add = button("Add a block", false);
+        if (onBuiltInPrompt())
+            lockForBuiltIn(add);
         add.addEventListener("click", () => {
             const next = blockList();
             const made = {
@@ -6503,7 +7089,7 @@ export function setup(ctx, overrides) {
                 name: "New block",
                 on: true,
                 role: "system",
-                // Empty. The prompts that ship with it use XML tags because that is
+                // Empty. The prompts that come with it use XML tags because that is
                 // what works, but a tag is a style and not everybody writes that way.
                 // A new block is a blank page.
                 text: "",
@@ -6525,9 +7111,35 @@ export function setup(ctx, overrides) {
         wrap.appendChild(acts);
         return wrap;
     }
+    // Whether the picker is on one of the built-in prompts.
+    //
+    // Those cannot be written over, so editing the blocks while one is named
+    // would be editing something the panel is about to refuse to save. Locking
+    // the fields says that before the typing rather than after it.
+    //
+    // A fresh install is not in this state: the picker starts on nothing and is
+    // only ever set by picking, so somebody who has never opened the list can
+    // still type into every block.
+    function onBuiltInPrompt() {
+        return !!presetPick && isBuiltIn(presetPick);
+    }
+    // Turns a control off and says why, so a screen reader gets the reason and
+    // not just a dead field.
+    function lockForBuiltIn(node) {
+        try {
+            node.disabled = true;
+            node.style.opacity = "0.55";
+            node.style.cursor = "not-allowed";
+            node.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+        }
+        catch (_) { }
+    }
     function buildBlockRow(list, i) {
         const b = list[i];
         const holdsTurn = String(b.text || "").indexOf(TURN_MACRO) >= 0;
+        // Reading one is why somebody picked it, so the fold stays live and every
+        // control that would change it does not.
+        const locked = onBuiltInPrompt();
         const wrap = el("div", "arf-block" + (b.on ? "" : " arf-hushed"));
         wrap.setAttribute("data-arf-block", b.id);
         const top = el("div", "arf-between");
@@ -6570,6 +7182,8 @@ export function setup(ctx, overrides) {
         left.appendChild(fold2);
         const box = document.createElement("input");
         box.type = "checkbox";
+        if (locked)
+            lockForBuiltIn(box);
         box.className = "arf-box";
         box.checked = b.on;
         box.setAttribute("aria-label", "Send " + blockLabel(b));
@@ -6591,6 +7205,8 @@ export function setup(ctx, overrides) {
         nameIn.type = "text";
         nameIn.className = "arf-field arf-grow";
         nameIn.value = b.name || "";
+        if (locked)
+            lockForBuiltIn(nameIn);
         nameIn.placeholder = "What to call it";
         nameIn.setAttribute("aria-label", "Name for this block");
         nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
@@ -6606,8 +7222,10 @@ export function setup(ctx, overrides) {
             const btn = button(sign, false);
             btn.className += " arf-mini";
             btn.setAttribute("aria-label", label + " " + blockLabel(b));
-            btn.disabled = to < 0 || to >= list.length;
+            btn.disabled = to < 0 || to >= list.length || locked;
             btn.style.opacity = btn.disabled ? "0.45" : "1";
+            if (locked)
+                lockForBuiltIn(btn);
             btn.addEventListener("click", () => {
                 const next = blockList();
                 const held = next[i];
@@ -6634,6 +7252,13 @@ export function setup(ctx, overrides) {
         ta.placeholder = "What you want it to do.";
         ta.setAttribute("aria-label", "Text for " + blockLabel(b));
         ta.setAttribute("data-arf-field", "blocktext:" + b.id);
+        // Readable rather than disabled, so the text can still be selected and
+        // copied out of a prompt somebody wants to borrow a line from.
+        if (locked) {
+            ta.readOnly = true;
+            ta.style.opacity = "0.75";
+            ta.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+        }
         ta.addEventListener("input", () => {
             const next = blockList();
             next[i].text = ta.value;
@@ -6658,6 +7283,8 @@ export function setup(ctx, overrides) {
         sel.className = "arf-field";
         sel.style.maxWidth = "140px";
         sel.setAttribute("aria-label", "Role for " + blockLabel(b));
+        if (locked)
+            lockForBuiltIn(sel);
         for (const o of ROLE_OPTIONS) {
             const op = document.createElement("option");
             op.value = o.value;
@@ -6677,6 +7304,8 @@ export function setup(ctx, overrides) {
         const drop = button("Delete", false);
         drop.className += " arf-danger";
         drop.setAttribute("aria-label", "Delete " + blockLabel(b));
+        if (locked)
+            lockForBuiltIn(drop);
         drop.addEventListener("click", () => {
             askFirst("block:" + b.id, {
                 title: "Delete block",
@@ -7426,6 +8055,7 @@ export function setup(ctx, overrides) {
         if (lastSteps.length > 1) {
             wrap.appendChild(el("div", "arf-rule"));
             wrap.appendChild(fold("What each pass changed", (body) => {
+                body.appendChild(changedHead("Each pass, before and after"));
                 for (let i = 0; i < lastSteps.length; i++) {
                     const one = lastSteps[i];
                     const head = el("div", "arf-between");
@@ -7462,7 +8092,7 @@ export function setup(ctx, overrides) {
         const wrap = card("What the model worked out", undefined, keptNotes ? (keptNotes.ok ? "saved" : "dropped") : undefined);
         if (!keptNotes) {
             wrap.appendChild(note(asksForWorking()
-                ? "Nothing yet. The working from the last refine that finishes lands here, and a refine you stop leaves what is already here alone."
+                ? "Nothing yet. The working from the last refine that finishes is shown here, and a refine you stop leaves what is already here alone."
                 : "The prompt you are on does not ask the model for its working, so there is none to keep. The two for a model that thinks ask for it."));
             return wrap;
         }
@@ -7816,12 +8446,12 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildAlertCard() {
-        const wrap = card("When a refine lands", "How you find out, other than the tab's badge.");
+        const wrap = card("When a refine finishes", "How you find out, other than the tab's badge.");
         wrap.appendChild(fieldRow({
             key: "popup",
             label: "Show the before and after on screen",
             type: "bool",
-            hint: "On by default. A card comes up on the page itself when a refine lands, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+            hint: "On by default. A card comes up on the page itself when a refine finishes, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
         }));
         wrap.appendChild(fieldRow({
             key: "toast",
@@ -7833,7 +8463,7 @@ export function setup(ctx, overrides) {
             key: "soundOn",
             label: "Play a sound",
             type: "bool",
-            hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised in the browser, with no file to ship. Attach your own below if you would rather.",
+            hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised in the browser, with no file to include. Attach your own below if you would rather.",
         }));
         // Built either way and hidden while the sound is off, so switching it on
         // brings these out where they stand rather than rebuilding the card around
@@ -7956,9 +8586,133 @@ export function setup(ctx, overrides) {
         wrap.appendChild(sound);
         return wrap;
     }
-    // Ways in other than the drawer. Both are off until asked for, because an
-    // extension that adds a floating button and an input bar row on install is
-    // one that redecorated somebody's screen without asking.
+    // Where the input box is.
+    //
+    // Refining a draft is the one part that reads Lumiverse's own layout, so a
+    // release that moves the box stops that and nothing else. The selectors are
+    // listed in full rather than described, because anybody who needs this card
+    // is reading their own page's markup and has to see what is already tried
+    // before writing anything.
+    //
+    // There is no button that picks the box for you. A click-based picker loses
+    // its click to the drawer closing, and a press-and-hold picker was tried and
+    // did not work reliably. Typing a selector works every time.
+    function buildInputCard() {
+        const wrap = card("Where the input box is", "Only needed if Refine what I have typed stops finding your box after a Lumiverse update.");
+        wrap.appendChild(fieldRow({
+            key: "inputSelector",
+            label: "The selectors it looks under",
+            type: "text",
+            hint: "Separated by commas. Emptying the box falls back to the built-in list.",
+        }));
+        const row = el("div", "arf-row");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
+        const test = button("Test", false);
+        const said = el("span", "arf-note");
+        said.style.minHeight = "16px";
+        const WORDS = {
+            match: "found it, and it can be typed into",
+            "found, not usable": "found something, but it cannot be typed into right now",
+            "no match": "nothing on the page matches",
+            invalid: "that is not a selector the browser can read",
+            blank: "nothing here yet, so only the built-in list is used",
+        };
+        // Reads the page at the moment it is pressed rather than on a timer. The
+        // answer is only true for what is on screen now, and a line that went stale
+        // while somebody read it would be worse than no line.
+        const run = () => {
+            const state = inputSelectorState(String(cfg.inputSelector || ""));
+            said.textContent = WORDS[state] || state;
+            said.style.color =
+                state === "match"
+                    ? "var(--lumiverse-success,#22c55e)"
+                    : state === "invalid"
+                        ? "var(--lumiverse-danger,#ef4444)"
+                        : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+            paintList();
+        };
+        test.addEventListener("click", run);
+        test.setAttribute("data-arf-testinput", "1");
+        row.appendChild(test);
+        // The way back, beside the thing it puts back. Editing a selector is how
+        // somebody ends up with a box that finds nothing, so the reset is here
+        // rather than on another card.
+        const put = button("Use the built-in list", false);
+        put.setAttribute("data-arf-resetinput", "1");
+        put.addEventListener("click", () => {
+            cfg.inputSelector = INPUT_PICKS.join(", ");
+            persist(true);
+            paint();
+        });
+        row.appendChild(put);
+        row.appendChild(said);
+        wrap.appendChild(row);
+        const list = el("div", "arf-col");
+        list.setAttribute("data-arf-inputlist", "1");
+        list.style.cssText = "display:flex;flex-direction:column;gap:4px;margin-top:8px";
+        // Every selector in the order it is tried, with the reader's own marked so
+        // they can see theirs went in front. Whether each one matches is only
+        // filled in after Test, since reading the page on every repaint would say
+        // "no match" while the drawer is over the input box.
+        function paintList() {
+            list.replaceChildren();
+            const picks = inputPicks();
+            list.setAttribute("data-arf-mine", String(picks.length));
+            const blank = !splitSelectorList(String(cfg.inputSelector || "")).length;
+            list.appendChild(el("div", "arf-note", blank ? "The box is empty, so the built-in list is used." : "Tried in this order."));
+            // A selector the browser cannot read is a typo, and Test cannot point at
+            // it: that answers for the box as a whole, and one bad selector among
+            // several good ones leaves the whole box still reading as valid. So the
+            // line carries it.
+            const bad = [];
+            for (let i = 0; i < picks.length; i++) {
+                try {
+                    document.querySelector(picks[i]);
+                    bad.push(false);
+                }
+                catch (_) {
+                    bad.push(true);
+                }
+            }
+            // Only the first one that finds the box is doing anything, and saying so
+            // about one line is worth more than a state repeated down every line. The
+            // rest are shown plainly because the order is the point.
+            let used = -1;
+            for (let i = 0; i < picks.length && used < 0; i++) {
+                if (!bad[i] && boxUnder(picks[i]))
+                    used = i;
+            }
+            let anyBad = false;
+            for (let i = 0; i < picks.length; i++) {
+                const line = el("div", "arf-pick");
+                if (i === used)
+                    line.className += " arf-pick-on";
+                else if (bad[i]) {
+                    line.className += " arf-pick-bad";
+                    anyBad = true;
+                }
+                // Breaks at the spaces in a selector where it can, and inside one part
+                // only when that part is wider than the card, so a long selector stays
+                // readable on a phone instead of pushing the card sideways.
+                line.textContent = picks[i];
+                line.setAttribute("data-arf-pick", i === used ? "on" : bad[i] ? "bad" : "off");
+                list.appendChild(line);
+            }
+            const notes = [
+                used < 0
+                    ? "None of them finds a box on this page right now."
+                    : "The highlighted one is the one in use.",
+            ];
+            if (anyBad)
+                notes.push("The one marked in red is not a selector the browser can read.");
+            list.appendChild(el("div", "arf-note", notes.join(" ")));
+        }
+        paintList();
+        wrap.appendChild(list);
+        return wrap;
+    }
+    // Ways in other than the drawer. Both are off until asked for, so a fresh
+    // install adds nothing to the screen.
     function buildReachCard() {
         const wrap = card("Ways to reach it", "The drawer tab is always there. These are extra.");
         wrap.appendChild(fieldRow({
@@ -8521,7 +9275,7 @@ export function setup(ctx, overrides) {
             {
                 id: PART_PRESETS,
                 label: "Saved presets",
-                what: "The ones you saved. The eight that ship with the extension are always there and are never in a file.",
+                what: "The ones you saved. The four built in are always there and are never in a file.",
             },
             {
                 id: PART_SETUPS,
@@ -8661,7 +9415,7 @@ export function setup(ctx, overrides) {
     // Cleared by a save, since Put it back after saving would mean two different
     // things at once.
     let presetUndo = null;
-    // The two that ship with it, offered alongside your own. They are not stored
+    // The two that come with it, offered alongside your own. They are not stored
     // and cannot be renamed or deleted, so they are always there to go back to.
     function builtIn() {
         return BUILT_IN_PROMPTS.map((p) => ({
@@ -8670,9 +9424,19 @@ export function setup(ctx, overrides) {
             // Into the list it was written for, and only that one. A prompt for your
             // own turn loaded over the prompt for replies would be the wrong job
             // asked of every reply in the chat.
+            //
+            // The prompt and nothing else. thinkingMode used to be in here, and it
+            // was never once applied: it belongs to a model setup rather than a
+            // preset, so applyPreset walks past it. A preset keeps the prompt and a
+            // setup keeps what runs it, and loading a prompt reaching over to change
+            // your model would break that in the direction nobody would want.
+            //
+            // Which model a prompt is written for is still said, in its name and in
+            // its description, because that is advice about what to pick rather than
+            // a switch to flip on somebody's behalf.
             settings: p.mine
-                ? { userBlocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking }
-                : { blocks: p.blocks.map((b) => ({ ...b })), thinkingMode: p.thinking },
+                ? { userBlocks: p.blocks.map((b) => ({ ...b })) }
+                : { blocks: p.blocks.map((b) => ({ ...b })) },
         }));
     }
     const isBuiltIn = (name) => BUILT_IN.indexOf(name) >= 0;
@@ -8986,7 +9750,7 @@ export function setup(ctx, overrides) {
         // worth a line, and changing them for somebody who has never touched one
         // is not.
         if (took && isBuiltIn(p.name))
-            markShippedSeen();
+            markBuiltInSeen();
         let alsoSaid = "";
         const wants = String(p.setup || "");
         if (wants) {
@@ -9022,8 +9786,13 @@ export function setup(ctx, overrides) {
         setupSaid = took ? "Loaded " + one.name + "." : "There was nothing in that setup to load.";
         log("loaded the model setup " + one.name, true);
     }
+    // The preset the box names, whether it comes with the extension or is one of
+    // yours. Read in two places, so it is named once.
+    function chosenPreset() {
+        return allPresets().find((p) => p.name === presetPick) || null;
+    }
     function buildPresetCard() {
-        const wrap = card("Presets", "Eight ship with the extension and work as they stand: a short one and a detailed one, each for a plain model and for a model that reasons, and that four again for refining what you wrote yourself. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
+        const wrap = card("Presets", "Four are built in and work as they stand: a line edit for replies and a copy edit for your own messages, each written once for any model and once for a model that reasons. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
         const sel = document.createElement("select");
         sel.className = "arf-field";
         sel.setAttribute("aria-label", "Saved presets");
@@ -9032,7 +9801,7 @@ export function setup(ctx, overrides) {
         none.value = "";
         none.textContent = "Pick a preset";
         sel.appendChild(none);
-        // Under headings, because eight that ship with it and however many of your
+        // Under headings, because four that come with it and however many of your
         // own is a column nobody can read. A heading is not an option: the browser
         // draws it greyed and will not let it be picked, which is what makes it a
         // heading rather than an entry that does nothing.
@@ -9040,15 +9809,15 @@ export function setup(ctx, overrides) {
         // The two halves are told apart by which prompt they carry, not by name, so
         // one of yours goes under the heading it belongs to whichever list you were
         // editing when you saved it.
-        const shipped = new Map(BUILT_IN_PROMPTS.map((p) => [p.name, p]));
+        const builtIns = new Map(BUILT_IN_PROMPTS.map((p) => [p.name, p]));
         const groups = [
             { head: "For replies", of: [] },
             { head: "For your messages", of: [] },
             { head: "Yours", of: [] },
         ];
         for (const one of allPresets()) {
-            const ship = shipped.get(one.name);
-            // A shipped preset is written for one list or the other and carries only
+            const known = builtIns.get(one.name);
+            // A built-in preset is written for one list or the other and carries only
             // that list, so loading the wrong one changes the prompt you are not
             // looking at and leaves the one you are looking at as it was. The list
             // you are not editing is left out rather than offered.
@@ -9056,10 +9825,10 @@ export function setup(ctx, overrides) {
             // Yours are not filtered. One of them can carry either list, or both, and
             // you are the one who saved it, so which tab you happen to be on is not
             // this menu's business.
-            if (ship && ship.mine !== editingYours())
+            if (known && known.mine !== editingYours())
                 continue;
-            if (ship)
-                groups[ship.mine ? 1 : 0].of.push(one);
+            if (known)
+                groups[known.mine ? 1 : 0].of.push(one);
             else
                 groups[2].of.push(one);
         }
@@ -9073,8 +9842,8 @@ export function setup(ctx, overrides) {
                 op.value = one.name;
                 // The heading says which prompt it is for, so the entry under it does
                 // not have to say it again.
-                const ship = shipped.get(one.name);
-                op.textContent = ship ? ship.label : one.name;
+                const known = builtIns.get(one.name);
+                op.textContent = known ? known.label : one.name;
                 head.appendChild(op);
             }
             sel.appendChild(head);
@@ -9087,6 +9856,37 @@ export function setup(ctx, overrides) {
             presetSaid = null;
         }
         sel.value = presetPick;
+        // Whether what is on screen still matches the preset the box names.
+        //
+        // Loading one sets the box and nothing clears it, so editing a block after
+        // loading left the box naming a preset the prompt no longer matched. The
+        // fields are not locked while a built-in preset is picked, because loading
+        // one and changing it is how you are meant to start; what was missing was
+        // the panel saying so.
+        const driftedFromPick = () => {
+            const p = chosenPreset();
+            if (!p || !p.settings)
+                return false;
+            try {
+                // Only the keys the preset actually carries. A built-in one holds the
+                // block list it was written for and the thinking setting, and nothing
+                // else, so measuring it against every setting on the panel would call
+                // it changed the moment it loaded.
+                // steady rather than JSON.stringify: loading a preset rebuilds every
+                // block as id, on, role, text, name, and the built-in ones are written
+                // id, name, on, role, text. Same values, different order, and a plain
+                // stringify called them different the moment one was loaded.
+                const now = presetFromNow();
+                for (const k of Object.keys(p.settings)) {
+                    if (steady(now[k]) !== steady(p.settings[k]))
+                        return true;
+                }
+                return false;
+            }
+            catch (_) {
+                return false;
+            }
+        };
         sel.addEventListener("change", () => {
             const was = presetPick;
             presetPick = sel.value;
@@ -9113,7 +9913,7 @@ export function setup(ctx, overrides) {
             presetName = nameIn.value;
         });
         wrap.appendChild(nameIn);
-        const chosen = () => allPresets().find((p) => p.name === presetPick) || null;
+        const chosen = () => chosenPreset();
         const chosenIsYours = () => !!presetPick && !isBuiltIn(presetPick);
         // Which saved model setup, if any, loads with this preset. Sits above the
         // buttons because it is part of what Save as new and Update selected write
@@ -9147,25 +9947,40 @@ export function setup(ctx, overrides) {
             o.textContent = presetSetup + " (not on this device)";
             setupSel.appendChild(o);
         }
-        // The prompts that ship with the extension cannot hold this. Picking one
+        // The prompts that come with the extension cannot hold this. Picking one
         // here still works, because Save as new writes it onto the copy, but Update
-        // selected is greyed out on a shipped prompt and switching the picker puts
+        // selected is greyed out on a built-in prompt and switching the picker puts
         // the box back to what the next preset carries. Without this line the pick
         // looks like it took and then goes without a word.
-        const shippedSaid = note("The prompts that ship with the extension cannot hold this. Press Save as new and the copy keeps it.");
-        shippedSaid.setAttribute("data-arf-shipped-setup", "1");
-        const sayShipped = () => {
-            shippedSaid.hidden = !presetSetup || !isBuiltIn(presetPick);
+        const builtInSaid = note("A built-in prompt cannot hold this. Press Save as new and the copy keeps it.");
+        builtInSaid.setAttribute("data-arf-builtin-setup", "1");
+        const sayBuiltIn = () => {
+            builtInSaid.hidden = !presetSetup || !isBuiltIn(presetPick);
         };
         setupSel.value = presetSetup;
         setupSel.addEventListener("change", () => {
             presetSetup = setupSel.value;
-            sayShipped();
+            sayBuiltIn();
         });
         withSetup.appendChild(setupSel);
-        sayShipped();
-        withSetup.appendChild(shippedSaid);
+        sayBuiltIn();
+        withSetup.appendChild(builtInSaid);
         wrap.appendChild(withSetup);
+        // Said once the prompt stops matching the preset the box names. A built-in
+        // preset cannot be written over, so the way to keep a change is to save it
+        // under a name of your own, and this is where somebody is told that while
+        // it still matters.
+        if (driftedFromPick()) {
+            const drift = note(isBuiltIn(presetPick)
+                ? "You have changed the prompt since loading " +
+                    presetPick +
+                    ". A built-in prompt cannot be written over, so put a name in the box and press Save as new to keep this."
+                : "You have changed the prompt since loading " +
+                    presetPick +
+                    ". Press Update selected to keep it, or Save as new for a second copy.");
+            drift.setAttribute("data-arf-preset-drift", isBuiltIn(presetPick) ? "built-in" : "yours");
+            wrap.appendChild(drift);
+        }
         const row = el("div", "arf-row");
         // Picking already loads, so this is only for loading the one already picked
         // a second time, which is how you throw away edits and get the saved
@@ -9213,7 +10028,7 @@ export function setup(ctx, overrides) {
                 return;
             }
             if (isBuiltIn(name)) {
-                presetSaid = "That name belongs to a prompt that ships with the extension. Pick another.";
+                presetSaid = "That name belongs to a built-in prompt. Pick another.";
                 paint();
                 return;
             }
@@ -9306,7 +10121,7 @@ export function setup(ctx, overrides) {
             const which = BUILT_IN_PROMPTS.find((p) => p.name === presetPick);
             if (which)
                 wrap.appendChild(note(which.what));
-            wrap.appendChild(note("One of the ones that ship with the extension. Picking it loaded it, so change it however you like and save it under a name of your own."));
+            wrap.appendChild(note("One of the four built in. Picking it loaded it, so change it however you like and save it under a name of your own."));
         }
         if (presetSaid) {
             const said = note(presetSaid);
@@ -9319,7 +10134,8 @@ export function setup(ctx, overrides) {
     function buildResetInto(wrap) {
         wrap.appendChild(el("div", "arf-rule"));
         const head = el("div", "arf-row");
-        head.appendChild(el("span", "arf-sign arf-bad-ink", "!"));
+        // No mark on the heading. The warning under it carries one, and the same
+        // mark twice in one card reads as two separate warnings.
         head.appendChild(el("span", "arf-lab arf-grow", "Start again"));
         wrap.appendChild(head);
         wrap.appendChild(bad("This cannot be undone. If your prompt is among the parts below, every block you wrote and every rule in them is gone. Export first if there is any chance you want it back."));
@@ -9414,7 +10230,7 @@ export function setup(ctx, overrides) {
     let resetArmed = false;
     // ---- the sound ----
     // A short two-note blip when nothing else is chosen, synthesised rather than
-    // shipped so the repository holds no audio file and the switch still makes a
+    // built in so the repository holds no audio file and the switch still makes a
     // sound on its own. A file you attach or a link you paste replaces it.
     const hasSound = () => !!String(cfg.soundUrl || "").trim();
     function beep(vol) {
@@ -9525,29 +10341,90 @@ export function setup(ctx, overrides) {
             return false;
         }
     }
+    // Every selector the box is looked for under, the reader's first. Duplicates
+    // are dropped so a selector already in the built-in list is not tried twice
+    // and does not appear twice on the card that lists them.
+    function inputPicks() {
+        const mine = splitSelectorList(String(cfg.inputSelector || ""));
+        // An empty box is not an instruction to stop looking. It is what an install
+        // from before this setting existed carries, and what somebody clearing the
+        // box leaves behind, and neither of them meant to switch refining a draft
+        // off.
+        const src = mine.length ? mine : INPUT_PICKS;
+        const out = [];
+        for (const pick of src)
+            if (out.indexOf(pick) < 0)
+                out.push(pick);
+        return out;
+    }
+    // Whether a selector finds the input box right now, in the words the card
+    // shows. Split from the finder because the card has to say why nothing
+    // matched, and the finder only has to return the box or nothing.
+    function inputSelectorState(sel) {
+        const raw = String(sel || "").trim();
+        if (!raw)
+            return "blank";
+        const parts = splitSelectorList(raw);
+        if (!parts.length)
+            return "blank";
+        let anyValid = false;
+        let anyFound = false;
+        for (const part of parts) {
+            let found = null;
+            try {
+                found = document.querySelectorAll(part);
+                anyValid = true;
+            }
+            catch (_) {
+                continue;
+            }
+            if (found.length)
+                anyFound = true;
+            if (boxIn(found))
+                return "match";
+        }
+        if (!anyValid)
+            return "invalid";
+        return anyFound ? "found, not usable" : "no match";
+    }
+    // The one box in a list of matches that can actually be written into. Shared
+    // so the card cannot say a selector is in use while the writer skips it.
+    function boxIn(found) {
+        if (!found)
+            return null;
+        // The last on the page, since our own panel holds a textarea too and the
+        // chat input sits below anything it could be confused with.
+        for (let i = found.length - 1; i >= 0; i--) {
+            const node = found[i];
+            if (!node || node.disabled || node.readOnly)
+                continue;
+            if (!typeable(node))
+                continue;
+            if (node.closest && node.closest(".arf"))
+                continue;
+            const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+            if (box && (!box.width || !box.height))
+                continue;
+            return node;
+        }
+        return null;
+    }
+    // The box one selector finds, or nothing.
+    function boxUnder(pick) {
+        try {
+            return boxIn(document.querySelectorAll(pick));
+        }
+        catch (_) {
+            return null;
+        }
+    }
     // The box to write into. Each selector is asked separately so the list keeps
     // its order: one query holding all of them answers in page order instead.
     function composer() {
-        for (const pick of INPUT_PICKS) {
-            try {
-                const found = document.querySelectorAll(pick);
-                // The last on the page, since our own panel holds a textarea too and
-                // the chat input sits below anything it could be confused with.
-                for (let i = found.length - 1; i >= 0; i--) {
-                    const node = found[i];
-                    if (!node || node.disabled || node.readOnly)
-                        continue;
-                    if (!typeable(node))
-                        continue;
-                    if (node.closest && node.closest(".arf"))
-                        continue;
-                    const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-                    if (box && (!box.width || !box.height))
-                        continue;
-                    return node;
-                }
-            }
-            catch (_) { }
+        for (const pick of inputPicks()) {
+            const node = boxUnder(pick);
+            if (node)
+                return node;
         }
         return null;
     }
@@ -9591,9 +10468,9 @@ export function setup(ctx, overrides) {
             toast("Your prompt has no {{message}} block, so there is nothing to rewrite.", true);
             return;
         }
-        // One at a time, the same rule the reply button follows. Not only because
-        // two model calls at once is not what anybody asked for: everything on
-        // screen that says a refine is running is one state, and a second refine
+        // One at a time, the same rule the reply button follows. Two model calls at
+        // once cost twice over, and everything on screen that says a refine is
+        // running is one state, so a second refine
         // ending would clear it out from under the first while that one was still
         // going, taking the live line, the countdown and both watchdogs with it.
         if (busy) {
@@ -9658,6 +10535,23 @@ export function setup(ctx, overrides) {
     // it would otherwise fire against a button that has gone and write its last
     // position over a newer one.
     let widgetSettle = null;
+    // Whether the eye on the button was reading last time it was painted, so the
+    // moment a refine ends can be told from every other repaint that finds
+    // nothing running.
+    let eyeWasWorking = false;
+    let eyeDoneTimer = null;
+    // Whether the refine now ending was called off rather than finished.
+    let eyeStopped = false;
+    // Which of the three is running, so the floating button can show the mark for
+    // the thing it is actually doing. Empty means a plain refine, which is the
+    // eye. Refining a selection and taking one out have marks of their own, and a
+    // button showing an eye while it cuts is a button describing something else.
+    let runKind = "";
+    disposers.push(() => {
+        if (eyeDoneTimer)
+            clearTimeout(eyeDoneTimer);
+        eyeDoneTimer = null;
+    });
     // Only the corner is taken from here, never the size: the size is widgetAt,
     // which is what this extension asked for. A box with nothing in any of the
     // four is a root that is not on screen and has nothing to say.
@@ -9730,7 +10624,12 @@ export function setup(ctx, overrides) {
             b.type = "button";
             b.className = "arf-float";
             b.setAttribute("aria-label", "Auto Refine");
-            b.innerHTML = refineIcon();
+            // The mark sits in its own holder and the ring sits over the whole button.
+            // Separated so repainting the mark does not throw the ring away mid-hold.
+            const glyphBox = document.createElement("span");
+            glyphBox.className = "arf-glyph";
+            b.appendChild(glyphBox);
+            b.insertAdjacentHTML("beforeend", holdRingSvg());
             paintFloat(b);
             // One tap does the main thing. A press and hold, or a right click, opens
             // the menu.
@@ -9739,7 +10638,7 @@ export function setup(ctx, overrides) {
             // more than a few pixels cancels it too. Waiting for the button's own
             // pointerup does not work: the host captures the pointer to drag the
             // widget, so that pointerup never arrives, every tap becomes a hold, and
-            // the click behind it is swallowed by a flag nothing clears.
+            // the click behind it is blocked by a flag nothing clears.
             let held = null;
             let downAt = null;
             let menuOpened = false;
@@ -9748,14 +10647,21 @@ export function setup(ctx, overrides) {
                     clearTimeout(held);
                 held = null;
                 downAt = null;
+                try {
+                    b.removeAttribute("data-arf-holding");
+                }
+                catch (_) { }
             };
             const onMove = (e) => {
                 if (!downAt || !held)
                     return;
                 const dx = Math.abs((e.clientX || 0) - downAt.x);
                 const dy = Math.abs((e.clientY || 0) - downAt.y);
-                // Moved: this is the host dragging the widget, not a hold.
-                if (dx > 6 || dy > 6)
+                // Moved: this is the host dragging the widget, not a hold. Ten pixels
+                // rather than six, because a thumb resting on glass drifts further than
+                // six and every one of those was a hold that quietly did nothing. Auto
+                // Retry allows the same.
+                if (dx > HOLD_SLOP || dy > HOLD_SLOP)
                     disarm();
             };
             // The host does the dragging and does not report where it finished, so the
@@ -9814,11 +10720,16 @@ export function setup(ctx, overrides) {
                 downAt = { x: (e && e.clientX) || 0, y: (e && e.clientY) || 0 };
                 if (held)
                     clearTimeout(held);
+                // The ring starts filling now and closes exactly as the menu opens, so
+                // the wait is something you watch rather than sit through. Letting go
+                // early wipes it back in a fraction of the time.
+                b.setAttribute("data-arf-holding", "1");
                 held = setTimeout(() => {
                     held = null;
                     menuOpened = true;
+                    b.removeAttribute("data-arf-holding");
                     widgetMenu();
-                }, 550);
+                }, HOLD_MS);
             });
             b.addEventListener("click", (e) => {
                 disarm();
@@ -9921,22 +10832,86 @@ export function setup(ctx, overrides) {
             // and lost inside a 96px one. Just over half the button leaves the ring
             // around it looking even at either end of the range.
             const mark = String(Math.round(widgetWanted() * 0.52));
-            const kind = (working ? "working" : "ready") + ":" + mark;
-            // Only when it would draw something different.
+            // Written once, and only when the size changes. The eye is one shape that
+            // moves between its states, so throwing it away and drawing a fresh one
+            // leaves nothing old enough to move from: the lid would pop open rather
+            // than open. This runs from the clock, two and a half times a second
+            // while a refine is in flight, so that is every state change lost.
+            // Which mark this button is showing. The eye at rest and for a plain
+            // refine, and the selection mark while it refines a selection, which is a
+            // model call and takes as long as one. Taking a selection out is not on
+            // this list: it is over the moment it is pressed, so a mark for it would
+            // be put up and taken down inside a frame.
             //
-            // This runs from the clock, which is to say two and a half times a
-            // second while a refine is in flight, and rewriting the icon throws the
-            // old one away mid-turn. The ring is turned by the stylesheet over 900ms,
-            // so it never got past half a rotation before starting again from the
-            // top: a spinner that stutters rather than turns. The buttons in the
-            // host's slots are guarded the same way, for the same reason.
-            if (el2.getAttribute("data-arf-icon") !== kind) {
-                el2.setAttribute("data-arf-icon", kind);
-                el2.innerHTML = working ? spinIcon() : refineIcon();
-                const svg = el2.querySelector && el2.querySelector("svg");
-                if (svg) {
-                    svg.setAttribute("width", mark);
-                    svg.setAttribute("height", mark);
+            // Held past the end of the refine, until the closing has played out.
+            // Keyed on whether a refine is running, the mark was swapped back the
+            // instant one stopped, so the selection mark vanished and a plain eye
+            // appeared to do the closing. The mark you were watching has to be the
+            // one that closes, and it can: it is the same eye underneath, with the
+            // same lid and the same pupil, drawn narrower with a bracket either side.
+            const doingNow = runKind === "part" ? "part" : "eye";
+            const box = el2.querySelector && el2.querySelector(".arf-glyph");
+            if (box && el2.getAttribute("data-arf-icon") !== mark + ":" + doingNow) {
+                el2.setAttribute("data-arf-icon", mark + ":" + doingNow);
+                // Shut from the first frame. Drawn without a state it would carry the
+                // waking animation, and the button would open itself every time it was
+                // resized while nothing was running.
+                box.innerHTML =
+                    doingNow === "part" ? partIcon("read") : eyeIcon("shut", Number(mark));
+                const drawn = box.querySelector("svg");
+                if (drawn) {
+                    drawn.setAttribute("width", mark);
+                    drawn.setAttribute("height", mark);
+                }
+            }
+            // Shut while nothing is running, open and reading while a refine is. The
+            // state is a class on the eye rather than a different icon, which is what
+            // lets the lid open rather than appear.
+            //
+            // A refine ending gets a state of its own on the way through: one long
+            // blink, then shut. Dropping the lid the instant the answer lands says
+            // nothing to anybody who was not already looking, and this is the one
+            // moment the button has something to tell them. It is left alone while it
+            // plays, because this runs from the clock two and a half times a second
+            // and rewriting the class would restart the blink on every tick.
+            const eye = el2.querySelector ? el2.querySelector(".arf-eye") : null;
+            if (eye) {
+                const now = String(eye.getAttribute("class") || "");
+                if (working) {
+                    eyeWasWorking = true;
+                    if (now !== "arf-eye arf-eye-read")
+                        eye.setAttribute("class", "arf-eye arf-eye-read");
+                }
+                else if (eyeWasWorking) {
+                    eyeWasWorking = false;
+                    const how = eyeStopped ? "arf-eye-stop" : "arf-eye-done";
+                    // Held before the flag is cleared, since the wait to settle has to
+                    // match whichever of the two is actually playing.
+                    const overIn = eyeStopped ? EYE_STOP_MS : EYE_DONE_MS;
+                    eyeStopped = false;
+                    eye.setAttribute("class", "arf-eye " + how);
+                    if (eyeDoneTimer)
+                        clearTimeout(eyeDoneTimer);
+                    eyeDoneTimer = setTimeout(() => {
+                        eyeDoneTimer = null;
+                        try {
+                            const held = String(eye.getAttribute("class") || "");
+                            if (held.indexOf("arf-eye-done") >= 0 || held.indexOf("arf-eye-stop") >= 0)
+                                eye.setAttribute("class", "arf-eye arf-eye-shut");
+                        }
+                        catch (_) { }
+                        // Only now does the selection mark hand back to the plain one. Any
+                        // earlier and it would be taken off the screen mid-close.
+                        if (runKind) {
+                            runKind = "";
+                            paintFloat();
+                        }
+                    }, overIn + 60);
+                }
+                else if (now.indexOf("arf-eye-done") < 0 &&
+                    now.indexOf("arf-eye-stop") < 0 &&
+                    now !== "arf-eye arf-eye-shut") {
+                    eye.setAttribute("class", "arf-eye arf-eye-shut");
                 }
             }
             el2.className =
@@ -10004,8 +10979,14 @@ export function setup(ctx, overrides) {
         // this menu takes them over while the button is on screen.
         // Only while something is selected. An entry that is always there and
         // usually does nothing is an entry somebody presses once and stops trusting.
-        if (!busy && pickedHere())
+        if (!busy && pickedHere()) {
             doing.push({ key: "part", label: "Refine the part I selected" });
+            // Beside it, on the same terms. Taking a selection out used to live on
+            // the button under a message and nowhere else, so somebody running
+            // without that button and without this one could refine a selection four
+            // ways and cut one none.
+            doing.push({ key: "snip", label: "Take out what I selected" });
+        }
         // On the same terms as the panel button beside it: no chat means no input
         // box, and an entry that is always there and sometimes does nothing is one
         // people press once and stop trusting.
@@ -10073,6 +11054,8 @@ export function setup(ctx, overrides) {
         }
         else if (picked === "part")
             refinePicked();
+        else if (picked === "snip")
+            snipPicked();
         else if (picked === "draft")
             refineInput();
         else if (picked === "open") {
@@ -10118,9 +11101,8 @@ export function setup(ctx, overrides) {
         // The Extras row.
         //
         // In one place at a time. While the floating button is on screen its menu
-        // holds these, and Extras holds them only when there is no button to. Two
-        // ways to reach one thing is one more than anybody needs, and it clutters a
-        // menu that was opened for something else. With the button off, or refused
+        // holds these, and Extras holds them only when there is no button to. One
+        // way in at a time, so a menu opened for something else stays short. With the button off, or refused
         // because ui_panels was not granted, Extras is the only way to reach them
         // on a phone, so they come back.
         //
@@ -10129,8 +11111,7 @@ export function setup(ctx, overrides) {
         // without the floating button needs this to be somewhere, and it is not
         // worth a second switch: anybody who has asked for a row in Extras has
         // asked for the row, not for one particular entry in it. Nothing appears on
-        // a fresh install either way, which is the rule this extension keeps: it
-        // does not redecorate a screen because it was installed.
+        // a fresh install either way.
         const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
         extra("auto-refine-now", "Refine the latest reply", inExtras, () => refineNow());
         extra("auto-refine-input", "Refine what I am typing", inExtras, () => refineInput());
@@ -10141,6 +11122,7 @@ export function setup(ctx, overrides) {
         //
         // Only while there is a selection, so it is never an entry that does nothing.
         extra("auto-refine-part", "Refine the part I selected", inExtras && !!pickedHere(), () => refinePicked());
+        extra("auto-refine-snip", "Take out what I selected", inExtras && !!pickedHere(), () => snipPicked());
         // The two that live in the host's own slots. Last, because putting them up
         // means starting to watch the page, and that is the one thing here worth
         // not doing for somebody who has them off.
@@ -10194,26 +11176,132 @@ export function setup(ctx, overrides) {
     // message. Where either of them lands on screen is not this file's to state:
     // a theme is CSS and can move anything, so nothing here says above or below.
     const BAR_SLOT = '[data-spindle-mount="chat_actions"]';
-    const MSG_SLOT = '[data-spindle-mount="message_footer"]';
+    // Two mounts, because a message carries two and which one it carries depends
+    // on the display mode. The row of actions is the one to join: it is where the
+    // host already puts everything you can do to a message, and standing in it
+    // means one row of buttons rather than a second row under the first. The
+    // footer is the fallback for a mode that lays no row out.
+    const MSG_ACTIONS = '[data-spindle-mount="message_actions"]';
+    const MSG_FOOT = '[data-spindle-mount="message_footer"]';
+    const MSG_SLOT = MSG_ACTIONS + "," + MSG_FOOT;
+    // The row the host puts a message's own buttons in. There is one in every
+    // display mode and it is found differently in each: the bubble marks its row
+    // with a component name, and the row in the other mode carries nothing but
+    // hashed classes, so it is found from a button that is in it either way.
+    // Whichever it turns out to be, the buttons belong in it, so that a message
+    // has one row of things you can do to it rather than two.
+    function actionBar(msg) {
+        try {
+            const pill = msg.querySelector('[data-component="BubbleActions"]');
+            if (pill)
+                return pill;
+            const edit = msg.querySelector('button[title="Edit"]');
+            if (edit && edit.parentElement)
+                return edit.parentElement;
+        }
+        catch (_) { }
+        return null;
+    }
+    // The button the host put in a row, for the next one to be made in its image.
+    // The first, because the last is often a delete carrying a warning colour of
+    // its own and the one before the end of the input bar is a gear with a class
+    // of its own, and neither is what the rest of the row looks like.
+    function hostButton(bar) {
+        try {
+            const all = bar.querySelectorAll("button");
+            for (let i = 0; i < all.length; i++) {
+                const one = all[i];
+                if (!one.hasAttribute("data-arf-slot"))
+                    return one;
+            }
+        }
+        catch (_) { }
+        return null;
+    }
+    // How a button in one of the host's rows looks, taken off the button beside
+    // it rather than written down in here.
+    //
+    // The host's classes carry a build hash, so they cannot be written into this
+    // file: read off the live button they are on, they are right on every build,
+    // and a build that changes them is followed rather than broken by. It also
+    // means a theme, or CSS somebody wrote themselves, reaches these buttons the
+    // same way it reaches the host's own, because to a stylesheet they are the
+    // host's own. Matching the look by hand instead was four numbers guessed from
+    // one screenshot, and it was only ever going to be right on that theme.
+    //
+    // The mark is sized and weighted from the host's too. It is drawn with a
+    // finer stroke than the host uses, which is right where it is drawn large and
+    // reads as the faint one in a row of heavier marks.
+    function dressLikeHost(b, like) {
+        if (!like)
+            return false;
+        try {
+            // Only when there is something to wear. The host's own buttons in one of
+            // the display modes carry no class at all, because the row styles the
+            // buttons in it, and a button of ours carrying an empty class attribute
+            // where the host's carry none is one more thing that is not quite the
+            // same as the rest of the row.
+            const worn = String(like.className || "");
+            if (worn)
+                b.className = worn;
+            const ours = b.querySelector("svg");
+            const theirs = like.querySelector("svg");
+            if (ours && theirs) {
+                const carry = ["width", "height", "stroke-width"];
+                for (let i = 0; i < carry.length; i++) {
+                    const v = theirs.getAttribute(carry[i]);
+                    if (v)
+                        ours.setAttribute(carry[i], v);
+                }
+            }
+            return true;
+        }
+        catch (_) { }
+        return false;
+    }
     // Set while this is writing into the page, so the watcher below does not
     // answer its own insertions.
     let filling = false;
     let slotEye = null;
     let slotTimer = null;
-    function slotButton(kind, title, run) {
+    // A button in one of the host's own slots. The two refine buttons turn into
+    // a stop while one is running, which is what the spinner on them was already
+    // promising: a reader who can see it is working expects pressing it again to
+    // call it off, and the panel saying "press it again to stop" was only ever
+    // true of the panel's own button.
+    function slotButton(kind, title, run, art, like) {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "arf-slot";
         b.setAttribute("data-arf-slot", kind);
         b.title = title;
         b.setAttribute("aria-label", title);
-        b.innerHTML = refineIcon();
+        b.innerHTML = art ? art() : eyeIcon();
+        // Dressed as one of the host's own where there is one to copy, and left to
+        // this extension's own look only where there is not.
+        if (!dressLikeHost(b, like || null))
+            b.className = "arf-slot";
+        // Marked as already drawn for the pass that keeps these in step with
+        // whether a refine is running. Without it that pass found no mark on a
+        // button it had just been handed, decided the icon was out of date and
+        // wrote a fresh one over it, which threw away the waking eye before the
+        // animation had a frame to play. The wake was dead on every button in the
+        // chat and nothing said so, because a mark that never moves looks exactly
+        // like a mark that has finished moving.
+        if (!art)
+            b.setAttribute("data-arf-icon", "ready");
         b.addEventListener("click", (e) => {
             try {
                 e.preventDefault();
                 e.stopPropagation();
             }
             catch (_) { }
+            // Stopping comes first, and only on the buttons that start a refine.
+            // The two selection buttons keep doing their own thing, since neither of
+            // them is what is running.
+            if (busy && !art) {
+                cancelRefine();
+                return;
+            }
             run();
         });
         return b;
@@ -10243,8 +11331,10 @@ export function setup(ctx, overrides) {
                 const stale = document.querySelectorAll("[data-arf-slot]");
                 for (let i = 0; i < stale.length; i++) {
                     const one = stale[i];
-                    const kind = one.getAttribute("data-arf-slot");
-                    if (kind === "bar" ? wantBar : wantMsg)
+                    const kind = String(one.getAttribute("data-arf-slot") || "");
+                    // The toolbar carries three of these now, so which setting a button
+                    // answers to is read from where it sits rather than from one name.
+                    if (kind.indexOf("bar") === 0 ? wantBar : wantMsg)
                         continue;
                     const row = one.parentElement;
                     try {
@@ -10255,27 +11345,150 @@ export function setup(ctx, overrides) {
                     catch (_) { }
                 }
             }
+            // Read once for both sets of buttons. The toolbar and the row under a
+            // message are answering the same question, so they should be answering it
+            // off the same reading of it.
+            const holding = pickedHere();
             if (wantBar) {
                 const bar = document.querySelector(BAR_SLOT);
-                if (bar && !bar.querySelector('[data-arf-slot="bar"]'))
-                    bar.appendChild(slotButton("bar", "Refine the latest reply", () => refineNow()));
+                if (bar) {
+                    // The host leaves this mount inside its own row of controls rather
+                    // than beside it, so what goes in it is laid out by that row. The
+                    // button to copy is therefore one of that row's, not one of the
+                    // mount's, which holds only ours.
+                    const like = hostButton(bar.parentElement || bar);
+                    if (!bar.querySelector('[data-arf-slot="bar"]'))
+                        bar.appendChild(slotButton("bar", "Refine the latest reply", () => refineNow(), undefined, like));
+                    // The toolbar answers a selection the same way the row under a
+                    // message does. Somebody who would rather not have a button under
+                    // every reply can keep those switched off and still reach the two
+                    // that work on a selection, and what the marks mean does not change
+                    // between the two places they appear.
+                    const whole = bar.querySelector('[data-arf-slot="bar"]');
+                    if (whole)
+                        whole.style.display = holding ? "none" : "";
+                    const part = bar.querySelector('[data-arf-slot="bar-part"]');
+                    const snip = bar.querySelector('[data-arf-slot="bar-snip"]');
+                    if (holding && !part)
+                        bar.appendChild(slotButton("bar-part", "Refine the part I selected", () => refinePicked(), partIcon, like));
+                    if (holding && !snip)
+                        bar.appendChild(slotButton("bar-snip", "Take out what I selected", () => snipPicked(), snipIcon, like));
+                    if (!holding) {
+                        try {
+                            if (part)
+                                part.remove();
+                            if (snip)
+                                snip.remove();
+                        }
+                        catch (_) { }
+                    }
+                }
             }
             if (wantMsg) {
                 const slots = document.querySelectorAll(MSG_SLOT);
+                // One message can offer both mounts, and only one of them gets the
+                // buttons. Picked per message rather than once for the page, because a
+                // mode change redraws the messages one at a time and a page holding
+                // both for a moment would otherwise draw the buttons twice on one.
+                // One message per id, whichever of its mounts was found first. The
+                // mount is only how a message and its id are come by; where the buttons
+                // actually go is decided from the message itself, below.
+                const picked = {};
                 for (let i = 0; i < slots.length; i++) {
                     const slot = slots[i];
-                    if (slot.querySelector('[data-arf-slot="message"]'))
-                        continue;
                     const id = slotId(slot);
-                    if (!id)
+                    if (!id || picked[id])
                         continue;
-                    const row = document.createElement("div");
-                    row.className = "arf-slot-row";
-                    row.appendChild(slotButton("message", "Refine this message", () => refineOne(id)));
-                    slot.appendChild(row);
+                    picked[id] = slot;
+                }
+                for (const id in picked) {
+                    const slot = picked[id];
+                    // The message this mount belongs to, and the row of buttons the host
+                    // drew on it. Only one display mode leaves a mount inside that row,
+                    // and the row is there in both, so the row is what is looked for.
+                    const msg = slot.closest
+                        ? slot.closest("[data-message-id]") || slot.parentElement
+                        : slot.parentElement;
+                    const bar = msg ? actionBar(msg) : null;
+                    // Inside the row: the host's own mount when it left one there, and
+                    // the row itself when it did not. Either way the buttons end up laid
+                    // out by that row, beside the host's own.
+                    //
+                    // With no row at all, a row of this extension's own under the
+                    // message, which is what that row was always for.
+                    let into;
+                    let like = null;
+                    if (bar) {
+                        like = hostButton(bar);
+                        const mount = bar.querySelector(MSG_ACTIONS);
+                        into = mount || bar;
+                    }
+                    else {
+                        let row = slot.querySelector(".arf-slot-row");
+                        if (!row) {
+                            row = document.createElement("div");
+                            row.className = "arf-slot-row";
+                            slot.appendChild(row);
+                        }
+                        into = row;
+                    }
+                    // Anything this message is holding anywhere else, which is what a
+                    // change of display mode leaves behind: a row under a message that
+                    // has since grown one of its own, or buttons in a row that has since
+                    // gone away.
+                    if (msg)
+                        try {
+                            const stale2 = msg.querySelectorAll("[data-arf-slot]");
+                            for (let k = 0; k < stale2.length; k++) {
+                                const one = stale2[k];
+                                if (one.parentElement !== into)
+                                    one.remove();
+                            }
+                            const rows = msg.querySelectorAll(".arf-slot-row");
+                            for (let k = 0; k < rows.length; k++) {
+                                const one = rows[k];
+                                if (one !== into && !one.querySelector("[data-arf-slot]"))
+                                    one.remove();
+                            }
+                        }
+                        catch (_) { }
+                    if (!into.querySelector('[data-arf-slot="message"]'))
+                        into.appendChild(slotButton("message", "Refine this message", () => refineOne(id), undefined, like));
+                    // The two that only make sense against a selection, and only on the
+                    // message the selection is in. A button that is always there and
+                    // usually does nothing is one people press once and stop trusting,
+                    // which is the same rule the menu entry follows.
+                    const mine = !!holding && String(holding.messageId) === id;
+                    // While something is selected in this message, the button that
+                    // refines the whole of it steps aside. Three marks sat in a row, two
+                    // of them eyes, and the one that ignored the selection looked exactly
+                    // like the one that used it. What you are being offered while you
+                    // have text selected is what to do with that text.
+                    const whole = into.querySelector('[data-arf-slot="message"]');
+                    if (whole)
+                        whole.style.display = mine ? "none" : "";
+                    const part = into.querySelector('[data-arf-slot="part"]');
+                    const snip = into.querySelector('[data-arf-slot="snip"]');
+                    if (mine && !part)
+                        into.appendChild(slotButton("part", "Refine the part I selected", () => refinePicked(), partIcon, like));
+                    if (mine && !snip)
+                        into.appendChild(slotButton("snip", "Take out what I selected", () => snipPicked(), snipIcon, like));
+                    if (!mine) {
+                        try {
+                            if (part)
+                                part.remove();
+                            if (snip)
+                                snip.remove();
+                        }
+                        catch (_) { }
+                    }
                 }
             }
             paintSlots();
+            // Any mark this pass has just put on the page starts at rest, so one
+            // drawn while a refine is already running would sit shut among a set that
+            // is reading. A message arriving mid-refine is exactly when that happens.
+            paintEyes(busy);
         }
         catch (_) {
         }
@@ -10306,10 +11519,37 @@ export function setup(ctx, overrides) {
         }
         for (let i = 0; i < found.length; i++) {
             const one = found[i];
+            const slot = String(one.getAttribute("data-arf-slot") || "");
+            // The selection buttons draw their own mark and never spin: neither of
+            // them is the thing that is running. Both places they sit in are read the
+            // same way here, so a toolbar pair behaves like the pair under a message.
+            const cuts = slot === "snip" || slot === "bar-snip";
+            if (cuts || slot === "part" || slot === "bar-part") {
+                const off = cuts ? snipping || busy : busy;
+                if (off)
+                    one.setAttribute("aria-busy", "true");
+                else
+                    one.removeAttribute("aria-busy");
+                continue;
+            }
             const kind = busy ? "working" : "ready";
             if (one.getAttribute("data-arf-icon") !== kind) {
                 one.setAttribute("data-arf-icon", kind);
-                one.innerHTML = busy ? spinIcon() : refineIcon();
+                // The mark itself is left alone. It used to be swapped for a different
+                // drawing whenever a refine started or ended, which replaced the element
+                // and threw away whatever it was in the middle of. The two drawings were
+                // different sizes as well, so the mark shrank from twenty pixels to
+                // fourteen the moment a refine began. Whether an eye is reading is a
+                // class on it now, set for every mark at once.
+                // Named for what pressing it does now, so the label a screen reader
+                // reads matches the mark beside it.
+                const said = busy
+                    ? "Stop this refine"
+                    : slot === "bar"
+                        ? "Refine the latest reply"
+                        : "Refine this message";
+                one.title = said;
+                one.setAttribute("aria-label", said);
             }
             if (busy)
                 one.setAttribute("aria-busy", "true");
@@ -10318,7 +11558,7 @@ export function setup(ctx, overrides) {
         }
     }
     // The host redraws this chrome on its own terms: a new reply, a swipe, a chat
-    // change, a re-render nobody asked for. Watched only while a button is wanted,
+    // change, or a re-render with no visible cause. Watched only while a button is wanted,
     // because a chat that is streaming mutates constantly and there is no reason
     // to answer any of it for somebody who has both of these switched off.
     function watchSlots() {
@@ -10375,6 +11615,11 @@ export function setup(ctx, overrides) {
     function cancelRefine() {
         if (!busy && !sweep)
             return;
+        // Noted before the answer comes back, so the eye can close on being called
+        // off rather than on having finished. The two used to look identical: a
+        // refine you stopped gave the same contented blink as one that read the
+        // whole reply, which tells you the opposite of what happened.
+        eyeStopped = true;
         send({ type: "cancel_refine", requestId: newId() });
         log("asked it to stop");
     }
@@ -10463,11 +11708,13 @@ export function setup(ctx, overrides) {
             if (!sel || !text.trim() || sel.isCollapsed) {
                 if (pickedRun) {
                     pickedRun = null;
-                    // Both, because they are two different surfaces: paint redraws the
-                    // panel's own button and syncExtras puts the row in the chat input's
-                    // menu up or takes it down.
+                    // Three different surfaces: paint redraws the panel's own button,
+                    // syncExtras puts the row in the chat input's menu up or takes it
+                    // down, and fillSlots does the same for the two buttons in the
+                    // toolbar and the two that sit on the message itself.
                     paint();
                     syncExtrasSoon();
+                    fillSlotsSoon();
                 }
                 return;
             }
@@ -10503,6 +11750,7 @@ export function setup(ctx, overrides) {
             if (!was || was.messageId !== pickedRun.messageId) {
                 paint();
                 syncExtrasSoon();
+                fillSlotsSoon();
             }
         }
         catch (_) { }
@@ -10516,6 +11764,64 @@ export function setup(ctx, overrides) {
             return null;
         return pickedRun;
     }
+    // Taking the selection out, with no model call. Guarded on its own rather
+    // than on busy: a snip is a write and a refine is a write, so two at once
+    // would race, but a snip is quick enough that it never needs the running
+    // state a refine puts on screen.
+    let snipping = false;
+    let snipTimer = null;
+    // The flag is what stops two snips overlapping, and nothing else clears it.
+    // A backend that never answers would leave the button dead for the rest of
+    // the session, so it is given the same five seconds every other request gets.
+    function snipDone() {
+        snipping = false;
+        if (snipTimer) {
+            clearTimeout(snipTimer);
+            snipTimer = null;
+        }
+    }
+    function snipPicked() {
+        const one = pickedHere();
+        if (!one) {
+            toast("Select part of a reply first.", true);
+            return;
+        }
+        if (snipping)
+            return;
+        if (busy) {
+            toast("A refine is running. Let it finish, or stop it first.", true);
+            return;
+        }
+        const why = whyNot();
+        if (why) {
+            toast(why, true);
+            log("nothing taken out: " + why.toLowerCase().replace(/\.$/, ""));
+            return;
+        }
+        snipping = true;
+        if (snipTimer)
+            clearTimeout(snipTimer);
+        snipTimer = setTimeout(() => {
+            snipTimer = null;
+            if (!snipping)
+                return;
+            snipping = false;
+            log("no answer from the backend. Nothing was taken out.");
+            toast("Auto Refine's backend is not answering. Nothing was taken out.", true);
+            paint();
+            fillSlotsSoon();
+        }, ACK_MS);
+        paint();
+        log("taking out the part you selected, " + one.text.trim().length + " characters of it");
+        send({
+            type: "snip_selection",
+            requestId: newId(),
+            chatId: one.chatId != null ? one.chatId : lastChatId,
+            messageId: one.messageId,
+            picked: one.text,
+            ahead: one.ahead,
+        });
+    }
     function refinePicked() {
         const one = pickedHere();
         if (!one) {
@@ -10523,7 +11829,7 @@ export function setup(ctx, overrides) {
             return;
         }
         if (busy) {
-            toast("A refine is already running. Press it again to stop that one.", true);
+            toast("A refine is already running. Stop it first, or wait for it to finish.", true);
             return;
         }
         const why = whyNot();
@@ -10534,6 +11840,7 @@ export function setup(ctx, overrides) {
         }
         retryAt = 0;
         retryOf = 0;
+        runKind = "part";
         markBusy(true);
         paint();
         log("refining the part you selected, " + one.text.trim().length + " characters of it");
@@ -10554,9 +11861,9 @@ export function setup(ctx, overrides) {
     // to watch arrive.
     function refineOne(messageId) {
         // One at a time. Two against the same reply means whichever finishes last
-        // wins, which is not a thing anybody asked for.
+        // wins, and which one that is cannot be predicted.
         if (busy) {
-            toast("A refine is already running. Press it again to stop that one.", true);
+            toast("A refine is already running. Stop it first, or wait for it to finish.", true);
             return;
         }
         const why = whyNot();
@@ -10842,10 +12149,13 @@ export function setup(ctx, overrides) {
                         return;
                     }
                     if (msg.type === "refined") {
-                        markBusy(false);
-                        keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
-                        tally.saved++;
-                        lastRun = { ms: lastRunMs, ok: true, why: "" };
+                        const wasSnip = msg.kind === "snip";
+                        if (!wasSnip) {
+                            markBusy(false);
+                            keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
+                            tally.saved++;
+                            lastRun = { ms: lastRunMs, ok: true, why: "" };
+                        }
                         // A refine only happens in the chat the reader is in, so this is
                         // also the chat. Adopted when nothing else has said so yet, or the
                         // panel would hold a refine it could not show anybody.
@@ -10868,8 +12178,15 @@ export function setup(ctx, overrides) {
                         // The badge is the point of the tab being closable: something
                         // happened to your writing and you can see that without opening it.
                         setBadge(String(undoHere().length || 1));
-                        log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
-                        toast("Reply refined.");
+                        if (wasSnip) {
+                            const gone = String(msg.before || "").length - String(msg.after || "").length;
+                            log("took " + (gone > 0 ? gone : 0) + " characters out of a reply", true);
+                            toast("Taken out. Put it back is on the card.");
+                        }
+                        else {
+                            log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+                            toast("Reply refined.");
+                        }
                         ping();
                         paint();
                         return;
@@ -10892,6 +12209,24 @@ export function setup(ctx, overrides) {
                         const what = String(msg.what || "settings");
                         log("your " + what + " could not be saved to your account. They are still saved in this browser.");
                         toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "snip_result") {
+                        snipDone();
+                        // The selection is not cleared from here. What is selected on the
+                        // page is the only thing that decides whether those two buttons are
+                        // up, and the host redrawing the message it came out of is what
+                        // ends it. Clearing it here as well would be undone by the next
+                        // selectionchange while the old text is still on screen.
+                        // The write itself arrives as "refined" with kind snip, which is
+                        // what registers the way back. This only has to report a refusal
+                        // and let the panel go again.
+                        if (!msg.ok) {
+                            const why = String(msg.why || "it could not be taken out");
+                            log("nothing taken out: " + why);
+                            toast(why.charAt(0).toUpperCase() + why.slice(1), true);
+                        }
                         paint();
                         return;
                     }
@@ -11375,6 +12710,16 @@ export function setup(ctx, overrides) {
             clearTimeout(saveTimer);
             saveTimer = null;
         }
+        // A search typed into a moment before the tab closed would otherwise
+        // repaint a panel that is no longer there.
+        if (huntTimer) {
+            clearTimeout(huntTimer);
+            huntTimer = null;
+        }
+        if (snipTimer) {
+            clearTimeout(snipTimer);
+            snipTimer = null;
+        }
         for (const d of disposers.splice(0)) {
             try {
                 d();
@@ -11388,8 +12733,11 @@ export function setup(ctx, overrides) {
 // against each other. A setting in one and not the other looks fine and quietly
 // never loads.
 export const __testing = {
+    splitSelectorList,
+    INPUT_PICKS,
     CONFIG,
     PARTS,
+    MOVED_DEFAULTS,
     COST_FIELDS,
     LIMIT_FIELDS,
     MACROS,

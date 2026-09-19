@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -41,7 +41,7 @@ let refineAgain = false;       // whether the pass returns to a reply it refined
 let connectionId = '';         // empty means the reader's active connection
 let thinkingMode = 'off';      // off | inherit | custom
 let thinkingEffort = 'medium'; // only read when thinkingMode is custom
-let timeoutSecs = 90;
+let timeoutSecs = 240;
 // Who these settings came from, which is who the automatic pass runs as.
 //
 // A generation event carries the generation, the chat, the message, the content
@@ -329,7 +329,7 @@ interface Block {
   text?: string;
 }
 
-// The prompt a fresh install ships with, and the one people copy to write their
+// The prompt a fresh install starts on, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
 // to as, and XML tags as headings with a closing tag at the end, because a
 // model reads a tagged block as one instruction rather than as a paragraph that
@@ -1133,10 +1133,10 @@ function overusedIn(
   for (const one of worn) {
     // Inside something already reported, and appearing no more often than it
     // does: the same habit, said once already.
-    const swallowed = kept.some(
+    const alreadyCovered = kept.some(
       (had) => had.phrase.indexOf(one.phrase) >= 0 && had.replies >= one.replies,
     );
-    if (!swallowed) kept.push(one);
+    if (!alreadyCovered) kept.push(one);
   }
   kept.sort((a, b) => b.replies - a.replies || b.count - a.count || a.phrase.localeCompare(b.phrase));
   return kept;
@@ -1232,8 +1232,8 @@ function loosen(s: string): { text: string; at: number[] } {
 }
 
 // Emphasis markers come in pairs. A span that starts or ends between a pair
-// takes one marker with it, and replacing it leaves the other one stranded,
-// which turns the rest of the message italic. The span is widened outward to
+// takes one marker with it, and replacing it leaves the other one with no
+// partner, which turns the rest of the message italic. The span is widened outward to
 // whichever marker it is inside, so the pair travels together.
 function balanced(raw: string, start: number, end: number): { start: number; end: number } | null {
   let from = start;
@@ -1317,6 +1317,32 @@ function pickedSpan(
   const end = map.from[lastSeen];
   if (start == null || end == null) return null;
   return balanced(raw, start, end + 1);
+}
+
+// Takes a span out of a passage and closes the gap the way a person would.
+//
+// Only the point where the two halves meet is touched. Tidying the whole
+// passage would change spacing the reader never selected, which matters on a
+// message whose line breaks are part of how it is written.
+function snipSpan(raw: string, start: number, end: number): string {
+  const left = raw.slice(0, start);
+  const right = raw.slice(end);
+  const hadSpace = /[ \t]$/.test(left) || /^[ \t]/.test(right);
+  const lTrim = left.replace(/[ \t]+$/, '');
+  const rTrim = right.replace(/^[ \t]+/, '');
+  // A whole paragraph taken out leaves the blank line from each side. One
+  // break is kept, and a blank line only where there was one before.
+  const lNl = (lTrim.match(/\n+$/) || [''])[0].length;
+  const rNl = (rTrim.match(/^\n+/) || [''])[0].length;
+  if (lNl || rNl) {
+    const keep = Math.max(lNl, rNl) > 1 ? '\n\n' : '\n';
+    return lTrim.replace(/\n+$/, '') + keep + rTrim.replace(/^\n+/, '');
+  }
+  // Nothing on one side means the span ran to an edge, so no space is owed.
+  if (!lTrim || !rTrim) return lTrim + rTrim;
+  // A space before a comma or a full stop is not how the sentence read before.
+  if (/^[,.!?;:)\]]/.test(rTrim)) return lTrim + rTrim;
+  return lTrim + (hadSpace ? ' ' : '') + rTrim;
 }
 
 // A block that is nothing but empty tags once its macros came back empty. A
@@ -1947,8 +1973,8 @@ let rateWaits = 2;
 // count going up on every reply.
 let asSwipe = false;
 // Phrases this chat has worn out, and how far back to look for them. Off by
-// default: it reads the chat's replies, which is a call to Lumiverse nobody asked
-// for until they put the macro in a block.
+// default, because it reads the chat's replies, which is an extra call to
+// Lumiverse. Turned on by putting the macro in a block.
 let wornOn = false;
 let wornBack = 60;
 let wornLeast = 3;
@@ -2130,7 +2156,7 @@ function judgeInner(answer: any, original: string): Verdict {
 
   if (!text) return { ok: false, text: '', why: 'the model sent nothing back' };
   // Not a failure. The prompt says a passage that already reads well comes back
-  // exactly as it was, so a model that hands it back is doing what it was told:
+  // exactly as it was, so a model that returns it unchanged did what it was told:
   // calling that "the model changed nothing" reported the extension's own
   // instruction as a fault, and on a short piece of writing, which is most of
   // what an input box holds, it was the usual answer.
@@ -2477,7 +2503,7 @@ function gatherWorn(msgs: any[], upTo: number, name?: string, canon?: string): s
     // would mean listing every length of the same habit.
     if (wornFine.some((fine) => one.phrase.indexOf(fine) >= 0)) continue;
     // Written down somewhere as part of the story, so it is the story rather
-    // than a reach for the same words twice.
+    // than the same words being used twice.
     //
     // A run of it rather than all of it, because a finding drifts from the words
     // it came from: a card saying "has crossed the same water" against a reply
@@ -2677,12 +2703,41 @@ function pause(ms: number, userId?: string): Promise<boolean> {
 }
 
 // ---- running one refine ----
+// What a provider named when it turned the request down, kept to the fields
+// this extension actually sent.
+//
+// A strict OpenAI-compatible endpoint rejects the whole request over one field
+// it does not know, rather than ignoring it, and the refine fails with a 400
+// that reads like a fault in the rules. NVIDIA's build does this with
+// max_context and reasoning. Which fields a given endpoint accepts cannot be
+// known ahead of the call, so the answer is to read the refusal and ask again
+// without them.
+//
+// Only names that went out are returned, so a message mentioning a field this
+// extension never sent cannot make it drop something it needs.
+function rejectedFields(msg: string, sent: string[]): string[] {
+  if (!msg || !sent.length) return [];
+  if (!/unsupported|unrecognized|unknown|not supported|invalid.{0,20}(param|argument|field)/i.test(msg))
+    return [];
+  const named = new Set<string>();
+  // Providers quote the offending name in backticks, single or double quotes.
+  for (const m of msg.matchAll(/[`'"]([A-Za-z_][A-Za-z0-9_]*)[`'"]/g)) named.add(m[1]);
+  // And some list them bare after the colon.
+  const tail = /(?:parameter\(s\)|parameters|arguments?|fields?)\s*:?\s*([^.\n]+)/i.exec(msg);
+  if (tail) for (const bit of tail[1].split(/[,\s]+/)) {
+    const name = bit.replace(/[`'"]/g, '').trim();
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) named.add(name);
+  }
+  return sent.filter((f) => named.has(f));
+}
+
 async function askModel(
   text: string,
   isUser: boolean,
   scene: Scene,
   userId?: string,
   use?: Block[],
+  drop?: string[],
 ): Promise<{ content: string; error: string }> {
   const controller: any = typeof (globalThis as any).AbortController === 'function'
     ? new (globalThis as any).AbortController()
@@ -2692,15 +2747,15 @@ async function askModel(
   // a high effort level can think for minutes before it writes a character, and
   // a cap that fires mid-thought throws away work that was about to arrive.
   const ms = !Number.isFinite(secs)
-    ? 90000
+    ? 240000
     : secs <= 0
       ? 0
       : Math.min(3600, Math.max(5, secs)) * 1000;
   let timer: any = null;
   if (controller) {
     controller.__arfWhy = '';
-    // Held whether or not there is a timer, because this is also what Stop
-    // reaches for, and with the timeout off it is the only way to end a run.
+    // Held whether or not there is a timer, because Stop uses this too, and
+    // with the timeout off it is the only way to end a run.
     holdRun(userId, controller);
     if (ms)
       timer = setTimeout(() => {
@@ -2744,7 +2799,12 @@ async function askModel(
     // Only the values the reader actually changed. An empty object is left out
     // so the connection's own preset stays in charge, which is what somebody
     // who never opened the sampler section expects.
-    const params = cleanSamplers();
+    let params = cleanSamplers();
+    if (params && drop && drop.length) {
+      const kept: Record<string, number> = {};
+      for (const key of Object.keys(params)) if (drop.indexOf(key) < 0) kept[key] = params[key];
+      params = Object.keys(kept).length ? kept : null;
+    }
     if (params) req.parameters = params;
     // The connection the reader picked for refining, which is the point of
     // being able to pick one: a rewrite does not need the model you roleplay
@@ -2759,7 +2819,7 @@ async function askModel(
     // bill arrives. Inherit leaves the field off entirely, which is what hands
     // the question back to the connection's own settings.
     const think = reasoningFor();
-    if (think) req.reasoning = think;
+    if (think && !(drop && drop.indexOf('reasoning') >= 0)) req.reasoning = think;
     if (controller) req.signal = controller.signal;
 
     // Streamed when the host can, and not otherwise. Nothing about the refine
@@ -2790,7 +2850,7 @@ async function askModel(
             said = now;
             // The length, and the working, and not the rewrite.
             //
-            // The rewrite is what the card shows when the refine lands, marked
+            // The rewrite is what the card shows when the refine finishes, marked
             // against what was there before, so streaming it as well would be
             // sending the same words twice. The working is different: it is
             // written before the rewrite and is gone by the time anything
@@ -2828,6 +2888,21 @@ async function askModel(
       const why = controller && controller.__arfWhy;
       if (why === 'stopped') return { content: '', error: 'you stopped it' };
       return { content: '', error: 'the model did not answer within ' + Math.round(ms / 1000) + 's' };
+    }
+    // The provider turned the request down over a field it does not take. Ask
+    // again without the fields it named, once: a second refusal is a real one.
+    if (!drop) {
+      const sentParams = cleanSamplers();
+      const sent = (sentParams ? Object.keys(sentParams) : []).concat(
+        reasoningFor() ? ['reasoning'] : [],
+      );
+      const bad = rejectedFields(String(msg), sent);
+      if (bad.length) {
+        say('warn', 'the connection refused ' + bad.join(', ') + ', asking again without');
+        if (timer != null) clearTimeout(timer);
+        dropRun(userId, controller);
+        return askModel(text, isUser, scene, userId, use, bad);
+      }
     }
     if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
       return { content: '', error: 'the generation permission is not granted' };
@@ -3104,7 +3179,7 @@ async function refineMessage(
   // them, so the tokens standing in for markup are the same throughout and the
   // instruction about them stays true for every pass.
   let carried = armed.text;
-  // What each pass was given and what it handed back. A chain that came out
+  // What each pass was given and what it returned. A chain that came out
   // worse is otherwise one before and one after with three calls somewhere in
   // between, and no way to tell which of them did it.
   //
@@ -3310,12 +3385,73 @@ async function currentContent(chatId: string, messageId: any): Promise<string | 
   }
 }
 
+// Takes the selected run out of a message and saves what is left.
+//
+// No model call, so none of the prompt building applies. What it does share
+// with a refine of a selection is how the span is found: the selection is made
+// in rendered markdown and has to be mapped back onto the raw text, and the
+// model's own working is held aside so an offset is never counted through it.
+async function snipMessage(
+  chatId: string,
+  messageId: any,
+  picked: string,
+  ahead: string,
+  userId?: string,
+): Promise<RefineOutcome> {
+  if (!masterOn) return { ok: false, why: 'Auto Refine is switched off' };
+  if (chatsOff.has(String(chatId)))
+    return { ok: false, why: 'Auto Refine is switched off in this chat' };
+  let msgs: any[] = [];
+  try {
+    msgs = await spindle.chat.getMessages(chatId);
+  } catch (e: any) {
+    return { ok: false, why: 'the chat could not be read: ' + ((e && e.message) || 'no reason given') };
+  }
+  if (!Array.isArray(msgs) || !msgs.length) return { ok: false, why: 'the chat came back empty' };
+  const greetingId = greetingIdOf(msgs);
+  const m =
+    messageId == null || messageId === ''
+      ? latestReply(msgs, greetingId)
+      : msgs.find((x: any) => x && x.id === messageId) || null;
+  if (!m) return { ok: false, why: 'that message is not in this chat any more' };
+  // The same two the refiner refuses. Taking text out is a different act from
+  // rewriting it, but these two buttons sit next to each other on the same
+  // message, and one of them quietly editing what the other will not touch is
+  // not something anybody could predict. Lumiverse's own edit is still there
+  // for a greeting somebody does want to change.
+  if (m.id === greetingId)
+    return { ok: false, why: 'the greeting is written by a person, so it is never edited from here' };
+  if (m.role !== 'assistant' && m.role !== 'user')
+    return { ok: false, why: 'only replies and your own messages can be edited from here' };
+
+  const original = String(m.content == null ? '' : m.content);
+  const split = splitThinking(original);
+  if (!split.body.trim())
+    return { ok: false, why: 'that message is only the model working, so there is nothing to take out' };
+
+  const at = pickedSpan(split.body, picked, ordinalOf(ahead, picked));
+  if (!at)
+    return { ok: false, why: 'what you selected is not in that message any more, so nothing was taken out' };
+
+  const body = snipSpan(split.body, at.start, at.end);
+  // Everything selected. An empty message is not something to leave somebody
+  // with by accident, and deleting the message is not what was asked for.
+  if (!body.trim())
+    return { ok: false, why: 'that would empty the message, so it was left as it is' };
+  const next = split.head + body + split.tail;
+  if (next === original) return { ok: false, why: 'that selection is already gone' };
+  return saveRefined(chatId, m, original, next, userId, 'snip');
+}
+
 async function saveRefined(
   chatId: string,
   m: any,
   original: string,
   next: string,
   userId?: string,
+  // What the write was. A snip takes text out with no model call, so the panel
+  // words it and counts it differently, but the way back is the same one.
+  kind?: 'refine' | 'snip',
 ): Promise<RefineOutcome> {
   const k = key(chatId, m.id);
   try {
@@ -3384,6 +3520,7 @@ async function saveRefined(
       before: original,
       after: next,
       canUndo: keepOriginal,
+      kind: kind === 'snip' ? 'snip' : 'refine',
     });
     return { ok: true, why: '' };
   } catch (e: any) {
@@ -3520,7 +3657,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
       // Not `|| 90`. Zero is a setting here, meaning never give up, and the
       // short form would have quietly turned it back into a minute and a half.
-      timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 90;
+      timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;
       maxGrowthPct = Number(s.maxGrowthPct);
       maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
       minShrinkPct = Number(s.minShrinkPct);
@@ -3818,8 +3955,8 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
     if (payload.type === 'refine_selection') {
       const picked = String(payload.picked == null ? '' : payload.picked);
       // Nothing picked is not a reason to rewrite the whole reply. Falling
-      // through to an ordinary refine here would rewrite the lot on a selection
-      // that had already been cleared, which is the one answer nobody asked for.
+      // through to an ordinary refine here would rewrite the whole reply on a
+      // selection that had already been cleared.
       if (!picked.trim()) {
         replyTo(userId, {
           type: 'refine_result',
@@ -3850,6 +3987,38 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         same: !!done.same,
         stood: !!done.stood,
         notes: done.notes || '',
+      });
+      return;
+    }
+
+    // Taking a selection out, with no model call. The panel sends what was
+    // selected and the text in front of it, exactly as a refine of a selection
+    // does, so the span is found the same way.
+    if (payload.type === 'snip_selection') {
+      const picked = String(payload.picked == null ? '' : payload.picked);
+      if (!picked.trim()) {
+        replyTo(userId, {
+          type: 'snip_result',
+          requestId: payload.requestId,
+          ok: false,
+          why: 'nothing was selected, so nothing was taken out',
+        });
+        return;
+      }
+      const done = await snipMessage(
+        payload.chatId,
+        payload.messageId,
+        picked,
+        String(payload.ahead == null ? '' : payload.ahead),
+        userId,
+      );
+      replyTo(userId, {
+        type: 'snip_result',
+        requestId: payload.requestId,
+        chatId: payload.chatId,
+        messageId: payload.messageId,
+        ok: done.ok,
+        why: done.why,
       });
       return;
     }
@@ -4233,7 +4402,7 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
   } catch (e: any) {
     const why = (e && e.message) || String(e);
     say('warn', 'a message from the panel could not be handled: ' + why);
-    // The panel is waiting. Swallowing this into a log line left it spinning
+    // The panel is waiting. Hiding this in a log line left it spinning
     // with no way to know the answer was never coming, so whatever it asked
     // for is answered with the failure.
     try {

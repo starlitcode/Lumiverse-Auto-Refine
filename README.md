@@ -16,7 +16,7 @@ Select part of a reply and you can refine only that. Two optional buttons put a 
 
 Your own messages can be refined too, by hand, never automatically. They get their own prompt, which repairs what went wrong and leaves the writing alone.
 
-It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking.
+It lives in a tab in the sidebar drawer rather than behind a settings window, because it is something you keep open while you write. After a refine the tab shows you what changed and offers to put it back, sitting where you are already looking. What changed can be read as one text with the changes coloured in place, or as the two versions in columns beside each other, whichever is the easier read.
 
 ## Install
 
@@ -26,7 +26,7 @@ In Lumiverse, open Extensions and install from the repository URL:
 https://github.com/starlitcode/Lumiverse-Auto-Refine
 ```
 
-Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt ships with it, so switching it on is the whole of the setup. Everything below is optional.
+Then open the sidebar drawer and pick the **Auto Refine** tab. A prompt comes with it, so switching it on is the whole of the setup. Everything below is optional.
 
 ## You are always in charge
 
@@ -78,11 +78,11 @@ Put your provider's prices in on the **Model** tab and the panel stops dealing i
 
 There is no rules box with a fixed prompt hidden behind it. Under **Prompt**, the whole request is a list of blocks you wrote: rename them, reorder them, switch them off, change the role each is sent as, add your own. Macros like `{{message}}`, `{{history}}` and `{{description}}` are filled in when the refine runs.
 
-Eight prompts ship with it and work as they stand: the same four shapes once for replies and once for your own messages, under a heading each where you pick them.
+Four prompts come with it and work as they stand: a line edit for replies and a copy edit for your own messages, each once for any model and once for a model that reasons, under a heading each where you pick them.
 
-**A quick read** is the one to start with. **A close read** goes over the same ground properly, for a bit more prompt. Both work on any model.
+Each one opens by telling the model which job it has. **The line edit** puts it on how a reply reads and keeps it off what happens in it. **The copy edit** puts it on what went wrong on the way to the page and keeps it off your style.
 
-The other two say **for a model that thinks** in their names. Those hand the model the standard and let it apply it, which is why they are the smaller pair; a model that does not reason is given the list instead.
+The two that say **for a model that thinks** hand the model the standard and let it apply it, which is why they are the smaller pair. A model that does not reason is given the list instead.
 
 The four for your own writing do a different job: repair what is there and change nothing else.
 
@@ -92,7 +92,7 @@ Under **Context**, **Show me the request** builds the real request for the reply
 
 ## Documentation
 
-- [How the prompt is built](docs/prompt.md) - the blocks, the macros, the roles, the eight prompts that ship with it, and the preview
+- [How the prompt is built](docs/prompt.md) - the blocks, the macros, the roles, the four built-in prompts, and the preview
 - [Writing rules](docs/rules.md) - what to ask a refine for, and what not to
 - [What it refuses to save](docs/guardrails.md) - the checks on what comes back
 - [Settings](docs/settings.md) - every tab, with what is on it and why
@@ -109,7 +109,7 @@ The refining runs in a backend module, because editing a saved message is a back
 
 It declares six permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` to know which chat it is and what Lumiverse remembers of it, `characters` to read the card, `world_books` to read the lore the chat has active, and `ui_panels` for the floating button. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
 
-One part reaches into the page rather than going through an API, because Lumiverse does not offer one: **Refine what I am typing** reads and writes the chat input box. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box.
+One part reaches into the page rather than going through an API, because Lumiverse does not offer one: **Refine what I am typing** reads and writes the chat input box. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box. **Where the input box is**, on the Setup tab, is where you point it at the new one without waiting for a release.
 
 Auditing it, or pointing a scanner at it? The two files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`, named in `spindle.json`. They are committed as plain readable JavaScript, not minified or bundled.
 
