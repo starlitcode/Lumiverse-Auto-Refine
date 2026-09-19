@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.12.0";
+const VERSION = "1.13.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -73,6 +73,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "maxGrowthPct",
       "minShrinkPct",
       "asSwipe",
+      "swipeSelector",
       "keepOriginal",
       "confirmBeforeSave",
       "protectOn",
@@ -257,6 +258,23 @@ const INPUT_PICKS = [
   "textarea",
 ];
 
+// The next / swipe control on a message, which is what moves a reply on to the
+// swipe sitting beside it. Several are listed for the same reason the input box
+// has several: a Lumiverse build that renames one of them is still likely to be
+// covered by another, and a build that renames all of them is fixed from the
+// panel on the day rather than waited out.
+//
+// The same list Auto Retry looks under, so a selector written for one reads the
+// same way in the other.
+const SWIPE_PICKS = [
+  '[aria-label="Next swipe"]',
+  '[data-action="swipe-right"]',
+  '[data-testid="swipe-right"]',
+  'button[aria-label*="next swipe" i]',
+  'button[aria-label*="swipe right" i]',
+  'button[title*="swipe" i]',
+];
+
 // Splits a selector list on its top-level commas only. A comma inside brackets,
 // parentheses or quotes belongs to the selector rather than separating the
 // list, so :is(a, b) and [title="x, y"] survive being pasted in.
@@ -321,11 +339,17 @@ const CONFIG = {
   costOut: 0,
   maxGrowthPct: 60,
   minShrinkPct: 40,
-  // The rewrite as a reroll beside the reply rather than over it. Off by
+  // The rewrite as a swipe beside the reply rather than over it. Off by
   // default: it changes what the chat holds rather than only what it says, and
-  // a reader who has not asked for that should not find their reroll count
+  // a reader who has not asked for that should not find their swipe count
   // going up on every reply.
   asSwipe: false,
+  // The arrows on a message, which are what moves a reply on to the swipe the
+  // refine went into. Held as a setting rather than written into the code for
+  // the same reason the input box selectors are: the day a Lumiverse update
+  // renames them, the refine goes in as a swipe nobody is shown, and without a
+  // box to correct it the only way out is a release of this.
+  swipeSelector: SWIPE_PICKS.join(", "),
   // Phrases this chat has worn out. Off by default, since it reads the chat's
   // replies. Turned on by putting {{overused}} in a block.
   wornOn: false,
@@ -1808,9 +1832,9 @@ const LIMIT_FIELDS: Field[] = [
   },
   {
     key: "asSwipe",
-    label: "Add the refine as a reroll instead of writing over the reply",
+    label: "Add the refine as a swipe instead of writing over the reply",
     type: "bool",
-    hint: "Off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that reroll off again. Needs a build that gives a message rerolls; where one does not, the rewrite is written over the reply as usual.",
+    hint: "Off by default. On, the rewrite goes in beside the reply as another swipe and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that swipe off again. Needs a build that gives a message swipes; where one does not, the rewrite is written over the reply as usual.",
   },
   {
     key: "passMode",
@@ -3324,18 +3348,50 @@ export function setup(ctx: Ctx, overrides?: any) {
   // value is already held under it, since a wait longer than an hour is capped
   // to this on the way in.
   const BACKSTOP_S = 3700;
-  function armDeadman(allowMs?: number) {
+  // When the run this deadline belongs to began, and how much of the wait the
+  // backend has been told to spend on purpose. The deadline is worked out from
+  // these rather than from now, so re-arming moves it no further out than the
+  // waiting actually justifies.
+  //
+  // Re-arming from now was the hole. Every provider wait and every message of a
+  // run through the chat pushed the deadline a full wait into the future, so a
+  // refine told to give up after a quarter of an hour could sit there for
+  // three times that and the panel would keep saying it was thinking. The
+  // setting says give up after this long, and it has to mean since the run
+  // started.
+  let deadFrom = 0;
+  let deadAllow = 0;
+  //
+  // `fresh` starts the stretch again rather than continuing it. A run through
+  // the chat is the one caller that wants that: each reply it finishes proves
+  // the run is alive, so the wait is per reply there, and holding forty replies
+  // to one reply's wait would cut short a run that is working perfectly well.
+  // A provider wait inside one refine is the opposite case and is not fresh.
+  function armDeadman(allowMs?: number, fresh?: boolean) {
     if (deadman) clearTimeout(deadman);
+    if (fresh) {
+      deadFrom = 0;
+      deadAllow = 0;
+    }
     const cap = waitCap();
     // Time the backend is spending on purpose, which is not time it has gone
-    // missing for. Added on top of the wait rather than counted against it.
-    const allow = Math.max(0, Number(allowMs) || 0) / 1000;
+    // missing for. Added on top of the wait rather than counted against it, and
+    // added up across the run rather than replaced, since two waits in a row
+    // are both time spent on purpose.
+    if (!deadFrom) deadFrom = Date.now();
+    deadAllow += Math.max(0, Number(allowMs) || 0) / 1000;
+    const allow = deadAllow;
     // The wait switched off means do not cut the model short, and an hour does
     // not cut any refine short: it is the ceiling every other setting is
     // already held to. What it does catch is the panel left marked busy by
     // something that went away without a word, which is the one state nothing
     // else can clear and a reload is the only way out of.
     const secs = cap ? Math.min(BACKSTOP_S, Math.max(20, cap + 15) + allow) : BACKSTOP_S;
+    // What is left of it. The run started at deadFrom, so a deadline set again
+    // partway through is the same deadline, not a fresh one. Never below a
+    // second, so a run already past its deadline ends on the next tick rather
+    // than through a timer asked for a negative delay.
+    const left = Math.max(1, secs - (Date.now() - deadFrom) / 1000);
     // The backend gives up at the timeout, so this waits a little longer than
     // that: it should only ever fire when the answer itself went missing.
     deadman = setTimeout(
@@ -3346,6 +3402,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         const why = cap
           ? "nothing came back within " + Math.round(secs) + "s"
           : "nothing came back in an hour, and the wait is switched off, so this is the backstop";
+        deadFrom = 0;
+        deadAllow = 0;
         tally.dropped++;
         countDrop(why);
         lastRun = { ms: lastRunMs, ok: false, why: why };
@@ -3353,7 +3411,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         toast("The refine never came back. Nothing was changed.", true);
         paint();
       },
-      secs * 1000,
+      left * 1000,
     );
   }
   disposers.push(() => {
@@ -3379,18 +3437,117 @@ export function setup(ctx: Ctx, overrides?: any) {
         clearTimeout(deadman);
         deadman = null;
       }
+      deadFrom = 0;
+      deadAllow = 0;
     }
     if (!on && busy && runStartedAt) lastRunMs = Date.now() - runStartedAt;
     busy = on;
+    // The sweep is counted from the start of the run, so a mark built halfway
+    // through joins where the others already are, and the next run starts its
+    // own count rather than inheriting the last one's.
+    if (on && !readFrom) readFrom = Date.now();
+    if (!on) readFrom = 0;
     paintEyes(on);
     stage = on ? why || stage || "asking" : "";
     tickLive();
+    watchMarks(on);
     if (on) {
       if (!clock) clock = setInterval(tickLive, 400);
     } else if (clock) {
       clearInterval(clock);
       clock = null;
     }
+  }
+
+  // Watching for a mark this extension did not draw.
+  //
+  // The one on the drawer tab is an SVG handed to Lumiverse once and written
+  // out again by Lumiverse whenever it redraws its sidebar, which is every
+  // change of tab. The copy that comes back is a fresh element resting shut,
+  // and the clock only reaches it on its next tick. That left the mark dead for
+  // up to four hundred milliseconds and then snapping back into a sweep the
+  // others were already most of the way through, so changing tab during a
+  // refine made the blink stall and jump. Long enough to watch happen.
+  //
+  // Answered the moment the element appears instead. The callback runs before
+  // the browser paints, so the copy that comes back is already reading in the
+  // same frame it arrived in and there is no gap to see.
+  //
+  // Only while something is running, because that is the only time a mark has
+  // anything to be out of step with, and because a chat outside a refine
+  // changes constantly for reasons none of this cares about. Nothing here
+  // writes a child anywhere, so it cannot answer itself: a class and a style
+  // are not the kind of change it is listening for.
+  let markEye: MutationObserver | null = null;
+  function watchMarks(on: boolean) {
+    if (typeof MutationObserver === "undefined" || typeof document === "undefined") return;
+    if (!on) {
+      if (markEye) {
+        try {
+          markEye.disconnect();
+        } catch (_) {}
+        markEye = null;
+      }
+      return;
+    }
+    if (markEye) return;
+    try {
+      markEye = new MutationObserver((all) => {
+        for (let i = 0; i < all.length; i++) {
+          const added = all[i].addedNodes;
+          for (let k = 0; k < added.length; k++) {
+            const node: any = added[k];
+            if (!node || node.nodeType !== 1) continue;
+            try {
+              if (
+                (node.matches && node.matches(".arf-eye")) ||
+                (node.querySelector && node.querySelector(".arf-eye"))
+              ) {
+                paintEyes(busy);
+                return;
+              }
+            } catch (_) {}
+          }
+        }
+      });
+      if (document.body) markEye.observe(document.body, { childList: true, subtree: true });
+    } catch (_) {
+      markEye = null;
+    }
+  }
+  disposers.push(() => watchMarks(false));
+
+  // How long one sweep of the pupil takes, and where the sweep is counted from.
+  //
+  // A CSS animation starts at nought when its element is built, and these
+  // elements are not built together: the panel rebuilds its own mark on every
+  // repaint while the ones in the chat stay where they are. Same duration,
+  // different starting points, so at any moment one pupil is crossing while
+  // another is snapping back, which reads as them moving opposite ways.
+  //
+  // A negative delay is how an animation joins a cycle already in progress. One
+  // origin per run, so every mark drawn during that run lands at the same point
+  // in the sweep whenever it happens to be built.
+  const READ_MS = 1700;
+  let readFrom = 0;
+  function readPhase(): string {
+    if (!readFrom) readFrom = Date.now();
+    return "-" + ((Date.now() - readFrom) % READ_MS) + "ms";
+  }
+
+  // Putting a mark into a state, and giving it the phase to go with it. Both
+  // the pass over every mark and the floating button's own paint come through
+  // here, because a mark set reading without a phase starts its own sweep and
+  // is the one out of step with the rest.
+  function wearEye(eye: any, want: string): void {
+    try {
+      if (String(eye.getAttribute("class") || "") === want) return;
+      eye.setAttribute("class", want);
+      const at = want.indexOf("arf-eye-read") >= 0 ? readPhase() : "";
+      const parts = eye.querySelectorAll(".arf-eye-pupil,.arf-eye-ball");
+      for (let k = 0; k < parts.length; k++)
+        (parts[k] as HTMLElement).style.animationDelay = at;
+    } catch (_) {}
   }
 
   // Every mark this extension has drawn, told the same thing at the same time.
@@ -3427,10 +3584,9 @@ export function setup(ctx: Ctx, overrides?: any) {
             .trim();
           eye.setAttribute("data-arf-eyebase", base);
         }
-        const want = on ? base + " arf-eye-read" : base;
         // Only when it would change something. Writing the same class back on
         // every repaint is what restarts an animation that was already running.
-        if (String(eye.getAttribute("class") || "") !== want) eye.setAttribute("class", want);
+        wearEye(eye, on ? base + " arf-eye-read" : base);
       }
     } catch (_) {}
   }
@@ -3464,6 +3620,18 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     } catch (_) {}
     paintFloat();
+    // Every mark, again, while something is running. Some of them are the
+    // host's to draw rather than this extension's: the one on the drawer tab is
+    // an SVG handed over once and written out again by Lumiverse whenever it
+    // redraws its sidebar, which it does every time you change tab. The mark
+    // that came back was a fresh element resting shut, in the middle of a run
+    // the rest of them were still reading through. Nothing told it otherwise,
+    // so it stayed shut until the run ended.
+    //
+    // Cheap enough to do on the clock: it reads the class each mark is wearing
+    // and writes only where that would change, so a mark already reading is
+    // left exactly as it is and its sweep carries on untouched.
+    paintEyes(busy);
   }
   let lastRunMs = 0;
   disposers.push(() => {
@@ -4210,7 +4378,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-warn .arf-sign{color:var(--lumiverse-warning,#f59e0b)}" +
     ".arf-bad .arf-sign{color:var(--lumiverse-danger,#ef4444)}" +
     ".arf-good .arf-sign{color:var(--lumiverse-success,#22c55e)}" +
-    ".arf-bad-ink{color:var(--lumiverse-danger,#ef4444)}" +
     // A button that throws something away. Edged in the danger colour rather
     // than filled with it: filled, it draws the eye to the one control on the
     // panel that should not be pressed by accident.
@@ -5845,7 +6012,13 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const auto = document.createElement("label");
     auto.className = "arf-row arf-note";
-    auto.style.cursor = "pointer";
+    // As wide as the switch and its words and no wider. A label is pressable
+    // everywhere it reaches, and a row laid out as a block reaches the whole
+    // width of the card, so the empty space beside the words was switching the
+    // automatic pass on and off. Giving it a line of its own is what put that
+    // space there, and this is what takes it back out of reach.
+    auto.style.cssText =
+      "cursor:pointer;display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
     const autoBox = document.createElement("input");
     autoBox.type = "checkbox";
     autoBox.checked = !!cfg.refineOn;
@@ -5858,8 +6031,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     auto.appendChild(autoBox);
     auto.appendChild(el("span", "", "every reply, automatically"));
-    row.appendChild(auto);
     wrap.appendChild(row);
+    // Its own line, under the buttons rather than flowing after them. As one
+    // more item in a row that wraps, where it landed depended on how much room
+    // the buttons before it had left, so anything that changed the width of the
+    // panel moved it: it sat beside a button at one width and dropped below at
+    // another. A switch that moves while you are reaching for it is one you
+    // press by accident.
+    wrap.appendChild(auto);
     // Why the button is greyed out, said once rather than left to a tooltip
     // nobody sees on a phone. The master switch being off is not written out:
     // the switch is right there saying it.
@@ -7274,7 +7453,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     const reset = button("Back to the default", false);
     reset.className += " arf-danger";
     reset.addEventListener("click", () => {
-      setBlocks((editingYours() ? YOURS_DEFAULT : DEFAULT_BLOCKS).map((b) => ({ ...b })));
+      const yours = editingYours();
+      const want = (yours ? YOURS_DEFAULT : DEFAULT_BLOCKS).map((b) => ({ ...b }));
+      // The default is one of the prompts that come with the extension, so the
+      // picker has to say so. It is what the lock reads, and without it these
+      // boxes held a prompt the panel would refuse to save over while every one
+      // of them stayed open to type in. Named from the blocks about to be put
+      // there rather than written down here, so the two cannot drift.
+      //
+      // Before setting them, not after: setting them draws the card again, and
+      // a picker changed after that draw is one the lock on screen never saw.
+      const named = promptNamed(promptShape(want), yours ? "userBlocks" : "blocks");
+      if (named && isBuiltIn(named)) {
+        presetPick = named;
+        presetSaid = null;
+      }
+      setBlocks(want);
       log("put the prompt back to the default", true);
     });
     acts.appendChild(add);
@@ -7292,8 +7486,20 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A fresh install is not in this state: the picker starts on nothing and is
   // only ever set by picking, so somebody who has never opened the list can
   // still type into every block.
+  // Which of the prompts that come with the extension is loaded, or nothing.
+  //
+  // The picker and not the blocks. Two things hold the same words as a built-in
+  // prompt without being one: a copy saved under a name of your own, which is
+  // yours to edit, and a fresh install, which has chosen nothing yet and should
+  // not open locked. Only the picker tells those apart from having loaded one.
+  // What that leaves is every path that loads one without going through the
+  // picker, and those set it themselves.
+  function builtInNow(): string {
+    return presetPick && isBuiltIn(presetPick) ? presetPick : "";
+  }
+
   function onBuiltInPrompt(): boolean {
-    return !!presetPick && isBuiltIn(presetPick);
+    return !!builtInNow();
   }
 
   // Turns a control off and says why, so a screen reader gets the reason and
@@ -7303,7 +7509,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.disabled = true;
       node.style.opacity = "0.55";
       node.style.cursor = "not-allowed";
-      node.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+      node.title =
+        "Part of " + (builtInNow() || presetPick) + ", which cannot be changed. Save it as your own first.";
     } catch (_) {}
   }
 
@@ -7357,7 +7564,17 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const box = document.createElement("input");
     box.type = "checkbox";
-    if (locked) lockForBuiltIn(box);
+    // The one control that stays live on a prompt that comes with the
+    // extension. Switching a block on or off chooses which of its parts go to
+    // the model; it does not rewrite a word of what they say, which is what
+    // cannot be written over. Locking it with the rest made the parts that ship
+    // switched off unreachable: What Has Happened is one of them, so anybody
+    // wanting their memories in the prompt had to save a copy under a name of
+    // their own before they could turn it on, for a switch that was right there.
+    //
+    // A prompt with a different set of parts switched on is no longer the one
+    // the picker names, and the line under the picker says so as soon as the
+    // two part company.
     box.className = "arf-box";
     box.checked = b.on;
     box.setAttribute("aria-label", "Send " + blockLabel(b));
@@ -8330,8 +8547,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const wrap = card("Before it writes");
     for (const f of LIMIT_FIELDS.filter(
       (f) => f.key !== "maxGrowthPct" && f.key !== "minShrinkPct" && f.key !== "toast",
-    ))
+    )) {
       wrap.appendChild(fieldRow(f));
+      // Straight under the switch it belongs to rather than at the foot of the
+      // card. A selector box three settings away from the thing it answers for
+      // is a box nobody connects to that thing.
+      if (f.key === "asSwipe") wrap.appendChild(buildSwipeChild());
+    }
     return wrap;
   }
 
@@ -9022,6 +9244,137 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (soundSaid) sound.appendChild(note(soundSaid));
     }
     wrap.appendChild(sound);
+    return wrap;
+  }
+
+  // The next / swipe button, under the switch that puts a refine in beside the
+  // reply rather than over it.
+  //
+  // A child of that switch rather than a card of its own: it answers for one
+  // setting and means nothing with that setting off, so it hangs under it and
+  // is out of the way until it is wanted. The card is built either way and
+  // hidden, so turning the switch on reveals something already standing there.
+  //
+  // Everything here is the same shape as Where the input box is, on purpose.
+  // Two boxes that do the same job and look different are two things to learn.
+  function buildSwipeChild(): HTMLElement {
+    const wrap = el("div", "arf-col arf-under");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:6px;margin-top:6px";
+    hangsOff(wrap, "asSwipe");
+    wrap.appendChild(
+      fieldRow({
+        key: "swipeSelector",
+        label: "Your next / swipe button",
+        type: "text",
+        hint: "Only needed if a Lumiverse update renames the arrows on a message and the refine stops appearing as a swipe. Separated by commas and tried in the order you write them. Emptying the box falls back to the built-in list.",
+      }),
+    );
+
+    const row = el("div", "arf-row");
+    row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
+    const test = button("Test", false);
+    const said = el("span", "arf-note");
+    said.style.minHeight = "16px";
+    const WORDS: Record<string, string> = {
+      match: "found it, and it can be pressed",
+      "found, not usable": "found something, but it cannot be pressed right now",
+      "no match": "nothing on the page matches",
+      invalid: "that is not a selector the browser can read",
+      blank: "nothing here yet, so only the built-in list is used",
+    };
+    // Read when it is pressed rather than on a timer, the same as the input
+    // box's. The arrows are only on a message that has swipes, so an answer
+    // from a minute ago is an answer about a different page.
+    const run = () => {
+      const state = swipeSelectorState(String(cfg.swipeSelector || ""));
+      said.textContent = WORDS[state] || state;
+      said.style.color =
+        state === "match"
+          ? "var(--lumiverse-success,#22c55e)"
+          : state === "invalid"
+            ? "var(--lumiverse-danger,#ef4444)"
+            : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+      paintList();
+    };
+    test.addEventListener("click", run);
+    test.setAttribute("data-arf-testswipe", "1");
+    row.appendChild(test);
+    // No button that picks it for you, the same as the box above it. A picker
+    // has to give the press it was armed for to whatever is under the pointer,
+    // and this panel is over the message those arrows are on. Typing a selector
+    // works every time.
+    const put = button("Use the built-in list", false);
+    put.setAttribute("data-arf-resetswipe", "1");
+    put.addEventListener("click", () => {
+      cfg.swipeSelector = SWIPE_PICKS.join(", ");
+      persist(true);
+      paint();
+    });
+    row.appendChild(put);
+    row.appendChild(said);
+    wrap.appendChild(row);
+
+    const list = el("div", "arf-col");
+    list.setAttribute("data-arf-swipelist", "1");
+    list.style.cssText = "display:flex;flex-direction:column;gap:4px;margin-top:8px";
+    // Every selector in the order it is tried, the reader's own marked so they
+    // can see theirs went in front. Whether each one matches is filled in after
+    // Test, since reading the page on every repaint would say no match while
+    // the drawer is over the message the arrows are on.
+    function paintList() {
+      list.replaceChildren();
+      const picks = swipePicks();
+      list.setAttribute("data-arf-mine", String(picks.length));
+      const blank = !splitSelectorList(String(cfg.swipeSelector || "")).length;
+      list.appendChild(
+        el(
+          "div",
+          "arf-note",
+          blank ? "The box is empty, so the built-in list is used." : "Tried in this order.",
+        ),
+      );
+      const bad: boolean[] = [];
+      for (let i = 0; i < picks.length; i++) {
+        try {
+          document.querySelector(picks[i]);
+          bad.push(false);
+        } catch (_) {
+          bad.push(true);
+        }
+      }
+      let used = -1;
+      for (let i = 0; i < picks.length && used < 0; i++) {
+        if (bad[i]) continue;
+        let found: any = null;
+        try {
+          found = document.querySelectorAll(picks[i]);
+        } catch (_) {
+          continue;
+        }
+        if (pressableIn(found)) used = i;
+      }
+      let anyBad = false;
+      for (let i = 0; i < picks.length; i++) {
+        const line = el("div", "arf-pick");
+        if (i === used) line.className += " arf-pick-on";
+        else if (bad[i]) {
+          line.className += " arf-pick-bad";
+          anyBad = true;
+        }
+        line.textContent = picks[i];
+        line.setAttribute("data-arf-pick", i === used ? "on" : bad[i] ? "bad" : "off");
+        list.appendChild(line);
+      }
+      const notes = [
+        used < 0
+          ? "None of them finds a button on this page right now."
+          : "The highlighted one is the one in use.",
+      ];
+      if (anyBad) notes.push("The one marked in red is not a selector the browser can read.");
+      list.appendChild(el("div", "arf-note", notes.join(" ")));
+    }
+    paintList();
+    wrap.appendChild(list);
     return wrap;
   }
 
@@ -10823,6 +11176,198 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
+  // ---- the next / swipe button on a message ----
+
+  // Every selector that button is looked for under, the reader's first, the
+  // same shape and for the same reason as the input box list.
+  function swipePicks(): string[] {
+    const mine = splitSelectorList(String(cfg.swipeSelector || ""));
+    const src = mine.length ? mine : SWIPE_PICKS;
+    const out: string[] = [];
+    for (const pick of src) if (out.indexOf(pick) < 0) out.push(pick);
+    return out;
+  }
+
+  // The one match that can actually be pressed. A control this extension drew
+  // is never it, and neither is one switched off or laid out at no size:
+  // pressing either does nothing, and a card saying it found the button when
+  // that is what it found would be worse than one saying it found nothing.
+  function pressableIn(found: any, within?: Element | null): any | null {
+    if (!found) return null;
+    for (let i = 0; i < found.length; i++) {
+      const node: any = found[i];
+      try {
+        if (!node || node.disabled) continue;
+        if (node.closest && node.closest(".arf")) continue;
+        if (node.hasAttribute && node.hasAttribute("data-arf-slot")) continue;
+        if (within && within.contains && !within.contains(node)) continue;
+        const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+        if (box && (!box.width || !box.height)) continue;
+        return node;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  // The button itself, looked for inside one message where one is named. The
+  // arrows belong to a message, and the one to press is the one on the message
+  // the refine went into rather than whichever is first on the page.
+  function swipeButton(within?: Element | null): any | null {
+    for (const pick of swipePicks()) {
+      let found: any = null;
+      try {
+        found = document.querySelectorAll(pick);
+      } catch (_) {
+        continue;
+      }
+      const one = pressableIn(found, within || null);
+      if (one) return one;
+    }
+    return null;
+  }
+
+  // Whether a selector finds that button right now, in the words the card
+  // shows. Split from the finder for the same reason the input box's is: the
+  // card has to say why nothing matched.
+  function swipeSelectorState(sel: string): string {
+    const raw = String(sel || "").trim();
+    if (!raw) return "blank";
+    const parts = splitSelectorList(raw);
+    if (!parts.length) return "blank";
+    let anyValid = false;
+    let anyFound = false;
+    for (const part of parts) {
+      let found: any = null;
+      try {
+        found = document.querySelectorAll(part);
+        anyValid = true;
+      } catch (_) {
+        continue;
+      }
+      if (found.length) anyFound = true;
+      if (pressableIn(found)) return "match";
+    }
+    if (!anyValid) return "invalid";
+    return anyFound ? "found, not usable" : "no match";
+  }
+
+  // The message with this id, however this build marks one. The bubble names it
+  // outright and the other mode does not, so the mount's own scope is the way
+  // in there: it is the host's label and it is on every message in both.
+  function messageNode(id: any): Element | null {
+    const want = String(id == null ? "" : id);
+    if (!want) return null;
+    try {
+      const named = document.querySelector('[data-message-id="' + want.replace(/"/g, '\\"') + '"]');
+      if (named) return named;
+      const mounts = document.querySelectorAll('[data-spindle-scope^="message:"]');
+      for (let i = 0; i < mounts.length; i++) {
+        const parts = String(mounts[i].getAttribute("data-spindle-scope") || "").split(":");
+        if (parts.length > 1 && parts[1] === want)
+          return (mounts[i] as any).closest
+            ? (mounts[i] as any).closest("[data-message-id]") || mounts[i].parentElement
+            : mounts[i].parentElement;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Two pieces of writing reduced to something that survives being drawn. What
+  // is on screen went through Lumiverse's own markdown, so the asterisks and
+  // underscores around a word are gone from it and still in what was sent. The
+  // letters and digits are in both, in the same order, so those are what the
+  // two are compared on.
+  function textKey(raw: string): string {
+    return String(raw == null ? "" : raw)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 240);
+  }
+
+  function bodyKey(msg: Element | null): string {
+    try {
+      const body = msg && msg.querySelector ? msg.querySelector('[data-component="MessageContent"]') : null;
+      if (!body) return "";
+      return textKey(String((body as HTMLElement).innerText || body.textContent || ""));
+    } catch (_) {
+      return "";
+    }
+  }
+
+  // Bringing the swipe that was just written into view.
+  //
+  // The rewrite goes in beside the reply and the message is told that new swipe
+  // is the one showing. A build that reads that back draws it on its own and
+  // there is nothing here to do. A build that does not leaves you looking at
+  // the reply you already had, with the refine one arrow away and nothing on
+  // screen saying so, and that arrow is what this presses.
+  //
+  // Pressed only while the old writing is still on screen. On the last swipe
+  // that button asks Lumiverse for a fresh reply, which costs a call and would
+  // land on top of the refine, so it is never pressed on the chance that it
+  // helps: the swipe being moved to is one this extension has just written, and
+  // the reading of the message is what proves it is still ahead.
+  const SWIPE_LOOK_MS = 320;
+  const SWIPE_LOOKS = 6;
+  // One wait per message rather than one for the panel. A sweep refines several
+  // replies one after another, and a single slot meant each new one called off
+  // the wait belonging to the reply before it: every message but the last was
+  // left sitting on its old writing with nothing coming back for it.
+  const swipeWaits = new Map<string, any>();
+  disposers.push(() => {
+    swipeWaits.forEach((t) => clearTimeout(t));
+    swipeWaits.clear();
+  });
+
+  function showSwipe(messageId: any, before: string, after: string, left?: number) {
+    if (typeof document === "undefined") return;
+    const key = String(messageId == null ? "" : messageId);
+    const togo = left == null ? SWIPE_LOOKS : left;
+    const held = swipeWaits.get(key);
+    if (held) {
+      clearTimeout(held);
+      swipeWaits.delete(key);
+    }
+    if (!key || togo <= 0) return;
+    swipeWaits.set(key, setTimeout(() => {
+      swipeWaits.delete(key);
+      try {
+        const msg = messageNode(messageId);
+        // No message on screen to read is no answer either way, so it waits for
+        // one rather than pressing into the dark.
+        if (!msg) {
+          showSwipe(messageId, before, after, togo - 1);
+          return;
+        }
+        const now = bodyKey(msg);
+        const want = textKey(after);
+        // Already there. Either Lumiverse followed the write on its own or the
+        // reader has swiped to it, and both of those are done.
+        if (want && now.indexOf(want) >= 0) return;
+        const was = textKey(before);
+        // Anything other than the writing that was replaced, and this has no
+        // business pressing: the message has moved on to something neither of
+        // these knows about.
+        if (!was || now.indexOf(was) < 0) {
+          showSwipe(messageId, before, after, togo - 1);
+          return;
+        }
+        const btn = swipeButton(msg);
+        if (!btn) {
+          showSwipe(messageId, before, after, togo - 1);
+          return;
+        }
+        btn.click();
+        log("moved the reply on to the swipe the refine went into");
+        // Once, and then it stands down whatever happens next. Looking again
+        // would find the old writing still on screen wherever the press did not
+        // take, and press a second time, and by then the swipe this was moving
+        // to is the one showing: the next press is a fresh reply asked for by
+        // nobody, paid for by the reader.
+      } catch (_) {}
+    }, SWIPE_LOOK_MS));
+  }
+
   // Every selector the box is looked for under, the reader's first. Duplicates
   // are dropped so a selector already in the built-in list is not tried twice
   // and does not appear twice on the card that lists them.
@@ -11338,7 +11883,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const now = String(eye.getAttribute("class") || "");
         if (working) {
           eyeWasWorking = true;
-          if (now !== "arf-eye arf-eye-read") eye.setAttribute("class", "arf-eye arf-eye-read");
+          wearEye(eye, "arf-eye arf-eye-read");
         } else if (eyeWasWorking) {
           eyeWasWorking = false;
           const how = eyeStopped ? "arf-eye-stop" : "arf-eye-done";
@@ -11661,6 +12206,28 @@ export function setup(ctx: Ctx, overrides?: any) {
     return null;
   }
 
+  // Whether the host has opened this message for editing. While it is open the
+  // row of actions is gone, swapped for a box to type in with its own two
+  // buttons under it, and the footer mount stays where it was. A button falling
+  // back to that mount therefore landed on its own under the editor, in a spot
+  // nothing else on the page uses, which is where it was reported from. There
+  // is nothing for it to do there either: what it would work on is the text as
+  // it stands saved, not the text being typed over it.
+  function beingEdited(msg: Element): boolean {
+    try {
+      // The host's own mark on an open editor comes first: it is there to say
+      // exactly this, and it says it whatever the editor is made of. The box to
+      // type in is the fallback, for a build that lays the editor out without
+      // offering anything to hang a mount on.
+      return !!msg.querySelector(
+        '[data-spindle-mount="message_edit_actions"],' +
+          'textarea[name="message-edit-content"],' +
+          'textarea,[contenteditable="true"]',
+      );
+    } catch (_) {}
+    return false;
+  }
+
   // The button the host put in a row, for the next one to be made in its image.
   // The first, because the last is often a delete carrying a warning colour of
   // its own and the one before the end of the input bar is a gear with a class
@@ -11716,6 +12283,23 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Set while this is writing into the page, so the watcher below does not
   // answer its own insertions.
   let filling = false;
+  // The messages the last pass found open for editing, kept so the watcher can
+  // tell the moment one of them closes.
+  let openEditors: Element[] = [];
+
+  // Whether any message that had its button taken off has since closed its
+  // editor, or been thrown away and redrawn, which is the same thing to answer.
+  function editorClosed(): boolean {
+    for (let i = 0; i < openEditors.length; i++) {
+      const msg = openEditors[i] as any;
+      try {
+        if (!msg.isConnected || !beingEdited(msg)) return true;
+      } catch (_) {
+        return true;
+      }
+    }
+    return false;
+  }
   let slotEye: MutationObserver | null = null;
   let slotTimer: any = null;
 
@@ -11805,6 +12389,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // message are answering the same question, so they should be answering it
       // off the same reading of it.
       const holding = pickedHere();
+      const editors: Element[] = [];
       if (wantBar) {
         const bar = document.querySelector(BAR_SLOT);
         if (bar) {
@@ -11878,6 +12463,19 @@ export function setup(ctx: Ctx, overrides?: any) {
           const msg = (slot as any).closest
             ? (slot as any).closest("[data-message-id]") || slot.parentElement
             : slot.parentElement;
+          // Open for editing: nothing of this extension's belongs on it until
+          // the editor closes, and anything left over from before it opened
+          // comes off now rather than waiting for the host to redraw.
+          if (msg && beingEdited(msg)) {
+            editors.push(msg);
+            try {
+              const on = msg.querySelectorAll("[data-arf-slot]");
+              for (let k = 0; k < on.length; k++) (on[k] as HTMLElement).remove();
+              const gone = msg.querySelectorAll(".arf-slot-row");
+              for (let k = 0; k < gone.length; k++) (gone[k] as HTMLElement).remove();
+            } catch (_) {}
+            continue;
+          }
           const bar = msg ? actionBar(msg) : null;
           // Inside the row: the host's own mount when it left one there, and
           // the row itself when it did not. Either way the buttons end up laid
@@ -11969,6 +12567,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
         }
       }
+      openEditors = editors;
       paintSlots();
       // Any mark this pass has just put on the page starts at rest, so one
       // drawn while a refine is already running would sit shut among a set that
@@ -12045,7 +12644,23 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (want && !slotEye) {
       try {
         slotEye = new MutationObserver(() => {
-          if (!filling) fillSlotsSoon();
+          if (filling) return;
+          // An editor closing is answered on the spot rather than after the
+          // settle. The host puts its own buttons back with the row they live
+          // in, so one of this extension's arriving a quarter of a second later
+          // appeared beside controls that were already sitting there, which is
+          // the one thing a button in somebody else's row must not do. Every
+          // other change keeps the settle: a chat that is streaming mutates
+          // constantly and none of it is worth answering that quickly.
+          if (openEditors.length && editorClosed()) {
+            if (slotTimer) {
+              clearTimeout(slotTimer);
+              slotTimer = null;
+            }
+            fillSlots();
+            return;
+          }
+          fillSlotsSoon();
         });
         if (document.body) slotEye.observe(document.body, { childList: true, subtree: true });
       } catch (_) {
@@ -12638,6 +13253,10 @@ export function setup(ctx: Ctx, overrides?: any) {
               log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
               toast("Reply refined.");
             }
+            // The write went in beside the reply rather than over it, so the
+            // reply on screen may still be the one it was written beside.
+            if (!wasSnip && msg.swiped)
+              showSwipe(msg.messageId, String(msg.before || ""), String(msg.after || ""));
             ping();
             paint();
             return;
@@ -12945,7 +13564,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             // reported a refine that never came back while the sweep was
             // working perfectly well.
             markBusy(true);
-            armDeadman();
+            armDeadman(0, true);
             clearAck();
             paint();
             return;

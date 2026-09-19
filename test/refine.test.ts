@@ -108,7 +108,7 @@ function host(
   const writes: Array<{ id: string; content: string }> = [];
   const asked: any[] = [];
   const memoryAsked: Array<{ chatId: any; userId: any }> = [];
-  // Every write as it was sent, so a check can read the reroll list rather than
+  // Every write as it was sent, so a check can read the swipe list rather than
   // only the text that ended up on screen.
   const patches: Array<{ id: string; patch: any }> = [];
   const msgs = messages.map((m) => ({ ...m }));
@@ -3339,12 +3339,12 @@ describe("only reading what the prompt asks for", () => {
   });
 });
 
-// The refine as a reroll beside the reply rather than over it.
+// The refine as a swipe beside the reply rather than over it.
 //
 // Put it back is held in memory and gone on reload, which is the right trade
-// for an undo and a poor one for the writing itself. A reroll is Lumiverse's
+// for an undo and a poor one for the writing itself. A swipe is Lumiverse's
 // own way back: it survives a reload, and the arrows are already on the message.
-describe("adding the refine as a reroll", () => {
+describe("adding the refine as a swipe", () => {
   const swiped = (): Msg[] => {
     const list = chat() as any[];
     list[2].swipes = ["She stepped through and, suddenly, the cold just hit her."];
@@ -3383,7 +3383,7 @@ describe("adding the refine as a reroll", () => {
     expect(p.swipe_id).toBe(1);
   });
 
-  test("putting it back takes the reroll off rather than writing over it", async () => {
+  test("putting it back takes the swipe off rather than writing over it", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
       { asSwipe: true },
@@ -3402,7 +3402,7 @@ describe("adding the refine as a reroll", () => {
   });
 
   // Cutting the end off a list somebody has been working in is not an undo.
-  test("a reroll added after the refine is not cut off the end", async () => {
+  test("a swipe added after the refine is not cut off the end", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
       { asSwipe: true },
@@ -3424,8 +3424,8 @@ describe("adding the refine as a reroll", () => {
     expect(done.gone).toBe(true);
   });
 
-  // A build with no rerolls on a message has nothing to add to.
-  test("a build without rerolls writes over the reply as usual", async () => {
+  // A build with no swipes on a message has nothing to add to.
+  test("a build without swipes writes over the reply as usual", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
       { asSwipe: true },

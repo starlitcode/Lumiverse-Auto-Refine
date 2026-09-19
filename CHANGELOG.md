@@ -6,6 +6,44 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.13.0
+
+_2026-09-19_
+
+### Added
+
+- **Your next / swipe button**, a box under **Add the refine as a swipe instead of writing over the reply** on the Limits tab. It is built the way **Where the input box is** is built: CSS selectors separated by commas, tried in the order you write them, with **Test**, **Use the built-in list**, and every selector listed under the box with the one in use highlighted.
+
+  The refine is written into the message either way, and Lumiverse is told the new swipe is the one to show. Where a build draws it on its own, nothing here is pressed and the box never matters. Where a build leaves the reply you already had on screen instead, the arrow is now pressed for you, so what you are looking at is the refine rather than the writing it was put in beside. That press is what the box aims, and an update that renames those arrows is something you can correct on the day rather than wait out.
+
+  It is pressed once, and only while the writing the refine replaced is still on screen. The same arrow asks Lumiverse for a fresh reply when there is no swipe ahead of it, so it is never pressed on the chance that it helps.
+
+### Changed
+
+- **Reroll is called swipe.** The switch, its explanation and the page about it all said reroll for something Lumiverse itself calls a swipe. Nothing about what it does has changed.
+
+### Fixed
+
+- **Every part's switch in a built-in prompt stays live.** Loading one locked the whole card, switches included, and two of the parts come switched off. **What Has Happened** is one of them, so putting your memories into a built-in prompt meant saving a copy under your own name to reach a switch that was sitting right there. A switch chooses which parts go to the model, and it does not rewrite a word of what they say, so it is not what the lock is for.
+
+- **Back to the default greys the boxes out again.** Pressing it put the built-in words back and left the boxes open to type in, which read as a prompt of your own and was not one. The picker is what the lock reads, and it was being set after the card had already been drawn.
+
+- **The automatic switch keeps its place while you search.** It sat in the same row as the buttons above it, so where it landed depended on how much room those buttons had left, and a search that found nothing moved it. It now has a line of its own under them.
+
+- **A refine gives up by the second you set it.** Waiting out a provider that would not take the call gave the watchdog a fresh deadline each time it waited, so a run that waited several times could pass the limit and keep going. The limit is now counted from the moment the refine started, and the waits are added to it once.
+
+- **The eyes in the panel read in step with the ones in the chat.** Each mark started its animation from the moment its own element was built, so a mark drawn later ran behind the rest and the panel's looked as though it were moving the other way. Every mark now joins the sweep already in progress.
+
+- **No button stands under a message you are editing.** Opening a message for editing takes its row of actions away and leaves the footer behind, so the button fell back to the footer and sat on its own under the editor. There is nothing for it to do there either, since what it would work on is the reply as it stands saved rather than the text being typed over it. It comes back when the editor closes.
+
+- **The button comes back with the rest of the row.** Closing an editor put Lumiverse's own buttons back at once and this extension's a quarter of a second later, so it arrived beside controls that were already sitting there. Everything else the page redraws is still answered at the old pace, since a chat that is streaming changes constantly and none of that is worth answering that quickly.
+
+- **The mark on the drawer tab keeps blinking while you change tab.** That one is drawn by Lumiverse rather than by this extension: it is handed over once and written out again whenever the sidebar is redrawn, which is every time you change tab. The copy that came back was resting shut in the middle of a refine the rest of the marks were still reading through, and nothing told it otherwise until the refine ended.
+
+  Any mark redrawn while a refine is running is now caught as it arrives, before the browser has drawn it, and put back into the sweep at the point the others have already reached. So there is no frame where it sits still and none where it jumps.
+
+---
+
 ## 1.12.0
 
 _2026-09-19_

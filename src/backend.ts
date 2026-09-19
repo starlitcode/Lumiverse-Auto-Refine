@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -98,10 +98,10 @@ const generating = new Set<string>();
 // The text each message had before the refine that changed it, so it can go
 // back. Held in memory only, and capped, since this is a convenience rather
 // than a record: the extension does not keep your writing after a reload.
-// swipeAt is the index the refine was added at, when it was added as a reroll
-// rather than written over the reply. Put it back then means taking that reroll
+// swipeAt is the index the refine was added at, when it was added as a swipe
+// rather than written over the reply. Put it back then means taking that swipe
 // off again and going back to the one before it, not writing the original over
-// the top of it: a write would leave two rerolls saying the same thing and no
+// the top of it: a write would leave two swipes saying the same thing and no
 // way to tell which was which.
 const before = new Map<string, { text: string; at: number; swipeAt?: number }>();
 const BEFORE_MAX = 30;
@@ -1967,11 +1967,27 @@ let retryRefine = 0;
 // nothing: the model never read anything, so waiting and asking again buys the
 // refine that was already asked for rather than a second one.
 let rateWaits = 2;
-// Whether a refine is added as a reroll beside the reply rather than written
+// Whether a refine is added as a swipe beside the reply rather than written
 // over it. Off by default: it changes what the chat holds rather than what it
 // says, and a reader who has not asked for that should not find their swipe
 // count going up on every reply.
 let asSwipe = false;
+// What a message keeps its swipes under, and which one is showing. Read from
+// the message rather than assumed, so a build that carries neither is written
+// to the way it always was.
+const SWIPE_LIST_NAMES = ['swipes'];
+const SWIPE_AT_NAMES = ['swipe_id'];
+
+// The first of those names this message actually carries a list under.
+function swipeListOn(m: any): string {
+  for (const name of SWIPE_LIST_NAMES) if (m && Array.isArray(m[name])) return name;
+  return '';
+}
+
+function swipeAtOn(m: any): string {
+  for (const name of SWIPE_AT_NAMES) if (m && typeof m[name] === 'number') return name;
+  return SWIPE_AT_NAMES[0];
+}
 // Phrases this chat has worn out, and how far back to look for them. Off by
 // default, because it reads the chat's replies, which is an extra call to
 // Lumiverse. Turned on by putting the macro in a block.
@@ -3476,9 +3492,11 @@ async function saveRefined(
     // A message can hold several swipes, and the one on screen is the one to
     // write. Writing content alone leaves the active swipe holding the old text
     // on a build that reads swipes first.
-    const swipes = m && Array.isArray(m.swipes) ? m.swipes.slice() : null;
-    const idx = m && typeof m.swipe_id === 'number' ? m.swipe_id : 0;
-    // The rewrite as a reroll beside the reply rather than over it.
+    const listOn = swipeListOn(m);
+    const atOn = swipeAtOn(m);
+    const swipes = listOn ? m[listOn].slice() : null;
+    const idx = m && typeof m[atOn] === 'number' ? m[atOn] : 0;
+    // The rewrite as a swipe beside the reply rather than over it.
     //
     // Put it back is held in memory and gone on reload, which is the right
     // trade for an undo but a poor one for the writing itself: a refine you
@@ -3493,12 +3511,12 @@ async function saveRefined(
     if (asSwipe && swipes) {
       swipes.push(next);
       addedAt = swipes.length - 1;
-      patch.swipes = swipes;
-      patch.swipe_id = addedAt;
+      patch[listOn] = swipes;
+      patch[atOn] = addedAt;
     } else if (swipes && idx >= 0 && idx < swipes.length) {
       swipes[idx] = next;
-      patch.swipes = swipes;
-      patch.swipe_id = idx;
+      patch[listOn] = swipes;
+      patch[atOn] = idx;
     }
     // Written down after the shape of the write is settled, so the way back
     // knows which kind it is undoing.
@@ -3521,6 +3539,11 @@ async function saveRefined(
       after: next,
       canUndo: keepOriginal,
       kind: kind === 'snip' ? 'snip' : 'refine',
+      // Whether this went in beside the reply rather than over it. The panel
+      // cannot work that out for itself: it depends on the setting and on
+      // whether this build gives the message a swipe list at all, and only the
+      // write knows both.
+      swiped: addedAt >= 0,
     });
     return { ok: true, why: '' };
   } catch (e: any) {
@@ -4109,12 +4132,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         const patch: any = { content: kept.text };
         const swipes = Array.isArray(m.swipes) ? m.swipes.slice() : null;
         const idx = typeof m.swipe_id === 'number' ? m.swipe_id : 0;
-        // The refine was added as a reroll of its own, so putting it back is
-        // taking that reroll off again rather than writing the original over
-        // it. A write would leave two rerolls saying the same thing.
+        // The refine was added as a swipe of its own, so putting it back is
+        // taking that swipe off again rather than writing the original over
+        // it. A write would leave two swipes saying the same thing.
         //
         // Only when it is still the last one and still holds what the refine
-        // wrote. Anything else means the reader has been swiping or rerolling
+        // wrote. Anything else means the reader has been swiping or regenerating
         // since, and cutting the end off a list somebody has been working in is
         // not an undo.
         const wroteAt = typeof kept.swipeAt === 'number' ? kept.swipeAt : -1;
