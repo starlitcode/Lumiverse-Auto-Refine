@@ -65,8 +65,7 @@ const PARTS = [
             "maxGrowthPct",
             "minShrinkPct",
             "asSwipe",
-            "swipeListField",
-            "swipeAtField",
+            "swipeSelector",
             "keepOriginal",
             "confirmBeforeSave",
             "protectOn",
@@ -234,17 +233,28 @@ const PRESET_KEYS = [
 // release, under Where the input box is on the Setup tab. These stay behind
 // whatever they type, so a selector that turns out to be wrong costs nothing:
 // the built-in list still answers.
-// The names a message keeps its rerolls under, tried in order. Written down
-// here so the settings can start holding the real list rather than an empty box
-// somebody has to guess at, the same way the input box selectors do.
-const SWIPE_LIST_NAMES = ["swipes"];
-const SWIPE_AT_NAMES = ["swipe_id"];
 const INPUT_PICKS = [
     '[data-component="InputArea"] textarea[name="chat-message"]',
     'textarea[name="chat-message"]',
     '[data-component="InputArea"] textarea[aria-label="Message"]',
     '[data-component="InputArea"] textarea',
     "textarea",
+];
+// The next / swipe control on a message, which is what moves a reply on to the
+// swipe sitting beside it. Several are listed for the same reason the input box
+// has several: a Lumiverse build that renames one of them is still likely to be
+// covered by another, and a build that renames all of them is fixed from the
+// panel on the day rather than waited out.
+//
+// The same list Auto Retry looks under, so a selector written for one reads the
+// same way in the other.
+const SWIPE_PICKS = [
+    '[aria-label="Next swipe"]',
+    '[data-action="swipe-right"]',
+    '[data-testid="swipe-right"]',
+    'button[aria-label*="next swipe" i]',
+    'button[aria-label*="swipe right" i]',
+    'button[title*="swipe" i]',
 ];
 // Splits a selector list on its top-level commas only. A comma inside brackets,
 // parentheses or quotes belongs to the selector rather than separating the
@@ -335,18 +345,17 @@ const CONFIG = {
     costOut: 0,
     maxGrowthPct: 60,
     minShrinkPct: 40,
-    // The rewrite as a reroll beside the reply rather than over it. Off by
+    // The rewrite as a swipe beside the reply rather than over it. Off by
     // default: it changes what the chat holds rather than only what it says, and
-    // a reader who has not asked for that should not find their reroll count
+    // a reader who has not asked for that should not find their swipe count
     // going up on every reply.
     asSwipe: false,
-    // What the reroll is read and written through. Held as settings rather than
-    // written into the code for the same reason the input box selectors are: the
-    // day a Lumiverse update renames one of these, the reroll quietly stops
-    // happening and falls back to writing over the reply, and without a box to
-    // correct it the only way out is a release of this.
-    swipeListField: SWIPE_LIST_NAMES.join(", "),
-    swipeAtField: SWIPE_AT_NAMES.join(", "),
+    // The arrows on a message, which are what moves a reply on to the swipe the
+    // refine went into. Held as a setting rather than written into the code for
+    // the same reason the input box selectors are: the day a Lumiverse update
+    // renames them, the refine goes in as a swipe nobody is shown, and without a
+    // box to correct it the only way out is a release of this.
+    swipeSelector: SWIPE_PICKS.join(", "),
     // Phrases this chat has worn out. Off by default, since it reads the chat's
     // replies. Turned on by putting {{overused}} in a block.
     wornOn: false,
@@ -1694,25 +1703,9 @@ const LIMIT_FIELDS = [
     },
     {
         key: "asSwipe",
-        label: "Add the refine as a reroll instead of writing over the reply",
+        label: "Add the refine as a swipe instead of writing over the reply",
         type: "bool",
-        hint: "Off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that reroll off again. Needs a build that gives a message rerolls; where one does not, the rewrite is written over the reply as usual.",
-    },
-    {
-        key: "swipeListField",
-        label: "Where a message keeps its rerolls",
-        type: "text",
-        needs: { key: "asSwipe" },
-        under: true,
-        hint: "The field on a message that holds its rerolls. Separate several with commas and they are tried in the order you write them. Emptying the box falls back to the list this came with. Only worth touching if a Lumiverse update moves it and the rerolls stop appearing.",
-    },
-    {
-        key: "swipeAtField",
-        label: "Where it keeps which reroll is showing",
-        type: "text",
-        needs: { key: "asSwipe" },
-        under: true,
-        hint: "The field naming which of the rerolls is on screen. Commas and fallback work the same way. Both of these are here so an update that renames them can be worked around on the day rather than waited out.",
+        hint: "Off by default. On, the rewrite goes in beside the reply as another swipe and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that swipe off again. Needs a build that gives a message swipes; where one does not, the rewrite is written over the reply as usual.",
     },
     {
         key: "passMode",
@@ -3396,6 +3389,18 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
         paintFloat();
+        // Every mark, again, while something is running. Some of them are the
+        // host's to draw rather than this extension's: the one on the drawer tab is
+        // an SVG handed over once and written out again by Lumiverse whenever it
+        // redraws its sidebar, which it does every time you change tab. The mark
+        // that came back was a fresh element resting shut, in the middle of a run
+        // the rest of them were still reading through. Nothing told it otherwise,
+        // so it stayed shut until the run ended.
+        //
+        // Cheap enough to do on the clock: it reads the class each mark is wearing
+        // and writes only where that would change, so a mark already reading is
+        // left exactly as it is and its sweep carries on untouched.
+        paintEyes(busy);
     }
     let lastRunMs = 0;
     disposers.push(() => {
@@ -8143,8 +8148,14 @@ export function setup(ctx, overrides) {
     }
     function buildSafetyCard() {
         const wrap = card("Before it writes");
-        for (const f of LIMIT_FIELDS.filter((f) => f.key !== "maxGrowthPct" && f.key !== "minShrinkPct" && f.key !== "toast"))
+        for (const f of LIMIT_FIELDS.filter((f) => f.key !== "maxGrowthPct" && f.key !== "minShrinkPct" && f.key !== "toast")) {
             wrap.appendChild(fieldRow(f));
+            // Straight under the switch it belongs to rather than at the foot of the
+            // card. A selector box three settings away from the thing it answers for
+            // is a box nobody connects to that thing.
+            if (f.key === "asSwipe")
+                wrap.appendChild(buildSwipeChild());
+        }
         return wrap;
     }
     // Patterns the backend could not compile, named so a typo is visible instead
@@ -8732,6 +8743,127 @@ export function setup(ctx, overrides) {
                 sound.appendChild(note(soundSaid));
         }
         wrap.appendChild(sound);
+        return wrap;
+    }
+    // The next / swipe button, under the switch that puts a refine in beside the
+    // reply rather than over it.
+    //
+    // A child of that switch rather than a card of its own: it answers for one
+    // setting and means nothing with that setting off, so it hangs under it and
+    // is out of the way until it is wanted. The card is built either way and
+    // hidden, so turning the switch on reveals something already standing there.
+    //
+    // Everything here is the same shape as Where the input box is, on purpose.
+    // Two boxes that do the same job and look different are two things to learn.
+    function buildSwipeChild() {
+        const wrap = el("div", "arf-col arf-under");
+        wrap.style.cssText = "display:flex;flex-direction:column;gap:6px;margin-top:6px";
+        hangsOff(wrap, "asSwipe");
+        wrap.appendChild(fieldRow({
+            key: "swipeSelector",
+            label: "Your next / swipe button",
+            type: "text",
+            hint: "Only needed if a Lumiverse update renames the arrows on a message and the refine stops appearing as a swipe. Separated by commas and tried in the order you write them. Emptying the box falls back to the built-in list.",
+        }));
+        const row = el("div", "arf-row");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
+        const test = button("Test", false);
+        const said = el("span", "arf-note");
+        said.style.minHeight = "16px";
+        const WORDS = {
+            match: "found it, and it can be pressed",
+            "found, not usable": "found something, but it cannot be pressed right now",
+            "no match": "nothing on the page matches",
+            invalid: "that is not a selector the browser can read",
+            blank: "nothing here yet, so only the built-in list is used",
+        };
+        // Read when it is pressed rather than on a timer, the same as the input
+        // box's. The arrows are only on a message that has swipes, so an answer
+        // from a minute ago is an answer about a different page.
+        const run = () => {
+            const state = swipeSelectorState(String(cfg.swipeSelector || ""));
+            said.textContent = WORDS[state] || state;
+            said.style.color =
+                state === "match"
+                    ? "var(--lumiverse-success,#22c55e)"
+                    : state === "invalid"
+                        ? "var(--lumiverse-danger,#ef4444)"
+                        : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+            paintList();
+        };
+        test.addEventListener("click", run);
+        test.setAttribute("data-arf-testswipe", "1");
+        row.appendChild(test);
+        // No button that picks it for you, the same as the box above it. A picker
+        // has to give the press it was armed for to whatever is under the pointer,
+        // and this panel is over the message those arrows are on. Typing a selector
+        // works every time.
+        const put = button("Use the built-in list", false);
+        put.setAttribute("data-arf-resetswipe", "1");
+        put.addEventListener("click", () => {
+            cfg.swipeSelector = SWIPE_PICKS.join(", ");
+            persist(true);
+            paint();
+        });
+        row.appendChild(put);
+        row.appendChild(said);
+        wrap.appendChild(row);
+        const list = el("div", "arf-col");
+        list.setAttribute("data-arf-swipelist", "1");
+        list.style.cssText = "display:flex;flex-direction:column;gap:4px;margin-top:8px";
+        // Every selector in the order it is tried, the reader's own marked so they
+        // can see theirs went in front. Whether each one matches is filled in after
+        // Test, since reading the page on every repaint would say no match while
+        // the drawer is over the message the arrows are on.
+        function paintList() {
+            list.replaceChildren();
+            const picks = swipePicks();
+            list.setAttribute("data-arf-mine", String(picks.length));
+            const blank = !splitSelectorList(String(cfg.swipeSelector || "")).length;
+            list.appendChild(el("div", "arf-note", blank ? "The box is empty, so the built-in list is used." : "Tried in this order."));
+            const bad = [];
+            for (let i = 0; i < picks.length; i++) {
+                try {
+                    document.querySelector(picks[i]);
+                    bad.push(false);
+                }
+                catch (_) {
+                    bad.push(true);
+                }
+            }
+            let used = -1;
+            for (let i = 0; i < picks.length && used < 0; i++) {
+                if (bad[i])
+                    continue;
+                let found = null;
+                try {
+                    found = document.querySelectorAll(picks[i]);
+                }
+                catch (_) {
+                    continue;
+                }
+                if (pressableIn(found))
+                    used = i;
+            }
+            let anyBad = false;
+            for (let i = 0; i < picks.length; i++) {
+                const line = el("div", "arf-pick");
+                if (i === used)
+                    line.className += " arf-pick-on";
+                else if (bad[i]) {
+                    line.className += " arf-pick-bad";
+                    anyBad = true;
+                }
+                line.textContent = picks[i];
+                list.appendChild(line);
+            }
+            if (used >= 0)
+                list.appendChild(el("div", "arf-note", "The highlighted one is the one in use."));
+            if (anyBad)
+                list.appendChild(el("div", "arf-note", "The ones marked in red are not selectors the browser can read."));
+        }
+        paintList();
+        wrap.appendChild(list);
         return wrap;
     }
     // Where the input box is.
@@ -10489,6 +10621,209 @@ export function setup(ctx, overrides) {
             return false;
         }
     }
+    // ---- the next / swipe button on a message ----
+    // Every selector that button is looked for under, the reader's first, the
+    // same shape and for the same reason as the input box list.
+    function swipePicks() {
+        const mine = splitSelectorList(String(cfg.swipeSelector || ""));
+        const src = mine.length ? mine : SWIPE_PICKS;
+        const out = [];
+        for (const pick of src)
+            if (out.indexOf(pick) < 0)
+                out.push(pick);
+        return out;
+    }
+    // The one match that can actually be pressed. A control this extension drew
+    // is never it, and neither is one switched off or laid out at no size:
+    // pressing either does nothing, and a card saying it found the button when
+    // that is what it found would be worse than one saying it found nothing.
+    function pressableIn(found, within) {
+        if (!found)
+            return null;
+        for (let i = 0; i < found.length; i++) {
+            const node = found[i];
+            try {
+                if (!node || node.disabled)
+                    continue;
+                if (node.closest && node.closest(".arf"))
+                    continue;
+                if (node.hasAttribute && node.hasAttribute("data-arf-slot"))
+                    continue;
+                if (within && within.contains && !within.contains(node))
+                    continue;
+                const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+                if (box && (!box.width || !box.height))
+                    continue;
+                return node;
+            }
+            catch (_) { }
+        }
+        return null;
+    }
+    // The button itself, looked for inside one message where one is named. The
+    // arrows belong to a message, and the one to press is the one on the message
+    // the refine went into rather than whichever is first on the page.
+    function swipeButton(within) {
+        for (const pick of swipePicks()) {
+            let found = null;
+            try {
+                found = document.querySelectorAll(pick);
+            }
+            catch (_) {
+                continue;
+            }
+            const one = pressableIn(found, within || null);
+            if (one)
+                return one;
+        }
+        return null;
+    }
+    // Whether a selector finds that button right now, in the words the card
+    // shows. Split from the finder for the same reason the input box's is: the
+    // card has to say why nothing matched.
+    function swipeSelectorState(sel) {
+        const raw = String(sel || "").trim();
+        if (!raw)
+            return "blank";
+        const parts = splitSelectorList(raw);
+        if (!parts.length)
+            return "blank";
+        let anyValid = false;
+        let anyFound = false;
+        for (const part of parts) {
+            let found = null;
+            try {
+                found = document.querySelectorAll(part);
+                anyValid = true;
+            }
+            catch (_) {
+                continue;
+            }
+            if (found.length)
+                anyFound = true;
+            if (pressableIn(found))
+                return "match";
+        }
+        if (!anyValid)
+            return "invalid";
+        return anyFound ? "found, not usable" : "no match";
+    }
+    // The message with this id, however this build marks one. The bubble names it
+    // outright and the other mode does not, so the mount's own scope is the way
+    // in there: it is the host's label and it is on every message in both.
+    function messageNode(id) {
+        const want = String(id == null ? "" : id);
+        if (!want)
+            return null;
+        try {
+            const named = document.querySelector('[data-message-id="' + want.replace(/"/g, '\\"') + '"]');
+            if (named)
+                return named;
+            const mounts = document.querySelectorAll('[data-spindle-scope^="message:"]');
+            for (let i = 0; i < mounts.length; i++) {
+                const parts = String(mounts[i].getAttribute("data-spindle-scope") || "").split(":");
+                if (parts.length > 1 && parts[1] === want)
+                    return mounts[i].closest
+                        ? mounts[i].closest("[data-message-id]") || mounts[i].parentElement
+                        : mounts[i].parentElement;
+            }
+        }
+        catch (_) { }
+        return null;
+    }
+    // Two pieces of writing reduced to something that survives being drawn. What
+    // is on screen went through Lumiverse's own markdown, so the asterisks and
+    // underscores around a word are gone from it and still in what was sent. The
+    // letters and digits are in both, in the same order, so those are what the
+    // two are compared on.
+    function textKey(raw) {
+        return String(raw == null ? "" : raw)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "")
+            .slice(0, 240);
+    }
+    function bodyKey(msg) {
+        try {
+            const body = msg && msg.querySelector ? msg.querySelector('[data-component="MessageContent"]') : null;
+            if (!body)
+                return "";
+            return textKey(String(body.innerText || body.textContent || ""));
+        }
+        catch (_) {
+            return "";
+        }
+    }
+    // Bringing the swipe that was just written into view.
+    //
+    // The rewrite goes in beside the reply and the message is told that new swipe
+    // is the one showing. A build that reads that back draws it on its own and
+    // there is nothing here to do. A build that does not leaves you looking at
+    // the reply you already had, with the refine one arrow away and nothing on
+    // screen saying so, and that arrow is what this presses.
+    //
+    // Pressed only while the old writing is still on screen. On the last swipe
+    // that button asks Lumiverse for a fresh reply, which costs a call and would
+    // land on top of the refine, so it is never pressed on the chance that it
+    // helps: the swipe being moved to is one this extension has just written, and
+    // the reading of the message is what proves it is still ahead.
+    const SWIPE_LOOK_MS = 320;
+    const SWIPE_LOOKS = 6;
+    let swipeTimer = null;
+    disposers.push(() => {
+        if (swipeTimer)
+            clearTimeout(swipeTimer);
+        swipeTimer = null;
+    });
+    function showSwipe(messageId, before, after, left) {
+        if (typeof document === "undefined")
+            return;
+        const togo = left == null ? SWIPE_LOOKS : left;
+        if (swipeTimer) {
+            clearTimeout(swipeTimer);
+            swipeTimer = null;
+        }
+        if (togo <= 0)
+            return;
+        swipeTimer = setTimeout(() => {
+            swipeTimer = null;
+            try {
+                const msg = messageNode(messageId);
+                // No message on screen to read is no answer either way, so it waits for
+                // one rather than pressing into the dark.
+                if (!msg) {
+                    showSwipe(messageId, before, after, togo - 1);
+                    return;
+                }
+                const now = bodyKey(msg);
+                const want = textKey(after);
+                // Already there. Either Lumiverse followed the write on its own or the
+                // reader has swiped to it, and both of those are done.
+                if (want && now.indexOf(want) >= 0)
+                    return;
+                const was = textKey(before);
+                // Anything other than the writing that was replaced, and this has no
+                // business pressing: the message has moved on to something neither of
+                // these knows about.
+                if (!was || now.indexOf(was) < 0) {
+                    showSwipe(messageId, before, after, togo - 1);
+                    return;
+                }
+                const btn = swipeButton(msg);
+                if (!btn) {
+                    showSwipe(messageId, before, after, togo - 1);
+                    return;
+                }
+                btn.click();
+                log("moved the reply on to the swipe the refine went into");
+                // Once, and then it stands down whatever happens next. Looking again
+                // would find the old writing still on screen wherever the press did not
+                // take, and press a second time, and by then the swipe this was moving
+                // to is the one showing: the next press is a fresh reply asked for by
+                // nobody, paid for by the reader.
+            }
+            catch (_) { }
+        }, SWIPE_LOOK_MS);
+    }
     // Every selector the box is looked for under, the reader's first. Duplicates
     // are dropped so a selector already in the built-in list is not tried twice
     // and does not appear twice on the card that lists them.
@@ -11423,6 +11758,24 @@ export function setup(ctx, overrides) {
     // Set while this is writing into the page, so the watcher below does not
     // answer its own insertions.
     let filling = false;
+    // The messages the last pass found open for editing, kept so the watcher can
+    // tell the moment one of them closes.
+    let openEditors = [];
+    // Whether any message that had its button taken off has since closed its
+    // editor, or been thrown away and redrawn, which is the same thing to answer.
+    function editorClosed() {
+        for (let i = 0; i < openEditors.length; i++) {
+            const msg = openEditors[i];
+            try {
+                if (!msg.isConnected || !beingEdited(msg))
+                    return true;
+            }
+            catch (_) {
+                return true;
+            }
+        }
+        return false;
+    }
     let slotEye = null;
     let slotTimer = null;
     // A button in one of the host's own slots. The two refine buttons turn into
@@ -11510,6 +11863,7 @@ export function setup(ctx, overrides) {
             // message are answering the same question, so they should be answering it
             // off the same reading of it.
             const holding = pickedHere();
+            const editors = [];
             if (wantBar) {
                 const bar = document.querySelector(BAR_SLOT);
                 if (bar) {
@@ -11574,6 +11928,7 @@ export function setup(ctx, overrides) {
                     // the editor closes, and anything left over from before it opened
                     // comes off now rather than waiting for the host to redraw.
                     if (msg && beingEdited(msg)) {
+                        editors.push(msg);
                         try {
                             const on = msg.querySelectorAll("[data-arf-slot]");
                             for (let k = 0; k < on.length; k++)
@@ -11660,6 +12015,7 @@ export function setup(ctx, overrides) {
                     }
                 }
             }
+            openEditors = editors;
             paintSlots();
             // Any mark this pass has just put on the page starts at rest, so one
             // drawn while a refine is already running would sit shut among a set that
@@ -11742,8 +12098,24 @@ export function setup(ctx, overrides) {
         if (want && !slotEye) {
             try {
                 slotEye = new MutationObserver(() => {
-                    if (!filling)
-                        fillSlotsSoon();
+                    if (filling)
+                        return;
+                    // An editor closing is answered on the spot rather than after the
+                    // settle. The host puts its own buttons back with the row they live
+                    // in, so one of this extension's arriving a quarter of a second later
+                    // appeared beside controls that were already sitting there, which is
+                    // the one thing a button in somebody else's row must not do. Every
+                    // other change keeps the settle: a chat that is streaming mutates
+                    // constantly and none of it is worth answering that quickly.
+                    if (openEditors.length && editorClosed()) {
+                        if (slotTimer) {
+                            clearTimeout(slotTimer);
+                            slotTimer = null;
+                        }
+                        fillSlots();
+                        return;
+                    }
+                    fillSlotsSoon();
                 });
                 if (document.body)
                     slotEye.observe(document.body, { childList: true, subtree: true });
@@ -12363,6 +12735,10 @@ export function setup(ctx, overrides) {
                             log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
                             toast("Reply refined.");
                         }
+                        // The write went in beside the reply rather than over it, so the
+                        // reply on screen may still be the one it was written beside.
+                        if (!wasSnip && msg.swiped)
+                            showSwipe(msg.messageId, String(msg.before || ""), String(msg.after || ""));
                         ping();
                         paint();
                         return;

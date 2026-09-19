@@ -98,10 +98,10 @@ const generating = new Set<string>();
 // The text each message had before the refine that changed it, so it can go
 // back. Held in memory only, and capped, since this is a convenience rather
 // than a record: the extension does not keep your writing after a reload.
-// swipeAt is the index the refine was added at, when it was added as a reroll
-// rather than written over the reply. Put it back then means taking that reroll
+// swipeAt is the index the refine was added at, when it was added as a swipe
+// rather than written over the reply. Put it back then means taking that swipe
 // off again and going back to the one before it, not writing the original over
-// the top of it: a write would leave two rerolls saying the same thing and no
+// the top of it: a write would leave two swipes saying the same thing and no
 // way to tell which was which.
 const before = new Map<string, { text: string; at: number; swipeAt?: number }>();
 const BEFORE_MAX = 30;
@@ -1967,40 +1967,26 @@ let retryRefine = 0;
 // nothing: the model never read anything, so waiting and asking again buys the
 // refine that was already asked for rather than a second one.
 let rateWaits = 2;
-// Whether a refine is added as a reroll beside the reply rather than written
+// Whether a refine is added as a swipe beside the reply rather than written
 // over it. Off by default: it changes what the chat holds rather than what it
 // says, and a reader who has not asked for that should not find their swipe
 // count going up on every reply.
 let asSwipe = false;
-// What a message keeps its rerolls under, and which one is showing. Settings
-// rather than names written into the code: an update that renames either would
-// otherwise stop the reroll happening at all, with the rewrite quietly going
-// over the reply instead, and nothing anybody could do about it but wait.
-let swipeListField = 'swipes';
-let swipeAtField = 'swipe_id';
-
-// The names to try, in the order they were written. An empty box falls back to
-// the one this came with rather than leaving nothing to look for.
-function fieldNames(raw: string, fallback: string): string[] {
-  const out: string[] = [];
-  for (const bit of String(raw == null ? '' : raw).split(',')) {
-    const name = bit.trim();
-    if (name && out.indexOf(name) < 0) out.push(name);
-  }
-  return out.length ? out : [fallback];
-}
+// What a message keeps its swipes under, and which one is showing. Read from
+// the message rather than assumed, so a build that carries neither is written
+// to the way it always was.
+const SWIPE_LIST_NAMES = ['swipes'];
+const SWIPE_AT_NAMES = ['swipe_id'];
 
 // The first of those names this message actually carries a list under.
 function swipeListOn(m: any): string {
-  for (const name of fieldNames(swipeListField, 'swipes'))
-    if (m && Array.isArray(m[name])) return name;
+  for (const name of SWIPE_LIST_NAMES) if (m && Array.isArray(m[name])) return name;
   return '';
 }
 
 function swipeAtOn(m: any): string {
-  for (const name of fieldNames(swipeAtField, 'swipe_id'))
-    if (m && typeof m[name] === 'number') return name;
-  return fieldNames(swipeAtField, 'swipe_id')[0];
+  for (const name of SWIPE_AT_NAMES) if (m && typeof m[name] === 'number') return name;
+  return SWIPE_AT_NAMES[0];
 }
 // Phrases this chat has worn out, and how far back to look for them. Off by
 // default, because it reads the chat's replies, which is an extra call to
@@ -3510,7 +3496,7 @@ async function saveRefined(
     const atOn = swipeAtOn(m);
     const swipes = listOn ? m[listOn].slice() : null;
     const idx = m && typeof m[atOn] === 'number' ? m[atOn] : 0;
-    // The rewrite as a reroll beside the reply rather than over it.
+    // The rewrite as a swipe beside the reply rather than over it.
     //
     // Put it back is held in memory and gone on reload, which is the right
     // trade for an undo but a poor one for the writing itself: a refine you
@@ -3553,6 +3539,11 @@ async function saveRefined(
       after: next,
       canUndo: keepOriginal,
       kind: kind === 'snip' ? 'snip' : 'refine',
+      // Whether this went in beside the reply rather than over it. The panel
+      // cannot work that out for itself: it depends on the setting and on
+      // whether this build gives the message a swipe list at all, and only the
+      // write knows both.
+      swiped: addedAt >= 0,
     });
     return { ok: true, why: '' };
   } catch (e: any) {
@@ -3761,8 +3752,6 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       rateWaits = Number(s.rateWaits);
       rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
       asSwipe = !!s.asSwipe;
-      swipeListField = String(s.swipeListField == null ? '' : s.swipeListField);
-      swipeAtField = String(s.swipeAtField == null ? '' : s.swipeAtField);
       wornOn = !!s.wornOn;
       wornBack = Number(s.wornBack);
       wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
@@ -4143,12 +4132,12 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
         const patch: any = { content: kept.text };
         const swipes = Array.isArray(m.swipes) ? m.swipes.slice() : null;
         const idx = typeof m.swipe_id === 'number' ? m.swipe_id : 0;
-        // The refine was added as a reroll of its own, so putting it back is
-        // taking that reroll off again rather than writing the original over
-        // it. A write would leave two rerolls saying the same thing.
+        // The refine was added as a swipe of its own, so putting it back is
+        // taking that swipe off again rather than writing the original over
+        // it. A write would leave two swipes saying the same thing.
         //
         // Only when it is still the last one and still holds what the refine
-        // wrote. Anything else means the reader has been swiping or rerolling
+        // wrote. Anything else means the reader has been swiping or regenerating
         // since, and cutting the end off a list somebody has been working in is
         // not an undo.
         const wroteAt = typeof kept.swipeAt === 'number' ? kept.swipeAt : -1;

@@ -8132,10 +8132,16 @@ console.log("\nthe buttons in Lumiverse's own slots");
         other: other.querySelectorAll("[data-arf-slot]").length,
       };
       body.innerHTML = was;
+      // Well under the settle the watcher otherwise waits out. The host puts
+      // its own buttons back with the row, so one of ours arriving after that
+      // settle is a button popping in beside controls already sitting there.
+      await new Promise((r) => setTimeout(r, 60));
+      const straightAway = one.querySelectorAll("[data-arf-slot]").length;
       await new Promise((r) => setTimeout(r, 700));
       return {
         before,
         during,
+        straightAway,
         after: one.querySelectorAll("[data-arf-slot]").length,
       };
     });
@@ -8147,6 +8153,11 @@ console.log("\nthe buttons in Lumiverse's own slots");
     );
     ok("and leaves the message beside it alone", out.during.other === 1, JSON.stringify(out));
     ok("closing the editor puts it back", out.after === 1, JSON.stringify(out));
+    ok(
+      "and puts it back at once, rather than after the settle",
+      out.straightAway === 1,
+      JSON.stringify(out),
+    );
   });
 
   // The same message in the mode that draws a row of its own, in case the host
@@ -8798,41 +8809,71 @@ await inTab(browser, { saved: { enabled: true } }, async (page) => {
   ok("and a part that ships switched off can be turned on", out.hadOff && out.turnedOn, JSON.stringify(out));
 });
 
-// The two rows under the reroll switch, so a Lumiverse update that renames
-// either field can be worked around on the day rather than waited out.
-await inTab(browser, { saved: { enabled: true } }, async (page) => {
-  await page.waitForTimeout(400);
-  const read = () =>
-    page.evaluate(() => {
-      const tab = [...document.querySelectorAll("button")].find((b) => /^limits$/i.test((b.textContent || "").trim()));
-      if (tab) tab.click();
-      const box = (k) => document.querySelector('[data-arf-field="' + k + '"]');
-      const shows = (el) => !!el && !!el.offsetParent;
+// The selector card under the swipe switch, so a Lumiverse update that renames
+// the arrows on a message can be worked around on the day rather than waited
+// out. Built the way Where the input box is is built, since the two do the same
+// job and two boxes that do one job should not be two things to learn.
+for (const [label, viewport, touch] of [
+  ["a small phone", { width: 320, height: 680 }, true],
+  ["a phone", { width: 390, height: 844 }, true],
+  ["a desktop", { width: 1440, height: 900 }, false],
+]) {
+  await inTab(browser, { saved: { enabled: true }, viewport, touch }, async (page) => {
+    await page.waitForTimeout(400);
+    const read = () =>
+      page.evaluate(() => {
+        const tab = [...document.querySelectorAll("button")].find((b) => /^limits$/i.test((b.textContent || "").trim()));
+        if (tab) tab.click();
+        const shows = (el) => !!el && !!el.offsetParent;
+        const sw = document.querySelector('[data-arf-field="asSwipe"]');
+        const box = document.querySelector('[data-arf-field="swipeSelector"]');
+        const list = document.querySelector("[data-arf-swipelist]");
+        const drawer = document.getElementById("drawer");
+        const room = drawer ? drawer.getBoundingClientRect() : null;
+        const wide = [];
+        const small = [];
+        const coarse = matchMedia("(pointer: coarse)").matches;
+        for (const one of [box, document.querySelector("[data-arf-testswipe]"), document.querySelector("[data-arf-resetswipe]")]) {
+          if (!one || !one.offsetParent) continue;
+          const r = one.getBoundingClientRect();
+          if (room && (r.left < room.left - 1 || r.right > room.right + 1)) wide.push(one.tagName);
+          // The same floor the rest of the panel is held to on a touch screen.
+          if (coarse && r.height < 28) small.push(one.tagName);
+        }
+        return {
+          toggle: !!sw,
+          on: !!sw && sw.checked,
+          boxShows: shows(box),
+          listShows: shows(list),
+          value: box ? box.value : null,
+          test: !!document.querySelector("[data-arf-testswipe]"),
+          reset: !!document.querySelector("[data-arf-resetswipe]"),
+          picker: !!document.querySelector("[data-arf-pickswipe]"),
+          lines: list ? list.querySelectorAll(".arf-pick").length : 0,
+          wide,
+          small,
+        };
+      });
+    const off = await read();
+    await page.evaluate(async () => {
       const sw = document.querySelector('[data-arf-field="asSwipe"]');
-      return {
-        toggle: !!sw,
-        on: !!sw && sw.checked,
-        listShows: shows(box("swipeListField")),
-        atShows: shows(box("swipeAtField")),
-        listValue: box("swipeListField") ? box("swipeListField").value : null,
-        atValue: box("swipeAtField") ? box("swipeAtField").value : null,
-      };
+      sw.checked = true;
+      sw.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 500));
     });
-  const off = await read();
-  await page.evaluate(async () => {
-    const sw = document.querySelector('[data-arf-field="asSwipe"]');
-    sw.checked = true;
-    sw.dispatchEvent(new Event("change", { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 500));
+    await page.waitForTimeout(400);
+    const on = await read();
+    ok(label + ": the swipe switch is there and starts off", off.toggle && !off.on, JSON.stringify(off));
+    ok(label + ": its selector box stays shut while it is off", !off.boxShows && !off.listShows, JSON.stringify(off));
+    ok(label + ": and comes out when it is switched on", on.boxShows && on.listShows, JSON.stringify(on));
+    ok(label + ": holding the selectors it really looks under", /Next swipe/.test(on.value || ""), JSON.stringify(on.value));
+    ok(label + ": with Test and the way back beside it", on.test && on.reset, JSON.stringify(on));
+    ok(label + ": and no button offering to pick it for you", !on.picker, JSON.stringify(on));
+    ok(label + ": every selector listed in the order it is tried", on.lines >= 5, JSON.stringify(on.lines));
+    ok(label + ": nothing hanging off the side of the panel", !on.wide.length, JSON.stringify(on.wide));
+    ok(label + ": and nothing too small to press", !on.small.length, JSON.stringify(on.small));
   });
-  await page.waitForTimeout(400);
-  const on = await read();
-  ok("the reroll switch is there and starts off", off.toggle && !off.on, JSON.stringify(off));
-  ok("its two rows stay shut while it is off", !off.listShows && !off.atShows, JSON.stringify(off));
-  ok("and come out when it is switched on", on.listShows && on.atShows, JSON.stringify(on));
-  ok("holding the names it really looks for", on.listValue === "swipes" && on.atValue === "swipe_id",
-    JSON.stringify({ list: on.listValue, at: on.atValue }));
-});
+}
 
 // 3. The wait means since the run started. Re-arming used to set a whole fresh
 // wait from that moment, so each provider wait pushed the deadline further out.
@@ -8900,6 +8941,124 @@ await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) 
   ok("more than one mark reads at once", out.reading > 1, JSON.stringify(out.reading));
   ok("and each joins the sweep already in progress", out.joined, JSON.stringify(out.delays));
 });
+
+// 5. A mark Lumiverse draws rather than this extension. The one on the drawer
+// tab is an SVG handed to the host once and written out again whenever it
+// redraws its sidebar, which is every change of tab. The copy that comes back
+// is a fresh element resting shut, and a run it lands in the middle of has to
+// reach it.
+await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) => {
+  await page.evaluate(() => (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" })));
+  await page.waitForTimeout(400);
+  const out = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /refine the latest reply/i.test(b.textContent || ""));
+    btn.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const reading = document.querySelector(".arf-eye.arf-eye-read");
+    if (!reading) return { none: true };
+    // Written out the way the host writes it: the mark as it was registered,
+    // with nothing this extension has since put on it.
+    const fresh = reading.cloneNode(true);
+    fresh.removeAttribute("data-arf-eyebase");
+    fresh.setAttribute("class", "arf-eye arf-opens");
+    for (const p of fresh.querySelectorAll(".arf-eye-pupil,.arf-eye-ball")) p.style.animationDelay = "";
+    const seat = document.createElement("span");
+    seat.appendChild(fresh);
+    document.body.appendChild(seat);
+    const shutAtFirst = fresh.getAttribute("class");
+    await new Promise((r) => setTimeout(r, 700));
+    const pupil = fresh.querySelector(".arf-eye-pupil");
+    return {
+      shutAtFirst,
+      now: fresh.getAttribute("class"),
+      delay: pupil ? getComputedStyle(pupil).animationDelay : "",
+    };
+  });
+  ok("a refine is running with a mark reading", !out.none, JSON.stringify(out));
+  ok("the host's copy comes back resting", out.shutAtFirst === "arf-eye arf-opens", JSON.stringify(out));
+  ok("and is reading again a moment later", /arf-eye-read/.test(out.now || ""), JSON.stringify(out));
+  ok(
+    "in step with the marks that were already going",
+    /^-/.test(out.delay || "") && !/^-?0s$/.test(out.delay || ""),
+    JSON.stringify(out),
+  );
+});
+
+// The refine written in beside the reply, and the arrow that moves the message
+// on to it. Lumiverse is told the new swipe is the one showing; a build that
+// does not read that back leaves the old reply on screen with the refine one
+// arrow away and nothing saying so.
+{
+  const MSG = `
+  <div id="wrap">
+    <div data-message-id="msg-one">
+      <div data-component="MessageContent"><div><p>The lamp over the bench had been out for a week.</p></div></div>
+      <button type="button" aria-label="Next swipe" style="width:28px;height:28px">&gt;</button>
+      <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:footer" style="display:contents"></span>
+    </div>
+  </div>`;
+  const WAS = "The lamp over the bench had been out for a week.";
+  const NOW = "The lamp above the bench had been dead a week.";
+
+  await inTab(browser, { saved: { enabled: true, asSwipe: true } }, async (page) => {
+    const out = await page.evaluate(
+      async ([markup, was, now]) => {
+        const put = async (text) => {
+          const old = document.getElementById("wrap");
+          if (old) old.remove();
+          const wrap = document.createElement("div");
+          wrap.innerHTML = markup;
+          document.body.appendChild(wrap.firstElementChild);
+          document.querySelector('[data-component="MessageContent"] p').textContent = text;
+          window.__pressed = 0;
+          document
+            .querySelector('[aria-label="Next swipe"]')
+            .addEventListener("click", () => (window.__pressed += 1));
+          (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+          await new Promise((r) => setTimeout(r, 400));
+        };
+        const land = () =>
+          window.__fromBackend({
+            type: "refined",
+            chatId: "c1",
+            messageId: "msg-one",
+            before: was,
+            after: now,
+            canUndo: true,
+            kind: "refine",
+            swiped: true,
+          });
+        // Still showing the reply the refine was written beside.
+        await put(was);
+        land();
+        await new Promise((r) => setTimeout(r, 1200));
+        const stale = window.__pressed;
+        // And left alone from there, however long the old writing stays up. The
+        // swipe it moved to is the one showing now, so a second press would be
+        // a fresh reply asked for by nobody.
+        await new Promise((r) => setTimeout(r, 1600));
+        const after = window.__pressed;
+        // A build that followed the write on its own has nothing to press.
+        await put(now);
+        land();
+        await new Promise((r) => setTimeout(r, 1600));
+        const already = window.__pressed;
+        // Writing neither of them knows about, which is a message that has
+        // moved on since.
+        await put("She left the crate where it was and went back inside.");
+        land();
+        await new Promise((r) => setTimeout(r, 1600));
+        const other = window.__pressed;
+        return { stale, after, already, other };
+      },
+      [MSG, WAS, NOW],
+    );
+    ok("the arrow is pressed while the old writing is still up", out.stale === 1, JSON.stringify(out));
+    ok("and pressed once, never again", out.after === 1, JSON.stringify(out));
+    ok("a reply already showing the refine is left alone", out.already === 0, JSON.stringify(out));
+    ok("and so is one showing neither", out.other === 0, JSON.stringify(out));
+  });
+}
 
 await browser.close();
 
