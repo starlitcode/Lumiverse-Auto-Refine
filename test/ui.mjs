@@ -9108,6 +9108,53 @@ await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) 
     ok("a reply already showing the refine is left alone", out.already === 0, JSON.stringify(out));
     ok("and so is one showing neither", out.other === 0, JSON.stringify(out));
   });
+
+  // A sweep refines several replies one after another. Each has its own wait,
+  // so the one before is not called off by the one after it.
+  await inTab(browser, { saved: { enabled: true, asSwipe: true } }, async (page) => {
+    const out = await page.evaluate(
+      async ([was, now]) => {
+        const old = document.getElementById("wrap");
+        if (old) old.remove();
+        const wrap = document.createElement("div");
+        wrap.id = "wrap";
+        window.__pressed = {};
+        for (const id of ["msg-one", "msg-two"]) {
+          const box = document.createElement("div");
+          box.setAttribute("data-message-id", id);
+          box.innerHTML =
+            '<div data-component="MessageContent"><p></p></div>' +
+            '<button type="button" aria-label="Next swipe" style="width:28px;height:28px">&gt;</button>' +
+            '<span data-spindle-mount="message_footer" data-spindle-scope="message:' +
+            id +
+            ':footer" style="display:contents"></span>';
+          box.querySelector("p").textContent = was;
+          window.__pressed[id] = 0;
+          box.querySelector("button").addEventListener("click", () => (window.__pressed[id] += 1));
+          wrap.appendChild(box);
+        }
+        document.body.appendChild(wrap);
+        (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+        await new Promise((r) => setTimeout(r, 400));
+        // Both land inside one wait, which is what used to throw the first away.
+        for (const id of ["msg-one", "msg-two"])
+          window.__fromBackend({
+            type: "refined",
+            chatId: "c1",
+            messageId: id,
+            before: was,
+            after: now,
+            canUndo: true,
+            kind: "refine",
+            swiped: true,
+          });
+        await new Promise((r) => setTimeout(r, 1400));
+        return window.__pressed;
+      },
+      [WAS, NOW],
+    );
+    ok("a sweep follows every reply it refined", out["msg-one"] === 1 && out["msg-two"] === 1, JSON.stringify(out));
+  });
 }
 
 await browser.close();

@@ -10778,24 +10778,29 @@ export function setup(ctx, overrides) {
     // the reading of the message is what proves it is still ahead.
     const SWIPE_LOOK_MS = 320;
     const SWIPE_LOOKS = 6;
-    let swipeTimer = null;
+    // One wait per message rather than one for the panel. A sweep refines several
+    // replies one after another, and a single slot meant each new one called off
+    // the wait belonging to the reply before it: every message but the last was
+    // left sitting on its old writing with nothing coming back for it.
+    const swipeWaits = new Map();
     disposers.push(() => {
-        if (swipeTimer)
-            clearTimeout(swipeTimer);
-        swipeTimer = null;
+        swipeWaits.forEach((t) => clearTimeout(t));
+        swipeWaits.clear();
     });
     function showSwipe(messageId, before, after, left) {
         if (typeof document === "undefined")
             return;
+        const key = String(messageId == null ? "" : messageId);
         const togo = left == null ? SWIPE_LOOKS : left;
-        if (swipeTimer) {
-            clearTimeout(swipeTimer);
-            swipeTimer = null;
+        const held = swipeWaits.get(key);
+        if (held) {
+            clearTimeout(held);
+            swipeWaits.delete(key);
         }
-        if (togo <= 0)
+        if (!key || togo <= 0)
             return;
-        swipeTimer = setTimeout(() => {
-            swipeTimer = null;
+        swipeWaits.set(key, setTimeout(() => {
+            swipeWaits.delete(key);
             try {
                 const msg = messageNode(messageId);
                 // No message on screen to read is no answer either way, so it waits for
@@ -10832,7 +10837,7 @@ export function setup(ctx, overrides) {
                 // nobody, paid for by the reader.
             }
             catch (_) { }
-        }, SWIPE_LOOK_MS);
+        }, SWIPE_LOOK_MS));
     }
     // Every selector the box is looked for under, the reader's first. Duplicates
     // are dropped so a selector already in the built-in list is not tried twice

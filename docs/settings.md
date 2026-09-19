@@ -133,6 +133,8 @@ Three things never move, whichever tab you left open, because they are what you 
 
   It stands in Lumiverse's own row of message buttons, beside Copy, Edit and the rest. Every display mode draws that row somewhere, and it goes in whichever one is there. A display mode that draws no row at all gets it under the message instead, centred, which is where Lumiverse would have put the row.
 
+  A message open for editing carries no button. Lumiverse takes its row of actions away while the editor is up, and what the button would work on is the reply as it stands saved rather than the words being typed over it. It comes back with the rest of the row when you close the editor.
+
   How it looks is not decided here. Both of these buttons take their appearance from the button standing next to them: the same classes, so the same size, spacing, colour, hover and focus. That means a theme reaches them, and so does CSS you wrote yourself. A rule you write for Lumiverse's own buttons applies to these without knowing they exist.
 
   Both of these buttons sit where Lumiverse puts its own, so an update that moves its controls carries these along with them rather than leaving them behind.
