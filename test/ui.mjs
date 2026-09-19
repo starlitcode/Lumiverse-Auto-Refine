@@ -6754,7 +6754,13 @@ console.log("\na built-in prompt cannot be typed into");
     ok("one of the built-in prompts was picked", picked, "");
     const held = await look(page);
     ok("the blocks stop taking typing", held.readOnly === true, JSON.stringify(held));
-    ok("the switch beside each one goes with them", held.switchOff === true, JSON.stringify(held));
+    // The switch is the one control that stays live. Turning a block on or off
+    // chooses which parts go to the model; it does not rewrite a word of what
+    // they say, and what they say is the thing that cannot be written over.
+    // Locking it put the parts that ship switched off out of reach: What Has
+    // Happened is one of them, so wanting your memories in the prompt meant
+    // saving a copy under your own name to reach a switch sitting right there.
+    ok("but the switch beside each one stays live", held.switchOff === false, JSON.stringify(held));
     ok("and so does adding another", held.addOff === true, JSON.stringify(held));
     ok("a line says why", held.said, JSON.stringify(held));
     ok("and says Save as new is the way round it", /Save as new/.test(held.text), held.text.slice(0, 200));
@@ -8102,6 +8108,63 @@ console.log("\nthe buttons in Lumiverse's own slots");
     ok("and leaves the toolbar one alone", out.bar === 1, JSON.stringify(out));
   });
 
+  // A message opened for editing. The host swaps the reply for a box to type in
+  // and keeps the footer mount, so a button falling back to that mount used to
+  // end up on its own under the editor with nothing around it.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES);
+    const out = await page.evaluate(async () => {
+      const seat = document.querySelector('[data-spindle-scope="message:msg-one:minimal:footer"]');
+      const one = seat.parentElement;
+      const other = document
+        .querySelector('[data-spindle-scope="message:msg-two:minimal:footer"]')
+        .parentElement;
+      const body = one.querySelector('[data-component="MessageContent"]');
+      const was = body.innerHTML;
+      const before = one.querySelectorAll("[data-arf-slot]").length;
+      body.innerHTML =
+        '<textarea>The lamp over the bench had been out for a week.</textarea>' +
+        '<div><button type="button">Cancel</button><button type="button">Save</button></div>';
+      await new Promise((r) => setTimeout(r, 700));
+      const during = {
+        mine: one.querySelectorAll("[data-arf-slot]").length,
+        rows: one.querySelectorAll(".arf-slot-row").length,
+        other: other.querySelectorAll("[data-arf-slot]").length,
+      };
+      body.innerHTML = was;
+      await new Promise((r) => setTimeout(r, 700));
+      return {
+        before,
+        during,
+        after: one.querySelectorAll("[data-arf-slot]").length,
+      };
+    });
+    ok("a message carries its button to begin with", out.before === 1, JSON.stringify(out));
+    ok(
+      "opening it for editing takes the button off it",
+      out.during.mine === 0 && out.during.rows === 0,
+      JSON.stringify(out),
+    );
+    ok("and leaves the message beside it alone", out.during.other === 1, JSON.stringify(out));
+    ok("closing the editor puts it back", out.after === 1, JSON.stringify(out));
+  });
+
+  // The same message in the mode that draws a row of its own, in case the host
+  // leaves that row up while the editor is open.
+  await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
+    await draw(page, MESSAGES_MINIMAL);
+    const out = await page.evaluate(async () => {
+      const one = document.querySelector('[data-message-id="msg-one"]');
+      const body = one.querySelector('[data-component="MessageContent"]');
+      const before = one.querySelectorAll("[data-arf-slot]").length;
+      body.innerHTML = '<textarea>The lamp over the bench had been out for a week.</textarea>';
+      await new Promise((r) => setTimeout(r, 700));
+      return { before, during: one.querySelectorAll("[data-arf-slot]").length };
+    });
+    ok("the row mode carries one too", out.before === 1, JSON.stringify(out));
+    ok("and it comes out of the row while the editor is open", out.during === 0, JSON.stringify(out));
+  });
+
   // Teardown. Anything left behind outlives the extension being switched off.
   await inTab(browser, { saved: { enabled: true, barButton: true, messageButton: true } }, async (page) => {
     await draw(page, MESSAGES);
@@ -8629,6 +8692,214 @@ console.log("\npicking a model setup loads it, the same as a preset");
   for (const e of errors) ok("no console errors", false, e);
   if (!errors.length) ok("no console errors", true);
 }
+
+console.log("\nthe faults reported on 1.12.0");
+
+// 1. The automatic switch keeps its place whatever the panel is showing. It was
+// one more item in a row that wraps, so where it landed depended on how much
+// room the buttons before it had left.
+await inTab(browser, { saved: { enabled: true, inputRefine: true }, viewport: { width: 420, height: 900 } }, async (page) => {
+  await page.evaluate(() => (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" })));
+  await page.waitForTimeout(350);
+  const where = () =>
+    page.evaluate(() => {
+      const lab = [...document.querySelectorAll("label")].find((l) =>
+        /every reply, automatically/i.test(l.textContent || ""),
+      );
+      if (!lab) return { found: false };
+      const r = lab.getBoundingClientRect();
+      const prev = lab.previousElementSibling && lab.previousElementSibling.getBoundingClientRect();
+      // Below the buttons rather than beside them, which is what stops the
+      // width of the panel deciding where it sits.
+      return { found: true, left: Math.round(r.left), under: !!prev && r.top >= prev.bottom - 1 };
+    });
+  const hunt = (text) =>
+    page.evaluate(async (t) => {
+      const box = [...document.querySelectorAll("input")].find((i) => /search/i.test(i.placeholder || ""));
+      box.value = t;
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 450));
+    }, text);
+  const idle = await where();
+  await hunt("Kacvskcajcajc");
+  await page.waitForTimeout(300);
+  const none = await where();
+  await hunt("wait");
+  await page.waitForTimeout(300);
+  const some = await where();
+  ok("the automatic switch sits under the buttons, not among them", idle.found && idle.under, JSON.stringify(idle));
+  ok("a search with no results leaves it where it was", none.found && none.left === idle.left && none.under, JSON.stringify({ idle, none }));
+  ok("and so does a search with results", some.found && some.left === idle.left, JSON.stringify({ idle, some }));
+});
+
+// 2. Back to the default loads one of the prompts that come with the extension,
+// so the boxes have to lock even though the picker was never touched.
+await inTab(browser, { saved: { enabled: true, blocks: [{ id: "x", name: "Mine", text: "my own words {{turn}}", role: "system", on: true }] } }, async (page) => {
+  const look = () =>
+    page.evaluate(() => {
+      const tab = [...document.querySelectorAll("button")].find((b) => /^prompt$/i.test((b.textContent || "").trim()));
+      if (tab) tab.click();
+      const boxes = [...document.querySelectorAll("[data-arf-block] textarea")];
+      return {
+        boxes: boxes.length,
+        // readOnly and not disabled. A locked block stays selectable on
+        // purpose, so a line can be copied out of a prompt you want to borrow
+        // wording from, and a disabled box cannot be selected.
+        locked: boxes.length > 0 && boxes.every((t) => t.readOnly),
+        says: /cannot be changed|Save as new/i.test(document.body.innerText),
+      };
+    });
+  await page.waitForTimeout(400);
+  const mine = await look();
+  await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /back to the default/i.test(b.textContent || ""));
+    if (btn) btn.click();
+    await new Promise((r) => setTimeout(r, 700));
+  });
+  await page.waitForTimeout(400);
+  const after = await look();
+  ok("a prompt of your own leaves the boxes open to type in", mine.boxes > 0 && !mine.locked, JSON.stringify(mine));
+  ok("back to the default locks them, with the picker never touched", after.locked, JSON.stringify(after));
+  ok("and says why", after.says, JSON.stringify(after));
+});
+
+// 2b. A prompt that comes with the extension still lets you choose which of its
+// parts go to the model. Some of them ship switched off, so locking the switch
+// with the rest put those out of reach entirely.
+await inTab(browser, { saved: { enabled: true } }, async (page) => {
+  await page.waitForTimeout(400);
+  const out = await page.evaluate(async () => {
+    const tab = [...document.querySelectorAll("button")].find((b) => /^prompt$/i.test((b.textContent || "").trim()));
+    if (tab) tab.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const btn = [...document.querySelectorAll("button")].find((b) => /back to the default/i.test(b.textContent || ""));
+    if (btn) btn.click();
+    await new Promise((r) => setTimeout(r, 700));
+    const boxes = [...document.querySelectorAll("[data-arf-block] textarea")];
+    const switches = [...document.querySelectorAll('input[type="checkbox"][aria-label^="Send "]')];
+    void boxes;
+    const off = switches.filter((c) => !c.checked);
+    const before = off.length;
+    if (off[0]) {
+      off[0].checked = true;
+      off[0].dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const now = [...document.querySelectorAll('input[type="checkbox"][aria-label^="Send "]')];
+    return {
+      textLocked: boxes.length > 0 && boxes.every((t) => t.readOnly),
+      switchesLive: switches.length > 0 && switches.every((c) => !c.disabled),
+      hadOff: before > 0,
+      turnedOn: now.filter((c) => !c.checked).length === before - 1,
+    };
+  });
+  ok("the words of a prompt that comes with it stay locked", out.textLocked, JSON.stringify(out));
+  ok("but every part's switch stays live", out.switchesLive, JSON.stringify(out));
+  ok("and a part that ships switched off can be turned on", out.hadOff && out.turnedOn, JSON.stringify(out));
+});
+
+// The two rows under the reroll switch, so a Lumiverse update that renames
+// either field can be worked around on the day rather than waited out.
+await inTab(browser, { saved: { enabled: true } }, async (page) => {
+  await page.waitForTimeout(400);
+  const read = () =>
+    page.evaluate(() => {
+      const tab = [...document.querySelectorAll("button")].find((b) => /^limits$/i.test((b.textContent || "").trim()));
+      if (tab) tab.click();
+      const box = (k) => document.querySelector('[data-arf-field="' + k + '"]');
+      const shows = (el) => !!el && !!el.offsetParent;
+      const sw = document.querySelector('[data-arf-field="asSwipe"]');
+      return {
+        toggle: !!sw,
+        on: !!sw && sw.checked,
+        listShows: shows(box("swipeListField")),
+        atShows: shows(box("swipeAtField")),
+        listValue: box("swipeListField") ? box("swipeListField").value : null,
+        atValue: box("swipeAtField") ? box("swipeAtField").value : null,
+      };
+    });
+  const off = await read();
+  await page.evaluate(async () => {
+    const sw = document.querySelector('[data-arf-field="asSwipe"]');
+    sw.checked = true;
+    sw.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+  });
+  await page.waitForTimeout(400);
+  const on = await read();
+  ok("the reroll switch is there and starts off", off.toggle && !off.on, JSON.stringify(off));
+  ok("its two rows stay shut while it is off", !off.listShows && !off.atShows, JSON.stringify(off));
+  ok("and come out when it is switched on", on.listShows && on.atShows, JSON.stringify(on));
+  ok("holding the names it really looks for", on.listValue === "swipes" && on.atValue === "swipe_id",
+    JSON.stringify({ list: on.listValue, at: on.atValue }));
+});
+
+// 3. The wait means since the run started. Re-arming used to set a whole fresh
+// wait from that moment, so each provider wait pushed the deadline further out.
+await inTab(browser, { saved: { enabled: true, timeoutSecs: 5 } }, async (page) => {
+  await page.evaluate(() => {
+    window.__makeComposer("");
+    (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+  });
+  await page.waitForTimeout(350);
+  const began = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /refine the latest reply/i.test(b.textContent || ""));
+    window.__sent.length = 0;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 150));
+    const ask = window.__sent.find((m) => /refine/.test(m.type || ""));
+    if (ask) window.__fromBackend({ type: "refine_ack", requestId: ask.requestId });
+    window.__t0 = Date.now();
+    return !!ask;
+  });
+  // Two provider waits partway through, which is what used to move the deadline.
+  await page.waitForTimeout(3000);
+  await page.evaluate(() => window.__fromBackend({ type: "refine_stage", stage: "waiting", waitMs: 1000, attempt: 1, of: 2 }));
+  await page.waitForTimeout(3000);
+  await page.evaluate(() => window.__fromBackend({ type: "refine_stage", stage: "waiting", waitMs: 1000, attempt: 2, of: 2 }));
+  const gaveUp = await page.evaluate(async () => {
+    for (let i = 0; i < 80; i++) {
+      if (!/Thinking|Asking|Writing|Checking|Stop this refine/i.test(document.body.innerText))
+        return Math.round((Date.now() - window.__t0) / 1000);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return -1;
+  });
+  ok("a refine given five seconds gives up", began && gaveUp > 0, String(gaveUp));
+  // Five seconds floors to twenty, plus the two seconds of waiting it was told
+  // to allow. Anything near forty is the deadline having been set again whole.
+  ok("once, rather than once per provider wait", gaveUp > 0 && gaveUp <= 30, gaveUp + "s");
+});
+
+// 4. Every reading mark joins the same sweep, whenever its element was built.
+await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) => {
+  await page.evaluate(() => (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" })));
+  await page.waitForTimeout(400);
+  const out = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /refine the latest reply/i.test(b.textContent || ""));
+    btn.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const eyes = [...document.querySelectorAll(".arf-eye.arf-eye-read")];
+    const delayOf = (el) => {
+      const p = el.querySelector(".arf-eye-pupil");
+      return p ? getComputedStyle(p).animationDelay : "";
+    };
+    return {
+      reading: eyes.length,
+      delays: eyes.map(delayOf),
+      // A negative delay is how an animation joins a cycle already running.
+      // The sweep is counted from the first mark of it, so nought is the right
+      // delay for that one and for no other: every mark at nought is every
+      // mark starting a sweep of its own, which is the fault this covers.
+      joined:
+        eyes.length > 1 &&
+        eyes.every((e) => /^-?0s$/.test(delayOf(e)) || /^-/.test(delayOf(e))) &&
+        eyes.some((e) => /^-/.test(delayOf(e)) && !/^-?0s$/.test(delayOf(e))),
+    };
+  });
+  ok("more than one mark reads at once", out.reading > 1, JSON.stringify(out.reading));
+  ok("and each joins the sweep already in progress", out.joined, JSON.stringify(out.delays));
+});
 
 await browser.close();
 

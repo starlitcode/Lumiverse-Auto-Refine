@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -1972,6 +1972,36 @@ let rateWaits = 2;
 // says, and a reader who has not asked for that should not find their swipe
 // count going up on every reply.
 let asSwipe = false;
+// What a message keeps its rerolls under, and which one is showing. Settings
+// rather than names written into the code: an update that renames either would
+// otherwise stop the reroll happening at all, with the rewrite quietly going
+// over the reply instead, and nothing anybody could do about it but wait.
+let swipeListField = 'swipes';
+let swipeAtField = 'swipe_id';
+
+// The names to try, in the order they were written. An empty box falls back to
+// the one this came with rather than leaving nothing to look for.
+function fieldNames(raw: string, fallback: string): string[] {
+  const out: string[] = [];
+  for (const bit of String(raw == null ? '' : raw).split(',')) {
+    const name = bit.trim();
+    if (name && out.indexOf(name) < 0) out.push(name);
+  }
+  return out.length ? out : [fallback];
+}
+
+// The first of those names this message actually carries a list under.
+function swipeListOn(m: any): string {
+  for (const name of fieldNames(swipeListField, 'swipes'))
+    if (m && Array.isArray(m[name])) return name;
+  return '';
+}
+
+function swipeAtOn(m: any): string {
+  for (const name of fieldNames(swipeAtField, 'swipe_id'))
+    if (m && typeof m[name] === 'number') return name;
+  return fieldNames(swipeAtField, 'swipe_id')[0];
+}
 // Phrases this chat has worn out, and how far back to look for them. Off by
 // default, because it reads the chat's replies, which is an extra call to
 // Lumiverse. Turned on by putting the macro in a block.
@@ -3476,8 +3506,10 @@ async function saveRefined(
     // A message can hold several swipes, and the one on screen is the one to
     // write. Writing content alone leaves the active swipe holding the old text
     // on a build that reads swipes first.
-    const swipes = m && Array.isArray(m.swipes) ? m.swipes.slice() : null;
-    const idx = m && typeof m.swipe_id === 'number' ? m.swipe_id : 0;
+    const listOn = swipeListOn(m);
+    const atOn = swipeAtOn(m);
+    const swipes = listOn ? m[listOn].slice() : null;
+    const idx = m && typeof m[atOn] === 'number' ? m[atOn] : 0;
     // The rewrite as a reroll beside the reply rather than over it.
     //
     // Put it back is held in memory and gone on reload, which is the right
@@ -3493,12 +3525,12 @@ async function saveRefined(
     if (asSwipe && swipes) {
       swipes.push(next);
       addedAt = swipes.length - 1;
-      patch.swipes = swipes;
-      patch.swipe_id = addedAt;
+      patch[listOn] = swipes;
+      patch[atOn] = addedAt;
     } else if (swipes && idx >= 0 && idx < swipes.length) {
       swipes[idx] = next;
-      patch.swipes = swipes;
-      patch.swipe_id = idx;
+      patch[listOn] = swipes;
+      patch[atOn] = idx;
     }
     // Written down after the shape of the write is settled, so the way back
     // knows which kind it is undoing.
@@ -3729,6 +3761,8 @@ spindle.onFrontendMessage(async (payload: any, userId?: string) => {
       rateWaits = Number(s.rateWaits);
       rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
       asSwipe = !!s.asSwipe;
+      swipeListField = String(s.swipeListField == null ? '' : s.swipeListField);
+      swipeAtField = String(s.swipeAtField == null ? '' : s.swipeAtField);
       wornOn = !!s.wornOn;
       wornBack = Number(s.wornBack);
       wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;

@@ -6,6 +6,32 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.13.0
+
+_2026-09-19_
+
+### Added
+
+- **Where a message keeps its rerolls** and **Where it keeps which reroll is showing**, two boxes under **Add the refine as a reroll instead of writing over the reply** on the Setup tab. A reroll is written to two fields on the message, and a Lumiverse update that renames either one stops rerolls appearing with nothing you can do about it. Now the names are yours to correct, the way the input box selectors already are.
+
+  Separate several with commas and they are tried in the order you write them. Emptying a box falls back to the names this came with. Both boxes stay out of the way until the switch above them is on, and neither is worth touching while rerolls work.
+
+### Fixed
+
+- **Every part's switch in a built-in prompt stays live.** Loading one locked the whole card, switches included, and two of the parts come switched off. **What Has Happened** is one of them, so putting your memories into a built-in prompt meant saving a copy under your own name to reach a switch that was sitting right there. A switch chooses which parts go to the model, and it does not rewrite a word of what they say, so it is not what the lock is for.
+
+- **Back to the default greys the boxes out again.** Pressing it put the built-in words back and left the boxes open to type in, which read as a prompt of your own and was not one. The picker is what the lock reads, and it was being set after the card had already been drawn.
+
+- **The automatic switch keeps its place while you search.** It sat in the same row as the buttons above it, so where it landed depended on how much room those buttons had left, and a search that found nothing moved it. It now has a line of its own under them.
+
+- **A refine gives up by the second you set it.** Waiting out a provider that would not take the call gave the watchdog a fresh deadline each time it waited, so a run that waited several times could pass the limit and keep going. The limit is now counted from the moment the refine started, and the waits are added to it once.
+
+- **The eyes in the panel read in step with the ones in the chat.** Each mark started its animation from the moment its own element was built, so a mark drawn later ran behind the rest and the panel's looked as though it were moving the other way. Every mark now joins the sweep already in progress.
+
+- **No button stands under a message you are editing.** Opening a message for editing takes its row of actions away and leaves the footer behind, so the button fell back to the footer and sat on its own under the editor. There is nothing for it to do there either, since what it would work on is the reply as it stands saved rather than the text being typed over it. It comes back when the editor closes.
+
+---
+
 ## 1.12.0
 
 _2026-09-19_
