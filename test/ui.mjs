@@ -8122,9 +8122,16 @@ console.log("\nthe buttons in Lumiverse's own slots");
       const body = one.querySelector('[data-component="MessageContent"]');
       const was = body.innerHTML;
       const before = one.querySelectorAll("[data-arf-slot]").length;
+      // The editor as Lumiverse lays it out: a box to type in and its own two
+      // buttons, with the host's mount on the row that holds them.
       body.innerHTML =
-        '<textarea>The lamp over the bench had been out for a week.</textarea>' +
-        '<div><button type="button">Cancel</button><button type="button">Save</button></div>';
+        '<div class="_editArea_kqzrw_2"><div><div class="_textareaWrapper_kqzrw_49">' +
+        '<textarea name="message-edit-content" aria-label="Message content" class="_editTextarea_kqzrw_8">' +
+        'The lamp over the bench had been out for a week.</textarea></div></div>' +
+        '<div class="_editActions_kqzrw_132" data-spindle-mount="message_edit_actions" ' +
+        'data-spindle-scope-key="message:msg-one:edit-actions">' +
+        '<button type="button" class="_editCancelBtn_kqzrw_138">Cancel</button>' +
+        '<button type="button" class="_editSaveBtn_kqzrw_148">Save</button></div></div>';
       await new Promise((r) => setTimeout(r, 700));
       const during = {
         mine: one.querySelectorAll("[data-arf-slot]").length,
@@ -8168,7 +8175,12 @@ console.log("\nthe buttons in Lumiverse's own slots");
       const one = document.querySelector('[data-message-id="msg-one"]');
       const body = one.querySelector('[data-component="MessageContent"]');
       const before = one.querySelectorAll("[data-arf-slot]").length;
-      body.innerHTML = '<textarea>The lamp over the bench had been out for a week.</textarea>';
+      body.innerHTML =
+        '<div class="_editArea_kqzrw_2"><textarea name="message-edit-content" ' +
+        'class="_editTextarea_kqzrw_8">The lamp over the bench had been out for a week.</textarea>' +
+        '<div class="_editActions_kqzrw_132" data-spindle-mount="message_edit_actions" ' +
+        'data-spindle-scope-key="message:msg-one:edit-actions">' +
+        '<button type="button">Cancel</button><button type="button">Save</button></div></div>';
       await new Promise((r) => setTimeout(r, 700));
       return { before, during: one.querySelectorAll("[data-arf-slot]").length };
     });
@@ -8741,6 +8753,44 @@ await inTab(browser, { saved: { enabled: true, inputRefine: true }, viewport: { 
   ok("the automatic switch sits under the buttons, not among them", idle.found && idle.under, JSON.stringify(idle));
   ok("a search with no results leaves it where it was", none.found && none.left === idle.left && none.under, JSON.stringify({ idle, none }));
   ok("and so does a search with results", some.found && some.left === idle.left, JSON.stringify({ idle, some }));
+
+  // Its own line put empty space beside it, and a label is pressable
+  // everywhere it reaches, so that space was switching the automatic pass on
+  // and off.
+  const reach = await page.evaluate(async () => {
+    const find = () =>
+      [...document.querySelectorAll("label")].find((l) =>
+        /every reply, automatically/i.test(l.textContent || ""),
+      );
+    const lab = find();
+    const words = lab.querySelector("span");
+    const box = lab.querySelector("input");
+    const r = lab.getBoundingClientRect();
+    const said = words.getBoundingClientRect();
+    const card = lab.parentElement.getBoundingClientRect();
+    const was = !!box.checked;
+    // Past the end of the words and still well inside the card, which is the
+    // empty space that was switching it.
+    const x = Math.min(card.right - 6, said.right + 20);
+    const y = r.top + r.height / 2;
+    const under = document.elementFromPoint(x, y);
+    if (under && under.click) under.click();
+    await new Promise((r2) => setTimeout(r2, 400));
+    return {
+      // How far the pressable area runs past the last word it holds.
+      over: Math.round(r.right - said.right),
+      room: Math.round(card.right - said.right),
+      was,
+      now: !!find().querySelector("input").checked,
+      hit: under ? under.tagName + "." + String(under.className || "").split(" ")[0] : "",
+    };
+  });
+  ok(
+    "the switch reaches no further than its own words",
+    reach.room > 40 && reach.over < 12,
+    JSON.stringify(reach),
+  );
+  ok("so pressing beside it leaves it alone", reach.was === reach.now, JSON.stringify(reach));
 });
 
 // 2. Back to the default loads one of the prompts that come with the extension,

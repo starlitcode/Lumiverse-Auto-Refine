@@ -18,6 +18,8 @@ _2026-09-19_
 
   It is pressed once, and only while the writing the refine replaced is still on screen. The same arrow asks Lumiverse for a fresh reply when there is no swipe ahead of it, so it is never pressed on the chance that it helps.
 
+### Changed
+
 - **Reroll is called swipe.** The switch, its explanation and the page about it all said reroll for something Lumiverse itself calls a swipe. Nothing about what it does has changed.
 
 ### Fixed
@@ -34,7 +36,7 @@ _2026-09-19_
 
 - **No button stands under a message you are editing.** Opening a message for editing takes its row of actions away and leaves the footer behind, so the button fell back to the footer and sat on its own under the editor. There is nothing for it to do there either, since what it would work on is the reply as it stands saved rather than the text being typed over it. It comes back when the editor closes.
 
-- **And it comes back with the rest of the row.** Closing an editor put Lumiverse's own buttons back at once and this extension's a quarter of a second later, so it arrived beside controls that were already sitting there. Everything else the page redraws is still answered at the old pace, since a chat that is streaming changes constantly and none of that is worth answering that quickly.
+- **The button comes back with the rest of the row.** Closing an editor put Lumiverse's own buttons back at once and this extension's a quarter of a second later, so it arrived beside controls that were already sitting there. Everything else the page redraws is still answered at the old pace, since a chat that is streaming changes constantly and none of that is worth answering that quickly.
 
 - **The mark on the drawer tab keeps reading while you change tab.** That one is drawn by Lumiverse rather than by this extension: it is handed over once and written out again whenever the sidebar is redrawn, which is every time you change tab. The copy that came back was resting shut in the middle of a refine the rest of the marks were still reading through, and nothing told it otherwise until the refine ended. Every mark is now brought back into line while one is running, wherever it was redrawn from.
 

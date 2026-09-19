@@ -4138,7 +4138,6 @@ export function setup(ctx, overrides) {
         ".arf-warn .arf-sign{color:var(--lumiverse-warning,#f59e0b)}" +
         ".arf-bad .arf-sign{color:var(--lumiverse-danger,#ef4444)}" +
         ".arf-good .arf-sign{color:var(--lumiverse-success,#22c55e)}" +
-        ".arf-bad-ink{color:var(--lumiverse-danger,#ef4444)}" +
         // A button that throws something away. Edged in the danger colour rather
         // than filled with it: filled, it draws the eye to the one control on the
         // panel that should not be pressed by accident.
@@ -5836,7 +5835,13 @@ export function setup(ctx, overrides) {
         }
         const auto = document.createElement("label");
         auto.className = "arf-row arf-note";
-        auto.style.cursor = "pointer";
+        // As wide as the switch and its words and no wider. A label is pressable
+        // everywhere it reaches, and a row laid out as a block reaches the whole
+        // width of the card, so the empty space beside the words was switching the
+        // automatic pass on and off. Giving it a line of its own is what put that
+        // space there, and this is what takes it back out of reach.
+        auto.style.cssText =
+            "cursor:pointer;display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
         const autoBox = document.createElement("input");
         autoBox.type = "checkbox";
         autoBox.checked = !!cfg.refineOn;
@@ -8855,12 +8860,17 @@ export function setup(ctx, overrides) {
                     anyBad = true;
                 }
                 line.textContent = picks[i];
+                line.setAttribute("data-arf-pick", i === used ? "on" : bad[i] ? "bad" : "off");
                 list.appendChild(line);
             }
-            if (used >= 0)
-                list.appendChild(el("div", "arf-note", "The highlighted one is the one in use."));
+            const notes = [
+                used < 0
+                    ? "None of them finds a button on this page right now."
+                    : "The highlighted one is the one in use.",
+            ];
             if (anyBad)
-                list.appendChild(el("div", "arf-note", "The ones marked in red are not selectors the browser can read."));
+                notes.push("The one marked in red is not a selector the browser can read.");
+            list.appendChild(el("div", "arf-note", notes.join(" ")));
         }
         paintList();
         wrap.appendChild(list);
@@ -11693,7 +11703,13 @@ export function setup(ctx, overrides) {
     // it stands saved, not the text being typed over it.
     function beingEdited(msg) {
         try {
-            return !!msg.querySelector('textarea,[contenteditable="true"]');
+            // The host's own mark on an open editor comes first: it is there to say
+            // exactly this, and it says it whatever the editor is made of. The box to
+            // type in is the fallback, for a build that lays the editor out without
+            // offering anything to hang a mount on.
+            return !!msg.querySelector('[data-spindle-mount="message_edit_actions"],' +
+                'textarea[name="message-edit-content"],' +
+                'textarea,[contenteditable="true"]');
         }
         catch (_) { }
         return false;
