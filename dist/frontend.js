@@ -3274,6 +3274,7 @@ export function setup(ctx, overrides) {
         paintEyes(on);
         stage = on ? why || stage || "asking" : "";
         tickLive();
+        watchMarks(on);
         if (on) {
             if (!clock)
                 clock = setInterval(tickLive, 400);
@@ -3283,6 +3284,68 @@ export function setup(ctx, overrides) {
             clock = null;
         }
     }
+    // Watching for a mark this extension did not draw.
+    //
+    // The one on the drawer tab is an SVG handed to Lumiverse once and written
+    // out again by Lumiverse whenever it redraws its sidebar, which is every
+    // change of tab. The copy that comes back is a fresh element resting shut,
+    // and the clock only reaches it on its next tick. That left the mark dead for
+    // up to four hundred milliseconds and then snapping back into a sweep the
+    // others were already most of the way through, so changing tab during a
+    // refine made the blink stall and jump. Long enough to watch happen.
+    //
+    // Answered the moment the element appears instead. The callback runs before
+    // the browser paints, so the copy that comes back is already reading in the
+    // same frame it arrived in and there is no gap to see.
+    //
+    // Only while something is running, because that is the only time a mark has
+    // anything to be out of step with, and because a chat outside a refine
+    // changes constantly for reasons none of this cares about. Nothing here
+    // writes a child anywhere, so it cannot answer itself: a class and a style
+    // are not the kind of change it is listening for.
+    let markEye = null;
+    function watchMarks(on) {
+        if (typeof MutationObserver === "undefined" || typeof document === "undefined")
+            return;
+        if (!on) {
+            if (markEye) {
+                try {
+                    markEye.disconnect();
+                }
+                catch (_) { }
+                markEye = null;
+            }
+            return;
+        }
+        if (markEye)
+            return;
+        try {
+            markEye = new MutationObserver((all) => {
+                for (let i = 0; i < all.length; i++) {
+                    const added = all[i].addedNodes;
+                    for (let k = 0; k < added.length; k++) {
+                        const node = added[k];
+                        if (!node || node.nodeType !== 1)
+                            continue;
+                        try {
+                            if ((node.matches && node.matches(".arf-eye")) ||
+                                (node.querySelector && node.querySelector(".arf-eye"))) {
+                                paintEyes(busy);
+                                return;
+                            }
+                        }
+                        catch (_) { }
+                    }
+                }
+            });
+            if (document.body)
+                markEye.observe(document.body, { childList: true, subtree: true });
+        }
+        catch (_) {
+            markEye = null;
+        }
+    }
+    disposers.push(() => watchMarks(false));
     // How long one sweep of the pupil takes, and where the sweep is counted from.
     //
     // A CSS animation starts at nought when its element is built, and these

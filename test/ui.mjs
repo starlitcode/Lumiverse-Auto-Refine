@@ -9016,17 +9016,27 @@ await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) 
     seat.appendChild(fresh);
     document.body.appendChild(seat);
     const shutAtFirst = fresh.getAttribute("class");
+    // One frame. The mark has to be reading before the browser paints it, or
+    // the redraw is something you watch stall and then jump.
+    await new Promise((r) => requestAnimationFrame(() => r()));
+    const inOneFrame = fresh.getAttribute("class");
     await new Promise((r) => setTimeout(r, 700));
     const pupil = fresh.querySelector(".arf-eye-pupil");
     return {
       shutAtFirst,
       now: fresh.getAttribute("class"),
+      inOneFrame,
       delay: pupil ? getComputedStyle(pupil).animationDelay : "",
     };
   });
   ok("a refine is running with a mark reading", !out.none, JSON.stringify(out));
   ok("the host's copy comes back resting", out.shutAtFirst === "arf-eye arf-opens", JSON.stringify(out));
-  ok("and is reading again a moment later", /arf-eye-read/.test(out.now || ""), JSON.stringify(out));
+  ok(
+    "and is reading before the browser has drawn it",
+    /arf-eye-read/.test(out.inOneFrame || ""),
+    JSON.stringify(out),
+  );
+  ok("and is still reading a moment later", /arf-eye-read/.test(out.now || ""), JSON.stringify(out));
   ok(
     "in step with the marks that were already going",
     /^-/.test(out.delay || "") && !/^-?0s$/.test(out.delay || ""),

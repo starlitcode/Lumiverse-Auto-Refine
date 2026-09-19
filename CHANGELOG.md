@@ -38,7 +38,9 @@ _2026-09-19_
 
 - **The button comes back with the rest of the row.** Closing an editor put Lumiverse's own buttons back at once and this extension's a quarter of a second later, so it arrived beside controls that were already sitting there. Everything else the page redraws is still answered at the old pace, since a chat that is streaming changes constantly and none of that is worth answering that quickly.
 
-- **The mark on the drawer tab keeps reading while you change tab.** That one is drawn by Lumiverse rather than by this extension: it is handed over once and written out again whenever the sidebar is redrawn, which is every time you change tab. The copy that came back was resting shut in the middle of a refine the rest of the marks were still reading through, and nothing told it otherwise until the refine ended. Every mark is now brought back into line while one is running, wherever it was redrawn from.
+- **The mark on the drawer tab keeps blinking while you change tab.** That one is drawn by Lumiverse rather than by this extension: it is handed over once and written out again whenever the sidebar is redrawn, which is every time you change tab. The copy that came back was resting shut in the middle of a refine the rest of the marks were still reading through, and nothing told it otherwise until the refine ended.
+
+  Any mark redrawn while a refine is running is now caught as it arrives, before the browser has drawn it, and put back into the sweep at the point the others have already reached. So there is no frame where it sits still and none where it jumps.
 
 ---
 
