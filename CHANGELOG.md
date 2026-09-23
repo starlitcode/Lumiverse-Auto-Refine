@@ -41,6 +41,8 @@ _2026-09-23_
 
 - **The README says exactly how the one exception works.** The code does not judge your story, keeps no list of words about it, and blocks nothing on its own. The exception is one paragraph in the built-in prompts, quoted in full in the docs.
 
+- **The docs are written in plain language:** shorter sentences, lists and numbered steps, with the README kept to a short front page.
+
 - **The comments on the refusal checks say what the words about age are for:** a model that misreads an adult character as a minor.
 
 ### Fixed
@@ -54,6 +56,8 @@ _2026-09-23_
 - **With the automatic pass off, new replies no longer show up in the Log.** It said "left a reply alone" for every reply, which looked like it had tried. It also stopped the spinner of a refine you started yourself if another reply arrived.
 
 - **Renaming a preset or setup to its current name says so**, instead of "Renamed.".
+
+- **Tab names are no longer cut short.** On a phone, **Prompt** and **Context** showed as "Pro…" and "Cont…", and **Context** could be cut short in the drawer on a computer too. Each tab now starts at the width of its name.
 
 - **An install shared by several accounts uses each account's own settings.** It used one set for everyone, from whichever account's panel sent settings last. Now a refine uses the settings of the account that asked, or whose chat it is. Refines from different accounts take turns, and the panel says when one is waiting.
 

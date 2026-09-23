@@ -1745,8 +1745,9 @@ const JUDGE_FIELDS = [
         key: "judgeChecks",
         label: "What Jev checks",
         type: "lines",
+        rows: 8,
         needs: { key: "judgeMode", is: "two" },
-        hint: "One statement a line about the reply, named as reply in backticks the way the ones already here are. Jev gives the chance each is true. Keep each to one thing on the page.",
+        hint: "One check per line. Call the reply reply, in backticks, like the checks already here. Jev scores how likely each one is true.",
     },
     {
         key: "judgeOver",
@@ -4002,11 +4003,11 @@ export function setup(ctx, overrides) {
         // The weight never changes with the state. A label that goes bold on select
         // is a label that gets wider, and the whole row shifts under the finger that
         // just tapped it.
-        // Equal shares rather than each tab sized to its own label. Sized to the
-        // label, the gaps between them all differ and the selected pill reads as
-        // cramped next to the wide ones, which is the uneven look. Equal shares
-        // give one rhythm across the row and one pill size.
-        ".arf-tab{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
+        // Each tab starts at the width of its label, and the room left over is
+        // shared equally. Equal widths cut "Prompt" and "Context" short on a phone
+        // and in a narrow drawer, and a cut word is hard to read. Sharing the
+        // spare room still gives every label the same space either side of it.
+        ".arf-tab{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
         "text-align:center;" +
         "cursor:pointer;background:transparent;border:0;" +
         "padding:8px 4px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
@@ -4014,6 +4015,9 @@ export function setup(ctx, overrides) {
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
         "transition:color var(--lumiverse-transition-fast,150ms ease)," +
         "background var(--lumiverse-transition-fast,150ms ease)}" +
+        // The smallest phones leave the row a few pixels short of every label, so
+        // the space either side of a label shrinks there instead of the label.
+        "@media (max-width: 340px){.arf-tabs{gap:1px}.arf-tab{padding-left:1px;padding-right:1px}}" +
         ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "background:var(--lumiverse-primary-010,rgba(147,112,219,.1))}" +
         // Filled, and the text at full strength. Two marks rather than one, because
@@ -7062,7 +7066,7 @@ export function setup(ctx, overrides) {
             ta.setAttribute("data-arf-field", f.key);
             ta.setAttribute("aria-label", f.label);
             ta.className = "arf-field arf-mono";
-            ta.rows = 3;
+            ta.rows = f.rows || 3;
             ta.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
             ta.addEventListener("input", () => {
                 cfg[f.key] = ta.value;
@@ -8141,7 +8145,7 @@ export function setup(ctx, overrides) {
     // each one sent a question per keystroke while the answer was on its way.
     let jevStatusAsked = false;
     function buildJudgeCard() {
-        const wrap = card("One model or two", "A beta. With two, Jev, a small model that only answers yes-or-no questions, reads each reply first, and the refine model runs on the replies that need it.", cfg.judgeMode === "two" ? "two, beta" : "one");
+        const wrap = card("One model or two", "Beta. With two, a small model called Jev reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
         for (const f of JUDGE_FIELDS.slice(0, 4))
             wrap.appendChild(fieldRow(f));
         const keyRow = el("div", "arf-col");

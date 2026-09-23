@@ -1065,6 +1065,21 @@ console.log("\nsettings that were saved before");
   );
 }
 
+// A tab label cut short to "Pro..." is hard to read, most of all for somebody
+// who reads slowly. Measured at the drawer's own width, a phone, and the
+// narrowest phone in use.
+console.log("\nevery tab label is whole");
+for (const viewport of [{ width: 1280, height: 900 }, { width: 360, height: 780 }, { width: 320, height: 640 }]) {
+  await inTab(browser, { viewport, touch: viewport.width < 560 }, async (page) => {
+    const cut = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("#drawer .arf-tab"))
+        .filter((t) => t.scrollWidth > t.clientWidth)
+        .map((t) => t.textContent.trim() + " " + t.scrollWidth + ">" + t.clientWidth),
+    );
+    ok("no tab label is cut short at " + viewport.width + "px", cut.length === 0, cut.join(", "));
+  });
+}
+
 console.log("\nthe tabs");
 {
   const errors = await inTab(browser, {}, async (page) => {
