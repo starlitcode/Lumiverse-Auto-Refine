@@ -1493,6 +1493,20 @@ console.log("\none model or two");
     await settle(page);
     ok("another address shows the address box", (await shown()).url, JSON.stringify(await shown()));
 
+    // Back to one model with another address still picked. The address hangs
+    // off the host, and the host off the mode, so both go.
+    await pick("judgeMode", "one");
+    await closed(page);
+    const back = await shown();
+    ok("with one model again, the address box goes too", !back.url && !back.host, JSON.stringify(back));
+    const model = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-row="judgeModel"]');
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    });
+    ok("and so does the model name", !model);
+    await pick("judgeMode", "two");
+    await settle(page);
+
     // The key goes to the backend and nowhere the panel keeps.
     await page.evaluate(() => {
       const box = document.querySelector("#drawer [data-arf-jevkey-box]");

@@ -1763,6 +1763,9 @@ const JUDGE_FIELDS = [
         hint: "Asks Jev whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
     },
 ];
+// Every field that another can hang off, by key, so a row can ask whether the
+// row it waits on is showing itself. Filled in below, once the lists exist.
+const FIELD_BY_KEY = {};
 const COST_FIELDS = [
     {
         key: "connectionId",
@@ -1933,6 +1936,8 @@ const LIMIT_FIELDS = [
         hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
     },
 ];
+for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
+    FIELD_BY_KEY[f.key] = f;
 // getComputedStyle hands colours back as rgb() or rgba() and nothing else, so
 // those forms are the whole of what needs parsing. Anything else is unknown,
 // and unknown means leave it alone.
@@ -6916,11 +6921,19 @@ export function setup(ctx, overrides) {
     // leaves a row sitting under a switch that is off, offering a setting that
     // cannot do anything until you leave the tab and come back.
     // Whether a row has anything to do where it sits.
-    function fieldShows(f) {
+    // A row also waits on whatever the row it hangs off waits on. The address for
+    // Jev hangs off the host being your own, and the host hangs off two models:
+    // checking only the host left the address on screen with one model, for
+    // anybody who had once picked another address.
+    function fieldShows(f, depth) {
         if (!f.needs)
             return true;
         const held = cfg[f.needs.key];
-        return f.needs.is === undefined ? !!held : held === f.needs.is;
+        const own = f.needs.is === undefined ? !!held : held === f.needs.is;
+        if (!own)
+            return false;
+        const parent = FIELD_BY_KEY[f.needs.key];
+        return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
     }
     function fieldRow(f) {
         // A row that says what it hangs off does not get drawn when that thing is

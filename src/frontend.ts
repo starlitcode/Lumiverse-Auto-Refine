@@ -1893,6 +1893,10 @@ const JUDGE_FIELDS: Field[] = [
   },
 ];
 
+// Every field that another can hang off, by key, so a row can ask whether the
+// row it waits on is showing itself. Filled in below, once the lists exist.
+const FIELD_BY_KEY: Record<string, Field> = {};
+
 const COST_FIELDS: Field[] = [
   {
     key: "connectionId",
@@ -2065,6 +2069,8 @@ const LIMIT_FIELDS: Field[] = [
     hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
   },
 ];
+for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
+  FIELD_BY_KEY[f.key] = f;
 
 // ---- colour, and staying readable on a theme nobody here has seen ----
 // Everything is styled from the host's --lumiverse-* variables so it arrives in
@@ -7068,10 +7074,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   // cannot do anything until you leave the tab and come back.
 
   // Whether a row has anything to do where it sits.
-  function fieldShows(f: Field): boolean {
+  // A row also waits on whatever the row it hangs off waits on. The address for
+  // Jev hangs off the host being your own, and the host hangs off two models:
+  // checking only the host left the address on screen with one model, for
+  // anybody who had once picked another address.
+  function fieldShows(f: Field, depth?: number): boolean {
     if (!f.needs) return true;
     const held = cfg[f.needs.key];
-    return f.needs.is === undefined ? !!held : held === f.needs.is;
+    const own = f.needs.is === undefined ? !!held : held === f.needs.is;
+    if (!own) return false;
+    const parent = FIELD_BY_KEY[f.needs.key];
+    return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
   }
 
   function fieldRow(f: Field): HTMLElement {
