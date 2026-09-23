@@ -6,6 +6,30 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.14.0
+
+_2026-09-23_
+
+### Added
+
+- **`{{charGroupFocused}}` in the list of macros.** In a group chat it is the name of the character in focus, which is the one the turn belongs to. It sits beside `{{char}}` under the ones Lumiverse fills in.
+
+### Changed
+
+- **The prompts that come with it say one thing they did not.** Each told the model that the user decides how dark, explicit or crude a story gets, and that whether a line should have been written is theirs, with nothing after it. Read on its own that was a promise about everything, so it now names the one exception: sexual content involving anyone under eighteen, or anyone written as a child, is not edited. The model is told to hand that passage back exactly as it came and say why, so your reply is left as it was. A younger character in a scene with nothing sexual in it is edited like anyone else.
+
+  The panel tells you the built-in prompts have changed, and loading yours again picks this up. A prompt of your own is not touched.
+
+- **The README says plainly that Auto Refine is not for sexual content involving minors.** It says what the prompts do about it, and that the one exception is the only one.
+
+- **The refusal checks say what their words about age are for.** Models sometimes misread an adult character as a minor and decline to rewrite the scene, and the checks recognise that so the refusal is not saved over your reply. The comments beside them said this in a way that could be read as treating every refusal about age as a mistake, and they say what they mean now.
+
+### Fixed
+
+- **A built-in prompt stays locked when Lumiverse builds the panel again.** Which prompt the picker named lived only in memory, and Lumiverse takes the panel down and puts it back on its own terms: changing drawer tab does it, and so does leaving it alone for a while. The picker came back empty every time, the lock that reads it came off with it, and the boxes went back to taking typing over a prompt that cannot be written over. The picker is kept with your prompt now, and travels with it when you export one.
+
+---
+
 ## 1.13.0
 
 _2026-09-19_

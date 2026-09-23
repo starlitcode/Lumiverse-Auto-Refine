@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -1395,9 +1395,12 @@ const REFUSAL_STRONG = [
     // part left out. Nobody in a scene talks about continuing the narrative.
     /\bcontinue the (?:narrative|story|scene|roleplay) with a focus on\b/i,
     /\bwithout (?:the )?(?:explicit|graphic) (?:anatomical|sexual|physical) (?:details?|descriptions?)\b/i,
-    // The model deciding a character is too young, which is a refusal aimed at
-    // your cast rather than at your request. Nobody in a scene says a character
-    // reads as underage.
+    // The model deciding a character is under age. This is here for the false
+    // positive: an adult character, written as an adult, that a model has
+    // misread as a minor, which is a refusal that should not have happened. It
+    // is not here to get sexual content involving a minor past a model, and
+    // nothing in this extension is meant for that. Nobody in a scene says a
+    // character reads as underage, which is what keeps it off ordinary writing.
     /\b(?:appears? to be|reads as|is described as|seems to be|may be) (?:a |an )?(?:minor|underage|child)\b/i,
     // The same thing with the reason in front of the refusal. The refusal has to
     // follow it, because "that would be illegal, he said, and went back to
@@ -1496,6 +1499,17 @@ const REFUSAL_STRONG = [
     // noun, so an in-scene offer of help does not reach it.
     /\bI(?:'m| am|'d be| would be) (?:available|happy|glad) to (?:assist|help)\b[^.?!\n]{0,60}?\b(?:writing tasks?|creative writing|analysis|queries|other requests?|other topics?|other directions?|another direction|other ideas|a story|a different story|a scene|alternatives)\b/i,
 ];
+// The subjects a model names when it refuses one.
+//
+// Read this for what it is: a list of words that appear in refusal messages,
+// so that a refiner declining the job is recognised as declining it. It is
+// not a list of things the extension produces, asks for, or helps anybody
+// get. Nothing here reaches a prompt. All a match does is keep the refusal
+// from being saved over your reply, which is left as it was.
+//
+// The words about age are here for one reason: an adult character that a
+// model has misread as a minor. This extension is not meant for sexual
+// content involving minors, and does not support anybody using it for that.
 const REFUSED_SUBJECT = "(?:" +
     // Sexual writing as a category, in the words a model names it by.
     // Written with their endings, because a refusal about a backstory says

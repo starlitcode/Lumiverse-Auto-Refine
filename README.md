@@ -34,6 +34,14 @@ The switch at the top of the tab stops everything: no refine runs and no model c
 
 Nothing is written that you cannot undo. **Put it back** restores the wording a refine replaced, and **Ask before saving a refine** puts a confirmation in front of every write if you would rather see each one coming.
 
+## Not for sexual content involving minors
+
+Auto Refine is not intended for sexual content involving minors, and I do not condone or support anybody using it for that. It is a writing tool for fiction between adults, and for stories with younger characters in them where nothing sexual happens to those characters.
+
+The prompts that come with it say so to the model too. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited: the model is told to hand it back exactly as it came and say why. That is the only exception. A younger character in a scene with nothing sexual in it is edited like anyone else.
+
+I cannot control what somebody does with an extension once they have it. What I can do is say plainly where I stand, and make sure nothing in this one is built to help.
+
 ## What makes it careful
 
 Handing your writing to a model and saving whatever it says is a risky thing to do quietly, so most of this extension is about refusing to save the wrong thing.

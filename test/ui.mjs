@@ -6752,6 +6752,34 @@ console.log("\na built-in prompt cannot be typed into");
       return true;
     });
     ok("one of the built-in prompts was picked", picked, "");
+    // The lock has to survive the panel being taken down and built again.
+    // Lumiverse does that on its own terms: changing drawer tab does it, and so
+    // does leaving it alone for a while. The picker used to live in memory, so
+    // it came back empty and took the lock with it, and the boxes went back to
+    // taking typing over a prompt that cannot be written over.
+    {
+      const before = await look(page);
+      await page.evaluate(() => {
+        try { window.__teardown && window.__teardown(); } catch (_) {}
+        document.getElementById("drawer").innerHTML = "";
+        window.__handlers = {};
+        window.__teardown = window.__setup({
+          events: { on: (n, f) => { (window.__handlers[n] = window.__handlers[n] || []).push(f); return () => {}; } },
+          ui: { registerDrawerTab: () => ({ root: document.getElementById("drawer"), setBadge: () => {}, activate: () => {}, destroy: () => {} }) },
+          messaging: { send: () => {}, onMessage: () => () => {} },
+        });
+      });
+      await page.waitForTimeout(700);
+      await goTab(page, "Prompt");
+      const after = await look(page);
+      const pick = await page.evaluate(
+        () => document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+      );
+      ok("the lock is on before the panel is taken down", before.readOnly === true, JSON.stringify(before));
+      ok("and still on when Lumiverse builds it again", after.readOnly === true, JSON.stringify(after));
+      ok("with the note still saying why", after.said === true, JSON.stringify(after));
+      ok("and the picker still naming the prompt", pick === "The line edit", JSON.stringify(pick));
+    }
     const held = await look(page);
     ok("the blocks stop taking typing", held.readOnly === true, JSON.stringify(held));
     // The switch is the one control that stays live. Turning a block on or off

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.13.0";
+const VERSION = "1.14.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -36,7 +36,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "prompt",
     label: "Your prompt",
     what: "Every block, and whether a refine runs one pass or several.",
-    keys: ["blocks", "userBlocks", "passMode", "passNames"],
+    keys: ["blocks", "userBlocks", "presetPick", "passMode", "passNames"],
   },
   {
     id: "context",
@@ -489,6 +489,16 @@ const CONFIG = {
   // own stamp rather than the prompts one, so saying got it to a line about a
   // setting never quietly marks the built-in prompts as seen too.
   movedSeen: "",
+  // Which preset the picker on the Prompt tab is naming.
+  //
+  // A setting rather than a variable held in memory. Lumiverse takes this panel
+  // down and builds it again on its own terms: changing drawer tab does it, and
+  // so does leaving it alone for long enough. A picker that lived only in
+  // memory came back empty every time, and the lock that reads it came off with
+  // it, so the boxes went back to taking typing over a prompt that cannot be
+  // written over. What the picker names is part of where you were, so it is
+  // kept the way everything else on the panel is.
+  presetPick: "",
   // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
   // "userBlocks:id". A folded block draws its name and its switch and nothing
   // else, so a prompt of twenty is a list you can see at once rather than
@@ -553,6 +563,11 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
   { tag: "{{scenario}}", what: "The card's scenario.", ours: false },
   { tag: "{{persona}}", what: "Your persona for this chat.", ours: false },
   { tag: "{{char}}", what: "The character's name.", ours: false },
+  {
+    tag: "{{charGroupFocused}}",
+    what: "In a group chat, the name of the character in focus, which is the one this turn belongs to.",
+    ours: false,
+  },
   { tag: "{{user}}", what: "Your name.", ours: false },
 ];
 
@@ -885,7 +900,12 @@ const JOB_BLOCK: Block = {
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in, the same heat and the same violence in the same places, in words as " +
     "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-    "should have been written is theirs." +
+    "should have been written is theirs.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
     "\n\n" +
     "Same story, told better.\n" +
     "</your_role>",
@@ -1084,7 +1104,12 @@ const THINKS_JOB: Block = {
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in, the same heat and the same violence in the same places, in words as " +
     "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-    "should have been written is theirs." +
+    "should have been written is theirs.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
     "\n" +
     "</your_role>",
 };
@@ -1155,7 +1180,13 @@ const YOURS_JOB: Block = {
     "The user decides where the story goes, and that takes in how dark, " +
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in. How a line reads is not yours to judge here, only whether it came " +
-    "out the way they meant to type it.\n" +
+    "out the way they meant to type it.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
+    "\n" +
     "</your_role>",
 };
 
@@ -1250,7 +1281,13 @@ const YOURS_THINKS_JOB: Block = {
     "The user decides where the story goes, and that takes in how dark, " +
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in. How a line reads is not yours to judge here, only whether it came " +
-    "out the way they meant to type it.\n" +
+    "out the way they meant to type it.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
+    "\n" +
     "</your_role>",
 };
 
@@ -2509,6 +2546,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   let saveTimer: any = null;
+  // The picker, written down rather than remembered. Every assignment goes
+  // through here so none of them can be the one that forgets.
+  function pickPreset(name: string) {
+    cfg.presetPick = String(name == null ? "" : name);
+    persist(true);
+  }
+
   function persist(now?: boolean) {
     const write = () => {
       saveTimer = null;
@@ -7422,7 +7466,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         "span",
         "",
         "You are looking at " +
-          presetPick +
+          cfg.presetPick +
           ", one of the prompts built in. It cannot be written over, so the blocks below are read-only. To change it, put a name in the box under Presets and press Save as new. The copy is yours and opens for editing.",
       );
       what.style.flex = "1";
@@ -7465,7 +7509,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // a picker changed after that draw is one the lock on screen never saw.
       const named = promptNamed(promptShape(want), yours ? "userBlocks" : "blocks");
       if (named && isBuiltIn(named)) {
-        presetPick = named;
+        pickPreset(named);
         presetSaid = null;
       }
       setBlocks(want);
@@ -7495,7 +7539,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // What that leaves is every path that loads one without going through the
   // picker, and those set it themselves.
   function builtInNow(): string {
-    return presetPick && isBuiltIn(presetPick) ? presetPick : "";
+    return cfg.presetPick && isBuiltIn(cfg.presetPick) ? cfg.presetPick : "";
   }
 
   function onBuiltInPrompt(): boolean {
@@ -7510,7 +7554,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.opacity = "0.55";
       node.style.cursor = "not-allowed";
       node.title =
-        "Part of " + (builtInNow() || presetPick) + ", which cannot be changed. Save it as your own first.";
+        "Part of " + (builtInNow() || cfg.presetPick) + ", which cannot be changed. Save it as your own first.";
     } catch (_) {}
   }
 
@@ -7650,7 +7694,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (locked) {
       ta.readOnly = true;
       ta.style.opacity = "0.75";
-      ta.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+      ta.title = "Part of " + cfg.presetPick + ", which cannot be changed. Save it as your own first.";
     }
     ta.addEventListener("input", () => {
       const next = blockList();
@@ -10214,7 +10258,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // connection id, which names nothing on anybody else's account, so a preset
   // that carried the values could not be shared. A name that matches nothing on
   // the machine reading it is simply not loaded, and the card says so.
-  let presetPick = "";
   let presetName = "";
   // The setup the picker is showing. Follows whichever preset is selected, so
   // choosing one in the list shows what that preset asks for rather than what
@@ -10541,13 +10584,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // is not a one-way door.
   //
   // wasPick is the picker's value before the caller changed it. The change
-  // handler sets presetPick first, so reading it here would snapshot the preset
+  // handler sets cfg.presetPick first, so reading it here would snapshot the preset
   // being loaded and leave Put it back pointing at the thing it just undid.
   function loadPreset(p: Preset, wasPick?: string): void {
     const before = {
       settings: presetFromNow(),
       setup: setupFromNow(),
-      pick: wasPick === undefined ? presetPick : wasPick,
+      pick: wasPick === undefined ? cfg.presetPick : wasPick,
     };
     const took = applyPreset(p);
     // Taking one of the eight marks them as seen. Changing them later is then
@@ -10593,7 +10636,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The preset the box names, whether it comes with the extension or is one of
   // yours. Read in two places, so it is named once.
   function chosenPreset(): any {
-    return allPresets().find((p: any) => p.name === presetPick) || null;
+    return allPresets().find((p: any) => p.name === cfg.presetPick) || null;
   }
 
   function buildPresetCard(): HTMLElement {
@@ -10657,11 +10700,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Switching lists can take the chosen one out of the menu. Left as it was,
     // the box shows blank while every button beside it still acts on a preset
     // that is no longer on screen.
-    if (presetPick && !groups.some((g) => g.of.some((x) => x.name === presetPick))) {
-      presetPick = "";
+    if (cfg.presetPick && !groups.some((g) => g.of.some((x) => x.name === cfg.presetPick))) {
+      pickPreset("");
       presetSaid = null;
     }
-    sel.value = presetPick;
+    sel.value = cfg.presetPick;
     // Whether what is on screen still matches the preset the box names.
     //
     // Loading one sets the box and nothing clears it, so editing a block after
@@ -10691,8 +10734,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     sel.addEventListener("change", () => {
-      const was = presetPick;
-      presetPick = sel.value;
+      const was = cfg.presetPick;
+      pickPreset(sel.value);
       presetName = sel.value;
       const now = allPresets().find((p) => p.name === sel.value);
       presetSetup = String((now && now.setup) || "");
@@ -10718,7 +10761,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(nameIn);
 
     const chosen = () => chosenPreset();
-    const chosenIsYours = () => !!presetPick && !isBuiltIn(presetPick);
+    const chosenIsYours = () => !!cfg.presetPick && !isBuiltIn(cfg.presetPick);
 
     // Which saved model setup, if any, loads with this preset. Sits above the
     // buttons because it is part of what Save as new and Update selected write
@@ -10764,7 +10807,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     builtInSaid.setAttribute("data-arf-builtin-setup", "1");
     const sayBuiltIn = () => {
-      builtInSaid.hidden = !presetSetup || !isBuiltIn(presetPick);
+      builtInSaid.hidden = !presetSetup || !isBuiltIn(cfg.presetPick);
     };
 
     setupSel.value = presetSetup;
@@ -10784,15 +10827,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     // it still matters.
     if (driftedFromPick()) {
       const drift = note(
-        isBuiltIn(presetPick)
+        isBuiltIn(cfg.presetPick)
           ? "You have changed the prompt since loading " +
-            presetPick +
+            cfg.presetPick +
             ". A built-in prompt cannot be written over, so put a name in the box and press Save as new to keep this."
           : "You have changed the prompt since loading " +
-            presetPick +
+            cfg.presetPick +
             ". Press Update selected to keep it, or Save as new for a second copy.",
       );
-      drift.setAttribute("data-arf-preset-drift", isBuiltIn(presetPick) ? "built-in" : "yours");
+      drift.setAttribute("data-arf-preset-drift", isBuiltIn(cfg.presetPick) ? "built-in" : "yours");
       wrap.appendChild(drift);
     }
 
@@ -10824,7 +10867,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       applySetup({ name: "", at: 0, settings: back.setup });
       // The picker goes back with it. Leaving it on the preset that was just
       // undone is the same mismatch this whole change is here to stop.
-      presetPick = back.pick;
+      pickPreset(back.pick);
       presetName = back.pick;
       const was = allPresets().find((x) => x.name === back.pick);
       presetSetup = String((was && was.setup) || "");
@@ -10856,7 +10899,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       presets.push({ name: name, at: Date.now(), settings: presetFromNow(), setup: presetSetup || undefined });
       presets = presets.slice(-60);
       savePresets();
-      presetPick = name;
+      pickPreset(name);
       presetUndo = null;
       presetSaid = "Saved " + name + ".";
       paint();
@@ -10898,7 +10941,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       p.name = name;
       savePresets();
-      presetPick = name;
+      pickPreset(name);
       presetSaid = "Renamed.";
       paint();
     });
@@ -10923,7 +10966,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         () => {
           presets = presets.filter((x) => x !== p);
           savePresets();
-          presetPick = "";
+          pickPreset("");
           presetName = "";
           presetSetup = "";
           presetSaid = "Deleted " + p.name + ".";
@@ -10939,8 +10982,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(rename);
     row.appendChild(drop);
     wrap.appendChild(row);
-    if (presetPick && isBuiltIn(presetPick)) {
-      const which = BUILT_IN_PROMPTS.find((p) => p.name === presetPick);
+    if (cfg.presetPick && isBuiltIn(cfg.presetPick)) {
+      const which = BUILT_IN_PROMPTS.find((p) => p.name === cfg.presetPick);
       if (which) wrap.appendChild(note(which.what));
       wrap.appendChild(
         note(
@@ -11042,7 +11085,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const k of keysFor("resetParts")) cfg[k] = (CONFIG as any)[k];
     if (partOn("resetParts", PART_PRESETS)) {
       presets = [];
-      presetPick = "";
+      pickPreset("");
       presetName = "";
       presetSetup = "";
       savePresets();

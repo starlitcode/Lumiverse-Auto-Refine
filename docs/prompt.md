@@ -119,7 +119,7 @@ Whether the passage is a reply or something you wrote is not a macro either. It 
 
 There is no macro for the model's reasoning. Where it keeps that is `<REFINE_NOTES>`, a tag you write into your own prompt in your own words, covered in [Asking it what it changed](#asking-it-what-it-changed).
 
-**Lumiverse's**, which the host resolves: `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{user}}`, and anything else that works in a character card or a preset.
+**Lumiverse's**, which the host resolves: `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{user}}`, and anything else that works in a character card or a preset.
 
 They are resolved in that order for a reason. Ours go in **last**, after the host has run, so nothing in your chat is ever handed to a macro resolver. A reply that happens to contain the text `{{persona}}` stays as those nine characters instead of quietly expanding into somebody's prompt.
 
