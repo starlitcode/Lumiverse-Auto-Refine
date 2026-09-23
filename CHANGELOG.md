@@ -12,51 +12,48 @@ _2026-09-23_
 
 ### Added
 
-- **`{{charGroupFocused}}` in the list of macros.** In a group chat it is the name of the character in focus, which is the one the turn belongs to. It sits beside `{{char}}` under the ones Lumiverse fills in.
+- **Two models, a beta.** On the Model tab, under **One model or two**. With two, a small model called Jev reads each new reply first and checks it against a list you write. The reply is refined only if a check reaches the line you set, so replies that are already fine cost nothing. See [Two models](docs/jev.md).
+  - Jev is reached through OpenRouter, NanoGPT, TypeSafe, or another address.
+  - Your Jev key is kept in Lumiverse's secure store, never in your settings or an export.
+  - If Jev cannot answer, the reply is refined as normal, and the Log says why.
+  - A refine you start yourself never goes to Jev.
+  - It needs a new permission, `cors_proxy`. Refusing it only affects two-model mode.
 
-- **Two models, a beta.** On the Model tab, **One model or two**. With two, Jev, a small decision model from TypeSafe, reads each finished reply first and answers a list of checks you write with the chance each one is true. The refine model runs only when a check reaches the line you set, so replies that were already fine stop costing a refine. Jev can be reached through OpenRouter, NanoGPT, TypeSafe itself, or another address. It can also check whether a reply uses a phrase the chat has worn out. The key is kept in Lumiverse's secure store and never in your settings or an export. Anything that stops Jev from answering means the reply is refined as it would be with one model, and the Log says why. A refine you start yourself never goes to Jev. See [Two models](docs/jev.md).
+- **Seconds between automatic refines**, on the Limits tab. A reply that arrives too soon waits for the gap, with a countdown, and is then refined. **Stop** ends the wait. It is 0, no gap, by default.
 
-  This needs a new permission, `cors_proxy`, because Jev is not a chat model and no connection profile can reach it. Lumiverse asks for it when you update. Refusing it changes nothing unless two-model mode is on.
-
-- **Seconds between automatic refines**, under Limits and protection. For a provider that meters calls per minute. A reply that lands inside the gap waits for it and is then refined, and the panel counts the seconds down while it waits. **Stop** ends the wait. It is 0 by default, which is no gap, and a refine you start yourself never waits for it.
+- **`{{charGroupFocused}}` in the list of macros.** In a group chat it is the name of the character whose turn it is.
 
 ### Changed
 
-- **The prompts that come with it say one thing they did not.** Each told the model that the user decides how dark, explicit or crude a story gets, and that whether a line should have been written is theirs, with nothing after it. Read on its own that was a promise about everything, so it now names the one exception: sexual content involving anyone under eighteen, or anyone written as a child, is not edited. The model is told to hand that passage back exactly as it came and say why, so your reply is left as it was. A younger character in a scene with nothing sexual in it is edited like anyone else.
+- **The built-in prompts name their one exception.** They now tell the model not to edit sexual content involving anyone under eighteen, or anyone written as a child, and to hand that passage back unchanged and say why. Your reply is then left as it was. A younger character in a scene with nothing sexual in it is edited like anyone else. The panel tells you the built-in prompts have changed. Your own prompts are not touched.
 
-  The panel tells you the built-in prompts have changed, and loading yours again picks this up. A prompt of your own is not touched.
+- **Each preset keeps its own folds.** Folding a block in one preset no longer folds it in presets saved from it. A copy you save keeps the folds you had, and a rename keeps them too.
 
-- **Each preset keeps its own folds.** Folds were kept by block, and a preset saved from another keeps that one's blocks, so folding a block in one preset folded it in every preset made from it. They are kept per preset now. Saving a copy keeps the folds you were looking at, and renaming a preset takes them with it.
+- **The Fold all button fits on one line.** It says **Fold all** or **Open all**, with a count of how many blocks are folded beside it.
 
-- **The bar over the blocks reads as one.** **Fold them all** was squeezed into a button made for an arrow, so it broke over three lines. It is **Fold all** or **Open all** on one line now, with the arrow the blocks use, and a count on the left of how many blocks there are and how many are folded. The count follows a block you fold by its own arrow.
+- **A passage handed back with a reason says so.** When the model returns a passage unchanged and explains why, the Log says that, instead of "it already read well". The model's words are under **What the model worked out**.
 
-- **A passage handed back with a reason says so.** When the model returns a passage unchanged and says why outside the tags, the Log used to say it already read well. It now says the model handed it back unchanged and said why, and its words are under **What the model worked out**.
+- **A snip says it cost nothing.** **Take out what I selected** never calls a model, and the message after one now says so.
 
-- **The settings page says what one install for several accounts does.** An install an admin makes for everybody on a server holds one set of rules at a time, from whichever account's panel sent its settings last, and every refine on the server runs with it. Saved settings and presets stay separate and private. An install you make for your own account is not affected.
+- **Only a switch flips a switch.** Pressing the words next to a switch, or the space beside the automatic switch, no longer changes it. Only the box does.
 
-- **A snip says it cost nothing.** **Take out what I selected** never asks a model, so it is free and instant, but it sits among buttons that do cost a call. The message after one now says so.
+- **The README says exactly how the one exception works.** The code does not judge your story, keeps no list of words about it, and blocks nothing on its own. The exception is one paragraph in the built-in prompts, quoted in full in the docs.
 
-- **Only a switch flips a switch.** Pressing the words beside one used to change the setting, and so did pressing the empty space past the automatic switch. A row of settings is read by running a finger or a pointer along it, so a stray tap on a name was a setting changed without meaning to. The box is the only thing that answers now, the same way the **?** is the only thing that opens a description. The lists of parts are the same, the reset list most of all. The words still name each switch for a screen reader.
+- **The settings page explains installs shared by several accounts.** An install an admin makes for everyone on a server uses one set of rules at a time, from whichever account's panel sent its settings last. An install for your own account is not affected.
 
-- **The README says plainly that Auto Refine is not for sexual content involving minors, and exactly how that works.** The code does not judge a story, keeps no list of words about it, and does not block or change anything on its own account. The one exception is a paragraph in the four built-in prompts, which **How the prompt is built** now quotes word for word. When a model follows it, your reply is left exactly as it was, and a prompt of your own carries only what you put in it.
-
-- **The refusal checks say what their words about age are for.** Models sometimes misread an adult character as a minor and decline to rewrite the scene, and the checks recognise that so the refusal is not saved over your reply. The comments beside them said this in a way that could be read as treating every refusal about age as a mistake, and they say what they mean now.
+- **The comments on the refusal checks say what the words about age are for:** a model that misreads an adult character as a minor.
 
 ### Fixed
 
-- **Take out what I selected works every time.** Reported by a Discord user. With **Add the refine as a swipe instead of writing over the reply** on, a snip went in as a new swipe rather than as an edit, one arrow away from the one on screen. Nothing appeared to change, the log said it had, and the next snip read the swipe you could not see and said your selection was no longer in the message. From then on every snip on every message looked broken. A snip now always edits the writing in place, whatever that switch says.
+- **Take out what I selected works every time.** Reported by a Discord user. With refines added as swipes, a snip was also added as a swipe you could not see, and after that every snip looked broken. A snip now always edits the text on screen.
 
-  It also finds your selection when the message and the screen disagree about which swipe is showing, which a refine added as a swipe can leave behind. The selection was made on screen, so the swipe on screen is the one it edits.
+- **Thinking that starts in the prompt is kept out of the refine.** Some presets open the reply inside the thinking tag. That thinking was sent to be rewritten like prose. It is now held back and put back unchanged.
 
-- **The model's working is held back when the thinking tag was opened in the prompt.** A preset can start the reply inside the thinking tag, so the message opens mid-thought and the first tag in it is the closer of one it never wrote. That working used to go to the refiner as part of the passage, to be rewritten like prose. It is held back now and put back in front of the rewrite exactly as it was, the same as working with both of its tags.
+- **A built-in prompt stays locked.** Changing drawer tab, leaving the panel alone for a while, or switching between **For replies** and **For your messages** could unlock it, so you could type over it. Each list now remembers its own prompt.
 
-- **A built-in prompt stays locked when Lumiverse builds the panel again.** Which prompt the picker named lived only in memory, and Lumiverse takes the panel down and puts it back on its own terms: changing drawer tab does it, and so does leaving it alone for a while. The picker came back empty every time, the lock that reads it came off with it, and the boxes went back to taking typing over a prompt that cannot be written over. The picker is kept with your prompt now, and travels with it when you export one.
+- **With the automatic pass off, new replies no longer show up in the Log.** It said "left a reply alone" for every reply, which looked like it had tried. It also stopped the spinner of a refine you started yourself if another reply arrived.
 
-  Each list also keeps its own. A built-in prompt is written for either replies or your own messages, and with one picker for both, switching between **For replies** and **For your messages** wiped it, so the list you came back to was open to typing again. Loading a built-in prompt names it for its own list only, and one of your presets, which carries both lists, names both.
-
-- **With the automatic pass off, a new reply no longer looks like a refine that was tried.** Every reply that landed put "left a reply alone: the automatic pass is switched off" in the Log, which read as the extension having tried and given up. It only says why a reply was left alone now when the automatic pass was going to take it. The same message also turned off the spinner of a refine you had started by hand, if another reply landed while it ran, and it no longer does.
-
-- **Renaming a preset or a model setup to the name it already has says so.** It used to say "Renamed." when nothing had changed. It now says that is already its name and asks for a different one. Renaming onto the name of another one was already refused, and says to pick another name.
+- **Renaming a preset or setup to its current name says so**, instead of "Renamed.".
 
 ---
 
