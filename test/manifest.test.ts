@@ -47,6 +47,10 @@ const EARNS: Record<string, { uses: RegExp; why: string }> = {
     uses: /createFloatWidget|showContextMenu/,
     why: "the floating button and its menu",
   },
+  cors_proxy: {
+    uses: /spindle\.cors\(/,
+    why: "reaches Jev in two-model mode",
+  },
 };
 
 describe("the permissions it asks for", () => {

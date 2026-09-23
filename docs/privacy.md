@@ -2,7 +2,9 @@
 
 ## What leaves your machine
 
-One thing: the model call that does the refining. It goes through Lumiverse to the provider you already configured, on the connection you picked.
+With one model, which is the default, one thing: the model call that does the refining. It goes through Lumiverse to the provider you already configured, on the connection you picked.
+
+With two models there is a second, described under [Jev](#jev) below.
 
 What it carries is the list of blocks you can see under **How the prompt is built**, and nothing else:
 
@@ -19,13 +21,26 @@ The panel is the honest list. A block switched off is not sent, **Messages of ru
 
 Your settings themselves are never sent. Neither is anything from a chat you are not in.
 
-The extension has no networking of its own. It never opens a connection and never contacts a server of mine or anyone else's, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing.
+The extension has no networking of its own. It never opens a connection and never contacts a server of mine, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing. The one call it makes to anywhere other than your provider is the call to Jev, and only with two models on. It goes through Lumiverse's own proxy, `spindle.cors`, and nowhere else.
+
+## Jev
+
+With **How many models** set to two, each finished reply is sent to Jev before it is refined. Jev goes to the host you picked under **Where Jev is reached**: OpenRouter, NanoGPT, TypeSafe, or an address you typed. That host is a separate service with its own terms, and it sees:
+
+- the reply, with its thinking taken out
+- the checks you wrote under **What Jev checks**
+- with **Also check for worn-out phrases** on, the list of phrases this chat has worn out
+- your Jev key, which is how the host knows the call is yours
+
+Nothing else goes to Jev: no card, no run-up, no lore, no memories, no settings. A refine you start yourself is never sent to Jev.
+
+The key is sent from the panel to the backend once, when you press **Save key**, and kept in Lumiverse's secure store for your account. It is not in your settings, not in an export, and not in this browser's storage, and the panel is only ever told whether one is saved. **Forget key** deletes it.
 
 Two things are taken out of a message before it is sent, rather than added. The model's own thinking never goes, and neither does your markup: tags, code and image links are replaced with tokens and put back afterwards, so a rewrite cannot change what it never saw.
 
 **Show me the request**, under Context, is the check on all of this. It builds the real request and shows it to you, message by message, without sending it anywhere.
 
-## The six permissions
+## The seven permissions
 
 - **`generation`** runs the refine. Without it the extension does nothing at all, and says so.
 - **`chat_mutation`** saves the result over the message. Refuse it and refining still runs but nothing can be written, so nothing changes.
@@ -34,6 +49,7 @@ Two things are taken out of a message before it is sent, rather than added. The 
 
 - **`world_books`** reads the lorebook entries the chat has active, so a rewrite does not contradict what the world has already established. Refuse it and refining carries on with the lore block left out.
 - **`ui_panels`** is only for the floating button, which is off by default. Refuse it and everything works except that button, and the panel says so rather than the switch quietly doing nothing.
+- **`cors_proxy`** is only for Jev, in two-model mode, which is off by default. Jev is not a chat model, so no connection profile can reach it, and this is how the backend asks Lumiverse to make the call. Refuse it and two-model mode refines every reply, the same as one model. Nothing else changes.
 
 The three that read rather than write are why a rewrite sounds like the character rather than like generic prose. Refusing any of them costs you quality, not the feature.
 
@@ -53,6 +69,8 @@ Your settings, in your browser and in Lumiverse's per-user storage so they follo
 The list of chats you switched it off in, in your browser. Chat ids and nothing else: no titles, no text.
 
 Your presets, in your browser, under a key of their own so exporting your settings and keeping your presets are separate choices.
+
+Your Jev key, if you saved one, in Lumiverse's secure store for your account and nowhere else.
 
 If you chose a sound of your own, that file, held with your settings as text. It never leaves your machine.
 

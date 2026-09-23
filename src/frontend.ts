@@ -91,6 +91,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "softenSwaps",
       "retryRefine",
       "rateWaits",
+      "refineGap",
       "wrapOutput",
       "streamProgress",
     ],
@@ -112,6 +113,12 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     label: "Where the input box is",
     what: "The selectors that find the chat input box. Its own part, so putting it back does not take the widget and the buttons with it.",
     keys: ["inputSelector"],
+  },
+  {
+    id: "judge",
+    label: "One model or two",
+    what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
+    keys: ["judgeMode", "judgeHost", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
   },
   {
     id: "switches",
@@ -183,7 +190,23 @@ const PERMS: Array<{ id: string; label: string; why: string; without: string; fa
     why: "The floating button.",
     without: "Everything works except the floating button, and its switch says so.",
   },
+  {
+    id: "cors_proxy",
+    label: "CORS proxy",
+    why: "Reaches Jev, the second model in two-model mode, which is not a chat model and so has no connection profile.",
+    without: "Two-model mode cannot ask Jev, so every reply is refined as it is with one model. Nothing else changes.",
+  },
 ];
+
+// What Jev checks a reply for until somebody writes their own. Each is a
+// statement about `reply` that is plainly true or false of the text, which is
+// the question Jev answers best: one thing, visible on the page.
+const JUDGE_CHECKS = [
+  "`reply` repeats a word, a phrase or a sentence shape inside itself.",
+  "`reply` uses stock phrases that turn up in many stories.",
+  "`reply` states a character's feeling outright where the scene could show it.",
+  "`reply` piles up adjectives or strained comparisons.",
+].join("\n");
 
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
@@ -351,7 +374,7 @@ const CONFIG = {
   // box to correct it the only way out is a release of this.
   swipeSelector: SWIPE_PICKS.join(", "),
   // Phrases this chat has worn out. Off by default, since it reads the chat's
-  // replies. Turned on by putting {{overused}} in a block.
+  // replies. The list goes wherever a block holds {{overused}}.
   wornOn: false,
   wornBack: 60,
   wornLeast: 3,
@@ -421,6 +444,24 @@ const CONFIG = {
   // refused: a free tier meters per minute and a local server answers 503 while
   // it loads, and both clear on their own.
   rateWaits: 2,
+  // Seconds between one automatic refine and the next, or 0 for none. A reply
+  // that lands inside the gap waits for it rather than being skipped, so a
+  // provider that meters calls per minute is not asked twice in one breath.
+  refineGap: 0,
+  // One model refines every reply. Two has Jev, a small decision model, read a
+  // reply first and say whether it needs a refine, so the refine model runs on
+  // the replies that do. A beta, and off until asked for.
+  judgeMode: "one",
+  // Where Jev is reached, and for "custom" the address and model name.
+  judgeHost: "openrouter",
+  judgeUrl: "",
+  judgeModel: "",
+  // One statement a line. Jev gives the chance each is true of `reply`.
+  judgeChecks: JUDGE_CHECKS,
+  // A check at or above this percentage is a reply worth refining.
+  judgeOver: 50,
+  // With worn phrases on, Jev is also asked whether the reply uses one.
+  judgeWorn: true,
   // Asking for the rewrite inside <REFINED> tags rather than on its own. A
   // model that cannot help adding a sentence of its own still puts the rewrite
   // between the tags, and taking what is between them is exact.
@@ -1654,6 +1695,15 @@ const GUARD_FIELDS: Field[] = [
     max: 5,
     hint: "How many times to wait and ask again when the provider answers \"too many requests\" or is loading a model, and 2 by default. A refused call costs nothing, so this buys the refine you asked for rather than a second one. Where the provider says how long to wait, that is what it waits.",
   },
+  {
+    key: "refineGap",
+    int: true,
+    label: "Seconds between automatic refines",
+    type: "num",
+    min: 0,
+    max: 120,
+    hint: "A reply that lands sooner waits for the gap and is then refined. 0 for no gap. Refines you start yourself do not wait.",
+  },
 ];
 
 // What the floating button offers once it is switched on. Kept out of the main
@@ -1774,6 +1824,74 @@ type Field = {
   // How far in it sits under the row it depends on.
   under?: boolean;
 };
+
+// Two-model mode. Everything under the first row waits on it, and the address
+// and model name wait on the host being your own.
+const JUDGE_FIELDS: Field[] = [
+  {
+    key: "judgeMode",
+    label: "How many models",
+    type: "pick",
+    options: [
+      { value: "one", label: "One: every reply is refined" },
+      { value: "two", label: "Two: Jev picks the replies to refine (beta)" },
+    ],
+    hint: "With two, Jev reads each finished reply first and the refine runs only where one of its checks says so. Jev is a separate service with its own key and its own bill. A refine you start yourself is never held back by it.",
+  },
+  {
+    key: "judgeHost",
+    label: "Where Jev is reached",
+    type: "pick",
+    options: [
+      { value: "openrouter", label: "OpenRouter" },
+      { value: "nanogpt", label: "NanoGPT" },
+      { value: "typesafe", label: "TypeSafe" },
+      { value: "custom", label: "Another address" },
+    ],
+    needs: { key: "judgeMode", is: "two" },
+    hint: "The key you save below has to be one from this host.",
+  },
+  {
+    key: "judgeUrl",
+    label: "Address",
+    type: "text",
+    needs: { key: "judgeHost", is: "custom" },
+    under: true,
+    hint: "The full address that takes a decision request, starting with https://.",
+  },
+  {
+    key: "judgeModel",
+    label: "Model name",
+    type: "text",
+    needs: { key: "judgeHost", is: "custom" },
+    under: true,
+    hint: "What that host calls Jev, such as jev-1.13.0.",
+  },
+  {
+    key: "judgeChecks",
+    label: "What Jev checks",
+    type: "lines",
+    needs: { key: "judgeMode", is: "two" },
+    hint: "One statement a line about the reply, named as reply in backticks the way the ones already here are. Jev gives the chance each is true. Keep each to one thing on the page.",
+  },
+  {
+    key: "judgeOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    hint: "A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "judgeWorn",
+    label: "Also check for worn-out phrases",
+    type: "bool",
+    needs: { key: "judgeMode", is: "two" },
+    hint: "Asks Jev whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
+  },
+];
 
 const COST_FIELDS: Field[] = [
   {
@@ -2391,10 +2509,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
         out.samplers = clean;
       } else if (key === "blocksShut") {
-        // Two lists of up to forty blocks each, so the cap is eighty and the
-        // entries are made into strings whatever the store held.
+        // A few hundred, for the folds of every preset kept apart, and made
+        // into strings whatever the store held. A fold saved before folds were
+        // kept per preset reads "blocks:id", and is taken as the same block
+        // with no preset named, which is where it was made.
         if (!Array.isArray(got)) continue;
-        out.blocksShut = got.slice(0, 80).map((v: any) => String(v));
+        out.blocksShut = got
+          .slice(-400)
+          .map((v: any) => String(v).replace(/^(blocks|userBlocks):/, "$1\n"));
       } else if (key === "soundUrl") {
         if (typeof got !== "string") continue;
         out.soundUrl = /^data:audio\//.test(got) && got.length <= SOUND_MAX * 2 ? got : "";
@@ -3261,7 +3383,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // a stage a refine that takes forty seconds looks the same as one that has
   // quietly failed, and a model that streams looks the same as one that has not
   // started.
-  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" = "";
+  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" = "";
   let streamed = 0;
 
   // How long a refine is given, in seconds, or 0 for as long as it takes. One
@@ -3281,12 +3403,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (stage === "writing")
       return "Writing" + (streamed ? ", " + streamed.toLocaleString() + " characters" : "") + clockPart;
     if (stage === "checking") return "Checking the answer" + clockPart;
+    if (stage === "judging") return "Jev is reading the reply" + clockPart;
     // Waiting out a provider that would not take the call. The number counts
     // down, because a status line that says "waiting" and does not move looks
     // exactly like one that has stopped, and this is the longest anything here
     // ever sits still.
     if (stage === "waiting") {
       const left = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
+      if (waitGap) return "Waiting for the gap between refines, starting in " + left + "s";
       return (
         "The provider would not take the call" +
         (waitAt ? " (" + waitAt + " of " + waitOf + ")" : "") +
@@ -3464,7 +3588,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     clearAck();
   });
 
-  function markBusy(on: boolean, why?: "asking" | "thinking" | "writing" | "checking" | "waiting") {
+  function markBusy(on: boolean, why?: "asking" | "thinking" | "writing" | "checking" | "waiting" | "judging") {
     if (on && !busy) {
       runStartedAt = Date.now();
       streamed = 0;
@@ -4063,6 +4187,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-block.arf-hushed{opacity:.55}" +
     ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
     ".arf-btn.arf-mini2{min-height:26px;padding:3px 10px;font-size:11.5px}" +
+    // The head of the block list: how many there are on the left, and the one
+    // press that folds or opens them all on the right. The button keeps to one
+    // line, since a label broken over three reads as three buttons.
+    ".arf-foldbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 6px}" +
+    ".arf-foldcount{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));font-size:12px;min-width:0}" +
+    ".arf-btn.arf-foldall{flex:none;white-space:nowrap}" +
     // Two choices side by side, where a menu would be heavier than the choice.
     // A row that only exists while the one above it is on. Indented and edged
     // so it reads as belonging to that row rather than as the next setting.
@@ -4442,6 +4572,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@media (pointer: coarse){" +
     ".arf-btn{min-height:40px;padding:10px 14px}" +
     ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
+    ".arf-btn.arf-foldall{min-height:40px;padding:0 14px}" +
     ".arf-fold{min-height:44px}" +
     ".arf-tab{padding:12px 4px}" +
     ".arf-box{width:46px;height:26px;border-radius:13px}" +
@@ -5402,7 +5533,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tabCards(id: string): HTMLElement[] {
     if (id === "prompt") return [buildBlocksCard(), buildMacroCard(), buildPresetCard()];
     if (id === "context") return [buildContextCard(), buildPreviewCard()];
-    if (id === "model") return [buildConnectionCard(), buildSamplerCard(), buildSetupCard()];
+    if (id === "model") return [buildConnectionCard(), buildSamplerCard(), buildSetupCard(), buildJudgeCard()];
     if (id === "limits")
       return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
     if (id === "log") {
@@ -6054,17 +6185,19 @@ export function setup(ctx: Ctx, overrides?: any) {
       row.appendChild(hangsOff(draft, "inputRefine"));
     }
 
-    const auto = document.createElement("label");
+    // A row, not a label. The box switches the automatic pass and nothing else
+    // on the line does: the words beside it used to, and so did the empty space
+    // past them once the row had a line of its own, which turned a stray press
+    // anywhere along it into refining every reply. The words still name the
+    // box for a screen reader.
+    const auto = document.createElement("div");
     auto.className = "arf-row arf-note";
-    // As wide as the switch and its words and no wider. A label is pressable
-    // everywhere it reaches, and a row laid out as a block reaches the whole
-    // width of the card, so the empty space beside the words was switching the
-    // automatic pass on and off. Giving it a line of its own is what put that
-    // space there, and this is what takes it back out of reach.
-    auto.style.cssText =
-      "cursor:pointer;display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
+    auto.style.cssText = "display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
+    const autoWords = el("span", "", "every reply, automatically");
+    autoWords.id = nextId() + "-name";
     const autoBox = document.createElement("input");
     autoBox.type = "checkbox";
+    autoBox.setAttribute("aria-labelledby", autoWords.id);
     autoBox.checked = !!cfg.refineOn;
     autoBox.className = "arf-box";
     autoBox.addEventListener("change", () => {
@@ -6074,7 +6207,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       settle();
     });
     auto.appendChild(autoBox);
-    auto.appendChild(el("span", "", "every reply, automatically"));
+    auto.appendChild(autoWords);
     wrap.appendChild(row);
     // Its own line, under the buttons rather than flowing after them. As one
     // more item in a row that wraps, where it landed depended on how much room
@@ -6965,21 +7098,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     (wrap as any)._arfShows = () => fieldShows(f);
     wrap.hidden = !fieldShows(f);
     if (f.type === "bool") {
-      // The "?" sits beside the words rather than inside the label.
+      // Only the switch flips the switch. The words beside it are not a second
+      // way to press it: a row of settings is read by running a finger or a
+      // pointer along it, and words that answered a press turned every stray
+      // tap on a name into a setting changed without meaning to. The "?" is the
+      // same, a press on it and nowhere else.
       //
-      // A label with no `for` names the first labelable element inside it, and a
-      // button is one, so a "?" placed in there took the label off the switch:
-      // pressing the words opened the description instead of flipping the
-      // switch, and the switch was left with only its own small box to press.
-      // Named by id instead, which says which control the words belong to
-      // whatever else ends up standing next to them.
+      // The words still name the switch, for a screen reader, through
+      // aria-labelledby rather than a label element, because a label is the one
+      // thing that makes its words pressable.
       const row = el("div", "arf-between");
       const left = el("div", "arf-labrow arf-grow");
       const id = nextId();
-      const lab = document.createElement("label");
+      const lab = document.createElement("span");
       lab.className = "arf-lab";
-      lab.style.cursor = "pointer";
-      lab.htmlFor = id;
+      lab.id = id + "-name";
       lab.textContent = f.label;
       left.appendChild(lab);
       const q = hintButton(f.hint, f.label);
@@ -6988,6 +7121,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const box = document.createElement("input");
       box.id = id;
       box.type = "checkbox";
+      box.setAttribute("aria-labelledby", lab.id);
       box.checked = !!cfg[f.key];
       box.setAttribute("data-arf-field", f.key);
       box.className = "arf-box";
@@ -7215,17 +7349,63 @@ export function setup(ctx: Ctx, overrides?: any) {
   const blockLabel = (b: Block) => String(b.name || "").trim() || "Untitled block";
 
   // Whether a block is folded shut, and the switch for it. Keyed by which list
-  // it is in as well as its id: the two prompts use the same ids for the same
-  // jobs, and folding the turn in one would otherwise fold it in both.
-  const shutKey = (b: Block) => (editingYours() ? "userBlocks" : "blocks") + ":" + String(b.id);
+  // it is in, which preset the picker names, and the block's id. The list,
+  // because the two prompts use the same ids for the same jobs. The preset,
+  // because a preset saved from another keeps its block ids, and folding a
+  // block in one would otherwise fold it in every preset made from it.
+  //
+  // A line break sits between the scope and the id because nothing typed into
+  // the name box can hold one, so no preset's name can run into another's.
+  const FOLDS_MAX = 400;
+  const foldScope = (which: "blocks" | "userBlocks", preset: string) =>
+    which + (preset ? "@" + preset : "") + "\n";
+  const shutKey = (b: Block) =>
+    foldScope(editingYours() ? "userBlocks" : "blocks", cfg.presetPick) + String(b.id);
   const shutList = (): string[] => (Array.isArray(cfg.blocksShut) ? cfg.blocksShut : []);
   const isShut = (b: Block) => shutList().indexOf(shutKey(b)) >= 0;
   function setShut(b: Block, shut: boolean) {
     const k = shutKey(b);
     const next = shutList().filter((x) => x !== k);
     if (shut) next.push(k);
-    cfg.blocksShut = next.slice(-80);
+    cfg.blocksShut = next.slice(-FOLDS_MAX);
     persist();
+    syncFoldAll();
+  }
+  // What one preset has folded, handed to another name. Saving a copy keeps the
+  // folds you were looking at, and a rename takes them along. With no new name
+  // they are dropped, which is what deleting the preset wants.
+  function carryFolds(from: string, to: string | null, keep: boolean) {
+    const heads = (["blocks", "userBlocks"] as const).map((w) => ({
+      from: foldScope(w, from),
+      to: to === null ? null : foldScope(w, to),
+    }));
+    const out: string[] = [];
+    for (const k of shutList()) {
+      const h = heads.find((x) => k.indexOf(x.from) === 0);
+      if (!h || keep) out.push(k);
+      if (h && h.to !== null) out.push(h.to + k.slice(h.from.length));
+    }
+    cfg.blocksShut = out.filter((k, i) => out.indexOf(k) === i).slice(-FOLDS_MAX);
+    persist();
+  }
+  // The fold bar's words follow the folds. A block folded by its own caret does
+  // not rebuild the list, so without this the bar kept offering to fold
+  // everything after the last one had been folded by hand.
+  function syncFoldAll(bar?: HTMLElement | null) {
+    const at = bar || (document.querySelector("[data-arf-foldbar]") as HTMLElement | null);
+    if (!at) return;
+    const list = blockList();
+    const shut = list.filter((b) => isShut(b)).length;
+    const anyOpen = shut < list.length;
+    const btn = at.querySelector("[data-arf-foldall]") as HTMLElement | null;
+    const count = at.querySelector("[data-arf-foldcount]") as HTMLElement | null;
+    if (btn) {
+      btn.textContent = (anyOpen ? CARET_SHUT : CARET_OPEN) + " " + (anyOpen ? "Fold all" : "Open all");
+      btn.setAttribute("aria-label", anyOpen ? "Fold every block" : "Open every block");
+    }
+    if (count)
+      count.textContent =
+        list.length + (list.length === 1 ? " block" : " blocks") + (shut ? ", " + shut + " folded" : "");
   }
 
   // Which saved prompt this one is, if it is one of them. The four that come with it
@@ -7434,23 +7614,32 @@ export function setup(ctx: Ctx, overrides?: any) {
     // are looking at, which is a different kind of thing; and standing it with
     // them made that row wrap when this label grew by a word, which moved Back
     // to the default onto a line of its own and back again on every press.
+    //
+    // A count on the left, so the row reads as the head of the list it acts on
+    // and says how much of it is folded away out of sight.
     {
-      const anyOpen = list.some((b) => !isShut(b));
-      const view = el("div", "arf-row");
-      view.appendChild(el("span", "arf-grow"));
-      const foldAll = button(anyOpen ? "Fold them all" : "Open them all", false);
-      foldAll.className += " arf-mini";
+      const view = el("div", "arf-foldbar");
+      view.setAttribute("data-arf-foldbar", "1");
+      const count = el("span", "arf-foldcount");
+      count.setAttribute("data-arf-foldcount", "1");
+      view.appendChild(count);
+      const foldAll = button("", false);
+      foldAll.className += " arf-mini2 arf-foldall";
       foldAll.setAttribute("data-arf-foldall", "1");
       foldAll.addEventListener("click", () => {
-        const which = editingYours() ? "userBlocks" : "blocks";
-        const others = shutList().filter((k) => k.indexOf(which + ":") !== 0);
+        // Read at the press rather than when the bar was drawn, since a caret
+        // on a block can have changed it in between.
+        const anyOpen = list.some((b) => !isShut(b));
+        const head = foldScope(editingYours() ? "userBlocks" : "blocks", cfg.presetPick);
+        const others = shutList().filter((k) => k.indexOf(head) !== 0);
         cfg.blocksShut = anyOpen
-          ? others.concat(list.map((b) => which + ":" + String(b.id))).slice(-80)
+          ? others.concat(list.map((b) => head + String(b.id))).slice(-FOLDS_MAX)
           : others;
         persist();
         paint();
       });
       view.appendChild(foldAll);
+      syncFoldAll(view);
       wrap.appendChild(view);
     }
     for (let i = 0; i < list.length; i++) wrap.appendChild(buildBlockRow(list, i));
@@ -7611,7 +7800,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The one control that stays live on a prompt that comes with the
     // extension. Switching a block on or off chooses which of its parts go to
     // the model; it does not rewrite a word of what they say, which is what
-    // cannot be written over. Locking it with the rest made the parts that ship
+    // cannot be written over. Locking it with the rest made the parts that come
     // switched off unreachable: What Has Happened is one of them, so anybody
     // wanting their memories in the prompt had to save a copy under a name of
     // their own before they could turn it on, for a switch that was right there.
@@ -8154,6 +8343,100 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // Two-model mode, and the key Jev is reached with. The key is sent to the
+  // backend once and kept in Lumiverse's secure store. The panel is only told
+  // whether there is one, so it never sits in the settings or an export.
+  let jevHas: boolean | null = null;
+  let jevSaid = "";
+  let jevAsk = "";
+  // Asked once per panel. The card is rebuilt on every paint, and asking on
+  // each one sent a question per keystroke while the answer was on its way.
+  let jevStatusAsked = false;
+  function buildJudgeCard(): HTMLElement {
+    const wrap = card(
+      "One model or two",
+      "A beta. With two, Jev, a small model that only answers yes-or-no questions, reads each reply first, and the refine model runs on the replies that need it.",
+      cfg.judgeMode === "two" ? "two, beta" : "one",
+    );
+    for (const f of JUDGE_FIELDS.slice(0, 4)) wrap.appendChild(fieldRow(f));
+
+    const keyRow = el("div", "arf-col");
+    keyRow.setAttribute("data-arf-jevkey", "1");
+    const lab = el("span", "arf-lab", "Jev key");
+    lab.id = "arf-jevkey-name";
+    keyRow.appendChild(lab);
+    const box = document.createElement("input");
+    box.type = "password";
+    box.className = "arf-field arf-mono";
+    box.setAttribute("aria-labelledby", lab.id);
+    box.setAttribute("autocomplete", "off");
+    box.setAttribute("data-arf-jevkey-box", "1");
+    box.placeholder = jevHas ? "A key is saved. Paste a new one to replace it." : "Paste the key from your Jev host";
+    keyRow.appendChild(box);
+    const acts = el("div", "arf-row");
+    const save = button("Save key", false);
+    save.setAttribute("data-arf-jev", "save");
+    save.addEventListener("click", () => {
+      const key = box.value.trim();
+      box.value = "";
+      if (!key) {
+        jevSaid = "Paste a key into the box first.";
+        paint();
+        return;
+      }
+      jevSaid = "Saving.";
+      jevAsk = newId();
+      send({ type: "jev_key_set", requestId: jevAsk, key: key });
+      paint();
+    });
+    const forget = button("Forget key", false);
+    forget.setAttribute("data-arf-jev", "forget");
+    forget.disabled = !jevHas;
+    forget.style.opacity = forget.disabled ? "0.45" : "1";
+    forget.addEventListener("click", () => {
+      jevSaid = "Forgetting.";
+      jevAsk = newId();
+      send({ type: "jev_key_forget", requestId: jevAsk });
+      paint();
+    });
+    const test = button("Test", false);
+    test.setAttribute("data-arf-jev", "test");
+    test.disabled = !jevHas;
+    test.style.opacity = test.disabled ? "0.45" : "1";
+    test.addEventListener("click", () => {
+      jevSaid = "Asking Jev one small question.";
+      jevAsk = newId();
+      send({ type: "jev_test", requestId: jevAsk });
+      paint();
+    });
+    acts.appendChild(save);
+    acts.appendChild(forget);
+    acts.appendChild(test);
+    keyRow.appendChild(acts);
+    const said = note(
+      jevSaid ||
+        (jevHas == null
+          ? "Asking whether a key is saved."
+          : jevHas
+            ? "A key is saved. It is kept in Lumiverse's secure store and never shown again."
+            : "No key is saved yet."),
+    );
+    said.setAttribute("data-arf-jevsaid", "1");
+    keyRow.appendChild(said);
+    wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
+
+    for (const f of JUDGE_FIELDS.slice(4)) wrap.appendChild(fieldRow(f));
+    if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
+      wrap.appendChild(
+        bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."),
+      );
+    if (jevHas == null && !jevStatusAsked) {
+      jevStatusAsked = true;
+      send({ type: "jev_key_status", requestId: newId() });
+    }
+    return wrap;
+  }
+
   // Named setups for the Model tab, so somebody running more than one custom
   // connection can move between them in one go rather than resetting five
   // fields by hand every time.
@@ -8289,8 +8572,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
         return;
       }
-      if (name !== one.name && setups.some((x) => x.name === name)) {
-        setupSaid = "There is already a setup called that.";
+      if (name === one.name) {
+        setupSaid = "That is already its name. Type a different one.";
+        paint();
+        return;
+      }
+      if (setups.some((x) => x.name === name)) {
+        setupSaid = "There is already a setup called that. Pick another name.";
         paint();
         return;
       }
@@ -8614,6 +8902,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   let waitUntil = 0;
   let waitAt = 0;
   let waitOf = 0;
+  // Whether the wait is the gap between automatic refines rather than a
+  // provider that turned the call down. The two count down the same way and
+  // mean different things.
+  let waitGap = false;
 
   // What is happening right now, which the panel could not say before: it knew
   // it was busy and nothing else, so a refine that took forty seconds looked
@@ -10107,9 +10399,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     for (const p of list) {
       const row = el("div", "arf-col");
-      const lab = document.createElement("label");
-      lab.className = "arf-between";
-      lab.style.cursor = "pointer";
+      // The box and only the box, the same as every switch on the panel. These
+      // lists include the reset one, where a stray press on a name would tick a
+      // part for putting back without anybody meaning it to.
+      const lab = el("div", "arf-between");
       lab.appendChild(el("span", "arf-lab arf-grow", p.label));
       const box = document.createElement("input");
       box.type = "checkbox";
@@ -10899,6 +11192,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       presets.push({ name: name, at: Date.now(), settings: presetFromNow(), setup: presetSetup || undefined });
       presets = presets.slice(-60);
       savePresets();
+      carryFolds(cfg.presetPick, name, true);
       pickPreset(name);
       presetUndo = null;
       presetSaid = "Saved " + name + ".";
@@ -10934,11 +11228,17 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
         return;
       }
-      if (name !== p.name && (isBuiltIn(name) || presets.some((x) => x.name === name))) {
-        presetSaid = "There is already a preset called that.";
+      if (name === p.name) {
+        presetSaid = "That is already its name. Type a different one.";
         paint();
         return;
       }
+      if (isBuiltIn(name) || presets.some((x) => x.name === name)) {
+        presetSaid = "There is already a preset called that. Pick another name.";
+        paint();
+        return;
+      }
+      carryFolds(p.name, name, false);
       p.name = name;
       savePresets();
       pickPreset(name);
@@ -10966,6 +11266,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         () => {
           presets = presets.filter((x) => x !== p);
           savePresets();
+          carryFolds(p.name, null, false);
           pickPreset("");
           presetName = "";
           presetSetup = "";
@@ -13085,6 +13386,46 @@ export function setup(ctx: Ctx, overrides?: any) {
             send({ type: "list_connections", requestId: newId() });
             return;
           }
+          // Jev's answer on one reply, for the Log. Each check with its
+          // percentage, so a reply left alone can be read back and the line
+          // moved if Jev is letting too much through or too little.
+          if (msg.type === "judge_said") {
+            const list = Array.isArray(msg.scores) ? msg.scores : [];
+            const each = list
+              .map((x: any) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
+              .join("; ");
+            const cost = Number(msg.cost) > 0 ? ", cost " + Number(msg.cost).toFixed(6) : "";
+            if (msg.failed)
+              log("Jev could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
+            else if (msg.refine) log("Jev says refine: " + each + cost, true);
+            else log("Jev says leave it: " + each + cost, true);
+            return;
+          }
+          // Whether a key is saved is true whichever question it answers, so
+          // every one of these is taken.
+          if (msg.type === "jev_key") {
+            jevHas = !!msg.has;
+            const said = String(msg.said || "");
+            jevSaid =
+              said === "saved"
+                ? "Saved. Press Test to check it."
+                : said === "forgotten"
+                  ? "Forgotten. Two-model mode refines every reply until a key is saved."
+                  : said
+                    ? said.charAt(0).toUpperCase() + said.slice(1) + "."
+                    : "";
+            paint();
+            return;
+          }
+          if (msg.type === "jev_tested") {
+            if (msg.requestId && msg.requestId !== jevAsk) return;
+            jevSaid = msg.ok
+              ? "Jev answered. The key works."
+              : "Jev did not answer: " + String(msg.why || "no reason given") + ".";
+            log(msg.ok ? "Jev answered a test question" : "Jev test failed: " + String(msg.why || ""), true);
+            paint();
+            return;
+          }
           if (msg.type === "backend_version") {
             const said = typeof msg.version === "string" ? msg.version : "";
             // Logged only on a change, since this arrives on every panel load
@@ -13135,6 +13476,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               waitUntil = Date.now() + ms;
               waitAt = Number(msg.attempt) || 0;
               waitOf = Number(msg.of) || 0;
+              waitGap = !!msg.gap;
               // The wait is the backend doing as it was told, so the panel's
               // own giving-up timer has to make room for it. Without this a
               // two-minute wait on a free tier fired the deadman and the panel
@@ -13142,9 +13484,11 @@ export function setup(ctx: Ctx, overrides?: any) {
               // there waiting on purpose.
               armDeadman(ms);
               log(
-                "the provider would not take the call, waiting " +
-                  Math.round(ms / 1000) +
-                  "s before trying again",
+                waitGap
+                  ? "a reply landed inside the gap between refines, waiting " + Math.round(ms / 1000) + "s"
+                  : "the provider would not take the call, waiting " +
+                      Math.round(ms / 1000) +
+                      "s before trying again",
               );
             }
             // Written again now everything this message carried has been read.
@@ -13290,8 +13634,10 @@ export function setup(ctx: Ctx, overrides?: any) {
             setBadge(String(undoHere().length || 1));
             if (wasSnip) {
               const gone = String(msg.before || "").length - String(msg.after || "").length;
-              log("took " + (gone > 0 ? gone : 0) + " characters out of a reply", true);
-              toast("Taken out. Put it back is on the card.");
+              // Said each time, because a snip sits among buttons that do call
+              // the model, and nothing else on screen says this one does not.
+              log("took " + (gone > 0 ? gone : 0) + " characters out of a reply, with no model call", true);
+              toast("Taken out. No model was asked, so it cost nothing. Put it back is on the card.");
             } else {
               log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
               toast("Reply refined.");

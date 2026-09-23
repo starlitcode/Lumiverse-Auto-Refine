@@ -91,6 +91,9 @@ function host(
     // Lumiverse's token counter, and whether it says its own answer is the
     // characters over four guess rather than a real count.
     tokens?: { approximate?: boolean };
+    // Jev, as the CORS proxy hands it back: a status and a body of text. The
+    // function is given the address and what was sent, and can answer or throw.
+    jev?: (url: string, init: any) => any;
   } = {},
 ) {
   // An install scoped to an operator refuses a model call that names no
@@ -119,7 +122,29 @@ function host(
   const shared: Record<string, string> = {};
   const perUser: Record<string, any> = {};
   const forbidden: string[] = [];
+  // The secure store, per account, and every call that went out to Jev.
+  const vault: Record<string, string> = {};
+  const jevCalls: Array<{ url: string; init: any; body: any }> = [];
   const spindle = {
+    cors: async (url: string, init: any) => {
+      let body: any = null;
+      try {
+        body = JSON.parse(init && init.body);
+      } catch (_) {}
+      jevCalls.push({ url: url, init: init, body: body });
+      if (!opts.jev) throw new Error("no Jev in this check");
+      return opts.jev(url, init);
+    },
+    enclave: {
+      put: async (k: string, v: string, u?: string) => {
+        vault[String(u) + ":" + k] = v;
+      },
+      get: async (k: string, u?: string) => vault[String(u) + ":" + k] ?? null,
+      has: async (k: string, u?: string) => String(u) + ":" + k in vault,
+      delete: async (k: string, u?: string) => {
+        delete vault[String(u) + ":" + k];
+      },
+    },
     on: (name: string, fn: any) => {
       (handlers[name] = handlers[name] || []).push(fn);
     },
@@ -352,6 +377,8 @@ function host(
     front: (p: any, who?: string) => frontHandler(p, who === undefined ? "u1" : who),
     // What each account's store actually holds, and the old shared one.
     perUser,
+    vault,
+    jevCalls,
     shared,
     breakStorage: () => {
       storageBroken = true;
@@ -445,6 +472,216 @@ describe("going over a reply more than once", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.asked.length).toBe(1);
+  });
+});
+
+// Two models. Jev answers each check with a chance from 0 to 1, and the refine
+// model runs only where one reaches the line. Jev failing in any way costs a
+// call, never a refine: the reply is refined as it is with one model.
+describe("two models: Jev reads the reply first", () => {
+  const says = (pcts: number[]) => (_url: string, init: any) => {
+    const b = JSON.parse(init.body);
+    const answers: any = {};
+    Object.keys(b.questions).forEach((id, i) => {
+      answers[id] = { noul: (pcts[i] ?? pcts[pcts.length - 1]) / 100 };
+    });
+    return { status: 200, body: JSON.stringify({ answers: answers, usage: { cost: 0.00002 } }) };
+  };
+  const TWO = { judgeMode: "two", judgeChecks: "`reply` repeats itself.\n`reply` uses stock phrases." };
+  const REPLY = "She stepped through and, suddenly, the cold just hit her.";
+  async function keyed(over: any, opts: any, messages = chat()) {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, ...over }, messages, opts);
+    await h.front({ type: "jev_key_set", requestId: "k", key: "sk-made-up-key" });
+    return h;
+  }
+  const said = (h: any) => h.sent.filter((m: any) => m.type === "judge_said");
+
+  test("a reply with every check under the line is left alone, and the refine model is not asked", async () => {
+    const h = await keyed({}, { jev: says([10, 20]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe(REPLY);
+    expect(h.stood().some((w: string) => /Jev found nothing/.test(w) && /highest was 20%/.test(w))).toBe(true);
+  });
+
+  test("a check at the line is refined", async () => {
+    const h = await keyed({}, { jev: says([10, 50]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    expect(said(h)[0].refine).toBe(true);
+    expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 50]);
+  });
+
+  test("the line is the setting, not a fixed half", async () => {
+    const h = await keyed({ judgeOver: 80 }, { jev: says([70]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("what goes to Jev is the reply, the checks and the key, to the host picked", async () => {
+    const h = await keyed({}, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const call = h.jevCalls[0];
+    expect(call.url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(call.init.method).toBe("POST");
+    expect(call.init.headers.Authorization).toBe("Bearer sk-made-up-key");
+    expect(call.body.model).toBe("typesafe/jev-1.13");
+    expect(call.body.state).toEqual({ reply: REPLY });
+    expect(call.body.questions).toEqual({
+      check_1: { type: "noul", instructions: "`reply` repeats itself." },
+      check_2: { type: "noul", instructions: "`reply` uses stock phrases." },
+    });
+  });
+
+  test("another address and model name go where they are pointed", async () => {
+    const h = await keyed(
+      { judgeHost: "custom", judgeUrl: "https://jev.example.test/v1/decide", judgeModel: "jev-custom" },
+      { jev: says([10]) },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://jev.example.test/v1/decide");
+    expect(h.jevCalls[0].body.model).toBe("jev-custom");
+  });
+
+  test("the key goes into the secure store and nowhere else", async () => {
+    const h = await keyed({}, { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.vault["u1:jev_api_key"]).toBe("sk-made-up-key");
+    expect(JSON.stringify(h.sent)).not.toContain("sk-made-up-key");
+    expect(JSON.stringify(h.perUser)).not.toContain("sk-made-up-key");
+    expect(JSON.stringify(h.shared)).not.toContain("sk-made-up-key");
+  });
+
+  test("a refused key refines anyway, and says why", async () => {
+    const h = await keyed({}, { jev: () => ({ status: 401, body: '{"error":"no"}' }) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    expect(said(h)[0].failed).toBe(true);
+    expect(said(h)[0].why).toMatch(/key was refused/);
+  });
+
+  test("Jev throwing refines anyway", async () => {
+    const h = await keyed({}, {
+      jev: () => {
+        throw new Error("the proxy fell over");
+      },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    expect(said(h)[0].why).toMatch(/could not be reached: the proxy fell over/);
+  });
+
+  test("with no key saved the reply is refined and nothing is sent to Jev", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], TWO, chat(), { jev: says([0]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+    expect(h.asked.length).toBe(1);
+    expect(said(h)[0].why).toMatch(/no Jev key/);
+  });
+
+  test("pressing the button is never held back by Jev", async () => {
+    const h = await keyed({}, { jev: says([0]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("with one model Jev is never asked", async () => {
+    const h = await keyed({ judgeMode: "one" }, { jev: says([0]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a pasted key is trimmed, and one that cannot be a key is refused", async () => {
+    const h = await armed([], TWO);
+    await h.front({ type: "jev_key_set", requestId: "a", key: "  sk-trimmed\n" });
+    expect(h.vault["u1:jev_api_key"]).toBe("sk-trimmed");
+    await h.front({ type: "jev_key_set", requestId: "b", key: "two\nlines" });
+    const back = h.sent.filter((m: any) => m.type === "jev_key");
+    expect(back[1].said).toMatch(/does not look like a key/);
+    expect(h.vault["u1:jev_api_key"]).toBe("sk-trimmed");
+    await h.front({ type: "jev_key_forget", requestId: "c" });
+    expect(h.vault["u1:jev_api_key"]).toBeUndefined();
+    expect(h.sent.filter((m: any) => m.type === "jev_key")[2].has).toBe(false);
+  });
+
+  test("Test asks one small question with nothing from any chat in it", async () => {
+    const h = await keyed({}, { jev: says([100]) });
+    await h.front({ type: "jev_test", requestId: "t" });
+    expect(h.jevCalls[0].body.state).toEqual({ text: "The door is open." });
+    const done = h.sent.find((m: any) => m.type === "jev_tested");
+    expect(done.ok).toBe(true);
+  });
+
+  test("worn phrases are asked about when they are on", async () => {
+    const worn: Msg[] = [
+      { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
+      { id: "m1", role: "user", content: "i go on" },
+      { id: "m2", role: "assistant", content: "Rain came down and the cold wind bit at her hands." },
+      { id: "m3", role: "user", content: "i keep going" },
+      { id: "m4", role: "assistant", content: "She went through the gate, and the cold wind bit at her again." },
+    ];
+    const h = await keyed({ wornOn: true, wornLeast: 2 }, { jev: says([10]) }, worn);
+    await h.ended({ chatId: "c1", messageId: "m4", generationId: "g1" });
+    await wait(50);
+    const body = h.jevCalls[0].body;
+    expect(body.state.worn_phrases).toMatch(/cold wind bit/);
+    expect(body.questions.worn.type).toBe("noul");
+  });
+});
+
+// A provider that meters calls per minute is the reason for the gap. A reply
+// inside it waits and is then refined: skipping it would leave a reply
+// unrefined for no reason the reader could see.
+describe("the gap between automatic refines", () => {
+  test("a reply inside the gap waits for it, then is refined", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true, refineGap: 1 });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    const second = h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(300);
+    expect(h.asked.length).toBe(1);
+    const told = h.sent.find((m) => m.type === "refine_progress" && m.stage === "waiting" && m.gap);
+    expect(told && told.waitMs > 0 && told.waitMs <= 1000).toBe(true);
+    await second;
+    await wait(50);
+    expect(h.asked.length).toBe(2);
+  });
+
+  test("with no gap the next one goes at once", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true, refineGap: 0 });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(100);
+    expect(h.asked.length).toBe(2);
+    expect(h.sent.some((m) => m.type === "refine_progress" && m.gap)).toBe(false);
+  });
+
+  test("Stop during the wait ends it, and nothing is asked", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true, refineGap: 5 });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const second = h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(50);
+    await h.front({ type: "cancel_refine", requestId: "s" });
+    await second;
+    expect(h.asked.length).toBe(1);
+    expect(h.stood().some((w: string) => /gap between refines/.test(w))).toBe(true);
   });
 });
 
@@ -1975,6 +2212,36 @@ describe("thinking the extension has to recognise", () => {
     await wait(50);
     expect(said(h)).not.toContain("plan the edit");
     expect(h.body("m2")).toContain("<scratchpad>plan the edit</scratchpad>");
+  });
+
+  // A preset can start the reply inside the thinking tag, so the message opens
+  // mid-thought and its first tag is the closer of one it never wrote. That is
+  // still the model working, and it is not the refiner's to rewrite.
+  test("working whose opener was in the prompt is kept out too", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withHead("# The plan\nkeep it short, end on the door\n</think>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("end on the door");
+    // Put back in front of the rewrite exactly as it was, closer and all.
+    expect(h.body("m2")).toBe(
+      "# The plan\nkeep it short, end on the door\n</think>\n\nShe stepped through and the cold hit her.",
+    );
+  });
+
+  test("but a closer with an opener in front of it is left to the usual rule", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withHead("<think>plan the edit</think>\n\n"),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("plan the edit");
+    expect(h.body("m2")).toContain("<think>plan the edit</think>");
   });
 
   test("an unusual one is sent as prose until it is named", async () => {
@@ -4591,6 +4858,77 @@ describe("taking out what you selected", () => {
 // other has to refuse too. A snip is a person's own edit rather than a model
 // rewrite, which is an argument for allowing it, but not an argument anybody
 // could guess from two marks side by side.
+// A snip is an edit to the writing on screen, never another version of it.
+//
+// It used to share the refine's write, swipe setting included, so with that
+// setting on a snip went in as a new swipe one arrow away. The screen did not
+// change, the log said it had, and the next snip read the swipe nobody could
+// see and reported that the selection was not in the message. Reported from
+// the Discord as the button working twice and then never again.
+describe("a snip edits the swipe on screen and never adds one", () => {
+  const WAS = "She stepped through and, suddenly, the cold just hit her.";
+  const withSwipes = (list: string[], showing: number): Msg[] => {
+    const msgs = chat() as any[];
+    msgs[2].swipes = list.slice();
+    msgs[2].swipe_id = showing;
+    msgs[2].content = list[showing];
+    return msgs as Msg[];
+  };
+  const snip = (h: any, picked: string, ahead: string) =>
+    h.front({ type: "snip_selection", requestId: "r", chatId: "c1", messageId: "m2", picked, ahead });
+
+  test("with the swipe setting on, a snip still writes in place", async () => {
+    const h = await armed([], { asSwipe: true }, withSwipes([WAS], 0));
+    await snip(h, ", suddenly,", "She stepped through and");
+    await wait(60);
+    const p = h.lastPatch("m2");
+    expect(p.swipes.length).toBe(1);
+    expect(p.swipe_id).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and the cold just hit her.");
+  });
+
+  test("so a second snip on the same message finds what it was asked for", async () => {
+    const h = await armed([], { asSwipe: true }, withSwipes([WAS], 0));
+    await snip(h, ", suddenly,", "She stepped through and");
+    await wait(60);
+    await snip(h, "just ", "She stepped through and the cold ");
+    await wait(60);
+    const results = h.sent.filter((m: any) => m.type === "snip_result");
+    expect(results.every((r: any) => r.ok !== false)).toBe(true);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // The record says one swipe is showing and the screen shows another, which
+  // is what a refine added as a swipe leaves when the view does not follow it.
+  // The selection was made on screen, so that is the swipe it belongs to.
+  test("a selection from the swipe on screen is found when the record points elsewhere", async () => {
+    const refined = "She stepped through and the cold hit her.";
+    const h = await armed([], {}, withSwipes([WAS, refined], 1));
+    await snip(h, ", suddenly,", "She stepped through and");
+    await wait(60);
+    const done = h.sent.find((m: any) => m.type === "snip_result");
+    expect(done && done.ok).not.toBe(false);
+    const p = h.lastPatch("m2");
+    expect(p.swipes[0]).toBe("She stepped through and the cold just hit her.");
+    // The refine is left as it was, and the swipe you edited is the one showing.
+    expect(p.swipes[1]).toBe(refined);
+    expect(p.swipe_id).toBe(0);
+  });
+
+  test("but not when two swipes both hold it, since there is no telling which was meant", async () => {
+    const h = await armed([], {}, withSwipes(["Rain, suddenly, on the glass.", WAS, "The dog barked."], 2));
+    await snip(h, ", suddenly,", "Rain");
+    await wait(60);
+    // Two swipes hold it, and neither is the one on record.
+    const h2 = await armed([], {}, withSwipes([WAS, WAS.replace("her", "him"), "The dog barked."], 2));
+    await snip(h2, ", suddenly,", "She stepped through and");
+    await wait(60);
+    const done = h2.sent.find((m: any) => m.type === "snip_result");
+    expect(done.ok).toBe(false);
+    expect(done.why).toMatch(/not in that message/i);
+  });
+});
+
 describe("what a snip refuses, matching the refine beside it", () => {
   const withGreeting = (): Msg[] => [
     { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },

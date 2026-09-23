@@ -857,6 +857,23 @@ function splitThinking(text) {
             }
         }
     }
+    // Working whose opener was in the prompt. A preset can start the reply inside
+    // the thinking tag, so the message opens mid-thought and the first tag in it
+    // is the closer of one it never wrote. Everything up to that closer is the
+    // model working and is held back like any other, rather than handed to the
+    // refiner as a passage to rewrite. Only when nothing opens it first, so an
+    // ordinary block stays with the rule above.
+    if (!head && protectThinking) {
+        const alt = thinkNames().join('|');
+        const close = new RegExp('<\\/(?:' + alt + ')\\s*>|\\[\\/(?:' + alt + ')\\s*\\]', 'i').exec(src);
+        if (close) {
+            const open = new RegExp('<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\]', 'i');
+            if (!open.test(src.slice(0, close.index))) {
+                const end = close.index + close[0].length;
+                head = src.slice(0, end) + /^\s*/.exec(src.slice(end))[0];
+            }
+        }
+    }
     // No working in front of the reply, but the markers that open the turn and
     // introduce the answer are still not prose and still must not be rewritten.
     if (!head) {
@@ -1901,6 +1918,12 @@ let retryRefine = 0;
 // nothing: the model never read anything, so waiting and asking again buys the
 // refine that was already asked for rather than a second one.
 let rateWaits = 2;
+// Seconds between one automatic refine and the next, 0 for none.
+let refineGap = 0;
+// When each account's next automatic refine may start. A slot is taken when a
+// reply lands, not when its refine ends, so two replies landing together are
+// spaced out rather than both reading the same last start and going at once.
+const nextAutoAt = new Map();
 // Whether a refine is added as a swipe beside the reply rather than written
 // over it. Off by default: it changes what the chat holds rather than what it
 // says, and a reader who has not asked for that should not find their swipe
@@ -3006,6 +3029,46 @@ pick) {
     // Where the selection sits in the body. Worked out against the body rather
     // than the whole message, because the model's own working is in front of it
     // and counting through that would put every offset out by its length.
+    // Two models: Jev reads the reply before the refine model is asked, on the
+    // automatic pass only. Pressing the button, or picking part of a reply, is
+    // somebody who has already decided it needs a refine.
+    if (judgeMode === 'two' && !byHand && !pick) {
+        tell(userId, { type: 'refine_progress', stage: 'judging' });
+        const worn = judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
+        // Held like a call to the refine model, so Stop reaches it. The request to
+        // Jev cannot be pulled back once sent, so Stop is honoured when it answers.
+        let stopped = false;
+        const handle = { abort: () => { stopped = true; } };
+        holdRun(userId, handle);
+        let verdict;
+        try {
+            verdict = await judgeReply(userId, split.body, worn);
+        }
+        finally {
+            dropRun(userId, handle);
+        }
+        if (stopped)
+            return { ok: false, stood: true, why: 'stopped while Jev was reading the reply' };
+        tell(userId, {
+            type: 'judge_said',
+            chatId: chatId,
+            messageId: m.id,
+            refine: verdict.refine,
+            failed: !!verdict.failed,
+            why: verdict.why || '',
+            scores: verdict.scores || [],
+            cost: verdict.cost || 0,
+            over: judgeOver,
+        });
+        if (!verdict.refine) {
+            const top = Math.max(0, ...(verdict.scores || []).map((x) => x.pct));
+            return {
+                ok: false,
+                stood: true,
+                why: 'Jev found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
+            };
+        }
+    }
     let pickAt = null;
     if (pick && String(pick.text || '').trim()) {
         pickAt = pickedSpan(split.body, String(pick.text), pick.ordinal);
@@ -3258,6 +3321,26 @@ pick) {
         saved.notes = notes;
     return saved;
 }
+// What one swipe of a message says right now, or null when it cannot be read,
+// for the same check as below when the write is for a swipe other than the one
+// the message records as showing.
+async function swipeContent(chatId, messageId, at) {
+    try {
+        const msgs = await spindle.chat.getMessages(chatId);
+        if (!Array.isArray(msgs))
+            return null;
+        const m = msgs.find((x) => x && x.id === messageId);
+        if (!m)
+            return null;
+        const listOn = swipeListOn(m);
+        if (!listOn || !Array.isArray(m[listOn]) || at >= m[listOn].length)
+            return null;
+        return String(m[listOn][at] == null ? '' : m[listOn][at]);
+    }
+    catch (_) {
+        return null;
+    }
+}
 // What a message says right now, or null when it cannot be read. Null means
 // proceed: a host that will not answer is not evidence that anything changed,
 // and refusing every refine because a read failed is worse than the race.
@@ -3310,11 +3393,51 @@ async function snipMessage(chatId, messageId, picked, ahead, userId) {
         return { ok: false, why: 'the greeting is written by a person, so it is never edited from here' };
     if (m.role !== 'assistant' && m.role !== 'user')
         return { ok: false, why: 'only replies and your own messages can be edited from here' };
-    const original = String(m.content == null ? '' : m.content);
-    const split = splitThinking(original);
+    const ordinal = ordinalOf(ahead, picked);
+    let original = String(m.content == null ? '' : m.content);
+    let split = splitThinking(original);
+    let at = split.body.trim() ? pickedSpan(split.body, picked, ordinal) : null;
+    let onSwipe;
+    // Not in the swipe the message records as showing, so possibly in the one
+    // that is actually on screen. The two part company whenever something moves
+    // the record without moving the view: a refine added as a swipe that the
+    // screen did not follow is the usual one. The selection was made on screen,
+    // so the swipe on screen is the one it belongs to. Used only when exactly one
+    // swipe holds it, because two would leave no way to know which was meant.
+    if (!at) {
+        const listOn = swipeListOn(m);
+        const list = listOn ? m[listOn] : [];
+        const showing = typeof m[swipeAtOn(m)] === 'number' ? m[swipeAtOn(m)] : -1;
+        let found = -1;
+        let foundSplit = null;
+        let foundAt = null;
+        for (let i = 0; i < list.length; i++) {
+            if (i === showing)
+                continue;
+            const text = String(list[i] == null ? '' : list[i]);
+            const sp = splitThinking(text);
+            if (!sp.body.trim())
+                continue;
+            const hit = pickedSpan(sp.body, picked, ordinal);
+            if (!hit)
+                continue;
+            if (found >= 0) {
+                found = -2;
+                break;
+            }
+            found = i;
+            foundSplit = sp;
+            foundAt = hit;
+        }
+        if (found >= 0) {
+            onSwipe = found;
+            original = String(list[found] == null ? '' : list[found]);
+            split = foundSplit;
+            at = foundAt;
+        }
+    }
     if (!split.body.trim())
         return { ok: false, why: 'that message is only the model working, so there is nothing to take out' };
-    const at = pickedSpan(split.body, picked, ordinalOf(ahead, picked));
     if (!at)
         return { ok: false, why: 'what you selected is not in that message any more, so nothing was taken out' };
     const body = snipSpan(split.body, at.start, at.end);
@@ -3325,13 +3448,22 @@ async function snipMessage(chatId, messageId, picked, ahead, userId) {
     const next = split.head + body + split.tail;
     if (next === original)
         return { ok: false, why: 'that selection is already gone' };
-    return saveRefined(chatId, m, original, next, userId, 'snip');
+    return saveRefined(chatId, m, original, next, userId, 'snip', onSwipe);
 }
 async function saveRefined(chatId, m, original, next, userId, 
 // What the write was. A snip takes text out with no model call, so the panel
 // words it and counts it differently, but the way back is the same one.
-kind) {
+kind, 
+// The swipe the write is for, when it is not the one the message says is
+// showing. Only a snip passes this: it works on what is on screen, and the
+// screen can be on a different swipe from the one the message records.
+onSwipe) {
     const k = key(chatId, m.id);
+    const aimed = typeof onSwipe === 'number' && onSwipe >= 0;
+    // A snip never goes in as a swipe, whatever the swipe setting says. It is an
+    // edit to the writing on screen, and one added as a swipe landed out of
+    // sight, so the log said it happened and the next snip could not find its
+    // text. The kind check sits on the swipe branch below.
     try {
         // The message is read, sent to a model, and written back, and the model
         // call takes seconds. Anything editing that message in the meantime would
@@ -3341,7 +3473,7 @@ kind) {
         // So the message is read again here and the write is refused if it moved.
         // A refine is worth less than somebody else's edit: the refine can be run
         // again on the new text, and the edit cannot be recovered.
-        const fresh = await currentContent(chatId, m.id);
+        const fresh = aimed ? await swipeContent(chatId, m.id, onSwipe) : await currentContent(chatId, m.id);
         if (fresh !== null && fresh !== original) {
             return {
                 ok: false,
@@ -3357,7 +3489,7 @@ kind) {
         const listOn = swipeListOn(m);
         const atOn = swipeAtOn(m);
         const swipes = listOn ? m[listOn].slice() : null;
-        const idx = m && typeof m[atOn] === 'number' ? m[atOn] : 0;
+        const idx = aimed ? onSwipe : m && typeof m[atOn] === 'number' ? m[atOn] : 0;
         // The rewrite as a swipe beside the reply rather than over it.
         //
         // Put it back is held in memory and gone on reload, which is the right
@@ -3370,7 +3502,7 @@ kind) {
         // there is nothing to add to, and writing content alone is the old
         // behaviour, which is what this falls back to.
         let addedAt = -1;
-        if (asSwipe && swipes) {
+        if (asSwipe && swipes && kind !== 'snip') {
             swipes.push(next);
             addedAt = swipes.length - 1;
             patch[listOn] = swipes;
@@ -3409,6 +3541,155 @@ kind) {
         return { ok: false, why: 'the message could not be saved: ' + ((e && e.message) || 'no reason given') };
     }
 }
+// ---- Jev, the second model ----
+// In two-model mode a second, much smaller model reads a finished reply first
+// and says whether it needs a refine. Jev answers each check with the chance,
+// from 0 to 1, that a statement about the reply is true, and nothing else: it
+// writes no text, so there is nothing of its own to save over a reply. The
+// refine model then runs only on the replies Jev picks out.
+//
+// Reached through Lumiverse's CORS proxy, since Jev is not a chat model and no
+// connection profile can hold it. The key is kept in the secure enclave, per
+// account, and never goes into the settings, an export or the panel.
+const JEV_HOSTS = {
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13' },
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13' },
+    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0' },
+};
+const JEV_KEY = 'jev_api_key';
+// A decision comes back in well under a second, so twenty is a host that is
+// down rather than one that is slow.
+const JEV_TIMEOUT_MS = 20000;
+// How much of the reply goes over. Far past any reply, and a cap all the same,
+// since the text leaves Lumiverse for somebody else's server.
+const JEV_REPLY_MAX = 60000;
+const JEV_CHECKS_MAX = 20;
+// The one kind of question put to Jev: the chance, 0 to 1, that a statement is
+// true. Named so it does not read as one of the bridge's message types.
+const NOUL = 'noul';
+let judgeMode = 'one';
+let judgeHost = 'openrouter';
+let judgeUrl = '';
+let judgeModel = '';
+let judgeChecks = [];
+let judgeOver = 50;
+let judgeWorn = true;
+function jevWhere() {
+    if (judgeHost === 'custom')
+        return { url: judgeUrl, model: judgeModel };
+    return JEV_HOSTS[judgeHost] || JEV_HOSTS.openrouter;
+}
+async function jevKey(userId) {
+    try {
+        if (!spindle.enclave || typeof spindle.enclave.get !== 'function')
+            return '';
+        const got = await spindle.enclave.get(JEV_KEY, userId);
+        return got == null ? '' : String(got);
+    }
+    catch (_) {
+        return '';
+    }
+}
+// What the enclave will take: printable ASCII, and far less of it than its
+// limit. A key with a line break pasted onto its end is the usual way this
+// fails, so the ends are trimmed first.
+function cleanJevKey(raw) {
+    const key = String(raw == null ? '' : raw).trim();
+    return /^[\x20-\x7e]{1,4096}$/.test(key) ? key : '';
+}
+function jevTimeout(work) {
+    let timer = null;
+    const late = new Promise((_, no) => {
+        timer = setTimeout(() => no(new Error('Jev did not answer within ' + JEV_TIMEOUT_MS / 1000 + 's')), JEV_TIMEOUT_MS);
+    });
+    return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+// One call to Jev. Answers with what Jev said, or with why it could not be
+// asked, in words fit for the Log.
+async function askJev(userId, state, questions) {
+    const where = jevWhere();
+    if (!where.url)
+        return { error: 'no address is set for Jev' };
+    if (!where.model)
+        return { error: 'no model name is set for Jev' };
+    const key = await jevKey(userId);
+    if (!key)
+        return { error: 'no Jev key is saved' };
+    if (typeof spindle.cors !== 'function')
+        return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
+    const body = JSON.stringify({ model: where.model, state: state, questions: questions });
+    const send = async () => {
+        try {
+            return await jevTimeout(spindle.cors(where.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+                body: body,
+            }));
+        }
+        catch (e) {
+            return { status: 0, body: '', error: (e && e.message) || String(e) };
+        }
+    };
+    let res = await send();
+    // Busy rather than broken, and a second ask a moment later usually lands.
+    if (res && (res.status === 429 || res.status === 529)) {
+        await new Promise((r) => setTimeout(r, 1200));
+        res = await send();
+    }
+    if (!res || res.error || !res.status)
+        return { error: 'Jev could not be reached: ' + ((res && res.error) || 'no answer') };
+    let data = null;
+    try {
+        data = JSON.parse(String(res.body || ''));
+    }
+    catch (_) {
+        data = null;
+    }
+    const said = data && (data.error || data.detail);
+    const saidText = typeof said === 'string' ? said : said && said.message ? String(said.message) : '';
+    if (res.status === 401 || res.status === 403)
+        return { error: 'the Jev key was refused' };
+    if (res.status === 402)
+        return { error: 'the Jev account has no credit left' };
+    if (res.status < 200 || res.status >= 300 || saidText)
+        return { error: 'Jev answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
+    if (!data || typeof data.answers !== 'object' || !data.answers)
+        return { error: 'Jev sent back no answers' };
+    const cost = Number(data.usage && data.usage.cost);
+    return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0 };
+}
+// The checks, and the worn phrases when there are any, put to Jev about one
+// reply. A check above the line is a reply worth refining.
+async function judgeReply(userId, reply, worn) {
+    const questions = {};
+    const asked = [];
+    judgeChecks.slice(0, JEV_CHECKS_MAX).forEach((line, i) => {
+        const id = 'check_' + (i + 1);
+        questions[id] = { type: NOUL, instructions: line };
+        asked.push({ id: id, check: line });
+    });
+    const state = { reply: reply.slice(0, JEV_REPLY_MAX) };
+    if (judgeWorn && worn.trim()) {
+        state.worn_phrases = worn;
+        const line = 'At least one phrase listed in `worn_phrases` appears in `reply`.';
+        questions.worn = { type: NOUL, instructions: line };
+        asked.push({ id: 'worn', check: 'Uses a phrase this chat has worn out' });
+    }
+    if (!asked.length)
+        return { refine: true, failed: true, why: 'there are no checks for Jev to answer' };
+    const got = await askJev(userId, state, questions);
+    if (got.error)
+        return { refine: true, failed: true, why: got.error };
+    const scores = [];
+    for (const one of asked) {
+        const v = got.answers[one.id] && got.answers[one.id].noul;
+        if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1)
+            scores.push({ id: one.id, check: one.check, pct: Math.round(v * 100) });
+    }
+    if (!scores.length)
+        return { refine: true, failed: true, why: 'Jev sent back no usable answers', cost: got.cost };
+    return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost };
+}
 // Everything the manifest asks for, so the panel can name what is missing
 // rather than saying a permission is missing.
 const NEEDED = [
@@ -3418,6 +3699,7 @@ const NEEDED = [
     'characters',
     'world_books',
     'ui_panels',
+    'cors_proxy',
 ];
 // ---- the events ----
 try {
@@ -3493,6 +3775,20 @@ try {
             if (answered.has(run))
                 return stand('this reply was announced twice, and it was taken the first time', messageId);
             note(answered, run, ANSWERED_MAX);
+            // The gap between automatic refines. Waited out rather than skipped: the
+            // reply still gets its refine, a few seconds later.
+            const gapMs = refineGap * 1000;
+            if (gapMs > 0) {
+                const slot = Math.max(Date.now(), nextAutoAt.get(who || '') || 0);
+                nextAutoAt.set(who || '', slot + gapMs);
+                const ms = slot - Date.now();
+                if (ms > 0) {
+                    say('info', 'waiting ' + Math.round(ms / 1000) + 's for the gap between refines');
+                    tell(who, { type: 'refine_progress', stage: 'waiting', waitMs: ms, gap: true });
+                    if (!(await pause(ms, who)))
+                        return stand('stopped while waiting for the gap between refines', messageId);
+                }
+            }
             let done;
             try {
                 done = await refineMessage(p.chatId, messageId, who, false);
@@ -3626,6 +3922,22 @@ spindle.onFrontendMessage(async (payload, userId) => {
             retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
             rateWaits = Number(s.rateWaits);
             rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
+            refineGap = Number(s.refineGap);
+            refineGap = Number.isFinite(refineGap) ? Math.min(120, Math.max(0, refineGap)) : 0;
+            judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
+            judgeHost = ['openrouter', 'nanogpt', 'typesafe', 'custom'].indexOf(String(s.judgeHost)) >= 0
+                ? String(s.judgeHost)
+                : 'openrouter';
+            judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
+            judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
+            judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
+                .split('\n')
+                .map((l) => l.trim().slice(0, 500))
+                .filter(Boolean)
+                .slice(0, JEV_CHECKS_MAX);
+            judgeOver = Number(s.judgeOver);
+            judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
+            judgeWorn = s.judgeWorn !== false;
             asSwipe = !!s.asSwipe;
             wornOn = !!s.wornOn;
             wornBack = Number(s.wornBack);
@@ -4129,6 +4441,46 @@ spindle.onFrontendMessage(async (payload, userId) => {
         // Which build this half is on. Asked on every panel load rather than only
         // announced at startup: this module comes up once and stays up, so a panel
         // opened at any point after that missed the announcement.
+        // The Jev key. It comes in once, goes into the enclave, and is never sent
+        // back: the panel is only ever told whether there is one.
+        if (payload.type === 'jev_key_set' || payload.type === 'jev_key_forget' || payload.type === 'jev_key_status') {
+            let said = '';
+            try {
+                if (!spindle.enclave)
+                    said = 'this build of Lumiverse has no secure store to keep the key in';
+                else if (payload.type === 'jev_key_set') {
+                    const key = cleanJevKey(payload.key);
+                    if (!key)
+                        said = 'that does not look like a key: it has to be one line of plain characters';
+                    else {
+                        await spindle.enclave.put(JEV_KEY, key, userId);
+                        said = 'saved';
+                    }
+                }
+                else if (payload.type === 'jev_key_forget') {
+                    await spindle.enclave.delete(JEV_KEY, userId);
+                    said = 'forgotten';
+                }
+            }
+            catch (e) {
+                said = 'the key could not be stored: ' + ((e && e.message) || String(e));
+            }
+            replyTo(userId, { type: 'jev_key', requestId: payload.requestId, has: !!(await jevKey(userId)), said: said });
+            return;
+        }
+        // One small question with nothing from any chat in it, so a key can be
+        // checked before a reply depends on it.
+        if (payload.type === 'jev_test') {
+            const got = await askJev(userId, { text: 'The door is open.' }, { open: { type: NOUL, instructions: 'The door in `text` is open.' } });
+            const v = got.answers && got.answers.open && got.answers.open.noul;
+            replyTo(userId, {
+                type: 'jev_tested',
+                requestId: payload.requestId,
+                ok: !got.error && typeof v === 'number',
+                why: got.error || (typeof v === 'number' ? '' : 'Jev answered, but not with a usable score'),
+            });
+            return;
+        }
         if (payload.type === 'get_backend_version') {
             replyTo(userId, { type: 'backend_version', requestId: payload.requestId, version: VERSION });
             return;

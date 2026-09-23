@@ -107,15 +107,16 @@ Under **Context**, **Show me the request** builds the real request for the reply
 - [Ways to reach it](docs/settings.md#setup) - the floating button, the two buttons in the chat, the Extras row, and refining a selection
 - [Presets](docs/prompt.md#presets) - saving a setup and moving between setups
 - [Import and export](docs/prompt.md#import-and-export) - carrying a setup to another device
+- [Two models](docs/jev.md) - Jev, a beta that decides which replies are worth a refine
 - [Privacy](docs/privacy.md) - what it can reach, what it sends, and what it keeps
 - [Security policy](SECURITY.md) - how to report a security problem
 - [Changelog](CHANGELOG.md) - what changed in every version
 
 ## How it works
 
-The refining runs in a backend module, because editing a saved message is a backend job. The tab collects what you want, hands it over, and shows what came back. Every model call goes through Lumiverse to the provider you already configured; the extension has no networking of its own, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing.
+The refining runs in a backend module, because editing a saved message is a backend job. The tab collects what you want, hands it over, and shows what came back. Every refine goes through Lumiverse to the provider you already configured, and with two models on, the call to Jev goes through Lumiverse's own proxy to the Jev host you picked. The extension has no networking of its own, which you can confirm by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and finding nothing.
 
-It declares six permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` to know which chat it is and what Lumiverse remembers of it, `characters` to read the card, `world_books` to read the lore the chat has active, and `ui_panels` for the floating button. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
+It declares seven permissions: `generation` to run the refine, `chat_mutation` to save it, `chats` to know which chat it is and what Lumiverse remembers of it, `characters` to read the card, `world_books` to read the lore the chat has active, `ui_panels` for the floating button, and `cors_proxy` to reach Jev when two models are on. [Privacy](docs/privacy.md) goes through each one and says what still works without it.
 
 One part reaches into the page rather than going through an API, because Lumiverse does not offer one: **Refine what I am typing** reads and writes the chat input box. It is off by default, and it is the only thing that would stop working if a Lumiverse update moved that box. **Where the input box is**, on the Setup tab, is where you point it at the new one without waiting for a release.
 

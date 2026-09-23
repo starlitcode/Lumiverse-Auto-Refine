@@ -14,11 +14,25 @@ _2026-09-23_
 
 - **`{{charGroupFocused}}` in the list of macros.** In a group chat it is the name of the character in focus, which is the one the turn belongs to. It sits beside `{{char}}` under the ones Lumiverse fills in.
 
+- **Two models, a beta.** On the Model tab, **One model or two**. With two, Jev, a small decision model from TypeSafe, reads each finished reply first and answers a list of checks you write with the chance each one is true. The refine model runs only when a check reaches the line you set, so replies that were already fine stop costing a refine. Jev can be reached through OpenRouter, NanoGPT, TypeSafe itself, or another address. It can also check whether a reply uses a phrase the chat has worn out. The key is kept in Lumiverse's secure store and never in your settings or an export. Anything that stops Jev from answering means the reply is refined as it would be with one model, and the Log says why. A refine you start yourself never goes to Jev. See [Two models](docs/jev.md).
+
+  This needs a new permission, `cors_proxy`, because Jev is not a chat model and no connection profile can reach it. Lumiverse asks for it when you update. Refusing it changes nothing unless two-model mode is on.
+
+- **Seconds between automatic refines**, under Limits and protection. For a provider that meters calls per minute. A reply that lands inside the gap waits for it and is then refined, and the panel counts the seconds down while it waits. **Stop** ends the wait. It is 0 by default, which is no gap, and a refine you start yourself never waits for it.
+
 ### Changed
 
 - **The prompts that come with it say one thing they did not.** Each told the model that the user decides how dark, explicit or crude a story gets, and that whether a line should have been written is theirs, with nothing after it. Read on its own that was a promise about everything, so it now names the one exception: sexual content involving anyone under eighteen, or anyone written as a child, is not edited. The model is told to hand that passage back exactly as it came and say why, so your reply is left as it was. A younger character in a scene with nothing sexual in it is edited like anyone else.
 
   The panel tells you the built-in prompts have changed, and loading yours again picks this up. A prompt of your own is not touched.
+
+- **Each preset keeps its own folds.** Folds were kept by block, and a preset saved from another keeps that one's blocks, so folding a block in one preset folded it in every preset made from it. They are kept per preset now. Saving a copy keeps the folds you were looking at, and renaming a preset takes them with it.
+
+- **The bar over the blocks reads as one.** **Fold them all** was squeezed into a button made for an arrow, so it broke over three lines. It is **Fold all** or **Open all** on one line now, with the arrow the blocks use, and a count on the left of how many blocks there are and how many are folded. The count follows a block you fold by its own arrow.
+
+- **A snip says it cost nothing.** **Take out what I selected** never asks a model, so it is free and instant, but it sits among buttons that do cost a call. The message after one now says so.
+
+- **Only a switch flips a switch.** Pressing the words beside one used to change the setting, and so did pressing the empty space past the automatic switch. A row of settings is read by running a finger or a pointer along it, so a stray tap on a name was a setting changed without meaning to. The box is the only thing that answers now, the same way the **?** is the only thing that opens a description. The lists of parts are the same, the reset list most of all. The words still name each switch for a screen reader.
 
 - **The README says plainly that Auto Refine is not for sexual content involving minors.** It says what the prompts do about it, and that the one exception is the only one.
 
@@ -26,7 +40,15 @@ _2026-09-23_
 
 ### Fixed
 
+- **Take out what I selected works every time.** Reported by a Discord user. With **Add the refine as a swipe instead of writing over the reply** on, a snip went in as a new swipe rather than as an edit, one arrow away from the one on screen. Nothing appeared to change, the log said it had, and the next snip read the swipe you could not see and said your selection was no longer in the message. From then on every snip on every message looked broken. A snip now always edits the writing in place, whatever that switch says.
+
+  It also finds your selection when the message and the screen disagree about which swipe is showing, which a refine added as a swipe can leave behind. The selection was made on screen, so the swipe on screen is the one it edits.
+
+- **The model's working is held back when the thinking tag was opened in the prompt.** A preset can start the reply inside the thinking tag, so the message opens mid-thought and the first tag in it is the closer of one it never wrote. That working used to go to the refiner as part of the passage, to be rewritten like prose. It is held back now and put back in front of the rewrite exactly as it was, the same as working with both of its tags.
+
 - **A built-in prompt stays locked when Lumiverse builds the panel again.** Which prompt the picker named lived only in memory, and Lumiverse takes the panel down and puts it back on its own terms: changing drawer tab does it, and so does leaving it alone for a while. The picker came back empty every time, the lock that reads it came off with it, and the boxes went back to taking typing over a prompt that cannot be written over. The picker is kept with your prompt now, and travels with it when you export one.
+
+- **Renaming a preset or a model setup to the name it already has says so.** It used to say "Renamed." when nothing had changed. It now says that is already its name and asks for a different one. Renaming onto the name of another one was already refused, and says to pick another name.
 
 ---
 

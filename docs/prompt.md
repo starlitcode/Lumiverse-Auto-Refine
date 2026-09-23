@@ -14,7 +14,7 @@ A block whose text comes out empty is left out, not sent blank, and so is one th
 
 ### Folding one shut
 
-Each block has a caret beside its switch. Folded, it is its switch and its name and nothing else, so a prompt of a dozen is a list you can read at once instead of a dozen text boxes to scroll past. **Fold them all** at the bottom of the card does the whole list, and turns into **Open them all** once they are.
+Each block has a caret beside its switch. Folded, it is its switch and its name and nothing else, so a prompt of a dozen is a list you can read at once instead of a dozen text boxes to scroll past. **Fold all** above the list does the whole list, and turns into **Open all** once they are. Beside it is how many blocks there are and how many are folded. Each preset keeps its own folds, and a copy you save keeps the ones you were looking at. Folds are never part of a preset you export.
 
 A folded block is sent exactly as it was: this is about what is on the screen, not what goes to the model. Its switch still works while it is folded.
 
