@@ -6308,7 +6308,7 @@ console.log("\nmodel setups");
   });
 
   // One saved before the prices existed names no price at all. Zeroing them
-  // would be worse than leaving them: a cost line quietly disappearing reads as
+  // would be worse than leaving them: a cost line disappearing reads as
   // the extension deciding not to show one.
   await inTab(
     browser,
@@ -8583,7 +8583,7 @@ console.log("\nthe buttons in Lumiverse's own slots");
 console.log("\nswitching on a setting with nowhere to put its answer");
 {
   // A prompt saved before the worn block existed does not carry it. Turning the
-  // setting on then fills nothing, and doing that quietly is the failure.
+  // setting on then fills nothing, and doing that without saying so is the failure.
   const noWorn = [
     { id: "system", name: "The job", on: true, role: "system", text: "<your_task>\nRewrite it.\n</your_task>" },
     { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },

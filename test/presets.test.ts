@@ -208,7 +208,7 @@ describe("the prompts that come with it", () => {
       }
   });
 
-  // Two things a refine gets wrong quietly, so every prompt says them.
+  // Two things a refine gets wrong without any warning, so every prompt says them.
   //
   // A reply written in first person, present tense, from inside one head can
   // come back in polished third with another character's thoughts in it, and
@@ -247,7 +247,7 @@ describe("the prompts that come with it", () => {
 
 // The list of macros the panel shows and the list the backend answers are two
 // lists in two files, and a macro in one but not the other is invisible until
-// somebody's prompt quietly stops working. {{whose}} was taken out of both,
+// somebody's prompt stops working. {{whose}} was taken out of both,
 // and this is what says so next time.
 describe("the macros offered and the macros answered", () => {
   const FE = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
@@ -299,7 +299,7 @@ describe("the macros offered and the macros answered", () => {
 
 // A setting nobody can export is a setting that does not survive moving to
 // another device, and nothing says so: the export runs, the file downloads, and
-// the setting is quietly not in it.
+// the setting is not in it.
 //
 // Six were missed this way at once, which is what this is here to stop.
 describe("every setting can leave the panel", () => {
@@ -307,7 +307,7 @@ describe("every setting can leave the panel", () => {
 
   // Settings that belong to this browser or to this screen rather than to a
   // person, so carrying them to another device would be wrong rather than
-  // missing. Named one at a time, with the reason, so the list cannot quietly
+  // missing. Named one at a time, with the reason, so the list cannot
   // become a place to put anything awkward.
   const STAYS_HERE: Record<string, string> = {
     ui: "which tab was open",

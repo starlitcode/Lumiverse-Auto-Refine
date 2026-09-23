@@ -528,7 +528,7 @@ const CONFIG = {
   builtInSeen: "",
   // Which set of moved defaults this reader has already been told about. Its
   // own stamp rather than the prompts one, so saying got it to a line about a
-  // setting never quietly marks the built-in prompts as seen too.
+  // setting never marks the built-in prompts as seen too.
   movedSeen: "",
   // Which preset the picker on the Prompt tab is naming.
   //
@@ -555,7 +555,7 @@ const CONFIG = {
   blocksShut: [] as string[],
   // Sampler values for the refine call. Empty means the connection's preset
   // decides, which is the right default: somebody who tuned a preset should not
-  // have it quietly overridden by an extension.
+  // have it overridden by an extension.
   samplers: {} as Record<string, any>,
 };
 
@@ -814,9 +814,8 @@ const THINKS_ANSWER: Block = {
     "</how_to_answer>",
 };
 
-// The note about the tokens standing in for protected formatting. It used to
-// hang off the end of How to Answer with no tag on it, which made it the one
-// macro in the list not sitting in one.
+// The note about the tokens standing in for protected formatting. It has a
+// tag of its own, like every other macro in the list.
 //
 // It needs a block of its own to carry a tag rather than a line of its own. A
 // block whose content comes out as nothing but tags is dropped whole, and this
@@ -1489,10 +1488,8 @@ const DEFAULT_BLOCKS: Block[] = PLAIN_LONG;
 // and once for a model that reasons.
 //
 // name is what it is stored and looked up as, label is what the list shows, and
-// the two are the same on all four. They were not always: both sets used to be
-// called a quick read and a close read, so a stored name needed a prefix saying
-// which set it came from. Naming the sets for their job took the collision away
-// and the prefix with it.
+// the two are the same on all four. Each set is named for its job, so no two
+// names collide and a stored name needs no prefix.
 type BuiltIn = {
   name: string;
   label: string;
@@ -2070,7 +2067,7 @@ const LIMIT_FIELDS: Field[] = [
     key: "toast",
     label: "Show a pop-up on each refine",
     type: "bool",
-    hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
+    hint: "On by default. Turn it off to see refines only here, on this tab, with no pop-up.",
   },
 ];
 for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
@@ -2335,8 +2332,8 @@ const HOLD_SLOP = 10;
 const HOLD_RING_WAIT = 150;
 
 // The ring that fills while the button is held down. A hold opens the menu, and
-// nothing on screen used to say a hold was under way, so the half second before
-// the menu appeared read as a tap that did nothing.
+// without the ring the half second before the menu appears looks like a tap
+// that did nothing.
 //
 // Its own square rather than part of the mark: this belongs to the button's
 // edge, and the mark is drawn at about half the button's width. The viewBox is
@@ -2468,7 +2465,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // rather than starting again from nothing.
   //
   // builtInSeen was shippedSeen. It holds which built-in prompts you were last
-  // shown, and losing it would quietly swallow the one line saying they changed.
+  // shown, and losing it would swallow the one line saying they changed.
   function carryOldNames(into: any) {
     if (!into || typeof into !== "object") return into;
     if (!into.builtInSeen && into.shippedSeen) into.builtInSeen = into.shippedSeen;
@@ -3412,7 +3409,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and writes one number rather than rebuilding the panel.
   // What the run is doing right now, named rather than left at "busy". Without
   // a stage a refine that takes forty seconds looks the same as one that has
-  // quietly failed, and a model that streams looks the same as one that has not
+  // failed, and a model that streams looks the same as one that has not
   // started.
   let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" = "";
   let streamed = 0;
@@ -3450,7 +3447,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         "s"
       );
     }
-    // Which try this is, because a refine that quietly takes three times as
+    // Which try this is, because a refine that takes three times as
     // long reads as broken unless it says why.
     if (stage === "retrying")
       return (
@@ -4132,12 +4129,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // tab strip has to do. It is also the same way the companion extension
     // marks its tabs, so the two read as a pair.
     //
-    // The line that used to sit under the strip is gone with it, and that is
-    // what fixes the drag. A sideways scroller is vertically scrollable too
-    // unless it is told otherwise, and the tabs were pulled a pixel down over
-    // that line by a negative margin, so the strip was one pixel taller than it
-    // could show: a drag up moved the titles by that pixel and stacked the
-    // tab's underline on the line, which reads as the line thickening. The tray
+    // There is no line under the strip. A sideways scroller can also scroll up
+    // and down unless told not to, and a line under tabs pulled down over it
+    // makes the strip one pixel taller than it can show, so dragging up moved
+    // the titles by that pixel. The tray
     // has nothing under it to sit over, so there is nothing to scroll.
     // One row, and it does not scroll. A scrolling strip slides under a finger
     // even when every tab already fits, because the padding and border put the
@@ -4305,10 +4300,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // below is what tells the two apart: a dip on its own is a tap, a dip with
     // the ring running is a hold.
     //
-    // A ring that grew out of the button and faded used to run the whole time a
-    // refine was going. Two rings on one button said one thing between them, and
-    // the eye already says a refine is running by reading. The ring here is the
-    // hold and nothing else.
+    // The ring shows a hold and nothing else. The eye already shows that a
+    // refine is running, so a second ring for that would say the same thing
+    // twice.
     ".arf-float:active{transform:scale(.94)}" +
     ".arf-float{transition:color 260ms cubic-bezier(.2,.7,.3,1)," +
     "border-color 260ms cubic-bezier(.2,.7,.3,1)," +
@@ -5105,12 +5099,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const r = row.getBoundingClientRect();
     // No wider than the setting it belongs to.
     //
-    // The cap used to be room on the screen, which is the wrong thing to
-    // measure: the panel is a modal narrower than the screen, so 300 on a phone
-    // came out wider than the panel and hung off the side of it. Sized to the
-    // row instead, it lands in the same column as the setting with the panel's
-    // own gutter either side, which is what makes it read as belonging to that
-    // row rather than floating over everything.
+    // Capped by the row, not the screen. The panel is narrower than the screen,
+    // so a cap based on the screen can come out wider than the panel. Sized to
+    // the row, it lines up with the setting it belongs to.
     //
     // The row is the whole width of the panel, so on a wide screen this is the
     // 300 cap as before and nothing changes there.
@@ -5435,7 +5426,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const wrap = el("div", "arf-col");
     // Everything is open while a search is running. A setting folded away is
     // still a setting somebody is looking for, and a search that cannot see
-    // into a fold quietly answers "no" for half the panel.
+    // into a fold answers "no" for half the panel.
     const open = openFolds.has(title) || !!hunt.trim();
     // A real button, so the keyboard and a screen reader get it for free rather
     // than from a role attribute and a keydown handler that has to remember
@@ -5817,10 +5808,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // came from; this gives one of these the same thing, with only the part
   // reveal() reads filled in.
   //
-  // The alternative is what these used to do: build the children only while the
-  // switch is on, which means the switch has to rebuild the panel to show them,
-  // and they arrive between two frames with nothing to watch. Built either way
-  // and hidden, they are already standing there when the switch goes on.
+  // The rows are built whether or not the switch is on, and hidden while it is
+  // off. Building them only while it is on would mean rebuilding the panel to
+  // show them, so they would appear all at once with no movement.
   function hangsOff(node: any, on: string | (() => boolean), name?: string): any {
     // Its own attribute, not data-arf-row. That one means a settings row: one
     // label, one control, its explanation behind the "?". These are containers
@@ -6216,11 +6206,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       row.appendChild(hangsOff(draft, "inputRefine"));
     }
 
-    // A row, not a label. The box switches the automatic pass and nothing else
-    // on the line does: the words beside it used to, and so did the empty space
-    // past them once the row had a line of its own, which turned a stray press
-    // anywhere along it into refining every reply. The words still name the
-    // box for a screen reader.
+    // A row, not a label. Only the box switches the automatic pass. The words
+    // and the space beside it do nothing when pressed, so a stray press on the
+    // row cannot turn on refining every reply. The words still name the box
+    // for a screen reader.
     const auto = document.createElement("div");
     auto.className = "arf-row arf-note";
     auto.style.cssText = "display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
@@ -6614,7 +6603,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---- the card that comes up on the page ----
   // A refine changes writing you were reading, and the panel is behind a tab.
   // Somebody who has not opened that tab had no way to see what changed and no
-  // way back, other than a floating button that had quietly turned into an undo
+  // way back, other than a floating button that had turned into an undo
   // button without saying so. This puts the before, the after and the way back
   // in front of them, on the page, where the change happened.
   let popEl: any = null;
@@ -7314,7 +7303,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       num.className = "arf-field";
       // A price is copied off a provider's own page, where it reads $5.00/M or
       // $0.075/M. A number box takes none of that: the paste lands as nothing
-      // and the setting quietly stays at its default, which reads as the
+      // and the setting stays at its default, which reads as the
       // feature being broken. The number is lifted out of whatever was pasted.
       num.addEventListener("paste", (e: any) => {
         const raw = e && e.clipboardData && e.clipboardData.getData("text");
@@ -7337,10 +7326,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
       wrap.appendChild(num);
     }
-    // The description lives behind the "?" now, so it is no longer in the page
-    // for the search to walk. Hung off the row instead, where shownText picks
-    // it up: a setting you can only describe is exactly the one you are
-    // searching for, and losing that would be the whole point of the search.
+    // The description is behind the "?", so it is not in the page for the
+    // search to read. It is stored on the row, where shownText picks it up, so
+    // searching for words in a description still finds the setting.
     if (f.hint) (wrap as any)._arfHint = f.hint;
     return wrap;
   }
@@ -8061,7 +8049,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildContextCard(): HTMLElement {
     const wrap = card(
       "How much it is told",
-      "What the {{history}} and {{lore}} macros carry. Every one of these costs tokens on every single refine, which is where a cheap feature quietly becomes an expensive one.",
+      "What the {{history}} and {{lore}} macros carry. Every one of these costs tokens on every single refine, so a feature that looks cheap can cost a lot over a long chat.",
     );
     wrap.appendChild(
       fieldRow({
@@ -8254,7 +8242,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const one = costOf(totalTokens, back);
       // Which half of the sum is real. One price left at 0 is not a cost of
       // nothing on that side, it is a price nobody has given, and a total that
-      // quietly leaves half out is worse than one that says what it covers.
+      // leaves half out is worse than one that says what it covers.
       const covers =
         Number(cfg.costIn) <= 0
           ? " Only what the model writes back is priced, since the input price is 0."
@@ -8273,7 +8261,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     }
     // Where the tokens are going, block by block. This is the part worth having
-    // before a change: a lorebook or a run-up that is quietly two thirds of
+    // before a change: a lorebook or a run-up that is two thirds of
     // every request does not look like anything in the messages below.
     if (parts.length) {
       const box = el("div", "arf-block");
@@ -8505,10 +8493,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       setupPick = sel.value;
       setupName = sel.value;
       setupSaid = null;
-      // Picking loads it, the same as the presets above. Before this, picking
-      // moved the name into the box and left the Model tab alone, so Update
-      // selected wrote whatever was set over the setup that had just been
-      // picked.
+      // Picking loads it, the same as the presets above, so Update selected
+      // cannot save one setup over another.
       const now = setups.find((x) => x.name === sel.value);
       if (now) loadSetup(now, was);
       paint();
@@ -8843,7 +8829,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     if (!cfg.protectOn)
       wrap.appendChild(
-        warn("With this off, a rewrite can quietly change or drop any formatting in your replies."),
+        warn("With this off, a rewrite can change or drop any formatting in your replies, and nothing warns you."),
       );
     return wrap;
   }
@@ -8945,7 +8931,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // What is happening right now, which the panel could not say before: it knew
   // it was busy and nothing else, so a refine that took forty seconds looked
-  // the same as one that had quietly failed.
+  // the same as one that had failed.
   function buildLiveCard(): HTMLElement {
     const st = statusLine();
     const wrap = card("Right now", undefined, st.tone === "busy" ? "working" : st.text);
@@ -10610,11 +10596,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       // own turn loaded over the prompt for replies would be the wrong job
       // asked of every reply in the chat.
       //
-      // The prompt and nothing else. thinkingMode used to be in here, and it
-      // was never once applied: it belongs to a model setup rather than a
-      // preset, so applyPreset walks past it. A preset keeps the prompt and a
-      // setup keeps what runs it, and loading a prompt reaching over to change
-      // your model would break that in the direction nobody would want.
+      // The prompt and nothing else. thinkingMode belongs to a model setup, not
+      // a preset, so applyPreset skips it. A preset keeps the prompt and a setup
+      // keeps what runs it, so loading a prompt never changes your model.
       //
       // Which model a prompt is written for is still said, in its name and in
       // its description, because that is advice about what to pick rather than
@@ -10736,7 +10720,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // What the Model tab says right now, copied rather than referenced so that
-  // changing a sampler afterwards does not quietly edit the setup it came from.
+  // changing a sampler afterwards does not edit the setup it came from.
   function setupFromNow(): Record<string, any> {
     const out: Record<string, any> = {};
     for (const k of SETUP_KEYS)
@@ -10781,7 +10765,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // exception: the list is the account's, not this file's, and a setup
         // saved before a connection was deleted still names it. That is said on
         // the card rather than silently corrected, since the alternative is
-        // quietly refining with the wrong model.
+        // refining with the wrong model.
         const field = COST_FIELDS.find((f) => f.key === k);
         const opts = field && field.options;
         if (k !== "connectionId" && opts && !opts.some((o) => o.value === got)) continue;
@@ -10850,7 +10834,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // Only the keys a preset owns, and each one copied rather than referenced, or
-  // editing your rules would quietly edit the preset you saved them from.
+  // editing your rules would edit the preset you saved them from.
   function presetFromNow(): Record<string, any> {
     const out: Record<string, any> = {};
     for (const k of PRESET_KEYS) {
@@ -11069,9 +11053,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       const now = allPresets().find((p) => p.name === sel.value);
       presetSetup = String((now && now.setup) || "");
       presetSaid = null;
-      // Picking loads it. Before this, picking moved the name into the box and
-      // left the prompt alone, so Update selected wrote whatever was on screen
-      // over the preset that had just been picked, and the preset was gone.
+      // Picking loads it, so the prompt on screen is always the preset the
+      // picker names, and Update selected cannot save one over another.
       if (now) loadPreset(now, was);
       paint();
     });
@@ -11119,7 +11102,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     // A preset saved on another machine can name a setup this one has never
     // had. Kept in the list rather than silently reset to none, so updating the
-    // preset here does not quietly throw the link away.
+    // preset here does not throw the link away.
     if (presetSetup && !setups.some((x) => x.name === presetSetup)) {
       const o = document.createElement("option");
       o.value = presetSetup;
@@ -12052,7 +12035,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const dy = Math.abs((e.clientY || 0) - downAt.y);
         // Moved: this is the host dragging the widget, not a hold. Ten pixels
         // rather than six, because a thumb resting on glass drifts further than
-        // six and every one of those was a hold that quietly did nothing. Auto
+        // six and every one of those was a hold that did nothing. Auto
         // Retry allows the same.
         if (dx > HOLD_SLOP || dy > HOLD_SLOP) disarm();
       };
@@ -12378,10 +12361,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // usually does nothing is an entry somebody presses once and stops trusting.
     if (!busy && pickedHere()) {
       doing.push({ key: "part", label: "Refine the part I selected" });
-      // Beside it, on the same terms. Taking a selection out used to live on
-      // the button under a message and nowhere else, so somebody running
-      // without that button and without this one could refine a selection four
-      // ways and cut one none.
+      // Beside it, on the same terms, so taking a selection out is offered
+      // everywhere refining one is, even with the message button switched off.
       doing.push({ key: "snip", label: "Take out what I selected" });
     }
     // On the same terms as the panel button beside it: no chat means no input
@@ -12554,10 +12535,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---- buttons in Lumiverse's own slots ----
   // The host leaves empty mount points in its chrome for extensions to fill,
   // each carrying the chat or the message it belongs to in its scope. That is
-  // the supported way in, and the difference between this and the button that
-  // used to be on every message: that one reached for a row by class name, and
-  // those names carry a build hash that changes when Lumiverse rebuilds its
-  // CSS.
+  // the supported way in. Finding a row by class name would break, because those
+  // names carry a build hash that changes when Lumiverse rebuilds its CSS.
   //
   // The message one goes in the footer slot, which the host puts inside the
   // message. Where either of them lands on screen is not this file's to state:
@@ -12996,12 +12975,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const kind = busy ? "working" : "ready";
       if (one.getAttribute("data-arf-icon") !== kind) {
         one.setAttribute("data-arf-icon", kind);
-        // The mark itself is left alone. It used to be swapped for a different
-        // drawing whenever a refine started or ended, which replaced the element
-        // and threw away whatever it was in the middle of. The two drawings were
-        // different sizes as well, so the mark shrank from twenty pixels to
-        // fourteen the moment a refine began. Whether an eye is reading is a
-        // class on it now, set for every mark at once.
+        // The mark itself is left alone. Swapping in a different drawing would
+        // replace the element and stop any animation part way. Whether the eye
+        // is reading is a class on it, set for every mark at once.
         // Named for what pressing it does now, so the label a screen reader
         // reads matches the mark beside it.
         const said = busy
@@ -13083,10 +13059,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // one moment it was most likely to be pressed.
   function cancelRefine() {
     if (!busy && !sweep) return;
-    // Noted before the answer comes back, so the eye can close on being called
-    // off rather than on having finished. The two used to look identical: a
-    // refine you stopped gave the same contented blink as one that read the
-    // whole reply, which tells you the opposite of what happened.
+    // Noted before the answer comes back, so the eye shows a stopped refine
+    // differently from a finished one. The same blink for both would say the
+    // refine finished when it did not.
     eyeStopped = true;
     send({ type: "cancel_refine", requestId: newId() });
     log("asked it to stop");
@@ -13702,7 +13677,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
           if (msg.type === "account_save_failed") {
             // Settings that look saved and are not is the worst shape this can
-            // take, so it is said plainly rather than logged quietly.
+            // take, so it is said plainly rather than only logged.
             const what = String(msg.what || "settings");
             log("your " + what + " could not be saved to your account. They are still saved in this browser.");
             toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
@@ -14216,7 +14191,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 }
 
 // The defaults and the fields built from them, so a check can hold the two
-// against each other. A setting in one and not the other looks fine and quietly
+// against each other. A setting in one and not the other looks fine and
 // never loads.
 export const __testing = {
   splitSelectorList,

@@ -48,7 +48,7 @@ Two things are taken out of a message before it is sent, rather than added. The 
 - **`characters`** reads that card, so a rewrite knows who is speaking rather than smoothing every voice into the same one. Refuse it and refining carries on with the card block left out.
 
 - **`world_books`** reads the lorebook entries the chat has active, so a rewrite does not contradict what the world has already established. Refuse it and refining carries on with the lore block left out.
-- **`ui_panels`** is only for the floating button, which is off by default. Refuse it and everything works except that button, and the panel says so rather than the switch quietly doing nothing.
+- **`ui_panels`** is only for the floating button, which is off by default. Refuse it and everything works except that button, and the panel says so, so the switch never does nothing without telling you.
 - **`cors_proxy`** is only for Jev, in two-model mode, which is off by default. Jev is not a chat model, so no connection profile can reach it, and this is how the backend asks Lumiverse to make the call. Refuse it and two-model mode refines every reply, the same as one model. Nothing else changes.
 
 The three that read rather than write are why a rewrite sounds like the character rather than like generic prose. Refusing any of them costs you quality, not the feature.
@@ -74,7 +74,7 @@ Your Jev key, if you saved one, in Lumiverse's secure store for your account and
 
 If you chose a sound of your own, that file, held with your settings as text. It never leaves your machine.
 
-The text from before each refine, in memory, so you can put a refine back. It is never written to disk and is gone on reload. That is on purpose: an undo is worth having, and keeping your writing in storage to provide one is not a fair trade for it.
+The text from before each refine, in memory, so you can put a refine back. It is never written to disk and is gone when you reload, so your writing is never kept in storage just to make undo possible.
 
 ## What it never does
 

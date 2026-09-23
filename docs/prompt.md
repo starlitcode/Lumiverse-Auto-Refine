@@ -107,7 +107,7 @@ Keep these in mind.
 
 and a chat with no memories sends `Keep these in mind.` on its own, pointing at nothing. Put the macro in one block and your wording in another, and an empty macro takes its whole block with it.
 
-**A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that quietly added its own would mean the request that ran was not the one on the screen.
+**A macro drops what is already in your chat into the prompt**, and nothing else. The passage, the pages before it, the lorebook, the card. It does not put in sentences somebody else wrote: your prompt is the words you chose, and a macro that added its own without telling you would mean the request that ran was not the one on the screen.
 
 `{{memories}}` is Lumiverse's own name for this, and it holds Lumiverse's own answer: the pieces it would have retrieved for the chat, as many as your chat memory settings ask for, written out with your own header and chunk templates. How many is not a setting here on purpose, because your chat and your refine working from different amounts of the same thing is a difference nobody would think to look for. A chat with memory switched off, or one with nothing vectorised yet, gives nothing back and the block is left out.
 
@@ -121,7 +121,7 @@ There is no macro for the model's reasoning. Where it keeps that is `<REFINE_NOT
 
 **Lumiverse's**, which the host resolves: `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{user}}`, and anything else that works in a character card or a preset.
 
-They are resolved in that order for a reason. Ours go in **last**, after the host has run, so nothing in your chat is ever handed to a macro resolver. A reply that happens to contain the text `{{persona}}` stays as those nine characters instead of quietly expanding into somebody's prompt.
+They are resolved in that order for a reason. Ours go in **last**, after the host has run, so nothing in your chat is ever handed to a macro resolver. A reply that happens to contain the text `{{persona}}` stays as those nine characters instead of turning into somebody's prompt.
 
 **Every prompt needs `{{message}}` somewhere.** Without it the model is never shown the thing it is meant to rewrite, so the refine is refused before anything is spent, and the Prompt tab says so in the danger colour.
 
@@ -276,7 +276,7 @@ Ask a model to improve a paragraph and it will happily drop a `<font color>` tag
 
 **Hide markup from the model**, under Limits, is on by default. Before the refine, each run of markup is lifted out and replaced with a short token like `[[AR1]]`. The model is told the tokens must come back untouched. Afterwards the real text goes back.
 
-What makes this a guarantee, and not just a hope, is the last step. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
+The last step is what makes this a guarantee. **If a token did not come back, the rewrite is dropped.** Asking a model to preserve something and checking that it did are different things, and only the second one is a guarantee.
 
 What gets protected: fenced code in both fence styles, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, the bracket a lot of trackers print in, and any tag carrying an attribute, which is where a colour or an href lives.
 
@@ -325,7 +325,7 @@ Most cloud providers hand reasoning back in a field of its own rather than insid
 
 ## What a refine costs
 
-Set **Input price, per million tokens** and **Output price, per million tokens** on the **Model** tab and the panel works the rest out. Both start at 0, and with both at 0 no cost is shown anywhere. Fill in one and leave the other, and the line says which half of the sum it is pricing rather than quietly leaving the other half out.
+Set **Input price, per million tokens** and **Output price, per million tokens** on the **Model** tab and the panel works the rest out. Both start at 0, and with both at 0 no cost is shown anywhere. Fill in one and leave the other, and the line says which half of the sum it is pricing rather than leaving the other half out without saying so.
 
 The prices are your provider's, copied off its price list. Nothing here knows what any model charges, and a figure this extension made up would be worse than none. There is no currency either: the number you type is the number you are shown.
 
@@ -345,7 +345,7 @@ The cheapest thing you can do is not on this page: point **Refine using** at a s
 
 ## Sampler settings
 
-Under **Model**, every sampler is blank to begin with, and blank means the connection's own preset decides. That is the right default: if you tuned a preset, an extension should not quietly override it.
+Under **Model**, every sampler is blank to begin with, and blank means the connection's own preset decides. That way, a preset you tuned is never overridden without you knowing.
 
 Fill one in and it is sent with the refine and only with the refine. Your chat is not affected, and neither is the preset.
 
@@ -371,7 +371,7 @@ The line above them gives the whole request in tokens, counted with Lumiverse's 
 
 **Where the tokens go** is the breakdown: one line per block, largest first, each with its share. The total above is those blocks added up.
 
-It is per block rather than per message on purpose. Blocks with the same role are joined before they are sent, so counting the messages would report every rule you wrote as one lump. This is the part worth reading before you change anything, because a lorebook or a run-up that is quietly two thirds of every request does not look like anything in the messages below it. Those messages carry their size in characters, since the token answer is the breakdown.
+It is per block rather than per message on purpose. Blocks with the same role are joined before they are sent, so counting the messages would report every rule you wrote as one lump. This is the part worth reading before you change anything, because a lorebook or a run-up that is two thirds of every request does not look like anything in the messages below it. Those messages carry their size in characters, since the token answer is the breakdown.
 
 It is built by the same function a real refine uses, and the passage goes through the same two steps first, so it cannot become a nice description of something the extension does not actually send. That is why the passage may read oddly: markup shows as `[[AR1]]` tokens, the model's own reasoning is already cut off it, and `{{protect_notes}}` has become the sentence that explains the tokens. That is what the model gets. Under the messages it shows the rest of the call too: which connection, how much thinking, and which samplers, which otherwise live on two other tabs.
 
@@ -403,13 +403,13 @@ What stays yours whichever preset you load is everything else: whether refining 
 
 **Model setup to load with it** is how to use the two together anyway. Pick one of your saved model setups on the preset card and loading that preset loads that setup as well, so a way of reading and the model that runs it arrive in one press. Leave it at **None** and the Model tab is left alone.
 
-The link lives on a preset you saved. The four built in are fixed, so there is nowhere on one of those to write it, and **Update selected** is greyed out on them. Picking a setup with a built-in prompt selected still works: press **Save as new** and your copy keeps the link. The card says so while you are there, so the pick does not look like it took and then go quietly.
+The link lives on a preset you saved. The four built in are fixed, so there is nowhere on one of those to write it, and **Update selected** is greyed out on them. Picking a setup with a built-in prompt selected still works: press **Save as new** and your copy keeps the link. The card says so while you are there, so the pick does not look like it worked and then undo itself.
 
 It is stored as the setup's name rather than its values, which is what lets a preset still be shared: a setup holds a connection id, and an id from another account names nothing on yours. If you load a preset that asks for a setup this device does not have, the preset still loads and the card tells you which setup it wanted.
 
 **Picking a preset loads it.** The moment you choose one in the list, its rules are on screen and in effect. Nothing is saved separately, so there is no Save step to remember.
 
-That matters because of what used to happen without it. Picking a preset put its name in the box and left your rules alone, so the panel showed one preset while the picker named another. Pressing **Update selected** then wrote what was on screen over the preset you had just picked, and the preset you overwrote was gone.
+This means the prompt on screen is always the preset the picker names. So **Update selected** can never save one preset's rules over another by mistake.
 
 **Put it back** appears next to the buttons after a pick has loaded something over what you had. One press restores exactly what was on screen before, the picker included, so you can look inside a preset without losing work you had not saved. It only shows when there is something to put back, and it goes once you save.
 

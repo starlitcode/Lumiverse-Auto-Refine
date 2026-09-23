@@ -50,17 +50,17 @@ I cannot control what somebody does with an extension once they have it. What I 
 
 ## What makes it careful
 
-Handing your writing to a model and saving whatever it says is a risky thing to do quietly, so most of this extension is about refusing to save the wrong thing.
+Saving whatever a model sends back, with nothing checking it, is risky. So most of this extension is about refusing to save the wrong thing.
 
 - **The greeting is never refined.** Not automatically, not by a button, not by any setting.
 - **A rewrite that talks about the edit is dropped.** "Here is the rewritten message" is the model answering the wrong question, and saving it would put that line in your chat.
 - **A rewrite where the model declined is dropped.** So is an empty one, and one that changed nothing.
 - **A rewrite that grew or shrank too much is dropped.** A refine that makes a reply half again as long has written new scene rather than polished what was there. Both limits are yours to set.
 - **A rewrite that lost your formatting is dropped.** Tags, code and image links are hidden from the model behind tokens and checked on the way back. If one did not come back, the rewrite does not get saved.
-- **The model's own thinking is never sent**, so a rewrite cannot quietly edit it.
+- **The model's own thinking is never sent**, so a rewrite cannot change it.
 - **The original is kept** so you can put it back, for as long as the page is open.
 
-Every one of those says why, in the Log tab, rather than quietly doing nothing.
+Every one of those says why, in the Log tab. None of them fails without telling you.
 
 ## The panel
 

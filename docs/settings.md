@@ -20,7 +20,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
 - **The switch** is the master switch. Off, nothing is refined and no model call is made, by any path.
 - **Refine the latest reply** does one, now. While one is running, both buttons are replaced by **Stop this refine**, so calling one off never depends on the floating button being switched on. **Refine every reply here**, beside it, goes through a chat you already have, oldest first, one model call each, and asks before it starts. **every reply, automatically** is the automatic pass, off by default. The greeting is never included by any of them, and neither are your own messages unless you press the button on one.
-- **Refines you can put back** shows what changed, with **Put it back** next to each one. Every refine in this chat is in there, newest first, not just the most recent: a second refine used to take away the way back from the first without saying so. The tab carries a badge with the count.
+- **Refines you can put back** shows what changed, with **Put it back** next to each one. Every refine in this chat is in there, newest first, not only the most recent, so a second refine never takes away the way back from the first. The tab carries a badge with the count.
 
 ## Prompt
 
@@ -120,7 +120,7 @@ Three things never move, whichever tab you left open, because they are what you 
 
   Drag it where you want it and that is where it stays, including after you change its size, which it grows around its own middle. Where you leave it is kept in the browser rather than in your settings, so it does not travel in an export.
 
-  The button keeps its own mark whatever has just happened. A refine that landed used to turn it into an arrow, which put a control over your chat that you had not asked for and took the extension's mark off the screen; the way back is a line in the menu instead. Refining the latest reply is not in that menu, because that is what the tap does.
+  The button keeps its own mark whatever has just happened. The way back from a refine is a line in the menu, not a change to the button. Refining the latest reply is not in that menu, because that is what the tap does.
 
   The automatic pass and the per chat switch stay on the tab rather than in that menu, so their explanations are next to them instead of appearing as bare labels over the chat.
 

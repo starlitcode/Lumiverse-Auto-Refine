@@ -279,7 +279,7 @@ function say(level, text) {
 const ROLES = ['system', 'user', 'assistant'];
 // The macro every prompt needs. Without it somewhere in the list, the model is
 // never shown the thing it is meant to be rewriting, so the refine is refused
-// rather than sent and quietly wasted.
+// rather than sent and wasted.
 const TURN_MACRO = '{{message}}';
 // The three whose answers cost a call to the host. Named here so the check that
 // decides whether to make that call and the resolver that answers it cannot
@@ -615,7 +615,7 @@ const SHIELD_NOTE = 'Parts of this passage have been replaced with tokens shaped
     'same place, treating each as a single character you cannot spell.';
 // The model's own working, which is not prose and is not the reader's writing.
 // It is cut off before the refine and put back afterwards, so a rewrite can
-// never quietly edit what a model worked out in a place nobody would check.
+// never edit what a model worked out in a place nobody would check.
 const THINK_TAGS = [
     'think',
     'thinking',
@@ -1315,7 +1315,7 @@ use) {
         // Ours are masked, not filled, so the host pass runs over the block's own
         // wording and never over the reply. Filling first would hand the reply's
         // text to the macro resolver, and a message that happens to contain
-        // {{persona}} would quietly expand into somebody's prompt. Masked, then
+        // {{persona}} would expand into somebody's prompt. Masked, then
         // resolved, then filled: the reply goes in last and is never scanned.
         const masked = maskOurs(String(b.text || ''));
         const resolved = await fillHost(masked.text, scene, userId);
@@ -1662,7 +1662,7 @@ function looksLikeRefusal(text) {
             return true;
     return false;
 }
-// ---- a rewrite that quietly sanitised the reply ----
+// ---- a rewrite that sanitised the reply ----
 // The failure the other checks cannot see. A softened reply is not a refusal,
 // is the right length, and keeps every protected token: it just came back with
 // the strong words taken out. Nothing catches that by looking at the rewrite alone,
@@ -1969,7 +1969,7 @@ let passList = [];
 // asks for exactly that of a passage that already reads well, so asking again is
 // asking the model to change something it has just said needs no change, at the
 // same price. That one is decided by the verdict's own flag rather than by its
-// wording, which is what a reader sees and what a rewording would quietly
+// wording, which is what a reader sees and what a rewording would
 // change the meaning of.
 function worthRetrying(why) {
     return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished/i.test(String(why || ''));
@@ -2277,7 +2277,7 @@ async function gatherHistory(msgs, at, charName, userId, youName) {
 // The lorebook entries the host says are active for this chat. Read through the
 // host rather than matched here: it already decides which entries a chat has
 // switched on and which of those the recent messages triggered, and a second
-// opinion on that would quietly disagree with the one the chat itself uses.
+// opinion on that would disagree with the one the chat itself uses.
 const LORE_ENTRIES_MAX = 24;
 // Budgets in tokens, which is the unit a context window is actually measured
 // in. Characters were a stand-in for it and a poor one: the same 8000
@@ -3391,7 +3391,7 @@ async function snipMessage(chatId, messageId, picked, ahead, userId) {
         return { ok: false, why: 'that message is not in this chat any more' };
     // The same two the refiner refuses. Taking text out is a different act from
     // rewriting it, but these two buttons sit next to each other on the same
-    // message, and one of them quietly editing what the other will not touch is
+    // message, and one of them editing what the other will not touch is
     // not something anybody could predict. Lumiverse's own edit is still there
     // for a greeting somebody does want to change.
     if (m.id === greetingId)
@@ -3734,12 +3734,10 @@ try {
             // and anything it has to say afterwards go to the same place.
             const who = settingsUser;
             // Every way out of this handler from here on says so. The panel turns its
-            // spinner on the moment a reply lands, because waiting for this side to
-            // answer before showing anything is a second of nothing happening on
-            // every turn. That only works while every path answers: a path that
-            // returned in silence left the panel spinning until its watchdog gave up
-            // five seconds later and reported a backend that was not running, which
-            // was untrue and counted against the reader's refused total.
+            // spinner on the moment a reply lands, when the automatic pass is on, and
+            // waits for this answer to turn it off. A path that returned without one
+            // would leave the spinner running until the panel's watchdog gave up and
+            // wrongly reported that the backend is not running.
             const stand = (why, messageId) => {
                 replyTo(who, {
                     type: 'refine_stood_down',
@@ -3854,7 +3852,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
                 s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
             thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
             // Not `|| 90`. Zero is a setting here, meaning never give up, and the
-            // short form would have quietly turned it back into a minute and a half.
+            // short form would have turned it back into a minute and a half.
             timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;
             maxGrowthPct = Number(s.maxGrowthPct);
             maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;

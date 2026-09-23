@@ -3141,7 +3141,7 @@ describe("going through every reply in a chat", () => {
     expect(steps[1].at).toBe(2);
   });
 
-  test("a chat with only a greeting in it says so rather than doing nothing quietly", async () => {
+  test("a chat with only a greeting in it says so rather than doing nothing without saying so", async () => {
     const h = await armed(["<REFINED>x</REFINED>"], {}, [
       { id: "m0", role: "assistant", content: "The gate stands open." },
     ]);
@@ -3841,7 +3841,7 @@ describe("refining what you selected", () => {
     await ask(h, "   ");
     await wait(60);
     // Nothing picked means the pass has nothing to act on, so the reply is not
-    // quietly rewritten end to end.
+    // rewritten end to end.
     expect(h.writes.length).toBe(0);
   });
 
@@ -3874,7 +3874,7 @@ describe("refining what you selected", () => {
 // A whole-message refine already treats these three differently: your messages
 // have their own prompt list, the greeting is refused outright, and neither is
 // picked up by the automatic pass. A selection goes through the same pass, so
-// the question is whether it inherits all of that or quietly works around it.
+// the question is whether it inherits all of that or works around it.
 describe("selecting inside your own message", () => {
   const mine = (text: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The yard gate was already open when she got there." },

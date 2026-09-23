@@ -26,7 +26,7 @@ The one the other checks cannot see. A softened reply is not a refusal, is the r
 
 It is built to stay quiet. The built-in list holds only words that are hard to use innocently, because everyday words like hit, skin or pain are the vocabulary of ordinary description and would fire on any refine that tightened a paragraph. It needs at least three such words in the reply before it can fire at all, and **How much of it may go** sets the fraction, 60% by default, so losing one or two reads as an edit.
 
-That narrowness misses some real softening, and it is the right way round: a missed one leaves you where you already were, while a false one throws away a good rewrite and teaches you to distrust the feature. **Words of your own to watch** is there because you know better than any list what softening looks like in what you write.
+Because the list is narrow, it misses some real softening. That is on purpose. A missed one leaves your reply as it was. A false one would throw away a good rewrite. **Words of your own to watch** is there because you know better than any list what softening looks like in what you write.
 
 ### The word that arrives in its place
 
