@@ -22,7 +22,7 @@ describe("a pasted fixture carries nothing real", () => {
 
   test("there is a fixture to check, or this passes by having nothing to read", () => {
     // A rule nobody runs is worse than no rule. If the fixtures are ever moved,
-    // this says so rather than going quietly green on an empty list.
+    // this says so rather than going green on an empty list.
     expect(files.length).toBeGreaterThan(0);
   });
 

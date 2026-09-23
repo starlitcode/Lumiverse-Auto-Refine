@@ -1065,6 +1065,21 @@ console.log("\nsettings that were saved before");
   );
 }
 
+// A tab label cut short to "Pro..." is hard to read, most of all for somebody
+// who reads slowly. Measured at the drawer's own width, a phone, and the
+// narrowest phone in use.
+console.log("\nevery tab label is whole");
+for (const viewport of [{ width: 1280, height: 900 }, { width: 360, height: 780 }, { width: 320, height: 640 }]) {
+  await inTab(browser, { viewport, touch: viewport.width < 560 }, async (page) => {
+    const cut = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("#drawer .arf-tab"))
+        .filter((t) => t.scrollWidth > t.clientWidth)
+        .map((t) => t.textContent.trim() + " " + t.scrollWidth + ">" + t.clientWidth),
+    );
+    ok("no tab label is cut short at " + viewport.width + "px", cut.length === 0, cut.join(", "));
+  });
+}
+
 console.log("\nthe tabs");
 {
   const errors = await inTab(browser, {}, async (page) => {
@@ -1393,6 +1408,395 @@ console.log("\nloading a preset and the Model tab");
     );
   });
   ok("no errors loading a preset", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- renaming a preset ----
+// Two presets under one name cannot be told apart in the picker, and a rename
+// to the name it already has is not a rename. Both are refused out loud.
+console.log("\nrenaming a preset");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const saveAs = (name) =>
+      page.evaluate((n) => {
+        const box = document.querySelector('#drawer [data-arf-field="presetName"]');
+        box.value = n;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="new"]').click();
+      }, name);
+    const renameTo = (name) =>
+      page.evaluate((n) => {
+        const box = document.querySelector('#drawer [data-arf-field="presetName"]');
+        box.value = n;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="rename"]').click();
+      }, name);
+    const names = () =>
+      page.evaluate(() =>
+        JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").map((p) => p.name),
+      );
+    const said = () => page.evaluate(() => document.getElementById("drawer").textContent || "");
+
+    await saveAs("First");
+    await settle(page);
+    await saveAs("Second");
+    await settle(page);
+    ok("two presets to rename between", (await names()).join() === "First,Second", await names());
+
+    await renameTo("First");
+    await settle(page);
+    ok("renaming onto another preset's name is refused", /already a preset called that/i.test(await said()));
+    ok("and both keep their names", (await names()).join() === "First,Second", await names());
+
+    await renameTo("Second");
+    await settle(page);
+    ok("renaming to its own name is refused", /already its name/i.test(await said()));
+
+    await renameTo("Third");
+    await settle(page);
+    ok("a new name goes through", (await names()).join() === "First,Third", await names());
+  });
+  ok("no errors renaming a preset", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- a reply the automatic pass was never going to take ----
+// The backend answers every reply that lands, so the panel's spinner always
+// hears back. With the automatic pass off the panel never started one, so that
+// answer has nothing to explain: a Log line on every reply read as the
+// extension trying, and it turned off the spinner of a refine started by hand.
+console.log("\na reply the automatic pass was never going to take");
+{
+  const errors = await inTab(browser, { saved: { enabled: true, refineOn: false } }, async (page) => {
+    // A refine running, the way one started by hand reports itself.
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
+    await goTab(page, "Log");
+    await settle(page);
+    const before = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-stop]"));
+    ok("a refine is running to begin with", before);
+    await page.evaluate(() =>
+      window.__fromBackend({ type: "refine_stood_down", chatId: "c9", messageId: "m9", why: "the automatic pass is switched off" }),
+    );
+    await goTab(page, "Prompt");
+    await settle(page);
+    const still = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-stop]"));
+    ok("another reply landing does not stop its spinner", still);
+    await goTab(page, "Log");
+    await settle(page);
+    const said = await page.evaluate(() => document.getElementById("drawer").textContent || "");
+    ok("and the Log does not say a reply was left alone", !/left a reply alone/.test(said));
+  });
+  ok("no errors", errors.length === 0, errors.join("\n         "));
+}
+
+// With the pass on, the same answer is the one the spinner is waiting for.
+{
+  const errors = await inTab(browser, { saved: { enabled: true, refineOn: true } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
+    await goTab(page, "Log");
+    await settle(page);
+    ok("a refine is running to begin with", await page.evaluate(() => !!document.querySelector("#drawer [data-arf-stop]")));
+    await page.evaluate(() =>
+      window.__fromBackend({ type: "refine_stood_down", chatId: "c9", messageId: "m9", why: "this reply is still holding the refine it was given" }),
+    );
+    await goTab(page, "Prompt");
+    await settle(page);
+    const off = await page.evaluate(() => !document.querySelector("#drawer [data-arf-stop]"));
+    ok("with the pass on, the answer stops the spinner", off);
+    await goTab(page, "Log");
+    await settle(page);
+    const said = await page.evaluate(() => document.getElementById("drawer").textContent || "");
+    ok("and says why", /left a reply alone: this reply is still holding/.test(said));
+  });
+  ok("no errors", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- each list keeps its own lock ----
+// A built-in prompt is written for one list. With one pick for both, switching
+// lists took the name out of the menu, the pick was wiped, and the list you
+// came back to was open to typing over a built-in prompt.
+console.log("\neach list keeps its own lock");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const look = () =>
+      page.evaluate(() => {
+        const ta = document.querySelector("#drawer [data-arf-block] textarea");
+        return {
+          pick: document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+          locked: !!ta && (ta.readOnly || ta.disabled),
+          note: !!document.querySelector("#drawer [data-arf-promptlocked]"),
+        };
+      });
+    const side = (w) =>
+      page.evaluate((w) => document.querySelector('#drawer [data-arf-editing="' + w + '"]').click(), w);
+    const load = (n) =>
+      page.evaluate((n) => {
+        const s = document.querySelector('#drawer [data-arf-field="presetPick"]');
+        s.value = n;
+        s.dispatchEvent(new Event("change", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="load"]').click();
+      }, n);
+
+    await side("userBlocks");
+    await settle(page);
+    await load("The copy edit");
+    await settle(page);
+    const mine = await look();
+    ok("a built-in prompt for your messages is locked", mine.locked && mine.note, JSON.stringify(mine));
+
+    await side("blocks");
+    await settle(page);
+    const replies = await look();
+    ok("the replies list is not locked by it", !replies.locked && !replies.note, JSON.stringify(replies));
+
+    await side("userBlocks");
+    await settle(page);
+    const back = await look();
+    ok("going back, it is still named and still locked",
+      back.pick === "The copy edit" && back.locked && back.note, JSON.stringify(back));
+
+    await side("blocks");
+    await settle(page);
+    await load("The line edit");
+    await settle(page);
+    await side("userBlocks");
+    await settle(page);
+    const both = await look();
+    ok("loading one for replies leaves the other list's lock alone",
+      both.pick === "The copy edit" && both.locked, JSON.stringify(both));
+  });
+  ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- one model or two ----
+// The Jev card on the Model tab. Everything under the mode waits on two, the
+// address waits on the host being your own, and the key goes to the backend
+// once and is never kept by the panel.
+console.log("\none model or two");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    const shown = () =>
+      page.evaluate(() => {
+        const vis = (sel) => {
+          const n = document.querySelector(sel);
+          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+        };
+        return {
+          mode: vis('#drawer [data-arf-row="judgeMode"]'),
+          host: vis('#drawer [data-arf-row="judgeHost"]'),
+          url: vis('#drawer [data-arf-row="judgeUrl"]'),
+          checks: vis('#drawer [data-arf-row="judgeChecks"]'),
+          key: vis("#drawer [data-arf-jevkey]"),
+          builtIn: vis("#drawer [data-arf-jevchecks]"),
+        };
+      });
+    const pick = (key, value) =>
+      page.evaluate(
+        ({ key, value }) => {
+          const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+          sel.value = value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        },
+        { key, value },
+      );
+
+    const one = await shown();
+    ok("the mode is on the Model tab", one.mode, JSON.stringify(one));
+    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn, JSON.stringify(one));
+    const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
+    ok("the panel asks whether a key is saved", asked >= 1, String(asked));
+
+    await pick("judgeMode", "two");
+    await settle(page);
+    const two = await shown();
+    ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
+    ok("and the address waits for another address", !two.url, JSON.stringify(two));
+
+    await pick("judgeHost", "custom");
+    await settle(page);
+    ok("another address shows the address box", (await shown()).url, JSON.stringify(await shown()));
+
+    // Back to one model with another address still picked. The address hangs
+    // off the host, and the host off the mode, so both go.
+    await pick("judgeMode", "one");
+    await closed(page);
+    const back = await shown();
+    ok("with one model again, the address box goes too", !back.url && !back.host, JSON.stringify(back));
+    const model = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-row="judgeModel"]');
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    });
+    ok("and so does the model name", !model);
+    await pick("judgeMode", "two");
+    await settle(page);
+
+    // A mistake in the checks is put right with one button, which asks first
+    // and touches nothing else on the card.
+    ok("with two, the button for the built-in checks shows", (await shown()).builtIn);
+    const checksNow = () =>
+      page.evaluate(() => document.querySelector('#drawer [data-arf-field="judgeChecks"]').value);
+    const pressBuiltIn = async () => {
+      await page.evaluate(() => document.querySelector("#drawer [data-arf-jevchecks]").click());
+      await settle(page);
+      await settle(page);
+    };
+    await page.evaluate(() => {
+      window.__confirms = [];
+      window.__toasts = [];
+    });
+    await pressBuiltIn();
+    const same = await page.evaluate(() => ({ asked: window.__confirms.length, told: window.__toasts.slice() }));
+    ok("pressed on the built-in checks, it asks nothing", same.asked === 0, JSON.stringify(same));
+    ok("and says they are already the built-in ones", same.told.some((t) => /already the built-in checks/.test(t)), JSON.stringify(same));
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="judgeChecks"]');
+      ta.value = "`reply` is made-up.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("blur"));
+    });
+    await pick("judgeHost", "nanogpt");
+    await settle(page);
+    await page.evaluate(() => {
+      window.__confirmSay = false;
+    });
+    await pressBuiltIn();
+    ok("saying no leaves your checks", (await checksNow()) === "`reply` is made-up.", await checksNow());
+    await page.evaluate(() => {
+      window.__confirmSay = true;
+    });
+    await pressBuiltIn();
+    ok("saying yes puts the built-in checks back", (await checksNow()) === STOCK_DEFAULTS.judgeChecks, await checksNow());
+    const kept = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop().settings;
+      return { mode: last.judgeMode, host: last.judgeHost, checks: last.judgeChecks };
+    });
+    ok("and saves them", kept.checks === STOCK_DEFAULTS.judgeChecks, JSON.stringify(kept));
+    ok("with two models and the host left as they were", kept.mode === "two" && kept.host === "nanogpt", JSON.stringify(kept));
+    await pick("judgeHost", "openrouter");
+    await settle(page);
+
+    // The key goes to the backend and nowhere the panel keeps.
+    await page.evaluate(() => {
+      const box = document.querySelector("#drawer [data-arf-jevkey-box]");
+      box.value = "sk-panel-made-up";
+      document.querySelector('#drawer [data-arf-jev="save"]').click();
+    });
+    await settle(page);
+    const after = await page.evaluate(() => ({
+      sent: window.__sent.filter((m) => m.type === "jev_key_set").map((m) => m.key),
+      box: document.querySelector("#drawer [data-arf-jevkey-box]").value,
+      stored: JSON.stringify(localStorage),
+      settings: JSON.stringify(window.__sent.filter((m) => m.type === "set_settings")),
+      password: document.querySelector("#drawer [data-arf-jevkey-box]").type,
+    }));
+    ok("saving sends the key to the backend once", after.sent.join() === "sk-panel-made-up", after.sent.join());
+    ok("the box is emptied", after.box === "", after.box);
+    ok("the box hides what is typed", after.password === "password", after.password);
+    ok("the key is not in this browser's storage", after.stored.indexOf("sk-panel-made-up") < 0);
+    ok("and not in the settings sent to the account", after.settings.indexOf("sk-panel-made-up") < 0);
+
+    // The backend saying there is one now.
+    await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "jev_key_set").pop();
+      window.__fromBackend({ type: "jev_key", requestId: last.requestId, has: true, said: "saved" });
+    });
+    await settle(page);
+    const saved = await page.evaluate(() => ({
+      said: document.querySelector("#drawer [data-arf-jevsaid]").textContent,
+      test: document.querySelector('#drawer [data-arf-jev="test"]').disabled,
+    }));
+    ok("it says the key was saved", /Saved/.test(saved.said), saved.said);
+    ok("and Test can be pressed", saved.test === false);
+  });
+  ok("no errors on the Jev card", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- folding the blocks ----
+// The bar over the list is one press for all of them, and the folds belong to
+// the preset the picker names. Presets saved from one another share block ids,
+// so folds keyed by id alone followed you from one preset into the next.
+console.log("\nfolding the blocks");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    await settle(page);
+    const bar = () =>
+      page.evaluate(() => {
+        const b = document.querySelector("#drawer [data-arf-foldall]");
+        const r = b.getBoundingClientRect();
+        const line = parseFloat(getComputedStyle(b).lineHeight) || 16;
+        return {
+          says: b.textContent,
+          count: document.querySelector("#drawer [data-arf-foldcount]").textContent,
+          oneLine: r.height < line * 2 + 12,
+          shut: document.querySelectorAll('#drawer .arf-blockfold[aria-expanded="false"]').length,
+          all: document.querySelectorAll("#drawer .arf-blockfold").length,
+        };
+      });
+    const press = (sel) => page.evaluate((s) => document.querySelector(s).click(), sel);
+    const saveAs = (name) =>
+      page.evaluate((n) => {
+        const box = document.querySelector('#drawer [data-arf-field="presetName"]');
+        box.value = n;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="new"]').click();
+      }, name);
+    const pick = (name) =>
+      page.evaluate((n) => {
+        const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+        sel.value = n;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      }, name);
+
+    const first = await bar();
+    ok("the bar offers to fold them all", /Fold all/.test(first.says), first.says);
+    ok("on one line", first.oneLine, JSON.stringify(first));
+    ok("and counts the blocks", /^\d+ blocks?$/.test(first.count), first.count);
+
+    // One caret by hand, and the count follows without the list being rebuilt.
+    await press("#drawer .arf-blockfold");
+    await settle(page);
+    ok("folding one by its caret is counted", /, 1 folded$/.test((await bar()).count), (await bar()).count);
+
+    await press("#drawer [data-arf-foldall]");
+    await settle(page);
+    const shut = await bar();
+    ok("pressing it folds every block", shut.shut === shut.all && shut.all > 0, JSON.stringify(shut));
+    ok("and it then offers to open them", /Open all/.test(shut.says), shut.says);
+
+    // A copy keeps the folds you were looking at.
+    await saveAs("Folded copy");
+    await settle(page);
+    const copy = await bar();
+    ok("saving a copy keeps its folds", copy.shut === copy.all, JSON.stringify(copy));
+
+    // Opened in a second copy, and the preset it was saved from stays folded.
+    await saveAs("Open copy");
+    await settle(page);
+    await press("#drawer [data-arf-foldall]");
+    await settle(page);
+    await pick("Folded copy");
+    await settle(page);
+    const back = await bar();
+    ok("each preset keeps its own folds", back.shut === back.all && back.all > 0, JSON.stringify(back));
+    await pick("Open copy");
+    await settle(page);
+    const other = await bar();
+    ok("and the other keeps its own", other.shut === 0, JSON.stringify(other));
+  });
+  ok("no errors folding blocks", errors.length === 0, errors.join("\n         "));
 }
 
 // ---- a preset can bring a model setup with it ----
@@ -5904,6 +6308,14 @@ console.log("\nmodel setups");
     const after = await named(page);
     ok("renaming keeps one setup, under the new name", after.length === 1 && after[0] === "Cheaper", after);
 
+    // Renaming to the name it already has changes nothing, and says so rather
+    // than reporting a rename that did not happen.
+    await type(page, "setupName", "Cheaper");
+    await press(page, "rename");
+    await settle(page);
+    ok("renaming to its own name is refused", /already its name/i.test(await said(page)), await said(page));
+    ok("and it keeps that name", (await named(page)).join() === "Cheaper", await named(page));
+
     // Load and the three below it act on whatever the picker names, and saving
     // a new one is what puts it there.
     await press(page, "load");
@@ -5957,7 +6369,7 @@ console.log("\nmodel setups");
   });
 
   // One saved before the prices existed names no price at all. Zeroing them
-  // would be worse than leaving them: a cost line quietly disappearing reads as
+  // would be worse than leaving them: a cost line disappearing reads as
   // the extension deciding not to show one.
   await inTab(
     browser,
@@ -6225,11 +6637,9 @@ console.log("\ndescriptions behind a ?");
 
   // What each part of a tick row answers to.
   //
-  // A label with no `for` names the first labelable element inside it, and a
-  // button is one, so a "?" inside the label would take the label off the
-  // switch: the setting's own words would open its description instead of
-  // flipping it, leaving the switch with only its own small box to press. The
-  // "?" alone cannot show that, so this presses the words too.
+  // Only the switch flips the switch. The words beside it name it, for a screen
+  // reader, but do not answer a press: a stray tap on a setting's name used to
+  // change the setting. The "?" opens the description and does nothing else.
   await inTab(browser, { viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
     // Every tick row on every tab, read rather than pressed. Pressing one
     // rebuilds the panel a moment later, so a loop that presses its way down a
@@ -6244,10 +6654,12 @@ console.log("\ndescriptions behind a ?");
           const tick = row.querySelector('input[type="checkbox"]');
           if (!tick || !row.querySelector(".arf-q")) continue;
           out.n++;
-          const words = row.querySelector("label.arf-lab");
+          const words = row.querySelector(".arf-lab");
           const name = ((words && words.textContent) || row.getAttribute("data-arf-row") || "").trim().slice(0, 26);
           if (!words) out.wrong.push("no words: " + name);
-          else if (words.control !== tick) out.wrong.push("names the wrong control: " + name);
+          else if (words.tagName === "LABEL") out.wrong.push("the words are a label, so pressable: " + name);
+          else if (!words.id || tick.getAttribute("aria-labelledby") !== words.id)
+            out.wrong.push("the words do not name the switch: " + name);
         }
         return out;
       });
@@ -6256,7 +6668,7 @@ console.log("\ndescriptions behind a ?");
     }
     ok("there are tick rows with a ? to check", rows >= 10, "found " + rows);
     ok(
-      "on all " + rows + ", the words name the switch and not the ?",
+      "on all " + rows + ", the words name the switch without being pressable",
       wrong.length === 0,
       wrong.slice(0, 4).join(" | "),
     );
@@ -6289,20 +6701,15 @@ console.log("\ndescriptions behind a ?");
         const was = tick.checked;
         row.scrollIntoView({ block: "center" });
         await frame();
-        press(row.querySelector("label.arf-lab"));
-        // Past the rebuild the press sets off, so what is read next is the panel
-        // as it ends up rather than the one that was there when it started.
+        press(row.querySelector(".arf-lab"));
+        // Past any rebuild a press could set off, so what is read next is the
+        // panel as it ends up rather than the one there when it started.
         await new Promise((r) => setTimeout(r, 400));
         row = find();
         tick = row.querySelector('input[type="checkbox"]');
-        if (tick.checked === was) out.push("the words did not flip it: " + key);
+        if (tick.checked !== was) out.push("the words flipped it: " + key);
         if (document.querySelector('[role="tooltip"]'))
           out.push("the words opened the description: " + key);
-        // Back where it was, then the "?".
-        press(row.querySelector("label.arf-lab"));
-        await new Promise((r) => setTimeout(r, 400));
-        row = find();
-        tick = row.querySelector('input[type="checkbox"]');
         const now = tick.checked;
         press(row.querySelector(".arf-q"));
         await new Promise((r) => setTimeout(r, 300));
@@ -6318,7 +6725,7 @@ console.log("\ndescriptions behind a ?");
       bad.push(...r);
     }
     ok(
-      "pressing the words flips the switch, pressing the ? opens the description",
+      "pressing the words leaves the switch alone, pressing the ? opens the description",
       bad.length === 0,
       bad.slice(0, 4).join(" | "),
     );
@@ -6752,12 +7159,40 @@ console.log("\na built-in prompt cannot be typed into");
       return true;
     });
     ok("one of the built-in prompts was picked", picked, "");
+    // The lock has to survive the panel being taken down and built again.
+    // Lumiverse does that on its own terms: changing drawer tab does it, and so
+    // does leaving it alone for a while. The picker used to live in memory, so
+    // it came back empty and took the lock with it, and the boxes went back to
+    // taking typing over a prompt that cannot be written over.
+    {
+      const before = await look(page);
+      await page.evaluate(() => {
+        try { window.__teardown && window.__teardown(); } catch (_) {}
+        document.getElementById("drawer").innerHTML = "";
+        window.__handlers = {};
+        window.__teardown = window.__setup({
+          events: { on: (n, f) => { (window.__handlers[n] = window.__handlers[n] || []).push(f); return () => {}; } },
+          ui: { registerDrawerTab: () => ({ root: document.getElementById("drawer"), setBadge: () => {}, activate: () => {}, destroy: () => {} }) },
+          messaging: { send: () => {}, onMessage: () => () => {} },
+        });
+      });
+      await page.waitForTimeout(700);
+      await goTab(page, "Prompt");
+      const after = await look(page);
+      const pick = await page.evaluate(
+        () => document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+      );
+      ok("the lock is on before the panel is taken down", before.readOnly === true, JSON.stringify(before));
+      ok("and still on when Lumiverse builds it again", after.readOnly === true, JSON.stringify(after));
+      ok("with the note still saying why", after.said === true, JSON.stringify(after));
+      ok("and the picker still naming the prompt", pick === "The line edit", JSON.stringify(pick));
+    }
     const held = await look(page);
     ok("the blocks stop taking typing", held.readOnly === true, JSON.stringify(held));
     // The switch is the one control that stays live. Turning a block on or off
     // chooses which parts go to the model; it does not rewrite a word of what
     // they say, and what they say is the thing that cannot be written over.
-    // Locking it put the parts that ship switched off out of reach: What Has
+    // Locking it put the parts that come switched off out of reach: What Has
     // Happened is one of them, so wanting your memories in the prompt meant
     // saving a copy under your own name to reach a switch sitting right there.
     ok("but the switch beside each one stays live", held.switchOff === false, JSON.stringify(held));
@@ -8209,7 +8644,7 @@ console.log("\nthe buttons in Lumiverse's own slots");
 console.log("\nswitching on a setting with nowhere to put its answer");
 {
   // A prompt saved before the worn block existed does not carry it. Turning the
-  // setting on then fills nothing, and doing that quietly is the failure.
+  // setting on then fills nothing, and doing that without saying so is the failure.
   const noWorn = [
     { id: "system", name: "The job", on: true, role: "system", text: "<your_task>\nRewrite it.\n</your_task>" },
     { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
@@ -8726,7 +9161,7 @@ await inTab(browser, { saved: { enabled: true, inputRefine: true }, viewport: { 
   await page.waitForTimeout(350);
   const where = () =>
     page.evaluate(() => {
-      const lab = [...document.querySelectorAll("label")].find((l) =>
+      const lab = [...document.querySelectorAll("#drawer .arf-row")].find((l) =>
         /every reply, automatically/i.test(l.textContent || ""),
       );
       if (!lab) return { found: false };
@@ -8759,7 +9194,7 @@ await inTab(browser, { saved: { enabled: true, inputRefine: true }, viewport: { 
   // and off.
   const reach = await page.evaluate(async () => {
     const find = () =>
-      [...document.querySelectorAll("label")].find((l) =>
+      [...document.querySelectorAll("#drawer .arf-row")].find((l) =>
         /every reply, automatically/i.test(l.textContent || ""),
       );
     const lab = find();
@@ -8825,7 +9260,7 @@ await inTab(browser, { saved: { enabled: true, blocks: [{ id: "x", name: "Mine",
 });
 
 // 2b. A prompt that comes with the extension still lets you choose which of its
-// parts go to the model. Some of them ship switched off, so locking the switch
+// parts go to the model. Some of them come switched off, so locking the switch
 // with the rest put those out of reach entirely.
 await inTab(browser, { saved: { enabled: true } }, async (page) => {
   await page.waitForTimeout(400);
@@ -8856,7 +9291,7 @@ await inTab(browser, { saved: { enabled: true } }, async (page) => {
   });
   ok("the words of a prompt that comes with it stay locked", out.textLocked, JSON.stringify(out));
   ok("but every part's switch stays live", out.switchesLive, JSON.stringify(out));
-  ok("and a part that ships switched off can be turned on", out.hadOff && out.turnedOn, JSON.stringify(out));
+  ok("and a part that comes switched off can be turned on", out.hadOff && out.turnedOn, JSON.stringify(out));
 });
 
 // The selector card under the swipe switch, so a Lumiverse update that renames
@@ -9166,6 +9601,79 @@ await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) 
     ok("a sweep follows every reply it refined", out["msg-one"] === 1 && out["msg-two"] === 1, JSON.stringify(out));
   });
 }
+
+console.log("\nonly the switch flips the switch");
+// A press on the words beside a switch changed the setting, which turned every
+// stray tap along a row into a setting nobody meant to change. The words still
+// name the control for a screen reader; they just do not answer a press.
+await inTab(browser, { saved: { enabled: true } }, async (page) => {
+  await page.evaluate(() => (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" })));
+  await goTab(page, "Limits");
+  const out = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const box = document.querySelector('#drawer [data-arf-field="asSwipe"]');
+    const name = document.getElementById(box.getAttribute("aria-labelledby") || "");
+    const before = box.checked;
+    name.click();
+    await wait(200);
+    const afterWords = document.querySelector('#drawer [data-arf-field="asSwipe"]').checked;
+    document.querySelector('#drawer [data-arf-field="asSwipe"]').click();
+    await wait(200);
+    const afterBox = document.querySelector('#drawer [data-arf-field="asSwipe"]').checked;
+
+    // The automatic switch on the card above the tabs.
+    const autoBox = [...document.querySelectorAll("#drawer input[type=checkbox]")].find((b) => {
+      const n = document.getElementById(b.getAttribute("aria-labelledby") || "");
+      return n && /every reply, automatically/i.test(n.textContent || "");
+    });
+    const autoName = autoBox ? document.getElementById(autoBox.getAttribute("aria-labelledby")) : null;
+    const autoWas = autoBox ? autoBox.checked : null;
+    if (autoName) autoName.click();
+    await wait(200);
+    const autoNow = autoBox ? autoBox.checked : null;
+
+    return {
+      named: !!name && (name.textContent || "").length > 0,
+      notALabel: !!name && name.tagName !== "LABEL",
+      before,
+      afterWords,
+      afterBox,
+      autoFound: !!autoBox && !!autoName,
+      autoWas,
+      autoNow,
+    };
+  });
+  ok("the switch still takes its words as its name", out.named && out.notALabel, JSON.stringify(out));
+  ok("pressing the words leaves the setting alone", out.afterWords === out.before, JSON.stringify(out));
+  ok("pressing the switch itself changes it", out.afterBox !== out.before, JSON.stringify(out));
+  ok("the automatic switch is the same", out.autoFound && out.autoNow === out.autoWas, JSON.stringify(out));
+});
+
+// The reset list most of all: ticking a part there puts settings back.
+await inTab(browser, { saved: { enabled: true } }, async (page) => {
+  await goTab(page, "Setup");
+  await page.evaluate(() => {
+    const fold = [...document.querySelectorAll("#drawer .arf-fold")].find((h) => /What to put back/.test(h.textContent));
+    if (fold) fold.click();
+  });
+  await settle(page);
+  const out = await page.evaluate(async () => {
+    const all = [...document.querySelectorAll('#drawer [data-arf-part^="resetParts:"]')];
+    if (!all.length) return { none: true };
+    const box = all[0];
+    const row = box.parentElement;
+    const words = row.querySelector(".arf-lab");
+    const was = box.checked;
+    words.click();
+    await new Promise((r) => setTimeout(r, 200));
+    return { was, now: box.checked, rowTag: row.tagName };
+  });
+  if (out.none) {
+    ok("a reset list to press", false, "no reset parts were on the page");
+  } else {
+    ok("a name in the reset list does not tick its part", out.now === out.was && out.rowTag !== "LABEL", JSON.stringify(out));
+  }
+});
 
 await browser.close();
 

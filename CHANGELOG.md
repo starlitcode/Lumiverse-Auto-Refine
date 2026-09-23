@@ -6,6 +6,66 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.14.0
+
+_2026-09-23_
+
+### Added
+
+- **Two models, a beta.** On the Model tab, under **One model or two**. With two, a small model called Jev reads each new reply first and checks it against a list you write. The reply is refined only if a check reaches the line you set, so replies that are already fine cost nothing. See [Two models](docs/jev.md).
+  - Jev is reached through OpenRouter, NanoGPT, TypeSafe, or another address.
+  - Your Jev key is kept in Lumiverse's secure store, never in your settings or an export.
+  - If Jev cannot answer, the reply is refined as normal, and the Log says why.
+  - A refine you start yourself never goes to Jev.
+  - **Use the built-in checks** puts the starting checks back, and changes nothing else.
+  - It needs a new permission, `cors_proxy`. Refusing it only affects two-model mode.
+
+- **Seconds between automatic refines**, on the Limits tab. A reply that arrives too soon waits for the gap, with a countdown, and is then refined. **Stop** ends the wait. It is 0, no gap, by default.
+
+- **`{{charGroupFocused}}` in the list of macros.** In a group chat it is the name of the character whose turn it is.
+
+### Changed
+
+- **The built-in prompts name their one exception.** They now tell the model not to edit sexual content involving anyone under eighteen, or anyone written as a child, and to hand that passage back unchanged and say why. Your reply is then left as it was. A younger character in a scene with nothing sexual in it is edited like anyone else. The panel tells you the built-in prompts have changed. Your own prompts are not touched.
+
+- **Each preset keeps its own folds.** Folding a block in one preset no longer folds it in presets saved from it. A copy you save keeps the folds you had, and a rename keeps them too.
+
+- **The Fold all button fits on one line.** It says **Fold all** or **Open all**, with a count of how many blocks are folded beside it.
+
+- **A passage handed back with a reason says so.** When the model returns a passage unchanged and explains why, the Log says that, instead of "it already read well". The model's words are under **What the model worked out**.
+
+- **Clearer empty boxes.** An empty block asks "What do you want this block to tell the model?" and its name box asks "What is this block called?". The preset name box says "A name for this preset" instead of "A name for this setup".
+
+- **A snip says it cost nothing.** **Take out what I selected** never calls a model, and the message after one now says so.
+
+- **Only a switch flips a switch.** Pressing the words next to a switch, or the space beside the automatic switch, no longer changes it. Only the box does.
+
+- **The README says exactly how the one exception works.** The code does not judge your story, keeps no list of words about it, and blocks nothing on its own. The exception is one paragraph in the built-in prompts, quoted in full in the docs.
+
+- **Shorter descriptions in the panel.** Card intros and the longest descriptions behind **?** are cut to a sentence or two. The detail is in the docs.
+
+- **The docs are written in plain language:** shorter sentences, lists and numbered steps, with the README kept to a short front page.
+
+- **The comments on the refusal checks say what the words about age are for:** a model that misreads an adult character as a minor.
+
+### Fixed
+
+- **Take out what I selected works every time.** Reported by a Discord user. With refines added as swipes, a snip was also added as a swipe you could not see, and after that every snip looked broken. A snip now always edits the text on screen.
+
+- **Thinking that starts in the prompt is kept out of the refine.** Some presets open the reply inside the thinking tag. That thinking was sent to be rewritten like prose. It is now held back and put back unchanged.
+
+- **A built-in prompt stays locked.** Changing drawer tab, leaving the panel alone for a while, or switching between **For replies** and **For your messages** could unlock it, so you could type over it. Each list now remembers its own prompt.
+
+- **With the automatic pass off, new replies no longer show up in the Log.** It said "left a reply alone" for every reply, which looked like it had tried. It also stopped the spinner of a refine you started yourself if another reply arrived.
+
+- **Renaming a preset or setup to its current name says so**, instead of "Renamed.".
+
+- **Tab names are no longer cut short.** On a phone, **Prompt** and **Context** showed as "Pro…" and "Cont…", and **Context** could be cut short in the drawer on a computer too. Each tab now starts at the width of its name.
+
+- **An install shared by several accounts uses each account's own settings.** It used one set for everyone, from whichever account's panel sent settings last. Now a refine uses the settings of the account that asked, or whose chat it is. Refines from different accounts take turns, and the panel says when one is waiting.
+
+---
+
 ## 1.13.0
 
 _2026-09-19_

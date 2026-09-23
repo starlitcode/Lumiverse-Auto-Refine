@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.13.0";
+const VERSION = "1.14.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -36,7 +36,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "prompt",
     label: "Your prompt",
     what: "Every block, and whether a refine runs one pass or several.",
-    keys: ["blocks", "userBlocks", "passMode", "passNames"],
+    keys: ["blocks", "userBlocks", "presetPick", "presetPickYours", "passMode", "passNames"],
   },
   {
     id: "context",
@@ -91,6 +91,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "softenSwaps",
       "retryRefine",
       "rateWaits",
+      "refineGap",
       "wrapOutput",
       "streamProgress",
     ],
@@ -112,6 +113,12 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     label: "Where the input box is",
     what: "The selectors that find the chat input box. Its own part, so putting it back does not take the widget and the buttons with it.",
     keys: ["inputSelector"],
+  },
+  {
+    id: "judge",
+    label: "One model or two",
+    what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
+    keys: ["judgeMode", "judgeHost", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
   },
   {
     id: "switches",
@@ -183,7 +190,23 @@ const PERMS: Array<{ id: string; label: string; why: string; without: string; fa
     why: "The floating button.",
     without: "Everything works except the floating button, and its switch says so.",
   },
+  {
+    id: "cors_proxy",
+    label: "CORS proxy",
+    why: "Reaches Jev, the second model in two-model mode, which is not a chat model and so has no connection profile.",
+    without: "Two-model mode cannot ask Jev, so every reply is refined as it is with one model. Nothing else changes.",
+  },
 ];
+
+// What Jev checks a reply for until somebody writes their own. Each is a
+// statement about `reply` that is plainly true or false of the text, which is
+// the question Jev answers best: one thing, visible on the page.
+const JUDGE_CHECKS = [
+  "`reply` repeats a word, a phrase or a sentence shape inside itself.",
+  "`reply` uses stock phrases that turn up in many stories.",
+  "`reply` states a character's feeling outright where the scene could show it.",
+  "`reply` piles up adjectives or strained comparisons.",
+].join("\n");
 
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
@@ -351,7 +374,7 @@ const CONFIG = {
   // box to correct it the only way out is a release of this.
   swipeSelector: SWIPE_PICKS.join(", "),
   // Phrases this chat has worn out. Off by default, since it reads the chat's
-  // replies. Turned on by putting {{overused}} in a block.
+  // replies. The list goes wherever a block holds {{overused}}.
   wornOn: false,
   wornBack: 60,
   wornLeast: 3,
@@ -421,6 +444,24 @@ const CONFIG = {
   // refused: a free tier meters per minute and a local server answers 503 while
   // it loads, and both clear on their own.
   rateWaits: 2,
+  // Seconds between one automatic refine and the next, or 0 for none. A reply
+  // that lands inside the gap waits for it rather than being skipped, so a
+  // provider that meters calls per minute is not asked twice in one breath.
+  refineGap: 0,
+  // One model refines every reply. Two has Jev, a small decision model, read a
+  // reply first and say whether it needs a refine, so the refine model runs on
+  // the replies that do. A beta, and off until asked for.
+  judgeMode: "one",
+  // Where Jev is reached, and for "custom" the address and model name.
+  judgeHost: "openrouter",
+  judgeUrl: "",
+  judgeModel: "",
+  // One statement a line. Jev gives the chance each is true of `reply`.
+  judgeChecks: JUDGE_CHECKS,
+  // A check at or above this percentage is a reply worth refining.
+  judgeOver: 50,
+  // With worn phrases on, Jev is also asked whether the reply uses one.
+  judgeWorn: true,
   // Asking for the rewrite inside <REFINED> tags rather than on its own. A
   // model that cannot help adding a sentence of its own still puts the rewrite
   // between the tags, and taking what is between them is exact.
@@ -487,8 +528,22 @@ const CONFIG = {
   builtInSeen: "",
   // Which set of moved defaults this reader has already been told about. Its
   // own stamp rather than the prompts one, so saying got it to a line about a
-  // setting never quietly marks the built-in prompts as seen too.
+  // setting never marks the built-in prompts as seen too.
   movedSeen: "",
+  // Which preset the picker on the Prompt tab is naming.
+  //
+  // A setting rather than a variable held in memory. Lumiverse takes this panel
+  // down and builds it again on its own terms: changing drawer tab does it, and
+  // so does leaving it alone for long enough. A picker that lived only in
+  // memory came back empty every time, and the lock that reads it came off with
+  // it, so the boxes went back to taking typing over a prompt that cannot be
+  // written over. What the picker names is part of where you were, so it is
+  // kept the way everything else on the panel is.
+  presetPick: "",
+  // The same for the prompt for your own messages. Each list keeps its own,
+  // because a built-in prompt is written for one list: one name for both was
+  // wiped by switching lists, and the list you came back to lost its lock.
+  presetPickYours: "",
   // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
   // "userBlocks:id". A folded block draws its name and its switch and nothing
   // else, so a prompt of twenty is a list you can see at once rather than
@@ -500,7 +555,7 @@ const CONFIG = {
   blocksShut: [] as string[],
   // Sampler values for the refine call. Empty means the connection's preset
   // decides, which is the right default: somebody who tuned a preset should not
-  // have it quietly overridden by an extension.
+  // have it overridden by an extension.
   samplers: {} as Record<string, any>,
 };
 
@@ -553,6 +608,11 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
   { tag: "{{scenario}}", what: "The card's scenario.", ours: false },
   { tag: "{{persona}}", what: "Your persona for this chat.", ours: false },
   { tag: "{{char}}", what: "The character's name.", ours: false },
+  {
+    tag: "{{charGroupFocused}}",
+    what: "In a group chat, the name of the character in focus, which is the one this turn belongs to.",
+    ours: false,
+  },
   { tag: "{{user}}", what: "Your name.", ours: false },
 ];
 
@@ -754,9 +814,8 @@ const THINKS_ANSWER: Block = {
     "</how_to_answer>",
 };
 
-// The note about the tokens standing in for protected formatting. It used to
-// hang off the end of How to Answer with no tag on it, which made it the one
-// macro in the list not sitting in one.
+// The note about the tokens standing in for protected formatting. It has a
+// tag of its own, like every other macro in the list.
 //
 // It needs a block of its own to carry a tag rather than a line of its own. A
 // block whose content comes out as nothing but tags is dropped whole, and this
@@ -885,7 +944,12 @@ const JOB_BLOCK: Block = {
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in, the same heat and the same violence in the same places, in words as " +
     "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-    "should have been written is theirs." +
+    "should have been written is theirs.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
     "\n\n" +
     "Same story, told better.\n" +
     "</your_role>",
@@ -1084,7 +1148,12 @@ const THINKS_JOB: Block = {
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in, the same heat and the same violence in the same places, in words as " +
     "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-    "should have been written is theirs." +
+    "should have been written is theirs.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
     "\n" +
     "</your_role>",
 };
@@ -1155,7 +1224,13 @@ const YOURS_JOB: Block = {
     "The user decides where the story goes, and that takes in how dark, " +
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in. How a line reads is not yours to judge here, only whether it came " +
-    "out the way they meant to type it.\n" +
+    "out the way they meant to type it.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
+    "\n" +
     "</your_role>",
 };
 
@@ -1250,7 +1325,13 @@ const YOURS_THINKS_JOB: Block = {
     "The user decides where the story goes, and that takes in how dark, " +
     "explicit or crude it gets. A passage comes back at the strength it went " +
     "in. How a line reads is not yours to judge here, only whether it came " +
-    "out the way they meant to type it.\n" +
+    "out the way they meant to type it.\n\n" +
+    "There is one exception, and it is not the user's call either. Sexual " +
+    "content involving anyone under eighteen, or anyone written as a child, " +
+    "is not edited. Hand that passage back exactly as it came, and say " +
+    "outside the tags that this is why. A younger character in a scene with " +
+    "nothing sexual in it is edited like anyone else." +
+    "\n" +
     "</your_role>",
 };
 
@@ -1407,10 +1488,8 @@ const DEFAULT_BLOCKS: Block[] = PLAIN_LONG;
 // and once for a model that reasons.
 //
 // name is what it is stored and looked up as, label is what the list shows, and
-// the two are the same on all four. They were not always: both sets used to be
-// called a quick read and a close read, so a stored name needed a prefix saying
-// which set it came from. Naming the sets for their job took the collision away
-// and the prefix with it.
+// the two are the same on all four. Each set is named for its job, so no two
+// names collide and a stored name needs no prefix.
 type BuiltIn = {
   name: string;
   label: string;
@@ -1537,7 +1616,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional, one regular expression per line, matched without case. Code, links, images, comments, entities, wiki brackets, spoiler bars, table rows and any tag carrying an attribute are covered already. Yours are tried first, and one that will not compile is named under this box.",
+    hint: "Optional. One regular expression per line, not case-sensitive. Code, links, tags and the like are kept already. One that will not work is named under this box.",
   },
   {
     key: "shieldKeep",
@@ -1558,7 +1637,7 @@ const GUARD_FIELDS: Field[] = [
     key: "guardRefusal",
     label: "Refuse an answer that declines the job",
     type: "bool",
-    hint: "On by default. Catches an answer where the model says it will not do this. That is the one thing that must never be saved over your reply. Only applies to a short answer: a long one that happens to contain the words is a scene, not a refusal.",
+    hint: "On by default. A short answer where the model says it will not do this is thrown away, so a refusal is never saved over your reply.",
   },
   {
     key: "guardPreamble",
@@ -1616,6 +1695,15 @@ const GUARD_FIELDS: Field[] = [
     min: 0,
     max: 5,
     hint: "How many times to wait and ask again when the provider answers \"too many requests\" or is loading a model, and 2 by default. A refused call costs nothing, so this buys the refine you asked for rather than a second one. Where the provider says how long to wait, that is what it waits.",
+  },
+  {
+    key: "refineGap",
+    int: true,
+    label: "Seconds between automatic refines",
+    type: "num",
+    min: 0,
+    max: 120,
+    hint: "A reply that lands sooner waits for the gap and is then refined. 0 for no gap. Refines you start yourself do not wait.",
   },
 ];
 
@@ -1736,7 +1824,83 @@ type Field = {
   needs?: { key: string; is?: any };
   // How far in it sits under the row it depends on.
   under?: boolean;
+  // How many lines deep a "lines" box opens. Three unless a field's usual
+  // content needs more to be read without scrolling.
+  rows?: number;
 };
+
+// Two-model mode. Everything under the first row waits on it, and the address
+// and model name wait on the host being your own.
+const JUDGE_FIELDS: Field[] = [
+  {
+    key: "judgeMode",
+    label: "How many models",
+    type: "pick",
+    options: [
+      { value: "one", label: "One: every reply is refined" },
+      { value: "two", label: "Two: Jev picks the replies to refine (beta)" },
+    ],
+    hint: "With two, Jev reads each finished reply first and the refine runs only where one of its checks says so. Jev is a separate service with its own key and its own bill. A refine you start yourself is never held back by it.",
+  },
+  {
+    key: "judgeHost",
+    label: "Where Jev is reached",
+    type: "pick",
+    options: [
+      { value: "openrouter", label: "OpenRouter" },
+      { value: "nanogpt", label: "NanoGPT" },
+      { value: "typesafe", label: "TypeSafe" },
+      { value: "custom", label: "Another address" },
+    ],
+    needs: { key: "judgeMode", is: "two" },
+    hint: "The key you save below has to be one from this host.",
+  },
+  {
+    key: "judgeUrl",
+    label: "Address",
+    type: "text",
+    needs: { key: "judgeHost", is: "custom" },
+    under: true,
+    hint: "The full address that takes a decision request, starting with https://.",
+  },
+  {
+    key: "judgeModel",
+    label: "Model name",
+    type: "text",
+    needs: { key: "judgeHost", is: "custom" },
+    under: true,
+    hint: "What that host calls Jev, such as jev-1.13.0.",
+  },
+  {
+    key: "judgeChecks",
+    label: "What Jev checks",
+    type: "lines",
+    rows: 8,
+    needs: { key: "judgeMode", is: "two" },
+    hint: "One check per line. Call the reply reply, in backticks, like the checks already here. Jev scores how likely each one is true.",
+  },
+  {
+    key: "judgeOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    hint: "A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "judgeWorn",
+    label: "Also check for worn-out phrases",
+    type: "bool",
+    needs: { key: "judgeMode", is: "two" },
+    hint: "Asks Jev whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
+  },
+];
+
+// Every field that another can hang off, by key, so a row can ask whether the
+// row it waits on is showing itself. Filled in below, once the lists exist.
+const FIELD_BY_KEY: Record<string, Field> = {};
 
 const COST_FIELDS: Field[] = [
   {
@@ -1755,7 +1919,7 @@ const COST_FIELDS: Field[] = [
       { value: "inherit", label: "Whatever my connection is set to" },
       { value: "custom", label: "Yes, and I will say how much" },
     ],
-    hint: "Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives. The middle one sends nothing at all, which is what leaves your own reasoning settings in charge.",
+    hint: "Off by default. Rewriting a paragraph rarely needs thinking, and thinking on every reply costs more. Whatever my connection is set to leaves it to your own reasoning settings.",
   },
   {
     key: "thinkingEffort",
@@ -1793,7 +1957,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "What your provider charges for what you send it. Its price list calls this input, and writes it as $5.00/M or $0.075/M. Type the number on its own, or paste the whole thing and the number is taken out of it. Left at 0, no cost is worked out anywhere.",
+    hint: "Your provider's input price per million tokens. Type the number, like 5 or 0.075, or paste the whole line. At 0, no cost is worked out.",
   },
   {
     key: "costOut",
@@ -1801,7 +1965,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. Same as above: the number on its own, or paste the line. In whatever currency it bills you in, since nothing here converts anything.",
+    hint: "Your provider's output price per million tokens, for what the model writes back. Type the number or paste the line. Nothing is converted between currencies.",
   },
 ];
 
@@ -1828,13 +1992,13 @@ const LIMIT_FIELDS: Field[] = [
     key: "refineAgain",
     label: "Refine something that has been refined before",
     type: "bool",
-    hint: "Off by default, so the same words are refined once. That covers the automatic pass, the buttons, and your own messages. Swiping, regenerating or editing puts different words behind the message, and those are refined either way. On, pressing refine on a reply still holding its refine sends it again.",
+    hint: "Off by default, so the same words are refined once. On, pressing refine on a reply that was already refined sends it again. A swipe, regenerate or edit is always refined.",
   },
   {
     key: "asSwipe",
     label: "Add the refine as a swipe instead of writing over the reply",
     type: "bool",
-    hint: "Off by default. On, the rewrite goes in beside the reply as another swipe and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that swipe off again. Needs a build that gives a message swipes; where one does not, the rewrite is written over the reply as usual.",
+    hint: "Off by default. On, the rewrite is added as a new swipe and the original stays one swipe back. Where Lumiverse gives no swipes, it is written over the reply as usual.",
   },
   {
     key: "passMode",
@@ -1852,13 +2016,13 @@ const LIMIT_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "passMode", is: "many" },
     under: true,
-    hint: "One preset name per line, top to bottom, up to six. Yours or one of the built-in prompts, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass. Each pass is one model call, so six passes cost six times one.",
+    hint: "One preset name per line, up to six, run top to bottom. A name that matches nothing is skipped. Each pass is one model call, so six passes cost six times as much.",
   },
   {
     key: "wornOn",
     label: "Find phrases this chat has worn out",
     type: "bool",
-    hint: "Off by default. On, {{overused}} fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. Narration only: a character who says the same thing every scene is a character, and counting speech would hand that back as a habit worth removing. Dialogue clichés are the prompt's job instead, and the Speech block covers them. It reads replies the refine already has, so it costs no extra call.",
+    hint: "Off by default. On, {{overused}} lists phrases the narration in this chat keeps repeating, so your prompt can ask for something else. Speech is not counted. No extra call is made.",
   },
   {
     key: "wornBack",
@@ -1907,9 +2071,11 @@ const LIMIT_FIELDS: Field[] = [
     key: "toast",
     label: "Show a pop-up on each refine",
     type: "bool",
-    hint: "On by default. Turn it off if you would rather it worked quietly and you watched this tab instead.",
+    hint: "On by default. Turn it off to see refines only here, on this tab, with no pop-up.",
   },
 ];
+for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
+  FIELD_BY_KEY[f.key] = f;
 
 // ---- colour, and staying readable on a theme nobody here has seen ----
 // Everything is styled from the host's --lumiverse-* variables so it arrives in
@@ -2170,8 +2336,8 @@ const HOLD_SLOP = 10;
 const HOLD_RING_WAIT = 150;
 
 // The ring that fills while the button is held down. A hold opens the menu, and
-// nothing on screen used to say a hold was under way, so the half second before
-// the menu appeared read as a tap that did nothing.
+// without the ring the half second before the menu appears looks like a tap
+// that did nothing.
 //
 // Its own square rather than part of the mark: this belongs to the button's
 // edge, and the mark is drawn at about half the button's width. The viewBox is
@@ -2303,7 +2469,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // rather than starting again from nothing.
   //
   // builtInSeen was shippedSeen. It holds which built-in prompts you were last
-  // shown, and losing it would quietly swallow the one line saying they changed.
+  // shown, and losing it would swallow the one line saying they changed.
   function carryOldNames(into: any) {
     if (!into || typeof into !== "object") return into;
     if (!into.builtInSeen && into.shippedSeen) into.builtInSeen = into.shippedSeen;
@@ -2354,10 +2520,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
         out.samplers = clean;
       } else if (key === "blocksShut") {
-        // Two lists of up to forty blocks each, so the cap is eighty and the
-        // entries are made into strings whatever the store held.
+        // A few hundred, for the folds of every preset kept apart, and made
+        // into strings whatever the store held. A fold saved before folds were
+        // kept per preset reads "blocks:id", and is taken as the same block
+        // with no preset named, which is where it was made.
         if (!Array.isArray(got)) continue;
-        out.blocksShut = got.slice(0, 80).map((v: any) => String(v));
+        out.blocksShut = got
+          .slice(-400)
+          .map((v: any) => String(v).replace(/^(blocks|userBlocks):/, "$1\n"));
       } else if (key === "soundUrl") {
         if (typeof got !== "string") continue;
         out.soundUrl = /^data:audio\//.test(got) && got.length <= SOUND_MAX * 2 ? got : "";
@@ -2509,6 +2679,34 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   let saveTimer: any = null;
+  // Which prompt list the Prompt tab is editing. Up here because the picker
+  // below reads it, and a panel rebuilt early must not meet it undeclared.
+  let editing: "blocks" | "userBlocks" = "blocks";
+  const editingYours = () => editing === "userBlocks";
+  // The picker, written down rather than remembered. Every assignment goes
+  // through here so none of them can be the one that forgets.
+  //
+  // A built-in prompt is written for one list, so it names the list being
+  // edited and no other. One of yours carries both lists and replaces both
+  // when loaded, so it names both.
+  const pickKey = (): "presetPick" | "presetPickYours" => (editingYours() ? "presetPickYours" : "presetPick");
+  function currentPick(): string {
+    return String(cfg[pickKey()] == null ? "" : cfg[pickKey()]);
+  }
+  function pickPreset(name: string) {
+    const n = String(name == null ? "" : name);
+    if (n && !isBuiltIn(n)) {
+      cfg.presetPick = n;
+      cfg.presetPickYours = n;
+    } else cfg[pickKey()] = n;
+    persist(true);
+  }
+  // A preset of yours renamed or deleted, followed on whichever list names it.
+  function repick(from: string, to: string) {
+    for (const k of ["presetPick", "presetPickYours"] as const) if (cfg[k] === from) cfg[k] = to;
+    persist(true);
+  }
+
   function persist(now?: boolean) {
     const write = () => {
       saveTimer = null;
@@ -3215,9 +3413,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // and writes one number rather than rebuilding the panel.
   // What the run is doing right now, named rather than left at "busy". Without
   // a stage a refine that takes forty seconds looks the same as one that has
-  // quietly failed, and a model that streams looks the same as one that has not
+  // failed, and a model that streams looks the same as one that has not
   // started.
-  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" = "";
+  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" | "queued" = "";
   let streamed = 0;
 
   // How long a refine is given, in seconds, or 0 for as long as it takes. One
@@ -3237,12 +3435,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (stage === "writing")
       return "Writing" + (streamed ? ", " + streamed.toLocaleString() + " characters" : "") + clockPart;
     if (stage === "checking") return "Checking the answer" + clockPart;
+    if (stage === "judging") return "Jev is reading the reply" + clockPart;
+    // Another account on this install has a refine running, and this one waits
+    // for it to finish before it can start.
+    if (stage === "queued") return "Waiting for another account's refine to finish" + clockPart;
     // Waiting out a provider that would not take the call. The number counts
     // down, because a status line that says "waiting" and does not move looks
     // exactly like one that has stopped, and this is the longest anything here
     // ever sits still.
     if (stage === "waiting") {
       const left = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
+      if (waitGap) return "Waiting for the gap between refines, starting in " + left + "s";
       return (
         "The provider would not take the call" +
         (waitAt ? " (" + waitAt + " of " + waitOf + ")" : "") +
@@ -3251,7 +3454,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         "s"
       );
     }
-    // Which try this is, because a refine that quietly takes three times as
+    // Which try this is, because a refine that takes three times as
     // long reads as broken unless it says why.
     if (stage === "retrying")
       return (
@@ -3420,7 +3623,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     clearAck();
   });
 
-  function markBusy(on: boolean, why?: "asking" | "thinking" | "writing" | "checking" | "waiting") {
+  function markBusy(
+    on: boolean,
+    why?: "asking" | "thinking" | "writing" | "checking" | "waiting" | "judging" | "queued",
+  ) {
     if (on && !busy) {
       runStartedAt = Date.now();
       streamed = 0;
@@ -3933,12 +4139,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // tab strip has to do. It is also the same way the companion extension
     // marks its tabs, so the two read as a pair.
     //
-    // The line that used to sit under the strip is gone with it, and that is
-    // what fixes the drag. A sideways scroller is vertically scrollable too
-    // unless it is told otherwise, and the tabs were pulled a pixel down over
-    // that line by a negative margin, so the strip was one pixel taller than it
-    // could show: a drag up moved the titles by that pixel and stacked the
-    // tab's underline on the line, which reads as the line thickening. The tray
+    // There is no line under the strip. A sideways scroller can also scroll up
+    // and down unless told not to, and a line under tabs pulled down over it
+    // makes the strip one pixel taller than it can show, so dragging up moved
+    // the titles by that pixel. The tray
     // has nothing under it to sit over, so there is nothing to scroll.
     // One row, and it does not scroll. A scrolling strip slides under a finger
     // even when every tab already fits, because the padding and border put the
@@ -3975,11 +4179,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The weight never changes with the state. A label that goes bold on select
     // is a label that gets wider, and the whole row shifts under the finger that
     // just tapped it.
-    // Equal shares rather than each tab sized to its own label. Sized to the
-    // label, the gaps between them all differ and the selected pill reads as
-    // cramped next to the wide ones, which is the uneven look. Equal shares
-    // give one rhythm across the row and one pill size.
-    ".arf-tab{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
+    // Each tab starts at the width of its label, and the room left over is
+    // shared equally. Equal widths cut "Prompt" and "Context" short on a phone
+    // and in a narrow drawer, and a cut word is hard to read. Sharing the
+    // spare room still gives every label the same space either side of it.
+    ".arf-tab{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;" +
     "text-align:center;" +
     "cursor:pointer;background:transparent;border:0;" +
     "padding:8px 4px;white-space:nowrap;border-radius:calc(var(--lumiverse-radius-md,10px) - 3px);" +
@@ -3987,6 +4191,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
     "transition:color var(--lumiverse-transition-fast,150ms ease)," +
     "background var(--lumiverse-transition-fast,150ms ease)}" +
+    // The smallest phones leave the row a few pixels short of every label, so
+    // the space either side of a label shrinks there instead of the label.
+    "@media (max-width: 340px){.arf-tabs{gap:1px}.arf-tab{padding-left:1px;padding-right:1px}}" +
     ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "background:var(--lumiverse-primary-010,rgba(147,112,219,.1))}" +
     // Filled, and the text at full strength. Two marks rather than one, because
@@ -4019,6 +4226,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-block.arf-hushed{opacity:.55}" +
     ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
     ".arf-btn.arf-mini2{min-height:26px;padding:3px 10px;font-size:11.5px}" +
+    // The head of the block list: how many there are on the left, and the one
+    // press that folds or opens them all on the right. The button keeps to one
+    // line, since a label broken over three reads as three buttons.
+    ".arf-foldbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 6px}" +
+    ".arf-foldcount{color:var(--lumiverse-text-muted,rgba(255,255,255,.65));font-size:12px;min-width:0}" +
+    ".arf-btn.arf-foldall{flex:none;white-space:nowrap}" +
     // Two choices side by side, where a menu would be heavier than the choice.
     // A row that only exists while the one above it is on. Indented and edged
     // so it reads as belonging to that row rather than as the next setting.
@@ -4100,10 +4313,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // below is what tells the two apart: a dip on its own is a tap, a dip with
     // the ring running is a hold.
     //
-    // A ring that grew out of the button and faded used to run the whole time a
-    // refine was going. Two rings on one button said one thing between them, and
-    // the eye already says a refine is running by reading. The ring here is the
-    // hold and nothing else.
+    // The ring shows a hold and nothing else. The eye already shows that a
+    // refine is running, so a second ring for that would say the same thing
+    // twice.
     ".arf-float:active{transform:scale(.94)}" +
     ".arf-float{transition:color 260ms cubic-bezier(.2,.7,.3,1)," +
     "border-color 260ms cubic-bezier(.2,.7,.3,1)," +
@@ -4398,6 +4610,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@media (pointer: coarse){" +
     ".arf-btn{min-height:40px;padding:10px 14px}" +
     ".arf-btn.arf-mini{min-height:40px;width:40px;padding:0}" +
+    ".arf-btn.arf-foldall{min-height:40px;padding:0 14px}" +
     ".arf-fold{min-height:44px}" +
     ".arf-tab{padding:12px 4px}" +
     ".arf-box{width:46px;height:26px;border-radius:13px}" +
@@ -4899,12 +5112,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const r = row.getBoundingClientRect();
     // No wider than the setting it belongs to.
     //
-    // The cap used to be room on the screen, which is the wrong thing to
-    // measure: the panel is a modal narrower than the screen, so 300 on a phone
-    // came out wider than the panel and hung off the side of it. Sized to the
-    // row instead, it lands in the same column as the setting with the panel's
-    // own gutter either side, which is what makes it read as belonging to that
-    // row rather than floating over everything.
+    // Capped by the row, not the screen. The panel is narrower than the screen,
+    // so a cap based on the screen can come out wider than the panel. Sized to
+    // the row, it lines up with the setting it belongs to.
     //
     // The row is the whole width of the panel, so on a wide screen this is the
     // 300 cap as before and nothing changes there.
@@ -5229,7 +5439,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const wrap = el("div", "arf-col");
     // Everything is open while a search is running. A setting folded away is
     // still a setting somebody is looking for, and a search that cannot see
-    // into a fold quietly answers "no" for half the panel.
+    // into a fold answers "no" for half the panel.
     const open = openFolds.has(title) || !!hunt.trim();
     // A real button, so the keyboard and a screen reader get it for free rather
     // than from a role attribute and a keydown handler that has to remember
@@ -5358,7 +5568,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tabCards(id: string): HTMLElement[] {
     if (id === "prompt") return [buildBlocksCard(), buildMacroCard(), buildPresetCard()];
     if (id === "context") return [buildContextCard(), buildPreviewCard()];
-    if (id === "model") return [buildConnectionCard(), buildSamplerCard(), buildSetupCard()];
+    if (id === "model") return [buildConnectionCard(), buildSamplerCard(), buildSetupCard(), buildJudgeCard()];
     if (id === "limits")
       return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
     if (id === "log") {
@@ -5611,10 +5821,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // came from; this gives one of these the same thing, with only the part
   // reveal() reads filled in.
   //
-  // The alternative is what these used to do: build the children only while the
-  // switch is on, which means the switch has to rebuild the panel to show them,
-  // and they arrive between two frames with nothing to watch. Built either way
-  // and hidden, they are already standing there when the switch goes on.
+  // The rows are built whether or not the switch is on, and hidden while it is
+  // off. Building them only while it is on would mean rebuilding the panel to
+  // show them, so they would appear all at once with no movement.
   function hangsOff(node: any, on: string | (() => boolean), name?: string): any {
     // Its own attribute, not data-arf-row. That one means a settings row: one
     // label, one control, its explanation behind the "?". These are containers
@@ -6010,17 +6219,18 @@ export function setup(ctx: Ctx, overrides?: any) {
       row.appendChild(hangsOff(draft, "inputRefine"));
     }
 
-    const auto = document.createElement("label");
+    // A row, not a label. Only the box switches the automatic pass. The words
+    // and the space beside it do nothing when pressed, so a stray press on the
+    // row cannot turn on refining every reply. The words still name the box
+    // for a screen reader.
+    const auto = document.createElement("div");
     auto.className = "arf-row arf-note";
-    // As wide as the switch and its words and no wider. A label is pressable
-    // everywhere it reaches, and a row laid out as a block reaches the whole
-    // width of the card, so the empty space beside the words was switching the
-    // automatic pass on and off. Giving it a line of its own is what put that
-    // space there, and this is what takes it back out of reach.
-    auto.style.cssText =
-      "cursor:pointer;display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
+    auto.style.cssText = "display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
+    const autoWords = el("span", "", "every reply, automatically");
+    autoWords.id = nextId() + "-name";
     const autoBox = document.createElement("input");
     autoBox.type = "checkbox";
+    autoBox.setAttribute("aria-labelledby", autoWords.id);
     autoBox.checked = !!cfg.refineOn;
     autoBox.className = "arf-box";
     autoBox.addEventListener("change", () => {
@@ -6030,7 +6240,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       settle();
     });
     auto.appendChild(autoBox);
-    auto.appendChild(el("span", "", "every reply, automatically"));
+    auto.appendChild(autoWords);
     wrap.appendChild(row);
     // Its own line, under the buttons rather than flowing after them. As one
     // more item in a row that wraps, where it landed depended on how much room
@@ -6406,7 +6616,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---- the card that comes up on the page ----
   // A refine changes writing you were reading, and the panel is behind a tab.
   // Somebody who has not opened that tab had no way to see what changed and no
-  // way back, other than a floating button that had quietly turned into an undo
+  // way back, other than a floating button that had turned into an undo
   // button without saying so. This puts the before, the after and the way back
   // in front of them, on the page, where the change happened.
   let popEl: any = null;
@@ -6891,10 +7101,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   // cannot do anything until you leave the tab and come back.
 
   // Whether a row has anything to do where it sits.
-  function fieldShows(f: Field): boolean {
+  // A row also waits on whatever the row it hangs off waits on. The address for
+  // Jev hangs off the host being your own, and the host hangs off two models:
+  // checking only the host left the address on screen with one model, for
+  // anybody who had once picked another address.
+  function fieldShows(f: Field, depth?: number): boolean {
     if (!f.needs) return true;
     const held = cfg[f.needs.key];
-    return f.needs.is === undefined ? !!held : held === f.needs.is;
+    const own = f.needs.is === undefined ? !!held : held === f.needs.is;
+    if (!own) return false;
+    const parent = FIELD_BY_KEY[f.needs.key];
+    return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
   }
 
   function fieldRow(f: Field): HTMLElement {
@@ -6921,21 +7138,21 @@ export function setup(ctx: Ctx, overrides?: any) {
     (wrap as any)._arfShows = () => fieldShows(f);
     wrap.hidden = !fieldShows(f);
     if (f.type === "bool") {
-      // The "?" sits beside the words rather than inside the label.
+      // Only the switch flips the switch. The words beside it are not a second
+      // way to press it: a row of settings is read by running a finger or a
+      // pointer along it, and words that answered a press turned every stray
+      // tap on a name into a setting changed without meaning to. The "?" is the
+      // same, a press on it and nowhere else.
       //
-      // A label with no `for` names the first labelable element inside it, and a
-      // button is one, so a "?" placed in there took the label off the switch:
-      // pressing the words opened the description instead of flipping the
-      // switch, and the switch was left with only its own small box to press.
-      // Named by id instead, which says which control the words belong to
-      // whatever else ends up standing next to them.
+      // The words still name the switch, for a screen reader, through
+      // aria-labelledby rather than a label element, because a label is the one
+      // thing that makes its words pressable.
       const row = el("div", "arf-between");
       const left = el("div", "arf-labrow arf-grow");
       const id = nextId();
-      const lab = document.createElement("label");
+      const lab = document.createElement("span");
       lab.className = "arf-lab";
-      lab.style.cursor = "pointer";
-      lab.htmlFor = id;
+      lab.id = id + "-name";
       lab.textContent = f.label;
       left.appendChild(lab);
       const q = hintButton(f.hint, f.label);
@@ -6944,6 +7161,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const box = document.createElement("input");
       box.id = id;
       box.type = "checkbox";
+      box.setAttribute("aria-labelledby", lab.id);
       box.checked = !!cfg[f.key];
       box.setAttribute("data-arf-field", f.key);
       box.className = "arf-box";
@@ -6997,7 +7215,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       ta.setAttribute("data-arf-field", f.key);
       ta.setAttribute("aria-label", f.label);
       ta.className = "arf-field arf-mono";
-      ta.rows = 3;
+      ta.rows = f.rows || 3;
       ta.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       ta.addEventListener("input", () => {
         cfg[f.key] = ta.value;
@@ -7098,7 +7316,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       num.className = "arf-field";
       // A price is copied off a provider's own page, where it reads $5.00/M or
       // $0.075/M. A number box takes none of that: the paste lands as nothing
-      // and the setting quietly stays at its default, which reads as the
+      // and the setting stays at its default, which reads as the
       // feature being broken. The number is lifted out of whatever was pasted.
       num.addEventListener("paste", (e: any) => {
         const raw = e && e.clipboardData && e.clipboardData.getData("text");
@@ -7121,10 +7339,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
       wrap.appendChild(num);
     }
-    // The description lives behind the "?" now, so it is no longer in the page
-    // for the search to walk. Hung off the row instead, where shownText picks
-    // it up: a setting you can only describe is exactly the one you are
-    // searching for, and losing that would be the whole point of the search.
+    // The description is behind the "?", so it is not in the page for the
+    // search to read. It is stored on the row, where shownText picks it up, so
+    // searching for words in a description still finds the setting.
     if (f.hint) (wrap as any)._arfHint = f.hint;
     return wrap;
   }
@@ -7134,15 +7351,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // locked blocks put back if a hand-edited or imported file has lost them.
   // Everything that draws or edits the layout goes through here, so a bad
   // stored value cannot take the section down with it.
-  // Nothing is forced back into the list any more. A block list is the reader's
+  // Nothing is forced back into the list. A block list is the reader's
   // prompt, and putting a block back into somebody's prompt because this file
   // thinks it belongs there is the wrong kind of help. What a missing piece
   // costs is said out loud instead: no {{message}} anywhere is a warning on the
   // card and a refusal to refine.
   // Which of the two prompts the editor is showing. Held for the session
   // rather than saved: it is where you are looking, not a setting.
-  let editing: "blocks" | "userBlocks" = "blocks";
-  const editingYours = () => editing === "userBlocks";
 
   function blockList(which?: "blocks" | "userBlocks"): Block[] {
     const key = which || editing;
@@ -7171,17 +7386,63 @@ export function setup(ctx: Ctx, overrides?: any) {
   const blockLabel = (b: Block) => String(b.name || "").trim() || "Untitled block";
 
   // Whether a block is folded shut, and the switch for it. Keyed by which list
-  // it is in as well as its id: the two prompts use the same ids for the same
-  // jobs, and folding the turn in one would otherwise fold it in both.
-  const shutKey = (b: Block) => (editingYours() ? "userBlocks" : "blocks") + ":" + String(b.id);
+  // it is in, which preset the picker names, and the block's id. The list,
+  // because the two prompts use the same ids for the same jobs. The preset,
+  // because a preset saved from another keeps its block ids, and folding a
+  // block in one would otherwise fold it in every preset made from it.
+  //
+  // A line break sits between the scope and the id because nothing typed into
+  // the name box can hold one, so no preset's name can run into another's.
+  const FOLDS_MAX = 400;
+  const foldScope = (which: "blocks" | "userBlocks", preset: string) =>
+    which + (preset ? "@" + preset : "") + "\n";
+  const shutKey = (b: Block) =>
+    foldScope(editingYours() ? "userBlocks" : "blocks", currentPick()) + String(b.id);
   const shutList = (): string[] => (Array.isArray(cfg.blocksShut) ? cfg.blocksShut : []);
   const isShut = (b: Block) => shutList().indexOf(shutKey(b)) >= 0;
   function setShut(b: Block, shut: boolean) {
     const k = shutKey(b);
     const next = shutList().filter((x) => x !== k);
     if (shut) next.push(k);
-    cfg.blocksShut = next.slice(-80);
+    cfg.blocksShut = next.slice(-FOLDS_MAX);
     persist();
+    syncFoldAll();
+  }
+  // What one preset has folded, handed to another name. Saving a copy keeps the
+  // folds you were looking at, and a rename takes them along. With no new name
+  // they are dropped, which is what deleting the preset wants.
+  function carryFolds(from: string, to: string | null, keep: boolean) {
+    const heads = (["blocks", "userBlocks"] as const).map((w) => ({
+      from: foldScope(w, from),
+      to: to === null ? null : foldScope(w, to),
+    }));
+    const out: string[] = [];
+    for (const k of shutList()) {
+      const h = heads.find((x) => k.indexOf(x.from) === 0);
+      if (!h || keep) out.push(k);
+      if (h && h.to !== null) out.push(h.to + k.slice(h.from.length));
+    }
+    cfg.blocksShut = out.filter((k, i) => out.indexOf(k) === i).slice(-FOLDS_MAX);
+    persist();
+  }
+  // The fold bar's words follow the folds. A block folded by its own caret does
+  // not rebuild the list, so without this the bar kept offering to fold
+  // everything after the last one had been folded by hand.
+  function syncFoldAll(bar?: HTMLElement | null) {
+    const at = bar || (document.querySelector("[data-arf-foldbar]") as HTMLElement | null);
+    if (!at) return;
+    const list = blockList();
+    const shut = list.filter((b) => isShut(b)).length;
+    const anyOpen = shut < list.length;
+    const btn = at.querySelector("[data-arf-foldall]") as HTMLElement | null;
+    const count = at.querySelector("[data-arf-foldcount]") as HTMLElement | null;
+    if (btn) {
+      btn.textContent = (anyOpen ? CARET_SHUT : CARET_OPEN) + " " + (anyOpen ? "Fold all" : "Open all");
+      btn.setAttribute("aria-label", anyOpen ? "Fold every block" : "Open every block");
+    }
+    if (count)
+      count.textContent =
+        list.length + (list.length === 1 ? " block" : " blocks") + (shut ? ", " + shut + " folded" : "");
   }
 
   // Which saved prompt this one is, if it is one of them. The four that come with it
@@ -7303,7 +7564,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const on = list.filter((b) => b.on).length;
     const wrap = card(
       "Your prompt",
-      "The refine is one request, and this is it. Blocks are sent top to bottom, and two next to each other with the same role are joined into one message. A block that comes out empty is left out.",
+      "This is the whole request a refine sends. Blocks go top to bottom. Two blocks in a row with the same role become one message, and an empty block is left out.",
       on + " of " + list.length + " on",
     );
     // Marked so switching a block off can bring it up to date where it stands.
@@ -7390,23 +7651,32 @@ export function setup(ctx: Ctx, overrides?: any) {
     // are looking at, which is a different kind of thing; and standing it with
     // them made that row wrap when this label grew by a word, which moved Back
     // to the default onto a line of its own and back again on every press.
+    //
+    // A count on the left, so the row reads as the head of the list it acts on
+    // and says how much of it is folded away out of sight.
     {
-      const anyOpen = list.some((b) => !isShut(b));
-      const view = el("div", "arf-row");
-      view.appendChild(el("span", "arf-grow"));
-      const foldAll = button(anyOpen ? "Fold them all" : "Open them all", false);
-      foldAll.className += " arf-mini";
+      const view = el("div", "arf-foldbar");
+      view.setAttribute("data-arf-foldbar", "1");
+      const count = el("span", "arf-foldcount");
+      count.setAttribute("data-arf-foldcount", "1");
+      view.appendChild(count);
+      const foldAll = button("", false);
+      foldAll.className += " arf-mini2 arf-foldall";
       foldAll.setAttribute("data-arf-foldall", "1");
       foldAll.addEventListener("click", () => {
-        const which = editingYours() ? "userBlocks" : "blocks";
-        const others = shutList().filter((k) => k.indexOf(which + ":") !== 0);
+        // Read at the press rather than when the bar was drawn, since a caret
+        // on a block can have changed it in between.
+        const anyOpen = list.some((b) => !isShut(b));
+        const head = foldScope(editingYours() ? "userBlocks" : "blocks", currentPick());
+        const others = shutList().filter((k) => k.indexOf(head) !== 0);
         cfg.blocksShut = anyOpen
-          ? others.concat(list.map((b) => which + ":" + String(b.id))).slice(-80)
+          ? others.concat(list.map((b) => head + String(b.id))).slice(-FOLDS_MAX)
           : others;
         persist();
         paint();
       });
       view.appendChild(foldAll);
+      syncFoldAll(view);
       wrap.appendChild(view);
     }
     for (let i = 0; i < list.length; i++) wrap.appendChild(buildBlockRow(list, i));
@@ -7422,7 +7692,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         "span",
         "",
         "You are looking at " +
-          presetPick +
+          currentPick() +
           ", one of the prompts built in. It cannot be written over, so the blocks below are read-only. To change it, put a name in the box under Presets and press Save as new. The copy is yours and opens for editing.",
       );
       what.style.flex = "1";
@@ -7465,7 +7735,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // a picker changed after that draw is one the lock on screen never saw.
       const named = promptNamed(promptShape(want), yours ? "userBlocks" : "blocks");
       if (named && isBuiltIn(named)) {
-        presetPick = named;
+        pickPreset(named);
         presetSaid = null;
       }
       setBlocks(want);
@@ -7495,7 +7765,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // What that leaves is every path that loads one without going through the
   // picker, and those set it themselves.
   function builtInNow(): string {
-    return presetPick && isBuiltIn(presetPick) ? presetPick : "";
+    return currentPick() && isBuiltIn(currentPick()) ? currentPick() : "";
   }
 
   function onBuiltInPrompt(): boolean {
@@ -7510,7 +7780,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.opacity = "0.55";
       node.style.cursor = "not-allowed";
       node.title =
-        "Part of " + (builtInNow() || presetPick) + ", which cannot be changed. Save it as your own first.";
+        "Part of " + (builtInNow() || currentPick()) + ", which cannot be changed. Save it as your own first.";
     } catch (_) {}
   }
 
@@ -7567,7 +7837,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The one control that stays live on a prompt that comes with the
     // extension. Switching a block on or off chooses which of its parts go to
     // the model; it does not rewrite a word of what they say, which is what
-    // cannot be written over. Locking it with the rest made the parts that ship
+    // cannot be written over. Locking it with the rest made the parts that come
     // switched off unreachable: What Has Happened is one of them, so anybody
     // wanting their memories in the prompt had to save a copy under a name of
     // their own before they could turn it on, for a switch that was right there.
@@ -7598,7 +7868,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     nameIn.className = "arf-field arf-grow";
     nameIn.value = b.name || "";
     if (locked) lockForBuiltIn(nameIn);
-    nameIn.placeholder = "What to call it";
+    nameIn.placeholder = "What is this block called?";
     nameIn.setAttribute("aria-label", "Name for this block");
     nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
     nameIn.addEventListener("change", () => {
@@ -7642,7 +7912,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ta.rows = Math.min(12, Math.max(3, String(b.text || "").split("\n").length + 1));
     ta.className = "arf-field arf-mono";
     ta.value = b.text || "";
-    ta.placeholder = "What you want it to do.";
+    ta.placeholder = "What do you want this block to tell the model?";
     ta.setAttribute("aria-label", "Text for " + blockLabel(b));
     ta.setAttribute("data-arf-field", "blocktext:" + b.id);
     // Readable rather than disabled, so the text can still be selected and
@@ -7650,7 +7920,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (locked) {
       ta.readOnly = true;
       ta.style.opacity = "0.75";
-      ta.title = "Part of " + presetPick + ", which cannot be changed. Save it as your own first.";
+      ta.title = "Part of " + currentPick() + ", which cannot be changed. Save it as your own first.";
     }
     ta.addEventListener("input", () => {
       const next = blockList();
@@ -7792,7 +8062,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildContextCard(): HTMLElement {
     const wrap = card(
       "How much it is told",
-      "What the {{history}} and {{lore}} macros carry. Every one of these costs tokens on every single refine, which is where a cheap feature quietly becomes an expensive one.",
+      "What the {{history}} and {{lore}} macros carry. Every one of these costs tokens on every single refine, so a feature that looks cheap can cost a lot over a long chat.",
     );
     wrap.appendChild(
       fieldRow({
@@ -7811,7 +8081,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         label: "Name the speakers in the run-up",
         type: "bool",
         under: true,
-        hint: "On by default. The run-up goes out as one block of text, so these labels are the only thing telling the two voices apart in it. Switch it off for a group chat, or any chat whose messages already begin with a name, where labelling them again says it twice.",
+        hint: "On by default. Puts a name before each earlier message, so the model can tell who said what. Switch it off if your messages already start with a name.",
       }),
     );
     wrap.appendChild(
@@ -7985,7 +8255,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const one = costOf(totalTokens, back);
       // Which half of the sum is real. One price left at 0 is not a cost of
       // nothing on that side, it is a price nobody has given, and a total that
-      // quietly leaves half out is worse than one that says what it covers.
+      // leaves half out is worse than one that says what it covers.
       const covers =
         Number(cfg.costIn) <= 0
           ? " Only what the model writes back is priced, since the input price is 0."
@@ -8004,7 +8274,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     }
     // Where the tokens are going, block by block. This is the part worth having
-    // before a change: a lorebook or a run-up that is quietly two thirds of
+    // before a change: a lorebook or a run-up that is two thirds of
     // every request does not look like anything in the messages below.
     if (parts.length) {
       const box = el("div", "arf-block");
@@ -8110,13 +8380,139 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // Two-model mode, and the key Jev is reached with. The key is sent to the
+  // backend once and kept in Lumiverse's secure store. The panel is only told
+  // whether there is one, so it never sits in the settings or an export.
+  let jevHas: boolean | null = null;
+  let jevSaid = "";
+  let jevAsk = "";
+  // Asked once per panel. The card is rebuilt on every paint, and asking on
+  // each one sent a question per keystroke while the answer was on its way.
+  let jevStatusAsked = false;
+  function buildJudgeCard(): HTMLElement {
+    const wrap = card(
+      "One model or two",
+      "Beta. With two, a small model called Jev reads each reply first. Only the replies it flags are sent to the refine model.",
+      cfg.judgeMode === "two" ? "two, beta" : "one",
+    );
+    for (const f of JUDGE_FIELDS.slice(0, 4)) wrap.appendChild(fieldRow(f));
+
+    const keyRow = el("div", "arf-col");
+    keyRow.setAttribute("data-arf-jevkey", "1");
+    const lab = el("span", "arf-lab", "Jev key");
+    lab.id = "arf-jevkey-name";
+    keyRow.appendChild(lab);
+    const box = document.createElement("input");
+    box.type = "password";
+    box.className = "arf-field arf-mono";
+    box.setAttribute("aria-labelledby", lab.id);
+    box.setAttribute("autocomplete", "off");
+    box.setAttribute("data-arf-jevkey-box", "1");
+    box.placeholder = jevHas ? "A key is saved. Paste a new one to replace it." : "Paste the key from your Jev host";
+    keyRow.appendChild(box);
+    const acts = el("div", "arf-row");
+    const save = button("Save key", false);
+    save.setAttribute("data-arf-jev", "save");
+    save.addEventListener("click", () => {
+      const key = box.value.trim();
+      box.value = "";
+      if (!key) {
+        jevSaid = "Paste a key into the box first.";
+        paint();
+        return;
+      }
+      jevSaid = "Saving.";
+      jevAsk = newId();
+      send({ type: "jev_key_set", requestId: jevAsk, key: key });
+      paint();
+    });
+    const forget = button("Forget key", false);
+    forget.setAttribute("data-arf-jev", "forget");
+    forget.disabled = !jevHas;
+    forget.style.opacity = forget.disabled ? "0.45" : "1";
+    forget.addEventListener("click", () => {
+      jevSaid = "Forgetting.";
+      jevAsk = newId();
+      send({ type: "jev_key_forget", requestId: jevAsk });
+      paint();
+    });
+    const test = button("Test", false);
+    test.setAttribute("data-arf-jev", "test");
+    test.disabled = !jevHas;
+    test.style.opacity = test.disabled ? "0.45" : "1";
+    test.addEventListener("click", () => {
+      jevSaid = "Asking Jev one small question.";
+      jevAsk = newId();
+      send({ type: "jev_test", requestId: jevAsk });
+      paint();
+    });
+    acts.appendChild(save);
+    acts.appendChild(forget);
+    acts.appendChild(test);
+    keyRow.appendChild(acts);
+    const said = note(
+      jevSaid ||
+        (jevHas == null
+          ? "Asking whether a key is saved."
+          : jevHas
+            ? "A key is saved. It is kept in Lumiverse's secure store and never shown again."
+            : "No key is saved yet."),
+    );
+    said.setAttribute("data-arf-jevsaid", "1");
+    keyRow.appendChild(said);
+    wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
+
+    const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(4);
+    wrap.appendChild(fieldRow(checksField));
+    // The way back to the built-in checks, beside the box it fills. Resetting
+    // the whole "One model or two" part would also switch back to one model
+    // and move the host and the threshold, which is more than somebody who
+    // mistyped a check wants.
+    const checksRow = el("div", "arf-row");
+    const builtIn = button("Use the built-in checks", false);
+    builtIn.setAttribute("data-arf-jevchecks", "builtin");
+    builtIn.addEventListener("click", () => {
+      if (String(cfg.judgeChecks || "").trim() === JUDGE_CHECKS.trim()) {
+        toast("These are already the built-in checks.", true);
+        return;
+      }
+      askFirst(
+        "jevchecks",
+        {
+          title: "Use the built-in checks",
+          message: "Replace what is in What Jev checks with the built-in checks? What you wrote there is not kept.",
+          confirmLabel: "Replace",
+        },
+        "Press Use the built-in checks again to replace yours.",
+        () => {
+          cfg.judgeChecks = JUDGE_CHECKS;
+          persist(true);
+          paint();
+          toast("The built-in checks are back.", true);
+        },
+      );
+    });
+    checksRow.appendChild(builtIn);
+    wrap.appendChild(hangsOff(checksRow, () => cfg.judgeMode === "two", "jev checks"));
+    for (const f of afterChecks) wrap.appendChild(fieldRow(f));
+    if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
+      wrap.appendChild(
+        bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."),
+      );
+    if (jevHas == null && !jevStatusAsked) {
+      jevStatusAsked = true;
+      send({ type: "jev_key_status", requestId: newId() });
+    }
+    return wrap;
+  }
+
   // Named setups for the Model tab, so somebody running more than one custom
   // connection can move between them in one go rather than resetting five
   // fields by hand every time.
   function buildSetupCard(): HTMLElement {
     const wrap = card(
       "Saved model setups",
-      "Everything on this tab under one name: the connection, the thinking, how long to wait, and the samplers. Your prompt is not in here, so loading one changes what runs the refine and nothing about how it reads. Kept in this browser and in your account, and not offered as a file: a connection id names nothing on anybody else's account.",
+      "Saves everything on this tab under one name: the connection, thinking, wait time and samplers. Your prompt is not part of it.",
       setups.length ? String(setups.length) : undefined,
     );
 
@@ -8142,10 +8538,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       setupPick = sel.value;
       setupName = sel.value;
       setupSaid = null;
-      // Picking loads it, the same as the presets above. Before this, picking
-      // moved the name into the box and left the Model tab alone, so Update
-      // selected wrote whatever was set over the setup that had just been
-      // picked.
+      // Picking loads it, the same as the presets above, so Update selected
+      // cannot save one setup over another.
       const now = setups.find((x) => x.name === sel.value);
       if (now) loadSetup(now, was);
       paint();
@@ -8245,8 +8639,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
         return;
       }
-      if (name !== one.name && setups.some((x) => x.name === name)) {
-        setupSaid = "There is already a setup called that.";
+      if (name === one.name) {
+        setupSaid = "That is already its name. Type a different one.";
+        paint();
+        return;
+      }
+      if (setups.some((x) => x.name === name)) {
+        setupSaid = "There is already a setup called that. Pick another name.";
         paint();
         return;
       }
@@ -8332,7 +8731,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ).length;
     const wrap = card(
       "Samplers",
-      "Left blank, the connection's own preset decides, which is what you want unless you have a reason. Fill one in and it is sent with the refine and only with the refine: your chat is not affected.",
+      "Leave these blank to use your connection's own preset. A value you fill in is sent with the refine only, never with your chat.",
       set ? set + " set" : "all default",
     );
     wrap.appendChild(
@@ -8405,7 +8804,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildProtectCard(): HTMLElement {
     const wrap = card(
       "Protecting what is not prose",
-      "Ask a model to improve a paragraph and it will happily drop a colour tag, reflow a code block, or decide an image link was a typo. None of that is writing, and none of it is the model's to touch.",
+      "A model asked to improve writing can change colour tags, code blocks or image links. These keep that kind of text exactly as it was.",
     );
     wrap.appendChild(
       fieldRow({
@@ -8475,7 +8874,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     if (!cfg.protectOn)
       wrap.appendChild(
-        warn("With this off, a rewrite can quietly change or drop any formatting in your replies."),
+        warn("With this off, a rewrite can change or drop any formatting in your replies, and nothing warns you."),
       );
     return wrap;
   }
@@ -8510,7 +8909,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildGuardCard(): HTMLElement {
     const wrap = card(
       "What it refuses to save",
-      "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired. Each is yours to switch off.",
+      "A rewrite that fails one of these checks is thrown away, and the reply stays as it was. The Log says which check stopped it. Each one can be switched off.",
     );
     for (const f of LIMIT_FIELDS.filter((f) => f.key === "maxGrowthPct" || f.key === "minShrinkPct"))
       wrap.appendChild(fieldRow(f));
@@ -8570,10 +8969,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   let waitUntil = 0;
   let waitAt = 0;
   let waitOf = 0;
+  // Whether the wait is the gap between automatic refines rather than a
+  // provider that turned the call down. The two count down the same way and
+  // mean different things.
+  let waitGap = false;
 
   // What is happening right now, which the panel could not say before: it knew
   // it was busy and nothing else, so a refine that took forty seconds looked
-  // the same as one that had quietly failed.
+  // the same as one that had failed.
   function buildLiveCard(): HTMLElement {
     const st = statusLine();
     const wrap = card("Right now", undefined, st.tone === "busy" ? "working" : st.text);
@@ -9099,7 +9502,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "popup",
         label: "Show the before and after on screen",
         type: "bool",
-        hint: "On by default. A card comes up on the page itself when a refine finishes, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+        hint: "On by default. When a refine finishes, a card shows the reply before and after, with a button to put it back. Closing it loses nothing: the refine is in the Log.",
       }),
     );
     wrap.appendChild(
@@ -9540,7 +9943,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "inputRefine",
         label: "Refining the draft in your input box",
         type: "bool",
-        hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs. A row for it also appears in the chat input's Extras menu, or in the floating button's menu when that is on screen.",
+        hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button is added above the tabs and to the Extras or floating button menu.",
       }),
     );
     wrap.appendChild(
@@ -9570,7 +9973,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildTransferCard(): HTMLElement {
     const wrap = card(
       "Your whole setup",
-      "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back. Presets and model setups go by name: one that matches a name you have replaces it, and one that matches it exactly is left alone. Pick several files at once and they are taken as one, counted together, with the last file naming something being the one that stands.",
+      "Save your settings to a file, or load them from one. Loading replaces what you have, so save a file first if you want a way back.",
     );
 
     const row = el("div", "arf-row");
@@ -10063,9 +10466,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     for (const p of list) {
       const row = el("div", "arf-col");
-      const lab = document.createElement("label");
-      lab.className = "arf-between";
-      lab.style.cursor = "pointer";
+      // The box and only the box, the same as every switch on the panel. These
+      // lists include the reset one, where a stray press on a name would tick a
+      // part for putting back without anybody meaning it to.
+      const lab = el("div", "arf-between");
       lab.appendChild(el("span", "arf-lab arf-grow", p.label));
       const box = document.createElement("input");
       box.type = "checkbox";
@@ -10214,7 +10618,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // connection id, which names nothing on anybody else's account, so a preset
   // that carried the values could not be shared. A name that matches nothing on
   // the machine reading it is simply not loaded, and the card says so.
-  let presetPick = "";
   let presetName = "";
   // The setup the picker is showing. Follows whichever preset is selected, so
   // choosing one in the list shows what that preset asks for rather than what
@@ -10238,11 +10641,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       // own turn loaded over the prompt for replies would be the wrong job
       // asked of every reply in the chat.
       //
-      // The prompt and nothing else. thinkingMode used to be in here, and it
-      // was never once applied: it belongs to a model setup rather than a
-      // preset, so applyPreset walks past it. A preset keeps the prompt and a
-      // setup keeps what runs it, and loading a prompt reaching over to change
-      // your model would break that in the direction nobody would want.
+      // The prompt and nothing else. thinkingMode belongs to a model setup, not
+      // a preset, so applyPreset skips it. A preset keeps the prompt and a setup
+      // keeps what runs it, so loading a prompt never changes your model.
       //
       // Which model a prompt is written for is still said, in its name and in
       // its description, because that is advice about what to pick rather than
@@ -10364,7 +10765,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // What the Model tab says right now, copied rather than referenced so that
-  // changing a sampler afterwards does not quietly edit the setup it came from.
+  // changing a sampler afterwards does not edit the setup it came from.
   function setupFromNow(): Record<string, any> {
     const out: Record<string, any> = {};
     for (const k of SETUP_KEYS)
@@ -10408,8 +10809,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         // A pick can only be given something it offers. A connection is the
         // exception: the list is the account's, not this file's, and a setup
         // saved before a connection was deleted still names it. That is said on
-        // the card rather than silently corrected, since the alternative is
-        // quietly refining with the wrong model.
+        // the card rather than corrected with no message, since the alternative is
+        // refining with the wrong model.
         const field = COST_FIELDS.find((f) => f.key === k);
         const opts = field && field.options;
         if (k !== "connectionId" && opts && !opts.some((o) => o.value === got)) continue;
@@ -10478,7 +10879,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // Only the keys a preset owns, and each one copied rather than referenced, or
-  // editing your rules would quietly edit the preset you saved them from.
+  // editing your rules would edit the preset you saved them from.
   function presetFromNow(): Record<string, any> {
     const out: Record<string, any> = {};
     for (const k of PRESET_KEYS) {
@@ -10541,13 +10942,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // is not a one-way door.
   //
   // wasPick is the picker's value before the caller changed it. The change
-  // handler sets presetPick first, so reading it here would snapshot the preset
+  // handler sets the pick first, so reading it here would snapshot the preset
   // being loaded and leave Put it back pointing at the thing it just undid.
   function loadPreset(p: Preset, wasPick?: string): void {
     const before = {
       settings: presetFromNow(),
       setup: setupFromNow(),
-      pick: wasPick === undefined ? presetPick : wasPick,
+      pick: wasPick === undefined ? currentPick() : wasPick,
     };
     const took = applyPreset(p);
     // Taking one of the eight marks them as seen. Changing them later is then
@@ -10593,13 +10994,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The preset the box names, whether it comes with the extension or is one of
   // yours. Read in two places, so it is named once.
   function chosenPreset(): any {
-    return allPresets().find((p: any) => p.name === presetPick) || null;
+    return allPresets().find((p: any) => p.name === currentPick()) || null;
   }
 
   function buildPresetCard(): HTMLElement {
     const wrap = card(
       "Presets",
-      "Four are built in and work as they stand: a line edit for replies and a copy edit for your own messages, each written once for any model and once for a model that reasons. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.",
+      "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Nothing from the Model tab is in it.",
       presets.length ? presets.length + " yours" : BUILT_IN.length + " built in",
     );
 
@@ -10657,18 +11058,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Switching lists can take the chosen one out of the menu. Left as it was,
     // the box shows blank while every button beside it still acts on a preset
     // that is no longer on screen.
-    if (presetPick && !groups.some((g) => g.of.some((x) => x.name === presetPick))) {
-      presetPick = "";
+    if (currentPick() && !groups.some((g) => g.of.some((x) => x.name === currentPick()))) {
+      pickPreset("");
       presetSaid = null;
     }
-    sel.value = presetPick;
+    sel.value = currentPick();
     // Whether what is on screen still matches the preset the box names.
     //
-    // Loading one sets the box and nothing clears it, so editing a block after
-    // loading left the box naming a preset the prompt no longer matched. The
-    // fields are not locked while a built-in preset is picked, because loading
-    // one and changing it is how you are meant to start; what was missing was
-    // the panel saying so.
+    // Loading one sets the box, and changing a setting afterwards does not
+    // clear it, so this is what lets the panel say the two differ. A built-in
+    // preset's blocks are locked, but the thinking setting it carries is not,
+    // so a built-in one can differ too.
     const driftedFromPick = () => {
       const p = chosenPreset();
       if (!p || !p.settings) return false;
@@ -10691,15 +11091,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     sel.addEventListener("change", () => {
-      const was = presetPick;
-      presetPick = sel.value;
+      const was = currentPick();
+      pickPreset(sel.value);
       presetName = sel.value;
       const now = allPresets().find((p) => p.name === sel.value);
       presetSetup = String((now && now.setup) || "");
       presetSaid = null;
-      // Picking loads it. Before this, picking moved the name into the box and
-      // left the prompt alone, so Update selected wrote whatever was on screen
-      // over the preset that had just been picked, and the preset was gone.
+      // Picking loads it, so the prompt on screen is always the preset the
+      // picker names, and Update selected cannot save one over another.
       if (now) loadPreset(now, was);
       paint();
     });
@@ -10708,7 +11107,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const nameIn = document.createElement("input");
     nameIn.type = "text";
     nameIn.className = "arf-field";
-    nameIn.placeholder = "A name for this setup";
+    nameIn.placeholder = "A name for this preset";
     nameIn.value = presetName;
     nameIn.setAttribute("aria-label", "Preset name");
     nameIn.setAttribute("data-arf-field", "presetName");
@@ -10718,7 +11117,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(nameIn);
 
     const chosen = () => chosenPreset();
-    const chosenIsYours = () => !!presetPick && !isBuiltIn(presetPick);
+    const chosenIsYours = () => !!currentPick() && !isBuiltIn(currentPick());
 
     // Which saved model setup, if any, loads with this preset. Sits above the
     // buttons because it is part of what Save as new and Update selected write
@@ -10746,8 +11145,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       setupSel.appendChild(o);
     }
     // A preset saved on another machine can name a setup this one has never
-    // had. Kept in the list rather than silently reset to none, so updating the
-    // preset here does not quietly throw the link away.
+    // had. Kept in the list rather than reset to none with no message, so updating the
+    // preset here does not throw the link away.
     if (presetSetup && !setups.some((x) => x.name === presetSetup)) {
       const o = document.createElement("option");
       o.value = presetSetup;
@@ -10764,7 +11163,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     builtInSaid.setAttribute("data-arf-builtin-setup", "1");
     const sayBuiltIn = () => {
-      builtInSaid.hidden = !presetSetup || !isBuiltIn(presetPick);
+      builtInSaid.hidden = !presetSetup || !isBuiltIn(currentPick());
     };
 
     setupSel.value = presetSetup;
@@ -10784,15 +11183,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     // it still matters.
     if (driftedFromPick()) {
       const drift = note(
-        isBuiltIn(presetPick)
+        isBuiltIn(currentPick())
           ? "You have changed the prompt since loading " +
-            presetPick +
+            currentPick() +
             ". A built-in prompt cannot be written over, so put a name in the box and press Save as new to keep this."
           : "You have changed the prompt since loading " +
-            presetPick +
+            currentPick() +
             ". Press Update selected to keep it, or Save as new for a second copy.",
       );
-      drift.setAttribute("data-arf-preset-drift", isBuiltIn(presetPick) ? "built-in" : "yours");
+      drift.setAttribute("data-arf-preset-drift", isBuiltIn(currentPick()) ? "built-in" : "yours");
       wrap.appendChild(drift);
     }
 
@@ -10824,7 +11223,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       applySetup({ name: "", at: 0, settings: back.setup });
       // The picker goes back with it. Leaving it on the preset that was just
       // undone is the same mismatch this whole change is here to stop.
-      presetPick = back.pick;
+      pickPreset(back.pick);
       presetName = back.pick;
       const was = allPresets().find((x) => x.name === back.pick);
       presetSetup = String((was && was.setup) || "");
@@ -10856,7 +11255,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       presets.push({ name: name, at: Date.now(), settings: presetFromNow(), setup: presetSetup || undefined });
       presets = presets.slice(-60);
       savePresets();
-      presetPick = name;
+      carryFolds(currentPick(), name, true);
+      pickPreset(name);
       presetUndo = null;
       presetSaid = "Saved " + name + ".";
       paint();
@@ -10891,14 +11291,20 @@ export function setup(ctx: Ctx, overrides?: any) {
         paint();
         return;
       }
-      if (name !== p.name && (isBuiltIn(name) || presets.some((x) => x.name === name))) {
-        presetSaid = "There is already a preset called that.";
+      if (name === p.name) {
+        presetSaid = "That is already its name. Type a different one.";
         paint();
         return;
       }
+      if (isBuiltIn(name) || presets.some((x) => x.name === name)) {
+        presetSaid = "There is already a preset called that. Pick another name.";
+        paint();
+        return;
+      }
+      carryFolds(p.name, name, false);
+      repick(p.name, name);
       p.name = name;
       savePresets();
-      presetPick = name;
       presetSaid = "Renamed.";
       paint();
     });
@@ -10923,7 +11329,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         () => {
           presets = presets.filter((x) => x !== p);
           savePresets();
-          presetPick = "";
+          carryFolds(p.name, null, false);
+          repick(p.name, "");
           presetName = "";
           presetSetup = "";
           presetSaid = "Deleted " + p.name + ".";
@@ -10939,8 +11346,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(rename);
     row.appendChild(drop);
     wrap.appendChild(row);
-    if (presetPick && isBuiltIn(presetPick)) {
-      const which = BUILT_IN_PROMPTS.find((p) => p.name === presetPick);
+    if (currentPick() && isBuiltIn(currentPick())) {
+      const which = BUILT_IN_PROMPTS.find((p) => p.name === currentPick());
       if (which) wrap.appendChild(note(which.what));
       wrap.appendChild(
         note(
@@ -11042,7 +11449,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const k of keysFor("resetParts")) cfg[k] = (CONFIG as any)[k];
     if (partOn("resetParts", PART_PRESETS)) {
       presets = [];
-      presetPick = "";
+      cfg.presetPick = "";
+      cfg.presetPickYours = "";
+      pickPreset("");
       presetName = "";
       presetSetup = "";
       savePresets();
@@ -11619,7 +12028,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {
       // ui_panels is not granted. The extension is fine without it; the button
       // is the only thing missing, and the panel says so rather than the
-      // switch silently doing nothing.
+      // switch doing nothing with no message.
       widget = null;
       widgetFailed = true;
       log("could not create the floating button. Check that the ui_panels permission is granted.");
@@ -11670,7 +12079,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const dy = Math.abs((e.clientY || 0) - downAt.y);
         // Moved: this is the host dragging the widget, not a hold. Ten pixels
         // rather than six, because a thumb resting on glass drifts further than
-        // six and every one of those was a hold that quietly did nothing. Auto
+        // six and every one of those was a hold that did nothing. Auto
         // Retry allows the same.
         if (dx > HOLD_SLOP || dy > HOLD_SLOP) disarm();
       };
@@ -11996,10 +12405,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // usually does nothing is an entry somebody presses once and stops trusting.
     if (!busy && pickedHere()) {
       doing.push({ key: "part", label: "Refine the part I selected" });
-      // Beside it, on the same terms. Taking a selection out used to live on
-      // the button under a message and nowhere else, so somebody running
-      // without that button and without this one could refine a selection four
-      // ways and cut one none.
+      // Beside it, on the same terms, so taking a selection out is offered
+      // everywhere refining one is, even with the message button switched off.
       doing.push({ key: "snip", label: "Take out what I selected" });
     }
     // On the same terms as the panel button beside it: no chat means no input
@@ -12172,10 +12579,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // ---- buttons in Lumiverse's own slots ----
   // The host leaves empty mount points in its chrome for extensions to fill,
   // each carrying the chat or the message it belongs to in its scope. That is
-  // the supported way in, and the difference between this and the button that
-  // used to be on every message: that one reached for a row by class name, and
-  // those names carry a build hash that changes when Lumiverse rebuilds its
-  // CSS.
+  // the supported way in. Finding a row by class name would break, because those
+  // names carry a build hash that changes when Lumiverse rebuilds its CSS.
   //
   // The message one goes in the footer slot, which the host puts inside the
   // message. Where either of them lands on screen is not this file's to state:
@@ -12614,12 +13019,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const kind = busy ? "working" : "ready";
       if (one.getAttribute("data-arf-icon") !== kind) {
         one.setAttribute("data-arf-icon", kind);
-        // The mark itself is left alone. It used to be swapped for a different
-        // drawing whenever a refine started or ended, which replaced the element
-        // and threw away whatever it was in the middle of. The two drawings were
-        // different sizes as well, so the mark shrank from twenty pixels to
-        // fourteen the moment a refine began. Whether an eye is reading is a
-        // class on it now, set for every mark at once.
+        // The mark itself is left alone. Swapping in a different drawing would
+        // replace the element and stop any animation part way. Whether the eye
+        // is reading is a class on it, set for every mark at once.
         // Named for what pressing it does now, so the label a screen reader
         // reads matches the mark beside it.
         const said = busy
@@ -12701,10 +13103,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // one moment it was most likely to be pressed.
   function cancelRefine() {
     if (!busy && !sweep) return;
-    // Noted before the answer comes back, so the eye can close on being called
-    // off rather than on having finished. The two used to look identical: a
-    // refine you stopped gave the same contented blink as one that read the
-    // whole reply, which tells you the opposite of what happened.
+    // Noted before the answer comes back, so the eye shows a stopped refine
+    // differently from a finished one. The same blink for both would say the
+    // refine finished when it did not.
     eyeStopped = true;
     send({ type: "cancel_refine", requestId: newId() });
     log("asked it to stop");
@@ -13042,6 +13443,46 @@ export function setup(ctx: Ctx, overrides?: any) {
             send({ type: "list_connections", requestId: newId() });
             return;
           }
+          // Jev's answer on one reply, for the Log. Each check with its
+          // percentage, so a reply left alone can be read back and the line
+          // moved if Jev is letting too much through or too little.
+          if (msg.type === "judge_said") {
+            const list = Array.isArray(msg.scores) ? msg.scores : [];
+            const each = list
+              .map((x: any) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
+              .join("; ");
+            const cost = Number(msg.cost) > 0 ? ", cost " + Number(msg.cost).toFixed(6) : "";
+            if (msg.failed)
+              log("Jev could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
+            else if (msg.refine) log("Jev says refine: " + each + cost, true);
+            else log("Jev says leave it: " + each + cost, true);
+            return;
+          }
+          // Whether a key is saved is true whichever question it answers, so
+          // every one of these is taken.
+          if (msg.type === "jev_key") {
+            jevHas = !!msg.has;
+            const said = String(msg.said || "");
+            jevSaid =
+              said === "saved"
+                ? "Saved. Press Test to check it."
+                : said === "forgotten"
+                  ? "Forgotten. Two-model mode refines every reply until a key is saved."
+                  : said
+                    ? said.charAt(0).toUpperCase() + said.slice(1) + "."
+                    : "";
+            paint();
+            return;
+          }
+          if (msg.type === "jev_tested") {
+            if (msg.requestId && msg.requestId !== jevAsk) return;
+            jevSaid = msg.ok
+              ? "Jev answered. The key works."
+              : "Jev did not answer: " + String(msg.why || "no reason given") + ".";
+            log(msg.ok ? "Jev answered a test question" : "Jev test failed: " + String(msg.why || ""), true);
+            paint();
+            return;
+          }
           if (msg.type === "backend_version") {
             const said = typeof msg.version === "string" ? msg.version : "";
             // Logged only on a change, since this arrives on every panel load
@@ -13074,6 +13515,9 @@ export function setup(ctx: Ctx, overrides?: any) {
             // that is not installed.
             clearAck();
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
+            // Time spent waiting its turn is not time the backend has gone
+            // missing for, so each of these gives the give-up timer more room.
+            if (msg.stage === "queued") armDeadman(Number(msg.waitMs) || 8000);
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
             // The working as it is written, already cut out of its tags by the
@@ -13092,6 +13536,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               waitUntil = Date.now() + ms;
               waitAt = Number(msg.attempt) || 0;
               waitOf = Number(msg.of) || 0;
+              waitGap = !!msg.gap;
               // The wait is the backend doing as it was told, so the panel's
               // own giving-up timer has to make room for it. Without this a
               // two-minute wait on a free tier fired the deadman and the panel
@@ -13099,9 +13544,11 @@ export function setup(ctx: Ctx, overrides?: any) {
               // there waiting on purpose.
               armDeadman(ms);
               log(
-                "the provider would not take the call, waiting " +
-                  Math.round(ms / 1000) +
-                  "s before trying again",
+                waitGap
+                  ? "a reply landed inside the gap between refines, waiting " + Math.round(ms / 1000) + "s"
+                  : "the provider would not take the call, waiting " +
+                      Math.round(ms / 1000) +
+                      "s before trying again",
               );
             }
             // Written again now everything this message carried has been read.
@@ -13247,8 +13694,10 @@ export function setup(ctx: Ctx, overrides?: any) {
             setBadge(String(undoHere().length || 1));
             if (wasSnip) {
               const gone = String(msg.before || "").length - String(msg.after || "").length;
-              log("took " + (gone > 0 ? gone : 0) + " characters out of a reply", true);
-              toast("Taken out. Put it back is on the card.");
+              // Said each time, because a snip sits among buttons that do call
+              // the model, and nothing else on screen says this one does not.
+              log("took " + (gone > 0 ? gone : 0) + " characters out of a reply, with no model call", true);
+              toast("Taken out. No model was asked, so it cost nothing. Put it back is on the card.");
             } else {
               log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
               toast("Reply refined.");
@@ -13275,7 +13724,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
           if (msg.type === "account_save_failed") {
             // Settings that look saved and are not is the worst shape this can
-            // take, so it is said plainly rather than logged quietly.
+            // take, so it is said plainly rather than only logged.
             const what = String(msg.what || "settings");
             log("your " + what + " could not be saved to your account. They are still saved in this browser.");
             toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
@@ -13369,6 +13818,13 @@ export function setup(ctx: Ctx, overrides?: any) {
             // This is what the spinner is waiting on. It goes on the moment a
             // reply lands rather than when this side answers, so every way the
             // backend can decide against a refine has to come back here.
+            //
+            // Only when the panel said a refine was coming. With the automatic
+            // pass off it never did, so there is nothing to explain: a line on
+            // every reply saying it was left alone read as the extension having
+            // tried, and turning the spinner off here stopped the one for a
+            // refine started by hand that was still running.
+            if (!(cfg.enabled && cfg.refineOn && !chatIsOff(msg.chatId))) return;
             markBusy(false);
             lastRun = { ms: lastRunMs, ok: false, why: String(msg.why || "") };
             log("left a reply alone: " + String(msg.why || "no reason given"));
@@ -13782,7 +14238,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 }
 
 // The defaults and the fields built from them, so a check can hold the two
-// against each other. A setting in one and not the other looks fine and quietly
+// against each other. A setting in one and not the other looks fine and
 // never loads.
 export const __testing = {
   splitSelectorList,

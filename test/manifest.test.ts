@@ -20,7 +20,7 @@ const manifest = JSON.parse(read("spindle.json"));
 const SRC = read("src/backend.ts") + read("src/frontend.ts");
 
 // permission -> what using it looks like, and why it is asked for. A permission
-// with no entry fails rather than passing quietly, so this list cannot go stale
+// with no entry fails rather than passing, so this list cannot go stale
 // by someone adding a permission and not this.
 const EARNS: Record<string, { uses: RegExp; why: string }> = {
   generation: {
@@ -46,6 +46,10 @@ const EARNS: Record<string, { uses: RegExp; why: string }> = {
   ui_panels: {
     uses: /createFloatWidget|showContextMenu/,
     why: "the floating button and its menu",
+  },
+  cors_proxy: {
+    uses: /spindle\.cors\(/,
+    why: "reaches Jev in two-model mode",
   },
 };
 
