@@ -94,6 +94,11 @@ function host(
     // Jev, as the CORS proxy hands it back: a status and a body of text. The
     // function is given the address and what was sent, and can answer or throw.
     jev?: (url: string, init: any) => any;
+    // Held open until the check lets it go, so a second account's work can be
+    // started while this one is still running.
+    asking?: () => Promise<void>;
+    // The one account that can see the chats, for a server with several.
+    chatOwner?: string;
   } = {},
 ) {
   // An install scoped to an operator refuses a model call that names no
@@ -168,6 +173,7 @@ function host(
         asked.push(req);
         needsUser(req);
         if (opts.whileAsking) opts.whileAsking();
+        if (opts.asking) await opts.asking();
         if (opts.fail) throw new Error(opts.fail);
         if (opts.failFirst && opts.failFirst.times > 0) {
           opts.failFirst.times--;
@@ -242,7 +248,8 @@ function host(
       },
     },
     chats: {
-      get: async () => {
+      get: async (_chatId?: string, userId?: string) => {
+        if (opts.chatOwner !== undefined && userId !== undefined && userId !== opts.chatOwner) return null;
         if (opts.whileReading) opts.whileReading();
         if (opts.chatFail) throw new Error(opts.chatFail);
         return opts.noCard ? { id: "c1" } : { id: "c1", character_id: "ch1" };
@@ -472,6 +479,125 @@ describe("going over a reply more than once", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(h.asked.length).toBe(1);
+  });
+});
+
+// One install serving several accounts. The settings live in one set of
+// variables, so each account's work runs in its own turn with its own settings,
+// and another account's work waits for the turn to end.
+describe("several accounts on one install", () => {
+  const A = { ...RULES, connectionId: "conn-a" };
+  const B = { ...RULES, connectionId: "conn-b" };
+
+  test("a refine runs with the settings of the account that asked", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."]);
+    await h.front({ type: "set_settings", settings: A }, "a");
+    await h.front({ type: "set_settings", settings: B }, "b");
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "a");
+    await wait(30);
+    expect(h.asked[0].connection_id).toBe("conn-a");
+    expect(h.asked[0].userId).toBe("a");
+  });
+
+  test("and the other account's refine runs with its own", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."]);
+    await h.front({ type: "set_settings", settings: A }, "a");
+    await h.front({ type: "set_settings", settings: { ...B, refineAgain: true } }, "b");
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "b");
+    await wait(30);
+    expect(h.asked[0].connection_id).toBe("conn-b");
+    expect(h.asked[0].userId).toBe("b");
+  });
+
+  test("a second account waits for the first account's refine, then uses its own settings", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    let calls = 0;
+    const h = host(chat(), ["She stepped through and the cold hit her."], {
+      asking: () => (calls++ === 0 ? held : Promise.resolve()),
+    });
+    await h.front({ type: "set_settings", settings: { ...A, refineAgain: true } }, "a");
+    await h.front({ type: "set_settings", settings: { ...B, refineAgain: true } }, "b");
+    const first = h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "a");
+    await wait(20);
+    const second = h.front({ type: "refine_now", requestId: "r2", chatId: "c1", messageId: "m2" }, "b");
+    await wait(30);
+    // Only the first has reached the model. The second has been told it is waiting.
+    expect(h.asked.length).toBe(1);
+    expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "queued")).toBe(true);
+    release();
+    await first;
+    await second;
+    expect(h.asked.length).toBe(2);
+    expect(h.asked[0].connection_id).toBe("conn-a");
+    expect(h.asked[1].connection_id).toBe("conn-b");
+  });
+
+  test("settings sent during another account's turn do not change the refine that is running", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    const h = host(chat(), ["She stepped through and the cold hit her."], { asking: () => held });
+    await h.front({ type: "set_settings", settings: { ...A, keepOriginal: true } }, "a");
+    const first = h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "a");
+    await wait(20);
+    // B's panel sends settings that would not keep the original. That is read
+    // when the rewrite is saved, after the model has answered.
+    await h.front({ type: "set_settings", settings: { ...B, keepOriginal: false } }, "b");
+    release();
+    await first;
+    const saved = h.sent.find((m: any) => m.type === "refined");
+    expect(saved && saved.canUndo).toBe(true);
+  });
+
+  test("the automatic pass uses the account the event names", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."]);
+    await h.front({ type: "set_settings", settings: A }, "a");
+    await h.front({ type: "set_settings", settings: B }, "b");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1", userId: "a" });
+    await wait(30);
+    expect(h.asked[0].connection_id).toBe("conn-a");
+  });
+
+  test("without one named, the account that can see the chat is used", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."], { chatOwner: "a" });
+    await h.front({ type: "set_settings", settings: A }, "a");
+    await h.front({ type: "set_settings", settings: B }, "b");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(30);
+    expect(h.asked[0].connection_id).toBe("conn-a");
+    expect(h.asked[0].userId).toBe("a");
+  });
+
+  test("a chat switched off by one account is not switched off for another", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."]);
+    await h.front({ type: "set_settings", settings: A }, "a");
+    await h.front({ type: "set_chats_off", chats: ["c1"] }, "a");
+    await h.front({ type: "set_settings", settings: B }, "b");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1", userId: "b" });
+    await wait(30);
+    expect(h.asked.length).toBe(1);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g2", userId: "a" });
+    await wait(30);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("one account's refines never wait for each other", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    let calls = 0;
+    const h = host(chat(), ["She stepped through and the cold hit her."], {
+      asking: () => (calls++ === 0 ? held : Promise.resolve()),
+    });
+    await h.front({ type: "set_settings", settings: { ...A, refineAgain: true } }, "a");
+    const first = h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "a");
+    await wait(20);
+    const second = h.front({ type: "refine_now", requestId: "r2", chatId: "c1", messageId: "m2" }, "a");
+    await wait(30);
+    expect(h.asked.length).toBe(2);
+    expect(h.sent.some((m: any) => m.stage === "queued")).toBe(false);
+    release();
+    await first;
+    await second;
   });
 });
 

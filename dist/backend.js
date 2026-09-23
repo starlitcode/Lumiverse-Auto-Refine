@@ -3706,6 +3706,239 @@ const NEEDED = [
     'ui_panels',
     'cors_proxy',
 ];
+// ---- whose turn it is ----
+// One backend can serve several accounts, and the rules above are one set of
+// variables. So work runs one account at a time. Each account's settings are
+// kept apart and loaded when its turn starts, and another account's work waits
+// until the turn ends. Work for the same account still runs side by side, so an
+// install with one account never waits.
+const TURN_BEAT_MS = 4000;
+const rulesBy = new Map();
+const chatsOffBy = new Map();
+let turnKey = null;
+let turnCount = 0;
+let loadedKey = null;
+const turnWaiters = [];
+const keyOf = (userId) => String(userId == null ? '' : userId);
+// Puts one account's settings and switched-off chats in place.
+function loadRules(k) {
+    if (loadedKey === k)
+        return;
+    const s = rulesBy.get(k);
+    if (s)
+        applyRules(s);
+    chatsOff = chatsOffBy.get(k) || new Set();
+    loadedKey = k;
+}
+// An account's panel sent its settings. Kept for its turns, and put in place
+// now unless another account's work is running.
+function rememberRules(userId, s) {
+    const k = keyOf(userId);
+    rulesBy.set(k, s);
+    // Said once, when it is saved. A pattern that cannot compile is a typo the
+    // reader can fix, and ignoring it would leave them believing a region is
+    // shielded when nothing is shielding it.
+    const bad = makePatterns(s.shieldAdd, 30).bad.concat(makePatterns(s.shieldKeep, 30).bad);
+    if (bad.length)
+        replyTo(userId, { type: 'shield_bad', patterns: bad });
+    if (turnCount === 0 || turnKey === k) {
+        applyRules(s);
+        chatsOff = chatsOffBy.get(k) || new Set();
+        loadedKey = k;
+    }
+}
+// Runs work as one account. When another account has the turn, waits for it to
+// end, calling onWait every few seconds so the panel can say it is waiting.
+async function asAccount(userId, work, onWait) {
+    const k = keyOf(userId);
+    while (turnCount > 0 && turnKey !== k) {
+        try {
+            if (onWait)
+                onWait();
+        }
+        catch (_) { }
+        await new Promise((r) => {
+            const t = setTimeout(r, TURN_BEAT_MS);
+            turnWaiters.push(() => {
+                clearTimeout(t);
+                r();
+            });
+        });
+    }
+    if (turnCount === 0) {
+        turnKey = k;
+        loadRules(k);
+    }
+    turnCount++;
+    try {
+        return await work();
+    }
+    finally {
+        turnCount--;
+        if (turnCount === 0) {
+            turnKey = null;
+            for (const w of turnWaiters.splice(0))
+                w();
+        }
+    }
+}
+// The panel's line while it waits for another account's work to finish.
+const sayQueued = (userId) => () => tell(userId, { type: 'refine_progress', stage: 'queued', waitMs: TURN_BEAT_MS * 2 });
+// Which account a finished reply belongs to. The event may name it. When it
+// does not and only one account uses this install, it is that one. With
+// several, each is asked whether it can see the chat, and the one that can is
+// the owner. When that cannot settle it, the account whose panel sent settings
+// last is used, and the server log says so.
+async function ownerOf(p) {
+    if (p && p.userId)
+        return String(p.userId);
+    const keys = Array.from(rulesBy.keys());
+    if (keys.length <= 1)
+        return keys.length ? keys[0] || undefined : settingsUser;
+    const hits = [];
+    for (const k of keys) {
+        try {
+            const chat = await spindle.chats.get(String(p.chatId), k || undefined);
+            if (chat)
+                hits.push(k);
+        }
+        catch (_) { }
+    }
+    if (hits.length === 1)
+        return hits[0] || undefined;
+    say('info', 'could not tell which account a reply belongs to, so the last panel to send settings is used');
+    return settingsUser;
+}
+// ---- one account's rules ----
+// Everything the panel sends as settings, put into the variables the refine
+// reads. Called when an account's turn starts, and when its panel sends new
+// settings while it has the turn.
+function applyRules(s) {
+    masterOn = s.enabled !== false;
+    refineOn = !!s.refineOn;
+    refineAgain = !!s.refineAgain;
+    connectionId = String(s.connectionId == null ? '' : s.connectionId);
+    thinkingMode =
+        s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
+    thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
+    // Not `|| 90`. Zero is a setting here, meaning never give up, and the
+    // short form would have turned it back into a minute and a half.
+    timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;
+    maxGrowthPct = Number(s.maxGrowthPct);
+    maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
+    minShrinkPct = Number(s.minShrinkPct);
+    minShrinkPct = Number.isFinite(minShrinkPct) ? minShrinkPct : 40;
+    keepOriginal = s.keepOriginal !== false;
+    confirmBeforeSave = !!s.confirmBeforeSave;
+    // The prompt layout. Only a list of block-shaped things is taken; a
+    // corrupted or half-written value falls back to the default rather than
+    // building a prompt out of whatever came over the bridge.
+    userBlocks = Array.isArray(s.userBlocks)
+        ? s.userBlocks
+            .filter((b) => b && typeof b === 'object' && b.id)
+            .slice(0, 60)
+            .map((b) => ({
+            id: String(b.id),
+            name: b.name == null ? undefined : String(b.name),
+            on: b.on !== false,
+            role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
+            text: b.text == null ? '' : String(b.text),
+        }))
+        : [];
+    blocks = Array.isArray(s.blocks)
+        ? s.blocks
+            .filter((b) => b && typeof b === 'object' && b.id)
+            .slice(0, 40)
+            .map((b) => ({
+            id: String(b.id),
+            name: b.name == null ? undefined : String(b.name),
+            on: b.on !== false,
+            role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
+            text: b.text == null ? '' : String(b.text),
+        }))
+        : [];
+    contextMessages = Number(s.contextMessages);
+    contextMessages = Number.isFinite(contextMessages) ? contextMessages : 4;
+    // Absent on a panel older than this setting, where the labels were always
+    // on, so a missing value means on rather than off.
+    nameSpeakers = s.nameSpeakers === undefined ? true : !!s.nameSpeakers;
+    maxLoreTokens = Number(s.maxLoreTokens);
+    maxLoreTokens = Number.isFinite(maxLoreTokens) && maxLoreTokens >= 0 ? maxLoreTokens : 2500;
+    maxHistoryTokens = Number(s.maxHistoryTokens);
+    maxHistoryTokens =
+        Number.isFinite(maxHistoryTokens) && maxHistoryTokens >= 0 ? maxHistoryTokens : 4500;
+    samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
+    protectOn = s.protectOn !== false;
+    protectThinking = s.protectThinking !== false;
+    setThinkTags(s.thinkTags);
+    stripAnswerThinking = s.stripAnswerThinking !== false;
+    {
+        const add = makePatterns(s.shieldAdd, 30);
+        const keep = makePatterns(s.shieldKeep, 30);
+        shieldAdd = add.list;
+        shieldKeep = keep.list;
+    }
+    guardRefusal = s.guardRefusal !== false;
+    guardPreamble = s.guardPreamble !== false;
+    guardSoften = s.guardSoften !== false;
+    softenPct = Number(s.softenPct);
+    softenPct = Number.isFinite(softenPct) ? softenPct : 60;
+    setStrong(s.softenWords);
+    setPairs(s.softenSwaps);
+    retryRefine = Number(s.retryRefine);
+    retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
+    rateWaits = Number(s.rateWaits);
+    rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
+    refineGap = Number(s.refineGap);
+    refineGap = Number.isFinite(refineGap) ? Math.min(120, Math.max(0, refineGap)) : 0;
+    judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
+    judgeHost = ['openrouter', 'nanogpt', 'typesafe', 'custom'].indexOf(String(s.judgeHost)) >= 0
+        ? String(s.judgeHost)
+        : 'openrouter';
+    judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
+    judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
+    judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
+        .split('\n')
+        .map((l) => l.trim().slice(0, 500))
+        .filter(Boolean)
+        .slice(0, JEV_CHECKS_MAX);
+    judgeOver = Number(s.judgeOver);
+    judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
+    judgeWorn = s.judgeWorn !== false;
+    asSwipe = !!s.asSwipe;
+    wornOn = !!s.wornOn;
+    wornBack = Number(s.wornBack);
+    wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
+    wornLeast = Number(s.wornLeast);
+    wornLeast = Number.isFinite(wornLeast) && wornLeast >= 2 ? Math.floor(wornLeast) : 3;
+    // Put through the same reading the phrases themselves go through, so a line
+    // typed with a full stop on the end still matches. Lowercasing alone left
+    // "a shiver ran down her spine." matching nothing and saying nothing about
+    // why, which is the worst way for a setting to not work.
+    wornFine = Array.isArray(s.wornFine)
+        ? s.wornFine
+            .map((x) => wordsOf(String(x == null ? '' : x), new Set()).join(' '))
+            .filter(Boolean)
+        : [];
+    manyPasses = String(s.passMode || 'one') === 'many';
+    // A pass with no blocks would send a prompt with nothing in it, and one
+    // with no block carrying {{message}} would never show the model the thing
+    // it is meant to rewrite. Both are dropped here rather than found halfway
+    // through a chain somebody is paying for.
+    passList = Array.isArray(s.passes)
+        ? s.passes
+            .filter((x) => x && x.on !== false && Array.isArray(x.blocks) && x.blocks.length)
+            .map((x, i) => ({
+            name: String(x.name == null || !String(x.name).trim() ? 'Pass ' + (i + 1) : x.name),
+            blocks: x.blocks,
+        }))
+            .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
+            .slice(0, CHAIN_MAX)
+        : [];
+    protectInline = !!s.protectInline;
+    wrapOutput = s.wrapOutput !== false;
+    streamProgress = s.streamProgress !== false;
+}
 // ---- the events ----
 try {
     spindle.on('GENERATION_STARTED', (p) => {
@@ -3727,103 +3960,103 @@ try {
             if (!p || !p.chatId)
                 return;
             generating.delete(String(p.chatId));
-            // The account this pass is for. GenerationEndedPayloadDTO is the
-            // generation, the chat, the message, the content and the error, and no
-            // account at all, so there is nothing on the event to prefer over this
-            // and no version of Lumiverse where there is. Read once, so the refine
-            // and anything it has to say afterwards go to the same place.
-            const who = settingsUser;
-            // Every way out of this handler from here on says so. The panel turns its
-            // spinner on the moment a reply lands, when the automatic pass is on, and
-            // waits for this answer to turn it off. A path that returned without one
-            // would leave the spinner running until the panel's watchdog gave up and
-            // wrongly reported that the backend is not running.
-            const stand = (why, messageId) => {
-                replyTo(who, {
-                    type: 'refine_stood_down',
-                    chatId: p.chatId,
-                    messageId: messageId == null ? null : messageId,
-                    why: why,
-                });
-            };
-            if (p.error)
-                return stand('the reply itself failed, so there was nothing to refine');
-            if (!masterOn)
-                return stand('Auto Refine is switched off');
-            if (!refineOn)
-                return stand('the automatic pass is switched off');
-            if (chatsOff.has(String(p.chatId)))
-                return stand('Auto Refine is switched off in this chat');
-            let messageId = p.messageId;
-            if (!messageId) {
-                // Not every build puts the id on the end event, so the newest reply
-                // stands in. The greeting is ruled out inside refineMessage either way.
+            // The account this pass is for, and so whose settings it runs with.
+            // Read once, so the refine and anything it has to say afterwards go to
+            // the same place.
+            const who = await ownerOf(p);
+            await asAccount(who, async () => {
+                // Every way out of this handler from here on says so. The panel turns its
+                // spinner on the moment a reply lands, when the automatic pass is on, and
+                // waits for this answer to turn it off. A path that returned without one
+                // would leave the spinner running until the panel's watchdog gave up and
+                // wrongly reported that the backend is not running.
+                const stand = (why, messageId) => {
+                    replyTo(who, {
+                        type: 'refine_stood_down',
+                        chatId: p.chatId,
+                        messageId: messageId == null ? null : messageId,
+                        why: why,
+                    });
+                };
+                if (p.error)
+                    return stand('the reply itself failed, so there was nothing to refine');
+                if (!masterOn)
+                    return stand('Auto Refine is switched off');
+                if (!refineOn)
+                    return stand('the automatic pass is switched off');
+                if (chatsOff.has(String(p.chatId)))
+                    return stand('Auto Refine is switched off in this chat');
+                let messageId = p.messageId;
+                if (!messageId) {
+                    // Not every build puts the id on the end event, so the newest reply
+                    // stands in. The greeting is ruled out inside refineMessage either way.
+                    try {
+                        const msgs = await spindle.chat.getMessages(p.chatId);
+                        if (Array.isArray(msgs))
+                            for (let i = msgs.length - 1; i >= 0; i--)
+                                if (msgs[i] && msgs[i].role === 'assistant') {
+                                    messageId = msgs[i].id;
+                                    break;
+                                }
+                    }
+                    catch (_) { }
+                }
+                if (!messageId)
+                    return stand('this build named no reply on the event and the chat had none to find');
+                // One generation is one reply, however many times it is announced. Where
+                // a build names no generation the message id stands in, which is the
+                // older guard and the only one available there.
+                const run = p.generationId ? 'g:' + String(p.generationId) : 'm:' + String(messageId);
+                if (answered.has(run))
+                    return stand('this reply was announced twice, and it was taken the first time', messageId);
+                note(answered, run, ANSWERED_MAX);
+                // The gap between automatic refines. Waited out rather than skipped: the
+                // reply still gets its refine, a few seconds later.
+                const gapMs = refineGap * 1000;
+                if (gapMs > 0) {
+                    const slot = Math.max(Date.now(), nextAutoAt.get(who || '') || 0);
+                    nextAutoAt.set(who || '', slot + gapMs);
+                    const ms = slot - Date.now();
+                    if (ms > 0) {
+                        say('info', 'waiting ' + Math.round(ms / 1000) + 's for the gap between refines');
+                        tell(who, { type: 'refine_progress', stage: 'waiting', waitMs: ms, gap: true });
+                        if (!(await pause(ms, who)))
+                            return stand('stopped while waiting for the gap between refines', messageId);
+                    }
+                }
+                let done;
                 try {
-                    const msgs = await spindle.chat.getMessages(p.chatId);
-                    if (Array.isArray(msgs))
-                        for (let i = msgs.length - 1; i >= 0; i--)
-                            if (msgs[i] && msgs[i].role === 'assistant') {
-                                messageId = msgs[i].id;
-                                break;
-                            }
+                    done = await refineMessage(p.chatId, messageId, who, false);
                 }
-                catch (_) { }
-            }
-            if (!messageId)
-                return stand('this build named no reply on the event and the chat had none to find');
-            // One generation is one reply, however many times it is announced. Where
-            // a build names no generation the message id stands in, which is the
-            // older guard and the only one available there.
-            const run = p.generationId ? 'g:' + String(p.generationId) : 'm:' + String(messageId);
-            if (answered.has(run))
-                return stand('this reply was announced twice, and it was taken the first time', messageId);
-            note(answered, run, ANSWERED_MAX);
-            // The gap between automatic refines. Waited out rather than skipped: the
-            // reply still gets its refine, a few seconds later.
-            const gapMs = refineGap * 1000;
-            if (gapMs > 0) {
-                const slot = Math.max(Date.now(), nextAutoAt.get(who || '') || 0);
-                nextAutoAt.set(who || '', slot + gapMs);
-                const ms = slot - Date.now();
-                if (ms > 0) {
-                    say('info', 'waiting ' + Math.round(ms / 1000) + 's for the gap between refines');
-                    tell(who, { type: 'refine_progress', stage: 'waiting', waitMs: ms, gap: true });
-                    if (!(await pause(ms, who)))
-                        return stand('stopped while waiting for the gap between refines', messageId);
+                catch (e) {
+                    // Caught here, because a throw that escapes ends the whole handler and
+                    // leaves the panel sitting busy until the page is reloaded.
+                    done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
+                    say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
                 }
-            }
-            let done;
-            try {
-                done = await refineMessage(p.chatId, messageId, who, false);
-            }
-            catch (e) {
-                // Caught here, because a throw that escapes ends the whole handler and
-                // leaves the panel sitting busy until the page is reloaded.
-                done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
-                say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
-            }
-            // Nothing reached a model, so nothing is reported as refused. The reply
-            // may well come back round: Auto Retry swipes a refusal and the next one
-            // arrives as its own generation, with its own text, which this pass has
-            // never seen and does not skip.
-            if (done.stood) {
-                stand(done.why, messageId);
-            }
-            else if (!done.ok && done.why) {
-                replyTo(who, {
-                    type: 'refine_skipped',
-                    chatId: p.chatId,
-                    messageId: messageId,
-                    why: done.why,
-                    same: !!done.same,
-                    notes: done.notes || '',
-                });
-            }
-            // A refine that worked still has a report to hand over when the prompt
-            // asked for one, and the automatic pass has no other way to show it.
-            else if (done.ok && done.notes) {
-                replyTo(who, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
-            }
+                // Nothing reached a model, so nothing is reported as refused. The reply
+                // may well come back round: Auto Retry swipes a refusal and the next one
+                // arrives as its own generation, with its own text, which this pass has
+                // never seen and does not skip.
+                if (done.stood) {
+                    stand(done.why, messageId);
+                }
+                else if (!done.ok && done.why) {
+                    replyTo(who, {
+                        type: 'refine_skipped',
+                        chatId: p.chatId,
+                        messageId: messageId,
+                        why: done.why,
+                        same: !!done.same,
+                        notes: done.notes || '',
+                    });
+                }
+                // A refine that worked still has a report to hand over when the prompt
+                // asked for one, and the automatic pass has no other way to show it.
+                else if (done.ok && done.notes) {
+                    replyTo(who, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
+                }
+            }, sayQueued(who));
         }
         catch (e) {
             say('warn', 'a reply could not be refined: ' + ((e && e.message) || String(e)));
@@ -3834,7 +4067,16 @@ catch (_) {
     say('warn', 'could not listen for replies. Check that the generation permission is granted.');
 }
 // ---- the bridge ----
-spindle.onFrontendMessage(async (payload, userId) => {
+// The messages that do work with the account's settings. Each runs in its
+// account's turn. The rest, such as saving settings or Stop, never wait.
+const WORK = new Set([
+    'refine_now', 'refine_all', 'refine_selection', 'snip_selection', 'try_refine',
+    'preview_prompt', 'apply_refine', 'undo_refine', 'jev_test',
+]);
+spindle.onFrontendMessage((payload, userId) => payload && WORK.has(String(payload.type))
+    ? asAccount(userId, () => onPanel(payload, userId), sayQueued(userId))
+    : onPanel(payload, userId));
+async function onPanel(payload, userId) {
     try {
         if (!payload)
             return;
@@ -3844,136 +4086,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
         if (payload.type === 'set_settings' && payload.settings && typeof payload.settings === 'object') {
             const s = payload.settings;
             settingsUser = userId;
-            masterOn = s.enabled !== false;
-            refineOn = !!s.refineOn;
-            refineAgain = !!s.refineAgain;
-            connectionId = String(s.connectionId == null ? '' : s.connectionId);
-            thinkingMode =
-                s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
-            thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
-            // Not `|| 90`. Zero is a setting here, meaning never give up, and the
-            // short form would have turned it back into a minute and a half.
-            timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;
-            maxGrowthPct = Number(s.maxGrowthPct);
-            maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
-            minShrinkPct = Number(s.minShrinkPct);
-            minShrinkPct = Number.isFinite(minShrinkPct) ? minShrinkPct : 40;
-            keepOriginal = s.keepOriginal !== false;
-            confirmBeforeSave = !!s.confirmBeforeSave;
-            // The prompt layout. Only a list of block-shaped things is taken; a
-            // corrupted or half-written value falls back to the default rather than
-            // building a prompt out of whatever came over the bridge.
-            userBlocks = Array.isArray(s.userBlocks)
-                ? s.userBlocks
-                    .filter((b) => b && typeof b === 'object' && b.id)
-                    .slice(0, 60)
-                    .map((b) => ({
-                    id: String(b.id),
-                    name: b.name == null ? undefined : String(b.name),
-                    on: b.on !== false,
-                    role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
-                    text: b.text == null ? '' : String(b.text),
-                }))
-                : [];
-            blocks = Array.isArray(s.blocks)
-                ? s.blocks
-                    .filter((b) => b && typeof b === 'object' && b.id)
-                    .slice(0, 40)
-                    .map((b) => ({
-                    id: String(b.id),
-                    name: b.name == null ? undefined : String(b.name),
-                    on: b.on !== false,
-                    role: ROLES.indexOf(String(b.role)) >= 0 ? String(b.role) : 'system',
-                    text: b.text == null ? '' : String(b.text),
-                }))
-                : [];
-            contextMessages = Number(s.contextMessages);
-            contextMessages = Number.isFinite(contextMessages) ? contextMessages : 4;
-            // Absent on a panel older than this setting, where the labels were always
-            // on, so a missing value means on rather than off.
-            nameSpeakers = s.nameSpeakers === undefined ? true : !!s.nameSpeakers;
-            maxLoreTokens = Number(s.maxLoreTokens);
-            maxLoreTokens = Number.isFinite(maxLoreTokens) && maxLoreTokens >= 0 ? maxLoreTokens : 2500;
-            maxHistoryTokens = Number(s.maxHistoryTokens);
-            maxHistoryTokens =
-                Number.isFinite(maxHistoryTokens) && maxHistoryTokens >= 0 ? maxHistoryTokens : 4500;
-            samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
-            protectOn = s.protectOn !== false;
-            protectThinking = s.protectThinking !== false;
-            setThinkTags(s.thinkTags);
-            stripAnswerThinking = s.stripAnswerThinking !== false;
-            {
-                const add = makePatterns(s.shieldAdd, 30);
-                const keep = makePatterns(s.shieldKeep, 30);
-                shieldAdd = add.list;
-                shieldKeep = keep.list;
-                const bad = add.bad.concat(keep.bad);
-                // Said once, when it is saved. A pattern that cannot compile is a typo
-                // the reader can fix, and silently ignoring it is how somebody believes
-                // a region is shielded when nothing is shielding it.
-                if (bad.length)
-                    replyTo(userId, { type: 'shield_bad', patterns: bad });
-            }
-            guardRefusal = s.guardRefusal !== false;
-            guardPreamble = s.guardPreamble !== false;
-            guardSoften = s.guardSoften !== false;
-            softenPct = Number(s.softenPct);
-            softenPct = Number.isFinite(softenPct) ? softenPct : 60;
-            setStrong(s.softenWords);
-            setPairs(s.softenSwaps);
-            retryRefine = Number(s.retryRefine);
-            retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
-            rateWaits = Number(s.rateWaits);
-            rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
-            refineGap = Number(s.refineGap);
-            refineGap = Number.isFinite(refineGap) ? Math.min(120, Math.max(0, refineGap)) : 0;
-            judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
-            judgeHost = ['openrouter', 'nanogpt', 'typesafe', 'custom'].indexOf(String(s.judgeHost)) >= 0
-                ? String(s.judgeHost)
-                : 'openrouter';
-            judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
-            judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
-            judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
-                .split('\n')
-                .map((l) => l.trim().slice(0, 500))
-                .filter(Boolean)
-                .slice(0, JEV_CHECKS_MAX);
-            judgeOver = Number(s.judgeOver);
-            judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
-            judgeWorn = s.judgeWorn !== false;
-            asSwipe = !!s.asSwipe;
-            wornOn = !!s.wornOn;
-            wornBack = Number(s.wornBack);
-            wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
-            wornLeast = Number(s.wornLeast);
-            wornLeast = Number.isFinite(wornLeast) && wornLeast >= 2 ? Math.floor(wornLeast) : 3;
-            // Put through the same reading the phrases themselves go through, so a line
-            // typed with a full stop on the end still matches. Lowercasing alone left
-            // "a shiver ran down her spine." matching nothing and saying nothing about
-            // why, which is the worst way for a setting to not work.
-            wornFine = Array.isArray(s.wornFine)
-                ? s.wornFine
-                    .map((x) => wordsOf(String(x == null ? '' : x), new Set()).join(' '))
-                    .filter(Boolean)
-                : [];
-            manyPasses = String(s.passMode || 'one') === 'many';
-            // A pass with no blocks would send a prompt with nothing in it, and one
-            // with no block carrying {{message}} would never show the model the thing
-            // it is meant to rewrite. Both are dropped here rather than found halfway
-            // through a chain somebody is paying for.
-            passList = Array.isArray(s.passes)
-                ? s.passes
-                    .filter((x) => x && x.on !== false && Array.isArray(x.blocks) && x.blocks.length)
-                    .map((x, i) => ({
-                    name: String(x.name == null || !String(x.name).trim() ? 'Pass ' + (i + 1) : x.name),
-                    blocks: x.blocks,
-                }))
-                    .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
-                    .slice(0, CHAIN_MAX)
-                : [];
-            protectInline = !!s.protectInline;
-            wrapOutput = s.wrapOutput !== false;
-            streamProgress = s.streamProgress !== false;
+            rememberRules(userId, s);
             // Written to the account as well as held here, so the next browser to
             // ask gets these rather than a fresh install. Failing to write is worth
             // saying out loud: settings that look saved and are not is the worst
@@ -4134,7 +4247,11 @@ spindle.onFrontendMessage(async (payload, userId) => {
         }
         if (payload.type === 'set_chats_off') {
             const list = Array.isArray(payload.chats) ? payload.chats : [];
-            chatsOff = new Set(list.slice(0, 500).map((c) => String(c)));
+            const off = new Set(list.slice(0, 500).map((c) => String(c)));
+            const k = keyOf(userId);
+            chatsOffBy.set(k, off);
+            if (turnCount === 0 || turnKey === k)
+                chatsOff = off;
             return;
         }
         // Refine one message on request, which is the path both buttons use.
@@ -4666,7 +4783,7 @@ spindle.onFrontendMessage(async (payload, userId) => {
         }
         catch (_) { }
     }
-});
+}
 // Said once this module is listening. A panel has no way to know the backend
 // was not up yet, or has restarted since and forgotten everything it was told.
 // Hearing this, it says it all again.

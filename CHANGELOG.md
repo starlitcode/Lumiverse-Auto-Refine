@@ -39,8 +39,6 @@ _2026-09-23_
 
 - **The README says exactly how the one exception works.** The code does not judge your story, keeps no list of words about it, and blocks nothing on its own. The exception is one paragraph in the built-in prompts, quoted in full in the docs.
 
-- **The settings page explains installs shared by several accounts.** An install an admin makes for everyone on a server uses one set of rules at a time, from whichever account's panel sent its settings last. An install for your own account is not affected.
-
 - **The comments on the refusal checks say what the words about age are for:** a model that misreads an adult character as a minor.
 
 ### Fixed
@@ -54,6 +52,8 @@ _2026-09-23_
 - **With the automatic pass off, new replies no longer show up in the Log.** It said "left a reply alone" for every reply, which looked like it had tried. It also stopped the spinner of a refine you started yourself if another reply arrived.
 
 - **Renaming a preset or setup to its current name says so**, instead of "Renamed.".
+
+- **An install shared by several accounts uses each account's own settings.** It used one set for everyone, from whichever account's panel sent settings last. Now a refine uses the settings of the account that asked, or whose chat it is. Refines from different accounts take turns, and the panel says when one is waiting.
 
 ---
 

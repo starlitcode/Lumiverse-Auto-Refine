@@ -3411,7 +3411,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // a stage a refine that takes forty seconds looks the same as one that has
   // failed, and a model that streams looks the same as one that has not
   // started.
-  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" = "";
+  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" | "queued" = "";
   let streamed = 0;
 
   // How long a refine is given, in seconds, or 0 for as long as it takes. One
@@ -3432,6 +3432,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       return "Writing" + (streamed ? ", " + streamed.toLocaleString() + " characters" : "") + clockPart;
     if (stage === "checking") return "Checking the answer" + clockPart;
     if (stage === "judging") return "Jev is reading the reply" + clockPart;
+    // Another account on this install has a refine running, and this one waits
+    // for it to finish before it can start.
+    if (stage === "queued") return "Waiting for another account's refine to finish" + clockPart;
     // Waiting out a provider that would not take the call. The number counts
     // down, because a status line that says "waiting" and does not move looks
     // exactly like one that has stopped, and this is the longest anything here
@@ -3616,7 +3619,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     clearAck();
   });
 
-  function markBusy(on: boolean, why?: "asking" | "thinking" | "writing" | "checking" | "waiting" | "judging") {
+  function markBusy(
+    on: boolean,
+    why?: "asking" | "thinking" | "writing" | "checking" | "waiting" | "judging" | "queued",
+  ) {
     if (on && !busy) {
       runStartedAt = Date.now();
       streamed = 0;
@@ -13471,6 +13477,9 @@ export function setup(ctx: Ctx, overrides?: any) {
             // that is not installed.
             clearAck();
             if (msg.stage === "writing" && typeof msg.chars === "number") streamed = msg.chars;
+            // Time spent waiting its turn is not time the backend has gone
+            // missing for, so each of these gives the give-up timer more room.
+            if (msg.stage === "queued") armDeadman(Number(msg.waitMs) || 8000);
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
             // The working as it is written, already cut out of its tags by the

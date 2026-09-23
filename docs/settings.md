@@ -6,7 +6,12 @@ It is a tab, not a window, on purpose. This is something you keep open and glanc
 
 **Your settings follow your account, not this browser.** They are written to Lumiverse under your account and read back on load, so opening a different browser, or a different machine, finds the setup you left. This browser keeps a copy as a cache, which is what draws the panel instantly and what carries on working if the account cannot be reached. On a server with several accounts on it, each account's settings and presets are stored separately and one cannot read another's. If a save to your account fails, the panel says so, so settings never look saved when they are not.
 
-**One install for several accounts shares one set of rules.** This is about an install an admin makes for everybody on a server. An install you make for your own account serves only you, and none of this applies to it. With one install serving several accounts, the part that does the refining holds one set of settings at a time: the set from whichever account's panel sent its settings last. That set is what every refine on the server runs with, the automatic pass and the refine button alike, until another panel sends its own. Each account's saved settings and presets stay separate and private. It is only the refine that is shared. Lumiverse does not say which account a finished reply belongs to, so this cannot be split by account yet. On a shared server, install it for your own account.
+**One install for several accounts.** An admin can install Auto Refine once for everyone on a server. Each account's refines still use that account's own settings:
+
+- A refine you start uses your settings.
+- The automatic pass uses the settings of the account the chat belongs to. If Lumiverse cannot say whose chat it is, the account whose panel last sent its settings is used, and Lumiverse's server log says so.
+- Refines take turns between accounts. If another account's refine is running, yours waits for it to finish, and the panel says "Waiting for another account's refine to finish".
+- Your own refines never wait for each other.
 
 **There is no Save button.** A tab has no moment where it closes, so a "nothing sticks until you press Save" contract would have nothing to hang on. Everything saves as you change it. That is safe here because almost nothing on the tab is destructive on its own: a block is only text until a reply arrives, and the switches that make something happen are switches, which is the control people expect to act at once. The two that do throw something away, deleting a preset and starting again, ask first.
 
