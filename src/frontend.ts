@@ -36,7 +36,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "prompt",
     label: "Your prompt",
     what: "Every block, and whether a refine runs one pass or several.",
-    keys: ["blocks", "userBlocks", "presetPick", "passMode", "passNames"],
+    keys: ["blocks", "userBlocks", "presetPick", "presetPickYours", "passMode", "passNames"],
   },
   {
     id: "context",
@@ -540,6 +540,10 @@ const CONFIG = {
   // written over. What the picker names is part of where you were, so it is
   // kept the way everything else on the panel is.
   presetPick: "",
+  // The same for the prompt for your own messages. Each list keeps its own,
+  // because a built-in prompt is written for one list: one name for both was
+  // wiped by switching lists, and the list you came back to lost its lock.
+  presetPickYours: "",
   // Which blocks are folded shut on the Prompt tab, as "blocks:id" or
   // "userBlocks:id". A folded block draws its name and its switch and nothing
   // else, so a prompt of twenty is a list you can see at once rather than
@@ -2674,10 +2678,31 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   let saveTimer: any = null;
+  // Which prompt list the Prompt tab is editing. Up here because the picker
+  // below reads it, and a panel rebuilt early must not meet it undeclared.
+  let editing: "blocks" | "userBlocks" = "blocks";
+  const editingYours = () => editing === "userBlocks";
   // The picker, written down rather than remembered. Every assignment goes
   // through here so none of them can be the one that forgets.
+  //
+  // A built-in prompt is written for one list, so it names the list being
+  // edited and no other. One of yours carries both lists and replaces both
+  // when loaded, so it names both.
+  const pickKey = (): "presetPick" | "presetPickYours" => (editingYours() ? "presetPickYours" : "presetPick");
+  function currentPick(): string {
+    return String(cfg[pickKey()] == null ? "" : cfg[pickKey()]);
+  }
   function pickPreset(name: string) {
-    cfg.presetPick = String(name == null ? "" : name);
+    const n = String(name == null ? "" : name);
+    if (n && !isBuiltIn(n)) {
+      cfg.presetPick = n;
+      cfg.presetPickYours = n;
+    } else cfg[pickKey()] = n;
+    persist(true);
+  }
+  // A preset of yours renamed or deleted, followed on whichever list names it.
+  function repick(from: string, to: string) {
+    for (const k of ["presetPick", "presetPickYours"] as const) if (cfg[k] === from) cfg[k] = to;
     persist(true);
   }
 
@@ -7332,8 +7357,6 @@ export function setup(ctx: Ctx, overrides?: any) {
   // card and a refusal to refine.
   // Which of the two prompts the editor is showing. Held for the session
   // rather than saved: it is where you are looking, not a setting.
-  let editing: "blocks" | "userBlocks" = "blocks";
-  const editingYours = () => editing === "userBlocks";
 
   function blockList(which?: "blocks" | "userBlocks"): Block[] {
     const key = which || editing;
@@ -7373,7 +7396,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   const foldScope = (which: "blocks" | "userBlocks", preset: string) =>
     which + (preset ? "@" + preset : "") + "\n";
   const shutKey = (b: Block) =>
-    foldScope(editingYours() ? "userBlocks" : "blocks", cfg.presetPick) + String(b.id);
+    foldScope(editingYours() ? "userBlocks" : "blocks", currentPick()) + String(b.id);
   const shutList = (): string[] => (Array.isArray(cfg.blocksShut) ? cfg.blocksShut : []);
   const isShut = (b: Block) => shutList().indexOf(shutKey(b)) >= 0;
   function setShut(b: Block, shut: boolean) {
@@ -7643,7 +7666,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // Read at the press rather than when the bar was drawn, since a caret
         // on a block can have changed it in between.
         const anyOpen = list.some((b) => !isShut(b));
-        const head = foldScope(editingYours() ? "userBlocks" : "blocks", cfg.presetPick);
+        const head = foldScope(editingYours() ? "userBlocks" : "blocks", currentPick());
         const others = shutList().filter((k) => k.indexOf(head) !== 0);
         cfg.blocksShut = anyOpen
           ? others.concat(list.map((b) => head + String(b.id))).slice(-FOLDS_MAX)
@@ -7668,7 +7691,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         "span",
         "",
         "You are looking at " +
-          cfg.presetPick +
+          currentPick() +
           ", one of the prompts built in. It cannot be written over, so the blocks below are read-only. To change it, put a name in the box under Presets and press Save as new. The copy is yours and opens for editing.",
       );
       what.style.flex = "1";
@@ -7741,7 +7764,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // What that leaves is every path that loads one without going through the
   // picker, and those set it themselves.
   function builtInNow(): string {
-    return cfg.presetPick && isBuiltIn(cfg.presetPick) ? cfg.presetPick : "";
+    return currentPick() && isBuiltIn(currentPick()) ? currentPick() : "";
   }
 
   function onBuiltInPrompt(): boolean {
@@ -7756,7 +7779,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.opacity = "0.55";
       node.style.cursor = "not-allowed";
       node.title =
-        "Part of " + (builtInNow() || cfg.presetPick) + ", which cannot be changed. Save it as your own first.";
+        "Part of " + (builtInNow() || currentPick()) + ", which cannot be changed. Save it as your own first.";
     } catch (_) {}
   }
 
@@ -7896,7 +7919,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (locked) {
       ta.readOnly = true;
       ta.style.opacity = "0.75";
-      ta.title = "Part of " + cfg.presetPick + ", which cannot be changed. Save it as your own first.";
+      ta.title = "Part of " + currentPick() + ", which cannot be changed. Save it as your own first.";
     }
     ta.addEventListener("input", () => {
       const next = blockList();
@@ -10890,13 +10913,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // is not a one-way door.
   //
   // wasPick is the picker's value before the caller changed it. The change
-  // handler sets cfg.presetPick first, so reading it here would snapshot the preset
+  // handler sets the pick first, so reading it here would snapshot the preset
   // being loaded and leave Put it back pointing at the thing it just undid.
   function loadPreset(p: Preset, wasPick?: string): void {
     const before = {
       settings: presetFromNow(),
       setup: setupFromNow(),
-      pick: wasPick === undefined ? cfg.presetPick : wasPick,
+      pick: wasPick === undefined ? currentPick() : wasPick,
     };
     const took = applyPreset(p);
     // Taking one of the eight marks them as seen. Changing them later is then
@@ -10942,7 +10965,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The preset the box names, whether it comes with the extension or is one of
   // yours. Read in two places, so it is named once.
   function chosenPreset(): any {
-    return allPresets().find((p: any) => p.name === cfg.presetPick) || null;
+    return allPresets().find((p: any) => p.name === currentPick()) || null;
   }
 
   function buildPresetCard(): HTMLElement {
@@ -11006,11 +11029,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Switching lists can take the chosen one out of the menu. Left as it was,
     // the box shows blank while every button beside it still acts on a preset
     // that is no longer on screen.
-    if (cfg.presetPick && !groups.some((g) => g.of.some((x) => x.name === cfg.presetPick))) {
+    if (currentPick() && !groups.some((g) => g.of.some((x) => x.name === currentPick()))) {
       pickPreset("");
       presetSaid = null;
     }
-    sel.value = cfg.presetPick;
+    sel.value = currentPick();
     // Whether what is on screen still matches the preset the box names.
     //
     // Loading one sets the box and nothing clears it, so editing a block after
@@ -11040,7 +11063,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     };
     sel.addEventListener("change", () => {
-      const was = cfg.presetPick;
+      const was = currentPick();
       pickPreset(sel.value);
       presetName = sel.value;
       const now = allPresets().find((p) => p.name === sel.value);
@@ -11067,7 +11090,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(nameIn);
 
     const chosen = () => chosenPreset();
-    const chosenIsYours = () => !!cfg.presetPick && !isBuiltIn(cfg.presetPick);
+    const chosenIsYours = () => !!currentPick() && !isBuiltIn(currentPick());
 
     // Which saved model setup, if any, loads with this preset. Sits above the
     // buttons because it is part of what Save as new and Update selected write
@@ -11113,7 +11136,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     builtInSaid.setAttribute("data-arf-builtin-setup", "1");
     const sayBuiltIn = () => {
-      builtInSaid.hidden = !presetSetup || !isBuiltIn(cfg.presetPick);
+      builtInSaid.hidden = !presetSetup || !isBuiltIn(currentPick());
     };
 
     setupSel.value = presetSetup;
@@ -11133,15 +11156,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     // it still matters.
     if (driftedFromPick()) {
       const drift = note(
-        isBuiltIn(cfg.presetPick)
+        isBuiltIn(currentPick())
           ? "You have changed the prompt since loading " +
-            cfg.presetPick +
+            currentPick() +
             ". A built-in prompt cannot be written over, so put a name in the box and press Save as new to keep this."
           : "You have changed the prompt since loading " +
-            cfg.presetPick +
+            currentPick() +
             ". Press Update selected to keep it, or Save as new for a second copy.",
       );
-      drift.setAttribute("data-arf-preset-drift", isBuiltIn(cfg.presetPick) ? "built-in" : "yours");
+      drift.setAttribute("data-arf-preset-drift", isBuiltIn(currentPick()) ? "built-in" : "yours");
       wrap.appendChild(drift);
     }
 
@@ -11205,7 +11228,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       presets.push({ name: name, at: Date.now(), settings: presetFromNow(), setup: presetSetup || undefined });
       presets = presets.slice(-60);
       savePresets();
-      carryFolds(cfg.presetPick, name, true);
+      carryFolds(currentPick(), name, true);
       pickPreset(name);
       presetUndo = null;
       presetSaid = "Saved " + name + ".";
@@ -11252,9 +11275,9 @@ export function setup(ctx: Ctx, overrides?: any) {
         return;
       }
       carryFolds(p.name, name, false);
+      repick(p.name, name);
       p.name = name;
       savePresets();
-      pickPreset(name);
       presetSaid = "Renamed.";
       paint();
     });
@@ -11280,7 +11303,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           presets = presets.filter((x) => x !== p);
           savePresets();
           carryFolds(p.name, null, false);
-          pickPreset("");
+          repick(p.name, "");
           presetName = "";
           presetSetup = "";
           presetSaid = "Deleted " + p.name + ".";
@@ -11296,8 +11319,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     row.appendChild(rename);
     row.appendChild(drop);
     wrap.appendChild(row);
-    if (cfg.presetPick && isBuiltIn(cfg.presetPick)) {
-      const which = BUILT_IN_PROMPTS.find((p) => p.name === cfg.presetPick);
+    if (currentPick() && isBuiltIn(currentPick())) {
+      const which = BUILT_IN_PROMPTS.find((p) => p.name === currentPick());
       if (which) wrap.appendChild(note(which.what));
       wrap.appendChild(
         note(
@@ -11399,6 +11422,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const k of keysFor("resetParts")) cfg[k] = (CONFIG as any)[k];
     if (partOn("resetParts", PART_PRESETS)) {
       presets = [];
+      cfg.presetPick = "";
+      cfg.presetPickYours = "";
       pickPreset("");
       presetName = "";
       presetSetup = "";

@@ -50,6 +50,8 @@ _2026-09-23_
 
 - **A built-in prompt stays locked when Lumiverse builds the panel again.** Which prompt the picker named lived only in memory, and Lumiverse takes the panel down and puts it back on its own terms: changing drawer tab does it, and so does leaving it alone for a while. The picker came back empty every time, the lock that reads it came off with it, and the boxes went back to taking typing over a prompt that cannot be written over. The picker is kept with your prompt now, and travels with it when you export one.
 
+  Each list also keeps its own. A built-in prompt is written for either replies or your own messages, and with one picker for both, switching between **For replies** and **For your messages** wiped it, so the list you came back to was open to typing again. Loading a built-in prompt names it for its own list only, and one of your presets, which carries both lists, names both.
+
 - **Renaming a preset or a model setup to the name it already has says so.** It used to say "Renamed." when nothing had changed. It now says that is already its name and asks for a different one. Renaming onto the name of another one was already refused, and says to pick another name.
 
 ---

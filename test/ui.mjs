@@ -1444,6 +1444,64 @@ console.log("\nrenaming a preset");
   ok("no errors renaming a preset", errors.length === 0, errors.join("\n         "));
 }
 
+// ---- each list keeps its own lock ----
+// A built-in prompt is written for one list. With one pick for both, switching
+// lists took the name out of the menu, the pick was wiped, and the list you
+// came back to was open to typing over a built-in prompt.
+console.log("\neach list keeps its own lock");
+{
+  const errors = await inTab(browser, {}, async (page) => {
+    await goTab(page, "Prompt");
+    const look = () =>
+      page.evaluate(() => {
+        const ta = document.querySelector("#drawer [data-arf-block] textarea");
+        return {
+          pick: document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+          locked: !!ta && (ta.readOnly || ta.disabled),
+          note: !!document.querySelector("#drawer [data-arf-promptlocked]"),
+        };
+      });
+    const side = (w) =>
+      page.evaluate((w) => document.querySelector('#drawer [data-arf-editing="' + w + '"]').click(), w);
+    const load = (n) =>
+      page.evaluate((n) => {
+        const s = document.querySelector('#drawer [data-arf-field="presetPick"]');
+        s.value = n;
+        s.dispatchEvent(new Event("change", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-preset="load"]').click();
+      }, n);
+
+    await side("userBlocks");
+    await settle(page);
+    await load("The copy edit");
+    await settle(page);
+    const mine = await look();
+    ok("a built-in prompt for your messages is locked", mine.locked && mine.note, JSON.stringify(mine));
+
+    await side("blocks");
+    await settle(page);
+    const replies = await look();
+    ok("the replies list is not locked by it", !replies.locked && !replies.note, JSON.stringify(replies));
+
+    await side("userBlocks");
+    await settle(page);
+    const back = await look();
+    ok("going back, it is still named and still locked",
+      back.pick === "The copy edit" && back.locked && back.note, JSON.stringify(back));
+
+    await side("blocks");
+    await settle(page);
+    await load("The line edit");
+    await settle(page);
+    await side("userBlocks");
+    await settle(page);
+    const both = await look();
+    ok("loading one for replies leaves the other list's lock alone",
+      both.pick === "The copy edit" && both.locked, JSON.stringify(both));
+  });
+  ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
+}
+
 // ---- one model or two ----
 // The Jev card on the Model tab. Everything under the mode waits on two, the
 // address waits on the host being your own, and the key goes to the backend
