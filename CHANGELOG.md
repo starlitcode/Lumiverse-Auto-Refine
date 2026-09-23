@@ -30,11 +30,13 @@ _2026-09-23_
 
 - **The bar over the blocks reads as one.** **Fold them all** was squeezed into a button made for an arrow, so it broke over three lines. It is **Fold all** or **Open all** on one line now, with the arrow the blocks use, and a count on the left of how many blocks there are and how many are folded. The count follows a block you fold by its own arrow.
 
+- **A passage handed back with a reason says so.** When the model returns a passage unchanged and says why outside the tags, the Log used to say it already read well. It now says the model handed it back unchanged and said why, and its words are under **What the model worked out**.
+
 - **A snip says it cost nothing.** **Take out what I selected** never asks a model, so it is free and instant, but it sits among buttons that do cost a call. The message after one now says so.
 
 - **Only a switch flips a switch.** Pressing the words beside one used to change the setting, and so did pressing the empty space past the automatic switch. A row of settings is read by running a finger or a pointer along it, so a stray tap on a name was a setting changed without meaning to. The box is the only thing that answers now, the same way the **?** is the only thing that opens a description. The lists of parts are the same, the reset list most of all. The words still name each switch for a screen reader.
 
-- **The README says plainly that Auto Refine is not for sexual content involving minors.** It says what the prompts do about it, and that the one exception is the only one.
+- **The README says plainly that Auto Refine is not for sexual content involving minors, and exactly how that works.** The code does not judge a story, keeps no list of words about it, and does not block or change anything on its own account. The one exception is a paragraph in the four built-in prompts, which **How the prompt is built** now quotes word for word. When a model follows it, your reply is left exactly as it was, and a prompt of your own carries only what you put in it.
 
 - **The refusal checks say what their words about age are for.** Models sometimes misread an adult character as a minor and decline to rewrite the scene, and the checks recognise that so the refusal is not saved over your reply. The comments beside them said this in a way that could be read as treating every refusal about age as a mistake, and they say what they mean now.
 

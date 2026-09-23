@@ -2077,6 +2077,11 @@ function judge(answer, original) {
     const out = judgeInner(got.text, original);
     if (got.outside)
         out.notes = got.outside;
+    // Handed back unchanged with something said outside the tags is the model
+    // declining to edit it and saying why, which the prompts ask for. "It already
+    // read well" would put words in its mouth, so the reason points at its own.
+    if (out.same && got.outside)
+        out.why = 'the model handed it back unchanged and said why in its notes';
     return out;
 }
 function judgeInner(answer, original) {

@@ -792,6 +792,22 @@ describe("answers that must not be saved", () => {
     expect(why).not.toMatch(/changed nothing/i);
   });
 
+  // Handed back with a sentence outside the tags is the model declining to edit
+  // it and saying why, which the built-in prompts ask for in one case. "It
+  // already read well" would be putting words in its mouth.
+  test("the same text back with a reason beside it points at that reason", async () => {
+    const h = await armed(["<REFINED>" + original + "</REFINED>\nI left this passage as it was, and here is why."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(original);
+    expect(h.writes.length).toBe(0);
+    const why = h.skipped().join(" ");
+    expect(why).toMatch(/handed it back unchanged and said why/);
+    expect(why).not.toMatch(/already read well/i);
+    const said = h.sent.find((m: any) => m.type === "refine_skipped");
+    expect(String(said.notes)).toMatch(/here is why/);
+  });
+
   test("and it is not asked again, since it has just said it needs no change", async () => {
     // Two answers waiting. A reason worth retrying takes the second; this one
     // must not, because asking again is paying twice for the same answer.

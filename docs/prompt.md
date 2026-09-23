@@ -241,6 +241,21 @@ Where the two sets differ is restraint. Every one of these ends by saying that w
 
 They are picked from the same list as the others, under a heading of their own, and loading one changes the prompt for your own messages and leaves the prompt for replies alone.
 
+### The one thing they do not edit
+
+Each of the four tells the model that how dark, explicit or crude a story gets is the writer's decision, and then names one exception. This is the paragraph, word for word, in the **Your Role** block of all four:
+
+> There is one exception, and it is not the user's call either. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited. Hand that passage back exactly as it came, and say outside the tags that this is why. A younger character in a scene with nothing sexual in it is edited like anyone else.
+
+Exactly what that does and does not do:
+
+- **It is text in the prompt, and nothing more.** The model reads it like any other line of the prompt. The extension's code does not read your story for this, keeps no list of words about it, and does not block, change or delete anything on its own account.
+- **When the model follows it, nothing is saved.** A passage handed back unchanged is not written over your reply, so your reply stays exactly as it was. The Log says the model handed it back unchanged and said why, and what it said is under **What the model worked out** on the same tab.
+- **A younger character in a scene with nothing sexual in it is edited like anyone else.** Age alone is not the exception. Nothing else is excepted.
+- **A prompt of your own carries only what you put in it.** A preset you save from one of the four keeps the paragraph, where you can read it, and one you write from nothing does not have it.
+
+The checks on what comes back are a separate thing. A model that refuses to edit a scene, for any reason, including misreading an adult character as a minor, has written a refusal rather than a rewrite. With **Refuse an answer that declines the job** on, which it is by default, a refusal is dropped and your reply is left as it was. See [The model answered the wrong question](guardrails.md#the-model-answered-the-wrong-question).
+
 ## How much it is told
 
 Four settings under **Context**. The three that set a size are the ones most likely to make a refine expensive without looking like it, since every one of them costs tokens on every single reply.

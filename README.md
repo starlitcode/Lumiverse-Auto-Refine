@@ -38,7 +38,13 @@ Nothing is written that you cannot undo. **Put it back** restores the wording a 
 
 Auto Refine is not intended for sexual content involving minors, and I do not condone or support anybody using it for that. It is a writing tool for fiction between adults, and for stories with younger characters in them where nothing sexual happens to those characters.
 
-The prompts that come with it say so to the model too. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited: the model is told to hand it back exactly as it came and say why. That is the only exception. A younger character in a scene with nothing sexual in it is edited like anyone else.
+So nobody has to guess what that means for their own writing, here is exactly how it works:
+
+- **The code does not judge your story.** It does not read your writing for this, keeps no list of words about it, and does not block, change or delete anything on its own account.
+- **The four built-in prompts carry one paragraph about it.** It tells the model that sexual content involving anyone under eighteen, or anyone written as a child, is not edited, and to hand that passage back exactly as it came and say why. It sits in the **Your Role** block of each, where you can read it, and word for word on [How the prompt is built](docs/prompt.md#the-one-thing-they-do-not-edit).
+- **When a model follows it, your reply is left exactly as it was.** Nothing is saved, and the Log says the model handed it back and why.
+- **Nothing else is excepted.** A younger character in a scene with nothing sexual in it is edited like anyone else, and how dark, explicit or crude a story between adults gets is yours to decide.
+- **A prompt you write yourself carries only what you put in it.**
 
 I cannot control what somebody does with an extension once they have it. What I can do is say plainly where I stand, and make sure nothing in this one is built to help.
 
