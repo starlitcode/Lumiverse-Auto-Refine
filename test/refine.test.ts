@@ -611,7 +611,10 @@ describe("two models: Jev reads the reply first", () => {
     Object.keys(b.questions).forEach((id, i) => {
       answers[id] = { noul: (pcts[i] ?? pcts[pcts.length - 1]) / 100 };
     });
-    return { status: 200, body: JSON.stringify({ answers: answers, usage: { cost: 0.00002 } }) };
+    // An alias is answered by the exact version it points at, the way the
+    // hosts report it.
+    const model = String(b.model).indexOf("latest") >= 0 ? "jev-1.13.0" : b.model;
+    return { status: 200, body: JSON.stringify({ model: model, answers: answers, usage: { cost: 0.00002 } }) };
   };
   const TWO = { judgeMode: "two", judgeChecks: "`reply` repeats itself.\n`reply` uses stock phrases." };
   const REPLY = "She stepped through and, suddenly, the cold just hit her.";
@@ -656,12 +659,89 @@ describe("two models: Jev reads the reply first", () => {
     expect(call.url).toBe("https://openrouter.ai/api/alpha/decisions");
     expect(call.init.method).toBe("POST");
     expect(call.init.headers.Authorization).toBe("Bearer sk-made-up-key");
-    expect(call.body.model).toBe("typesafe/jev-1.13");
+    // The latest Jev by default, by the name OpenRouter gives its alias.
+    expect(call.body.model).toBe("~typesafe/jev-latest");
     expect(call.body.state).toEqual({ reply: REPLY });
     expect(call.body.questions).toEqual({
       check_1: { type: "noul", instructions: "`reply` repeats itself." },
       check_2: { type: "noul", instructions: "`reply` uses stock phrases." },
     });
+  });
+
+  // Which Jev answers, per host. The latest is each host's own alias where it
+  // has published one, the exact version is pinned, and a typed name is sent
+  // as typed, so a host that renames Jev needs no update.
+  for (const [host, version, name, url, model] of [
+    ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
+    ["typesafe", "latest", "", "https://api.typesafe.ai/v1/systemone", "jev-latest"],
+    ["typesafe", "exact", "", "https://api.typesafe.ai/v1/systemone", "jev-1.13.0"],
+    ["nanogpt", "latest", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-1.13"],
+    ["nanogpt", "own", "typesafe/jev-renamed", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-renamed"],
+    ["openrouter", "own", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
+  ]) {
+    test(host + ", " + version + (name ? " " + name : "") + ": " + model, async () => {
+      const h = await keyed({ judgeHost: host, judgeVersion: version, judgeName: name }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe(url);
+      expect(h.jevCalls[0].body.model).toBe(model);
+    });
+  }
+
+  test("the panel is told which exact version answered", async () => {
+    const h = await keyed({}, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].model).toBe("jev-1.13.0");
+  });
+
+  // A chat completions address, the way some routers take Jev: the state is
+  // the text of one user message, the questions go in response_format, and the
+  // answers come back as JSON in the assistant message.
+  const chatSays = (pcts: number[]) => (_url: string, init: any) => {
+    const b = JSON.parse(init.body);
+    const answers: any = {};
+    Object.keys(b.response_format.questions).forEach((id, i) => {
+      answers[id] = { type: "noul", noul: (pcts[i] ?? pcts[pcts.length - 1]) / 100 };
+    });
+    return {
+      status: 200,
+      body: JSON.stringify({ model: b.model, choices: [{ index: 0, message: { role: "assistant", content: JSON.stringify(answers) } }] }),
+    };
+  };
+  const CHAT = { judgeHost: "custom", judgeUrl: "https://router.example.test/v1/chat/completions", judgeModel: "typesafe/jev-latest" };
+
+  test("a chat completions address is sent a chat request", async () => {
+    const h = await keyed(CHAT, { jev: chatSays([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const body = h.jevCalls[0].body;
+    expect(body.model).toBe("typesafe/jev-latest");
+    expect(body.state).toBeUndefined();
+    expect(body.messages).toEqual([{ role: "user", content: JSON.stringify({ reply: REPLY }) }]);
+    expect(body.response_format.type).toBe("questions");
+    expect(Object.keys(body.response_format.questions)).toEqual(["check_1", "check_2"]);
+    expect(body.stream).toBe(false);
+  });
+
+  test("and its answers are read out of the assistant message", async () => {
+    const h = await keyed(CHAT, { jev: chatSays([10, 20]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].failed).toBe(false);
+    expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 20]);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("a chat answer that is not JSON refines anyway, and says why", async () => {
+    const h = await keyed(CHAT, {
+      jev: () => ({ status: 200, body: JSON.stringify({ choices: [{ message: { content: "Sure! Here is my answer." } }] }) }),
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].failed).toBe(true);
+    expect(said(h)[0].why).toMatch(/not with the JSON/);
+    expect(h.asked.length).toBe(1);
   });
 
   test("another address and model name go where they are pointed", async () => {

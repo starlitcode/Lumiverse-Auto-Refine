@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.14.0";
+const VERSION = "1.15.0";
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -118,7 +118,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeHost", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
+    keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
   },
   {
     id: "switches",
@@ -456,6 +456,8 @@ const CONFIG = {
   judgeHost: "openrouter",
   judgeUrl: "",
   judgeModel: "",
+  judgeVersion: "latest",
+  judgeName: "",
   // One statement a line. Jev gives the chance each is true of `reply`.
   judgeChecks: JUDGE_CHECKS,
   // A check at or above this percentage is a reply worth refining.
@@ -1818,12 +1820,15 @@ type Field = {
   // provider quotes a fraction of a unit per million tokens.
   int?: boolean;
   options?: Array<{ value: string; label: string }>;
-  // Shown only while another setting is on, or holds a given value. A row that
-  // can do nothing where it sits is worse than a row that is not there, and a
-  // greyed one still takes up the space and invites the tap.
+  // Shown only while another setting is on, or holds a given value, or one of
+  // a list of values. A row that can do nothing where it sits is worse than a
+  // row that is not there, and a greyed one still takes up the space and
+  // invites the tap.
   needs?: { key: string; is?: any };
   // How far in it sits under the row it depends on.
   under?: boolean;
+  // Shown inside an empty text box, as an example of what goes there.
+  placeholder?: string;
   // How many lines deep a "lines" box opens. Three unless a field's usual
   // content needs more to be read without scrolling.
   rows?: number;
@@ -1856,12 +1861,35 @@ const JUDGE_FIELDS: Field[] = [
     hint: "The key you save below has to be one from this host.",
   },
   {
+    key: "judgeVersion",
+    label: "Which Jev",
+    type: "pick",
+    options: [
+      { value: "latest", label: "The latest Jev" },
+      { value: "exact", label: "Jev 1.13 exactly" },
+      { value: "own", label: "A name I type" },
+    ],
+    needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] },
+    under: true,
+    hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.13 to keep them steady.",
+  },
+  {
+    key: "judgeName",
+    label: "Model name",
+    type: "text",
+    needs: { key: "judgeVersion", is: "own" },
+    under: true,
+    placeholder: "typesafe/jev-1.13",
+    hint: "What your host calls Jev now, as its own docs spell it. Left empty, 1.13 is used.",
+  },
+  {
     key: "judgeUrl",
     label: "Address",
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    hint: "The full address that takes a decision request, starting with https://.",
+    placeholder: "https://router.requesty.ai/v1/chat/completions",
+    hint: "Your host's full address for Jev. The Jev page in the docs lists the ones known to work.",
   },
   {
     key: "judgeModel",
@@ -1869,13 +1897,14 @@ const JUDGE_FIELDS: Field[] = [
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    hint: "What that host calls Jev, such as jev-1.13.0.",
+    placeholder: "typesafe/jev-latest",
+    hint: "What that host calls Jev, as its own docs spell it.",
   },
   {
     key: "judgeChecks",
     label: "What Jev checks",
     type: "lines",
-    rows: 8,
+    rows: 10,
     needs: { key: "judgeMode", is: "two" },
     hint: "One check per line. Call the reply reply, in backticks, like the checks already here. Jev scores how likely each one is true.",
   },
@@ -7108,7 +7137,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   function fieldShows(f: Field, depth?: number): boolean {
     if (!f.needs) return true;
     const held = cfg[f.needs.key];
-    const own = f.needs.is === undefined ? !!held : held === f.needs.is;
+    const is = f.needs.is;
+    const own = is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
     if (!own) return false;
     const parent = FIELD_BY_KEY[f.needs.key];
     return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
@@ -7199,6 +7229,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.setAttribute("autocorrect", "off");
       box.setAttribute("autocomplete", "off");
       box.setAttribute("spellcheck", "false");
+      if (f.placeholder) box.placeholder = f.placeholder;
       box.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       box.addEventListener("input", () => {
         cfg[f.key] = box.value;
@@ -8395,7 +8426,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       "Beta. With two, a small model called Jev reads each reply first. Only the replies it flags are sent to the refine model.",
       cfg.judgeMode === "two" ? "two, beta" : "one",
     );
-    for (const f of JUDGE_FIELDS.slice(0, 4)) wrap.appendChild(fieldRow(f));
+    // Everything above the checks sits above the key: the mode, the host, and
+    // how that host is reached. Split by key rather than by count, so a row
+    // added to the list lands on the right side of the key.
+    const checksAt = JUDGE_FIELDS.findIndex((f) => f.key === "judgeChecks");
+    for (const f of JUDGE_FIELDS.slice(0, checksAt)) wrap.appendChild(fieldRow(f));
 
     const keyRow = el("div", "arf-col");
     keyRow.setAttribute("data-arf-jevkey", "1");
@@ -8462,7 +8497,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     keyRow.appendChild(said);
     wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
 
-    const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(4);
+    const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
     wrap.appendChild(fieldRow(checksField));
     // The way back to the built-in checks, beside the box it fills. Resetting
     // the whole "One model or two" part would also switch back to one model
@@ -13452,10 +13487,11 @@ export function setup(ctx: Ctx, overrides?: any) {
               .map((x: any) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
               .join("; ");
             const cost = Number(msg.cost) > 0 ? ", cost " + Number(msg.cost).toFixed(6) : "";
+            const by = msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "";
             if (msg.failed)
               log("Jev could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
-            else if (msg.refine) log("Jev says refine: " + each + cost, true);
-            else log("Jev says leave it: " + each + cost, true);
+            else if (msg.refine) log("Jev" + by + " says refine: " + each + cost, true);
+            else log("Jev" + by + " says leave it: " + each + cost, true);
             return;
           }
           // Whether a key is saved is true whichever question it answers, so
@@ -13477,7 +13513,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (msg.type === "jev_tested") {
             if (msg.requestId && msg.requestId !== jevAsk) return;
             jevSaid = msg.ok
-              ? "Jev answered. The key works."
+              ? "Jev" + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") + " answered. The key works."
               : "Jev did not answer: " + String(msg.why || "no reason given") + ".";
             log(msg.ok ? "Jev answered a test question" : "Jev test failed: " + String(msg.why || ""), true);
             paint();

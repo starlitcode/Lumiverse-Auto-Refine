@@ -1600,6 +1600,8 @@ console.log("\none model or two");
           checks: vis('#drawer [data-arf-row="judgeChecks"]'),
           key: vis("#drawer [data-arf-jevkey]"),
           builtIn: vis("#drawer [data-arf-jevchecks]"),
+          version: vis('#drawer [data-arf-row="judgeVersion"]'),
+          name: vis('#drawer [data-arf-row="judgeName"]'),
         };
       });
     const pick = (key, value) =>
@@ -1623,10 +1625,22 @@ console.log("\none model or two");
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
+    ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
+    ok("and the typed name waits for A name I type", !two.name, JSON.stringify(two));
+    await pick("judgeVersion", "own");
+    await settle(page);
+    ok("A name I type shows the name box", (await shown()).name, JSON.stringify(await shown()));
+    await pick("judgeHost", "nanogpt");
+    await settle(page);
+    const nano = await shown();
+    ok("NanoGPT has the same choice", nano.version && nano.name, JSON.stringify(nano));
 
     await pick("judgeHost", "custom");
-    await settle(page);
-    ok("another address shows the address box", (await shown()).url, JSON.stringify(await shown()));
+    await closed(page);
+    const own = await shown();
+    ok("another address shows the address box", own.url, JSON.stringify(own));
+    ok("and takes its model name there, not from Which Jev", !own.version && !own.name, JSON.stringify(own));
+    await pick("judgeVersion", "latest");
 
     // Back to one model with another address still picked. The address hangs
     // off the host, and the host off the mode, so both go.

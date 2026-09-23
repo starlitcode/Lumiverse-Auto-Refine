@@ -10,10 +10,55 @@ Everything is on the Model tab, in **One model or two**.
 
 1. Set **How many models** to two.
 2. Pick **Where Jev is reached**. OpenRouter and NanoGPT sell access to Jev alongside other models. TypeSafe is the maker. **Another address** is for any other host that takes the same kind of request, and asks for its address and the name it gives Jev.
-3. Paste a key from that host under **Jev key** and press **Save key**. The key has to come from the host you picked.
-4. Press **Test**. It asks Jev one small question with nothing from any chat in it, and says whether an answer came back.
+3. Pick **Which Jev**. See [Which Jev](#which-jev) below.
+4. Paste a key from that host under **Jev key** and press **Save key**. The key has to come from the host you picked.
+5. Press **Test**. It asks Jev one small question with nothing from any chat in it, and says whether an answer came back, and which Jev answered.
 
 Two-model mode also needs the `cors_proxy` permission, since Jev is not a chat model and no connection profile can reach it. Without it the panel says so and every reply is refined, the same as with one model.
+
+## Which Jev
+
+**Which Jev** has three choices:
+
+- **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
+- **Jev 1.13 exactly**. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
+- **A name I type** opens a **Model name** box. Type what your host calls Jev. Use this when a host renames Jev, or has a Jev this list does not know. Left empty, Jev 1.13 is used.
+
+The name each host is sent:
+
+| Host | The latest Jev | Jev 1.13 exactly |
+| --- | --- | --- |
+| OpenRouter | `~typesafe/jev-latest` | `typesafe/jev-1.13` |
+| TypeSafe | `jev-latest` | `jev-1.13.0` |
+| NanoGPT | `typesafe/jev-1.13` | `typesafe/jev-1.13` |
+
+NanoGPT has not published a name for the latest Jev, so both choices send Jev 1.13 there. If NanoGPT names one, pick **A name I type** and type it.
+
+**Another address** does not use **Which Jev**. It has its own **Model name** box.
+
+## Another address
+
+Pick **Another address** for any host not in the list. Fill in two boxes:
+
+1. **Address**: your host's full address for Jev.
+2. **Model name**: what your host calls Jev, spelled the way its docs spell it.
+
+Hosts take Jev in one of two ways, and the address decides which:
+
+- An address ending in `/chat/completions` is sent a **chat request**. The reply goes as the text of one user message, and the checks go with it.
+- Any other address is sent a **decisions request**, the same kind OpenRouter and TypeSafe take.
+
+Addresses known to work:
+
+| Host | Address | Model name |
+| --- | --- | --- |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13` or `~typesafe/jev-latest` |
+| TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
+| Requesty | `https://router.requesty.ai/v1/chat/completions` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
+
+OpenRouter and TypeSafe are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether Jev answered, and which Jev.
+
+Every answer says which exact Jev gave it. The Log shows it next to each decision, for example "Jev (jev-1.13.0) says leave it".
 
 ## What Jev checks
 

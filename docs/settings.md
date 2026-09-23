@@ -70,7 +70,7 @@ The greeting is never refined. Your own messages are only refined when you press
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
-- **One model or two** is a beta. With two, a small model called Jev checks each new reply first, and only the replies that need it are refined. It has its own host, key and checks. See [Two models](jev.md).
+- **One model or two** is a beta. With two, a small model called Jev checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks. See [Two models](jev.md).
 
 ## Limits
 

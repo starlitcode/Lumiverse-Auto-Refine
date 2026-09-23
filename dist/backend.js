@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3063,6 +3063,7 @@ pick) {
             why: verdict.why || '',
             scores: verdict.scores || [],
             cost: verdict.cost || 0,
+            model: verdict.model || '',
             over: judgeOver,
         });
         if (!verdict.refine) {
@@ -3546,21 +3547,17 @@ onSwipe) {
         return { ok: false, why: 'the message could not be saved: ' + ((e && e.message) || 'no reason given') };
     }
 }
-// ---- Jev, the second model ----
-// In two-model mode a second, much smaller model reads a finished reply first
-// and says whether it needs a refine. Jev answers each check with the chance,
-// from 0 to 1, that a statement about the reply is true, and nothing else: it
-// writes no text, so there is nothing of its own to save over a reply. The
-// refine model then runs only on the replies Jev picks out.
-//
-// Reached through Lumiverse's CORS proxy, since Jev is not a chat model and no
-// connection profile can hold it. The key is kept in the secure enclave, per
-// account, and never goes into the settings, an export or the panel.
 const JEV_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13' },
-    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0' },
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', kind: 'decisions' },
+    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', kind: 'decisions' },
 };
+// Another address is sent a chat request when it is a chat completions
+// address, and a decisions request otherwise, so pasting the host's own
+// address is all it takes.
+function jevKindOf(url) {
+    return /\/chat\/completions\/?(\?.*)?$/i.test(url) ? 'chat' : 'decisions';
+}
 const JEV_KEY = 'jev_api_key';
 // A decision comes back in well under a second, so twenty is a host that is
 // down rather than one that is slow.
@@ -3572,17 +3569,26 @@ const JEV_CHECKS_MAX = 20;
 // The one kind of question put to Jev: the chance, 0 to 1, that a statement is
 // true. Named so it does not read as one of the bridge's message types.
 const NOUL = 'noul';
+// The response format a chat request names to get decisions back rather than
+// prose. Named for the same reason as NOUL.
+const QUESTIONS_FORMAT = 'questions';
 let judgeMode = 'one';
 let judgeHost = 'openrouter';
 let judgeUrl = '';
 let judgeModel = '';
+let judgeVersion = 'latest';
+let judgeName = '';
 let judgeChecks = [];
 let judgeOver = 50;
 let judgeWorn = true;
 function jevWhere() {
     if (judgeHost === 'custom')
-        return { url: judgeUrl, model: judgeModel };
-    return JEV_HOSTS[judgeHost] || JEV_HOSTS.openrouter;
+        return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
+    const host = JEV_HOSTS[judgeHost] || JEV_HOSTS.openrouter;
+    // A name typed in wins, so a host that renames Jev needs no update here.
+    if (judgeVersion === 'own' && judgeName)
+        return { url: host.url, model: judgeName, kind: host.kind };
+    return { url: host.url, model: judgeVersion === 'latest' && host.latest ? host.latest : host.model, kind: host.kind };
 }
 async function jevKey(userId) {
     try {
@@ -3622,7 +3628,16 @@ async function askJev(userId, state, questions) {
         return { error: 'no Jev key is saved' };
     if (typeof spindle.cors !== 'function')
         return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
-    const body = JSON.stringify({ model: where.model, state: state, questions: questions });
+    // A chat request carries the state as the text of one user message. It goes
+    // as JSON, so the names the checks use, such as `reply`, are still in it.
+    const body = JSON.stringify(where.kind === 'chat'
+        ? {
+            model: where.model,
+            messages: [{ role: 'user', content: JSON.stringify(state) }],
+            response_format: { type: QUESTIONS_FORMAT, questions: questions },
+            stream: false,
+        }
+        : { model: where.model, state: state, questions: questions });
     const send = async () => {
         try {
             return await jevTimeout(spindle.cors(where.url, {
@@ -3658,10 +3673,25 @@ async function askJev(userId, state, questions) {
         return { error: 'the Jev account has no credit left' };
     if (res.status < 200 || res.status >= 300 || saidText)
         return { error: 'Jev answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
+    // A chat answer is JSON written as the text of the assistant message.
+    if (where.kind === 'chat' && data && !data.answers) {
+        const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        try {
+            const parsed = typeof text === 'string' ? JSON.parse(text) : null;
+            if (parsed && typeof parsed === 'object')
+                data = { ...data, answers: parsed };
+        }
+        catch (_) {
+            return { error: 'Jev answered, but not with the JSON a chat request should get back' };
+        }
+    }
     if (!data || typeof data.answers !== 'object' || !data.answers)
         return { error: 'Jev sent back no answers' };
     const cost = Number(data.usage && data.usage.cost);
-    return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0 };
+    // The exact version that answered. Asked by an alias, this is the only
+    // place that says which release the alias pointed at.
+    const model = typeof data.model === 'string' ? data.model.slice(0, 100) : '';
+    return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0, model: model };
 }
 // The checks, and the worn phrases when there are any, put to Jev about one
 // reply. A check above the line is a reply worth refining.
@@ -3692,8 +3722,8 @@ async function judgeReply(userId, reply, worn) {
             scores.push({ id: one.id, check: one.check, pct: Math.round(v * 100) });
     }
     if (!scores.length)
-        return { refine: true, failed: true, why: 'Jev sent back no usable answers', cost: got.cost };
-    return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost };
+        return { refine: true, failed: true, why: 'Jev sent back no usable answers', cost: got.cost, model: got.model };
+    return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost, model: got.model };
 }
 // Everything the manifest asks for, so the panel can name what is missing
 // rather than saying a permission is missing.
@@ -3897,6 +3927,8 @@ function applyRules(s) {
         : 'openrouter';
     judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
     judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
+    judgeVersion = s.judgeVersion === 'exact' || s.judgeVersion === 'own' ? s.judgeVersion : 'latest';
+    judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
     judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
         .split('\n')
         .map((l) => l.trim().slice(0, 500))
@@ -4598,6 +4630,7 @@ async function onPanel(payload, userId) {
                 requestId: payload.requestId,
                 ok: !got.error && typeof v === 'number',
                 why: got.error || (typeof v === 'number' ? '' : 'Jev answered, but not with a usable score'),
+                model: got.model || '',
             });
             return;
         }
