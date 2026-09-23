@@ -32,6 +32,8 @@ _2026-09-23_
 
 - **A passage handed back with a reason says so.** When the model returns a passage unchanged and says why outside the tags, the Log used to say it already read well. It now says the model handed it back unchanged and said why, and its words are under **What the model worked out**.
 
+- **The settings page says what one install for several accounts does.** An install an admin makes for everybody on a server holds one set of rules at a time, from whichever account's panel sent its settings last, and every refine on the server runs with it. Saved settings and presets stay separate and private. An install you make for your own account is not affected.
+
 - **A snip says it cost nothing.** **Take out what I selected** never asks a model, so it is free and instant, but it sits among buttons that do cost a call. The message after one now says so.
 
 - **Only a switch flips a switch.** Pressing the words beside one used to change the setting, and so did pressing the empty space past the automatic switch. A row of settings is read by running a finger or a pointer along it, so a stray tap on a name was a setting changed without meaning to. The box is the only thing that answers now, the same way the **?** is the only thing that opens a description. The lists of parts are the same, the reset list most of all. The words still name each switch for a screen reader.

@@ -201,7 +201,7 @@ Before the rewrite, list what you changed:
 Then give the rewrite between <REFINED> and </REFINED>.
 ```
 
-What comes back outside the tags is dropped rather than written into the message. Anything between `<REFINE_NOTES>` and `</REFINE_NOTES>` is kept on the **Log** tab, as prose by default and as the whole answer with every tag when you ask for that. What the refine did to your writing is on the card that comes up when it lands, marked word by word: struck through where the rewrite took something out, plain where it left it alone.
+What comes back outside `<REFINED>` and `</REFINED>` is never written into the message. All of it, `<REFINE_NOTES>` included, is kept on the **Log** tab under **What the model worked out**, as prose by default and as the whole answer with every tag when you ask for that. What the refine did to your writing is on the card that comes up when it lands, marked word by word: struck through where the rewrite took something out, plain where it left it alone.
 
 The names of those tags are yours. Nothing in the extension looks for `<cut>` or `<kept>`; it takes the rewrite from between `<REFINED>` and `</REFINED>` and shows you everything else. Ask for a paragraph of prose instead if that reads better.
 
