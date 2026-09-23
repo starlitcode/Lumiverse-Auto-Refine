@@ -7861,7 +7861,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     nameIn.className = "arf-field arf-grow";
     nameIn.value = b.name || "";
     if (locked) lockForBuiltIn(nameIn);
-    nameIn.placeholder = "What to call it";
+    nameIn.placeholder = "What is this block called?";
     nameIn.setAttribute("aria-label", "Name for this block");
     nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
     nameIn.addEventListener("change", () => {
@@ -7905,7 +7905,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ta.rows = Math.min(12, Math.max(3, String(b.text || "").split("\n").length + 1));
     ta.className = "arf-field arf-mono";
     ta.value = b.text || "";
-    ta.placeholder = "What you want it to do.";
+    ta.placeholder = "What do you want this block to tell the model?";
     ta.setAttribute("aria-label", "Text for " + blockLabel(b));
     ta.setAttribute("data-arf-field", "blocktext:" + b.id);
     // Readable rather than disabled, so the text can still be selected and
@@ -11069,7 +11069,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const nameIn = document.createElement("input");
     nameIn.type = "text";
     nameIn.className = "arf-field";
-    nameIn.placeholder = "A name for this setup";
+    nameIn.placeholder = "A name for this preset";
     nameIn.value = presetName;
     nameIn.setAttribute("aria-label", "Preset name");
     nameIn.setAttribute("data-arf-field", "presetName");

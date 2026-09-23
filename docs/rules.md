@@ -1,10 +1,10 @@
 # Writing rules
 
-A rule is a block in your prompt. This page is about what to put in one, and what not to. [How the prompt is built](prompt.md) covers the blocks themselves.
+A rule is a block in your prompt. This page is about what to write in one. [How the prompt is built](prompt.md) covers the blocks themselves.
 
 ## One subject per block
 
-Give each block one job and a tag that names it:
+Give each block one job, and a tag that names it:
 
 ```
 <speech>
@@ -16,13 +16,12 @@ tone is not already in the words, fix the words.
 </speech>
 ```
 
-The tag is not decoration. A model reads a tagged block as one instruction; the same words run together with the block above them read as a paragraph, and paragraphs blur.
-
-Second person throughout. You are talking to the model, so write like it: "cut the sentence that repeats the one before it", not "sentences that repeat should be cut".
+- **The tag matters.** A model reads a tagged block as one instruction. Without tags, blocks run together into one long paragraph, and the model follows it less closely.
+- **Write to the model as "you".** For example, "cut the sentence that repeats the one before it", not "sentences that repeat should be cut".
 
 ## Say what to do, not only what to avoid
 
-A rule that only forbids leaves a hole, and a model fills a hole with whatever is nearest. Pair the two:
+A rule that only says what not to do leaves the model to guess what to do instead. Say both:
 
 ```
 Cut a heartbeat used to stand in for a feeling. Put in its place what the
@@ -31,39 +30,45 @@ character actually does with their hands.
 
 ## Be specific enough to check
 
-"Make it better" and "improve the flow" give a model nothing to act on, and you will not be able to tell whether it followed them. "Cut adverbs on speech tags" is a rule with an answer.
-
-The most useful rules name the exact thing you are tired of reading. If you have noticed a phrase three times this week, put the phrase in.
+- "Make it better" or "improve the flow" gives the model nothing clear to do, and you cannot tell whether it followed the rule.
+- "Cut adverbs on speech tags" is a rule you can check.
+- The most useful rules name the exact phrase you are tired of reading. If you have noticed a phrase three times this week, put it in the rule.
 
 ## Do not ask for more writing
 
-Every rule that asks for expansion is asking for a reply rather than a refine: add sensory detail, deepen the emotion, expand the description. A refine that grows a reply by half has written new scene, and the length limit will drop it anyway.
+Rules like "add sensory detail" or "expand the description" ask for new writing, not a refine. A refine that makes a reply half again as long has written new scene, and the length limit will drop it anyway.
 
-If you want more, ask your roleplay model for more. This is the pass that tightens what is already there.
+If you want more writing, ask your roleplay model. A refine tightens what is already there.
 
-## Leave room for the message to be fine
+## Let a good passage stay as it is
 
-Somewhere in your prompt, say that a passage which is already good comes back untouched. Without that, a model asked to improve something will find something to improve, and you will lose lines you liked without noticing which ones.
+Somewhere in your prompt, say that a passage that is already good comes back unchanged. Without this, a model asked to improve something will always change something, and you can lose lines you liked without noticing.
 
-## Two things worth saying out loud
+## Two things to always say
 
-Both go wrong without any warning, which is why the four built-in prompts say them and why a prompt of your own should too.
+Both of these go wrong without any warning. The four built-in prompts say both, and your own prompt should too.
 
-**The point of view.** A reply written in first person, in present tense, from inside one character's head can come back in polished third person with another character's thoughts in it, and nothing about that reads as an error. Say that the passage keeps the person and tense it was written in, and stays in the head it was written from.
+**The point of view.** A reply in first person and present tense, from inside one character's head, can come back in third person with another character's thoughts in it. Nothing about that looks like an error. Say that the passage keeps its person, its tense, and the character whose head it is written from.
 
-**The strength of what it is given.** A model rewriting roleplay will soften it: the heat comes down, the violence goes vague, the crude word turns polite. Say that the passage comes back at the strength it went in, and that how a line reads is the model's half while whether it should have been written is not. [What it refuses to save](guardrails.md) can catch a rewrite that sanitised a reply, but that is a model call already paid for, so it is worth asking first.
+**How strong it is.** A model rewriting roleplay tends to soften it: less heat, vaguer violence, politer swearing. Say that the passage comes back as strong as it went in, and that the model decides how a line reads, not whether it should have been written.
+
+[What it refuses to save](guardrails.md) can catch a rewrite that softened a reply. But by then you have paid for the call, so it is better to ask for this in the prompt.
 
 ## Where a rule goes
 
-Order changes how strongly a rule lands. Anything below the turn reads as an instruction about it, so a rule you cannot get a model to follow is worth moving down, closer to the message.
+- The order of blocks changes how closely a rule is followed.
+- Anything below the turn reads as an instruction about it. If the model will not follow a rule, move it down, closer to the message.
+- Blocks that never change go at the top. Blocks that change every turn go near the passage.
 
-Blocks that never change belong at the top, and the ones that move every turn belong near the passage.
+## Trying a rule
 
-## Trying one
+Use **Refine the latest reply**, above the tabs, to test a new block. It runs once, on one reply, and **Put it back** is on the card if you do not like the result.
 
-**Refine the latest reply**, above the tabs, is the cheap way to find out whether a new block does anything: it runs once, on one reply, and **Put it back** is right there on the card if it went the wrong way.
+If a rule does nothing, the usual reasons, most common first:
 
-If a rule does nothing, the usual causes are these, in order: it is too vague to act on, it is too far from the turn, or it is buried in a block with four other rules and the model took the first one.
+1. It is too vague to act on.
+2. It is too far from the turn.
+3. It shares a block with several other rules, and the model only followed the first.
 
 ---
 

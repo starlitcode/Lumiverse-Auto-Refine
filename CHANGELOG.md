@@ -33,6 +33,8 @@ _2026-09-23_
 
 - **A passage handed back with a reason says so.** When the model returns a passage unchanged and explains why, the Log says that, instead of "it already read well". The model's words are under **What the model worked out**.
 
+- **Clearer empty boxes.** An empty block asks "What do you want this block to tell the model?" and its name box asks "What is this block called?". The preset name box says "A name for this preset" instead of "A name for this setup".
+
 - **A snip says it cost nothing.** **Take out what I selected** never calls a model, and the message after one now says so.
 
 - **Only a switch flips a switch.** Pressing the words next to a switch, or the space beside the automatic switch, no longer changes it. Only the box does.
