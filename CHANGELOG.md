@@ -54,6 +54,8 @@ _2026-09-23_
 
   Each list also keeps its own. A built-in prompt is written for either replies or your own messages, and with one picker for both, switching between **For replies** and **For your messages** wiped it, so the list you came back to was open to typing again. Loading a built-in prompt names it for its own list only, and one of your presets, which carries both lists, names both.
 
+- **With the automatic pass off, a new reply no longer looks like a refine that was tried.** Every reply that landed put "left a reply alone: the automatic pass is switched off" in the Log, which read as the extension having tried and given up. It only says why a reply was left alone now when the automatic pass was going to take it. The same message also turned off the spinner of a refine you had started by hand, if another reply landed while it ran, and it no longer does.
+
 - **Renaming a preset or a model setup to the name it already has says so.** It used to say "Renamed." when nothing had changed. It now says that is already its name and asks for a different one. Renaming onto the name of another one was already refused, and says to pick another name.
 
 ---

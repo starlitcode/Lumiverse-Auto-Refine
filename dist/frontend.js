@@ -13361,6 +13361,14 @@ export function setup(ctx, overrides) {
                         // This is what the spinner is waiting on. It goes on the moment a
                         // reply lands rather than when this side answers, so every way the
                         // backend can decide against a refine has to come back here.
+                        //
+                        // Only when the panel said a refine was coming. With the automatic
+                        // pass off it never did, so there is nothing to explain: a line on
+                        // every reply saying it was left alone read as the extension having
+                        // tried, and turning the spinner off here stopped the one for a
+                        // refine started by hand that was still running.
+                        if (!(cfg.enabled && cfg.refineOn && !chatIsOff(msg.chatId)))
+                            return;
                         markBusy(false);
                         lastRun = { ms: lastRunMs, ok: false, why: String(msg.why || "") };
                         log("left a reply alone: " + String(msg.why || "no reason given"));

@@ -1444,6 +1444,67 @@ console.log("\nrenaming a preset");
   ok("no errors renaming a preset", errors.length === 0, errors.join("\n         "));
 }
 
+// ---- a reply the automatic pass was never going to take ----
+// The backend answers every reply that lands, so the panel's spinner always
+// hears back. With the automatic pass off the panel never started one, so that
+// answer has nothing to explain: a Log line on every reply read as the
+// extension trying, and it turned off the spinner of a refine started by hand.
+console.log("\na reply the automatic pass was never going to take");
+{
+  const errors = await inTab(browser, { saved: { enabled: true, refineOn: false } }, async (page) => {
+    // A refine running, the way one started by hand reports itself.
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
+    await goTab(page, "Log");
+    await settle(page);
+    const before = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-stop]"));
+    ok("a refine is running to begin with", before);
+    await page.evaluate(() =>
+      window.__fromBackend({ type: "refine_stood_down", chatId: "c9", messageId: "m9", why: "the automatic pass is switched off" }),
+    );
+    await goTab(page, "Prompt");
+    await settle(page);
+    const still = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-stop]"));
+    ok("another reply landing does not stop its spinner", still);
+    await goTab(page, "Log");
+    await settle(page);
+    const said = await page.evaluate(() => document.getElementById("drawer").textContent || "");
+    ok("and the Log does not say a reply was left alone", !/left a reply alone/.test(said));
+  });
+  ok("no errors", errors.length === 0, errors.join("\n         "));
+}
+
+// With the pass on, the same answer is the one the spinner is waiting for.
+{
+  const errors = await inTab(browser, { saved: { enabled: true, refineOn: true } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
+    await goTab(page, "Log");
+    await settle(page);
+    ok("a refine is running to begin with", await page.evaluate(() => !!document.querySelector("#drawer [data-arf-stop]")));
+    await page.evaluate(() =>
+      window.__fromBackend({ type: "refine_stood_down", chatId: "c9", messageId: "m9", why: "this reply is still holding the refine it was given" }),
+    );
+    await goTab(page, "Prompt");
+    await settle(page);
+    const off = await page.evaluate(() => !document.querySelector("#drawer [data-arf-stop]"));
+    ok("with the pass on, the answer stops the spinner", off);
+    await goTab(page, "Log");
+    await settle(page);
+    const said = await page.evaluate(() => document.getElementById("drawer").textContent || "");
+    ok("and says why", /left a reply alone: this reply is still holding/.test(said));
+  });
+  ok("no errors", errors.length === 0, errors.join("\n         "));
+}
+
 // ---- each list keeps its own lock ----
 // A built-in prompt is written for one list. With one pick for both, switching
 // lists took the name out of the menu, the pick was wiped, and the list you
