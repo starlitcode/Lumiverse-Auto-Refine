@@ -40,6 +40,13 @@ Jev answers these best when each one:
 
 **Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it.
 
+### Putting the built-in checks back
+
+If you make a mistake in **What Jev checks**, press **Use the built-in checks** under the box.
+
+- It asks first, because what you wrote is not kept.
+- It only changes the checks. The host, the key, the threshold and the number of models stay as they are.
+
 ## When Jev is asked
 
 Only on the automatic pass. **Refine the latest reply**, the button on a message and refining a selection are you deciding a reply needs one, so Jev is not asked and nothing is sent to it.

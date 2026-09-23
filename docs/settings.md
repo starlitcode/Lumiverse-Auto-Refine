@@ -190,7 +190,20 @@ While the floating button is on screen, its menu holds these extra actions. With
 
 **Your whole setup** exports your settings to a file, imports a file, or resets to defaults.
 
-- All three use the same list of parts: prompt, context, model, samplers, limits, alerts, buttons, switches, presets, and switched-off chats.
+- All three use the same list of parts:
+  - Your prompt
+  - Context
+  - Model and thinking
+  - Samplers
+  - Limits and protection
+  - Alerts and sound
+  - Buttons and the widget
+  - Where the input box is
+  - One model or two (never the Jev key)
+  - The on and off switches
+  - Saved presets
+  - Saved model setups
+  - Chats you switched off
 - **What goes in the file**, **What to take from a file** and **What to put back** each choose their own parts. So you can export only your prompt, or reset your prompt and keep your connection.
 - See [Import and export](prompt.md#import-and-export) and [Starting again](prompt.md#starting-again).
 

@@ -1599,6 +1599,7 @@ console.log("\none model or two");
           url: vis('#drawer [data-arf-row="judgeUrl"]'),
           checks: vis('#drawer [data-arf-row="judgeChecks"]'),
           key: vis("#drawer [data-arf-jevkey]"),
+          builtIn: vis("#drawer [data-arf-jevchecks]"),
         };
       });
     const pick = (key, value) =>
@@ -1613,7 +1614,7 @@ console.log("\none model or two");
 
     const one = await shown();
     ok("the mode is on the Model tab", one.mode, JSON.stringify(one));
-    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key, JSON.stringify(one));
+    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn, JSON.stringify(one));
     const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
     ok("the panel asks whether a key is saved", asked >= 1, String(asked));
 
@@ -1639,6 +1640,51 @@ console.log("\none model or two");
     });
     ok("and so does the model name", !model);
     await pick("judgeMode", "two");
+    await settle(page);
+
+    // A mistake in the checks is put right with one button, which asks first
+    // and touches nothing else on the card.
+    ok("with two, the button for the built-in checks shows", (await shown()).builtIn);
+    const checksNow = () =>
+      page.evaluate(() => document.querySelector('#drawer [data-arf-field="judgeChecks"]').value);
+    const pressBuiltIn = async () => {
+      await page.evaluate(() => document.querySelector("#drawer [data-arf-jevchecks]").click());
+      await settle(page);
+      await settle(page);
+    };
+    await page.evaluate(() => {
+      window.__confirms = [];
+      window.__toasts = [];
+    });
+    await pressBuiltIn();
+    const same = await page.evaluate(() => ({ asked: window.__confirms.length, told: window.__toasts.slice() }));
+    ok("pressed on the built-in checks, it asks nothing", same.asked === 0, JSON.stringify(same));
+    ok("and says they are already the built-in ones", same.told.some((t) => /already the built-in checks/.test(t)), JSON.stringify(same));
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="judgeChecks"]');
+      ta.value = "`reply` is made-up.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("blur"));
+    });
+    await pick("judgeHost", "nanogpt");
+    await settle(page);
+    await page.evaluate(() => {
+      window.__confirmSay = false;
+    });
+    await pressBuiltIn();
+    ok("saying no leaves your checks", (await checksNow()) === "`reply` is made-up.", await checksNow());
+    await page.evaluate(() => {
+      window.__confirmSay = true;
+    });
+    await pressBuiltIn();
+    ok("saying yes puts the built-in checks back", (await checksNow()) === STOCK_DEFAULTS.judgeChecks, await checksNow());
+    const kept = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop().settings;
+      return { mode: last.judgeMode, host: last.judgeHost, checks: last.judgeChecks };
+    });
+    ok("and saves them", kept.checks === STOCK_DEFAULTS.judgeChecks, JSON.stringify(kept));
+    ok("with two models and the host left as they were", kept.mode === "two" && kept.host === "nanogpt", JSON.stringify(kept));
+    await pick("judgeHost", "openrouter");
     await settle(page);
 
     // The key goes to the backend and nowhere the panel keeps.

@@ -17,6 +17,7 @@ _2026-09-23_
   - Your Jev key is kept in Lumiverse's secure store, never in your settings or an export.
   - If Jev cannot answer, the reply is refined as normal, and the Log says why.
   - A refine you start yourself never goes to Jev.
+  - **Use the built-in checks** puts the starting checks back, and changes nothing else.
   - It needs a new permission, `cors_proxy`. Refusing it only affects two-model mode.
 
 - **Seconds between automatic refines**, on the Limits tab. A reply that arrives too soon waits for the gap, with a countdown, and is then refined. **Stop** ends the wait. It is 0, no gap, by default.
@@ -40,6 +41,8 @@ _2026-09-23_
 - **Only a switch flips a switch.** Pressing the words next to a switch, or the space beside the automatic switch, no longer changes it. Only the box does.
 
 - **The README says exactly how the one exception works.** The code does not judge your story, keeps no list of words about it, and blocks nothing on its own. The exception is one paragraph in the built-in prompts, quoted in full in the docs.
+
+- **Shorter descriptions in the panel.** Card intros and the longest descriptions behind **?** are cut to a sentence or two. The detail is in the docs.
 
 - **The docs are written in plain language:** shorter sentences, lists and numbered steps, with the README kept to a short front page.
 

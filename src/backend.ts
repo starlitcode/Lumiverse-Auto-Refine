@@ -228,7 +228,7 @@ async function writeUserJson(file: string, value: any, userId?: string): Promise
     try {
       await spindle.userStorage.setJson(file, value, { userId: userId });
       return;
-    } catch (_) { /* fall through, so a save is never silently lost */ }
+    } catch (_) { /* fall through, so a save is never lost with no message */ }
   }
   await spindle.storage.write(file, JSON.stringify(value));
 }
@@ -2643,7 +2643,7 @@ function reasoningFor(): any {
 // An allow-list rather than passing the panel's object straight through. The
 // bounds are the sane range for each one, and a value outside it is clamped
 // rather than dropped: somebody who typed 5 into temperature meant the top of
-// the range, and silently sending nothing would look like the setting is
+// the range, and sending nothing with no message would look like the setting is
 // broken. Anything not on this list never reaches the request.
 const SAMPLERS: Array<{ id: string; min: number; max: number; whole?: boolean }> = [
   { id: 'temperature', min: 0, max: 2 },
@@ -3615,7 +3615,7 @@ async function saveRefined(
   try {
     // The message is read, sent to a model, and written back, and the model
     // call takes seconds. Anything editing that message in the meantime would
-    // be silently reverted by this write: the reader editing the reply while
+    // be reverted by this write with no message: the reader editing the reply while
     // waiting, or another extension writing on the same event.
     //
     // So the message is read again here and the write is refused if it moved.

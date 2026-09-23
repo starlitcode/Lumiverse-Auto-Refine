@@ -1616,7 +1616,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional, one regular expression per line, matched without case. Code, links, images, comments, entities, wiki brackets, spoiler bars, table rows and any tag carrying an attribute are covered already. Yours are tried first, and one that will not compile is named under this box.",
+    hint: "Optional. One regular expression per line, not case-sensitive. Code, links, tags and the like are kept already. One that will not work is named under this box.",
   },
   {
     key: "shieldKeep",
@@ -1637,7 +1637,7 @@ const GUARD_FIELDS: Field[] = [
     key: "guardRefusal",
     label: "Refuse an answer that declines the job",
     type: "bool",
-    hint: "On by default. Catches an answer where the model says it will not do this. That is the one thing that must never be saved over your reply. Only applies to a short answer: a long one that happens to contain the words is a scene, not a refusal.",
+    hint: "On by default. A short answer where the model says it will not do this is thrown away, so a refusal is never saved over your reply.",
   },
   {
     key: "guardPreamble",
@@ -1919,7 +1919,7 @@ const COST_FIELDS: Field[] = [
       { value: "inherit", label: "Whatever my connection is set to" },
       { value: "custom", label: "Yes, and I will say how much" },
     ],
-    hint: "Off by default. Rewriting a paragraph is not a reasoning problem, and extended thinking on every reply is the cost nobody notices until the bill arrives. The middle one sends nothing at all, which is what leaves your own reasoning settings in charge.",
+    hint: "Off by default. Rewriting a paragraph rarely needs thinking, and thinking on every reply costs more. Whatever my connection is set to leaves it to your own reasoning settings.",
   },
   {
     key: "thinkingEffort",
@@ -1957,7 +1957,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "What your provider charges for what you send it. Its price list calls this input, and writes it as $5.00/M or $0.075/M. Type the number on its own, or paste the whole thing and the number is taken out of it. Left at 0, no cost is worked out anywhere.",
+    hint: "Your provider's input price per million tokens. Type the number, like 5 or 0.075, or paste the whole line. At 0, no cost is worked out.",
   },
   {
     key: "costOut",
@@ -1965,7 +1965,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "What it charges for what the model writes back. Its price list calls this output, and it is usually the dearer of the two. Same as above: the number on its own, or paste the line. In whatever currency it bills you in, since nothing here converts anything.",
+    hint: "Your provider's output price per million tokens, for what the model writes back. Type the number or paste the line. Nothing is converted between currencies.",
   },
 ];
 
@@ -1992,13 +1992,13 @@ const LIMIT_FIELDS: Field[] = [
     key: "refineAgain",
     label: "Refine something that has been refined before",
     type: "bool",
-    hint: "Off by default, so the same words are refined once. That covers the automatic pass, the buttons, and your own messages. Swiping, regenerating or editing puts different words behind the message, and those are refined either way. On, pressing refine on a reply still holding its refine sends it again.",
+    hint: "Off by default, so the same words are refined once. On, pressing refine on a reply that was already refined sends it again. A swipe, regenerate or edit is always refined.",
   },
   {
     key: "asSwipe",
     label: "Add the refine as a swipe instead of writing over the reply",
     type: "bool",
-    hint: "Off by default. On, the rewrite goes in beside the reply as another swipe and the original stays one swipe back, which is Lumiverse's own way back and survives a reload. Put it back then takes that swipe off again. Needs a build that gives a message swipes; where one does not, the rewrite is written over the reply as usual.",
+    hint: "Off by default. On, the rewrite is added as a new swipe and the original stays one swipe back. Where Lumiverse gives no swipes, it is written over the reply as usual.",
   },
   {
     key: "passMode",
@@ -2016,13 +2016,13 @@ const LIMIT_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "passMode", is: "many" },
     under: true,
-    hint: "One preset name per line, top to bottom, up to six. Yours or one of the built-in prompts, and yours wins where the names match. A name matching nothing is skipped, and so is a preset with no block carrying {{message}}. With no usable line here the prompt on the Prompt tab runs as a single pass. Each pass is one model call, so six passes cost six times one.",
+    hint: "One preset name per line, up to six, run top to bottom. A name that matches nothing is skipped. Each pass is one model call, so six passes cost six times as much.",
   },
   {
     key: "wornOn",
     label: "Find phrases this chat has worn out",
     type: "bool",
-    hint: "Off by default. On, {{overused}} fills in with the phrases the replies in this chat keep reaching for, so a prompt can name them and ask for something else. Narration only: a character who says the same thing every scene is a character, and counting speech would hand that back as a habit worth removing. Dialogue clichés are the prompt's job instead, and the Speech block covers them. It reads replies the refine already has, so it costs no extra call.",
+    hint: "Off by default. On, {{overused}} lists phrases the narration in this chat keeps repeating, so your prompt can ask for something else. Speech is not counted. No extra call is made.",
   },
   {
     key: "wornBack",
@@ -7351,7 +7351,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // locked blocks put back if a hand-edited or imported file has lost them.
   // Everything that draws or edits the layout goes through here, so a bad
   // stored value cannot take the section down with it.
-  // Nothing is forced back into the list any more. A block list is the reader's
+  // Nothing is forced back into the list. A block list is the reader's
   // prompt, and putting a block back into somebody's prompt because this file
   // thinks it belongs there is the wrong kind of help. What a missing piece
   // costs is said out loud instead: no {{message}} anywhere is a warning on the
@@ -7564,7 +7564,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const on = list.filter((b) => b.on).length;
     const wrap = card(
       "Your prompt",
-      "The refine is one request, and this is it. Blocks are sent top to bottom, and two next to each other with the same role are joined into one message. A block that comes out empty is left out.",
+      "This is the whole request a refine sends. Blocks go top to bottom. Two blocks in a row with the same role become one message, and an empty block is left out.",
       on + " of " + list.length + " on",
     );
     // Marked so switching a block off can bring it up to date where it stands.
@@ -8081,7 +8081,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         label: "Name the speakers in the run-up",
         type: "bool",
         under: true,
-        hint: "On by default. The run-up goes out as one block of text, so these labels are the only thing telling the two voices apart in it. Switch it off for a group chat, or any chat whose messages already begin with a name, where labelling them again says it twice.",
+        hint: "On by default. Puts a name before each earlier message, so the model can tell who said what. Switch it off if your messages already start with a name.",
       }),
     );
     wrap.appendChild(
@@ -8462,7 +8462,39 @@ export function setup(ctx: Ctx, overrides?: any) {
     keyRow.appendChild(said);
     wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
 
-    for (const f of JUDGE_FIELDS.slice(4)) wrap.appendChild(fieldRow(f));
+    const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(4);
+    wrap.appendChild(fieldRow(checksField));
+    // The way back to the built-in checks, beside the box it fills. Resetting
+    // the whole "One model or two" part would also switch back to one model
+    // and move the host and the threshold, which is more than somebody who
+    // mistyped a check wants.
+    const checksRow = el("div", "arf-row");
+    const builtIn = button("Use the built-in checks", false);
+    builtIn.setAttribute("data-arf-jevchecks", "builtin");
+    builtIn.addEventListener("click", () => {
+      if (String(cfg.judgeChecks || "").trim() === JUDGE_CHECKS.trim()) {
+        toast("These are already the built-in checks.", true);
+        return;
+      }
+      askFirst(
+        "jevchecks",
+        {
+          title: "Use the built-in checks",
+          message: "Replace what is in What Jev checks with the built-in checks? What you wrote there is not kept.",
+          confirmLabel: "Replace",
+        },
+        "Press Use the built-in checks again to replace yours.",
+        () => {
+          cfg.judgeChecks = JUDGE_CHECKS;
+          persist(true);
+          paint();
+          toast("The built-in checks are back.", true);
+        },
+      );
+    });
+    checksRow.appendChild(builtIn);
+    wrap.appendChild(hangsOff(checksRow, () => cfg.judgeMode === "two", "jev checks"));
+    for (const f of afterChecks) wrap.appendChild(fieldRow(f));
     if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
       wrap.appendChild(
         bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."),
@@ -8480,7 +8512,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildSetupCard(): HTMLElement {
     const wrap = card(
       "Saved model setups",
-      "Everything on this tab under one name: the connection, the thinking, how long to wait, and the samplers. Your prompt is not in here, so loading one changes what runs the refine and nothing about how it reads. Kept in this browser and in your account, and not offered as a file: a connection id names nothing on anybody else's account.",
+      "Saves everything on this tab under one name: the connection, thinking, wait time and samplers. Your prompt is not part of it.",
       setups.length ? String(setups.length) : undefined,
     );
 
@@ -8699,7 +8731,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ).length;
     const wrap = card(
       "Samplers",
-      "Left blank, the connection's own preset decides, which is what you want unless you have a reason. Fill one in and it is sent with the refine and only with the refine: your chat is not affected.",
+      "Leave these blank to use your connection's own preset. A value you fill in is sent with the refine only, never with your chat.",
       set ? set + " set" : "all default",
     );
     wrap.appendChild(
@@ -8772,7 +8804,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildProtectCard(): HTMLElement {
     const wrap = card(
       "Protecting what is not prose",
-      "Ask a model to improve a paragraph and it will happily drop a colour tag, reflow a code block, or decide an image link was a typo. None of that is writing, and none of it is the model's to touch.",
+      "A model asked to improve writing can change colour tags, code blocks or image links. These keep that kind of text exactly as it was.",
     );
     wrap.appendChild(
       fieldRow({
@@ -8877,7 +8909,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildGuardCard(): HTMLElement {
     const wrap = card(
       "What it refuses to save",
-      "A model asked to rewrite prose sometimes answers with something else. A rewrite that fails one of these is dropped and the reply is left exactly as it was, and the Log says which one fired. Each is yours to switch off.",
+      "A rewrite that fails one of these checks is thrown away, and the reply stays as it was. The Log says which check stopped it. Each one can be switched off.",
     );
     for (const f of LIMIT_FIELDS.filter((f) => f.key === "maxGrowthPct" || f.key === "minShrinkPct"))
       wrap.appendChild(fieldRow(f));
@@ -9470,7 +9502,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "popup",
         label: "Show the before and after on screen",
         type: "bool",
-        hint: "On by default. A card comes up on the page itself when a refine finishes, with what the reply said before, what it says now, and a button to put it back. It closes when you answer it, and the refine stays in the Log either way, so closing it loses nothing.",
+        hint: "On by default. When a refine finishes, a card shows the reply before and after, with a button to put it back. Closing it loses nothing: the refine is in the Log.",
       }),
     );
     wrap.appendChild(
@@ -9911,7 +9943,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "inputRefine",
         label: "Refining the draft in your input box",
         type: "bool",
-        hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button joins the two above the tabs. A row for it also appears in the chat input's Extras menu, or in the floating button's menu when that is on screen.",
+        hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button is added above the tabs and to the Extras or floating button menu.",
       }),
     );
     wrap.appendChild(
@@ -9941,7 +9973,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildTransferCard(): HTMLElement {
     const wrap = card(
       "Your whole setup",
-      "A file with your rules, your prompt layout and your sampler settings in it. Importing replaces what you have here, so export first if you want a way back. Presets and model setups go by name: one that matches a name you have replaces it, and one that matches it exactly is left alone. Pick several files at once and they are taken as one, counted together, with the last file naming something being the one that stands.",
+      "Save your settings to a file, or load them from one. Loading replaces what you have, so save a file first if you want a way back.",
     );
 
     const row = el("div", "arf-row");
@@ -10777,7 +10809,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // A pick can only be given something it offers. A connection is the
         // exception: the list is the account's, not this file's, and a setup
         // saved before a connection was deleted still names it. That is said on
-        // the card rather than silently corrected, since the alternative is
+        // the card rather than corrected with no message, since the alternative is
         // refining with the wrong model.
         const field = COST_FIELDS.find((f) => f.key === k);
         const opts = field && field.options;
@@ -10968,7 +11000,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildPresetCard(): HTMLElement {
     const wrap = card(
       "Presets",
-      "Four are built in and work as they stand: a line edit for replies and a copy edit for your own messages, each written once for any model and once for a model that reasons. The heading says which prompt one is for, and loading it leaves the other alone. Saving your own keeps both prompts, your run-up count and your reading limits under a name. Nothing from the Model tab goes in one, so loading a preset never changes which model refines or how much it thinks. Point one at a saved setup below to have that load with it.",
+      "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Nothing from the Model tab is in it.",
       presets.length ? presets.length + " yours" : BUILT_IN.length + " built in",
     );
 
@@ -11033,11 +11065,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     sel.value = currentPick();
     // Whether what is on screen still matches the preset the box names.
     //
-    // Loading one sets the box and nothing clears it, so editing a block after
-    // loading left the box naming a preset the prompt no longer matched. The
-    // fields are not locked while a built-in preset is picked, because loading
-    // one and changing it is how you are meant to start; what was missing was
-    // the panel saying so.
+    // Loading one sets the box, and changing a setting afterwards does not
+    // clear it, so this is what lets the panel say the two differ. A built-in
+    // preset's blocks are locked, but the thinking setting it carries is not,
+    // so a built-in one can differ too.
     const driftedFromPick = () => {
       const p = chosenPreset();
       if (!p || !p.settings) return false;
@@ -11114,7 +11145,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       setupSel.appendChild(o);
     }
     // A preset saved on another machine can name a setup this one has never
-    // had. Kept in the list rather than silently reset to none, so updating the
+    // had. Kept in the list rather than reset to none with no message, so updating the
     // preset here does not throw the link away.
     if (presetSetup && !setups.some((x) => x.name === presetSetup)) {
       const o = document.createElement("option");
@@ -11997,7 +12028,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {
       // ui_panels is not granted. The extension is fine without it; the button
       // is the only thing missing, and the panel says so rather than the
-      // switch silently doing nothing.
+      // switch doing nothing with no message.
       widget = null;
       widgetFailed = true;
       log("could not create the floating button. Check that the ui_panels permission is granted.");
