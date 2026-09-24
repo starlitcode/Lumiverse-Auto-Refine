@@ -894,6 +894,31 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(1);
   });
 
+  test("with Let Jev check refines you start yourself on, the button asks Jev first", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([80]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("and a reply Jev finds nothing wrong with is left alone, and says so", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([10]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe(REPLY);
+    expect(said(h).length).toBe(1);
+  });
+
+  test("but your own message is never sent to Jev, switch or not", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([80]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+  });
+
   test("with one model Jev is never asked", async () => {
     const h = await keyed({ judgeMode: "one" }, { jev: says([0]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });

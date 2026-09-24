@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.16.2";
+const VERSION = "1.17.0";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -124,7 +124,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
+        keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeByHand"],
     },
     {
         id: "switches",
@@ -483,6 +483,9 @@ const CONFIG = {
     judgeOver: 50,
     // With worn phrases on, Jev is also asked whether the reply uses one.
     judgeWorn: true,
+    // Jev reads the reply before a refine started with a button as well as on
+    // the automatic pass. Off, pressing refine goes straight to the refine model.
+    judgeByHand: false,
     // Asking for the rewrite inside <REFINED> tags rather than on its own. A
     // model that cannot help adding a sentence of its own still puts the rewrite
     // between the tags, and taking what is between them is exact.
@@ -1806,6 +1809,13 @@ const JUDGE_FIELDS = [
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
         hint: "Asks Jev whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
+    },
+    {
+        key: "judgeByHand",
+        label: "Let Jev check refines you start yourself",
+        type: "bool",
+        needs: { key: "judgeMode", is: "two" },
+        hint: "Off by default, so a refine button goes straight to the refine model. On, Jev reads the reply first and may leave it alone. A selection is never sent to Jev.",
     },
 ];
 // Every field that another can hang off, by key, so a row can ask whether the

@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.16.2';
+const VERSION = '1.17.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -3183,10 +3183,12 @@ async function refineMessage(
   // Where the selection sits in the body. Worked out against the body rather
   // than the whole message, because the model's own working is in front of it
   // and counting through that would put every offset out by its length.
-  // Two models: Jev reads the reply before the refine model is asked, on the
-  // automatic pass only. Pressing the button, or picking part of a reply, is
-  // somebody who has already decided it needs a refine.
-  if (judgeMode === 'two' && !byHand && !pick) {
+  // Two models: Jev reads the reply before the refine model is asked. Always on
+  // the automatic pass. On a refine started with a button only when the reader
+  // asked for that, since pressing it is already a decision the reply needs
+  // one. Never on a selection, which is part of a reply and not what the checks
+  // are about, and never on the reader's own message, which is not a reply.
+  if (judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick) {
     tell(userId, { type: 'refine_progress', stage: 'judging' });
     const worn = judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
     // Held like a call to the refine model, so Stop reaches it. The request to
@@ -3782,6 +3784,9 @@ let judgeName = '';
 let judgeChecks: string[] = [];
 let judgeOver = 50;
 let judgeWorn = true;
+// Whether Jev also reads a reply before a refine somebody starts with a button.
+// Off, a refine asked for by hand goes ahead without Jev.
+let judgeByHand = false;
 
 interface JevScore {
   id: string;
@@ -4164,6 +4169,7 @@ function applyRules(s: any): void {
   judgeOver = Number(s.judgeOver);
   judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
   judgeWorn = s.judgeWorn !== false;
+  judgeByHand = s.judgeByHand === true;
   asSwipe = !!s.asSwipe;
   wornOn = !!s.wornOn;
   wornBack = Number(s.wornBack);

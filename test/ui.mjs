@@ -1675,6 +1675,7 @@ console.log("\none model or two");
           builtIn: vis("#drawer [data-arf-jevchecks]"),
           version: vis('#drawer [data-arf-row="judgeVersion"]'),
           name: vis('#drawer [data-arf-row="judgeName"]'),
+          byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
         };
       });
     const pick = (key, value) =>
@@ -1699,7 +1700,7 @@ console.log("\none model or two");
         about.target === "_blank" && /noopener/.test(about.rel),
       JSON.stringify(about),
     );
-    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn, JSON.stringify(one));
+    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand, JSON.stringify(one));
     const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
     ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
 
@@ -1709,6 +1710,7 @@ console.log("\none model or two");
     ok("with two it asks whether a key is saved", asked >= 1, String(asked));
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
+    ok("and so does the switch for refines you start yourself", two.byHand, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
     ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
     ok("and the typed name waits for A name I type", !two.name, JSON.stringify(two));

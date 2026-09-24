@@ -6,9 +6,13 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.16.2
+## 1.17.0
 
 _2026-09-24_
+
+### Added
+
+- **Let Jev check refines you start yourself**, in **One model or two**, while two models are on. Off by default, so a refine button goes straight to the refine model as before. On, Jev reads the reply first when you press **Refine the latest reply** or the button on a message, and a reply it finds nothing wrong with is left alone. A selection and your own messages are never sent to Jev. See [When Jev is asked](docs/jev.md#when-jev-is-asked).
 
 ### Fixed
 
