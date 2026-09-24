@@ -43,10 +43,11 @@ Pick **Another address** for any host not in the list. Fill in two boxes:
 1. **Address**: your host's full address for Jev. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
 2. **Model name**: what your host calls Jev, spelled the way its docs spell it.
 
-Hosts take Jev in one of two ways, and the address decides which:
+Hosts take Jev in one of three ways, and the end of the address decides which:
 
-- An address ending in `/chat/completions` is sent a **chat request**. The reply goes as the text of one user message, and the checks go with it.
-- Any other address is sent a **decisions request**, the same kind OpenRouter and TypeSafe take.
+- **Ending in `/chat/completions`**: the OpenAI chat format. The reply goes as the text of one user message, and the checks go with it.
+- **Ending in `/messages`**: the Claude format. The same, laid out the way Claude-style hosts expect, with the key sent in the header those hosts read.
+- **Any other ending**: a decisions request, the same kind OpenRouter and TypeSafe take.
 
 Addresses known to work:
 
@@ -54,7 +55,8 @@ Addresses known to work:
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13` or `~typesafe/jev-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
-| Requesty | `https://router.requesty.ai/v1/chat/completions` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
+| Requesty, OpenAI format | `https://router.requesty.ai/v1/chat/completions` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
+| Requesty, Claude format | `https://router.requesty.ai/v1/messages` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
 
 OpenRouter and TypeSafe are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether Jev answered, and which Jev.
 

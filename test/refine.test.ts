@@ -744,6 +744,47 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(1);
   });
 
+  // A Claude-style messages address: the questions go in output_config, and
+  // the answers come back as JSON in the first text block.
+  const MESSAGES = { judgeHost: "custom", judgeUrl: "https://router.example.test/v1/messages", judgeModel: "typesafe/jev-latest" };
+  const messagesSay = (pcts: number[]) => (_url: string, init: any) => {
+    const b = JSON.parse(init.body);
+    const answers: any = {};
+    Object.keys(b.output_config.format.questions).forEach((id, i) => {
+      answers[id] = { type: "noul", noul: (pcts[i] ?? pcts[pcts.length - 1]) / 100 };
+    });
+    return { status: 200, body: JSON.stringify({ model: b.model, content: [{ type: "text", text: JSON.stringify(answers) }] }) };
+  };
+
+  test("a messages address is sent a Claude-style request", async () => {
+    const h = await keyed(MESSAGES, { jev: messagesSay([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const call = h.jevCalls[0];
+    expect(call.body.messages).toEqual([{ role: "user", content: JSON.stringify({ reply: REPLY }) }]);
+    expect(call.body.output_config.format.type).toBe("questions");
+    expect(Object.keys(call.body.output_config.format.questions)).toEqual(["check_1", "check_2"]);
+    expect(call.body.response_format).toBeUndefined();
+    expect(call.body.max_tokens).toBeGreaterThan(0);
+    expect(call.init.headers["x-api-key"]).toBe("sk-made-up-key");
+    expect(call.init.headers["anthropic-version"]).toBeTruthy();
+  });
+
+  test("and its answers are read out of the first text block", async () => {
+    const h = await keyed(MESSAGES, { jev: messagesSay([10, 20]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].failed).toBe(false);
+    expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 20]);
+  });
+
+  test("the key goes in x-api-key only for a messages address", async () => {
+    const h = await keyed(CHAT, { jev: chatSays([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].init.headers["x-api-key"]).toBeUndefined();
+  });
+
   test("another address and model name go where they are pointed", async () => {
     const h = await keyed(
       { judgeHost: "custom", judgeUrl: "https://jev.example.test/v1/decide", judgeModel: "jev-custom" },

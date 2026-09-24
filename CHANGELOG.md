@@ -19,7 +19,7 @@ _2026-09-23_
 
 - **The Log names the Jev that answered**, for example "Jev (jev-1.13.0) says leave it". **Test** names it too.
 
-- **Another address takes chat completions addresses.** An address ending in `/chat/completions`, such as Requesty's, is sent the kind of request those addresses take. The address and model name boxes show an example, and [Another address](docs/jev.md#another-address) lists the addresses known to work.
+- **Another address takes OpenAI and Claude format addresses.** An address ending in `/chat/completions` or `/messages`, such as Requesty's, is sent the kind of request that format takes. The address and model name boxes show an example, and [Another address](docs/jev.md#another-address) lists the addresses known to work.
 
 ### Changed
 

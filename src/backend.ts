@@ -3708,23 +3708,26 @@ async function saveRefined(
 // stable release. An alias moves when a new Jev comes out, so its answers can
 // change with nothing changed here. A host with no published alias has none.
 //
-// Hosts take one of two kinds of request. A decisions request sends the state
-// and the questions as they are, and reads `answers` back. A chat request goes
-// to a chat completions address: the state is the text of one user message,
-// the questions ride in `response_format`, and the answers come back as JSON in
-// the assistant message.
-type JevKind = 'decisions' | 'chat';
+// Hosts take one of three kinds of request. A decisions request sends the
+// state and the questions as they are, and reads `answers` back. A chat
+// request goes to a chat completions address, and a messages request to a
+// Claude-style messages address. In both, the state is the text of one user
+// message and the answers come back as JSON in the reply: chat carries the
+// questions in `response_format`, messages in `output_config.format`.
+type JevKind = 'decisions' | 'chat' | 'messages';
 const JEV_HOSTS: Record<string, { url: string; model: string; latest?: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
   nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', kind: 'decisions' },
   typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', kind: 'decisions' },
 };
 
-// Another address is sent a chat request when it is a chat completions
-// address, and a decisions request otherwise, so pasting the host's own
-// address is all it takes.
+// Another address is sent the kind of request its path names, and a
+// decisions request otherwise, so pasting the host's own address is all it
+// takes.
 function jevKindOf(url: string): JevKind {
-  return /\/chat\/completions\/?(\?.*)?$/i.test(url) ? 'chat' : 'decisions';
+  if (/\/chat\/completions\/?(\?.*)?$/i.test(url)) return 'chat';
+  if (/\/messages\/?(\?.*)?$/i.test(url)) return 'messages';
+  return 'decisions';
 }
 const JEV_KEY = 'jev_api_key';
 // A decision comes back in well under a second, so twenty is a host that is
@@ -3814,24 +3817,30 @@ async function askJev(
   if (!key) return { error: 'no Jev key is saved' };
   if (typeof spindle.cors !== 'function')
     return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
-  // A chat request carries the state as the text of one user message. It goes
-  // as JSON, so the names the checks use, such as `reply`, are still in it.
+  // A chat or messages request carries the state as the text of one user
+  // message. It goes as JSON, so the names the checks use, such as `reply`,
+  // are still in it.
+  const asText = [{ role: 'user', content: JSON.stringify(state) }];
   const body = JSON.stringify(
     where.kind === 'chat'
-      ? {
-          model: where.model,
-          messages: [{ role: 'user', content: JSON.stringify(state) }],
-          response_format: { type: QUESTIONS_FORMAT, questions: questions },
-          stream: false,
-        }
-      : { model: where.model, state: state, questions: questions },
+      ? { model: where.model, messages: asText, response_format: { type: QUESTIONS_FORMAT, questions: questions }, stream: false }
+      : where.kind === 'messages'
+        ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: { type: QUESTIONS_FORMAT, questions: questions } } }
+        : { model: where.model, state: state, questions: questions },
   );
+  // Claude-style hosts read the key from x-api-key and want a version header.
+  // Both go only to the address the user picked, the same as the bearer key.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
+  if (where.kind === 'messages') {
+    headers['x-api-key'] = key;
+    headers['anthropic-version'] = '2023-06-01';
+  }
   const send = async () => {
     try {
       return await jevTimeout<any>(
         spindle.cors(where.url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+          headers: headers,
           body: body,
         }),
       );
@@ -3858,14 +3867,18 @@ async function askJev(
   if (res.status === 402) return { error: 'the Jev account has no credit left' };
   if (res.status < 200 || res.status >= 300 || saidText)
     return { error: 'Jev answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
-  // A chat answer is JSON written as the text of the assistant message.
-  if (where.kind === 'chat' && data && !data.answers) {
-    const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  // A chat or messages answer is JSON written as the text of the reply: in the
+  // assistant message for chat, in the first text block for messages.
+  if (where.kind !== 'decisions' && data && !data.answers) {
+    const text =
+      where.kind === 'chat'
+        ? data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+        : Array.isArray(data.content) && (data.content.find((b: any) => b && b.type === 'text') || {}).text;
     try {
       const parsed = typeof text === 'string' ? JSON.parse(text) : null;
       if (parsed && typeof parsed === 'object') data = { ...data, answers: parsed };
     } catch (_) {
-      return { error: 'Jev answered, but not with the JSON a chat request should get back' };
+      return { error: 'Jev answered, but not with the JSON a ' + where.kind + ' request should get back' };
     }
   }
   if (!data || typeof data.answers !== 'object' || !data.answers) return { error: 'Jev sent back no answers' };

@@ -3552,11 +3552,15 @@ const JEV_HOSTS = {
     nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', kind: 'decisions' },
     typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', kind: 'decisions' },
 };
-// Another address is sent a chat request when it is a chat completions
-// address, and a decisions request otherwise, so pasting the host's own
-// address is all it takes.
+// Another address is sent the kind of request its path names, and a
+// decisions request otherwise, so pasting the host's own address is all it
+// takes.
 function jevKindOf(url) {
-    return /\/chat\/completions\/?(\?.*)?$/i.test(url) ? 'chat' : 'decisions';
+    if (/\/chat\/completions\/?(\?.*)?$/i.test(url))
+        return 'chat';
+    if (/\/messages\/?(\?.*)?$/i.test(url))
+        return 'messages';
+    return 'decisions';
 }
 const JEV_KEY = 'jev_api_key';
 // A decision comes back in well under a second, so twenty is a host that is
@@ -3628,21 +3632,27 @@ async function askJev(userId, state, questions) {
         return { error: 'no Jev key is saved' };
     if (typeof spindle.cors !== 'function')
         return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
-    // A chat request carries the state as the text of one user message. It goes
-    // as JSON, so the names the checks use, such as `reply`, are still in it.
+    // A chat or messages request carries the state as the text of one user
+    // message. It goes as JSON, so the names the checks use, such as `reply`,
+    // are still in it.
+    const asText = [{ role: 'user', content: JSON.stringify(state) }];
     const body = JSON.stringify(where.kind === 'chat'
-        ? {
-            model: where.model,
-            messages: [{ role: 'user', content: JSON.stringify(state) }],
-            response_format: { type: QUESTIONS_FORMAT, questions: questions },
-            stream: false,
-        }
-        : { model: where.model, state: state, questions: questions });
+        ? { model: where.model, messages: asText, response_format: { type: QUESTIONS_FORMAT, questions: questions }, stream: false }
+        : where.kind === 'messages'
+            ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: { type: QUESTIONS_FORMAT, questions: questions } } }
+            : { model: where.model, state: state, questions: questions });
+    // Claude-style hosts read the key from x-api-key and want a version header.
+    // Both go only to the address the user picked, the same as the bearer key.
+    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
+    if (where.kind === 'messages') {
+        headers['x-api-key'] = key;
+        headers['anthropic-version'] = '2023-06-01';
+    }
     const send = async () => {
         try {
             return await jevTimeout(spindle.cors(where.url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+                headers: headers,
                 body: body,
             }));
         }
@@ -3673,16 +3683,19 @@ async function askJev(userId, state, questions) {
         return { error: 'the Jev account has no credit left' };
     if (res.status < 200 || res.status >= 300 || saidText)
         return { error: 'Jev answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
-    // A chat answer is JSON written as the text of the assistant message.
-    if (where.kind === 'chat' && data && !data.answers) {
-        const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    // A chat or messages answer is JSON written as the text of the reply: in the
+    // assistant message for chat, in the first text block for messages.
+    if (where.kind !== 'decisions' && data && !data.answers) {
+        const text = where.kind === 'chat'
+            ? data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
+            : Array.isArray(data.content) && (data.content.find((b) => b && b.type === 'text') || {}).text;
         try {
             const parsed = typeof text === 'string' ? JSON.parse(text) : null;
             if (parsed && typeof parsed === 'object')
                 data = { ...data, answers: parsed };
         }
         catch (_) {
-            return { error: 'Jev answered, but not with the JSON a chat request should get back' };
+            return { error: 'Jev answered, but not with the JSON a ' + where.kind + ' request should get back' };
         }
     }
     if (!data || typeof data.answers !== 'object' || !data.answers)
