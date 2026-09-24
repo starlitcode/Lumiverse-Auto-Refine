@@ -1616,12 +1616,24 @@ console.log("\none model or two");
 
     const one = await shown();
     ok("the mode is on the Model tab", one.mode, JSON.stringify(one));
+    const about = await page.evaluate(() => {
+      const a = document.querySelector("#drawer [data-arf-jevabout] a");
+      return a ? { text: a.textContent, href: a.href, target: a.target, rel: a.rel, shown: a.getClientRects().length > 0 } : null;
+    });
+    ok(
+      "a What is Jev? link opens TypeSafe's introduction in a new tab",
+      !!about && about.shown && about.text === "What is Jev?" && /typesafe\.ai\/blog\//.test(about.href) &&
+        about.target === "_blank" && /noopener/.test(about.rel),
+      JSON.stringify(about),
+    );
     ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn, JSON.stringify(one));
-    const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
-    ok("the panel asks whether a key is saved", asked >= 1, String(asked));
+    const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
+    ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
 
     await pick("judgeMode", "two");
-    await settle(page);
+    await closed(page);
+    const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
+    ok("with two it asks whether a key is saved", asked >= 1, String(asked));
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
@@ -1756,6 +1768,27 @@ console.log("\nwhat Jev decided");
   const one = await inTab(browser, { saved: { enabled: true, judgeMode: "one" } }, async (page) => {
     await goTab(page, "Log");
     ok("with one model there is no Jev card", (await card(page)) === null);
+    // With one model, Jev is named only on the card that turns two on.
+    const seen = [];
+    for (const t of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+      await goTab(page, t);
+      await closed(page);
+      seen.push(
+        ...(await page.evaluate(() => {
+          const out = [];
+          const walk = document.createTreeWalker(document.getElementById("drawer"), NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walk.nextNode())) {
+            const el = n.parentElement;
+            if (!el || !el.getClientRects().length || el.closest("[hidden]")) continue;
+            if (el.closest('[data-arf-card="One model or two"]')) continue;
+            if (/jev/i.test(n.textContent)) out.push(n.textContent.trim().slice(0, 80));
+          }
+          return out;
+        })),
+      );
+    }
+    ok("with one model no tab names Jev beyond the switch", seen.length === 0, seen.join(" | "));
   });
   const errors = await inTab(browser, { saved: { enabled: true, judgeMode: "two" } }, async (page) => {
     await goTab(page, "Log");

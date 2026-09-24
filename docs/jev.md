@@ -2,7 +2,7 @@
 
 A beta. With one model, which is the default, every reply the automatic pass reaches is refined. With two, a second model called Jev reads each finished reply first and says whether it needs a refine, and the refine model runs only on the replies Jev picks out. Replies that were fine already stop costing a refine.
 
-Jev is a small decision model made by TypeSafe. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
+Jev is a small decision model made by TypeSafe. **What is Jev?**, on the Model tab, links to TypeSafe's own introduction. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
 ## Setting it up
 

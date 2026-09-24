@@ -16,6 +16,20 @@
  * wants, hands it to the backend, and shows what came back.
  */
 const VERSION = "1.15.0";
+// TypeSafe's own introduction to Jev, for somebody meeting the name for the
+// first time on the Model tab.
+const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
+// A link in the panel's own colours. Names are linked rather than printed as
+// bare addresses, which read as noise and cannot be followed on a phone.
+function linkTo(url, text) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = text;
+    a.style.cssText = "color:var(--lumiverse-primary,rgba(147,112,219,.9));text-decoration:underline";
+    return a;
+}
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -8192,6 +8206,10 @@ export function setup(ctx, overrides) {
     let jevStatusAsked = false;
     function buildJudgeCard() {
         const wrap = card("One model or two", "Beta. With two, a small model called Jev reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
+        const about = note("");
+        about.setAttribute("data-arf-jevabout", "1");
+        about.appendChild(linkTo(JEV_ABOUT_URL, "What is Jev?"));
+        wrap.appendChild(about);
         // Everything above the checks sits above the key: the mode, the host, and
         // how that host is reached. Split by key rather than by count, so a row
         // added to the list lands on the right side of the key.
@@ -8291,7 +8309,8 @@ export function setup(ctx, overrides) {
             wrap.appendChild(fieldRow(f));
         if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
             wrap.appendChild(bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."));
-        if (jevHas == null && !jevStatusAsked) {
+        // Asked only once two models are on, since nothing about Jev shows before.
+        if (cfg.judgeMode === "two" && jevHas == null && !jevStatusAsked) {
             jevStatusAsked = true;
             send({ type: "jev_key_status", requestId: newId() });
         }

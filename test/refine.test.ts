@@ -892,6 +892,9 @@ describe("two models: Jev reads the reply first", () => {
     await wait(50);
     expect(h.jevCalls.length).toBe(0);
     expect(h.asked.length).toBe(1);
+    // Nothing about Jev reaches the panel either, so the Log has no Jev line.
+    expect(said(h).length).toBe(0);
+    expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "judging")).toBe(false);
   });
 
   test("a pasted key is trimmed, and one that cannot be a key is refused", async () => {
