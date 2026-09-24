@@ -57,8 +57,6 @@ Addresses known to work:
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13` or `~typesafe/jev-latest` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13` or `typesafe/jev-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
-| Requesty, OpenAI format | `https://router.requesty.ai/v1/chat/completions` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
-| Requesty, Claude format | `https://router.requesty.ai/v1/messages` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 
