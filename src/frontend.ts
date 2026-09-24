@@ -1888,7 +1888,7 @@ const JUDGE_FIELDS: Field[] = [
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    placeholder: "https://router.requesty.ai/v1/chat/completions",
+    placeholder: "https://jev.example.com/v1/decisions",
     hint: "Your host's full address for Jev. The Jev page in the docs lists the ones known to work.",
   },
   {
