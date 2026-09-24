@@ -3159,6 +3159,10 @@ export function setup(ctx, overrides) {
     // tab. The Log line says the same in one line; the card lays each check out
     // against the line, which is what somebody tuning the checks needs to see.
     let jevLast = null;
+    // Every decision since the page loaded, so the card can say how many replies
+    // Jev spared a refine. That count is how somebody tells whether two models
+    // are saving them anything.
+    const jevTally = { read: 0, spared: 0, failed: 0, cost: 0 };
     // The whole answer, when the message carries one. Every ending sends it, and
     // it is the better copy of what the stream was showing a trimmed tail of.
     //
@@ -8808,10 +8812,18 @@ export function setup(ctx, overrides) {
         }
         if (last.cost > 0)
             wrap.appendChild(note("Cost " + last.cost.toFixed(6) + "."));
+        const t = jevTally;
+        const sum = note("Since this page opened, Jev read " + t.read + (t.read === 1 ? " reply" : " replies") +
+            " and left " + t.spared + " alone, so " + t.spared + (t.spared === 1 ? " refine was" : " refines were") + " not paid for." +
+            (t.failed ? " It could not decide on " + t.failed + ", and those were refined." : "") +
+            (t.cost > 0 ? " Jev cost " + t.cost.toFixed(6) + " in all." : ""));
+        sum.setAttribute("data-arf-jevtally", "1");
+        wrap.appendChild(sum);
         const rowB = el("div", "arf-row");
         const clear = button("Clear", false);
         clear.addEventListener("click", () => {
             jevLast = null;
+            jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = 0;
             paint();
         });
         rowB.appendChild(clear);
@@ -13124,6 +13136,12 @@ export function setup(ctx, overrides) {
                             model: String(msg.model || "").slice(0, 60),
                             cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
                         };
+                        jevTally.read++;
+                        if (msg.failed)
+                            jevTally.failed++;
+                        else if (!msg.refine)
+                            jevTally.spared++;
+                        jevTally.cost += jevLast.cost;
                         const each = list
                             .map((x) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
                             .join("; ");

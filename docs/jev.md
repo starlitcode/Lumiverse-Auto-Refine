@@ -114,7 +114,8 @@ The reply is refined, the same as with one model. No key, a refused key, an acco
 - Whether the reply was refined or left alone, or why Jev could not decide.
 - Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
 - Which Jev answered, and what the answer cost.
-- **Clear** empties the card. It is kept only until you close the tab, like the Log.
+- A count since the page opened: how many replies Jev read, how many it left alone, and so how many refines you did not pay for. Use it to see whether two models are saving you anything.
+- **Clear** empties the card and the count. It is kept only until you close the tab, like the Log.
 
 **Test** does not show this. It asks Jev one made-up question, with nothing from your chats in it, to check the key and the address.
 

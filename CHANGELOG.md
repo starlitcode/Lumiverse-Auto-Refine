@@ -17,7 +17,7 @@ _2026-09-23_
   - The preview runs ahead of the latest when TypeSafe has a preview build. Only TypeSafe names one, so on other hosts it sends the latest.
   - A name you type is sent as you typed it, for a host that renames Jev.
 
-- **What Jev decided**, a card on the Log tab while two models are on. It shows the last reply Jev read: each check with its score as a bar, the line marked on each bar, whether the reply was refined, which Jev answered, and the cost. See [Reading what it decided](docs/jev.md#reading-what-it-decided).
+- **What Jev decided**, a card on the Log tab while two models are on. It shows the last reply Jev read: each check with its score as a bar, the line marked on each bar, whether the reply was refined, which Jev answered, and the cost. It also counts, since the page opened, how many replies Jev left alone, which is how many refines you did not pay for. See [Reading what it decided](docs/jev.md#reading-what-it-decided).
 
 - **What is Jev?**, a link on the Model tab to TypeSafe's own introduction to Jev.
 

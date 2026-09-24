@@ -1817,6 +1817,22 @@ console.log("\nwhat Jev decided");
     ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
     ok("each bar is as long as its score", !!got && got.widths.join() === "72%,18%", JSON.stringify(got));
     ok("it names the Jev that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
+    // A second reply left alone, and a third Jev could not decide on.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m3", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 10 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m4", refine: true, failed: true, why: "the Jev key was refused", scores: [], cost: 0, model: "", over: 50 });
+    });
+    // Log lines landing together are painted once, a moment after the first.
+    await closed(page);
+    const tally = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
+    ok("it counts the replies Jev read, left alone and could not decide on", /read 3 replies/.test(tally) && /left 1 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
+      b.click();
+    });
+    await settle(page);
+    const cleared = await card(page);
+    ok("Clear empties the card and the count", !!cleared && /Nothing yet/.test(cleared.text), JSON.stringify(cleared));
   });
   ok("no errors on the Jev card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
 }
