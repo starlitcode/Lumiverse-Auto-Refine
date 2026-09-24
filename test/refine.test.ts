@@ -124,6 +124,9 @@ function host(
 
   let chatBroken = false;
   let storageBroken = false;
+  // How long each of the next writes to an account's store takes, in turn, so
+  // a check can have an older save finish after a newer one.
+  const writeDelays: number[] = [];
   const shared: Record<string, string> = {};
   const perUser: Record<string, any> = {};
   const forbidden: string[] = [];
@@ -323,6 +326,8 @@ function host(
         return k in perUser ? perUser[k] : (o && o.fallback) !== undefined ? o.fallback : null;
       },
       setJson: async (file: string, value: any, o: any) => {
+        const slow = writeDelays.shift();
+        if (slow) await new Promise((r) => setTimeout(r, slow));
         if (storageBroken) throw new Error("the disk is full");
         perUser[String((o && o.userId) || '') + ':' + file] = value;
       },
@@ -389,6 +394,9 @@ function host(
     shared,
     breakStorage: () => {
       storageBroken = true;
+    },
+    slowWrites: (...ms: number[]) => {
+      writeDelays.push(...ms);
     },
     ended: async (p: any) => {
       for (const fn of handlers.GENERATION_ENDED || []) await fn(p);
@@ -2356,6 +2364,41 @@ describe("settings that follow the account", () => {
     const got = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "r1");
     expect(got.settings.contextMessages).toBe(6);
     expect(h.perUser["u1:settings.json"].contextMessages).toBe(6);
+  });
+
+  // A panel starting up, or answering a backend that restarted, hands over
+  // this browser's copy, which can be older than the account's. Written, it
+  // put an old prompt back on every device: a phone opened after the prompt
+  // was changed on a computer wrote its old copy over the new one.
+  test("settings handed over to be held are not written to the account", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    await h.front({ type: "set_settings", settings: { ...RULES, contextMessages: 7 } });
+    await h.front({ type: "set_settings", settings: { ...RULES, contextMessages: 2 }, keep: true });
+    await wait(10);
+    expect(h.perUser["u1:settings.json"].contextMessages).toBe(7);
+    await h.front({ type: "load_settings", requestId: "r1" });
+    await wait(10);
+    const got = h.sent.find((m: any) => m.type === "loaded_settings" && m.requestId === "r1");
+    expect(got.settings.contextMessages).toBe(7);
+  });
+
+  test("but they are still used until the account's copy arrives", async () => {
+    const h = host(chat(), ["<refined>She stepped through and the cold hit her.</refined>"]);
+    await h.front({ type: "set_settings", settings: RULES, keep: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    expect(h.perUser["u1:settings.json"]).toBeUndefined();
+  });
+
+  test("an older save cannot finish after a newer one and stand", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.slowWrites(40, 0);
+    const older = h.front({ type: "set_settings", settings: { ...RULES, contextMessages: 4 } });
+    const newer = h.front({ type: "set_settings", settings: { ...RULES, contextMessages: 9 } });
+    await Promise.all([older, newer]);
+    await wait(60);
+    expect(h.perUser["u1:settings.json"].contextMessages).toBe(9);
   });
 
   // Settings that look saved and are not is the worst shape this can take.

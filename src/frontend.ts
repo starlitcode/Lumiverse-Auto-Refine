@@ -2811,7 +2811,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (typeof localStorage !== "undefined")
           localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
       } catch (_) {}
-      send({ type: "set_settings", settings: forBackend() });
+      // The account's own copy, handed back to be held. Not written again.
+      send({ type: "set_settings", settings: forBackend(), keep: true });
       syncExtras();
       log("settings loaded from your account", true);
       paint();
@@ -2824,6 +2825,38 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
     } catch (_) {}
   }
+
+  // A tab left in the background holds the settings it had when it went
+  // there. Coming back to it after a while, the account is asked again before
+  // anything can be changed, so an old tab on a phone does not write its old
+  // prompt over one changed on a computer since. Not while a save is waiting
+  // to go, since that is newer than the account.
+  const STALE_AFTER_MS = 30000;
+  let hiddenAt = 0;
+  function onVisible() {
+    try {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (!hiddenAt || Date.now() - hiddenAt < STALE_AFTER_MS || saveTimer) return;
+      hiddenAt = 0;
+      loadFromAccount();
+      loadPresetsFromAccount();
+      loadSetupsFromAccount();
+    } catch (_) {}
+  }
+  try {
+    if (typeof document !== "undefined" && document.addEventListener) {
+      document.addEventListener("visibilitychange", onVisible);
+      disposers.push(() => {
+        try {
+          document.removeEventListener("visibilitychange", onVisible);
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
 
   let chatsOff: string[] = [];
   try {
@@ -2846,8 +2879,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // restarts comes back knowing none of it. It cannot look the settings up
   // either: that read runs before any user is known. So this says it all again
   // whenever the backend announces itself.
+  //
+  // Held there, never written to the account. What this has at these moments
+  // is this browser's copy, which can be older than the account's: a phone
+  // opened after the prompt was changed on a computer wrote its old prompt
+  // over the new one. The account copy is asked for straight after, and wins.
   function armBackend() {
-    send({ type: "set_settings", settings: forBackend() });
+    send({ type: "set_settings", settings: forBackend(), keep: true });
     send({ type: "set_chats_off", chats: chatsOff.slice() });
   }
 

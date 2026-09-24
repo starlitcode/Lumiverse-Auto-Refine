@@ -21,6 +21,7 @@ _2026-09-24_
 
 ### Fixed
 
+- **An older prompt could come back.** Opening Lumiverse on a device saved that device's copy of your settings to your account before your account's copy was read. A phone opened after you changed a prompt on a computer put the old prompt back, on every device. Now only a change you make is saved to your account, saves land in the order you made them, and a tab you come back to after a while loads your settings from your account again. See [Settings](docs/settings.md).
 - **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay greyed out until a chat is open.
 - **A deleted block stuck and then jumped shut.** The space it leaves now starts closing straight away. The same goes for every row that closes when a switch turns it off.
 

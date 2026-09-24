@@ -222,6 +222,23 @@ async function readUserJson(file, userId) {
         return null;
     }
 }
+// Writes for one account, one after another. A save runs only once the one
+// before it has finished, so the last one sent is the last one written.
+const settingsWrites = new Map();
+function inTurn(queue, userId, job) {
+    const k = String(userId == null ? '' : userId);
+    const before = queue.get(k) || Promise.resolve();
+    const next = before.then(job, job);
+    const held = next.catch(() => { });
+    queue.set(k, held);
+    // Dropped once it is the last in line, so the map holds nothing for an
+    // account that is not saving.
+    held.then(() => {
+        if (queue.get(k) === held)
+            queue.delete(k);
+    });
+    return next;
+}
 async function writeUserJson(file, value, userId) {
     if (hasUserStorage()) {
         try {
@@ -4149,24 +4166,32 @@ async function onPanel(payload, userId) {
     try {
         if (!payload)
             return;
-        // The panel handing over what it has. Adopted and not written anywhere: the
-        // account copy is the panel's to keep, and this module coming back up is no
-        // reason to write over it.
+        // The panel handing over what it has. Held here either way. Written to the
+        // account only when it is a change somebody made: a panel starting up, or
+        // answering this module coming back up, sends keep, since what it holds
+        // then is this browser's copy, which can be older than the account's. A
+        // phone opened after the prompt was changed on a computer wrote its old
+        // prompt over the new one, and every device then loaded the old one.
         if (payload.type === 'set_settings' && payload.settings && typeof payload.settings === 'object') {
             const s = payload.settings;
             settingsUser = userId;
             rememberRules(userId, s);
+            if (payload.keep)
+                return;
             // Written to the account as well as held here, so the next browser to
-            // ask gets these rather than a fresh install. Failing to write is worth
-            // saying out loud: settings that look saved and are not is the worst
-            // shape this can take.
-            try {
-                await writeUserJson(SETTINGS_FILE, s, userId);
-            }
-            catch (e) {
-                say('warn', 'settings could not be saved to the account: ' + ((e && e.message) || String(e)));
-                replyTo(userId, { type: 'account_save_failed', what: 'settings' });
-            }
+            // ask gets these rather than a fresh install. One write at a time per
+            // account, in the order they were sent, so an older copy cannot finish
+            // last and stand. Failing to write is worth saying out loud: settings
+            // that look saved and are not is the worst shape this can take.
+            await inTurn(settingsWrites, userId, async () => {
+                try {
+                    await writeUserJson(SETTINGS_FILE, s, userId);
+                }
+                catch (e) {
+                    say('warn', 'settings could not be saved to the account: ' + ((e && e.message) || String(e)));
+                    replyTo(userId, { type: 'account_save_failed', what: 'settings' });
+                }
+            });
             return;
         }
         // The panel asking for the account's copy on load. This is the only path

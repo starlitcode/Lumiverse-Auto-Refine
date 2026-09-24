@@ -2425,6 +2425,66 @@ console.log("\nsettings that follow the account");
       return last && last.settings.contextMessages;
     });
     ok("an empty account is filled from this browser", up === 7, String(up));
+    const kept = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().keep);
+    ok("and that copy is written, not only held", kept !== true, String(kept));
+  });
+
+  // This browser's copy can be older than the account's. Handed over at
+  // start-up it is only held, or a phone opened after the prompt was changed
+  // on a computer writes its old prompt over the new one on every device.
+  await inTab(browser, { saved: { contextMessages: 3 } }, async (page) => {
+    const early = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").map((m) => m.keep === true));
+    ok("on load, this browser's copy is held rather than written", early.length > 0 && early.every(Boolean), JSON.stringify(early));
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "loaded_settings", requestId: id, settings: { contextMessages: 9 } });
+    });
+    await settle(page);
+    const back = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").map((m) => m.keep === true));
+    ok("the account's own copy is handed back to be held, not written again", back.length > 0 && back.every(Boolean), JSON.stringify(back));
+    // A backend coming back up is told again, and that is held too.
+    await page.evaluate(() => {
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "backend_ready" });
+    });
+    const again = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").map((m) => m.keep === true));
+    ok("and so is the copy a restarted backend is given", again.length > 0 && again.every(Boolean), JSON.stringify(again));
+    // A change somebody makes is written.
+    await goTab(page, "Context");
+    await page.evaluate(() => {
+      window.__sent.length = 0;
+      const box = document.querySelector('#drawer [data-arf-field="contextMessages"]');
+      box.value = "5";
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.waitForTimeout(500);
+    const change = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").map((m) => m.keep === true));
+    ok("a change you make is written to the account", change.length > 0 && change.every((k) => !k), JSON.stringify(change));
+
+    // A tab left in the background is asked to catch up with the account when
+    // it comes back after a while, before anything in it can be changed.
+    const flip = (state, ahead) =>
+      page.evaluate(({ state, ahead }) => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+        if (ahead) {
+          const real = Date.now.bind(Date);
+          Date.now = () => real() + ahead;
+        }
+        document.dispatchEvent(new Event("visibilitychange"));
+      }, { state, ahead });
+    const asks = () => page.evaluate(() => window.__sent.filter((m) => m.type === "load_settings").length);
+    await page.evaluate(() => { window.__sent.length = 0; });
+    await flip("hidden", 0);
+    await flip("visible", 0);
+    ok("a tab hidden for a moment does not ask again", (await asks()) === 0, String(await asks()));
+    await flip("hidden", 0);
+    await flip("visible", 31000);
+    const later = await page.evaluate(() => ({
+      settings: window.__sent.filter((m) => m.type === "load_settings").length,
+      presets: window.__sent.filter((m) => m.type === "load_presets").length,
+    }));
+    ok("a tab back after a while asks the account for its settings and presets again", later.settings === 1 && later.presets === 1, JSON.stringify(later));
   });
 
   // Saving a preset sends it up as well as writing it here.
