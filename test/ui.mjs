@@ -1607,7 +1607,19 @@ console.log("\na reply the automatic pass was never going to take");
 // came back to was open to typing over a built-in prompt.
 console.log("\neach list keeps its own lock");
 {
-  const errors = await inTab(browser, {}, async (page) => {
+  const own = (id, text) => ({ id: id, on: true, role: "system", name: id, text: text });
+  const errors = await inTab(browser, {
+    presets: [
+      {
+        name: "Lantern",
+        at: 1,
+        settings: {
+          blocks: [own("r1", "A reply prompt of my own. {{message}}")],
+          userBlocks: [own("u1", "A messages prompt of my own. {{message}}")],
+        },
+      },
+    ],
+  }, async (page) => {
     await goTab(page, "Prompt");
     const look = () =>
       page.evaluate(() => {
@@ -1655,6 +1667,19 @@ console.log("\neach list keeps its own lock");
     const both = await look();
     ok("loading one for replies leaves the other list's lock alone",
       both.pick === "The copy edit" && both.locked, JSON.stringify(both));
+
+    // One of your own, picked for replies, is named on that list only. Named
+    // on both, the list for your messages stops naming the built-in prompt it
+    // still holds, and that prompt is open to typing over.
+    await side("blocks");
+    await settle(page);
+    await load("Lantern");
+    await settle(page);
+    await side("userBlocks");
+    await settle(page);
+    const yours = await look();
+    ok("loading one of your own for replies leaves the other list's lock alone too",
+      yours.pick === "The copy edit" && yours.locked && yours.note, JSON.stringify(yours));
   });
   ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
 }
