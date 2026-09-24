@@ -12,8 +12,9 @@ _2026-09-23_
 
 ### Added
 
-- **Which Jev.** In **One model or two**, under **Where Jev is reached**. Pick **The latest Jev**, **Jev 1.13 exactly**, or **A name I type**. See [Which Jev](docs/jev.md#which-jev).
+- **Which Jev.** In **One model or two**, under **Where Jev is reached**. Pick **The latest Jev**, **The preview Jev**, **Jev 1.13 exactly**, or **A name I type**. See [Which Jev](docs/jev.md#which-jev).
   - The latest moves to each new Jev by itself, so its answers can change. Jev 1.13 exactly keeps them steady.
+  - The preview runs ahead of the latest when TypeSafe has a preview build. Only TypeSafe names one, so on other hosts it sends the latest.
   - A name you type is sent as you typed it, for a host that renames Jev.
 
 - **What Jev decided**, a card on the Log tab while two models are on. It shows the last reply Jev read: each check with its score as a bar, the line marked on each bar, whether the reply was refined, which Jev answered, and the cost. See [Reading what it decided](docs/jev.md#reading-what-it-decided).

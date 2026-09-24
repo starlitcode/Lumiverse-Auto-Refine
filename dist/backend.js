@@ -3550,7 +3550,7 @@ onSwipe) {
 const JEV_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
     nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', latest: 'typesafe/jev-latest', kind: 'decisions' },
-    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', kind: 'decisions' },
+    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
 };
 // The text of a responses API reply when it has no `output_text` of its own:
 // the first output_text part of the first message in `output`.
@@ -3607,7 +3607,8 @@ function jevWhere() {
     // A name typed in wins, so a host that renames Jev needs no update here.
     if (judgeVersion === 'own' && judgeName)
         return { url: host.url, model: judgeName, kind: host.kind };
-    return { url: host.url, model: judgeVersion === 'latest' && host.latest ? host.latest : host.model, kind: host.kind };
+    const moving = judgeVersion === 'preview' ? host.preview || host.latest : judgeVersion === 'latest' ? host.latest : '';
+    return { url: host.url, model: moving || host.model, kind: host.kind };
 }
 async function jevKey(userId) {
     try {
@@ -3963,7 +3964,7 @@ function applyRules(s) {
         : 'openrouter';
     judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
     judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
-    judgeVersion = s.judgeVersion === 'exact' || s.judgeVersion === 'own' ? s.judgeVersion : 'latest';
+    judgeVersion = ['preview', 'exact', 'own'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
     judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
     judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
         .split('\n')

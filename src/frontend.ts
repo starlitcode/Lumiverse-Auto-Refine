@@ -1866,6 +1866,7 @@ const JUDGE_FIELDS: Field[] = [
     type: "pick",
     options: [
       { value: "latest", label: "The latest Jev" },
+      { value: "preview", label: "The preview Jev (TypeSafe only)" },
       { value: "exact", label: "Jev 1.13 exactly" },
       { value: "own", label: "A name I type" },
     ],

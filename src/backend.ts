@@ -3704,9 +3704,11 @@ async function saveRefined(
 // Reached through Lumiverse's CORS proxy, since Jev is not a chat model and no
 // connection profile can hold it. The key is kept in the secure enclave, per
 // account, and never goes into the settings, an export or the panel.
-// Each host's name for Jev 1.13, and for the alias that follows the newest
-// stable release. An alias moves when a new Jev comes out, so its answers can
-// change with nothing changed here. A host with no published alias has none.
+// Each host's name for Jev 1.13, for the alias that follows the newest stable
+// release, and for the one that runs ahead of it when a preview build exists.
+// An alias moves when a new Jev comes out, so its answers can change with
+// nothing changed here. A host with no published alias has none, and asking it
+// for the preview gets its latest instead.
 //
 // Hosts take one of four kinds of request. A decisions request sends the
 // state and the questions as they are, and reads `answers` back. The other
@@ -3715,10 +3717,10 @@ async function saveRefined(
 // carries the questions in `response_format`, a responses request in
 // `text.format`, and a Claude-style messages request in `output_config.format`.
 type JevKind = 'decisions' | 'chat' | 'responses' | 'messages';
-const JEV_HOSTS: Record<string, { url: string; model: string; latest?: string; kind: JevKind }> = {
+const JEV_HOSTS: Record<string, { url: string; model: string; latest?: string; preview?: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
   nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', latest: 'typesafe/jev-latest', kind: 'decisions' },
-  typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', kind: 'decisions' },
+  typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
 };
 
 // The text of a responses API reply when it has no `output_text` of its own:
@@ -3759,7 +3761,7 @@ let judgeMode: 'one' | 'two' = 'one';
 let judgeHost = 'openrouter';
 let judgeUrl = '';
 let judgeModel = '';
-let judgeVersion: 'latest' | 'exact' | 'own' = 'latest';
+let judgeVersion: 'latest' | 'preview' | 'exact' | 'own' = 'latest';
 let judgeName = '';
 let judgeChecks: string[] = [];
 let judgeOver = 50;
@@ -3786,7 +3788,8 @@ function jevWhere(): { url: string; model: string; kind: JevKind } {
   const host = JEV_HOSTS[judgeHost] || JEV_HOSTS.openrouter;
   // A name typed in wins, so a host that renames Jev needs no update here.
   if (judgeVersion === 'own' && judgeName) return { url: host.url, model: judgeName, kind: host.kind };
-  return { url: host.url, model: judgeVersion === 'latest' && host.latest ? host.latest : host.model, kind: host.kind };
+  const moving = judgeVersion === 'preview' ? host.preview || host.latest : judgeVersion === 'latest' ? host.latest : '';
+  return { url: host.url, model: moving || host.model, kind: host.kind };
 }
 
 async function jevKey(userId?: string): Promise<string> {
@@ -4135,7 +4138,7 @@ function applyRules(s: any): void {
     : 'openrouter';
   judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
   judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
-  judgeVersion = s.judgeVersion === 'exact' || s.judgeVersion === 'own' ? s.judgeVersion : 'latest';
+  judgeVersion = ['preview', 'exact', 'own'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
   judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
   judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
     .split('\n')
