@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.16.1';
+const VERSION = '1.17.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -226,6 +226,10 @@ async function readUserJson(file: string, userId?: string): Promise<any> {
 // Writes for one account, one after another. A save runs only once the one
 // before it has finished, so the last one sent is the last one written.
 const settingsWrites = new Map<string, Promise<void>>();
+// Presets and model setups the same way, each in its own line, so a save of
+// one never waits on a save of another.
+const presetWrites = new Map<string, Promise<void>>();
+const setupWrites = new Map<string, Promise<void>>();
 function inTurn(queue: Map<string, Promise<void>>, userId: string | undefined, job: () => Promise<void>): Promise<void> {
   const k = String(userId == null ? '' : userId);
   const before = queue.get(k) || Promise.resolve();
@@ -3183,10 +3187,12 @@ async function refineMessage(
   // Where the selection sits in the body. Worked out against the body rather
   // than the whole message, because the model's own working is in front of it
   // and counting through that would put every offset out by its length.
-  // Two models: Jev reads the reply before the refine model is asked, on the
-  // automatic pass only. Pressing the button, or picking part of a reply, is
-  // somebody who has already decided it needs a refine.
-  if (judgeMode === 'two' && !byHand && !pick) {
+  // Two models: Jev reads the reply before the refine model is asked. Always on
+  // the automatic pass. On a refine started with a button only when the reader
+  // asked for that, since pressing it is already a decision the reply needs
+  // one. Never on a selection, which is part of a reply and not what the checks
+  // are about, and never on the reader's own message, which is not a reply.
+  if (judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick) {
     tell(userId, { type: 'refine_progress', stage: 'judging' });
     const worn = judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
     // Held like a call to the refine model, so Stop reaches it. The request to
@@ -3782,6 +3788,9 @@ let judgeName = '';
 let judgeChecks: string[] = [];
 let judgeOver = 50;
 let judgeWorn = true;
+// Whether Jev also reads a reply before a refine somebody starts with a button.
+// Off, a refine asked for by hand goes ahead without Jev.
+let judgeByHand = false;
 
 interface JevScore {
   id: string;
@@ -4164,6 +4173,7 @@ function applyRules(s: any): void {
   judgeOver = Number(s.judgeOver);
   judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
   judgeWorn = s.judgeWorn !== false;
+  judgeByHand = s.judgeByHand === true;
   asSwipe = !!s.asSwipe;
   wornOn = !!s.wornOn;
   wornBack = Number(s.wornBack);
@@ -4370,13 +4380,18 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
       return;
     }
 
+    // In the order they were sent, for the same reason as the settings: two
+    // saves close together, written at once, can finish the older one last and
+    // leave it as the copy every browser loads.
     if (payload.type === 'save_presets') {
-      try {
-        await writeUserJson(PRESETS_FILE, payload.presets, userId);
-      } catch (e: any) {
-        say('warn', 'presets could not be saved to the account: ' + ((e && e.message) || String(e)));
-        replyTo(userId, { type: 'account_save_failed', what: 'presets' });
-      }
+      await inTurn(presetWrites, userId, async () => {
+        try {
+          await writeUserJson(PRESETS_FILE, payload.presets, userId);
+        } catch (e: any) {
+          say('warn', 'presets could not be saved to the account: ' + ((e && e.message) || String(e)));
+          replyTo(userId, { type: 'account_save_failed', what: 'presets' });
+        }
+      });
       return;
     }
 
@@ -4392,12 +4407,14 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     }
 
     if (payload.type === 'save_setups') {
-      try {
-        await writeUserJson(SETUPS_FILE, payload.setups, userId);
-      } catch (e: any) {
-        say('warn', 'model setups could not be saved to the account: ' + ((e && e.message) || String(e)));
-        replyTo(userId, { type: 'account_save_failed', what: 'model setups' });
-      }
+      await inTurn(setupWrites, userId, async () => {
+        try {
+          await writeUserJson(SETUPS_FILE, payload.setups, userId);
+        } catch (e: any) {
+          say('warn', 'model setups could not be saved to the account: ' + ((e && e.message) || String(e)));
+          replyTo(userId, { type: 'account_save_failed', what: 'model setups' });
+        }
+      });
       return;
     }
 

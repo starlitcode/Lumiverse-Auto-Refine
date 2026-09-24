@@ -101,7 +101,20 @@ If you make a mistake in **What Jev checks**, press **Use the built-in checks** 
 
 ## When Jev is asked
 
-Only on the automatic pass. **Refine the latest reply**, the button on a message and refining a selection are you deciding a reply needs one, so Jev is not asked and nothing is sent to it.
+Always on the automatic pass.
+
+A refine you start yourself, with **Refine the latest reply** or the button on a message, goes straight to the refine model by default. Pressing it is you deciding the reply needs one, so Jev is not asked and nothing is sent to it.
+
+**Let Jev check refines you start yourself** changes that. On, Jev reads the reply first, the same as on the automatic pass:
+
+- If a check reaches your line, the reply is refined.
+- If none does, the reply is left alone, and the Log and the **What Jev decided** card say so.
+- Each press costs one Jev call as well as the refine.
+
+Two things are never sent to Jev, whichever way the switch is set:
+
+- A selection, since it is part of a reply and the checks are about the whole reply.
+- Your own messages, since the checks are about the character's replies.
 
 Jev is asked after **Seconds between automatic refines**, when that is set, and the panel says "Jev is reading the reply" while it does. **Stop** works while it is reading.
 

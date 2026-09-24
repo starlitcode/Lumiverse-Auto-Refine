@@ -9,7 +9,7 @@ It is a tab so you can keep it open while you write, and see what the last refin
 - **There is no Save button.** Everything saves as you change it.
 - **Only deleting a preset and starting again throw anything away**, and both ask first.
 - **Your settings follow your account.** They are saved to Lumiverse under your account, so a different browser or device finds the same setup. This browser also keeps a copy, so the panel opens instantly and keeps working if your account cannot be reached.
-- **The account copy wins.** When the panel opens, it uses this browser's copy until your account's copy arrives, then switches to the account's. Only a change you make is saved to your account. Opening Lumiverse on another device never saves that device's copy over yours.
+- **The account copy wins.** When the panel opens, it uses this browser's copy until your account's copy arrives, then switches to the account's. Only a change you make is saved to your account. Opening Lumiverse on another device never saves that device's copy over yours. If the panel opens before the extension's server side has started, it asks your account again once that side is ready.
 - **A tab left open catches up.** Come back to a tab after more than 30 seconds away and it loads your settings and presets from your account again. So an old tab on your phone does not bring back an older prompt.
 - **If a save to your account fails, the panel says so.**
 - **On a server with several accounts**, each account's settings and presets are stored separately. No account can read another's.

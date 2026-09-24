@@ -1416,6 +1416,81 @@ console.log("\nloading a preset and the Model tab");
   ok("no errors loading a preset", errors.length === 0, errors.join("\n         "));
 }
 
+// ---- loading a preset changes only the list you are on ----
+// A preset of your own holds both prompts as they were when it was saved.
+// Picking it on For replies must leave the prompt for your own messages as it
+// is now, or an old one comes back every time the preset is picked.
+console.log("\na preset loads into the list you are on");
+{
+  const block = (id, text) => ({ id: id, on: true, role: "system", name: id, text: text });
+  const errors = await inTab(
+    browser,
+    {
+      saved: {
+        blocks: [block("r1", "Reply prompt now. {{message}}")],
+        userBlocks: [block("u1", "My own prompt, the new one. {{message}}")],
+      },
+      presets: [
+        {
+          name: "Mine",
+          at: 1,
+          settings: {
+            blocks: [block("r1", "Reply prompt from the preset. {{message}}")],
+            userBlocks: [block("u1", "My own prompt, the old one. {{message}}")],
+          },
+        },
+      ],
+    },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const lists = () =>
+        page.evaluate(() => {
+          const s = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}");
+          const text = (l) => (Array.isArray(l) ? l.map((b) => b.text).join(" | ") : "");
+          return {
+            replies: text(s.blocks),
+            mine: text(s.userBlocks),
+            undo: !!document.querySelector('#drawer [data-arf-preset="undo"]'),
+            drift: !!document.querySelector("#drawer [data-arf-preset-drift]"),
+            pick: document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+          };
+        });
+      const pickIt = (name) =>
+        page.evaluate((n) => {
+          const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+          sel.value = n;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        }, name);
+      const onList = (w) => page.evaluate((w) => document.querySelector('#drawer [data-arf-editing="' + w + '"]').click(), w);
+
+      await onList("blocks");
+      await settle(page);
+      await pickIt("Mine");
+      await settle(page);
+      const fromReplies = await lists();
+      ok("picking a preset on For replies loads its reply prompt", /from the preset/.test(fromReplies.replies), JSON.stringify(fromReplies));
+      ok("and leaves the prompt for your own messages as it is now", /the new one/.test(fromReplies.mine) && !/the old one/.test(fromReplies.mine), JSON.stringify(fromReplies));
+      ok("Put it back is offered on the list the load changed", fromReplies.undo, JSON.stringify(fromReplies));
+      ok("and the prompt just loaded is not called changed", !fromReplies.drift, JSON.stringify(fromReplies));
+
+      await onList("userBlocks");
+      await settle(page);
+      const other = await lists();
+      ok("and not on the other list, where it would name the wrong prompt", !other.undo, JSON.stringify(other));
+      ok("and the other list's picker does not name a preset it never loaded", other.pick !== "Mine", JSON.stringify(other));
+
+      await onList("blocks");
+      await settle(page);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-preset="undo"]').click());
+      await settle(page);
+      const back = await lists();
+      ok("Put it back restores the reply prompt and still leaves your own alone",
+        /Reply prompt now/.test(back.replies) && /the new one/.test(back.mine), JSON.stringify(back));
+    },
+  );
+  ok("no errors loading a preset into one list", errors.length === 0, errors.join("\n         "));
+}
+
 // ---- renaming a preset ----
 // Two presets under one name cannot be told apart in the picker, and a rename
 // to the name it already has is not a rename. Both are refused out loud.
@@ -1532,7 +1607,19 @@ console.log("\na reply the automatic pass was never going to take");
 // came back to was open to typing over a built-in prompt.
 console.log("\neach list keeps its own lock");
 {
-  const errors = await inTab(browser, {}, async (page) => {
+  const own = (id, text) => ({ id: id, on: true, role: "system", name: id, text: text });
+  const errors = await inTab(browser, {
+    presets: [
+      {
+        name: "Lantern",
+        at: 1,
+        settings: {
+          blocks: [own("r1", "A reply prompt of my own. {{message}}")],
+          userBlocks: [own("u1", "A messages prompt of my own. {{message}}")],
+        },
+      },
+    ],
+  }, async (page) => {
     await goTab(page, "Prompt");
     const look = () =>
       page.evaluate(() => {
@@ -1580,6 +1667,19 @@ console.log("\neach list keeps its own lock");
     const both = await look();
     ok("loading one for replies leaves the other list's lock alone",
       both.pick === "The copy edit" && both.locked, JSON.stringify(both));
+
+    // One of your own, picked for replies, is named on that list only. Named
+    // on both, the list for your messages stops naming the built-in prompt it
+    // still holds, and that prompt is open to typing over.
+    await side("blocks");
+    await settle(page);
+    await load("Lantern");
+    await settle(page);
+    await side("userBlocks");
+    await settle(page);
+    const yours = await look();
+    ok("loading one of your own for replies leaves the other list's lock alone too",
+      yours.pick === "The copy edit" && yours.locked && yours.note, JSON.stringify(yours));
   });
   ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
 }
@@ -1608,6 +1708,7 @@ console.log("\none model or two");
           builtIn: vis("#drawer [data-arf-jevchecks]"),
           version: vis('#drawer [data-arf-row="judgeVersion"]'),
           name: vis('#drawer [data-arf-row="judgeName"]'),
+          byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
         };
       });
     const pick = (key, value) =>
@@ -1632,7 +1733,7 @@ console.log("\none model or two");
         about.target === "_blank" && /noopener/.test(about.rel),
       JSON.stringify(about),
     );
-    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn, JSON.stringify(one));
+    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand, JSON.stringify(one));
     const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
     ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
 
@@ -1642,6 +1743,7 @@ console.log("\none model or two");
     ok("with two it asks whether a key is saved", asked >= 1, String(asked));
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
+    ok("and so does the switch for refines you start yourself", two.byHand, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
     ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
     ok("and the typed name waits for A name I type", !two.name, JSON.stringify(two));
@@ -2450,6 +2552,8 @@ console.log("\nsettings that follow the account");
     });
     const again = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").map((m) => m.keep === true));
     ok("and so is the copy a restarted backend is given", again.length > 0 && again.every(Boolean), JSON.stringify(again));
+    const reasked = await page.evaluate(() => window.__sent.filter((m) => m.type === "load_settings").length);
+    ok("an answered ask is not sent again when the backend comes back up", reasked === 0, String(reasked));
     // A change somebody makes is written.
     await goTab(page, "Context");
     await page.evaluate(() => {
@@ -2485,6 +2589,30 @@ console.log("\nsettings that follow the account");
       presets: window.__sent.filter((m) => m.type === "load_presets").length,
     }));
     ok("a tab back after a while asks the account for its settings and presets again", later.settings === 1 && later.presets === 1, JSON.stringify(later));
+  });
+
+  // An ask sent before the backend was listening gets no answer. The backend
+  // announcing itself is the cue to ask again, or the panel runs on this
+  // browser's copy for the whole visit.
+  await inTab(browser, { saved: { contextMessages: 3 } }, async (page) => {
+    const first = await page.evaluate(() => window.__sent.filter((m) => m.type === "load_settings").pop().requestId);
+    await page.evaluate(() => {
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "backend_ready" });
+    });
+    const asked = await page.evaluate(() => ({
+      settings: window.__sent.filter((m) => m.type === "load_settings").map((m) => m.requestId),
+      presets: window.__sent.filter((m) => m.type === "load_presets").length,
+      setups: window.__sent.filter((m) => m.type === "load_setups").length,
+    }));
+    ok("an unanswered ask is sent again when the backend comes up",
+      asked.settings.length === 1 && asked.settings[0] !== first && asked.presets === 1 && asked.setups === 1, JSON.stringify(asked));
+    await page.evaluate((id) => {
+      window.__fromBackend({ type: "loaded_settings", requestId: id, settings: { contextMessages: 9 } });
+    }, asked.settings[0]);
+    await settle(page);
+    const took = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").contextMessages);
+    ok("and the answer to it is taken", took === 9, String(took));
   });
 
   // Saving a preset sends it up as well as writing it here.

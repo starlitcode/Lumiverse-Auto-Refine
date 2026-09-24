@@ -6,6 +6,22 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.17.0
+
+_2026-09-24_
+
+### Added
+
+- **Let Jev check refines you start yourself**, in **One model or two**, while two models are on. Off by default, so a refine button goes straight to the refine model as before. On, Jev reads the reply first when you press **Refine the latest reply** or the button on a message, and a reply it finds nothing wrong with is left alone. A selection and your own messages are never sent to Jev. See [When Jev is asked](docs/jev.md#when-jev-is-asked).
+
+### Fixed
+
+- **Fixed again: a built-in prompt stays locked.** 1.14.0 fixed this for switching tabs and lists, and missed one case. Picking one of your own presets under **For replies** also changed **For your messages**. It loaded the prompt for your messages saved in that preset, and it named your preset on that list too. So the prompt for your messages was no longer greyed out, even when it was a built-in one, and could be typed over. Now picking a preset names it only on the list you are on, and loads only that list's prompt. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
+- **Two preset saves close together could leave the older one in your account.** Saves of your presets and model setups could finish out of order, so the next load from your account brought back the older copy. They are now written one at a time, in the order you made them, the same as your settings.
+- **The panel could miss your account's settings for a whole visit.** If it opened before the extension's server side had started, its request for your account's copy got no answer, and it was not asked again. The panel then ran on this browser's copy, which can be older, and the next change you made saved that older copy to your account. Now the panel asks again as soon as the server side is ready. See [How settings are saved](docs/settings.md#how-settings-are-saved).
+
+---
+
 ## 1.16.1
 
 _2026-09-24_
@@ -32,7 +48,7 @@ _2026-09-24_
 
 ### Fixed
 
-- **An older prompt could come back.** Opening Lumiverse on a device saved that device's copy of your settings to your account before your account's copy was read. A phone opened after you changed a prompt on a computer put the old prompt back, on every device. Now only a change you make is saved to your account, saves land in the order you made them, and a tab you come back to after a while loads your settings from your account again. See [Settings](docs/settings.md).
+- **An older prompt could come back.** Opening Lumiverse on a device saved that device's copy of your settings to your account before your account's copy was read. A phone opened after you changed a prompt on a computer put the old prompt back, on every device. Now only a change you make is saved to your account, saves land in the order you made them, and a tab you come back to after a while loads your settings from your account again. See [How settings are saved](docs/settings.md#how-settings-are-saved).
 - **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay greyed out until a chat is open.
 - **A deleted block stuck and then jumped shut.** The space it leaves now starts closing straight away. The same goes for every row that closes when a switch turns it off.
 

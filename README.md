@@ -1,3 +1,5 @@
+![Auto Refine: a writer at a desk under a purple night sky, turning messy pages into clean ones.](docs/banner.png)
+
 # Auto Refine
 
 A Lumiverse extension. It sends a finished reply to a model with the rules you wrote, and saves the rewrite over the original.

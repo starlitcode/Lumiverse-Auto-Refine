@@ -388,9 +388,11 @@ At the bottom of the **Prompt** tab, presets save a prompt under a name, so you 
 
 What a preset holds:
 
-- every block: its name, text, role and place in the order
+- every block of both prompts, for replies and for your messages: its name, text, role and place in the order
 - how many messages of history are sent
 - the size limits for history and lorebook
+
+**Loading a preset changes only the prompt for the list you are on.** Load one while editing **For replies** and your prompt for your own messages is left as it is, and the other way round. The picker on the other list also stays as it was. A preset still saves both prompts, so either can be loaded from it later.
 
 What a preset never changes: whether refining is on, the length limits, whether it asks before saving, the sounds, the chats you switched off, and everything on the **Model** tab.
 
@@ -403,7 +405,7 @@ What a preset never changes: whether refining is on, the length limits, whether 
 
 The buttons:
 
-- **Put it back** appears after picking a preset loads over what you had. It restores exactly what was there, including the picker. It disappears once you save.
+- **Put it back** appears after picking a preset loads over what you had. It restores exactly what was there, including the picker. It shows on the list the load changed, and disappears once you save.
 - **Load it again** reloads the picked preset, throwing away your edits.
 - **Save as new** saves what is on screen under the name in the box.
 - **Update selected** saves over the picked preset.

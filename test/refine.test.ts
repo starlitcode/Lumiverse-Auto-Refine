@@ -894,6 +894,31 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(1);
   });
 
+  test("with Let Jev check refines you start yourself on, the button asks Jev first", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([80]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("and a reply Jev finds nothing wrong with is left alone, and says so", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([10]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe(REPLY);
+    expect(said(h).length).toBe(1);
+  });
+
+  test("but your own message is never sent to Jev, switch or not", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([80]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+  });
+
   test("with one model Jev is never asked", async () => {
     const h = await keyed({ judgeMode: "one" }, { jev: says([0]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
@@ -2399,6 +2424,26 @@ describe("settings that follow the account", () => {
     await Promise.all([older, newer]);
     await wait(60);
     expect(h.perUser["u1:settings.json"].contextMessages).toBe(9);
+  });
+
+  test("and the same holds for presets", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.slowWrites(40, 0);
+    const older = h.front({ type: "save_presets", presets: [{ name: "Terse", at: 1, settings: { contextMessages: 4 } }] });
+    const newer = h.front({ type: "save_presets", presets: [{ name: "Terse", at: 2, settings: { contextMessages: 9 } }] });
+    await Promise.all([older, newer]);
+    await wait(60);
+    expect(h.perUser["u1:presets.json"][0].at).toBe(2);
+  });
+
+  test("and for model setups", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.slowWrites(40, 0);
+    const older = h.front({ type: "save_setups", setups: [{ name: "Quick", at: 1, settings: {} }] });
+    const newer = h.front({ type: "save_setups", setups: [{ name: "Quick", at: 2, settings: {} }] });
+    await Promise.all([older, newer]);
+    await wait(60);
+    expect(h.perUser["u1:setups.json"][0].at).toBe(2);
   });
 
   // Settings that look saved and are not is the worst shape this can take.

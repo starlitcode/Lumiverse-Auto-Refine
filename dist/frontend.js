@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.16.1";
+const VERSION = "1.17.0";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -124,7 +124,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
+        keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeByHand"],
     },
     {
         id: "switches",
@@ -483,6 +483,9 @@ const CONFIG = {
     judgeOver: 50,
     // With worn phrases on, Jev is also asked whether the reply uses one.
     judgeWorn: true,
+    // Jev reads the reply before a refine started with a button as well as on
+    // the automatic pass. Off, pressing refine goes straight to the refine model.
+    judgeByHand: false,
     // Asking for the rewrite inside <REFINED> tags rather than on its own. A
     // model that cannot help adding a sentence of its own still puts the rewrite
     // between the tags, and taking what is between them is exact.
@@ -1807,6 +1810,13 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeMode", is: "two" },
         hint: "Asks Jev whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
     },
+    {
+        key: "judgeByHand",
+        label: "Let Jev check refines you start yourself",
+        type: "bool",
+        needs: { key: "judgeMode", is: "two" },
+        hint: "Off by default, so a refine button goes straight to the refine model. On, Jev reads the reply first and may leave it alone. A selection is never sent to Jev.",
+    },
 ];
 // Every field that another can hang off, by key, so a row can ask whether the
 // row it waits on is showing itself. Filled in below, once the lists exist.
@@ -2553,21 +2563,15 @@ export function setup(ctx, overrides) {
     // The picker, written down rather than remembered. Every assignment goes
     // through here so none of them can be the one that forgets.
     //
-    // A built-in prompt is written for one list, so it names the list being
-    // edited and no other. One of yours carries both lists and replaces both
-    // when loaded, so it names both.
+    // Each list names its own pick. A load changes only the list being edited,
+    // so naming the preset on the other list as well would say a prompt is
+    // loaded there that is not.
     const pickKey = () => (editingYours() ? "presetPickYours" : "presetPick");
     function currentPick() {
         return String(cfg[pickKey()] == null ? "" : cfg[pickKey()]);
     }
     function pickPreset(name) {
-        const n = String(name == null ? "" : name);
-        if (n && !isBuiltIn(n)) {
-            cfg.presetPick = n;
-            cfg.presetPickYours = n;
-        }
-        else
-            cfg[pickKey()] = n;
+        cfg[pickKey()] = String(name == null ? "" : name);
         persist(true);
     }
     // A preset of yours renamed or deleted, followed on whichever list names it.
@@ -10652,13 +10656,19 @@ export function setup(ctx, overrides) {
         }
         return out;
     }
-    function applyPreset(p) {
+    // list is the prompt the load is for. A preset of yours holds both prompts,
+    // as they were when it was saved, and only the one for the list it is loaded
+    // into is taken. Taking both would put the other list back to how it stood
+    // on the day the preset was saved, over whatever it holds now.
+    function applyPreset(p, list = editing) {
         let took = 0;
         for (const k of PRESET_KEYS) {
             if (!(k in p.settings))
                 continue;
             const got = p.settings[k];
             if (k === "blocks" || k === "userBlocks") {
+                if (k !== list)
+                    continue;
                 if (!Array.isArray(got))
                     continue;
                 cfg[k] = got
@@ -10717,8 +10727,9 @@ export function setup(ctx, overrides) {
             settings: presetFromNow(),
             setup: setupFromNow(),
             pick: wasPick === undefined ? currentPick() : wasPick,
+            list: editing,
         };
-        const took = applyPreset(p);
+        const took = applyPreset(p, editing);
         // Taking one of the eight marks them as seen. Changing them later is then
         // worth a line, and changing them for somebody who has never touched one
         // is not.
@@ -10765,7 +10776,7 @@ export function setup(ctx, overrides) {
         return allPresets().find((p) => p.name === currentPick()) || null;
     }
     function buildPresetCard() {
-        const wrap = card("Presets", "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Nothing from the Model tab is in it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
+        const wrap = card("Presets", "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Loading one changes only the prompt for the list you are on. Nothing from the Model tab is in it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
         const sel = document.createElement("select");
         sel.className = "arf-field";
         sel.setAttribute("aria-label", "Saved presets");
@@ -10848,8 +10859,14 @@ export function setup(ctx, overrides) {
                 // block as id, on, role, text, name, and the built-in ones are written
                 // id, name, on, role, text. Same values, different order, and a plain
                 // stringify called them different the moment one was loaded.
+                //
+                // The other list's prompt is left out. A load never takes it, so it
+                // can differ from the preset without anything on this list changing.
                 const now = presetFromNow();
+                const other = editingYours() ? "blocks" : "userBlocks";
                 for (const k of Object.keys(p.settings)) {
+                    if (k === other)
+                        continue;
                     if (steady(now[k]) !== steady(p.settings[k]))
                         return true;
                 }
@@ -10976,7 +10993,7 @@ export function setup(ctx, overrides) {
             const back = presetUndo;
             if (!back)
                 return;
-            applyPreset({ name: "", at: 0, settings: back.settings });
+            applyPreset({ name: "", at: 0, settings: back.settings }, back.list);
             applySetup({ name: "", at: 0, settings: back.setup });
             // The picker goes back with it. Leaving it on the preset that was just
             // undone is the same mismatch this whole change is here to stop.
@@ -11088,7 +11105,9 @@ export function setup(ctx, overrides) {
                 paint();
             });
         });
-        if (presetUndo)
+        // Only on the list the load changed. The picker it puts back belongs to
+        // that list, and from the other one it would name the wrong prompt.
+        if (presetUndo && presetUndo.list === editing)
             row.appendChild(putBack);
         row.appendChild(load);
         row.appendChild(asNew);
@@ -13216,6 +13235,16 @@ export function setup(ctx, overrides) {
                         return;
                     if (msg.type === "backend_ready") {
                         armBackend();
+                        // An ask sent before the backend was listening is never answered.
+                        // Without asking again, the panel would run on this browser's copy
+                        // for the whole visit, and its next save would write that copy over
+                        // the account's.
+                        if (accountAsk)
+                            loadFromAccount();
+                        if (presetAsk)
+                            loadPresetsFromAccount();
+                        if (setupAsk)
+                            loadSetupsFromAccount();
                         askPermissions();
                         askBackendVersion();
                         send({ type: "list_connections", requestId: newId() });
