@@ -1600,6 +1600,8 @@ console.log("\none model or two");
           checks: vis('#drawer [data-arf-row="judgeChecks"]'),
           key: vis("#drawer [data-arf-jevkey]"),
           builtIn: vis("#drawer [data-arf-jevchecks]"),
+          version: vis('#drawer [data-arf-row="judgeVersion"]'),
+          name: vis('#drawer [data-arf-row="judgeName"]'),
         };
       });
     const pick = (key, value) =>
@@ -1614,19 +1616,70 @@ console.log("\none model or two");
 
     const one = await shown();
     ok("the mode is on the Model tab", one.mode, JSON.stringify(one));
+    const about = await page.evaluate(() => {
+      const a = document.querySelector("#drawer [data-arf-jevabout] a");
+      return a ? { text: a.textContent, href: a.href, target: a.target, rel: a.rel, shown: a.getClientRects().length > 0 } : null;
+    });
+    ok(
+      "a What is Jev? link opens TypeSafe's introduction in a new tab",
+      !!about && about.shown && about.text === "What is Jev?" && /typesafe\.ai\/blog\//.test(about.href) &&
+        about.target === "_blank" && /noopener/.test(about.rel),
+      JSON.stringify(about),
+    );
     ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn, JSON.stringify(one));
-    const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
-    ok("the panel asks whether a key is saved", asked >= 1, String(asked));
+    const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
+    ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
 
     await pick("judgeMode", "two");
-    await settle(page);
+    await closed(page);
+    const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
+    ok("with two it asks whether a key is saved", asked >= 1, String(asked));
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
+    ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
+    ok("and the typed name waits for A name I type", !two.name, JSON.stringify(two));
+    await pick("judgeVersion", "own");
+    await settle(page);
+    ok("A name I type shows the name box", (await shown()).name, JSON.stringify(await shown()));
+    await pick("judgeHost", "nanogpt");
+    await settle(page);
+    const nano = await shown();
+    ok("NanoGPT has the same choice", nano.version && nano.name, JSON.stringify(nano));
+
+    // The preview is a TypeSafe name, so it is offered only there. A preview
+    // picked on TypeSafe shows as the latest elsewhere, which is what is sent,
+    // and comes back when TypeSafe is picked again.
+    const versions = () =>
+      page.evaluate(() => {
+        const sel = document.querySelector('#drawer [data-arf-field="judgeVersion"]');
+        return { values: Array.from(sel.options).map((o) => o.value), chosen: sel.value };
+      });
+    const onNano = await versions();
+    ok("NanoGPT offers no preview", onNano.values.indexOf("preview") < 0 && onNano.values.length === 3, JSON.stringify(onNano));
+    await pick("judgeHost", "typesafe");
+    await settle(page);
+    const onTs = await versions();
+    ok("TypeSafe offers the preview", onTs.values.indexOf("preview") >= 0 && onTs.chosen === "own", JSON.stringify(onTs));
+    await pick("judgeVersion", "preview");
+    await pick("judgeHost", "openrouter");
+    await settle(page);
+    const onOr = await versions();
+    ok("a preview picked on TypeSafe shows as the latest on OpenRouter", onOr.values.indexOf("preview") < 0 && onOr.chosen === "latest", JSON.stringify(onOr));
+    await pick("judgeHost", "typesafe");
+    await settle(page);
+    const again = await versions();
+    ok("and is picked again on TypeSafe", again.chosen === "preview", JSON.stringify(again));
+    await pick("judgeVersion", "own");
+    await pick("judgeHost", "nanogpt");
+    await settle(page);
 
     await pick("judgeHost", "custom");
-    await settle(page);
-    ok("another address shows the address box", (await shown()).url, JSON.stringify(await shown()));
+    await closed(page);
+    const own = await shown();
+    ok("another address shows the address box", own.url, JSON.stringify(own));
+    ok("and takes its model name there, not from Which Jev", !own.version && !own.name, JSON.stringify(own));
+    await pick("judgeVersion", "latest");
 
     // Back to one model with another address still picked. The address hangs
     // off the host, and the host off the mode, so both go.
@@ -1721,6 +1774,96 @@ console.log("\none model or two");
     ok("and Test can be pressed", saved.test === false);
   });
   ok("no errors on the Jev card", errors.length === 0, errors.join("\n         "));
+}
+
+// ---- what Jev decided ----
+// The card on the Log tab that lays out Jev's last decision: one bar per check,
+// the ones that reached the line marked, and which Jev answered.
+console.log("\nwhat Jev decided");
+{
+  const card = (page) =>
+    page.evaluate(() => {
+      const c = document.querySelector("#drawer [data-arf-jevcard]");
+      if (!c) return null;
+      return {
+        text: c.textContent,
+        over: c.querySelectorAll('[data-arf-jevcheck="over"]').length,
+        under: c.querySelectorAll('[data-arf-jevcheck="under"]').length,
+        widths: Array.from(c.querySelectorAll(".arf-jevfill")).map((f) => f.style.width),
+      };
+    });
+  const one = await inTab(browser, { saved: { enabled: true, judgeMode: "one" } }, async (page) => {
+    await goTab(page, "Log");
+    ok("with one model there is no Jev card", (await card(page)) === null);
+    // With one model, Jev is named only on the card that turns two on.
+    const seen = [];
+    for (const t of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+      await goTab(page, t);
+      await closed(page);
+      seen.push(
+        ...(await page.evaluate(() => {
+          const out = [];
+          const walk = document.createTreeWalker(document.getElementById("drawer"), NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walk.nextNode())) {
+            const el = n.parentElement;
+            if (!el || !el.getClientRects().length || el.closest("[hidden]")) continue;
+            if (el.closest('[data-arf-card="One model or two"]')) continue;
+            if (/jev/i.test(n.textContent)) out.push(n.textContent.trim().slice(0, 80));
+          }
+          return out;
+        })),
+      );
+    }
+    ok("with one model no tab names Jev beyond the switch", seen.length === 0, seen.join(" | "));
+  });
+  const errors = await inTab(browser, { saved: { enabled: true, judgeMode: "two" } }, async (page) => {
+    await goTab(page, "Log");
+    const empty = await card(page);
+    ok("with two models the card is there before Jev has read anything", !!empty && /Nothing yet/.test(empty.text), JSON.stringify(empty));
+    await page.evaluate(() =>
+      window.__fromBackend({
+        type: "judge_said",
+        chatId: "c1",
+        messageId: "m2",
+        refine: true,
+        failed: false,
+        why: "",
+        scores: [
+          { id: "check_1", check: "`reply` repeats itself.", pct: 72 },
+          { id: "check_2", check: "`reply` uses stock phrases.", pct: 18 },
+        ],
+        cost: 0.00002,
+        model: "jev-1.13.0",
+        over: 50,
+      }),
+    );
+    // A Log line landing just after another is painted a moment later, not in
+    // the same frame, so this waits the repaint out rather than two frames.
+    await closed(page);
+    const got = await card(page);
+    ok("after a decision it shows each check", !!got && /reply repeats itself/.test(got.text) && /reply uses stock phrases/.test(got.text), JSON.stringify(got));
+    ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
+    ok("each bar is as long as its score", !!got && got.widths.join() === "72%,18%", JSON.stringify(got));
+    ok("it names the Jev that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
+    // A second reply left alone, and a third Jev could not decide on.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m3", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 10 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m4", refine: true, failed: true, why: "the Jev key was refused", scores: [], cost: 0, model: "", over: 50 });
+    });
+    // Log lines landing together are painted once, a moment after the first.
+    await closed(page);
+    const tally = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
+    ok("it counts the replies Jev read, left alone and could not decide on", /read 3 replies/.test(tally) && /left 1 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
+    await page.evaluate(() => {
+      const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
+      b.click();
+    });
+    await settle(page);
+    const cleared = await card(page);
+    ok("Clear empties the card and the count", !!cleared && /Nothing yet/.test(cleared.text), JSON.stringify(cleared));
+  });
+  ok("no errors on the Jev card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
 }
 
 // ---- folding the blocks ----

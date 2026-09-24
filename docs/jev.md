@@ -2,7 +2,7 @@
 
 A beta. With one model, which is the default, every reply the automatic pass reaches is refined. With two, a second model called Jev reads each finished reply first and says whether it needs a refine, and the refine model runs only on the replies Jev picks out. Replies that were fine already stop costing a refine.
 
-Jev is a small decision model made by TypeSafe. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
+Jev is a small decision model made by TypeSafe. **What is Jev?**, on the Model tab, links to TypeSafe's own introduction. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
 ## Setting it up
 
@@ -10,10 +10,62 @@ Everything is on the Model tab, in **One model or two**.
 
 1. Set **How many models** to two.
 2. Pick **Where Jev is reached**. OpenRouter and NanoGPT sell access to Jev alongside other models. TypeSafe is the maker. **Another address** is for any other host that takes the same kind of request, and asks for its address and the name it gives Jev.
-3. Paste a key from that host under **Jev key** and press **Save key**. The key has to come from the host you picked.
-4. Press **Test**. It asks Jev one small question with nothing from any chat in it, and says whether an answer came back.
+3. Pick **Which Jev**. See [Which Jev](#which-jev) below.
+4. Paste a key from that host under **Jev key** and press **Save key**. The key has to come from the host you picked.
+5. Press **Test**. It asks Jev one small question with nothing from any chat in it, and says whether an answer came back, and which Jev answered.
 
 Two-model mode also needs the `cors_proxy` permission, since Jev is not a chat model and no connection profile can reach it. Without it the panel says so and every reply is refined, the same as with one model.
+
+## Which Jev
+
+**Which Jev** has these choices:
+
+- **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
+- **The preview Jev**, only when the host is TypeSafe. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest.
+- **Jev 1.13 exactly**. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
+- **A name I type** opens a **Model name** box. Type what your host calls Jev. Use this when a host renames Jev, or has a Jev this list does not know. Left empty, Jev 1.13 is used.
+
+The name each host is sent:
+
+| Host | The latest Jev | The preview Jev | Jev 1.13 exactly |
+| --- | --- | --- | --- |
+| OpenRouter | `~typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
+| TypeSafe | `jev-latest` | `jev-preview` | `jev-1.13.0` |
+| NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
+
+OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them. If you picked it on TypeSafe and then change host, the list shows **The latest Jev**, and the latest is what is sent. Change back to TypeSafe and the preview is picked again.
+
+If a host renames Jev, pick **A name I type** and type the new name.
+
+**Another address** does not use **Which Jev**. It has its own **Model name** box.
+
+## Another address
+
+Pick **Another address** for any host not in the list. Fill in two boxes:
+
+1. **Address**: your host's full address for Jev. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
+2. **Model name**: what your host calls Jev, spelled the way its docs spell it.
+
+Hosts take Jev in one of four ways, and the end of the address decides which:
+
+- **Ending in `/chat/completions`**: the OpenAI chat format. The reply goes as the text of one user message, and the checks go with it.
+- **Ending in `/responses`**: the OpenAI responses format. The same, laid out the way that format expects.
+- **Ending in `/messages`**: the Claude format. The same again, with the key also sent in the header Claude-style hosts read.
+- **Any other ending**: a decisions request, the same kind OpenRouter, NanoGPT and TypeSafe take.
+
+Addresses known to work:
+
+| Host | Address | Model name |
+| --- | --- | --- |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13` or `~typesafe/jev-latest` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13` or `typesafe/jev-latest` |
+| TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
+
+NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
+
+OpenRouter, NanoGPT and TypeSafe are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether Jev answered, and which Jev.
+
+Every answer says which exact Jev gave it. The Log shows it next to each decision, for example "Jev (jev-1.13.0) says leave it".
 
 ## What Jev checks
 
@@ -59,11 +111,21 @@ The reply is refined, the same as with one model. No key, a refused key, an acco
 
 ## Reading what it decided
 
-Every answer goes in the Log, each check with its percentage:
+**What Jev decided**, on the Log tab, shows the last reply Jev read. It is there while two models are on.
+
+- Whether the reply was refined or left alone, or why Jev could not decide.
+- Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
+- Which Jev answered, and what the answer cost.
+- A count since the page opened: how many replies Jev read, how many it left alone, and so how many refines you did not pay for. Use it to see whether two models are saving you anything.
+- **Clear** empties the card and the count. It is kept only until you close the tab, like the Log.
+
+**Test** does not show this. It asks Jev one made-up question, with nothing from your chats in it, to check the key and the address.
+
+Every answer also goes in the Log as one line:
 
 ```
-Jev says leave it: reply repeats a word, a phrase or a sentence shape inside itself 12%; ...
-Jev says refine: ... uses stock phrases that turn up in many stories 71%; ...
+Jev (jev-1.13.0) says leave it: reply repeats a word, a phrase or a sentence shape inside itself 12%; ...
+Jev (jev-1.13.0) says refine: ... uses stock phrases that turn up in many stories 71%; ...
 ```
 
 A reply Jev left alone also says so where a refine that stood down would, with the highest percentage it gave. If Jev is letting through replies you would have refined, lower the line or add the check it is missing. If it refines replies that were fine, raise the line or drop the check that keeps firing.

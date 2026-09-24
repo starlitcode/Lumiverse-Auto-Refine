@@ -23,7 +23,23 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.14.0";
+const VERSION = "1.15.0";
+
+// TypeSafe's own introduction to Jev, for somebody meeting the name for the
+// first time on the Model tab.
+const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
+
+// A link in the panel's own colours. Names are linked rather than printed as
+// bare addresses, which read as noise and cannot be followed on a phone.
+function linkTo(url: string, text: string): HTMLElement {
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = text;
+  a.style.cssText = "color:var(--lumiverse-primary,rgba(147,112,219,.9));text-decoration:underline";
+  return a;
+}
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
@@ -118,7 +134,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeHost", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
+    keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn"],
   },
   {
     id: "switches",
@@ -456,6 +472,8 @@ const CONFIG = {
   judgeHost: "openrouter",
   judgeUrl: "",
   judgeModel: "",
+  judgeVersion: "latest",
+  judgeName: "",
   // One statement a line. Jev gives the chance each is true of `reply`.
   judgeChecks: JUDGE_CHECKS,
   // A check at or above this percentage is a reply worth refining.
@@ -1817,13 +1835,18 @@ type Field = {
   // alike. Without it a box takes decimals, which is what a price needs: every
   // provider quotes a fraction of a unit per million tokens.
   int?: boolean;
-  options?: Array<{ value: string; label: string }>;
-  // Shown only while another setting is on, or holds a given value. A row that
-  // can do nothing where it sits is worse than a row that is not there, and a
-  // greyed one still takes up the space and invites the tap.
+  // An option can carry its own `needs`, the same shape as a row's, for a
+  // choice only one host offers.
+  options?: Array<{ value: string; label: string; needs?: { key: string; is?: any } }>;
+  // Shown only while another setting is on, or holds a given value, or one of
+  // a list of values. A row that can do nothing where it sits is worse than a
+  // row that is not there, and a greyed one still takes up the space and
+  // invites the tap.
   needs?: { key: string; is?: any };
   // How far in it sits under the row it depends on.
   under?: boolean;
+  // Shown inside an empty text box, as an example of what goes there.
+  placeholder?: string;
   // How many lines deep a "lines" box opens. Three unless a field's usual
   // content needs more to be read without scrolling.
   rows?: number;
@@ -1856,12 +1879,36 @@ const JUDGE_FIELDS: Field[] = [
     hint: "The key you save below has to be one from this host.",
   },
   {
+    key: "judgeVersion",
+    label: "Which Jev",
+    type: "pick",
+    options: [
+      { value: "latest", label: "The latest Jev" },
+      { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
+      { value: "exact", label: "Jev 1.13 exactly" },
+      { value: "own", label: "A name I type" },
+    ],
+    needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] },
+    under: true,
+    hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.13 to keep them steady.",
+  },
+  {
+    key: "judgeName",
+    label: "Model name",
+    type: "text",
+    needs: { key: "judgeVersion", is: "own" },
+    under: true,
+    placeholder: "typesafe/jev-1.13",
+    hint: "What your host calls Jev now, as its own docs spell it. Left empty, 1.13 is used.",
+  },
+  {
     key: "judgeUrl",
     label: "Address",
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    hint: "The full address that takes a decision request, starting with https://.",
+    placeholder: "https://jev.example.com/v1/decisions",
+    hint: "Any host that serves Jev. Paste its full Jev address, not only the base. It ends in something like /decisions, /chat/completions or /messages.",
   },
   {
     key: "judgeModel",
@@ -1869,13 +1916,14 @@ const JUDGE_FIELDS: Field[] = [
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    hint: "What that host calls Jev, such as jev-1.13.0.",
+    placeholder: "typesafe/jev-latest",
+    hint: "What that host calls Jev, as its own docs spell it.",
   },
   {
     key: "judgeChecks",
     label: "What Jev checks",
     type: "lines",
-    rows: 8,
+    rows: 10,
     needs: { key: "judgeMode", is: "two" },
     hint: "One check per line. Call the reply reply, in backticks, like the checks already here. Jev scores how likely each one is true.",
   },
@@ -3279,6 +3327,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     mine: boolean;
   } | null = null;
 
+  // What Jev decided about the last reply it read, for the card on the Log
+  // tab. The Log line says the same in one line; the card lays each check out
+  // against the line, which is what somebody tuning the checks needs to see.
+  let jevLast: {
+    at: number;
+    refine: boolean;
+    failed: boolean;
+    why: string;
+    scores: Array<{ check: string; pct: number }>;
+    over: number;
+    model: string;
+    cost: number;
+  } | null = null;
+  // Every decision since the page loaded, so the card can say how many replies
+  // Jev spared a refine. That count is how somebody tells whether two models
+  // are saving them anything.
+  const jevTally = { read: 0, spared: 0, failed: 0, cost: 0 };
+
   // The whole answer, when the message carries one. Every ending sends it, and
   // it is the better copy of what the stream was showing a trimmed tail of.
   //
@@ -4086,6 +4152,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-sbs-col{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:4px}" +
     ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     ".arf-well.arf-tall{max-height:340px}" +
+    // A bar per Jev check, with a mark where the line is. The fill takes the
+    // accent where the check reached the line and the muted text colour where
+    // it did not, so the one that decided it stands out in any theme.
+    ".arf-jevbar{position:relative;height:6px;margin-top:4px;border-radius:3px;overflow:hidden;" +
+    "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+    ".arf-jevfill{display:block;height:100%;border-radius:3px;" +
+    "background:var(--lumiverse-text-muted,rgba(255,255,255,.65));opacity:.55}" +
+    ".arf-jevfill-hit{background:var(--lumiverse-primary,rgba(147,112,219,.9));opacity:1}" +
+    ".arf-jevline{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;" +
+    "background:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+    ".arf-jevhit{color:var(--lumiverse-text,rgba(255,255,255,.9));font-weight:600}" +
     ".arf-dot{flex:none;width:7px;height:7px;border-radius:50%;" +
     "background:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
     ".arf-dot.arf-live{background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
@@ -5572,7 +5649,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (id === "limits")
       return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
     if (id === "log") {
-      return [buildLiveCard(), buildNotesCard(), buildActivityCard(), buildDebugCard()];
+      const jev = cfg.judgeMode === "two" ? [buildJevCard()] : [];
+      return [buildLiveCard(), buildNotesCard(), ...jev, buildActivityCard(), buildDebugCard()];
     }
     return [
       buildPermsCard(),
@@ -5840,6 +5918,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   function reveal() {
     if (!tab || !tab.root) return;
     try {
+      // A list with options that depend on another setting is drawn again.
+      const lists = (tab.root as HTMLElement).querySelectorAll("[data-arf-opts]");
+      for (let i = 0; i < lists.length; i++) {
+        const fill = (lists[i] as any)._arfFill;
+        if (typeof fill === "function") fill();
+      }
       const rows = (tab.root as HTMLElement).querySelectorAll("[data-arf-row],[data-arf-hangs]");
       for (let i = 0; i < rows.length; i++) {
         const row: any = rows[i];
@@ -7100,6 +7184,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // leaves a row sitting under a switch that is off, offering a setting that
   // cannot do anything until you leave the tab and come back.
 
+  // Whether the setting a row or an option needs holds what it asks for.
+  function optionShows(needs: { key: string; is?: any }): boolean {
+    const held = cfg[needs.key];
+    const is = needs.is;
+    return is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
+  }
+
   // Whether a row has anything to do where it sits.
   // A row also waits on whatever the row it hangs off waits on. The address for
   // Jev hangs off the host being your own, and the host hangs off two models:
@@ -7107,9 +7198,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // anybody who had once picked another address.
   function fieldShows(f: Field, depth?: number): boolean {
     if (!f.needs) return true;
-    const held = cfg[f.needs.key];
-    const own = f.needs.is === undefined ? !!held : held === f.needs.is;
-    if (!own) return false;
+    if (!optionShows(f.needs)) return false;
     const parent = FIELD_BY_KEY[f.needs.key];
     return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
   }
@@ -7199,6 +7288,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.setAttribute("autocorrect", "off");
       box.setAttribute("autocomplete", "off");
       box.setAttribute("spellcheck", "false");
+      if (f.placeholder) box.placeholder = f.placeholder;
       box.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       box.addEventListener("input", () => {
         cfg[f.key] = box.value;
@@ -7266,32 +7356,46 @@ export function setup(ctx: Ctx, overrides?: any) {
                     ]
                   : [],
               )
-          : (f.options || []).map((o: any) => ({ value: o.value, label: o.label, group: "" }));
-      // Under headings, but only where there is more than one heading to draw.
-      // A single one over the whole list names nothing the list does not
-      // already say, and is a row of chrome on a phone for no reason.
-      const heads: string[] = [];
-      for (const o of opts)
-        if (o.group && heads.indexOf(o.group) < 0) heads.push(o.group);
-      const grouped = heads.length > 1;
-      const boxes: Record<string, any> = {};
-      for (const o of opts) {
-        const op = document.createElement("option");
-        op.value = o.value;
-        op.textContent = o.label;
-        if (!grouped || !o.group) {
-          sel.appendChild(op);
-          continue;
+          : (f.options || []).map((o: any) => ({ value: o.value, label: o.label, group: "", needs: o.needs }));
+      const fill = () => {
+        sel.textContent = "";
+        const shown = opts.filter((o: any) => !o.needs || optionShows(o.needs));
+        // Under headings, but only where there is more than one heading to
+        // draw. A single one over the whole list names nothing the list does
+        // not already say, and is a row of chrome on a phone for no reason.
+        const heads: string[] = [];
+        for (const o of shown)
+          if (o.group && heads.indexOf(o.group) < 0) heads.push(o.group);
+        const grouped = heads.length > 1;
+        const boxes: Record<string, any> = {};
+        for (const o of shown) {
+          const op = document.createElement("option");
+          op.value = o.value;
+          op.textContent = o.label;
+          if (!grouped || !o.group) {
+            sel.appendChild(op);
+            continue;
+          }
+          if (!boxes[o.group]) {
+            const head = document.createElement("optgroup");
+            head.label = o.group;
+            boxes[o.group] = head;
+            sel.appendChild(head);
+          }
+          boxes[o.group].appendChild(op);
         }
-        if (!boxes[o.group]) {
-          const head = document.createElement("optgroup");
-          head.label = o.group;
-          boxes[o.group] = head;
-          sel.appendChild(head);
-        }
-        boxes[o.group].appendChild(op);
+        const held = String(cfg[f.key] == null ? "" : cfg[f.key]);
+        // A held choice this host does not offer shows as the default, which
+        // is what the backend sends in its place. The setting is kept, so it
+        // comes back if the host that offers it is picked again.
+        const offered = shown.some((o: any) => o.value === held) || !opts.some((o: any) => o.value === held);
+        sel.value = offered ? held : String((CONFIG as any)[f.key]);
+      };
+      fill();
+      if (opts.some((o: any) => o.needs)) {
+        sel.setAttribute("data-arf-opts", "1");
+        (sel as any)._arfFill = fill;
       }
-      sel.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       sel.addEventListener("change", () => {
         cfg[f.key] = sel.value;
         persist(true);
@@ -8395,7 +8499,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       "Beta. With two, a small model called Jev reads each reply first. Only the replies it flags are sent to the refine model.",
       cfg.judgeMode === "two" ? "two, beta" : "one",
     );
-    for (const f of JUDGE_FIELDS.slice(0, 4)) wrap.appendChild(fieldRow(f));
+    const about = note("");
+    about.setAttribute("data-arf-jevabout", "1");
+    about.appendChild(linkTo(JEV_ABOUT_URL, "What is Jev?"));
+    wrap.appendChild(about);
+    // Everything above the checks sits above the key: the mode, the host, and
+    // how that host is reached. Split by key rather than by count, so a row
+    // added to the list lands on the right side of the key.
+    const checksAt = JUDGE_FIELDS.findIndex((f) => f.key === "judgeChecks");
+    for (const f of JUDGE_FIELDS.slice(0, checksAt)) wrap.appendChild(fieldRow(f));
 
     const keyRow = el("div", "arf-col");
     keyRow.setAttribute("data-arf-jevkey", "1");
@@ -8462,7 +8574,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     keyRow.appendChild(said);
     wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
 
-    const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(4);
+    const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
     wrap.appendChild(fieldRow(checksField));
     // The way back to the built-in checks, beside the box it fills. Resetting
     // the whole "One model or two" part would also switch back to one model
@@ -8499,7 +8611,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(
         bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."),
       );
-    if (jevHas == null && !jevStatusAsked) {
+    // Asked only once two models are on, since nothing about Jev shows before.
+    if (cfg.judgeMode === "two" && jevHas == null && !jevStatusAsked) {
       jevStatusAsked = true;
       send({ type: "jev_key_status", requestId: newId() });
     }
@@ -9053,6 +9166,73 @@ export function setup(ctx: Ctx, overrides?: any) {
         wrap.appendChild(r);
       }
     }
+    return wrap;
+  }
+
+  // Each check Jev answered about the last reply it read, as a bar against the
+  // line, so somebody tuning the checks can see which one decided it and by
+  // how much. Kept for the session only, like the Log.
+  function buildJevCard(): HTMLElement {
+    const last = jevLast;
+    const wrap = card(
+      "What Jev decided",
+      undefined,
+      last ? (last.failed ? "could not decide" : last.refine ? "refined" : "left alone") : undefined,
+    );
+    wrap.setAttribute("data-arf-jevcard", "1");
+    if (!last) {
+      wrap.appendChild(note("Nothing yet. After Jev reads a reply, each check and its score is shown here."));
+      return wrap;
+    }
+    const when = new Date(last.at).toTimeString().slice(0, 8);
+    const who = "Jev" + (last.model ? " (" + last.model + ")" : "");
+    wrap.appendChild(
+      note(
+        last.failed
+          ? who + " could not decide at " + when + ": " + last.why + ". The reply was refined anyway."
+          : who + " read a reply at " + when + ". A check at " + last.over + "% or more means refine." +
+            (last.refine ? " At least one did, so the reply was refined." : " None did, so the reply was left alone."),
+      ),
+    );
+    for (const s of last.scores) {
+      const hit = s.pct >= last.over;
+      const row = el("div", "arf-col");
+      row.setAttribute("data-arf-jevcheck", hit ? "over" : "under");
+      const top = el("div", "arf-between");
+      top.appendChild(el("span", "arf-note arf-grow" + (hit ? " arf-jevhit" : ""), s.check));
+      top.appendChild(el("span", "arf-pill arf-mono", s.pct + "%"));
+      row.appendChild(top);
+      const bar = el("div", "arf-jevbar");
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", s.pct + " percent" + (hit ? ", reached the line" : ""));
+      const fill = el("span", hit ? "arf-jevfill arf-jevfill-hit" : "arf-jevfill");
+      fill.style.width = s.pct + "%";
+      bar.appendChild(fill);
+      const line = el("span", "arf-jevline");
+      line.style.left = last.over + "%";
+      bar.appendChild(line);
+      row.appendChild(bar);
+      wrap.appendChild(row);
+    }
+    if (last.cost > 0) wrap.appendChild(note("Cost " + last.cost.toFixed(6) + "."));
+    const t = jevTally;
+    const sum = note(
+      "Since this page opened, Jev read " + t.read + (t.read === 1 ? " reply" : " replies") +
+        " and left " + t.spared + " alone, so " + t.spared + (t.spared === 1 ? " refine was" : " refines were") + " not paid for." +
+        (t.failed ? " It could not decide on " + t.failed + ", and those were refined." : "") +
+        (t.cost > 0 ? " Jev cost " + t.cost.toFixed(6) + " in all." : ""),
+    );
+    sum.setAttribute("data-arf-jevtally", "1");
+    wrap.appendChild(sum);
+    const rowB = el("div", "arf-row");
+    const clear = button("Clear", false);
+    clear.addEventListener("click", () => {
+      jevLast = null;
+      jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = 0;
+      paint();
+    });
+    rowB.appendChild(clear);
+    wrap.appendChild(rowB);
     return wrap;
   }
 
@@ -13448,14 +13628,32 @@ export function setup(ctx: Ctx, overrides?: any) {
           // moved if Jev is letting too much through or too little.
           if (msg.type === "judge_said") {
             const list = Array.isArray(msg.scores) ? msg.scores : [];
+            jevLast = {
+              at: Date.now(),
+              refine: !!msg.refine,
+              failed: !!msg.failed,
+              why: String(msg.why || ""),
+              scores: list.slice(0, 30).map((x: any) => ({
+                check: String(x.check || "").replace(/`/g, "").slice(0, 300),
+                pct: Math.max(0, Math.min(100, Math.round(Number(x.pct) || 0))),
+              })),
+              over: Number(msg.over) || 50,
+              model: String(msg.model || "").slice(0, 60),
+              cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
+            };
+            jevTally.read++;
+            if (msg.failed) jevTally.failed++;
+            else if (!msg.refine) jevTally.spared++;
+            jevTally.cost += jevLast.cost;
             const each = list
               .map((x: any) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
               .join("; ");
             const cost = Number(msg.cost) > 0 ? ", cost " + Number(msg.cost).toFixed(6) : "";
+            const by = msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "";
             if (msg.failed)
               log("Jev could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
-            else if (msg.refine) log("Jev says refine: " + each + cost, true);
-            else log("Jev says leave it: " + each + cost, true);
+            else if (msg.refine) log("Jev" + by + " says refine: " + each + cost, true);
+            else log("Jev" + by + " says leave it: " + each + cost, true);
             return;
           }
           // Whether a key is saved is true whichever question it answers, so
@@ -13477,7 +13675,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           if (msg.type === "jev_tested") {
             if (msg.requestId && msg.requestId !== jevAsk) return;
             jevSaid = msg.ok
-              ? "Jev answered. The key works."
+              ? "Jev" + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") + " answered. The key works."
               : "Jev did not answer: " + String(msg.why || "no reason given") + ".";
             log(msg.ok ? "Jev answered a test question" : "Jev test failed: " + String(msg.why || ""), true);
             paint();

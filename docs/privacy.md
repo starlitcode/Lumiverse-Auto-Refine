@@ -33,6 +33,8 @@ Your settings are never sent. Nothing from a chat you are not in is sent.
 
 The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. The only call to somewhere other than your provider is the call to Jev, with two models on, and it goes through Lumiverse's own proxy, `spindle.cors`.
 
+There is one link, **What is Jev?**, on the Model tab. It points at TypeSafe's page introducing Jev. Showing it fetches nothing. Tapping it opens the page in your browser.
+
 ## Jev
 
 With **How many models** set to two, each finished reply is sent to Jev before it is refined. Jev is reached through the host you picked under **Where Jev is reached**: OpenRouter, NanoGPT, TypeSafe, or an address you typed. That host is a separate service with its own terms. It receives:
