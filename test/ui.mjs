@@ -1811,7 +1811,9 @@ console.log("\nwhat Jev decided");
         over: 50,
       }),
     );
-    await settle(page);
+    // A Log line landing just after another is painted a moment later, not in
+    // the same frame, so this waits the repaint out rather than two frames.
+    await closed(page);
     const got = await card(page);
     ok("after a decision it shows each check", !!got && /reply repeats itself/.test(got.text) && /reply uses stock phrases/.test(got.text), JSON.stringify(got));
     ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
