@@ -18,10 +18,10 @@ Two-model mode also needs the `cors_proxy` permission, since Jev is not a chat m
 
 ## Which Jev
 
-**Which Jev** has four choices:
+**Which Jev** has these choices:
 
 - **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
-- **The preview Jev**, TypeSafe only. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest. OpenRouter and NanoGPT have no preview name, so there it sends the latest.
+- **The preview Jev**, only when the host is TypeSafe. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest.
 - **Jev 1.13 exactly**. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
 - **A name I type** opens a **Model name** box. Type what your host calls Jev. Use this when a host renames Jev, or has a Jev this list does not know. Left empty, Jev 1.13 is used.
 
@@ -29,9 +29,11 @@ The name each host is sent:
 
 | Host | The latest Jev | The preview Jev | Jev 1.13 exactly |
 | --- | --- | --- | --- |
-| OpenRouter | `~typesafe/jev-latest` | `~typesafe/jev-latest` | `typesafe/jev-1.13` |
+| OpenRouter | `~typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
 | TypeSafe | `jev-latest` | `jev-preview` | `jev-1.13.0` |
-| NanoGPT | `typesafe/jev-latest` | `typesafe/jev-latest` | `typesafe/jev-1.13` |
+| NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
+
+OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them. If you picked it on TypeSafe and then change host, the list shows **The latest Jev**, and the latest is what is sent. Change back to TypeSafe and the preview is picked again.
 
 If a host renames Jev, pick **A name I type** and type the new name.
 

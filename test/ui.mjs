@@ -1647,6 +1647,33 @@ console.log("\none model or two");
     const nano = await shown();
     ok("NanoGPT has the same choice", nano.version && nano.name, JSON.stringify(nano));
 
+    // The preview is a TypeSafe name, so it is offered only there. A preview
+    // picked on TypeSafe shows as the latest elsewhere, which is what is sent,
+    // and comes back when TypeSafe is picked again.
+    const versions = () =>
+      page.evaluate(() => {
+        const sel = document.querySelector('#drawer [data-arf-field="judgeVersion"]');
+        return { values: Array.from(sel.options).map((o) => o.value), chosen: sel.value };
+      });
+    const onNano = await versions();
+    ok("NanoGPT offers no preview", onNano.values.indexOf("preview") < 0 && onNano.values.length === 3, JSON.stringify(onNano));
+    await pick("judgeHost", "typesafe");
+    await settle(page);
+    const onTs = await versions();
+    ok("TypeSafe offers the preview", onTs.values.indexOf("preview") >= 0 && onTs.chosen === "own", JSON.stringify(onTs));
+    await pick("judgeVersion", "preview");
+    await pick("judgeHost", "openrouter");
+    await settle(page);
+    const onOr = await versions();
+    ok("a preview picked on TypeSafe shows as the latest on OpenRouter", onOr.values.indexOf("preview") < 0 && onOr.chosen === "latest", JSON.stringify(onOr));
+    await pick("judgeHost", "typesafe");
+    await settle(page);
+    const again = await versions();
+    ok("and is picked again on TypeSafe", again.chosen === "preview", JSON.stringify(again));
+    await pick("judgeVersion", "own");
+    await pick("judgeHost", "nanogpt");
+    await settle(page);
+
     await pick("judgeHost", "custom");
     await closed(page);
     const own = await shown();

@@ -1747,7 +1747,7 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "latest", label: "The latest Jev" },
-            { value: "preview", label: "The preview Jev (TypeSafe only)" },
+            { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
             { value: "exact", label: "Jev 1.13 exactly" },
             { value: "own", label: "A name I type" },
         ],
@@ -5790,6 +5790,13 @@ export function setup(ctx, overrides) {
         if (!tab || !tab.root)
             return;
         try {
+            // A list with options that depend on another setting is drawn again.
+            const lists = tab.root.querySelectorAll("[data-arf-opts]");
+            for (let i = 0; i < lists.length; i++) {
+                const fill = lists[i]._arfFill;
+                if (typeof fill === "function")
+                    fill();
+            }
             const rows = tab.root.querySelectorAll("[data-arf-row],[data-arf-hangs]");
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
@@ -7009,6 +7016,12 @@ export function setup(ctx, overrides) {
     // from the field arrays it misses every row written inline in a card, which
     // leaves a row sitting under a switch that is off, offering a setting that
     // cannot do anything until you leave the tab and come back.
+    // Whether the setting a row or an option needs holds what it asks for.
+    function optionShows(needs) {
+        const held = cfg[needs.key];
+        const is = needs.is;
+        return is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
+    }
     // Whether a row has anything to do where it sits.
     // A row also waits on whatever the row it hangs off waits on. The address for
     // Jev hangs off the host being your own, and the host hangs off two models:
@@ -7017,10 +7030,7 @@ export function setup(ctx, overrides) {
     function fieldShows(f, depth) {
         if (!f.needs)
             return true;
-        const held = cfg[f.needs.key];
-        const is = f.needs.is;
-        const own = is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
-        if (!own)
+        if (!optionShows(f.needs))
             return false;
         const parent = FIELD_BY_KEY[f.needs.key];
         return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
@@ -7176,33 +7186,47 @@ export function setup(ctx, overrides) {
                         },
                     ]
                     : [])
-                : (f.options || []).map((o) => ({ value: o.value, label: o.label, group: "" }));
-            // Under headings, but only where there is more than one heading to draw.
-            // A single one over the whole list names nothing the list does not
-            // already say, and is a row of chrome on a phone for no reason.
-            const heads = [];
-            for (const o of opts)
-                if (o.group && heads.indexOf(o.group) < 0)
-                    heads.push(o.group);
-            const grouped = heads.length > 1;
-            const boxes = {};
-            for (const o of opts) {
-                const op = document.createElement("option");
-                op.value = o.value;
-                op.textContent = o.label;
-                if (!grouped || !o.group) {
-                    sel.appendChild(op);
-                    continue;
+                : (f.options || []).map((o) => ({ value: o.value, label: o.label, group: "", needs: o.needs }));
+            const fill = () => {
+                sel.textContent = "";
+                const shown = opts.filter((o) => !o.needs || optionShows(o.needs));
+                // Under headings, but only where there is more than one heading to
+                // draw. A single one over the whole list names nothing the list does
+                // not already say, and is a row of chrome on a phone for no reason.
+                const heads = [];
+                for (const o of shown)
+                    if (o.group && heads.indexOf(o.group) < 0)
+                        heads.push(o.group);
+                const grouped = heads.length > 1;
+                const boxes = {};
+                for (const o of shown) {
+                    const op = document.createElement("option");
+                    op.value = o.value;
+                    op.textContent = o.label;
+                    if (!grouped || !o.group) {
+                        sel.appendChild(op);
+                        continue;
+                    }
+                    if (!boxes[o.group]) {
+                        const head = document.createElement("optgroup");
+                        head.label = o.group;
+                        boxes[o.group] = head;
+                        sel.appendChild(head);
+                    }
+                    boxes[o.group].appendChild(op);
                 }
-                if (!boxes[o.group]) {
-                    const head = document.createElement("optgroup");
-                    head.label = o.group;
-                    boxes[o.group] = head;
-                    sel.appendChild(head);
-                }
-                boxes[o.group].appendChild(op);
+                const held = String(cfg[f.key] == null ? "" : cfg[f.key]);
+                // A held choice this host does not offer shows as the default, which
+                // is what the backend sends in its place. The setting is kept, so it
+                // comes back if the host that offers it is picked again.
+                const offered = shown.some((o) => o.value === held) || !opts.some((o) => o.value === held);
+                sel.value = offered ? held : String(CONFIG[f.key]);
+            };
+            fill();
+            if (opts.some((o) => o.needs)) {
+                sel.setAttribute("data-arf-opts", "1");
+                sel._arfFill = fill;
             }
-            sel.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
             sel.addEventListener("change", () => {
                 cfg[f.key] = sel.value;
                 persist(true);

@@ -1835,7 +1835,9 @@ type Field = {
   // alike. Without it a box takes decimals, which is what a price needs: every
   // provider quotes a fraction of a unit per million tokens.
   int?: boolean;
-  options?: Array<{ value: string; label: string }>;
+  // An option can carry its own `needs`, the same shape as a row's, for a
+  // choice only one host offers.
+  options?: Array<{ value: string; label: string; needs?: { key: string; is?: any } }>;
   // Shown only while another setting is on, or holds a given value, or one of
   // a list of values. A row that can do nothing where it sits is worse than a
   // row that is not there, and a greyed one still takes up the space and
@@ -1882,7 +1884,7 @@ const JUDGE_FIELDS: Field[] = [
     type: "pick",
     options: [
       { value: "latest", label: "The latest Jev" },
-      { value: "preview", label: "The preview Jev (TypeSafe only)" },
+      { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
       { value: "exact", label: "Jev 1.13 exactly" },
       { value: "own", label: "A name I type" },
     ],
@@ -5916,6 +5918,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   function reveal() {
     if (!tab || !tab.root) return;
     try {
+      // A list with options that depend on another setting is drawn again.
+      const lists = (tab.root as HTMLElement).querySelectorAll("[data-arf-opts]");
+      for (let i = 0; i < lists.length; i++) {
+        const fill = (lists[i] as any)._arfFill;
+        if (typeof fill === "function") fill();
+      }
       const rows = (tab.root as HTMLElement).querySelectorAll("[data-arf-row],[data-arf-hangs]");
       for (let i = 0; i < rows.length; i++) {
         const row: any = rows[i];
@@ -7176,6 +7184,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // leaves a row sitting under a switch that is off, offering a setting that
   // cannot do anything until you leave the tab and come back.
 
+  // Whether the setting a row or an option needs holds what it asks for.
+  function optionShows(needs: { key: string; is?: any }): boolean {
+    const held = cfg[needs.key];
+    const is = needs.is;
+    return is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
+  }
+
   // Whether a row has anything to do where it sits.
   // A row also waits on whatever the row it hangs off waits on. The address for
   // Jev hangs off the host being your own, and the host hangs off two models:
@@ -7183,10 +7198,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // anybody who had once picked another address.
   function fieldShows(f: Field, depth?: number): boolean {
     if (!f.needs) return true;
-    const held = cfg[f.needs.key];
-    const is = f.needs.is;
-    const own = is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
-    if (!own) return false;
+    if (!optionShows(f.needs)) return false;
     const parent = FIELD_BY_KEY[f.needs.key];
     return !parent || (depth || 0) > 8 || fieldShows(parent, (depth || 0) + 1);
   }
@@ -7344,32 +7356,46 @@ export function setup(ctx: Ctx, overrides?: any) {
                     ]
                   : [],
               )
-          : (f.options || []).map((o: any) => ({ value: o.value, label: o.label, group: "" }));
-      // Under headings, but only where there is more than one heading to draw.
-      // A single one over the whole list names nothing the list does not
-      // already say, and is a row of chrome on a phone for no reason.
-      const heads: string[] = [];
-      for (const o of opts)
-        if (o.group && heads.indexOf(o.group) < 0) heads.push(o.group);
-      const grouped = heads.length > 1;
-      const boxes: Record<string, any> = {};
-      for (const o of opts) {
-        const op = document.createElement("option");
-        op.value = o.value;
-        op.textContent = o.label;
-        if (!grouped || !o.group) {
-          sel.appendChild(op);
-          continue;
+          : (f.options || []).map((o: any) => ({ value: o.value, label: o.label, group: "", needs: o.needs }));
+      const fill = () => {
+        sel.textContent = "";
+        const shown = opts.filter((o: any) => !o.needs || optionShows(o.needs));
+        // Under headings, but only where there is more than one heading to
+        // draw. A single one over the whole list names nothing the list does
+        // not already say, and is a row of chrome on a phone for no reason.
+        const heads: string[] = [];
+        for (const o of shown)
+          if (o.group && heads.indexOf(o.group) < 0) heads.push(o.group);
+        const grouped = heads.length > 1;
+        const boxes: Record<string, any> = {};
+        for (const o of shown) {
+          const op = document.createElement("option");
+          op.value = o.value;
+          op.textContent = o.label;
+          if (!grouped || !o.group) {
+            sel.appendChild(op);
+            continue;
+          }
+          if (!boxes[o.group]) {
+            const head = document.createElement("optgroup");
+            head.label = o.group;
+            boxes[o.group] = head;
+            sel.appendChild(head);
+          }
+          boxes[o.group].appendChild(op);
         }
-        if (!boxes[o.group]) {
-          const head = document.createElement("optgroup");
-          head.label = o.group;
-          boxes[o.group] = head;
-          sel.appendChild(head);
-        }
-        boxes[o.group].appendChild(op);
+        const held = String(cfg[f.key] == null ? "" : cfg[f.key]);
+        // A held choice this host does not offer shows as the default, which
+        // is what the backend sends in its place. The setting is kept, so it
+        // comes back if the host that offers it is picked again.
+        const offered = shown.some((o: any) => o.value === held) || !opts.some((o: any) => o.value === held);
+        sel.value = offered ? held : String((CONFIG as any)[f.key]);
+      };
+      fill();
+      if (opts.some((o: any) => o.needs)) {
+        sel.setAttribute("data-arf-opts", "1");
+        (sel as any)._arfFill = fill;
       }
-      sel.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       sel.addEventListener("change", () => {
         cfg[f.key] = sel.value;
         persist(true);
