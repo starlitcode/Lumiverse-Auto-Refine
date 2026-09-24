@@ -2881,9 +2881,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // whenever the backend announces itself.
   //
   // Held there, never written to the account. What this has at these moments
-  // is this browser's copy, which can be older than the account's: a phone
-  // opened after the prompt was changed on a computer wrote its old prompt
-  // over the new one. The account copy is asked for straight after, and wins.
+  // is this browser's copy, which can be older than the account's, and a phone
+  // opened after the prompt was changed on a computer would write its old
+  // prompt over the new one. The account copy is asked for straight after, and
+  // wins.
   function armBackend() {
     send({ type: "set_settings", settings: forBackend(), keep: true });
     send({ type: "set_chats_off", chats: chatsOff.slice() });
@@ -3062,8 +3063,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Whether an event about a chat is about one somewhere else: the address is
   // known to name chats, names none right now, and does not carry this id. A
   // reply finishing in a chat you walked out of, or in another tab or device,
-  // is still reported here, and taking it as the chat you are in lit every
-  // button on the home screen.
+  // is still reported here, and taking it as the chat you are in would light
+  // every button on the home screen.
   function elsewhere(id: any): boolean {
     return id != null && urlSlot != null && idInUrl() == null && !urlHolds(id);
   }

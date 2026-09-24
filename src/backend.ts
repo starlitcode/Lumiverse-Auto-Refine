@@ -4332,9 +4332,9 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // The panel handing over what it has. Held here either way. Written to the
     // account only when it is a change somebody made: a panel starting up, or
     // answering this module coming back up, sends keep, since what it holds
-    // then is this browser's copy, which can be older than the account's. A
-    // phone opened after the prompt was changed on a computer wrote its old
-    // prompt over the new one, and every device then loaded the old one.
+    // then is this browser's copy, which can be older than the account's.
+    // Written, a phone opened after the prompt was changed on a computer would
+    // put its old prompt back on every device.
     if (payload.type === 'set_settings' && payload.settings && typeof payload.settings === 'object') {
       const s = payload.settings;
       settingsUser = userId;
