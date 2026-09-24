@@ -108,11 +108,20 @@ The reply is refined, the same as with one model. No key, a refused key, an acco
 
 ## Reading what it decided
 
-Every answer goes in the Log, each check with its percentage:
+**What Jev decided**, on the Log tab, shows the last reply Jev read. It is there while two models are on.
+
+- Whether the reply was refined or left alone, or why Jev could not decide.
+- Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
+- Which Jev answered, and what the answer cost.
+- **Clear** empties the card. It is kept only until you close the tab, like the Log.
+
+**Test** does not show this. It asks Jev one made-up question, with nothing from your chats in it, to check the key and the address.
+
+Every answer also goes in the Log as one line:
 
 ```
-Jev says leave it: reply repeats a word, a phrase or a sentence shape inside itself 12%; ...
-Jev says refine: ... uses stock phrases that turn up in many stories 71%; ...
+Jev (jev-1.13.0) says leave it: reply repeats a word, a phrase or a sentence shape inside itself 12%; ...
+Jev (jev-1.13.0) says refine: ... uses stock phrases that turn up in many stories 71%; ...
 ```
 
 A reply Jev left alone also says so where a refine that stood down would, with the highest percentage it gave. If Jev is letting through replies you would have refined, lower the line or add the check it is missing. If it refines replies that were fine, raise the line or drop the check that keeps firing.

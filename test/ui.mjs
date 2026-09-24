@@ -1737,6 +1737,57 @@ console.log("\none model or two");
   ok("no errors on the Jev card", errors.length === 0, errors.join("\n         "));
 }
 
+// ---- what Jev decided ----
+// The card on the Log tab that lays out Jev's last decision: one bar per check,
+// the ones that reached the line marked, and which Jev answered.
+console.log("\nwhat Jev decided");
+{
+  const card = (page) =>
+    page.evaluate(() => {
+      const c = document.querySelector("#drawer [data-arf-jevcard]");
+      if (!c) return null;
+      return {
+        text: c.textContent,
+        over: c.querySelectorAll('[data-arf-jevcheck="over"]').length,
+        under: c.querySelectorAll('[data-arf-jevcheck="under"]').length,
+        widths: Array.from(c.querySelectorAll(".arf-jevfill")).map((f) => f.style.width),
+      };
+    });
+  const one = await inTab(browser, { saved: { enabled: true, judgeMode: "one" } }, async (page) => {
+    await goTab(page, "Log");
+    ok("with one model there is no Jev card", (await card(page)) === null);
+  });
+  const errors = await inTab(browser, { saved: { enabled: true, judgeMode: "two" } }, async (page) => {
+    await goTab(page, "Log");
+    const empty = await card(page);
+    ok("with two models the card is there before Jev has read anything", !!empty && /Nothing yet/.test(empty.text), JSON.stringify(empty));
+    await page.evaluate(() =>
+      window.__fromBackend({
+        type: "judge_said",
+        chatId: "c1",
+        messageId: "m2",
+        refine: true,
+        failed: false,
+        why: "",
+        scores: [
+          { id: "check_1", check: "`reply` repeats itself.", pct: 72 },
+          { id: "check_2", check: "`reply` uses stock phrases.", pct: 18 },
+        ],
+        cost: 0.00002,
+        model: "jev-1.13.0",
+        over: 50,
+      }),
+    );
+    await settle(page);
+    const got = await card(page);
+    ok("after a decision it shows each check", !!got && /reply repeats itself/.test(got.text) && /reply uses stock phrases/.test(got.text), JSON.stringify(got));
+    ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
+    ok("each bar is as long as its score", !!got && got.widths.join() === "72%,18%", JSON.stringify(got));
+    ok("it names the Jev that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
+  });
+  ok("no errors on the Jev card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
+}
+
 // ---- folding the blocks ----
 // The bar over the list is one press for all of them, and the folds belong to
 // the preset the picker names. Presets saved from one another share block ids,

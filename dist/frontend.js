@@ -3140,6 +3140,10 @@ export function setup(ctx, overrides) {
     // before it, and a stop is exactly that.
     let liveNotes = "";
     let keptNotes = null;
+    // What Jev decided about the last reply it read, for the card on the Log
+    // tab. The Log line says the same in one line; the card lays each check out
+    // against the line, which is what somebody tuning the checks needs to see.
+    let jevLast = null;
     // The whole answer, when the message carries one. Every ending sends it, and
     // it is the better copy of what the stream was showing a trimmed tail of.
     //
@@ -3938,6 +3942,17 @@ export function setup(ctx, overrides) {
         ".arf-sbs-col{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:4px}" +
         ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-well.arf-tall{max-height:340px}" +
+        // A bar per Jev check, with a mark where the line is. The fill takes the
+        // accent where the check reached the line and the muted text colour where
+        // it did not, so the one that decided it stands out in any theme.
+        ".arf-jevbar{position:relative;height:6px;margin-top:4px;border-radius:3px;overflow:hidden;" +
+        "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+        ".arf-jevfill{display:block;height:100%;border-radius:3px;" +
+        "background:var(--lumiverse-text-muted,rgba(255,255,255,.65));opacity:.55}" +
+        ".arf-jevfill-hit{background:var(--lumiverse-primary,rgba(147,112,219,.9));opacity:1}" +
+        ".arf-jevline{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;" +
+        "background:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+        ".arf-jevhit{color:var(--lumiverse-text,rgba(255,255,255,.9));font-weight:600}" +
         ".arf-dot{flex:none;width:7px;height:7px;border-radius:50%;" +
         "background:var(--lumiverse-text-dim,rgba(255,255,255,.4))}" +
         ".arf-dot.arf-live{background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
@@ -5476,7 +5491,8 @@ export function setup(ctx, overrides) {
         if (id === "limits")
             return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
         if (id === "log") {
-            return [buildLiveCard(), buildNotesCard(), buildActivityCard(), buildDebugCard()];
+            const jev = cfg.judgeMode === "two" ? [buildJevCard()] : [];
+            return [buildLiveCard(), buildNotesCard(), ...jev, buildActivityCard(), buildDebugCard()];
         }
         return [
             buildPermsCard(),
@@ -8731,6 +8747,55 @@ export function setup(ctx, overrides) {
                 wrap.appendChild(r);
             }
         }
+        return wrap;
+    }
+    // Each check Jev answered about the last reply it read, as a bar against the
+    // line, so somebody tuning the checks can see which one decided it and by
+    // how much. Kept for the session only, like the Log.
+    function buildJevCard() {
+        const last = jevLast;
+        const wrap = card("What Jev decided", undefined, last ? (last.failed ? "could not decide" : last.refine ? "refined" : "left alone") : undefined);
+        wrap.setAttribute("data-arf-jevcard", "1");
+        if (!last) {
+            wrap.appendChild(note("Nothing yet. After Jev reads a reply, each check and its score is shown here."));
+            return wrap;
+        }
+        const when = new Date(last.at).toTimeString().slice(0, 8);
+        const who = "Jev" + (last.model ? " (" + last.model + ")" : "");
+        wrap.appendChild(note(last.failed
+            ? who + " could not decide at " + when + ": " + last.why + ". The reply was refined anyway."
+            : who + " read a reply at " + when + ". A check at " + last.over + "% or more means refine." +
+                (last.refine ? " At least one did, so the reply was refined." : " None did, so the reply was left alone.")));
+        for (const s of last.scores) {
+            const hit = s.pct >= last.over;
+            const row = el("div", "arf-col");
+            row.setAttribute("data-arf-jevcheck", hit ? "over" : "under");
+            const top = el("div", "arf-between");
+            top.appendChild(el("span", "arf-note arf-grow" + (hit ? " arf-jevhit" : ""), s.check));
+            top.appendChild(el("span", "arf-pill arf-mono", s.pct + "%"));
+            row.appendChild(top);
+            const bar = el("div", "arf-jevbar");
+            bar.setAttribute("role", "img");
+            bar.setAttribute("aria-label", s.pct + " percent" + (hit ? ", reached the line" : ""));
+            const fill = el("span", hit ? "arf-jevfill arf-jevfill-hit" : "arf-jevfill");
+            fill.style.width = s.pct + "%";
+            bar.appendChild(fill);
+            const line = el("span", "arf-jevline");
+            line.style.left = last.over + "%";
+            bar.appendChild(line);
+            row.appendChild(bar);
+            wrap.appendChild(row);
+        }
+        if (last.cost > 0)
+            wrap.appendChild(note("Cost " + last.cost.toFixed(6) + "."));
+        const rowB = el("div", "arf-row");
+        const clear = button("Clear", false);
+        clear.addEventListener("click", () => {
+            jevLast = null;
+            paint();
+        });
+        rowB.appendChild(clear);
+        wrap.appendChild(rowB);
         return wrap;
     }
     // What the model worked out on the way to the last refine that finished.
@@ -13026,6 +13091,19 @@ export function setup(ctx, overrides) {
                     // moved if Jev is letting too much through or too little.
                     if (msg.type === "judge_said") {
                         const list = Array.isArray(msg.scores) ? msg.scores : [];
+                        jevLast = {
+                            at: Date.now(),
+                            refine: !!msg.refine,
+                            failed: !!msg.failed,
+                            why: String(msg.why || ""),
+                            scores: list.slice(0, 30).map((x) => ({
+                                check: String(x.check || "").replace(/`/g, "").slice(0, 300),
+                                pct: Math.max(0, Math.min(100, Math.round(Number(x.pct) || 0))),
+                            })),
+                            over: Number(msg.over) || 50,
+                            model: String(msg.model || "").slice(0, 60),
+                            cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
+                        };
                         const each = list
                             .map((x) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
                             .join("; ");
