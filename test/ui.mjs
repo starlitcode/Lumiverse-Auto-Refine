@@ -108,7 +108,7 @@ const COMPOSER_HTML = readFileSync(join(root, "test", "input-area.html"), "utf8"
   .replace(/^<!--[\s\S]*?-->\s*/, "")
   .trim();
 
-async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, setups = null, noMenu = false, noConfirm = false } = {}, fn) {
+async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, setups = null, storage = null, noMenu = false, noConfirm = false } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
   );
@@ -149,6 +149,12 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
     await page.evaluate((list) => {
       localStorage.setItem("lv-auto-refine:setups:v1", JSON.stringify(list));
     }, setups);
+  }
+  // Anything else the panel reads on the way up, as key and text.
+  if (storage) {
+    await page.evaluate((all) => {
+      for (const k of Object.keys(all)) localStorage.setItem(k, all[k]);
+    }, storage);
   }
   await page.addScriptTag({ content: SOURCE, type: "module" });
   await page.waitForFunction(() => !!window.__setup);
@@ -1862,6 +1868,50 @@ console.log("\nwhat Jev decided");
     await settle(page);
     const cleared = await card(page);
     ok("Clear empties the card and the count", !!cleared && /Nothing yet/.test(cleared.text), JSON.stringify(cleared));
+
+    // The Test button's answer lands in the same card, marked as a test, with
+    // where it went. It is not a reply, so the count does not show it.
+    await page.evaluate(() => {
+      window.__fromBackend({
+        type: "jev_tested",
+        ok: true,
+        why: "",
+        model: "jev-1.13.0",
+        check: "The door in `text` is open.",
+        pct: 98,
+        over: 50,
+        cost: 0,
+        url: "https://jev.example.com/v1/chat/completions",
+        sent: "typesafe/jev-latest",
+        kind: "chat",
+      });
+    });
+    await closed(page);
+    const test = await page.evaluate(() => {
+      const c = document.querySelector("#drawer [data-arf-jevcard]");
+      return c
+        ? {
+            text: c.textContent,
+            mark: c.getAttribute("data-arf-jevtest"),
+            sent: (c.querySelector("[data-arf-jevsent]") || {}).textContent || "",
+            tally: !!c.querySelector("[data-arf-jevtally]"),
+            widths: Array.from(c.querySelectorAll(".arf-jevfill")).map((f) => f.style.width),
+          }
+        : null;
+    });
+    ok("a test shows in the card, marked as a test", !!test && test.mark === "ok" && /made-up question/.test(test.text) && /The door in text is open/.test(test.text) && test.widths.join() === "98%", JSON.stringify(test));
+    ok("it says where the test went, in which format, and the name sent", !!test && /jev\.example\.com\/v1\/chat\/completions/.test(test.sent) && /OpenAI chat request/.test(test.sent) && /typesafe\/jev-latest/.test(test.sent), JSON.stringify(test));
+    ok("it says when the host reported no cost", !!test && /reported no cost/.test(test.text), JSON.stringify(test));
+    ok("a test is not counted as a reply", !!test && !test.tally, JSON.stringify(test));
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "jev_tested", ok: false, why: "the host said the key is not valid", model: "", check: "", pct: null, over: 50, cost: 0, url: "https://jev.example.com/v1/decisions", sent: "jev-1.13.0", kind: "decisions" });
+    });
+    await closed(page);
+    const failed = await page.evaluate(() => {
+      const c = document.querySelector("#drawer [data-arf-jevcard]");
+      return { mark: c.getAttribute("data-arf-jevtest"), text: c.textContent, bars: c.querySelectorAll(".arf-jevbar").length };
+    });
+    ok("a failed test says why and where it went", failed.mark === "failed" && /key is not valid/.test(failed.text) && /jev\.example\.com\/v1\/decisions/.test(failed.text) && failed.bars === 0, JSON.stringify(failed));
   });
   ok("no errors on the Jev card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
 }
@@ -1938,6 +1988,30 @@ console.log("\nfolding the blocks");
     await settle(page);
     const other = await bar();
     ok("and the other keeps its own", other.shut === 0, JSON.stringify(other));
+
+    // A block starts closing on the first frame. A curve that eases in holds
+    // still for its first few frames and then jumps, which on a phone reads as
+    // the block sticking. Read off the curve the browser is running rather
+    // than timed, since a timed sample moves with the machine's frame rate.
+    const early = await page.evaluate(() => {
+      const atRest = (tf) => {
+        const first = String(tf || "").split(",")[0].trim();
+        const named = { ease: [0.25, 0.1], "ease-in": [0.42, 0], "ease-out": [0, 0], "ease-in-out": [0.42, 0], linear: [0, 0] };
+        const m = /^cubic-bezier\(([^,]+),([^,]+)/.exec(String(tf || "").replace(/\s/g, ""));
+        const p = m ? [Number(m[1]), Number(m[2])] : named[first];
+        // A first control point along the time axis with no rise is a curve
+        // that starts at a standstill.
+        return !p || (p[0] > 0 && p[1] === 0);
+      };
+      const block = document.querySelectorAll("#drawer .arf-block")[1];
+      const btn = block.querySelector(".arf-blockfold");
+      if (btn.getAttribute("aria-expanded") !== "true") btn.click();
+      const body = Array.from(block.children).find((c) => !c.classList.contains("arf-between"));
+      btn.click();
+      const st = getComputedStyle(body);
+      return { curve: st.transitionTimingFunction, moving: /[1-9]/.test(st.transitionDuration), rest: atRest(st.transitionTimingFunction) };
+    });
+    ok("a block starts closing straight away rather than sticking", early.moving && !early.rest, JSON.stringify(early));
   });
   ok("no errors folding blocks", errors.length === 0, errors.join("\n         "));
 }
@@ -3872,6 +3946,57 @@ console.log("\nthe three buttons agree about the home screen");
     const inChat = await state();
     ok("back in a chat it is live again", !inChat.draft.off, JSON.stringify(inChat.draft));
   });
+
+  // A page loaded on the home screen, which already knows where chat ids sit
+  // in the address from an earlier visit. A reply or a refine finishing in a
+  // chat that is not open, one walked out of or one in another tab, is still
+  // reported here, and it must not light the buttons.
+  const outside = [
+    ["a reply finishing", (p) => { for (const f of window.__handlers.GENERATION_ENDED || []) f(p); }],
+    ["a character message", (p) => { for (const f of window.__handlers.CHARACTER_MESSAGE_RENDERED || []) f(p); }],
+    ["a user message", (p) => { for (const f of window.__handlers.USER_MESSAGE_RENDERED || []) f(p); }],
+    ["a refine finishing", (p) => window.__fromBackend({ type: "refined", chatId: p.chatId, messageId: p.messageId, before: "a", after: "b" })],
+    // Taken at its word, since it is the host naming a chat. The address then
+    // says otherwise, and the address watch has to put it right on a page
+    // that was loaded on the home screen as well.
+    ["the host naming a chat", (p) => { for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: p.chatId }); }, true],
+  ];
+  for (const [what, send, believed] of outside) {
+    await inTab(
+      browser,
+      { saved: { inputRefine: true }, storage: { "lv-auto-refine:url-slot:v1": JSON.stringify({ at: 1, after: "chat" }) } },
+      async (page) => {
+        const state = () =>
+          page.evaluate(() => {
+            const off = (sel) => { const n = document.querySelector("#drawer " + sel); return n ? !!n.disabled : null; };
+            const d = document.querySelector('#drawer [data-arf-draft="1"]');
+            // Greyed for the right reason. A reply finishing also marks a
+            // refine as starting, and a busy panel greys the buttons too.
+            return { latest: off('[data-arf-now="1"]'), draft: off('[data-arf-draft="1"]'), noChat: /no chat/i.test((d && d.title) || "") };
+          });
+        await page.evaluate(() => {
+          const last = window.__sent.filter((m) => m.type === "active_chat").pop();
+          window.__fromBackend({ type: "active_chat", requestId: last && last.requestId, chatId: null, resolved: true, found: false });
+        });
+        await settle(page);
+        await page.evaluate("(" + send.toString() + ")({ chatId: 'elsewhere0001', messageId: 'm9' })");
+        // Drawn again, so the buttons show what the panel now believes. Not
+        // every event redraws on its own: a reply finishing with automatic
+        // refines off does not.
+        await page.evaluate(() => window.__fromBackend({ type: "connections", list: [{ id: "redraw", name: "Redraw" }] }));
+        await settle(page);
+        if (!believed) {
+          const now = await state();
+          ok("on the home screen, " + what + " in a chat that is not open leaves the buttons greyed", now.latest === true && now.draft === true && now.noChat, JSON.stringify(now));
+        }
+        // Past a tick of the address watch, which is what puts it right when
+        // the event was taken.
+        await page.waitForTimeout(900);
+        const got = await state();
+        ok("and a moment later they are still greyed, after " + what, got.latest === true && got.draft === true && got.noChat, JSON.stringify(got));
+      },
+    );
+  }
 }
 
 console.log("\nthe run through the chat");

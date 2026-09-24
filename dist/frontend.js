@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.15.0";
+const VERSION = "1.16.0";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -2852,6 +2852,14 @@ export function setup(ctx, overrides) {
             return null;
         return got;
     }
+    // Whether an event about a chat is about one somewhere else: the address is
+    // known to name chats, names none right now, and does not carry this id. A
+    // reply finishing in a chat you walked out of, or in another tab or device,
+    // is still reported here, and taking it as the chat you are in lit every
+    // button on the home screen.
+    function elsewhere(id) {
+        return id != null && urlSlot != null && idInUrl() == null && !urlHolds(id);
+    }
     // Whether the address in front of you names this chat. The slot is asked
     // first and the whole address second, so a build that has moved its ids
     // somewhere else is not called wrong for it while the slot catches up.
@@ -2901,7 +2909,10 @@ export function setup(ctx, overrides) {
                     return;
                 }
                 urlWas = now;
-                if (!urlNamesChats)
+                // A slot remembered from an earlier visit counts as well. Without it a
+                // page loaded on the home screen never learned that addresses name
+                // chats, and a chat id arriving there stayed until a chat was opened.
+                if (!urlNamesChats && urlSlot == null)
                     return;
                 leftTheChat();
                 // Moving from one chat straight into another looks the same from here
@@ -6712,17 +6723,16 @@ export function setup(ctx, overrides) {
             // Read the layout between the two, or the browser sees one value being set
             // and nothing to travel between.
             void node.offsetWidth;
-            // Out rather than in. Easing in puts the longest step at the end, so the
-            // panel travels gently and then stops dead, which is the part that reads
-            // as a jump; easing out spends the distance early and lands softly.
+            // Ease-out, so it moves on the first frame and lands softly. At 45 frames
+            // a second each frame takes 16%, 15%, 14% and so on of the travel, and no
+            // step is much bigger than the one before it.
             //
-            // The curve eases in a little as well as out. A pure ease-out spends its
-            // distance at the very start, so the first frame was the largest step of
-            // the whole travel; this leans into it over two or three frames and then
-            // has a long tail to land on. Longer than the panel's other movements
-            // because this one carries the page with it, and the same distance over
-            // more frames is a smaller step in each.
-            const ease = "240ms cubic-bezier(.4,0,.2,1)";
+            // A curve that also eases in holds still for its first few frames and
+            // then covers a quarter of the travel in one. On a phone that reads as
+            // the row sticking and then jumping shut. Longer than the panel's other
+            // movements because this one carries the page with it, and the same
+            // distance over more frames is a smaller step in each.
+            const ease = "220ms ease-out";
             node.style.transition =
                 "height " + ease + ",opacity " + ease + ",margin-bottom " + ease +
                     ",padding-top " + ease + ",padding-bottom " + ease +
@@ -8802,7 +8812,11 @@ export function setup(ctx, overrides) {
     // how much. Kept for the session only, like the Log.
     function buildJevCard() {
         const last = jevLast;
-        const wrap = card("What Jev decided", undefined, last ? (last.failed ? "could not decide" : last.refine ? "refined" : "left alone") : undefined);
+        const wrap = card("What Jev decided", undefined, last
+            ? last.test
+                ? last.failed ? "test failed" : "test"
+                : last.failed ? "could not decide" : last.refine ? "refined" : "left alone"
+            : undefined);
         wrap.setAttribute("data-arf-jevcard", "1");
         if (!last) {
             wrap.appendChild(note("Nothing yet. After Jev reads a reply, each check and its score is shown here."));
@@ -8810,10 +8824,31 @@ export function setup(ctx, overrides) {
         }
         const when = new Date(last.at).toTimeString().slice(0, 8);
         const who = "Jev" + (last.model ? " (" + last.model + ")" : "");
-        wrap.appendChild(note(last.failed
-            ? who + " could not decide at " + when + ": " + last.why + ". The reply was refined anyway."
-            : who + " read a reply at " + when + ". A check at " + last.over + "% or more means refine." +
-                (last.refine ? " At least one did, so the reply was refined." : " None did, so the reply was left alone.")));
+        if (last.test) {
+            wrap.setAttribute("data-arf-jevtest", last.failed ? "failed" : "ok");
+            wrap.appendChild(note(last.failed
+                ? "The test at " + when + " failed: " + last.why + "."
+                : who + " answered the test at " + when + ". The test is one made-up question, not a reply from your chat. The door is open, so a score near 100% is right."));
+            const kinds = {
+                decisions: "a decisions request",
+                chat: "an OpenAI chat request",
+                responses: "an OpenAI responses request",
+                messages: "a Claude messages request",
+            };
+            const asked = last.test;
+            if (asked.url) {
+                const sent = note("Sent to " + asked.url + " as " + (kinds[asked.kind] || "a request") + (asked.sent ? ", asking for " + asked.sent + "." : "."));
+                sent.setAttribute("data-arf-jevsent", "1");
+                sent.style.overflowWrap = "anywhere";
+                wrap.appendChild(sent);
+            }
+        }
+        else {
+            wrap.appendChild(note(last.failed
+                ? who + " could not decide at " + when + ": " + last.why + ". The reply was refined anyway."
+                : who + " read a reply at " + when + ". A check at " + last.over + "% or more means refine." +
+                    (last.refine ? " At least one did, so the reply was refined." : " None did, so the reply was left alone.")));
+        }
         for (const s of last.scores) {
             const hit = s.pct >= last.over;
             const row = el("div", "arf-col");
@@ -8836,13 +8871,18 @@ export function setup(ctx, overrides) {
         }
         if (last.cost > 0)
             wrap.appendChild(note("Cost " + last.cost.toFixed(6) + "."));
+        else if (last.test && !last.failed)
+            wrap.appendChild(note("The host reported no cost for it."));
         const t = jevTally;
         const sum = note("Since this page opened, Jev read " + t.read + (t.read === 1 ? " reply" : " replies") +
             " and left " + t.spared + " alone, so " + t.spared + (t.spared === 1 ? " refine was" : " refines were") + " not paid for." +
             (t.failed ? " It could not decide on " + t.failed + ", and those were refined." : "") +
             (t.cost > 0 ? " Jev cost " + t.cost.toFixed(6) + " in all." : ""));
         sum.setAttribute("data-arf-jevtally", "1");
-        wrap.appendChild(sum);
+        // Only once a real reply is counted. A test alone would read as nothing
+        // counted at all.
+        if (t.read > 0)
+            wrap.appendChild(sum);
         const rowB = el("div", "arf-row");
         const clear = button("Clear", false);
         clear.addEventListener("click", () => {
@@ -13100,13 +13140,13 @@ export function setup(ctx, overrides) {
                 paint();
             }),
             ctx.events.on("CHARACTER_MESSAGE_RENDERED", (p) => {
-                if (!p)
+                if (!p || elsewhere(p.chatId))
                     return;
                 sawChat(p.chatId, p.messageId);
                 paint();
             }),
             ctx.events.on("USER_MESSAGE_RENDERED", (p) => {
-                if (!p)
+                if (!p || elsewhere(p.chatId))
                     return;
                 sawChat(p.chatId);
                 paint();
@@ -13114,7 +13154,8 @@ export function setup(ctx, overrides) {
             ctx.events.on("GENERATION_ENDED", (p) => {
                 if (!p)
                     return;
-                sawChat(p.chatId, p.messageId);
+                if (!elsewhere(p.chatId))
+                    sawChat(p.chatId, p.messageId);
                 if (cfg.enabled && cfg.refineOn && !p.error && !chatIsOff(p.chatId)) {
                     markBusy(true);
                     paint();
@@ -13198,9 +13239,28 @@ export function setup(ctx, overrides) {
                     if (msg.type === "jev_tested") {
                         if (msg.requestId && msg.requestId !== jevAsk)
                             return;
+                        const pct = msg.pct == null ? NaN : Number(msg.pct);
+                        jevLast = {
+                            at: Date.now(),
+                            refine: false,
+                            failed: !msg.ok,
+                            why: String(msg.why || "no reason given"),
+                            scores: Number.isFinite(pct)
+                                ? [{ check: String(msg.check || "").replace(/`/g, "").slice(0, 300), pct: Math.max(0, Math.min(100, Math.round(pct))) }]
+                                : [],
+                            over: Number(msg.over) || 50,
+                            model: String(msg.model || "").slice(0, 60),
+                            cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
+                            test: {
+                                url: String(msg.url || "").slice(0, 300),
+                                sent: String(msg.sent || "").slice(0, 200),
+                                kind: String(msg.kind || ""),
+                            },
+                        };
                         jevSaid = msg.ok
-                            ? "Jev" + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") + " answered. The key works."
-                            : "Jev did not answer: " + String(msg.why || "no reason given") + ".";
+                            ? "Jev" + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
+                                " answered. The key works. The Log tab shows the test under What Jev decided."
+                            : "Jev did not answer: " + String(msg.why || "no reason given") + ". The Log tab shows where the test was sent.";
                         log(msg.ok ? "Jev answered a test question" : "Jev test failed: " + String(msg.why || ""), true);
                         paint();
                         return;
@@ -13400,10 +13460,12 @@ export function setup(ctx, overrides) {
                             tally.saved++;
                             lastRun = { ms: lastRunMs, ok: true, why: "" };
                         }
-                        // A refine only happens in the chat the reader is in, so this is
-                        // also the chat. Adopted when nothing else has said so yet, or the
-                        // panel would hold a refine it could not show anybody.
-                        if (msg.chatId != null && lastChatId == null)
+                        // A refine is usually in the chat the reader is in, so this is
+                        // taken as the chat when nothing else has said so yet, or the
+                        // panel would hold a refine it could not show anybody. Not while
+                        // the address shows no chat: then the refine finished somewhere
+                        // else, such as another tab.
+                        if (msg.chatId != null && lastChatId == null && !elsewhere(msg.chatId))
                             lastChatId = msg.chatId;
                         if (msg.chatId != null && msg.canUndo) {
                             const k = undoKey(msg.chatId, msg.messageId);

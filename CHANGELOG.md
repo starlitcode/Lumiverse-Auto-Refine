@@ -6,6 +6,26 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.16.0
+
+_2026-09-24_
+
+### Added
+
+- **Test shows its answer in What Jev decided**, on the Log tab, marked as a test. See [Reading a test](docs/jev.md#reading-a-test).
+  - The score for the test question, and which Jev answered.
+  - The address the test went to, the format it was sent in, and the model name it asked for.
+  - What the host said the test cost, or that it reported no cost.
+  - If the test failed, why, and where it was sent.
+  - A test is not counted as a reply Jev read.
+
+### Fixed
+
+- **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay greyed out until a chat is open.
+- **A block closing on the Prompt tab stuck and then jumped shut.** It now starts moving straight away, the same way it opens. The same goes for every row that closes in the panel.
+
+---
+
 ## 1.15.0
 
 _2026-09-23_

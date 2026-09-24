@@ -918,6 +918,30 @@ describe("two models: Jev reads the reply first", () => {
     expect(done.ok).toBe(true);
   });
 
+  test("Test tells the panel its score, cost, and where it went, but never the key", async () => {
+    const h = await keyed({ judgeOver: 60 }, { jev: says([97]) });
+    await h.front({ type: "jev_test", requestId: "t" });
+    const done = h.sent.find((m: any) => m.type === "jev_tested");
+    expect(done.pct).toBe(97);
+    expect(done.over).toBe(60);
+    expect(done.cost).toBe(0.00002);
+    expect(done.model).toBe("jev-1.13.0");
+    expect(done.url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(done.sent).toBe("~typesafe/jev-latest");
+    expect(done.kind).toBe("decisions");
+    expect(done.check).toMatch(/door/);
+    expect(JSON.stringify(done)).not.toContain("sk-made-up-key");
+  });
+
+  test("a test answered with a score outside 0 to 1 fails, like a real reply would", async () => {
+    const h = await keyed({}, { jev: says([140]) });
+    await h.front({ type: "jev_test", requestId: "t" });
+    const done = h.sent.find((m: any) => m.type === "jev_tested");
+    expect(done.ok).toBe(false);
+    expect(done.pct).toBe(null);
+    expect(done.why).toMatch(/not with a usable score/);
+  });
+
   test("worn phrases are asked about when they are on", async () => {
     const worn: Msg[] = [
       { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },

@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4660,14 +4660,26 @@ async function onPanel(payload, userId) {
         // One small question with nothing from any chat in it, so a key can be
         // checked before a reply depends on it.
         if (payload.type === 'jev_test') {
-            const got = await askJev(userId, { text: 'The door is open.' }, { open: { type: NOUL, instructions: 'The door in `text` is open.' } });
+            const check = 'The door in `text` is open.';
+            const got = await askJev(userId, { text: 'The door is open.' }, { open: { type: NOUL, instructions: check } });
             const v = got.answers && got.answers.open && got.answers.open.noul;
+            const scored = typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+            // Where the test went and in which format, so a failed test on another
+            // address can be read against what was sent. Never the key.
+            const where = jevWhere();
             replyTo(userId, {
                 type: 'jev_tested',
                 requestId: payload.requestId,
-                ok: !got.error && typeof v === 'number',
-                why: got.error || (typeof v === 'number' ? '' : 'Jev answered, but not with a usable score'),
+                ok: !got.error && scored,
+                why: got.error || (scored ? '' : 'Jev answered, but not with a usable score'),
                 model: got.model || '',
+                check: check,
+                pct: scored ? Math.round(v * 100) : null,
+                over: judgeOver,
+                cost: got.cost || 0,
+                url: where.url,
+                sent: where.model,
+                kind: where.kind,
             });
             return;
         }
