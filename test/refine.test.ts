@@ -675,7 +675,8 @@ describe("two models: Jev reads the reply first", () => {
     ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
     ["typesafe", "latest", "", "https://api.typesafe.ai/v1/systemone", "jev-latest"],
     ["typesafe", "exact", "", "https://api.typesafe.ai/v1/systemone", "jev-1.13.0"],
-    ["nanogpt", "latest", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-1.13"],
+    ["nanogpt", "latest", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-latest"],
+    ["nanogpt", "exact", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-1.13"],
     ["nanogpt", "own", "typesafe/jev-renamed", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-renamed"],
     ["openrouter", "own", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
   ]) {
@@ -777,6 +778,44 @@ describe("two models: Jev reads the reply first", () => {
     expect(said(h)[0].failed).toBe(false);
     expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 20]);
   });
+
+  // A responses address: the state is the input, the questions go in
+  // text.format, and the answers come back as JSON in output_text, or in the
+  // output message when a host leaves output_text out.
+  const RESPONSES = { judgeHost: "custom", judgeUrl: "https://router.example.test/v1/responses", judgeModel: "typesafe/jev-latest" };
+  const responsesSay = (pcts: number[], withOutputText: boolean) => (_url: string, init: any) => {
+    const b = JSON.parse(init.body);
+    const answers: any = {};
+    Object.keys(b.text.format.questions).forEach((id, i) => {
+      answers[id] = { type: "noul", noul: (pcts[i] ?? pcts[pcts.length - 1]) / 100 };
+    });
+    const text = JSON.stringify(answers);
+    const out: any = { model: b.model, output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: text }] }] };
+    if (withOutputText) out.output_text = text;
+    return { status: 200, body: JSON.stringify(out) };
+  };
+
+  test("a responses address is sent a responses request", async () => {
+    const h = await keyed(RESPONSES, { jev: responsesSay([10], true) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const body = h.jevCalls[0].body;
+    expect(body.input).toBe(JSON.stringify({ reply: REPLY }));
+    expect(body.text.format.type).toBe("questions");
+    expect(Object.keys(body.text.format.questions)).toEqual(["check_1", "check_2"]);
+    expect(body.stream).toBe(false);
+    expect(body.messages).toBeUndefined();
+  });
+
+  for (const withOutputText of [true, false]) {
+    test("its answers are read " + (withOutputText ? "from output_text" : "from the output message"), async () => {
+      const h = await keyed(RESPONSES, { jev: responsesSay([10, 20], withOutputText) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(said(h)[0].failed).toBe(false);
+      expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 20]);
+    });
+  }
 
   test("the key goes in x-api-key only for a messages address", async () => {
     const h = await keyed(CHAT, { jev: chatSays([10]) });

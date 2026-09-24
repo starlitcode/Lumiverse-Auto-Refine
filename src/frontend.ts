@@ -1889,7 +1889,7 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeHost", is: "custom" },
     under: true,
     placeholder: "https://jev.example.com/v1/decisions",
-    hint: "Any host that serves Jev. Paste its full Jev address, ending in /decisions, /systemone, /chat/completions or /messages, not only the base.",
+    hint: "Any host that serves Jev. Paste its full Jev address, not only the base. It ends in something like /decisions, /chat/completions or /messages.",
   },
   {
     key: "judgeModel",

@@ -30,9 +30,9 @@ The name each host is sent:
 | --- | --- | --- |
 | OpenRouter | `~typesafe/jev-latest` | `typesafe/jev-1.13` |
 | TypeSafe | `jev-latest` | `jev-1.13.0` |
-| NanoGPT | `typesafe/jev-1.13` | `typesafe/jev-1.13` |
+| NanoGPT | `typesafe/jev-latest` | `typesafe/jev-1.13` |
 
-NanoGPT has not published a name for the latest Jev, so both choices send Jev 1.13 there. If NanoGPT names one, pick **A name I type** and type it.
+If a host renames Jev, pick **A name I type** and type the new name.
 
 **Another address** does not use **Which Jev**. It has its own **Model name** box.
 
@@ -43,22 +43,26 @@ Pick **Another address** for any host not in the list. Fill in two boxes:
 1. **Address**: your host's full address for Jev. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
 2. **Model name**: what your host calls Jev, spelled the way its docs spell it.
 
-Hosts take Jev in one of three ways, and the end of the address decides which:
+Hosts take Jev in one of four ways, and the end of the address decides which:
 
 - **Ending in `/chat/completions`**: the OpenAI chat format. The reply goes as the text of one user message, and the checks go with it.
-- **Ending in `/messages`**: the Claude format. The same, laid out the way Claude-style hosts expect, with the key sent in the header those hosts read.
-- **Any other ending**: a decisions request, the same kind OpenRouter and TypeSafe take.
+- **Ending in `/responses`**: the OpenAI responses format. The same, laid out the way that format expects.
+- **Ending in `/messages`**: the Claude format. The same again, with the key also sent in the header Claude-style hosts read.
+- **Any other ending**: a decisions request, the same kind OpenRouter, NanoGPT and TypeSafe take.
 
 Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13` or `~typesafe/jev-latest` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13` or `typesafe/jev-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Requesty, OpenAI format | `https://router.requesty.ai/v1/chat/completions` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
 | Requesty, Claude format | `https://router.requesty.ai/v1/messages` | `typesafe/jev-1.13.0` or `typesafe/jev-latest` |
 
-OpenRouter and TypeSafe are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether Jev answered, and which Jev.
+NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
+
+OpenRouter, NanoGPT and TypeSafe are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether Jev answered, and which Jev.
 
 Every answer says which exact Jev gave it. The Log shows it next to each decision, for example "Jev (jev-1.13.0) says leave it".
 

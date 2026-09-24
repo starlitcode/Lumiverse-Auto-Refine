@@ -3549,15 +3549,30 @@ onSwipe) {
 }
 const JEV_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', kind: 'decisions' },
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', latest: 'typesafe/jev-latest', kind: 'decisions' },
     typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', kind: 'decisions' },
 };
+// The text of a responses API reply when it has no `output_text` of its own:
+// the first output_text part of the first message in `output`.
+function jevOutputText(output) {
+    if (!Array.isArray(output))
+        return undefined;
+    for (const item of output) {
+        const parts = item && Array.isArray(item.content) ? item.content : [];
+        for (const part of parts)
+            if (part && part.type === 'output_text' && typeof part.text === 'string')
+                return part.text;
+    }
+    return undefined;
+}
 // Another address is sent the kind of request its path names, and a
 // decisions request otherwise, so pasting the host's own address is all it
 // takes.
 function jevKindOf(url) {
     if (/\/chat\/completions\/?(\?.*)?$/i.test(url))
         return 'chat';
+    if (/\/responses\/?(\?.*)?$/i.test(url))
+        return 'responses';
     if (/\/messages\/?(\?.*)?$/i.test(url))
         return 'messages';
     return 'decisions';
@@ -3632,15 +3647,18 @@ async function askJev(userId, state, questions) {
         return { error: 'no Jev key is saved' };
     if (typeof spindle.cors !== 'function')
         return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
-    // A chat or messages request carries the state as the text of one user
-    // message. It goes as JSON, so the names the checks use, such as `reply`,
-    // are still in it.
-    const asText = [{ role: 'user', content: JSON.stringify(state) }];
+    // A chat API request carries the state as text. It goes as JSON, so the
+    // names the checks use, such as `reply`, are still in it.
+    const stateText = JSON.stringify(state);
+    const asked = { type: QUESTIONS_FORMAT, questions: questions };
+    const asText = [{ role: 'user', content: stateText }];
     const body = JSON.stringify(where.kind === 'chat'
-        ? { model: where.model, messages: asText, response_format: { type: QUESTIONS_FORMAT, questions: questions }, stream: false }
-        : where.kind === 'messages'
-            ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: { type: QUESTIONS_FORMAT, questions: questions } } }
-            : { model: where.model, state: state, questions: questions });
+        ? { model: where.model, messages: asText, response_format: asked, stream: false }
+        : where.kind === 'responses'
+            ? { model: where.model, input: stateText, text: { format: asked }, stream: false, store: false }
+            : where.kind === 'messages'
+                ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: asked }, stream: false }
+                : { model: where.model, state: state, questions: questions });
     // Claude-style hosts read the key from x-api-key and want a version header.
     // Both go only to the address the user picked, the same as the bearer key.
     const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
@@ -3683,12 +3701,17 @@ async function askJev(userId, state, questions) {
         return { error: 'the Jev account has no credit left' };
     if (res.status < 200 || res.status >= 300 || saidText)
         return { error: 'Jev answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
-    // A chat or messages answer is JSON written as the text of the reply: in the
-    // assistant message for chat, in the first text block for messages.
+    // A chat API answer is JSON written as the text of the reply: the assistant
+    // message for chat completions, `output_text` or the output message for
+    // responses, the first text block for messages.
     if (where.kind !== 'decisions' && data && !data.answers) {
         const text = where.kind === 'chat'
             ? data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-            : Array.isArray(data.content) && (data.content.find((b) => b && b.type === 'text') || {}).text;
+            : where.kind === 'responses'
+                ? typeof data.output_text === 'string'
+                    ? data.output_text
+                    : jevOutputText(data.output)
+                : Array.isArray(data.content) && (data.content.find((b) => b && b.type === 'text') || {}).text;
         try {
             const parsed = typeof text === 'string' ? JSON.parse(text) : null;
             if (parsed && typeof parsed === 'object')
