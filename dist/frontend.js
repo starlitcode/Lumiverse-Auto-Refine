@@ -1756,7 +1756,7 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeHost", is: "custom" },
         under: true,
         placeholder: "https://jev.example.com/v1/decisions",
-        hint: "Your host's full address for Jev. The Jev page in the docs lists the ones known to work.",
+        hint: "Any host that serves Jev. Paste its full Jev address, ending in /decisions, /systemone or /chat/completions, not only the base.",
     },
     {
         key: "judgeModel",

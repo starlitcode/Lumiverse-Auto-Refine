@@ -40,7 +40,7 @@ NanoGPT has not published a name for the latest Jev, so both choices send Jev 1.
 
 Pick **Another address** for any host not in the list. Fill in two boxes:
 
-1. **Address**: your host's full address for Jev.
+1. **Address**: your host's full address for Jev. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
 2. **Model name**: what your host calls Jev, spelled the way its docs spell it.
 
 Hosts take Jev in one of two ways, and the address decides which:
