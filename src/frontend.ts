@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.16.0";
+const VERSION = "1.16.1";
 
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
@@ -396,7 +396,7 @@ const CONFIG = {
   wornLeast: 3,
   // One phrase per line, left alone. A repeated line can be the point.
   wornFine: [] as string[],
-  // One pass or several. One is what every refine did before this existed.
+  // One pass or several. One is a single model call per refine.
   passMode: "one",
   // One saved preset name per line, run top to bottom, each pass handed what the
   // one before it wrote. Names rather than copies of the blocks, so editing a
@@ -2056,7 +2056,7 @@ const LIMIT_FIELDS: Field[] = [
       { value: "one", label: "One pass" },
       { value: "many", label: "Several passes, one after another" },
     ],
-    hint: "One by default, which is one model call per refine. Several walks a list of your saved presets in order, each pass handed what the one before it wrote. Two cheap passes often beat one expensive one, and it costs one call per pass.",
+    hint: "One by default, which is one model call per refine. Several runs your saved presets in order, each pass given what the one before it wrote, at one call per pass.",
   },
   {
     key: "passNames",

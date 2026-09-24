@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.16.0';
+const VERSION = '1.16.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -425,8 +425,7 @@ function unwrapOutput(answer: string): { text: string; tagged: boolean; outside:
 // prose, the other is tidying your own without turning it into the narrator's.
 // One prompt doing both ends up hedged enough to do neither well.
 //
-// Empty means you have not written one, and the reply prompt is used instead,
-// which is what it did before this existed.
+// Empty means you have not written one, and the reply prompt is used instead.
 let userBlocks: Block[] = [];
 
 // The blocks as they will actually be sent. There is one prompt and the panel

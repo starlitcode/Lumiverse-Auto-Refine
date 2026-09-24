@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.16.1
+
+_2026-09-24_
+
+### Fixed
+
+- **The hint under How many passes a refine makes** no longer says that two cheap passes often beat one expensive one. That was never measured. It now says what the setting does and what it costs.
+
+---
+
 ## 1.16.0
 
 _2026-09-24_
