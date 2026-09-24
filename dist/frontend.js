@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.16.0";
+const VERSION = "1.16.1";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -399,7 +399,7 @@ const CONFIG = {
     wornLeast: 3,
     // One phrase per line, left alone. A repeated line can be the point.
     wornFine: [],
-    // One pass or several. One is what every refine did before this existed.
+    // One pass or several. One is a single model call per refine.
     passMode: "one",
     // One saved preset name per line, run top to bottom, each pass handed what the
     // one before it wrote. Names rather than copies of the blocks, so editing a
@@ -1916,7 +1916,7 @@ const LIMIT_FIELDS = [
             { value: "one", label: "One pass" },
             { value: "many", label: "Several passes, one after another" },
         ],
-        hint: "One by default, which is one model call per refine. Several walks a list of your saved presets in order, each pass handed what the one before it wrote. Two cheap passes often beat one expensive one, and it costs one call per pass.",
+        hint: "One by default, which is one model call per refine. Several runs your saved presets in order, each pass given what the one before it wrote, at one call per pass.",
     },
     {
         key: "passNames",
@@ -2710,9 +2710,10 @@ export function setup(ctx, overrides) {
     // whenever the backend announces itself.
     //
     // Held there, never written to the account. What this has at these moments
-    // is this browser's copy, which can be older than the account's: a phone
-    // opened after the prompt was changed on a computer wrote its old prompt
-    // over the new one. The account copy is asked for straight after, and wins.
+    // is this browser's copy, which can be older than the account's, and a phone
+    // opened after the prompt was changed on a computer would write its old
+    // prompt over the new one. The account copy is asked for straight after, and
+    // wins.
     function armBackend() {
         send({ type: "set_settings", settings: forBackend(), keep: true });
         send({ type: "set_chats_off", chats: chatsOff.slice() });
@@ -2897,8 +2898,8 @@ export function setup(ctx, overrides) {
     // Whether an event about a chat is about one somewhere else: the address is
     // known to name chats, names none right now, and does not carry this id. A
     // reply finishing in a chat you walked out of, or in another tab or device,
-    // is still reported here, and taking it as the chat you are in lit every
-    // button on the home screen.
+    // is still reported here, and taking it as the chat you are in would light
+    // every button on the home screen.
     function elsewhere(id) {
         return id != null && urlSlot != null && idInUrl() == null && !urlHolds(id);
     }
