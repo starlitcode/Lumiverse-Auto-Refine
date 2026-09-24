@@ -1989,29 +1989,21 @@ console.log("\nfolding the blocks");
     const other = await bar();
     ok("and the other keeps its own", other.shut === 0, JSON.stringify(other));
 
-    // A block starts closing on the first frame. A curve that eases in holds
-    // still for its first few frames and then jumps, which on a phone reads as
-    // the block sticking. Read off the curve the browser is running rather
-    // than timed, since a timed sample moves with the machine's frame rate.
-    const early = await page.evaluate(() => {
-      const atRest = (tf) => {
-        const first = String(tf || "").split(",")[0].trim();
-        const named = { ease: [0.25, 0.1], "ease-in": [0.42, 0], "ease-out": [0, 0], "ease-in-out": [0.42, 0], linear: [0, 0] };
-        const m = /^cubic-bezier\(([^,]+),([^,]+)/.exec(String(tf || "").replace(/\s/g, ""));
-        const p = m ? [Number(m[1]), Number(m[2])] : named[first];
-        // A first control point along the time axis with no rise is a curve
-        // that starts at a standstill.
-        return !p || (p[0] > 0 && p[1] === 0);
-      };
+    // Folding a block is one step each way, with no animation.
+    const fold = await page.evaluate(async () => {
       const block = document.querySelectorAll("#drawer .arf-block")[1];
       const btn = block.querySelector(".arf-blockfold");
-      if (btn.getAttribute("aria-expanded") !== "true") btn.click();
       const body = Array.from(block.children).find((c) => !c.classList.contains("arf-between"));
+      if (btn.getAttribute("aria-expanded") !== "true") btn.click();
+      const look = () => ({ hidden: body.hidden, height: body.style.height, moving: /[1-9]/.test(getComputedStyle(body).transitionDuration) });
       btn.click();
-      const st = getComputedStyle(body);
-      return { curve: st.transitionTimingFunction, moving: /[1-9]/.test(st.transitionDuration), rest: atRest(st.transitionTimingFunction) };
+      const shut = look();
+      btn.click();
+      const open = look();
+      return { shut, open };
     });
-    ok("a block starts closing straight away rather than sticking", early.moving && !early.rest, JSON.stringify(early));
+    ok("a block folds at once, with no animation", fold.shut.hidden && !fold.shut.height && !fold.shut.moving, JSON.stringify(fold.shut));
+    ok("and opens at once, with no animation", !fold.open.hidden && !fold.open.height && !fold.open.moving, JSON.stringify(fold.open));
   });
   ok("no errors folding blocks", errors.length === 0, errors.join("\n         "));
 }
@@ -6216,10 +6208,25 @@ console.log("\nnothing is thrown away on one tap");
       said[0] && said[0].message.length > 20, said[0] && said[0].message);
     ok("saying no keeps the block", (await blocks(page)) === had, { had: had });
 
-    await page.evaluate(() => {
+    const closing = await page.evaluate(async () => {
       window.__confirmSay = true;
-      document.querySelector('#drawer [data-arf-block] [aria-label^="Delete"]').click();
+      const block = document.querySelector("#drawer [data-arf-block]");
+      block.querySelector('[aria-label^="Delete"]').click();
+      // The answer comes back from the dialog a moment later.
+      await new Promise((r) => setTimeout(r, 0));
+      const tf = getComputedStyle(block).transitionTimingFunction;
+      const first = String(tf || "").split(",")[0].trim();
+      const named = { ease: [0.25, 0.1], "ease-in": [0.42, 0], "ease-out": [0, 0], "ease-in-out": [0.42, 0], linear: [0, 0] };
+      const m = /^cubic-bezier\(([^,]+),([^,]+)/.exec(String(tf || "").replace(/\s/g, ""));
+      const p = m ? [Number(m[1]), Number(m[2])] : named[first];
+      // A first control point along the time axis with no rise is a curve
+      // that starts at a standstill.
+      return { curve: tf, moving: /[1-9]/.test(getComputedStyle(block).transitionDuration), rest: !p || (p[0] > 0 && p[1] === 0) };
     });
+    // Its space closes over a few frames, and starts on the first one. A
+    // curve that eases in holds still and then jumps, which on a phone reads
+    // as the block sticking.
+    ok("a deleted block's space closes, starting straight away", closing.moving && !closing.rest, JSON.stringify(closing));
     // The block's space is let down before it goes, so this is past that.
     await page.waitForTimeout(400);
     await settle(page);

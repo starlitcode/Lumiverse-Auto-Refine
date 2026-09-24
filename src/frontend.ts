@@ -7934,20 +7934,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       fold2.setAttribute("aria-label", (now ? "Open " : "Close ") + blockLabel(b));
       // Where it stands, rather than through a rebuild. The card holds every
       // box of prompt on the tab and tearing it down to hide one block is the
-      // heaviest thing a press here could ask for.
-      if (now) {
-        foldAway(rest, () => {
-          // Unless it was opened again while it was closing.
-          if (!isShut(b)) return;
-          rest.hidden = true;
-        });
-      } else {
-        rest.hidden = false;
-        // A close still running is dropped rather than waited out, or the body
-        // would sit at no height until a travel it no longer needs finishes.
-        clearFold(rest);
-        growIn(rest);
-      }
+      // heaviest thing a press here could ask for. Shown or hidden in one step,
+      // with no animation.
+      rest.hidden = now;
     });
     left.appendChild(fold2);
 

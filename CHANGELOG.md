@@ -22,7 +22,11 @@ _2026-09-24_
 ### Fixed
 
 - **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay greyed out until a chat is open.
-- **A block closing on the Prompt tab stuck and then jumped shut.** It now starts moving straight away, the same way it opens. The same goes for every row that closes in the panel.
+- **A deleted block stuck and then jumped shut.** The space it leaves now starts closing straight away. The same goes for every row that closes when a switch turns it off.
+
+### Changed
+
+- **Folding a block on the Prompt tab has no animation.** A block opens and closes at once. Deleting a block still closes its space over a moment.
 
 ---
 
