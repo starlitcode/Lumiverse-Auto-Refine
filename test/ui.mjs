@@ -1416,6 +1416,73 @@ console.log("\nloading a preset and the Model tab");
   ok("no errors loading a preset", errors.length === 0, errors.join("\n         "));
 }
 
+// ---- loading a preset changes only the list you are on ----
+// A preset of your own holds both prompts as they were when it was saved.
+// Picking it on For replies must leave the prompt for your own messages as it
+// is now, or an old one comes back every time the preset is picked.
+console.log("\na preset loads into the list you are on");
+{
+  const block = (id, text) => ({ id: id, on: true, role: "system", name: id, text: text });
+  const errors = await inTab(
+    browser,
+    {
+      saved: {
+        blocks: [block("r1", "Reply prompt now. {{message}}")],
+        userBlocks: [block("u1", "My own prompt, the new one. {{message}}")],
+      },
+      presets: [
+        {
+          name: "Mine",
+          at: 1,
+          settings: {
+            blocks: [block("r1", "Reply prompt from the preset. {{message}}")],
+            userBlocks: [block("u1", "My own prompt, the old one. {{message}}")],
+          },
+        },
+      ],
+    },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const lists = () =>
+        page.evaluate(() => {
+          const s = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}");
+          const text = (l) => (Array.isArray(l) ? l.map((b) => b.text).join(" | ") : "");
+          return { replies: text(s.blocks), mine: text(s.userBlocks), undo: !!document.querySelector('#drawer [data-arf-preset="undo"]') };
+        });
+      const pickIt = (name) =>
+        page.evaluate((n) => {
+          const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
+          sel.value = n;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        }, name);
+      const onList = (w) => page.evaluate((w) => document.querySelector('#drawer [data-arf-editing="' + w + '"]').click(), w);
+
+      await onList("blocks");
+      await settle(page);
+      await pickIt("Mine");
+      await settle(page);
+      const fromReplies = await lists();
+      ok("picking a preset on For replies loads its reply prompt", /from the preset/.test(fromReplies.replies), JSON.stringify(fromReplies));
+      ok("and leaves the prompt for your own messages as it is now", /the new one/.test(fromReplies.mine) && !/the old one/.test(fromReplies.mine), JSON.stringify(fromReplies));
+      ok("Put it back is offered on the list the load changed", fromReplies.undo, JSON.stringify(fromReplies));
+
+      await onList("userBlocks");
+      await settle(page);
+      const other = await lists();
+      ok("and not on the other list, where it would name the wrong prompt", !other.undo, JSON.stringify(other));
+
+      await onList("blocks");
+      await settle(page);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-preset="undo"]').click());
+      await settle(page);
+      const back = await lists();
+      ok("Put it back restores the reply prompt and still leaves your own alone",
+        /Reply prompt now/.test(back.replies) && /the new one/.test(back.mine), JSON.stringify(back));
+    },
+  );
+  ok("no errors loading a preset into one list", errors.length === 0, errors.join("\n         "));
+}
+
 // ---- renaming a preset ----
 // Two presets under one name cannot be told apart in the picker, and a rename
 // to the name it already has is not a rename. Both are refused out loud.

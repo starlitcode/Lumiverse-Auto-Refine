@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.16.1";
+const VERSION = "1.16.2";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -10652,13 +10652,19 @@ export function setup(ctx, overrides) {
         }
         return out;
     }
-    function applyPreset(p) {
+    // list is the prompt the load is for. A preset of yours holds both prompts,
+    // as they were when it was saved, and only the one for the list it is loaded
+    // into is taken. Taking both would put the other list back to how it stood
+    // on the day the preset was saved, over whatever it holds now.
+    function applyPreset(p, list = editing) {
         let took = 0;
         for (const k of PRESET_KEYS) {
             if (!(k in p.settings))
                 continue;
             const got = p.settings[k];
             if (k === "blocks" || k === "userBlocks") {
+                if (k !== list)
+                    continue;
                 if (!Array.isArray(got))
                     continue;
                 cfg[k] = got
@@ -10717,8 +10723,9 @@ export function setup(ctx, overrides) {
             settings: presetFromNow(),
             setup: setupFromNow(),
             pick: wasPick === undefined ? currentPick() : wasPick,
+            list: editing,
         };
-        const took = applyPreset(p);
+        const took = applyPreset(p, editing);
         // Taking one of the eight marks them as seen. Changing them later is then
         // worth a line, and changing them for somebody who has never touched one
         // is not.
@@ -10765,7 +10772,7 @@ export function setup(ctx, overrides) {
         return allPresets().find((p) => p.name === currentPick()) || null;
     }
     function buildPresetCard() {
-        const wrap = card("Presets", "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Nothing from the Model tab is in it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
+        const wrap = card("Presets", "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Loading one changes only the prompt for the list you are on. Nothing from the Model tab is in it.", presets.length ? presets.length + " yours" : BUILT_IN.length + " built in");
         const sel = document.createElement("select");
         sel.className = "arf-field";
         sel.setAttribute("aria-label", "Saved presets");
@@ -10976,7 +10983,7 @@ export function setup(ctx, overrides) {
             const back = presetUndo;
             if (!back)
                 return;
-            applyPreset({ name: "", at: 0, settings: back.settings });
+            applyPreset({ name: "", at: 0, settings: back.settings }, back.list);
             applySetup({ name: "", at: 0, settings: back.setup });
             // The picker goes back with it. Leaving it on the preset that was just
             // undone is the same mismatch this whole change is here to stop.
@@ -11088,7 +11095,9 @@ export function setup(ctx, overrides) {
                 paint();
             });
         });
-        if (presetUndo)
+        // Only on the list the load changed. The picker it puts back belongs to
+        // that list, and from the other one it would name the wrong prompt.
+        if (presetUndo && presetUndo.list === editing)
             row.appendChild(putBack);
         row.appendChild(load);
         row.appendChild(asNew);

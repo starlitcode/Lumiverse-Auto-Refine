@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.16.2
+
+_2026-09-24_
+
+### Fixed
+
+- **Picking one of your own presets brought back an old prompt for your messages.** A preset you save holds both prompts, as they were on the day you saved it, and loading it put both back. So picking it under **For replies** also replaced your current prompt for your own messages with the old one. Now loading a preset changes only the prompt for the list you are on. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
+
+---
+
 ## 1.16.1
 
 _2026-09-24_

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.16.1";
+const VERSION = "1.16.2";
 
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
@@ -10893,7 +10893,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   // anyone wanting the step before that has the preset itself to load again.
   // Cleared by a save, since Put it back after saving would mean two different
   // things at once.
-  let presetUndo: { settings: Record<string, any>; setup: Record<string, any>; pick: string } | null = null;
+  let presetUndo: {
+    settings: Record<string, any>;
+    setup: Record<string, any>;
+    pick: string;
+    list: "blocks" | "userBlocks";
+  } | null = null;
 
   // The two that come with it, offered alongside your own. They are not stored
   // and cannot be renamed or deleted, so they are always there to go back to.
@@ -11155,12 +11160,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     return out;
   }
 
-  function applyPreset(p: Preset): number {
+  // list is the prompt the load is for. A preset of yours holds both prompts,
+  // as they were when it was saved, and only the one for the list it is loaded
+  // into is taken. Taking both would put the other list back to how it stood
+  // on the day the preset was saved, over whatever it holds now.
+  function applyPreset(p: Preset, list: "blocks" | "userBlocks" = editing): number {
     let took = 0;
     for (const k of PRESET_KEYS) {
       if (!(k in p.settings)) continue;
       const got = p.settings[k];
       if (k === "blocks" || k === "userBlocks") {
+        if (k !== list) continue;
         if (!Array.isArray(got)) continue;
         cfg[k] = got
           .filter((b: any) => b && typeof b === "object" && b.id)
@@ -11213,8 +11223,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       settings: presetFromNow(),
       setup: setupFromNow(),
       pick: wasPick === undefined ? currentPick() : wasPick,
+      list: editing,
     };
-    const took = applyPreset(p);
+    const took = applyPreset(p, editing);
     // Taking one of the eight marks them as seen. Changing them later is then
     // worth a line, and changing them for somebody who has never touched one
     // is not.
@@ -11264,7 +11275,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildPresetCard(): HTMLElement {
     const wrap = card(
       "Presets",
-      "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Nothing from the Model tab is in it.",
+      "Four are built in: one for replies and one for your own messages, each with a version for models that think. A preset you save holds both prompts, how many earlier messages are read, and the reading limits. Loading one changes only the prompt for the list you are on. Nothing from the Model tab is in it.",
       presets.length ? presets.length + " yours" : BUILT_IN.length + " built in",
     );
 
@@ -11483,7 +11494,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     putBack.addEventListener("click", () => {
       const back = presetUndo;
       if (!back) return;
-      applyPreset({ name: "", at: 0, settings: back.settings });
+      applyPreset({ name: "", at: 0, settings: back.settings }, back.list);
       applySetup({ name: "", at: 0, settings: back.setup });
       // The picker goes back with it. Leaving it on the preset that was just
       // undone is the same mismatch this whole change is here to stop.
@@ -11603,7 +11614,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     });
 
-    if (presetUndo) row.appendChild(putBack);
+    // Only on the list the load changed. The picker it puts back belongs to
+    // that list, and from the other one it would name the wrong prompt.
+    if (presetUndo && presetUndo.list === editing) row.appendChild(putBack);
     row.appendChild(load);
     row.appendChild(asNew);
     row.appendChild(update);
