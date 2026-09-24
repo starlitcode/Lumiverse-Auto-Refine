@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.17.0";
+const VERSION = "1.16.0";
 
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
