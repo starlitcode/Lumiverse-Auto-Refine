@@ -5589,6 +5589,37 @@ console.log("\nreading the request at full size");
     ok("the preview opens at full size", /the whole instruction, at length/.test(view.text));
     ok("as something to read rather than edit", view.readOnly, view.labels.join(","));
     ok("with Copy and Close, and no Done", view.labels.indexOf("Done") < 0 && view.labels.indexOf("Close") >= 0);
+
+    // It comes up the way Auto Retry's dialogs do: the dim fades in and the box
+    // grows to its size. With less motion asked for, it just appears.
+    const moves = async () => {
+      await page.evaluate(() => {
+        const over = document.querySelector(".arf-over");
+        const close = over && Array.from(over.querySelectorAll("button")).find((b) => b.textContent.trim() === "Close");
+        if (close) close.click();
+        const card = Array.from(document.querySelectorAll("#drawer .arf-card")).find((c) =>
+          /See what gets sent/.test(c.textContent),
+        );
+        Array.from(card.querySelectorAll("button"))
+          .find((b) => b.textContent.trim() === "Expand")
+          .click();
+      });
+      return page.evaluate(() => {
+        const over = document.querySelector(".arf-over");
+        const box = over && over.querySelector(".arf-bigbox");
+        return {
+          dim: over ? getComputedStyle(over).animationName : "",
+          box: box ? getComputedStyle(box).animationName : "",
+          running: over ? over.getAnimations({ subtree: true }).length : 0,
+        };
+      });
+    };
+    const normal = await moves();
+    ok("the full-size view fades in and grows to its size", normal.dim === "arf-fade" && normal.box === "arf-grow" && normal.running >= 2, JSON.stringify(normal));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const still = await moves();
+    ok("with less motion asked for, it just appears", still.dim === "none" && still.box === "none" && still.running === 0, JSON.stringify(still));
+    await page.emulateMedia({ reducedMotion: "no-preference" });
   });
 }
 

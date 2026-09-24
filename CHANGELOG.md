@@ -18,6 +18,7 @@ _2026-09-24_
   - What the host said the test cost, or that it reported no cost.
   - If the test failed, why, and where it was sent.
   - A test is not counted as a reply Jev read.
+- **The Expand editor comes up smoothly.** The dimmed background fades in, and the editor rises a little and grows into place as it fades in. It is the same entrance Auto Retry's dialogs make. If your device is set to reduce motion, it just appears.
 
 ### Fixed
 

@@ -4391,10 +4391,18 @@ export function setup(ctx, overrides) {
         // Fixed at the width the two carets share, so the name beside it does not
         // shift when one turns.
         ".arf-blockfold{font-size:12px;padding:2px 4px;min-width:16px;text-align:center;flex:0 0 auto}" +
-        // The full-screen editor for one block of text.
+        // The full-screen editor for one block of text. The dim fades in, and the
+        // box rises a little and grows to its size as it fades in, slowing as it
+        // lands and going slightly past its place before settling. The same
+        // entrance Auto Retry's dialogs make. With less motion asked for, it just
+        // appears.
         ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
         "justify-content:center;padding:16px;box-sizing:border-box;" +
-        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.6))}" +
+        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.6));" +
+        "animation:arf-fade 180ms ease-out both}" +
+        ".arf-over .arf-bigbox{animation:arf-grow 260ms cubic-bezier(.2,.9,.3,1.1) both}" +
+        "@keyframes arf-grow{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}" +
+        "@media (prefers-reduced-motion: reduce){.arf-over,.arf-over .arf-bigbox{animation:none}}" +
         ".arf-bigbox{display:flex;flex-direction:column;gap:10px;width:min(760px,96vw);" +
         "height:min(82vh,700px);box-sizing:border-box;padding:14px;" +
         "border-radius:var(--lumiverse-radius-lg,12px);" +
