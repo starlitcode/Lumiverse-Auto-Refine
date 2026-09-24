@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.17.0
+
+_2026-09-24_
+
+### Added
+
+- **The Expand editor comes up smoothly.** The dimmed background fades in, and the editor rises a little and grows into place as it fades in. It is the same entrance Auto Retry's dialogs make. If your device is set to reduce motion, it just appears.
+
+---
+
 ## 1.16.0
 
 _2026-09-24_
