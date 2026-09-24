@@ -392,7 +392,7 @@ What a preset holds:
 - how many messages of history are sent
 - the size limits for history and lorebook
 
-**Loading a preset changes only the prompt for the list you are on.** Load one while editing **For replies** and your prompt for your own messages is left as it is, and the other way round. A preset still saves both prompts, so either can be loaded from it later.
+**Loading a preset changes only the prompt for the list you are on.** Load one while editing **For replies** and your prompt for your own messages is left as it is, and the other way round. The picker on the other list also stays as it was. A preset still saves both prompts, so either can be loaded from it later.
 
 What a preset never changes: whether refining is on, the length limits, whether it asks before saving, the sounds, the chats you switched off, and everything on the **Model** tab.
 

@@ -1447,7 +1447,13 @@ console.log("\na preset loads into the list you are on");
         page.evaluate(() => {
           const s = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}");
           const text = (l) => (Array.isArray(l) ? l.map((b) => b.text).join(" | ") : "");
-          return { replies: text(s.blocks), mine: text(s.userBlocks), undo: !!document.querySelector('#drawer [data-arf-preset="undo"]') };
+          return {
+            replies: text(s.blocks),
+            mine: text(s.userBlocks),
+            undo: !!document.querySelector('#drawer [data-arf-preset="undo"]'),
+            drift: !!document.querySelector("#drawer [data-arf-preset-drift]"),
+            pick: document.querySelector('#drawer [data-arf-field="presetPick"]').value,
+          };
         });
       const pickIt = (name) =>
         page.evaluate((n) => {
@@ -1465,11 +1471,13 @@ console.log("\na preset loads into the list you are on");
       ok("picking a preset on For replies loads its reply prompt", /from the preset/.test(fromReplies.replies), JSON.stringify(fromReplies));
       ok("and leaves the prompt for your own messages as it is now", /the new one/.test(fromReplies.mine) && !/the old one/.test(fromReplies.mine), JSON.stringify(fromReplies));
       ok("Put it back is offered on the list the load changed", fromReplies.undo, JSON.stringify(fromReplies));
+      ok("and the prompt just loaded is not called changed", !fromReplies.drift, JSON.stringify(fromReplies));
 
       await onList("userBlocks");
       await settle(page);
       const other = await lists();
       ok("and not on the other list, where it would name the wrong prompt", !other.undo, JSON.stringify(other));
+      ok("and the other list's picker does not name a preset it never loaded", other.pick !== "Mine", JSON.stringify(other));
 
       await onList("blocks");
       await settle(page);

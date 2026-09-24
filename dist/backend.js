@@ -225,6 +225,10 @@ async function readUserJson(file, userId) {
 // Writes for one account, one after another. A save runs only once the one
 // before it has finished, so the last one sent is the last one written.
 const settingsWrites = new Map();
+// Presets and model setups the same way, each in its own line, so a save of
+// one never waits on a save of another.
+const presetWrites = new Map();
+const setupWrites = new Map();
 function inTurn(queue, userId, job) {
     const k = String(userId == null ? '' : userId);
     const before = queue.get(k) || Promise.resolve();
@@ -4213,14 +4217,19 @@ async function onPanel(payload, userId) {
             replyTo(userId, { type: 'loaded_settings', requestId: payload.requestId, settings: saved });
             return;
         }
+        // In the order they were sent, for the same reason as the settings: two
+        // saves close together, written at once, can finish the older one last and
+        // leave it as the copy every browser loads.
         if (payload.type === 'save_presets') {
-            try {
-                await writeUserJson(PRESETS_FILE, payload.presets, userId);
-            }
-            catch (e) {
-                say('warn', 'presets could not be saved to the account: ' + ((e && e.message) || String(e)));
-                replyTo(userId, { type: 'account_save_failed', what: 'presets' });
-            }
+            await inTurn(presetWrites, userId, async () => {
+                try {
+                    await writeUserJson(PRESETS_FILE, payload.presets, userId);
+                }
+                catch (e) {
+                    say('warn', 'presets could not be saved to the account: ' + ((e && e.message) || String(e)));
+                    replyTo(userId, { type: 'account_save_failed', what: 'presets' });
+                }
+            });
             return;
         }
         if (payload.type === 'load_presets') {
@@ -4235,13 +4244,15 @@ async function onPanel(payload, userId) {
             return;
         }
         if (payload.type === 'save_setups') {
-            try {
-                await writeUserJson(SETUPS_FILE, payload.setups, userId);
-            }
-            catch (e) {
-                say('warn', 'model setups could not be saved to the account: ' + ((e && e.message) || String(e)));
-                replyTo(userId, { type: 'account_save_failed', what: 'model setups' });
-            }
+            await inTurn(setupWrites, userId, async () => {
+                try {
+                    await writeUserJson(SETUPS_FILE, payload.setups, userId);
+                }
+                catch (e) {
+                    say('warn', 'model setups could not be saved to the account: ' + ((e && e.message) || String(e)));
+                    replyTo(userId, { type: 'account_save_failed', what: 'model setups' });
+                }
+            });
             return;
         }
         if (payload.type === 'load_setups') {

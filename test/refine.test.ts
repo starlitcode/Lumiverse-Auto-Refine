@@ -2426,6 +2426,26 @@ describe("settings that follow the account", () => {
     expect(h.perUser["u1:settings.json"].contextMessages).toBe(9);
   });
 
+  test("and the same holds for presets", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.slowWrites(40, 0);
+    const older = h.front({ type: "save_presets", presets: [{ name: "Terse", at: 1, settings: { contextMessages: 4 } }] });
+    const newer = h.front({ type: "save_presets", presets: [{ name: "Terse", at: 2, settings: { contextMessages: 9 } }] });
+    await Promise.all([older, newer]);
+    await wait(60);
+    expect(h.perUser["u1:presets.json"][0].at).toBe(2);
+  });
+
+  test("and for model setups", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.slowWrites(40, 0);
+    const older = h.front({ type: "save_setups", setups: [{ name: "Quick", at: 1, settings: {} }] });
+    const newer = h.front({ type: "save_setups", setups: [{ name: "Quick", at: 2, settings: {} }] });
+    await Promise.all([older, newer]);
+    await wait(60);
+    expect(h.perUser["u1:setups.json"][0].at).toBe(2);
+  });
+
   // Settings that look saved and are not is the worst shape this can take.
   // Both stores down. One down alone is not a failure: the write falls through
   // to the other rather than being lost, which is the point of the fallback.

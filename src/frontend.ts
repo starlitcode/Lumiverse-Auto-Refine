@@ -2744,19 +2744,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The picker, written down rather than remembered. Every assignment goes
   // through here so none of them can be the one that forgets.
   //
-  // A built-in prompt is written for one list, so it names the list being
-  // edited and no other. One of yours carries both lists and replaces both
-  // when loaded, so it names both.
+  // Each list names its own pick. A load changes only the list being edited,
+  // so naming the preset on the other list as well would say a prompt is
+  // loaded there that is not.
   const pickKey = (): "presetPick" | "presetPickYours" => (editingYours() ? "presetPickYours" : "presetPick");
   function currentPick(): string {
     return String(cfg[pickKey()] == null ? "" : cfg[pickKey()]);
   }
   function pickPreset(name: string) {
-    const n = String(name == null ? "" : name);
-    if (n && !isBuiltIn(n)) {
-      cfg.presetPick = n;
-      cfg.presetPickYours = n;
-    } else cfg[pickKey()] = n;
+    cfg[pickKey()] = String(name == null ? "" : name);
     persist(true);
   }
   // A preset of yours renamed or deleted, followed on whichever list names it.
@@ -11366,8 +11362,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         // block as id, on, role, text, name, and the built-in ones are written
         // id, name, on, role, text. Same values, different order, and a plain
         // stringify called them different the moment one was loaded.
+        //
+        // The other list's prompt is left out. A load never takes it, so it
+        // can differ from the preset without anything on this list changing.
         const now: Record<string, any> = presetFromNow();
+        const other = editingYours() ? "blocks" : "userBlocks";
         for (const k of Object.keys(p.settings)) {
+          if (k === other) continue;
           if (steady(now[k]) !== steady(p.settings[k])) return true;
         }
         return false;

@@ -16,7 +16,8 @@ _2026-09-24_
 
 ### Fixed
 
-- **Picking one of your own presets brought back an old prompt for your messages.** A preset you save holds both prompts, as they were on the day you saved it, and loading it put both back. So picking it under **For replies** also replaced your current prompt for your own messages with the old one. Now loading a preset changes only the prompt for the list you are on. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
+- **Picking one of your own presets brought back an old prompt for your messages.** A preset you save holds both prompts, as they were on the day you saved it, and loading it put both back. So picking it under **For replies** also replaced your current prompt for your own messages with the old one. Now loading a preset changes only the prompt for the list you are on. The picker on the other list stays as it was. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
+- **Two preset saves close together could leave the older one in your account.** Saves of your presets and model setups could finish out of order, so the next load from your account brought back the older copy. They are now written one at a time, in the order you made them, the same as your settings.
 
 ---
 
