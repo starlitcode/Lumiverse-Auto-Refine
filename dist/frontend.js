@@ -13235,6 +13235,16 @@ export function setup(ctx, overrides) {
                         return;
                     if (msg.type === "backend_ready") {
                         armBackend();
+                        // An ask sent before the backend was listening is never answered.
+                        // Without asking again, the panel would run on this browser's copy
+                        // for the whole visit, and its next save would write that copy over
+                        // the account's.
+                        if (accountAsk)
+                            loadFromAccount();
+                        if (presetAsk)
+                            loadPresetsFromAccount();
+                        if (setupAsk)
+                            loadSetupsFromAccount();
                         askPermissions();
                         askBackendVersion();
                         send({ type: "list_connections", requestId: newId() });

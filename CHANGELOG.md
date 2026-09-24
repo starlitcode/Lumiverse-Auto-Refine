@@ -18,6 +18,7 @@ _2026-09-24_
 
 - **Picking one of your own presets brought back an old prompt for your messages.** A preset you save holds both prompts, as they were on the day you saved it, and loading it put both back. So picking it under **For replies** also replaced your current prompt for your own messages with the old one. Now loading a preset changes only the prompt for the list you are on. The picker on the other list stays as it was. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
 - **Two preset saves close together could leave the older one in your account.** Saves of your presets and model setups could finish out of order, so the next load from your account brought back the older copy. They are now written one at a time, in the order you made them, the same as your settings.
+- **The panel could miss your account's settings for a whole visit.** If it opened before the extension's server side had started, its request for your account's copy got no answer, and it was not asked again. The panel then ran on this browser's copy, which can be older, and the next change you made saved that older copy to your account. Now the panel asks again as soon as the server side is ready. See [How settings are saved](docs/settings.md#how-settings-are-saved).
 
 ---
 
@@ -47,7 +48,7 @@ _2026-09-24_
 
 ### Fixed
 
-- **An older prompt could come back.** Opening Lumiverse on a device saved that device's copy of your settings to your account before your account's copy was read. A phone opened after you changed a prompt on a computer put the old prompt back, on every device. Now only a change you make is saved to your account, saves land in the order you made them, and a tab you come back to after a while loads your settings from your account again. See [Settings](docs/settings.md).
+- **An older prompt could come back.** Opening Lumiverse on a device saved that device's copy of your settings to your account before your account's copy was read. A phone opened after you changed a prompt on a computer put the old prompt back, on every device. Now only a change you make is saved to your account, saves land in the order you made them, and a tab you come back to after a while loads your settings from your account again. See [How settings are saved](docs/settings.md#how-settings-are-saved).
 - **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay greyed out until a chat is open.
 - **A deleted block stuck and then jumped shut.** The space it leaves now starts closing straight away. The same goes for every row that closes when a switch turns it off.
 

@@ -2527,6 +2527,8 @@ console.log("\nsettings that follow the account");
     });
     const again = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").map((m) => m.keep === true));
     ok("and so is the copy a restarted backend is given", again.length > 0 && again.every(Boolean), JSON.stringify(again));
+    const reasked = await page.evaluate(() => window.__sent.filter((m) => m.type === "load_settings").length);
+    ok("an answered ask is not sent again when the backend comes back up", reasked === 0, String(reasked));
     // A change somebody makes is written.
     await goTab(page, "Context");
     await page.evaluate(() => {
@@ -2562,6 +2564,30 @@ console.log("\nsettings that follow the account");
       presets: window.__sent.filter((m) => m.type === "load_presets").length,
     }));
     ok("a tab back after a while asks the account for its settings and presets again", later.settings === 1 && later.presets === 1, JSON.stringify(later));
+  });
+
+  // An ask sent before the backend was listening gets no answer. The backend
+  // announcing itself is the cue to ask again, or the panel runs on this
+  // browser's copy for the whole visit.
+  await inTab(browser, { saved: { contextMessages: 3 } }, async (page) => {
+    const first = await page.evaluate(() => window.__sent.filter((m) => m.type === "load_settings").pop().requestId);
+    await page.evaluate(() => {
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "backend_ready" });
+    });
+    const asked = await page.evaluate(() => ({
+      settings: window.__sent.filter((m) => m.type === "load_settings").map((m) => m.requestId),
+      presets: window.__sent.filter((m) => m.type === "load_presets").length,
+      setups: window.__sent.filter((m) => m.type === "load_setups").length,
+    }));
+    ok("an unanswered ask is sent again when the backend comes up",
+      asked.settings.length === 1 && asked.settings[0] !== first && asked.presets === 1 && asked.setups === 1, JSON.stringify(asked));
+    await page.evaluate((id) => {
+      window.__fromBackend({ type: "loaded_settings", requestId: id, settings: { contextMessages: 9 } });
+    }, asked.settings[0]);
+    await settle(page);
+    const took = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").contextMessages);
+    ok("and the answer to it is taken", took === 9, String(took));
   });
 
   // Saving a preset sends it up as well as writing it here.
