@@ -12,7 +12,7 @@ Everything is on the Model tab, in **One model or two**.
 2. Pick **Where Jev is reached**. OpenRouter and NanoGPT sell access to Jev alongside other models. TypeSafe is the maker. **Another address** is for any other host that takes the same kind of request, and asks for its address and the name it gives Jev.
 3. Pick **Which Jev**. See [Which Jev](#which-jev) below.
 4. Paste a key from that host under **Jev key** and press **Save key**. The key has to come from the host you picked.
-5. Press **Test**. It asks Jev one small question with nothing from any chat in it, and says whether an answer came back, and which Jev answered.
+5. Press **Test**. It asks Jev one small question with nothing from any chat in it, and says whether an answer came back, and which Jev answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
 Two-model mode also needs the `cors_proxy` permission, since Jev is not a chat model and no connection profile can reach it. Without it the panel says so and every reply is refined, the same as with one model.
 
@@ -119,8 +119,6 @@ The reply is refined, the same as with one model. No key, a refused key, an acco
 - A count since the page opened: how many replies Jev read, how many it left alone, and so how many refines you did not pay for. Use it to see whether two models are saving you anything.
 - **Clear** empties the card and the count. It is kept only until you close the tab, like the Log.
 
-**Test** does not show this. It asks Jev one made-up question, with nothing from your chats in it, to check the key and the address.
-
 Every answer also goes in the Log as one line:
 
 ```
@@ -130,9 +128,23 @@ Jev (jev-1.13.0) says refine: ... uses stock phrases that turn up in many storie
 
 A reply Jev left alone also says so where a refine that stood down would, with the highest percentage it gave. If Jev is letting through replies you would have refined, lower the line or add the check it is missing. If it refines replies that were fine, raise the line or drop the check that keeps firing.
 
+### Reading a test
+
+**Test** puts its answer in the same card, marked **test**. A test is not a reply from your chat, so it is not added to the count.
+
+- The question is always the same: the text "The door is open." and the check "The door in text is open." The door is open, so a score near 100% is right.
+- The address the test went to, the format it was sent in, and the model name it asked for.
+- Which Jev answered.
+- What the host said it cost. If the host reported no cost, the card says so.
+- If the test failed, why, and where it was sent. Use this to check an address or model name you typed.
+
+The key is never shown.
+
 ## What it costs
 
-Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev. Where the host reports the cost of a call, the Log shows it beside the answer.
+Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev, and so is each press of **Test**. Where the host reports the cost of a call, the Log and the card show it.
+
+A test is very small, so its cost can be a tiny part of a cent. A host's own billing page may round it to nothing.
 
 ## Privacy
 

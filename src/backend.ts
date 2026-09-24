@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -221,6 +221,23 @@ async function readUserJson(file: string, userId?: string): Promise<any> {
     return legacy;
   }
   try { return JSON.parse(await spindle.storage.read(file)); } catch (_) { return null; }
+}
+
+// Writes for one account, one after another. A save runs only once the one
+// before it has finished, so the last one sent is the last one written.
+const settingsWrites = new Map<string, Promise<void>>();
+function inTurn(queue: Map<string, Promise<void>>, userId: string | undefined, job: () => Promise<void>): Promise<void> {
+  const k = String(userId == null ? '' : userId);
+  const before = queue.get(k) || Promise.resolve();
+  const next = before.then(job, job);
+  const held = next.catch(() => {});
+  queue.set(k, held);
+  // Dropped once it is the last in line, so the map holds nothing for an
+  // account that is not saving.
+  held.then(() => {
+    if (queue.get(k) === held) queue.delete(k);
+  });
+  return next;
 }
 
 async function writeUserJson(file: string, value: any, userId?: string): Promise<void> {
@@ -4313,23 +4330,30 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
   try {
     if (!payload) return;
 
-    // The panel handing over what it has. Adopted and not written anywhere: the
-    // account copy is the panel's to keep, and this module coming back up is no
-    // reason to write over it.
+    // The panel handing over what it has. Held here either way. Written to the
+    // account only when it is a change somebody made: a panel starting up, or
+    // answering this module coming back up, sends keep, since what it holds
+    // then is this browser's copy, which can be older than the account's. A
+    // phone opened after the prompt was changed on a computer wrote its old
+    // prompt over the new one, and every device then loaded the old one.
     if (payload.type === 'set_settings' && payload.settings && typeof payload.settings === 'object') {
       const s = payload.settings;
       settingsUser = userId;
       rememberRules(userId, s);
+      if (payload.keep) return;
       // Written to the account as well as held here, so the next browser to
-      // ask gets these rather than a fresh install. Failing to write is worth
-      // saying out loud: settings that look saved and are not is the worst
-      // shape this can take.
-      try {
-        await writeUserJson(SETTINGS_FILE, s, userId);
-      } catch (e: any) {
-        say('warn', 'settings could not be saved to the account: ' + ((e && e.message) || String(e)));
-        replyTo(userId, { type: 'account_save_failed', what: 'settings' });
-      }
+      // ask gets these rather than a fresh install. One write at a time per
+      // account, in the order they were sent, so an older copy cannot finish
+      // last and stand. Failing to write is worth saying out loud: settings
+      // that look saved and are not is the worst shape this can take.
+      await inTurn(settingsWrites, userId, async () => {
+        try {
+          await writeUserJson(SETTINGS_FILE, s, userId);
+        } catch (e: any) {
+          say('warn', 'settings could not be saved to the account: ' + ((e && e.message) || String(e)));
+          replyTo(userId, { type: 'account_save_failed', what: 'settings' });
+        }
+      });
       return;
     }
 
@@ -4840,18 +4864,26 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // One small question with nothing from any chat in it, so a key can be
     // checked before a reply depends on it.
     if (payload.type === 'jev_test') {
-      const got = await askJev(
-        userId,
-        { text: 'The door is open.' },
-        { open: { type: NOUL, instructions: 'The door in `text` is open.' } },
-      );
+      const check = 'The door in `text` is open.';
+      const got = await askJev(userId, { text: 'The door is open.' }, { open: { type: NOUL, instructions: check } });
       const v = got.answers && got.answers.open && got.answers.open.noul;
+      const scored = typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+      // Where the test went and in which format, so a failed test on another
+      // address can be read against what was sent. Never the key.
+      const where = jevWhere();
       replyTo(userId, {
         type: 'jev_tested',
         requestId: payload.requestId,
-        ok: !got.error && typeof v === 'number',
-        why: got.error || (typeof v === 'number' ? '' : 'Jev answered, but not with a usable score'),
+        ok: !got.error && scored,
+        why: got.error || (scored ? '' : 'Jev answered, but not with a usable score'),
         model: got.model || '',
+        check: check,
+        pct: scored ? Math.round(v * 100) : null,
+        over: judgeOver,
+        cost: got.cost || 0,
+        url: where.url,
+        sent: where.model,
+        kind: where.kind,
       });
       return;
     }
