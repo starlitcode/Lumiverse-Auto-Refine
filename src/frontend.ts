@@ -902,7 +902,7 @@ const PHRASES =
   // pattern and catches the ones not listed; a list of every filling is longer
   // and catches nothing more.
   "- the held breath family: a breath they didn't know they were holding, a breath that hitches or catches\n" +
-  "- bodies on autopilot: a hammering heart, a racing pulse, a dropping stomach, whitening knuckles, a tight jaw, a bobbing throat\n" +
+  "- bodies on autopilot: a shiver down a spine, a hammering heart, a racing pulse, a dropping stomach, whitening knuckles, a tight jaw\n" +
   "- stock faces: pupils blown wide, darkening eyes, a smirk, an arched brow, a mouth corner that quirks, a smile that doesn't reach the eyes\n" +
   "- feelings in containers or blends: a jolt of, a wave of, a pang of, a flicker of, a mix of, warring with\n" +
   "- acutely or painfully aware, and the weight of a look, a word or a silence\n" +
@@ -958,9 +958,8 @@ const JOB_BLOCK: Block = {
     "the user. Catch them.\n\n" +
     "The passage below was written for the user, and you get it before " +
     "they do. How it reads is your job. What happens in it is theirs. If " +
-    "someone slams a door in the original, that door still gets slammed, " +
-    "and whoever said a line still says it and means it. It ends where it " +
-    "ended. Keep the person, the tense, and whose head we're in. Cutting " +
+    "someone slams a door in the original, that door still gets slammed, and whoever said a line still says it and means it. " +
+    "Don't write past where it ends. Keep the person, the tense, and whose head we're in. Cutting " +
     "an action or a line of dialogue counts as changing what happens.\n\n" +
     "Only mark lines that break a rule below, even when some other line " +
     "reads badly or makes no sense to you. The user put it there. Leave " +
@@ -1194,9 +1193,9 @@ const PLAIN_LONG: Block[] = [
       "answer. Cut the throat-clearing too, like here's the thing or long " +
       "story short, and lines that only grade the last line, like fair " +
       "enough.\n\n" +
-      "Therapist-speak belongs to therapists. What I'm hearing is, that's " +
-      "completely valid: a real person handed something heavy handles it " +
-      "badly, or late, or makes it about themselves.\n\n" +
+      "Therapist-speak, like what I'm hearing is or that's completely " +
+    "valid, belongs to therapists. A real person handed something heavy " +
+    "handles it badly, or late, or makes it about themselves.\n\n" +
       "And if a character talks like shit on purpose, they keep talking like " +
       "shit. Smooth them out and you've written somebody else." +
       "\n</dialogue>",
@@ -1257,9 +1256,8 @@ const THINKS_JOB: Block = {
     "<the_judge>\n" +
     "You're judging this story line by line, and you've got the red pen. " +
     "The passage below was written for the user, and you see it first.\n\n" +
-    "Find what's weak in how it's written, fix that, then stop. What " +
-    "happens isn't yours to change: events stay, speakers keep their " +
-    "lines, and it ends where it ended. Keep the person, the tense, and " +
+    "Find what's weak in how it's written, fix that, then stop. What happens isn't yours to change. Events stay and speakers keep " +
+    "their lines, and you don't write past where it ends. Keep the person, the tense, and " +
     "whose head we're in.\n\n" +
     "Use your reasoning to fill in the scorecard below, then only change " +
     "what the scores point at. Thinking about a sentence isn't a reason to " +
@@ -1530,8 +1528,8 @@ const THINKS_LONG: Block[] = [
       "all five before you call it done.\n\n" +
       "The second sentence, which loves repeating the first one in new " +
       "words. One of them is doing the work.\n\n" +
-      "The body. Hands and eyes wandering around on their own, a pulse " +
-      "standing in for a feeling, details piled up where one would do.\n\n" +
+      "The body. Watch for hands and eyes wandering around on their own, " +
+    "and for a pulse standing in for a feeling.\n\n" +
       "Speech tags. When a tag has to explain the tone, the line under it is " +
       "too weak. A tag that only says who is talking stays.\n\n" +
       "Stock moves. Held breaths, hammering hearts, air thick with whatever, " +
