@@ -960,6 +960,44 @@ describe("two models: Jev reads the reply first", () => {
     expect(text).not.toContain("repeats itself");
   });
 
+  // A real request is not shown anywhere, so the panel is told when what Jev
+  // found went into it, and how many checks.
+  test("the panel is told what Jev found went to the refine model", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([60, 90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const told = h.sent.filter((m: any) => m.type === "jev_found_sent");
+    expect(told.length).toBe(1);
+    expect(told[0].count).toBe(2);
+  });
+
+  test("but not when no block takes it", async () => {
+    const h = await keyed({}, { jev: says([60, 90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    expect(h.sent.some((m: any) => m.type === "jev_found_sent")).toBe(false);
+  });
+
+  // The preview never asks Jev, so it says the block is left out rather than
+  // showing a request without it and calling that what is sent.
+  test("the preview says What Jev Found is left out, with two models and a block for it", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([90]) });
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    expect(got.jevFoundLeftOut).toBe(true);
+    expect(h.jevCalls.length).toBe(0);
+  });
+
+  test("and does not with one model", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS, judgeMode: "one" }, { jev: says([90]) });
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    expect(got.jevFoundLeftOut).toBe(false);
+  });
+
   test("when Jev did not read the reply, the block is left out", async () => {
     const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([90]) });
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
@@ -1026,6 +1064,10 @@ describe("two models: Jev reads the reply first", () => {
     expect(second).toContain("- reply uses stock phrases. (70%)");
     expect(second).not.toContain("repeats itself");
     expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "again")).toBe(true);
+    const told = h.sent.filter((m: any) => m.type === "jev_found_sent");
+    expect(told.length).toBe(2);
+    expect(told[1].after).toBe(true);
+    expect(told[1].count).toBe(1);
   });
 
   test("and only once, however the second rewrite reads", async () => {

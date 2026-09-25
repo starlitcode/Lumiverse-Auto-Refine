@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.18.0';
+const VERSION = '1.19.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -309,6 +309,7 @@ const HISTORY_MACRO = '{{history}}';
 const LORE_MACRO = '{{lore}}';
 const MEMORY_MACRO = '{{memories}}';
 const OVERUSED_MACRO = '{{overused}}';
+const JEV_FOUND_MACRO = '{{jev_found}}';
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
 // rather than a stray heading in the prompt.
@@ -3105,6 +3106,10 @@ pick) {
         // there is nothing it found.
         if (!verdict.failed)
             scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver) };
+        // Said in the Log, since a real request is not shown anywhere and the
+        // preview never asks Jev. Only when a block is there to take it.
+        if (scene.jevFound && promptWants(JEV_FOUND_MACRO, isUser, willSend))
+            tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, count: jevHits(verdict.scores, judgeOver).length });
     }
     let pickAt = null;
     if (pick && String(pick.text || '').trim()) {
@@ -3301,6 +3306,8 @@ pick) {
             if (!after.failed && after.refine) {
                 say('info', 'Jev read the rewrite and a check still reached the line, so it is refined once more');
                 scene = { ...scene, jevFound: jevFoundText(after.scores, judgeOver) };
+                if (promptWants(JEV_FOUND_MACRO, isUser, willSend))
+                    tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, after: true, count: jevHits(after.scores, judgeOver).length });
                 tell(userId, { type: 'refine_progress', stage: 'again' });
                 const again = await runChain(carried);
                 if (stopped)
@@ -3880,8 +3887,12 @@ async function judgeReply(userId, reply, worn) {
 // says the checks are leads, since Jev can be wrong,
 // and a model told to fix each one would change writing that was fine.
 // Empty when no check reached the line, which leaves the block out.
+// The checks that reached the line, strongest first.
+function jevHits(scores, over) {
+    return (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
+}
 function jevFoundText(scores, over) {
-    const hits = (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
+    const hits = jevHits(scores, over);
     if (!hits.length)
         return '';
     return ('Another model, Jev, read this passage before you and scored it against checks the user wrote. ' +
@@ -4761,6 +4772,10 @@ async function onPanel(payload, userId) {
                     wrapOutput: wrapOutput,
                     connectionId: connectionId || '',
                     reasoning: reasoningFor(),
+                    // A preview never asks Jev, so a block holding {{jev_found}} comes
+                    // out empty here and is left out, where a real refine Jev read would
+                    // send it. Flagged so the panel can say so.
+                    jevFoundLeftOut: !isUser && judgeMode === 'two' && promptWants(JEV_FOUND_MACRO, false),
                 });
             }
             catch (e) {

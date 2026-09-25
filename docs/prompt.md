@@ -373,6 +373,7 @@ On the **Model** tab, **Let it think first** has three choices:
 - It is built by the same code a real refine uses, so it is exactly what the model gets. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
 - Below the messages, it also shows the connection, thinking and samplers the call would use.
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
+- **What Jev Found** is left out, because a preview never asks Jev. The card says so when a switched-on block uses `{{jev_found}}`. The Log says when a real refine sent it.
 - **Copy it** copies the whole thing, useful when asking why a refine did something odd.
 
 ## Starting a block from nothing

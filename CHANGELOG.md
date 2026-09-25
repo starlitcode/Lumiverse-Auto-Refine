@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.19.0
+
+_2026-09-25_
+
+### Added
+
+- **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
+
+### Fixed
+
+- **Show me the request left out What Jev Found without saying so.** A preview never asks Jev, so the block was empty and left out, and the request looked as if the findings were never sent. The card now says the block is left out here, and that the Log says when a real refine sent it. See [Seeing what gets sent](docs/prompt.md#seeing-what-gets-sent).
+
+---
+
 ## 1.18.0
 
 _2026-09-25_

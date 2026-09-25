@@ -2005,6 +2005,17 @@ console.log("\nwhat Jev decided");
     ok("and is counted apart from the replies", /read 3 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
     const logged = await page.evaluate(() => document.querySelector("#drawer").textContent);
     ok("the Log says Jev read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
+    // A real request is not shown anywhere, so the Log says when what Jev found
+    // went into it.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "jev_found_sent", chatId: "c1", messageId: "m2", count: 2 });
+      window.__fromBackend({ type: "jev_found_sent", chatId: "c1", messageId: "m2", after: true, count: 1 });
+    });
+    await closed(page);
+    const sentLog = await page.evaluate(() => document.querySelector("#drawer").textContent);
+    ok("the Log says what Jev found went to the refine model, and how many checks",
+      /what Jev found went to the refine model: 2 checks/.test(sentLog));
+    ok("and says so for the second refine too", /went to the second refine: 1 check/.test(sentLog));
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
       b.click();
@@ -4696,9 +4707,9 @@ console.log("\nthe preview says which prompt it used");
   // the list they did not touch. Saying nothing about that reads as a preset
   // that failed to load.
   await inTab(browser, {}, async (page) => {
-    const feed = async (which) => {
+    const feed = async (which, jevLeft) => {
       await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
-      await page.evaluate((w) => {
+      await page.evaluate(({ w, jevLeft }) => {
         const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
         window.__fromBackend({
           type: "prompt_preview",
@@ -4711,14 +4722,20 @@ console.log("\nthe preview says which prompt it used");
           parameters: null,
           wrapOutput: true,
           connectionId: "",
+          jevFoundLeftOut: !!jevLeft,
         });
-      }, which);
+      }, { w: which, jevLeft });
       await settle(page);
       return page.evaluate(() => {
         const n = document.querySelector('#drawer [data-arf-preview="which"]');
         return n ? n.textContent : null;
       });
     };
+    const jevLine = () =>
+      page.evaluate(() => {
+        const n = document.querySelector('#drawer [data-arf-preview="jevfound"]');
+        return n ? n.textContent : null;
+      });
     await goTab(page, "Context");
     const replies = await feed("replies");
     ok("a reply preview says it used the reply prompt",
@@ -4728,6 +4745,12 @@ console.log("\nthe preview says which prompt it used");
     const yours = await feed("yours");
     ok("your own turn says it used the prompt for your writing",
       /your own writing/.test(yours || ""), yours);
+    ok("with nothing left out for Jev, nothing is said about it", (await jevLine()) === null);
+    // A preview never asks Jev, so a block holding {{jev_found}} is empty here.
+    await feed("replies", true);
+    const left = await jevLine();
+    ok("a preview with What Jev Found left out says so, and where to look instead",
+      /left out here/.test(left || "") && /The Log says when it was sent/.test(left || ""), left);
   });
 }
 

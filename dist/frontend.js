@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.18.0";
+const VERSION = "1.19.0";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -8220,6 +8220,14 @@ export function setup(ctx, overrides) {
         }
         wrap.appendChild(note(size +
             (preview.real ? "" : ", with a stand-in where your reply would go, since no reply was found on screen")));
+        // The preview never asks Jev, so a block holding {{jev_found}} is empty
+        // here and left out. Without this line the card would show a request with
+        // no findings in it and call that what gets sent.
+        if (preview.jevFoundLeftOut) {
+            const left = note("What Jev found is left out here. It is filled in only when Jev reads the reply during a refine, and a preview does not ask Jev. The Log says when it was sent.");
+            left.setAttribute("data-arf-preview", "jevfound");
+            wrap.appendChild(left);
+        }
         // What this one would cost, before it is spent. What comes back cannot be
         // known until it arrives, so it is taken as the same size as the passage:
         // a rewrite is the passage said better, and the length limits are what keep
@@ -13327,6 +13335,16 @@ export function setup(ctx, overrides) {
                     // moved if Jev is letting too much through or too little.
                     // A second refine after Jev read the rewrite, turned down by a check.
                     // The first rewrite is what gets saved, and the Log says why.
+                    // What Jev found went into the request. A real request is not shown
+                    // anywhere, so this line is how somebody can tell it was sent.
+                    if (msg.type === "jev_found_sent") {
+                        const n = Math.max(0, Number(msg.count) || 0);
+                        const checks = n + (n === 1 ? " check" : " checks");
+                        log(msg.after
+                            ? "what Jev found in the rewrite went to the second refine: " + checks
+                            : "what Jev found went to the refine model: " + checks, true);
+                        return;
+                    }
                     if (msg.type === "refine_again_dropped") {
                         log("the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
                         return;

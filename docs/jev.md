@@ -150,6 +150,11 @@ The block is empty, and left out of the prompt, whenever Jev did not read the re
 
 Jev can be wrong, which is why the lead-in calls the checks leads. Your other rules still apply as they are.
 
+To see that it was sent:
+
+- **The Log** says "what Jev found went to the refine model", with how many checks, on each refine that sent it.
+- **Show me the request** on the **Context** tab does not show it. A preview never asks Jev, so the block is empty there and left out. The card says so.
+
 ## Having Jev check the rewrite
 
 **Have Jev check the rewrite**, in **One model or two**, is off by default. On, Jev also reads what the refine model wrote:
