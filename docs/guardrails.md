@@ -104,7 +104,7 @@ The status line counts down while it waits. **Stop** ends the wait and the call.
 - **Too long.** A rewrite that grows the reply by more than your limit has written new scene. The default limit is 60%.
 - **Too short.** A rewrite that shrinks it by more than your limit has thrown writing away. The default limit is 40%.
 
-Set either to 0 to allow any length. Before raising the growth limit, read [Writing rules](rules.md): a rule that asks for more writing is asking for a new reply.
+Set either to 0 to allow any length. Before raising the growth limit, read [Making your own prompt](rules.md#rules-to-keep-in-every-prompt): a rule that asks for more writing is asking for a new reply.
 
 ## Wrapping, which is fixed instead of dropped
 

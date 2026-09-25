@@ -14,6 +14,7 @@ _2026-09-25_
 
 - **The built-in prompts score a passage before they change it.** All four ask the model to score each area out of 100, and each score has to rest on a line it could quote. Only areas under 85 are changed. A line the model is not sure about is left alone. The two for a model that thinks write the scores down, and they are kept under **What the model worked out** on the Log tab. The two plain ones score silently and send back only the rewrite. See [The scorecard](docs/prompt.md#the-scorecard).
 - **Roll Call**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, and uses a name where a pronoun could mean two people.
+- **A step-by-step guide to making your own prompt.** It shows how to start from a built-in prompt, find what annoys you, group it by kind, keep it short, match your model, add your own taste, and test it. See [Making your own prompt](docs/rules.md).
 - **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
 
 ### Changed

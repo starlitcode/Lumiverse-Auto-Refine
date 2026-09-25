@@ -111,7 +111,7 @@ All four score the passage before they change it. A score has to rest on a line 
 ## Documentation
 
 - [How the prompt is built](docs/prompt.md): blocks, macros, roles, the built-in prompts, and the preview
-- [Writing rules](docs/rules.md): what to ask a refine for, and what not to
+- [Making your own prompt](docs/rules.md): a step-by-step guide to a prompt that fits your story and your model
 - [What it refuses to save](docs/guardrails.md): the checks on what comes back
 - [Settings](docs/settings.md): every tab and setting
 - [Ways to reach it](docs/settings.md#setup): the floating button, the chat buttons, and refining a selection

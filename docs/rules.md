@@ -1,74 +1,179 @@
-# Writing rules
+# Making your own prompt
 
-A rule is a block in your prompt. This page is about what to write in one. [How the prompt is built](prompt.md) covers the blocks themselves.
+The four built-in prompts are a starting point. They work for most people, and they only ask for fixes that suit every kind of story.
 
-## One subject per block
+Your own prompt can do more. It can know your story, your model and your taste. This page shows you how to build one, step by step.
 
-Give each block one job, and a tag that names it:
+[How the prompt is built](prompt.md) explains blocks, macros and roles. This page is about what to write in them.
+
+## The short version
+
+1. Start from a built-in prompt and save it under your own name.
+2. Read some of your replies and write down what annoys you.
+3. Group what you found by kind, with two or three examples each.
+4. Write each rule as "cut this, and write this instead".
+5. Keep it short.
+6. Test it on one reply, then change one thing at a time.
+
+Each step is explained below.
+
+## Step 1: Start from a built-in prompt
+
+Do not start from nothing. A built-in prompt already does the hard parts:
+
+- it keeps the point of view and the tense
+- it keeps the story as strong as it was
+- it leaves good lines alone
+- it asks for the answer in the right tags
+
+To copy one:
+
+1. Open the **Prompt** tab.
+2. Pick a built-in prompt from the list.
+3. Press **Save as new** and give it a name.
+4. Now you can change any block. A built-in prompt cannot be changed until you save it as your own.
+
+**Which one to start from:**
+
+- Your model reasons, or has a thinking mode: pick **A judge that thinks**.
+- Your model does not reason: pick **A judge**.
+- You want to fix your own messages: pick **A line judge** or **A line judge that thinks**.
+
+## Step 2: Find what annoys you
+
+Read five or ten recent replies from your chat. Write down every phrase or habit that made you roll your eyes.
+
+Two things help:
+
+- **Find phrases this chat has worn out**, on the **Limits** tab, counts the phrases your replies keep using. Switch it on and read the list in the **Worn Out** block.
+- Your own feeling counts. If you have noticed a phrase three times this week, it belongs in a rule.
+
+## Step 3: Group by kind
+
+A long list of single phrases is a weak rule. The model skims it, and it only catches the exact phrases on the list.
+
+A kind of phrase is stronger. The model learns the pattern and catches the versions you did not list.
+
+**Weak:** a list of every heart phrase you have seen.
 
 ```
-<speech>
-Every line keeps its meaning. You can fix phrasing that is stiff. You cannot
-change what was said, and you cannot add a line nobody said.
-
-Cut the tag that explains the line: she said angrily, he asked, curious. If the
-tone is not already in the words, fix the words.
-</speech>
+- her heart hammered
+- his heart pounded
+- her heart raced
+- his heart thundered
 ```
 
-- **The tag matters.** A model reads a tagged block as one instruction. Without tags, blocks run together into one long paragraph, and the model follows it less closely.
-- **Write to the model as "you".** For example, "cut the sentence that repeats the one before it", not "sentences that repeat should be cut".
-
-## Say what to do, not only what to avoid
-
-A rule that only says what not to do leaves the model to guess what to do instead. Say both:
+**Strong:** the kind, with a few examples.
 
 ```
-Cut a heartbeat used to stand in for a feeling. Put in its place what the
-character actually does with their hands.
+- bodies on autopilot: a hammering heart, a racing pulse, a dropping stomach
 ```
 
-## Be specific enough to check
+Two or three examples are enough. They show the model what the kind looks like.
 
-- "Make it better" or "improve the flow" gives the model nothing clear to do, and you cannot tell whether it followed the rule.
-- "Cut adverbs on speech tags" is a rule you can check.
-- The most useful rules name the exact phrase you are tired of reading. If you have noticed a phrase three times this week, put it in the rule.
+## Step 4: Say what to write instead
 
-## Do not ask for more writing
+A rule that only says "do not" leaves the model to guess. It often guesses a close copy of the same thing. A shiver becomes a tremble.
 
-Rules like "add sensory detail" or "expand the description" ask for new writing, which a refine is not for. A refine that makes a reply half again as long has written new scene, and the length limit will drop it anyway.
+So every rule says two things:
 
-If you want more writing, ask your roleplay model. A refine tightens what is already there.
+1. what to cut
+2. what to write in its place
 
-## Let a good passage stay as it is
+**Example:**
 
-Somewhere in your prompt, say that a passage that is already good comes back unchanged. Without this, a model asked to improve something will always change something, and you can lose lines you liked without noticing.
+```
+Cut a heartbeat that stands in for a feeling. Write what the character
+does with their hands instead.
+```
 
-## Two things to always say
+**Be specific enough to check.** You should be able to read the result and say yes or no.
 
-Both of these go wrong without any warning. The four built-in prompts say both, and your own prompt should too.
+- "Make it flow better" cannot be checked.
+- "Cut adverbs on speech tags" can be checked.
 
-**The point of view.** A reply in first person and present tense, from inside one character's head, can come back in third person with another character's thoughts in it. Nothing about that looks like an error. Say that the passage keeps its person, its tense, and the character whose head it is written from.
+## Step 5: Keep it short
 
-**How strong it is.** A model rewriting roleplay tends to soften it: less heat, vaguer violence, politer swearing. Say that the passage comes back as strong as it went in, and that the model decides how a line reads, not whether it should have been written.
+Every word of your prompt is sent on every refine. A longer prompt costs more. It also makes each rule weaker, because the model has more to hold at once.
 
-[What it refuses to save](guardrails.md) can catch a rewrite that softened a reply. But by then you have paid for the call, so it is better to ask for this in the prompt.
+- **One subject per block.** Give each block one job and a tag that names it.
+- **Cut rules that never fire.** If a rule has not changed anything in a week, take it out.
+- **Put the rules you care about most near the bottom.** A rule close to the passage is followed more closely.
 
-## Where a rule goes
+**Example of one block with one job:**
 
-- The order of blocks changes how closely a rule is followed.
-- Anything below the turn reads as an instruction about it. If the model will not follow a rule, move it down, closer to the message.
-- Blocks that never change go at the top. Blocks that change every turn go near the passage.
+```
+<dialogue>
+Every line keeps its meaning and its speaker.
 
-## Trying a rule
+When a tag has to explain the line, like she said angrily, fix the line
+and drop the explaining.
+</dialogue>
+```
 
-Use **Refine the latest reply**, above the tabs, to test a new block. It runs once, on one reply, and **Put it back** is on the card if you do not like the result.
+## Step 6: Match your model
 
-If a rule does nothing, the usual reasons, most common first:
+A model that reasons and a model that does not need different prompts.
+
+**A model that does not reason** follows a list better than an idea.
+
+- Give it the list of kinds, with examples.
+- Ask for the rewrite and nothing else.
+
+**A model that reasons** can work from an idea.
+
+- Give it a standard, like "a sentence that could sit in any other story is the one to fix".
+- Tell it where to look.
+- You can ask it to write its working in `<REFINE_NOTES>`. You can read that on the **Log** tab, and it shows you why it changed each line.
+
+## Step 7: Add your own taste
+
+The built-in prompts leave out anything that is a matter of taste. They have to work for everyone.
+
+Your prompt only has to work for you. So this is where it can get much better than the built-in ones.
+
+Some ideas people often want. Only add the ones you agree with.
+
+- No speech tags when only two people are talking.
+- No em dashes in the narration.
+- No one-line paragraphs used for drama.
+- No exact counts, like "three heartbeats" or "exactly four steps".
+- Units and money that fit your setting, not the ones from the real world.
+- No sentences that start with "And" or "But".
+
+You can also write rules about your own story:
+
+- A character's voice: "Mara never swears. Keep it that way."
+- Words that fit your setting: "This is a fantasy world. There are no minutes or miles."
+
+## Step 8: Test it
+
+1. Open a chat with a reply you want to test on.
+2. Press **Refine the latest reply**, above the tabs.
+3. Read the before and the after on the card.
+4. If you do not like it, press **Put it back**.
+
+**Change one thing at a time.** If you change three rules and the result gets worse, you will not know which rule did it.
+
+**If a rule does nothing,** these are the usual reasons, most common first:
 
 1. It is too vague to act on.
-2. It is too far from the turn.
-3. It shares a block with several other rules, and the model only followed the first.
+2. It is too far from the passage. Move it lower.
+3. It shares a block with several other rules, and the model only followed the first one.
+
+## Rules to keep in every prompt
+
+These go wrong without any warning, so every prompt needs them. The built-in prompts have all of them. If you start from one, you already have them.
+
+**Keep the point of view.** Say that the passage keeps its person, its tense, and the character whose head it is told from. Without this, first person can come back as third person, with another character's thoughts in it.
+
+**Keep the strength.** Say that the passage comes back as strong as it went in. A model rewriting roleplay tends to soften it: less heat, vaguer violence, politer swearing.
+
+**Let a good passage stay the same.** Say that a passage that already reads well comes back unchanged. Without this, the model always changes something, and you can lose lines you liked.
+
+**Do not ask for more writing.** Rules like "add sensory detail" ask for new writing. A refine is for fixing what is there. If you want more writing, ask your roleplay model instead. A refine that makes a reply much longer is also dropped by the length limit.
+
+[What it refuses to save](guardrails.md) can catch a rewrite that softened a reply. But by then you have paid for the call, so it is better to ask for this in the prompt.
 
 ---
 
