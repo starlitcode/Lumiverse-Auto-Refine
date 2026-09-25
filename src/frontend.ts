@@ -4620,12 +4620,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
     "animation:arf-fade 320ms cubic-bezier(.2,.8,.28,1) both}" +
     "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
-    // A line that says something is being worked out fades down and back up, so
-    // it reads as busy rather than stuck. It never goes below half, so it stays
-    // readable, and it stays still for somebody who asked for less movement.
-    ".arf-building{animation:arf-building 1400ms ease-in-out infinite}" +
-    "@keyframes arf-building{0%,100%{opacity:1}50%{opacity:.5}}" +
-    "@media (prefers-reduced-motion: reduce){.arf-building{animation:none}}" +
     "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
     "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
     // A row switched on where somebody is already looking. It fades down into
@@ -8411,10 +8405,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(row);
 
     if (previewBusy) {
-      const building = note("Building...");
-      building.classList.add("arf-building");
-      building.setAttribute("data-arf-preview", "building");
-      wrap.appendChild(building);
+      wrap.appendChild(note("Building..."));
       return wrap;
     }
     if (!preview) return wrap;

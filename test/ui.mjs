@@ -4789,24 +4789,34 @@ console.log("\nthe preview says which prompt it used");
   });
 }
 
-console.log("\nthe preview pulses while it builds");
+console.log("\nthe refine card rises into place");
 {
-  // A line that says Building and sits still reads as stuck. It fades down and
-  // back up, and stays still for somebody who asked for less movement.
+  // The card saying a refine happened comes up from its corner with the dim
+  // fading in behind it, then settles. With less movement asked for, both just
+  // appear.
   for (const reduce of [false, true]) {
-    await inTab(browser, {}, async (page) => {
+    await inTab(browser, { saved: { enabled: true, popup: true } }, async (page) => {
       if (reduce) await page.emulateMedia({ reducedMotion: "reduce" });
-      await goTab(page, "Context");
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
-      await settle(page);
+      await page.evaluate(() =>
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line of the reply.", after: "The new line of the reply." }),
+      );
+      await page.waitForTimeout(40);
       const got = await page.evaluate(() => {
-        const n = document.querySelector('#drawer [data-arf-preview="building"]');
-        return n ? { text: n.textContent, anim: getComputedStyle(n).animationName } : null;
+        const pop = document.querySelector(".arf-pop");
+        const shade = document.querySelector(".arf-shade");
+        return pop ? { pop: getComputedStyle(pop).animationName, shade: shade ? getComputedStyle(shade).animationName : null, opacity: Number(getComputedStyle(pop).opacity) } : null;
       });
-      if (reduce)
-        ok("with less movement asked for, Building stays still", !!got && got.anim === "none", JSON.stringify(got));
-      else
-        ok("Building pulses while the preview is built", !!got && /Building/.test(got.text) && got.anim === "arf-building", JSON.stringify(got));
+      await page.waitForTimeout(450);
+      const settled = await page.evaluate(() => {
+        const p = document.querySelector(".arf-pop");
+        return p ? { transform: getComputedStyle(p).transform, opacity: Number(getComputedStyle(p).opacity) } : null;
+      });
+      if (reduce) {
+        ok("with less movement asked for, the refine card just appears", !!got && got.pop === "none" && got.shade === "none" && got.opacity === 1, JSON.stringify(got));
+      } else {
+        ok("the refine card rises in with the dim fading behind it", !!got && got.pop === "arf-rise" && got.shade === "arf-fade" && got.opacity < 1, JSON.stringify(got));
+        ok("and settles in place", !!settled && settled.opacity === 1 && /matrix\(1, 0, 0, 1, 0, 0\)|none/.test(settled.transform), JSON.stringify(settled));
+      }
     });
   }
 }
