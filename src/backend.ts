@@ -4896,11 +4896,16 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
             const youName = nameSpeakers
               ? await gatherPersonaName(payload.chatId, card.id, userId)
               : '';
+            const lore = await gatherLore(payload.chatId, userId);
             scene = {
               character: card.text,
               context: at > 0 ? await gatherHistory(msgs, at, card.name, userId, youName) : '',
-              lore: await gatherLore(payload.chatId, userId),
+              lore: lore,
               memory: await gatherMemory(payload.chatId, userId),
+              // Worked out the way a refine works it out, from the replies
+              // before this one, so {{overused}} shows here what a refine of
+              // this reply would send. Empty while the setting is off.
+              worn: gatherWorn(msgs, at, card.name, card.text + '\n' + lore),
               name: card.name,
               chatId: payload.chatId,
               characterId: card.id,
@@ -4918,7 +4923,14 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         const armed = shield(split.body);
         if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
         const blockParts: Array<{ name: string; text: string }> = [];
-        const messages = await buildPrompt(armed.text, isUser, scene, userId, blockParts);
+        // With several passes, a refine sends each pass's own prompt and never
+        // the one on the Prompt tab. The first pass is built here as it would
+        // go out. The ones after it are handed the rewrite the one before wrote,
+        // which does not exist until a refine runs, so they are named instead.
+        const chain = manyPasses && passList.length ? passList : null;
+        const allBlocks: Block[] = [];
+        if (chain) for (const one of chain) for (const b of one.blocks) allBlocks.push(b);
+        const messages = await buildPrompt(armed.text, isUser, scene, userId, blockParts, chain ? chain[0].blocks : undefined);
         const whichPrompt = isUser ? 'yours' : 'replies';
         // Counted here rather than in the panel, because the tokeniser lives on
         // this side and characters over four is the number this card exists to
@@ -4960,7 +4972,8 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           // A preview never asks Jev, so a block holding {{jev_found}} comes
           // out empty here and is left out, where a real refine Jev read would
           // send it. Flagged so the panel can say so.
-          jevFoundLeftOut: !isUser && judgeMode === 'two' && promptWants(JEV_FOUND_MACRO, false),
+          jevFoundLeftOut: !isUser && judgeMode === 'two' && promptWants(JEV_FOUND_MACRO, false, chain ? allBlocks : undefined),
+          passes: chain ? chain.map((one) => one.name) : [],
         });
       } catch (e: any) {
         replyTo(userId, {

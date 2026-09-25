@@ -373,6 +373,8 @@ On the **Model** tab, **Let it think first** has three choices:
 - It is built by the same code a real refine uses, so it is exactly what the model gets. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
 - Below the messages, it also shows the connection, thinking and samplers the call would use.
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
+- The worn-out phrases are worked out the same way a refine works them out, so **Already Worn Out in This Chat** shows what a refine would send.
+- With **Several passes** on, it shows the first pass as it would go out, and names every pass in order. The passes after the first are sent the rewrite the one before wrote, so they cannot be shown until a refine runs.
 - **What Jev Found** is left out, because a preview never asks Jev. The card says so when a switched-on block uses `{{jev_found}}`. The Log says when a real refine sent it.
 - **Copy it** copies the whole thing, useful when asking why a refine did something odd.
 

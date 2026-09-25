@@ -14,8 +14,14 @@ _2026-09-25_
 
 - **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
 
+### Changed
+
+- **Building... pulses while Show me the request is built.** It fades down and back up, so it reads as working rather than stuck. It stays still if your system asks for less motion.
+
 ### Fixed
 
+- **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Already Worn Out in This Chat** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
+- **Show me the request showed the wrong prompt with several passes on.** It built the prompt on the Prompt tab, which a refine with several passes never sends. It now shows the first pass as it would go out, and names every pass in order.
 - **Show me the request left out What Jev Found without saying so.** A preview never asks Jev, so the block was empty and left out, and the request looked as if the findings were never sent. The card now says the block is left out here, and that the Log says when a real refine sent it. See [Seeing what gets sent](docs/prompt.md#seeing-what-gets-sent).
 
 ---

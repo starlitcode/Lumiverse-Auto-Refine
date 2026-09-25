@@ -4416,6 +4416,12 @@ export function setup(ctx, overrides) {
         "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
         "animation:arf-fade 320ms cubic-bezier(.2,.8,.28,1) both}" +
         "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
+        // A line that says something is being worked out fades down and back up, so
+        // it reads as busy rather than stuck. It never goes below half, so it stays
+        // readable, and it stays still for somebody who asked for less movement.
+        ".arf-building{animation:arf-building 1400ms ease-in-out infinite}" +
+        "@keyframes arf-building{0%,100%{opacity:1}50%{opacity:.5}}" +
+        "@media (prefers-reduced-motion: reduce){.arf-building{animation:none}}" +
         "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
         "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
         // A row switched on where somebody is already looking. It fades down into
@@ -8163,7 +8169,10 @@ export function setup(ctx, overrides) {
         }
         wrap.appendChild(row);
         if (previewBusy) {
-            wrap.appendChild(note("Building..."));
+            const building = note("Building...");
+            building.classList.add("arf-building");
+            building.setAttribute("data-arf-preview", "building");
+            wrap.appendChild(building);
             return wrap;
         }
         if (!preview)
@@ -8179,7 +8188,9 @@ export function setup(ctx, overrides) {
         // reply preset while their own message is the newest one gets a preview of
         // the prompt they did not touch, and nothing here said so.
         const which = String(preview.which || "");
-        if (which) {
+        // Not with several passes on: then neither list on the Prompt tab is sent,
+        // and the line about passes below says what is.
+        if (which && !(Array.isArray(preview.passes) && preview.passes.length)) {
             const line = note(which === "yours"
                 ? "Built from your prompt for your own writing, because the message being previewed is yours. A preset loaded into the reply prompt will not show here."
                 : "Built from your prompt for replies, because the message being previewed is a reply. A preset loaded into the prompt for your own writing will not show here.");
@@ -8220,6 +8231,19 @@ export function setup(ctx, overrides) {
         }
         wrap.appendChild(note(size +
             (preview.real ? "" : ", with a stand-in where your reply would go, since no reply was found on screen")));
+        // With several passes, what is shown is the first pass. The rest are named,
+        // since each is sent the rewrite the pass before it wrote, and that does
+        // not exist until a refine runs.
+        const passNames = Array.isArray(preview.passes) ? preview.passes.map((x) => String(x)) : [];
+        if (passNames.length) {
+            const passLine = note(passNames.length === 1
+                ? "Several passes are on, with one pass: " + passNames[0] + ". This is its request, not the prompt on the Prompt tab."
+                : "Several passes are on, so this is pass 1 of " + passNames.length + ", " + passNames[0] +
+                    ". Each pass after it is sent the rewrite the pass before it wrote, so it cannot be shown until a refine runs. In order: " +
+                    passNames.join(", ") + ".");
+            passLine.setAttribute("data-arf-preview", "passes");
+            wrap.appendChild(passLine);
+        }
         // The preview never asks Jev, so a block holding {{jev_found}} is empty
         // here and left out. Without this line the card would show a request with
         // no findings in it and call that what gets sent.

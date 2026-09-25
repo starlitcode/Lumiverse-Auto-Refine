@@ -4707,9 +4707,9 @@ console.log("\nthe preview says which prompt it used");
   // the list they did not touch. Saying nothing about that reads as a preset
   // that failed to load.
   await inTab(browser, {}, async (page) => {
-    const feed = async (which, jevLeft) => {
+    const feed = async (which, jevLeft, passes) => {
       await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
-      await page.evaluate(({ w, jevLeft }) => {
+      await page.evaluate(({ w, jevLeft, passes }) => {
         const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
         window.__fromBackend({
           type: "prompt_preview",
@@ -4723,8 +4723,9 @@ console.log("\nthe preview says which prompt it used");
           wrapOutput: true,
           connectionId: "",
           jevFoundLeftOut: !!jevLeft,
+          passes: passes || [],
         });
-      }, { w: which, jevLeft });
+      }, { w: which, jevLeft, passes });
       await settle(page);
       return page.evaluate(() => {
         const n = document.querySelector('#drawer [data-arf-preview="which"]');
@@ -4751,7 +4752,39 @@ console.log("\nthe preview says which prompt it used");
     const left = await jevLine();
     ok("a preview with What Jev Found left out says so, and where to look instead",
       /left out here/.test(left || "") && /The Log says when it was sent/.test(left || ""), left);
+    // With several passes, neither list on the Prompt tab is sent, so the line
+    // naming one gives way to a line naming the passes.
+    const withPasses = await feed("replies", false, ["Tighten", "Polish"]);
+    const passLine = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-preview="passes"]');
+      return n ? n.textContent : null;
+    });
+    ok("with several passes, the preview says it is pass 1 and names them in order",
+      /pass 1 of 2, Tighten/.test(passLine || "") && /In order: Tighten, Polish/.test(passLine || ""), passLine);
+    ok("and does not name a Prompt tab list it did not use", withPasses === null, withPasses);
   });
+}
+
+console.log("\nthe preview pulses while it builds");
+{
+  // A line that says Building and sits still reads as stuck. It fades down and
+  // back up, and stays still for somebody who asked for less movement.
+  for (const reduce of [false, true]) {
+    await inTab(browser, {}, async (page) => {
+      if (reduce) await page.emulateMedia({ reducedMotion: "reduce" });
+      await goTab(page, "Context");
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
+      await settle(page);
+      const got = await page.evaluate(() => {
+        const n = document.querySelector('#drawer [data-arf-preview="building"]');
+        return n ? { text: n.textContent, anim: getComputedStyle(n).animationName } : null;
+      });
+      if (reduce)
+        ok("with less movement asked for, Building stays still", !!got && got.anim === "none", JSON.stringify(got));
+      else
+        ok("Building pulses while the preview is built", !!got && /Building/.test(got.text) && got.anim === "arf-building", JSON.stringify(got));
+    });
+  }
 }
 
 console.log("\nthe raw view");

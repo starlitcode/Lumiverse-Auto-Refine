@@ -1224,6 +1224,56 @@ describe("two models: Jev reads the reply first", () => {
     expect(done.why).toMatch(/not with a usable score/);
   });
 
+  // Show me the request builds its own scene. {{overused}} has to be filled
+  // there the same way, or the preview drops a block a refine sends.
+  test("the preview fills {{overused}} the way a refine does", async () => {
+    const worn: Msg[] = [
+      { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
+      { id: "m1", role: "user", content: "i go on" },
+      { id: "m2", role: "assistant", content: "Rain came down and the cold wind bit at her hands." },
+      { id: "m3", role: "user", content: "i keep going" },
+      { id: "m4", role: "assistant", content: "She went through the gate, and the cold wind bit at her again." },
+    ];
+    const WORN = { id: "worn", name: "Worn", on: true, role: "system", text: "<worn>\n{{overused}}\n</worn>" };
+    const h = await keyed({ wornOn: true, wornLeast: 2, blocks: FOUND_BLOCKS.concat([WORN]) }, { jev: says([10]) }, worn);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m4" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    const text = (got.messages || []).map((m: any) => m.content).join("\n");
+    expect(text).toContain("<worn>");
+    expect(text).toMatch(/cold wind bit/);
+  });
+
+  // With several passes, a refine sends each pass's own prompt. The preview
+  // builds the first one and names them all, and never shows the Prompt tab's
+  // list, which is not sent.
+  test("with several passes, the preview is the first pass, and names them all", async () => {
+    const pass = (name: string, line: string) => ({
+      name: name,
+      on: true,
+      blocks: [
+        { id: "r", name: "Rule", on: true, role: "system", text: line },
+        { id: "t", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
+      ],
+    });
+    const h = await keyed(
+      {
+        blocks: [{ id: "tab", name: "Tab", on: true, role: "user", text: "THE PROMPT TAB LIST {{message}}" }],
+        passMode: "many",
+        passes: [pass("Tighten", "FIRST PASS RULE"), pass("Polish", "SECOND PASS RULE")],
+      },
+      { jev: says([10]) },
+    );
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    const text = (got.messages || []).map((m: any) => m.content).join("\n");
+    expect(text).toContain("FIRST PASS RULE");
+    expect(text).not.toContain("SECOND PASS RULE");
+    expect(text).not.toContain("THE PROMPT TAB LIST");
+    expect(got.passes).toEqual(["Tighten", "Polish"]);
+  });
+
   test("worn phrases are asked about when they are on", async () => {
     const worn: Msg[] = [
       { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
