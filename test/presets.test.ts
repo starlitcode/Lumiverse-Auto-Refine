@@ -82,7 +82,7 @@ describe("the prompts that come with it", () => {
     }
   });
 
-  test("the prompts for replies keep the names that say who is talking, and add nothing for the user's character", () => {
+  test("the prompts for replies keep the names that say who is talking", () => {
     for (const p of forReplies()) {
       const t = String(p.blocks.find((x: any) => x.id === "cast").text);
       expect({
@@ -90,8 +90,7 @@ describe("the prompts that come with it", () => {
         tags: /a name or a plain speech tag/.test(t),
         pronouns: /could mean two people, use the name/.test(t),
         present: /still in it when you are done/.test(t),
-        user: /Add nothing that \{\{user\}\} says, does, thinks or feels/.test(t),
-      }).toEqual({ prompt: p.name, tags: true, pronouns: true, present: true, user: true });
+      }).toEqual({ prompt: p.name, tags: true, pronouns: true, present: true });
     }
   });
 
@@ -103,16 +102,6 @@ describe("the prompts that come with it", () => {
       expect({ prompt: p.name, keeps: /tag that only says who is talking stays/.test(all) })
         .toEqual({ prompt: p.name, keeps: true });
     }
-  });
-
-  // Taking out lines written for the user's character changes what happens,
-  // which every other block forbids, so it is there to switch on and is off.
-  test("taking out lines written for the user is offered for replies, switched off", () => {
-    for (const p of forReplies()) {
-      const b = p.blocks.find((x: any) => x.id === "notuser");
-      expect({ prompt: p.name, there: !!b, on: b ? b.on : null }).toEqual({ prompt: p.name, there: true, on: false });
-    }
-    for (const p of forMine()) expect(p.blocks.some((x: any) => x.id === "notuser")).toBe(false);
   });
 
   // The mark tells a reader the built-in prompts changed. A block added

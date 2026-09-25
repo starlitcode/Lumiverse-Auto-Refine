@@ -1023,8 +1023,10 @@ const LEAVE_ALONE = {
 // line edit makes in a crowd: a speech tag cut where it was the only thing
 // naming the speaker, a pronoun that now points at two people, two voices
 // smoothed into one, and a character dropped because their one line read
-// weakly. The last paragraph is the one every roleplay prompt carries: the
-// user's character is theirs to write.
+// weakly.
+//
+// Nothing here says who plays which character. Some people write their own
+// character and some let the model write it too, and a refine works for both.
 const CAST_BLOCK = {
     id: "cast",
     name: "The Cast",
@@ -1042,36 +1044,13 @@ const CAST_BLOCK = {
         "sounded different in the passage still sound different in your " +
         "rewrite.\n\n" +
         "A character in the passage is still in it when you are done, even one " +
-        "with a single line.\n\n" +
-        "{{user}} is played by the user. Add nothing that {{user}} says, does, " +
-        "thinks or feels.\n" +
+        "with a single line.\n" +
         "</the_cast>",
-};
-// Off. A reply that speaks or acts for the user's character is the complaint
-// people bring to a roleplay prompt more than any other, and the one fault a
-// refine can take out after the fact. It changes what happens, which every
-// other block forbids, so it says so and is left for the reader to switch on.
-const NOT_FOR_USER_BLOCK = {
-    id: "notuser",
-    name: "Take Out Lines for the User",
-    on: false,
-    role: "system",
-    text: "<lines_for_the_user>\n" +
-        "The passage may speak or act for {{user}}. That is the user's to write, " +
-        "so take it out here, even though this changes what happens.\n\n" +
-        "Take out every line of speech, action, thought or feeling given to " +
-        "{{user}}. Keep what the other characters do. Where a sentence needs " +
-        "{{user}} to make sense, write it from the other character's side: " +
-        "{{user}} takes the cup becomes she holds the cup out.\n\n" +
-        "Where the passage ends on {{user}} doing something, end it on the last " +
-        "thing another character did.\n" +
-        "</lines_for_the_user>",
 };
 // Who is in the scene, for the user's own turn. Shorter than the one for
 // replies, because a copy edit changes so little that most of those faults
 // cannot happen. The two that can: a line moved to the wrong speaker while a
-// sentence is untangled, and a reply written for a character the user does not
-// play.
+// sentence is untangled, and a line added for another character.
 const YOURS_CAST = {
     id: "cast",
     name: "The Cast",
@@ -1081,8 +1060,8 @@ const YOURS_CAST = {
         "The user may write one character or several in the same turn. Every " +
         "line of speech keeps its speaker, and every action keeps the person " +
         "doing it.\n\n" +
-        "Where their turn names a character the user does not play, add nothing " +
-        "for that character: no answer, no reaction, no line.\n" +
+        "Add nothing for any character in it: no answer, no reaction, no " +
+        "line.\n" +
         "</the_cast>",
 };
 // The scoring, shared by all four. The anchors say what each band means rather
@@ -1232,7 +1211,6 @@ const PLAIN_LONG = [
             "</bodies_and_feeling>",
     },
     CAST_BLOCK,
-    NOT_FOR_USER_BLOCK,
     {
         id: "endings",
         name: "How It Ends",
@@ -1554,7 +1532,6 @@ const THINKS_LONG = [
             "</voice>",
     },
     CAST_BLOCK,
-    NOT_FOR_USER_BLOCK,
     RESTRAINT,
     {
         id: "check",

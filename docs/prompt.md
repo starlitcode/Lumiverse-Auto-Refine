@@ -189,8 +189,7 @@ There are four: a line edit for replies and a copy edit for your own messages, e
 
 - The version for a model that thinks is the smaller one. A reasoning model is given the standard and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name exact phrases, because "cut clichés" gives a model nothing to act on. They name the ones that appear often in machine-written roleplay: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, and an emotion given as a mix of two others.
-- **The Cast** block is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene, and adds nothing for your own character.
-- **Take Out Lines for the User** is switched off. On, it takes out anything the reply says or does for your character, and keeps what the other characters do. It changes what happens, which is why it is off.
+- **The Cast** block is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
 - Both have a block called **What Jev Found**, switched off. It is for two models. See [Passing on what Jev found](jev.md#passing-on-what-jev-found).
 - All four work as they are. Load one, change what you like, and save it under your own name.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
@@ -205,7 +204,7 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 | **The copy edit, for a model that thinks** | The same role, then one test for telling a mistake from a choice, and the places where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - Each ends by saying that when a slip cannot be told from a choice, it is a choice. A short line, a fragment, or a plain "she left" stays as it is.
-- Their **The Cast** block keeps every line with its speaker when you write more than one character. It adds nothing for a character you do not play.
+- Their **The Cast** block keeps every line with its speaker when you write more than one character. It adds no line for any character.
 - They are in the same menu, under their own heading. Loading one changes only the prompt for your own messages.
 
 ### The one thing they do not edit

@@ -13,8 +13,7 @@ _2026-09-25_
 ### Added
 
 - **The built-in prompts score a passage before they change it.** All four ask the model to score each area out of 100, and each score has to rest on a line it quotes. Only areas under 85 are changed. A line the model is not sure about is left alone. The scores are kept under **What the model worked out** on the Log tab. See [The scorecard](docs/prompt.md#the-scorecard).
-- **The Cast**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, uses a name where a pronoun could mean two people, and adds nothing for your character.
-- **Take Out Lines for the User**, a block in both built-in prompts for replies, switched off. On, it takes out what a reply says or does for your character.
+- **The Cast**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, and uses a name where a pronoun could mean two people.
 - **More phrases to cut** in The line edit: eyes that sparkle with mischief, ministrations, a testament to something, and a question asked in the narration and answered at once. Truly and utterly join the words to cut.
 - **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
 
