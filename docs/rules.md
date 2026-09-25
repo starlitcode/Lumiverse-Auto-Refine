@@ -132,7 +132,15 @@ does with their hands instead.
 
 ## Step 5: Keep it short
 
-Every word of your prompt is sent on every refine. A longer prompt costs more. It also makes each rule weaker, because the model has more to hold at once.
+Every switched-on block is sent on every refine.
+
+- **A longer prompt costs more** on a paid API, because you pay for every token sent. On a model you run yourself, it costs time instead.
+- **A long list of rules can be followed less closely.** Past a point, a model is more likely to miss some of them. How soon this happens depends on the model. Large models handle a long list well. Smaller models slip sooner.
+
+**This is about your rules, not your chat history.** They are two different things:
+
+- Your rules are the blocks you write. Keep them focused.
+- Chat history is how much of the chat is sent with the reply. More history helps a model keep track of the story. A refine only edits one reply, so it needs less history than your roleplay model does. Set it with **Messages of run-up to send** on the **Context** tab.
 
 - **One subject per block.** Give each block one job and a tag that names it.
 - **Cut rules that never fire.** If a rule has not changed anything in a week, take it out.
