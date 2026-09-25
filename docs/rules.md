@@ -142,20 +142,52 @@ Every switched-on block is sent on every refine.
 - Your rules are the blocks you write. Keep them focused.
 - Chat history is how much of the chat is sent with the reply. More history helps a model keep track of the story. A refine only edits one reply, so it needs less history than your roleplay model does. Set it with **Messages of run-up to send** on the **Context** tab.
 
-- **One subject per block.** Give each block one job and a tag that names it.
+- **One subject per block.** Give each block one job.
 - **Cut rules that never fire.** If a rule has not changed anything in a week, take it out.
 - **Put the rules you care about most near the bottom.** A rule close to the passage is followed more closely.
 
 **Example of one block with one job:**
 
 ```
+Dialogue: every line keeps its meaning and its speaker.
+
+When a speech tag has to explain the line, like she said angrily, fix the
+line and drop the explaining.
+```
+
+## Write rules in any format
+
+There is no one correct format for a rule. Models follow plain sentences, headings, bullet lists and XML-style tags. Use the one you find easiest to read and change.
+
+The same rule, three ways:
+
+**Plain sentences:**
+
+```
+Dialogue: every line keeps its meaning and its speaker.
+```
+
+**A heading:**
+
+```
+## Dialogue
+Every line keeps its meaning and its speaker.
+```
+
+**XML-style tags:**
+
+```
 <dialogue>
 Every line keeps its meaning and its speaker.
-
-When a tag has to explain the line, like she said angrily, fix the line
-and drop the explaining.
 </dialogue>
 ```
+
+The built-in prompts use tags. That is one choice, not a rule. Mixing formats in one prompt works too.
+
+**Two things to know if you do not use tags:**
+
+- **Empty blocks.** A block that is only empty tags, like `<world></world>` in a chat with no lorebook, is left out of the request. A block with a heading and an empty macro still sends the heading on its own. It does no harm, but it costs a few tokens.
+- **The answer tags are different.** `<REFINED>` and `</REFINED>` are not a style choice. The extension looks for them to find the rewrite. See [What every prompt must have](#what-every-prompt-must-have).
 
 ## Step 6: Match your model
 
