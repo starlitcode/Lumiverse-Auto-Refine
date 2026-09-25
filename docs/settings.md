@@ -174,7 +174,7 @@ It rewrites only what you selected. It works in your own messages too, with thei
 
 **Take out what I selected** appears in the same places. It deletes the selection without calling a model, so it costs nothing.
 
-- It tidies the gap: one space, not two, and one blank line when a paragraph goes.
+- It tidies the gap. It leaves one space where a phrase was cut, and one blank line where a paragraph was.
 - It will not delete the whole message.
 - **Put it back** undoes it.
 

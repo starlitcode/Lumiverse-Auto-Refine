@@ -44,7 +44,7 @@ With **How many models** set to two, each finished reply is sent to Jev before i
 - the list of phrases this chat has worn out, if **Also check for worn-out phrases** is on
 - your Jev key, which tells the host the call is yours
 
-Nothing else goes to Jev: no card, no chat history, no lore, no memories, no settings. A refine you start yourself never goes to Jev.
+Nothing else goes to Jev. Your card, chat history, lore, memories and settings stay out of it. A refine you start yourself never goes to Jev.
 
 Your key:
 
@@ -81,7 +81,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 ## What it keeps
 
 - **Your settings**, in your browser and in Lumiverse's storage for your account, so they follow you to other devices.
-- **The chats you switched it off in**, in your browser. Only the chat ids: no titles, no text.
+- **The chats you switched it off in**, in your browser. Only the chat ids are kept. Chat titles and text are not.
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
 - **Your Jev key**, if you saved one, in Lumiverse's secure store for your account and nowhere else.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.

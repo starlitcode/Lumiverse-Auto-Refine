@@ -41,7 +41,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. |
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
-| `{{jev_found}}` | With two models, the checks Jev found in the reply, strongest first, each with its score. They come after a short lead-in that calls them leads to check, not orders. Only filled in when Jev read the reply and picked it out. See [Passing on what Jev found](jev.md#passing-on-what-jev-found). |
+| `{{jev_found}}` | With two models, the checks Jev found in the reply, strongest first, each with its score. They come after a short lead-in that says to treat each one as a lead to check. Only filled in when Jev read the reply and picked it out. See [Passing on what Jev found](jev.md#passing-on-what-jev-found). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. |
 
@@ -118,41 +118,36 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 ## The scorecard
 
-All four built-in prompts ask the model to score the passage before it changes anything. The answer comes in two parts:
+All four built-in prompts ask the model to score the passage before it changes anything. How the scoring works, from the **Scorecard** block:
+
+- An area is one kind of fault the prompt tells the model to look for, such as stock phrases, repetition or speech.
+- Each area gets a score out of 100.
+- A score has to rest on a line from the passage that the model could quote. An area with nothing to quote scores 100.
+- From 85 to 99 means a line might fit, but the model is not sure. Those lines are left alone.
+- Only areas under 85 are changed, and in them only the lines that fit.
+- A passage can score 100 in every area. Then it comes back unchanged.
+
+Why it is there: a model that has to point at a line before it changes it leaves alone the lines it cannot point at. This stops a refine rewriting a passage that was already fine.
+
+**The two for a model that thinks write the scorecard down.** Their answer comes in two parts:
 
 ```
 <REFINE_NOTES>
-Area: score. "the weakest line, quoted"
+Area: score. "the worst line, quoted"
 (one line for each area)
-The areas under 85.
+The areas under 85, and what changes in each.
 </REFINE_NOTES>
 <REFINED>
 the rewritten message
 </REFINED>
 ```
 
-How the scoring works, from the **Scorecard** block:
-
-- An area is one kind of fault the prompt tells the model to look for, such as stock phrases, repetition or speech.
-- Each area gets a score out of 100.
-- Each score has to rest on a line from the passage, quoted. An area with no line to quote scores 100.
-- From 85 to 99 means a line might fit, but the model is not sure. Those lines are left alone.
-- Only areas under 85 are changed, and in them only the lines that fit.
-- A passage can score 100 in every area. Then it comes back unchanged.
-
-Why it is there:
-
-- A model that has to quote a line before it changes it leaves alone the lines it cannot point at. This stops a refine rewriting a passage that was already fine.
 - The scores come before the rewrite, so they decide what changes. They do not grade the rewrite afterwards.
-- You can read them. The notes are kept on the **Log** tab, under **What the model worked out**.
-
-About the notes:
-
 - `<REFINE_NOTES>` is outside `<REFINED>`, so it can never reach your chat.
-- Only a refine that finishes replaces them. Stopping one keeps the last notes.
-- The two plain prompts keep the notes to one line an area, since a model that does not reason pays for every word in time. The two for a model that thinks also put the rest of their working there.
-- A score is the model's own judgement, not a measurement. The quoted line is the part to trust.
-- To stop the scoring, switch off **Scorecard** and take the notes out of **Hand It In**. A prompt that asks for no notes keeps nothing and costs nothing extra.
+- The notes are kept on the **Log** tab, under **What the model worked out**. Only a refine that finishes replaces them. Stopping one keeps the last notes.
+- A score is only the model's judgement. The quoted line is the part to trust.
+
+**The two plain prompts score silently.** They ask for the rewrite and nothing else. A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost. So these two keep the same rules and write nothing down.
 
 Both tags are in capitals so a model scanning the prompt finds them easily.
 
@@ -203,7 +198,7 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 | **The line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
 | **The line judge, for a model that thinks** | The same role, then The Call for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
-- Each ends by saying that when a slip cannot be told from a choice, it is a choice. A short line, a fragment, or a plain "she left" stays as it is.
+- Each ends by saying that when a slip cannot be told from a choice, it is a choice. So a plain "she left" stays as it is.
 - Their **Roll Call** block keeps every line with its speaker when you write more than one character. It adds no line for any character.
 - They are in the same menu, under their own heading. Loading one changes only the prompt for your own messages.
 
@@ -220,7 +215,7 @@ What it does and does not do:
 - **A younger character in a scene with nothing sexual in it is edited like anyone else.** Age alone is not the exception. Nothing else is excepted.
 - **A prompt of your own carries only what you put in it.** A preset you save from one of the four keeps the paragraph, where you can read it. One you write yourself does not have it.
 
-The checks on what comes back are separate. A model that refuses to edit a scene, for any reason, including misreading an adult character as a minor, has written a refusal, not a rewrite. With **Refuse an answer that declines the job** on, which it is by default, a refusal is dropped and your reply is left as it was. See [The model answered the wrong question](guardrails.md#the-model-answered-the-wrong-question).
+The checks on what comes back are separate. A model that refuses to edit a scene, for any reason, including misreading an adult character as a minor, has written a refusal instead of a rewrite. With **Refuse an answer that declines the job** on, which it is by default, a refusal is dropped and your reply is left as it was. See [The model answered the wrong question](guardrails.md#the-model-answered-the-wrong-question).
 
 ## How much it is told
 
@@ -233,7 +228,7 @@ Four settings on the **Context** tab. Three of them set a size, and every one of
 **In a group chat**, each reply is named after the character who wrote it. The card sent in `{{description}}` is that character's card too, found by name among the cards in the chat. Where no card matches the name, the chat's own card is sent.
 - **Most tokens of lorebook** is a size limit on the lorebook entries. Whole entries are kept or dropped.
 
-Sizes are in tokens, not characters, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokeniser where it can, and estimated at four characters a token where it cannot.
+Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokeniser where it can, and estimated at four characters a token where it cannot.
 
 ## Phrases this chat has worn out
 
@@ -264,7 +259,7 @@ It adds no extra call, because it reads replies the refine already has. It does 
 
 A refine is one model call by default. **How many passes a refine makes**, on the Limits tab, can make it several, each pass given what the one before it wrote. For example, one pass cuts filler and the next fixes rhythm, so no single prompt has to do both.
 
-**The passes, in order** takes one preset name per line, top to bottom. It can be one of yours or a built-in prompt. Yours wins when the names match. Presets are named, not copied, so editing a preset changes every pass that uses it.
+**The passes, in order** takes one preset name per line, top to bottom. It can be one of yours or a built-in prompt. Yours wins when the names match. A pass uses the preset by name, so editing a preset changes every pass that uses it.
 
 The built-in prompts are whole refines, so running two in a row does the same work twice. Build a chain from presets of your own that each do one thing.
 
@@ -318,7 +313,7 @@ Some things cannot be found by pattern, such as a stat block or a translation li
 
 ### The reply's own reasoning
 
-**Keep the reply's own reasoning out of the refine** is also on by default. A reasoning model's working is not your writing. It is taken off before the refine and put back afterwards, unchanged.
+**Keep the reply's own reasoning out of the refine** is also on by default. A reasoning model's working is taken off before the refine and put back afterwards, unchanged.
 
 Three forms are recognised by tag name:
 
@@ -426,7 +421,7 @@ What a preset never changes: whether refining is on, the length limits, whether 
 **Model setup to load with it** links a preset to one of your saved model setups, so loading the preset loads that setup too. Leave it at **None** to leave the Model tab alone.
 
 - The link can only be set on a preset of your own. To link one to a built-in prompt, pick the setup, then press **Save as new**. The card says this while you are there.
-- The setup is linked by name, not copied, so a preset can be shared. If you load a preset that names a setup you do not have, the preset still loads and the card says which setup it wanted.
+- The setup is linked by name, so a preset can be shared. If you load a preset that names a setup you do not have, the preset still loads and the card says which setup it wanted.
 
 **Picking a preset loads it.** Its prompt is on screen and in use straight away. This means the prompt on screen is always the preset the picker names, so **Update selected** can never save one preset over another by mistake.
 

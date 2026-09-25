@@ -36,7 +36,7 @@ character actually does with their hands.
 
 ## Do not ask for more writing
 
-Rules like "add sensory detail" or "expand the description" ask for new writing, not a refine. A refine that makes a reply half again as long has written new scene, and the length limit will drop it anyway.
+Rules like "add sensory detail" or "expand the description" ask for new writing, which a refine is not for. A refine that makes a reply half again as long has written new scene, and the length limit will drop it anyway.
 
 If you want more writing, ask your roleplay model. A refine tightens what is already there.
 

@@ -52,22 +52,38 @@ describe("the prompts that come with it", () => {
   });
 
   // Every one scores before it changes anything, and the score has to rest on
-  // a quoted line. The answer asks for the scorecard ahead of the rewrite, so
-  // the scores are written before the rewrite is and cannot grade it after.
-  test("every one scores the passage, on quoted lines, before the rewrite", () => {
+  // a line the model could quote. The two for a model that reasons write the
+  // scorecard ahead of the rewrite, so the scores are written before the
+  // rewrite is and cannot grade it after. The two for a model that does not
+  // score silently and are never asked for notes.
+  test("every one scores the passage, on lines it could quote", () => {
     for (const p of BUILT_IN_PROMPTS) {
       const score = p.blocks.find((x: any) => x.id === "score");
-      const answer = p.blocks.find((x: any) => x.id === "answer");
       const t = String(score && score.text);
-      const a = String(answer && answer.text);
       expect({
         prompt: p.name,
         on: !!(score && score.on),
         quotes: /quote/.test(t),
         leavesDoubt: /85 to 99: a line might fit, but you are not sure/.test(t),
         onlyUnder: /Change only the areas that scored under 85/.test(t),
-        cardFirst: a.indexOf("<REFINE_NOTES>") >= 0 && a.indexOf("<REFINE_NOTES>") < a.indexOf("<REFINED>"),
-      }).toEqual({ prompt: p.name, on: true, quotes: true, leavesDoubt: true, onlyUnder: true, cardFirst: true });
+      }).toEqual({ prompt: p.name, on: true, quotes: true, leavesDoubt: true, onlyUnder: true });
+    }
+  });
+
+  test("the ones for a model that reasons write the scorecard before the rewrite", () => {
+    for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking !== "off")) {
+      const a = String(p.blocks.find((x: any) => x.id === "answer").text);
+      expect({ prompt: p.name, cardFirst: a.indexOf("<REFINE_NOTES>") >= 0 && a.indexOf("<REFINE_NOTES>") < a.indexOf("<REFINED>") })
+        .toEqual({ prompt: p.name, cardFirst: true });
+    }
+  });
+
+  test("and the ones for a model that does not reason ask for no notes at all", () => {
+    for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking === "off")) {
+      const all = p.blocks.map((b: any) => String(b.text)).join("\n");
+      const score = String(p.blocks.find((x: any) => x.id === "score").text);
+      expect({ prompt: p.name, notes: /refine_notes/i.test(all), silent: /Don't write the scores down/.test(score) })
+        .toEqual({ prompt: p.name, notes: false, silent: true });
     }
   });
 

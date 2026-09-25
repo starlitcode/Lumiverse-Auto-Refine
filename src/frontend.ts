@@ -158,7 +158,7 @@ const DEBUG_PARTS: Array<{ id: string; label: string; what: string }> = [
   { id: "prompt", label: "The shape of your prompt", what: "Block names, roles, order and which macros each one uses. Not what the blocks say." },
   { id: "counts", label: "Counts for this session", what: "How many refines were saved, dropped and put back, and why." },
   { id: "log", label: "What it has been doing", what: "The last dozen lines from the Log tab." },
-  { id: "chat", label: "Where you are", what: "Whether a chat is open and whether it has a card. No ids, no names." },
+  { id: "chat", label: "Where you are", what: "Whether a chat is open and whether it has a card. Chat ids and names are left out." },
   { id: "browser", label: "Your browser", what: "The user agent string and the screen size, which is what a layout bug needs." },
 ];
 
@@ -615,8 +615,8 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
       "They come after this lead-in: \"Another model, Jev, read this passage " +
       "before you and scored it against checks the user wrote. The checks below " +
       "reached the user's line of 50%, strongest first. In them, \"reply\" means " +
-      "the passage you are rewriting. Look at these first. Each one is a lead, " +
-      "not an order: where a check does not fit the passage, leave that part as " +
+      "the passage you are rewriting. Look at these first. Treat each one as a " +
+      "lead to check. If a check does not fit the passage, leave that part as " +
       "it is. Everything else in these instructions still applies.\" The 50% " +
       "there is an example: it says whatever line you set under Refine when a " +
       "check reaches, and only checks at or over that line are listed. Empty on " +
@@ -682,11 +682,14 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // one. That is the whole of the difference between the two on a side.
 //
 // All four score the passage before they change it: each area gets a score out
-// of 100 that rests on a quoted line, and only areas under 85 are touched. The
-// quote is the part that matters. A model that has to point at the line it
-// wants to change leaves alone the lines it cannot point at, which is what
-// stops a refine rewriting a passage that was already fine. The scores are
-// written into the notes, so the panel shows what was found and why.
+// of 100 that rests on a line the model can point to, and only areas under 85
+// are touched. A model that has to point at the line it wants to change leaves
+// alone the lines it cannot point at, which is what stops a refine rewriting a
+// passage that was already fine. The two for a model that reasons write the
+// scorecard into the notes, so the panel shows it. The two for a model that
+// does not score silently and write nothing but the rewrite, since working
+// written out by a model that does not reason costs time and rarely changes
+// what it does.
 
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
@@ -757,7 +760,7 @@ const WORN_BLOCK: Block = {
 // What Jev found in the reply, with two models on. Off in both built-in prompts
 // for replies, and in neither prompt for your own messages, since Jev never
 // reads those. The macro brings its own lead-in, which says the checks are
-// leads rather than orders, so the block is the tag and nothing else and is
+// leads to check, so the block is the tag and nothing else and is
 // left out whenever Jev found nothing.
 const JEV_FOUND_BLOCK: Block = {
   id: "jevfound",
@@ -807,11 +810,8 @@ const TURN_BLOCK: Block = {
 // the shape, and the tags are the only part of this prompt that has to come
 // back exactly right.
 //
-// The scorecard comes first, in the notes tag, so the scores are written before
-// the rewrite is. A model that writes the rewrite first and scores it after is
-// grading its own work rather than deciding what to change. The notes are kept
-// to one line an area, since a model that does not reason pays for every word
-// of them in time.
+// No notes here. This one is for a model that does not reason, which scores
+// silently and hands back the rewrite and nothing else.
 //
 // Shouted, and read back case-insensitively so a prompt written in lower case
 // still works.
@@ -833,16 +833,12 @@ const HOW_TO_ANSWER: Block = {
   role: "user",
   text:
     "<hand_it_in>\n" +
-    "Hand it in like this, in this order:\n\n" +
-    "<REFINE_NOTES>\nOne line per area, in the order the rules list them:\n" +
-    "Area: score. \"the worst line, quoted\"\nThen one line saying which " +
-    "areas scored under 85. Those are the only ones you touch.\n" +
-    "</REFINE_NOTES>\n<REFINED>\nthe passage, rewritten\n</REFINED>\n\n" +
-    "Keep the scorecard short. The user can read it, but it never goes " +
-    "into the story.\n\n" +
-    "Only what's between <REFINED> and </REFINED> gets saved, so both tags " +
-    "go in every time. Inside them, just the passage, the way a reader " +
-    "would see it." +
+    "Hand it in like this:\n\n" +
+    "<REFINED>\nthe passage, rewritten\n</REFINED>\n\n" +
+    "Only what's between those two tags gets saved, so both go in every " +
+    "time. Inside them, just the passage, the way a reader would see it.\n\n" +
+    "If you need to tell the user something, like why you handed it back " +
+    "untouched, say it outside the tags. It reaches them and never the story." +
     "\n</hand_it_in>",
 };
 
@@ -852,8 +848,10 @@ const HOW_TO_ANSWER: Block = {
 // what makes asking for it worth the tokens: working nobody reads is only a
 // bill.
 //
-// The scorecard is the same as in the plain answer. What this one adds is where
-// the rest of the working goes: a model that reasons will write some whatever
+// The scorecard goes first, in the notes, so the scores are written before the
+// rewrite is. A model that writes the rewrite first and scores it after is
+// grading its own work rather than deciding what to change. The rest of the
+// working goes in the same tag: a model that reasons will write some whatever
 // it is told, and this keeps it inside the one tag that never reaches the story.
 const THINKS_ANSWER: Block = {
   id: "answer",
@@ -1086,7 +1084,7 @@ const YOURS_CAST: Block = {
     "\n</roll_call>",
 };
 
-// The scoring, shared by all four. The anchors say what each band means rather
+// The written scorecard, for the two that reason. The anchors say what each band means rather
 // than leaving a model to invent its own scale, and the band from 85 to 99 is
 // where doubt goes: a line that might fit and might not is left alone. On the
 // user's own turn that is the rule already, where a line that might be a slip
@@ -1094,7 +1092,7 @@ const YOURS_CAST: Block = {
 //
 // An area is left for the model to find in the rules above it rather than
 // listed here, so a block switched off is an area that is not scored.
-const SCORE_BLOCK: Block = {
+const THINKS_SCORE_BLOCK: Block = {
   id: "score",
   name: "Scorecard",
   on: true,
@@ -1114,6 +1112,33 @@ const SCORE_BLOCK: Block = {
     "even if you'd have written it differently.\n\n" +
     "Score what's actually on the page. A passage that gets 100 everywhere " +
     "comes back unchanged, and that's a legit result." +
+    "\n</scorecard>",
+};
+
+// The same scoring for the two that do not reason, done silently. The rules
+// are the same, down to the bands, and the only difference is that nothing is
+// written down: the answer is the rewrite and nothing else.
+const SCORE_BLOCK: Block = {
+  id: "score",
+  name: "Scorecard",
+  on: true,
+  role: "system",
+  text:
+    "<scorecard>\n" +
+    "Score it in your head before you touch anything. Don't write the scores " +
+    "down, just use them. An area is one kind of fault the rules above go " +
+    "after. Give each area a score out of 100, and only count a fault you " +
+    "could point at: a real line in the passage, one you could quote.\n\n" +
+    "- 100: clean.\n" +
+    "- 85 to 99: a line might fit, but you are not sure, or fixing it would " +
+    "do more harm than good.\n" +
+    "- 60 to 84: one or two lines fit.\n" +
+    "- under 60: it's all over the place.\n\n" +
+    "Change only the areas that scored under 85, and in those, only the " +
+    "lines that earned it. Everything else goes back exactly as it came, " +
+    "even if you'd have written it differently.\n\n" +
+    "A passage that scores 100 everywhere comes back unchanged, and that's " +
+    "a legit result." +
     "\n</scorecard>",
 };
 
@@ -1452,8 +1477,9 @@ const YOURS_THINKS_JOB: Block = {
     "You're the line judge on the user's own writing. You call clear " +
     "faults and that's it: typos, grammar, punctuation, a doubled word, a " +
     "dropped one. Making their prose better is somebody else's job.\n\n" +
-    "Everything they did, said and meant stays. So does how they write it, " +
-    "meaning the tense, the person, the caps, the length, the plainness. " +
+    "Everything they did, said and meant stays. So does how they write it. " +
+    "Three words in lowercase, first person, present tense? That's what comes " +
+    "back. " +
     "Only call what the rules below name.\n\n" +
     "Use your reasoning to tell a mistake from a decision. When they look " +
     "alike, it's a decision, and you leave it. Thinking hard about a line " +
@@ -1594,7 +1620,7 @@ const THINKS_LONG: Block[] = [
       "the space. Usually it isn't." +
       "\n</review_the_tape>",
   },
-  SCORE_BLOCK,
+  THINKS_SCORE_BLOCK,
   COPY_EXACTLY,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
@@ -1614,7 +1640,7 @@ const YOURS_THINKS_LONG: Block[] = [
   YOURS_WHERE,
   YOURS_CAST,
   YOURS_NOT_YOURS,
-  SCORE_BLOCK,
+  THINKS_SCORE_BLOCK,
   COPY_EXACTLY,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
@@ -1658,7 +1684,7 @@ const BUILT_IN_PROMPTS: BuiltIn[] = [
     mine: false,
     blocks: THINKS_LONG,
     thinking: "inherit",
-    what: "The same job, given as a bar to clear rather than a list to match: five hot spots, the voice it was written in, the roll call, a scorecard, and a review of its own rewrite. Needs a model that reasons.",
+    what: "The same job, given as a bar to clear. It checks five hot spots and the roll call, keeps the voice the reply was written in, and reviews its own rewrite before handing it in. Needs a model that reasons.",
   },
   {
     name: "The line judge",
@@ -1790,7 +1816,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional. One regular expression per line, not case-sensitive. Code, links, tags and the like are kept already. One that will not work is named under this box.",
+    hint: "Optional. One regular expression per line. Capitals do not matter. Code, links, tags and the like are kept already. One that will not work is named under this box.",
   },
   {
     key: "shieldKeep",
@@ -1817,7 +1843,7 @@ const GUARD_FIELDS: Field[] = [
     key: "guardPreamble",
     label: "Refuse an answer that talks about the edit",
     type: "bool",
-    hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is ignored, not saved.",
+    hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is never saved.",
   },
   {
     key: "guardSoften",
@@ -7847,8 +7873,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
   }
 
-  // Whether this prompt asks the model to write down what it is doing. The four
-  // built-in prompts do. A prompt of somebody's own may not, and then the card
+  // Whether this prompt asks the model to write down what it is doing. The two
+  // built-in prompts for a model that thinks do. Any other may not, and then the card
   // that shows the working while it writes has nothing to show, and somebody
   // waiting for it has no way of knowing why. Said here, where the prompt is.
   const asksForWorking = () =>
@@ -7859,7 +7885,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       return cfg.popup
         ? "It asks the model for its working, which comes up on screen while it writes."
         : "It asks the model for its working, but Show the before and after on screen is off under When a refine finishes, and that card is where the working appears.";
-    return "It does not ask the model for its working, so there is nothing to watch while it writes. The four built-in prompts do.";
+    return "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks do.";
   }
 
   // A block switched on or off, taken in where it stands.
@@ -9585,7 +9611,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         note(
           asksForWorking()
             ? "Nothing yet. The working from the last refine that finishes is shown here, and a refine you stop leaves what is already here alone."
-            : "The prompt you are on does not ask the model for its working, so there is none to keep. The four built-in prompts ask for it.",
+            : "The prompt you are on does not ask the model for its working, so there is none to keep. The two for a model that thinks ask for it.",
         ),
       );
       return wrap;

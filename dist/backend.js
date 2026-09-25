@@ -3939,7 +3939,7 @@ function jevFoundText(scores, over) {
     return ('Another model, Jev, read this passage before you and scored it against checks the user wrote. ' +
         'The checks below reached the user\'s line of ' + over + '%, strongest first. ' +
         'In them, "reply" means the passage you are rewriting. Look at these first. ' +
-        'Each one is a lead, not an order: where a check does not fit the passage, leave that part as it is. ' +
+        'Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. ' +
         'Everything else in these instructions still applies.\n' +
         hits.map((x) => '- ' + x.check.replace(/`/g, '') + ' (' + x.pct + '%)').join('\n'));
 }

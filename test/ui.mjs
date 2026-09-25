@@ -5076,7 +5076,7 @@ console.log("\nthe working, read as prose");
   // A prompt that asks for no working still gets an answer, and that answer is
   // the rewrite. Taking it would put the rewrite itself under What the model
   // worked out, which is neither what the card says nor what anybody is looking
-  // for there. A prompt of somebody's own, since all four built-in ones ask.
+  // for there.
   await inTab(browser, { saved: { blocks: [{ id: "rules", name: "Only rules", on: true, role: "system", text: "cut filler {{message}}" }] } }, async (page) => {
     await page.evaluate(() => {
       window.__fromBackend({

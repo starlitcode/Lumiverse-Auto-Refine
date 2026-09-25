@@ -6,7 +6,7 @@ Every check below leaves the reply exactly as it was, and writes a line in the p
 
 ## The greeting, always
 
-The opening message is written by a person, so it is never refined. Not by the automatic pass, not by a button, and not by any setting. Asking for it by name is refused too.
+The opening message is written by a person, so it is never refined. The automatic pass skips it, the buttons skip it, and no setting changes that. Asking for it by name is refused too.
 
 This is the only rule in the extension with no switch.
 
@@ -54,7 +54,7 @@ What it cannot catch:
 
 ## Asking again
 
-**Ask again when a check fails** is 0 by default. A refusal, a preamble or a softened rewrite is often a one-off, and the same request can come back fine.
+**Ask again when a check fails** is 0 by default. A failed check is often a one-off, and the same request can come back fine.
 
 - Only failures that a second try could fix are retried.
 - A rewrite refused for its length is not retried, because the model meant it and would give the same answer.
@@ -71,7 +71,7 @@ But the same test cannot tell new writing from a loop, such as:
 - Lumiverse announcing the same reply under new ids
 - a chat being swiped through very fast
 
-So the automatic pass refines one reply at most twelve times, for as long as Lumiverse is running. This is a safety stop, not a budget. Nobody reaches it in normal use.
+So the automatic pass refines one reply at most twelve times, for as long as Lumiverse is running. It is a safety stop. Nobody reaches it in normal use.
 
 Pressing the refine button on a reply always works, whatever the count. The Log says when the automatic pass has stopped on a reply, and why.
 
@@ -104,7 +104,7 @@ The status line counts down while it waits. **Stop** ends the wait and the call.
 - **Too long.** A rewrite that grows the reply by more than your limit has written new scene. The default limit is 60%.
 - **Too short.** A rewrite that shrinks it by more than your limit has thrown writing away. The default limit is 40%.
 
-Set either to 0 to allow any length. Before raising the growth limit, read [Writing rules](rules.md): a rule that asks for more writing is asking for a new reply, not a refine.
+Set either to 0 to allow any length. Before raising the growth limit, read [Writing rules](rules.md): a rule that asks for more writing is asking for a new reply.
 
 ## Wrapping, which is fixed instead of dropped
 
@@ -125,7 +125,7 @@ A refine reads the reply, sends it to a model, and writes the answer back. That 
 
 **Keep what a refine replaced** is on by default. It keeps the text from before each refine, so you can put it back from the panel.
 
-It is kept in memory while the page is open, and never written anywhere. It is a way back from a refine you did not like, not a record of your chat.
+It is kept in memory while the page is open, and never written anywhere. It is there to undo a refine you did not like. It keeps no record of your chat.
 
 ---
 

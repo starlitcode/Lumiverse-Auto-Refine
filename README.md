@@ -104,7 +104,7 @@ Four prompts come with it:
 - **The line judge**, for your own messages. It fixes mistakes and leaves your style alone.
 - Each has a smaller version **for a model that thinks**.
 
-All four score the passage before they change it. Each score rests on a line the model quotes, and only low scores lead to a change. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
+All four score the passage before they change it. A score has to rest on a line the model could quote, and only low scores lead to a change. The two for a model that thinks write the scores down, and the two plain ones score silently. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
 
 **Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what Jev found, and the passes after the first.
 
@@ -128,7 +128,7 @@ All four score the passage before they change it. Each score rests on a line the
 - The extension has no networking of its own. Search the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and you will find nothing.
 - **Nothing is ever added to your chat.** It only edits messages that already exist.
 - **Refine what I am typing** reads and writes the input box on the page, because Lumiverse has no API for it. If an update moves the box, **Where the input box is** on the Setup tab points it at the new one.
-- The files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`. They are plain, readable JavaScript, not minified.
+- The files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`. They are plain, readable JavaScript. Nothing is minified.
 
 It asks for seven permissions:
 
