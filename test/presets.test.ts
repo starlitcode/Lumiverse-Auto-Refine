@@ -184,8 +184,8 @@ describe("the prompts that come with it", () => {
     const mine = forMine().map((p: any) => p.label);
     const replies = forReplies().map((p: any) => p.label);
     for (const one of mine) expect(replies).not.toContain(one);
-    expect(mine.every((l: string) => /copy edit/i.test(l))).toBe(true);
-    expect(replies.every((l: string) => /line edit/i.test(l))).toBe(true);
+    expect(mine.every((l: string) => /^The line judge/.test(l))).toBe(true);
+    expect(replies.every((l: string) => /^The judge/.test(l))).toBe(true);
   });
 
   // A prompt for your own turn loaded over the prompt for replies would be the
@@ -198,7 +198,7 @@ describe("the prompts that come with it", () => {
   // hands the model: a line edit on a reply, a copy edit on your own turn. The
   // only thing separating them is which model they were written for.
   test("each set is named for the job it does", () => {
-    for (const [set, job] of [[forReplies(), "The line edit"], [forMine(), "The copy edit"]] as any) {
+    for (const [set, job] of [[forReplies(), "The judge"], [forMine(), "The line judge"]] as any) {
       const stems = set.map((p: any) => p.label.split(",")[0].trim());
       expect(stems.filter((n: string) => n === job).length).toBe(2);
     }
@@ -219,8 +219,8 @@ describe("the prompts that come with it", () => {
   // so, and this is what holds that claim to the text.
   test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
-      ["The line edit, for a model that thinks", "The line edit"],
-      ["The copy edit, for a model that thinks", "The copy edit"],
+      ["The judge, for a model that thinks", "The judge"],
+      ["The line judge, for a model that thinks", "The line judge"],
     ];
     for (const [small, big] of pairs)
       expect(sizeOf(named(small))).toBeLessThan(sizeOf(named(big)));

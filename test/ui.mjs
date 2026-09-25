@@ -1642,7 +1642,7 @@ console.log("\neach list keeps its own lock");
 
     await side("userBlocks");
     await settle(page);
-    await load("The copy edit");
+    await load("The line judge");
     await settle(page);
     const mine = await look();
     ok("a built-in prompt for your messages is locked", mine.locked && mine.note, JSON.stringify(mine));
@@ -1656,17 +1656,17 @@ console.log("\neach list keeps its own lock");
     await settle(page);
     const back = await look();
     ok("going back, it is still named and still locked",
-      back.pick === "The copy edit" && back.locked && back.note, JSON.stringify(back));
+      back.pick === "The line judge" && back.locked && back.note, JSON.stringify(back));
 
     await side("blocks");
     await settle(page);
-    await load("The line edit");
+    await load("The judge");
     await settle(page);
     await side("userBlocks");
     await settle(page);
     const both = await look();
     ok("loading one for replies leaves the other list's lock alone",
-      both.pick === "The copy edit" && both.locked, JSON.stringify(both));
+      both.pick === "The line judge" && both.locked, JSON.stringify(both));
 
     // One of your own, picked for replies, is named on that list only. Named
     // on both, the list for your messages stops naming the built-in prompt it
@@ -1679,7 +1679,7 @@ console.log("\neach list keeps its own lock");
     await settle(page);
     const yours = await look();
     ok("loading one of your own for replies leaves the other list's lock alone too",
-      yours.pick === "The copy edit" && yours.locked && yours.note, JSON.stringify(yours));
+      yours.pick === "The line judge" && yours.locked && yours.note, JSON.stringify(yours));
   });
   ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
 }
@@ -2240,7 +2240,7 @@ console.log("\na preset that names a model setup");
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }, value);
 
-    await pickPreset("The line edit");
+    await pickPreset("The judge");
     await settle(page);
     ok("nothing is said about a built-in prompt before a setup is picked", (await builtInNote()) === false);
     await page.evaluate(() => {
@@ -2772,12 +2772,12 @@ console.log("\nloading a preset from where you were reading");
       };
       // Start on the smaller of the pair, since a fresh install already holds
       // the bigger one and loading it again would grow nothing to follow.
-      load(/^The line edit, for a model that thinks$/);
+      load(/^The judge, for a model that thinks$/);
       await new Promise((r) => setTimeout(r, 120));
       const was = { scroll: s.scrollTop, card: seen() };
       // The biggest one, which is the one that grows the panel most when it
       // loads and so the one most likely to throw the scroll.
-      const detailed = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const detailed = Array.from(pick.options).find((o) => /^The judge$/.test(o.textContent.trim()));
       pick.value = detailed.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       document.querySelector('#drawer [data-arf-preset="load"]').click();
@@ -7740,7 +7740,7 @@ console.log("\nsaying the built-in prompts have changed");
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
       const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const builtIn = Array.from(sel.options).find((o) => /The line edit/.test(o.textContent));
+      const builtIn = Array.from(sel.options).find((o) => /The judge/.test(o.textContent));
       sel.value = builtIn.value;
       sel.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 60));
@@ -7753,7 +7753,7 @@ console.log("\nsaying the built-in prompts have changed");
         line: !!document.querySelector("#drawer [data-arf-builtinmoved]"),
       };
     });
-    ok("the built-in prompt really was the one loaded", /The line edit/.test(out.picked), JSON.stringify(out));
+    ok("the built-in prompt really was the one loaded", /The judge/.test(out.picked), JSON.stringify(out));
     ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
     ok("so the line goes with it", !out.line, JSON.stringify(out));
   });
@@ -7785,6 +7785,26 @@ console.log("\na built-in prompt cannot be typed into");
       };
     });
 
+  // The four were renamed. A pick and a pass saved under the old names follow
+  // the rename rather than leaving the picker empty and the pass skipped.
+  await inTab(
+    browser,
+    { saved: { presetPick: "The line edit", passMode: "many", passNames: ["The line edit", "Mine"] } },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const pick = await page.evaluate(() => document.querySelector('#drawer [data-arf-field="presetPick"]').value);
+      ok("a pick saved under an old built-in name follows the rename", pick === "The judge", JSON.stringify(pick));
+      await goTab(page, "Limits");
+      const passes = await page.evaluate(() => {
+        const box = document.querySelector('#drawer [data-arf-field="passNames"]');
+        const area = box && (box.tagName === "TEXTAREA" ? box : box.querySelector("textarea"));
+        return area ? area.value : null;
+      });
+      ok("and so does a pass named after one, leaving your own names alone",
+        passes === "The judge\nMine", JSON.stringify(passes));
+    },
+  );
+
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const fresh = await look(page);
@@ -7793,7 +7813,7 @@ console.log("\na built-in prompt cannot be typed into");
 
     const picked = await page.evaluate(async () => {
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const one = [...pick.options].find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const one = [...pick.options].find((o) => /^The judge$/.test(o.textContent.trim()));
       pick.value = one.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
@@ -7826,7 +7846,7 @@ console.log("\na built-in prompt cannot be typed into");
       ok("the lock is on before the panel is taken down", before.readOnly === true, JSON.stringify(before));
       ok("and still on when Lumiverse builds it again", after.readOnly === true, JSON.stringify(after));
       ok("with the note still saying why", after.said === true, JSON.stringify(after));
-      ok("and the picker still naming the prompt", pick === "The line edit", JSON.stringify(pick));
+      ok("and the picker still naming the prompt", pick === "The judge", JSON.stringify(pick));
     }
     const held = await look(page);
     ok("the blocks stop taking typing", held.readOnly === true, JSON.stringify(held));
@@ -7847,12 +7867,12 @@ console.log("\na built-in prompt cannot be typed into");
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const one = [...pick.options].find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const one = [...pick.options].find((o) => /^The judge$/.test(o.textContent.trim()));
       pick.value = one.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
       const name = document.querySelector('#drawer [data-arf-field="presetName"]');
-      name.value = "Mine, off the line edit";
+      name.value = "Mine, off the judge";
       name.dispatchEvent(new Event("input", { bubbles: true }));
       document.querySelector('#drawer [data-arf-preset="new"]').click();
       await new Promise((r) => setTimeout(r, 300));
@@ -7884,7 +7904,7 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
         return n ? { kind: n.getAttribute("data-arf-preset-drift"), text: n.textContent } : null;
       };
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const builtIn = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const builtIn = Array.from(pick.options).find((o) => /^The judge$/.test(o.textContent.trim()));
       pick.value = builtIn.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
@@ -9531,7 +9551,7 @@ console.log("\nthe rows that only appear when switched on, at both sizes");
   const ON = {
     enabled: true,
     passMode: "many",
-    passNames: ["The line edit", "The line edit, for a model that thinks"],
+    passNames: ["The judge", "The judge, for a model that thinks"],
     wornOn: true,
     wornBack: 60,
     wornLeast: 3,

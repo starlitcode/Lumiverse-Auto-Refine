@@ -660,7 +660,7 @@ const TURN_MACRO = "{{message}}";
 // prompt that does not ask for it has nothing to show while it writes.
 const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // ---- the prompts that come with it ----
-// One question, four answers. A line edit for a reply and a copy edit for what
+// One question, four answers. The judge for a reply and the line judge for what
 // you wrote yourself, and on each of those two sides one for a model that
 // reasons and one for a model that does not. The question is which model you
 // are running, and nothing else.
@@ -1559,32 +1559,32 @@ const YOURS_THINKS_LONG = [
 const DEFAULT_BLOCKS = PLAIN_LONG;
 const BUILT_IN_PROMPTS = [
     {
-        name: "The line edit",
-        label: "The line edit",
+        name: "The judge",
+        label: "The judge",
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
         what: "Start here. It judges the reply one rule at a time: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish. It scores each against a line it quotes and changes only what scores under 85. Works with one character or several. Runs on any model.",
     },
     {
-        name: "The line edit, for a model that thinks",
-        label: "The line edit, for a model that thinks",
+        name: "The judge, for a model that thinks",
+        label: "The judge, for a model that thinks",
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
         what: "The same job, given as a bar to clear rather than a list to match: five hot spots, the voice it was written in, the roll call, a scorecard, and a review of its own rewrite. Needs a model that reasons.",
     },
     {
-        name: "The copy edit",
-        label: "The copy edit",
+        name: "The line judge",
+        label: "The line judge",
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
         what: "Start here. A line judge for your own writing: slips, missing words, punctuation that came out wrong, and then it stops. It scores each against a line it quotes and fixes only what scores low. Your wording, your sentences and your plain lines come back as they went in, for every character you write. Runs on any model.",
     },
     {
-        name: "The copy edit, for a model that thinks",
-        label: "The copy edit, for a model that thinks",
+        name: "The line judge, for a model that thinks",
+        label: "The line judge, for a model that thinks",
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
@@ -1592,6 +1592,19 @@ const BUILT_IN_PROMPTS = [
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
+// The names the four went by before they were named for the scorecard. A pick
+// or a pass saved under one of these is carried to the name it has now, so
+// nobody finds their picker empty or a pass skipped after updating.
+const OLD_BUILT_IN_NAMES = {
+    "the line edit": "The judge",
+    "the line edit, for a model that thinks": "The judge, for a model that thinks",
+    "the copy edit": "The line judge",
+    "the copy edit, for a model that thinks": "The line judge, for a model that thinks",
+};
+const renamedBuiltIn = (name) => {
+    const now = OLD_BUILT_IN_NAMES[String(name == null ? "" : name).trim().toLowerCase()];
+    return now || name;
+};
 // The prompt it starts on is one of the four, and which one is worth saying
 // out loud. Back to the default and a fresh install both land here, and
 // "the default" on its own does not tell you what you are about to get.
@@ -2492,6 +2505,12 @@ export function setup(ctx, overrides) {
             delete into.shippedSeen;
         }
         catch (_) { }
+        // A built-in prompt picked or chained under the name it had before.
+        for (const k of ["presetPick", "presetPickYours"])
+            if (k in into)
+                into[k] = renamedBuiltIn(into[k]);
+        if (Array.isArray(into.passNames))
+            into.passNames = into.passNames.map(renamedBuiltIn);
         return into;
     }
     // A panel with nothing saved is a fresh install, and a fresh install is
@@ -10109,7 +10128,7 @@ export function setup(ctx, overrides) {
         return out;
     }
     function applyImport(body) {
-        const s = body.settings;
+        const s = carryOldNames(body.settings);
         // Only the keys the chosen parts cover. Everything else in the file is
         // read past, so a file carrying somebody's whole setup can be used to take
         // just their prompt.

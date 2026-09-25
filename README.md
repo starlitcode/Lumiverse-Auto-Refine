@@ -100,8 +100,8 @@ The whole request is a list of blocks you can edit, reorder, switch off or add t
 
 Four prompts come with it:
 
-- **The line edit**, for replies. It improves how a reply reads and leaves what happens alone.
-- **The copy edit**, for your own messages. It fixes mistakes and leaves your style alone.
+- **The judge**, for replies. It improves how a reply reads and leaves what happens alone.
+- **The line judge**, for your own messages. It fixes mistakes and leaves your style alone.
 - Each has a smaller version **for a model that thinks**.
 
 All four score the passage before they change it. Each score rests on a line the model quotes, and only low scores lead to a change. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
