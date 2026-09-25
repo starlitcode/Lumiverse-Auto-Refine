@@ -14,7 +14,6 @@ _2026-09-25_
 
 - **The built-in prompts score a passage before they change it.** All four ask the model to score each area out of 100, and each score has to rest on a line it could quote. Only areas under 85 are changed. A line the model is not sure about is left alone. The two for a model that thinks write the scores down, and they are kept under **What the model worked out** on the Log tab. The two plain ones score silently and send back only the rewrite. See [The scorecard](docs/prompt.md#the-scorecard).
 - **Roll Call**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, and uses a name where a pronoun could mean two people.
-- **More phrases to cut** in A judge, under **Instant Penalties**: eyes that sparkle with mischief, ministrations, a testament to something, and a question asked in the narration and answered at once. Truly and utterly join **Dead Weight**.
 - **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
 
 ### Changed
@@ -32,6 +31,7 @@ _2026-09-25_
   - What each block asks for is the same, apart from the changes listed here.
 - **The built-in prompts say plainly that the tone is yours.** Gentle, sexual or violent, a passage comes back at the strength it went in. A gentle scene gets no heat added, and sex, gore, swearing and insults keep their plain words.
 - **The built-in prompts are written the way a person talks.** They use contractions, some swearing, and sentences of different shapes, so they do not read like the writing they exist to fix. What they ask for is the same. The lead-in before what Jev found now says to treat each check as a lead to check.
+- **Instant Penalties is shorter and catches more.** It lists kinds of stock writing with a few examples each, instead of every phrase. New kinds: fancy stand-ins for plain words, office and maths talk in fiction, the negation trick, do-then-undo, and saying the same thing twice. **Dead Weight** also catches hedges like "something like fear" and two adjectives stacked on one noun. **Body Language** also cuts filters like "she noticed". Truly and utterly join **Dead Weight**.
 - **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit, now A judge, took out tags such as "she asked" before, which could leave nothing to say who spoke.
 
 ### Fixed
