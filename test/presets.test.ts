@@ -104,6 +104,17 @@ describe("the prompts that come with it", () => {
     }
   });
 
+  // A name macro fills in one name. In a group chat that is one character out
+  // of several, so a built-in prompt that leans on it is wrong for everyone
+  // else in the scene. The macros stay in the list for a prompt of your own.
+  test("none of them uses a macro that fills in one character's name", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      for (const b of p.blocks) {
+        const hit = /\{\{\s*(?:user|char|charGroupFocused)\s*\}\}/i.exec(String(b.text));
+        expect({ block: p.name + "/" + b.id, macro: hit ? hit[0] : "" }).toEqual({ block: p.name + "/" + b.id, macro: "" });
+      }
+  });
+
   // The mark tells a reader the built-in prompts changed. A block added
   // switched off is still new wording to take, so it has to move the mark.
   test("the mark moves for a block added switched off", () => {
