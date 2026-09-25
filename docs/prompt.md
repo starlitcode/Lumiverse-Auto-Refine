@@ -88,12 +88,12 @@ The built-in prompts are ordered from what never changes to what changes every t
 1. **The rules.** The same on every refine.
 2. **The setting**: who the story follows, who you are writing with, and what is true in its world. The same for a whole chat.
 3. **Memories.** Lumiverse's memory of the chat. Off by default.
-4. **Earlier Pages.** The recent messages, which change every turn.
+4. **Earlier Turns.** The recent messages, which change every turn.
 5. **Passage.** Different every time.
-6. **How to Answer.** Below the passage on purpose, and sent as **User**.
+6. **Hand It In.** Below the passage on purpose, and sent as **User**.
 7. **Protected Formatting.** Only sent when something was hidden.
 
-**Why How to Answer comes last.** A rule about the shape of the answer is followed best when it is the last thing the model reads. Placed at the top, some models forget the tags, and a rewrite without its tags is dropped, which costs you the call.
+**Why Hand It In comes last.** A rule about the shape of the answer is followed best when it is the last thing the model reads. Placed at the top, some models forget the tags, and a rewrite without its tags is dropped, which costs you the call.
 
 It is sent as **User** because it is your instruction about what you want back, so the model reads your passage and your request together.
 
@@ -112,7 +112,7 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 - If there is an opening tag with no closing tag, the answer was cut off. Nothing is saved, and your reply stays as it was.
 - The tags are read without caring about capitals, so a prompt written in lower case still works.
 
-**Asking for the tags is your prompt's job.** The built-in prompts ask in the **How to Answer** block, in plain words you can reword, move or delete. No hidden macro adds the instruction.
+**Asking for the tags is your prompt's job.** The built-in prompts ask in the **Hand It In** block, in plain words you can reword, move or delete. No hidden macro adds the instruction.
 
 **Take the answer from between the tags**, on the Limits tab, is on by default. Off, the whole answer is taken as the rewrite, and the other checks catch a preamble instead.
 
@@ -131,7 +131,7 @@ the rewritten message
 </REFINED>
 ```
 
-How the scoring works, from the **How to Score** block:
+How the scoring works, from the **Scorecard** block:
 
 - An area is one kind of fault the prompt tells the model to look for, such as stock phrases, repetition or speech.
 - Each area gets a score out of 100.
@@ -152,7 +152,7 @@ About the notes:
 - Only a refine that finishes replaces them. Stopping one keeps the last notes.
 - The two plain prompts keep the notes to one line an area, since a model that does not reason pays for every word in time. The two for a model that thinks also put the rest of their working there.
 - A score is the model's own judgement, not a measurement. The quoted line is the part to trust.
-- To stop the scoring, switch off **How to Score** and take the notes out of **How to Answer**. A prompt that asks for no notes keeps nothing and costs nothing extra.
+- To stop the scoring, switch off **Scorecard** and take the notes out of **Hand It In**. A prompt that asks for no notes keeps nothing and costs nothing extra.
 
 Both tags are in capitals so a model scanning the prompt finds them easily.
 
@@ -160,7 +160,7 @@ Both tags are in capitals so a model scanning the prompt finds them easily.
 
 Nothing outside the `<REFINED>` tags is ever saved into your chat. So a prompt can safely ask for a report around the rewrite: what was cut, what was added, what was left alone.
 
-Add the tags you want to the **How to Answer** block, in your own words. For example:
+Add the tags you want to the **Hand It In** block, in your own words. For example:
 
 ```
 Before the rewrite, list what you changed:
@@ -184,12 +184,12 @@ There are four: a line edit for replies and a copy edit for your own messages, e
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The line edit** | Tells the model it is a line editor: how a passage reads is its job, and what happens in it is yours. Then one block each for phrases, words, repetition, rhythm, speech, bodies, the cast, endings and restraint, and a score for each. The one to start with. | no |
-| **The line edit, for a model that thinks** | The same role, then one standard, the five places worth checking, keeping the writer's voice, the cast, and a check of its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
+| **The line edit** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard for all of them. The one to start with. | no |
+| **The line edit, for a model that thinks** | The same role, then The Bar to clear, five Hot Spots, the writer's Voice, Roll Call, and Review the Tape for its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
 
-- The version for a model that thinks is the smaller one. A reasoning model is given the standard and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
+- The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name exact phrases, because "cut clichés" gives a model nothing to act on. They name the ones that appear often in machine-written roleplay: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, and an emotion given as a mix of two others.
-- **The Cast** block is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
+- **Roll Call** is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
 - Both have a block called **What Jev Found**, switched off. It is for two models. See [Passing on what Jev found](jev.md#passing-on-what-jev-found).
 - All four work as they are. Load one, change what you like, and save it under your own name.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
@@ -200,16 +200,16 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The copy edit** | Tells the model it is a copy editor: it fixes what went wrong on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
-| **The copy edit, for a model that thinks** | The same role, then one test for telling a mistake from a choice, and the places where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
+| **The copy edit** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
+| **The copy edit, for a model that thinks** | The same role, then The Call for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - Each ends by saying that when a slip cannot be told from a choice, it is a choice. A short line, a fragment, or a plain "she left" stays as it is.
-- Their **The Cast** block keeps every line with its speaker when you write more than one character. It adds no line for any character.
+- Their **Roll Call** block keeps every line with its speaker when you write more than one character. It adds no line for any character.
 - They are in the same menu, under their own heading. Loading one changes only the prompt for your own messages.
 
 ### The one thing they do not edit
 
-Each of the four tells the model that the tone of the story is the writer's decision. It names the tones, from gentle and funny to dark, violent or sexually explicit. It says a soft scene stays soft and a graphic one stays graphic, and that sex, violence, swearing and insults keep their plain words. Then it names one exception. This is the paragraph, word for word, in the **Your Role** block of all four:
+Each of the four tells the model that the tone of the story is the writer's decision. It names the tones, from gentle and funny to dark, violent or sexually explicit. It says a soft scene stays soft and a graphic one stays graphic, and that sex, violence, swearing and insults keep their plain words. Then it names one exception. This is the paragraph, word for word, in the first block of all four, **The Judge** or **Line Judge**:
 
 > There is one exception, and it is not the user's call either. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited. Hand that passage back exactly as it came, and say outside the tags that this is why. A younger character in a scene with nothing sexual in it is edited like anyone else.
 
@@ -251,7 +251,7 @@ What it counts:
 
 - **Across replies, not within one.** A phrase has to be in a number of different replies, three by default. Set this with **How many replies a phrase has to be in**. Five times in one reply never counts.
 - **How far back it looks** is **How many replies to look across**, 60 by default.
-- **Narration only.** Everything in quotation marks is left out, because a character who repeats a phrase is being themselves. The **Speech** block handles dialogue instead.
+- **Narration only.** Everything in quotation marks is left out, because a character who repeats a phrase is being themselves. The **Dialogue** block handles speech instead.
 - **Three words at least.** A run of only common words, like "out of the", never counts.
 - **The longest phrase wins.** A six-word phrase is not also reported as the four-word phrase inside it.
 - **Left out:** your own messages, the character's name, words from the character card and the lorebook (they are the story, not a habit), and anything in backticks.
@@ -314,7 +314,7 @@ What is not hidden:
 
 **Patterns to keep visible** keeps a region visible even when a rule above would hide it. The usual use is a colour span in the middle of a sentence, which the model handles better when it can see it.
 
-Some things cannot be found by pattern, such as a stat block or a translation line. The built-in prompts have a **What to Leave** block that tells the model to keep these as they are.
+Some things cannot be found by pattern, such as a stat block or a translation line. The built-in prompts have an **Out of Bounds** block that tells the model to keep these as they are.
 
 ### The reply's own reasoning
 

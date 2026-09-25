@@ -21,7 +21,7 @@ The panel shows what is sent:
 
 - A block that is switched off is not sent.
 - **Messages of run-up to send** set to 0 sends no chat history.
-- Switching off the **Your Characters** block sends no card.
+- Switching off the **Cast Sheet** block sends no card.
 - **Show me the request**, on the Context tab, builds the request a refine would send and shows it to you without sending it anywhere. What Jev found is not in it, since a preview does not ask Jev. The Log says when a refine sent it.
 
 Two things are taken out of a message before it is sent:

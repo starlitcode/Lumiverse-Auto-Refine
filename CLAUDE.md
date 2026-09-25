@@ -31,6 +31,12 @@ behaves, goes into both.
   `spindle.x.y(` call. Keep comments above the `try`, not between it and the call.
 - `test/presets.test.ts` needs every setting in `CONFIG` to belong to a part in
   `PARTS`, or be listed as staying put.
+- The built-in prompts are written around a scorecard, at the owner's request.
+  The model is the judge on a reply and the line judge on the user's own
+  writing, and the block names and tags follow that. This is the one place a
+  metaphor is used. Docs, comments and panel text stay plain.
+- The built-in prompts use no `{{user}}`, `{{char}}` or `{{charGroupFocused}}`,
+  so they suit group chats and do not assume who plays which character.
 - The built-in prompts carry a mark worked out from their text. Changing their
   text tells every user the built-in prompts have changed, so do it on purpose.
 
