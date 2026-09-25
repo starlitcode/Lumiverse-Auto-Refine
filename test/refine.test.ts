@@ -919,6 +919,170 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls.length).toBe(0);
   });
 
+  // {{jev_found}} hands the refine model what Jev picked out, so it does not
+  // have to find the problems again from nothing.
+  const FOUND_BLOCKS = [
+    { id: "t", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
+    { id: "j", name: "Found", on: true, role: "system", text: "<found>\n{{jev_found}}\n</found>" },
+  ];
+  const sentText = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
+
+  test("{{jev_found}} lists the checks that reached the line, strongest first", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([60, 90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const text = sentText(h);
+    expect(text).toContain("<found>");
+    expect(text).toContain("Each one is a lead, not an order");
+    expect(text).toContain("line of 50%");
+    const first = text.indexOf("- reply uses stock phrases. (90%)");
+    const second = text.indexOf("- reply repeats itself. (60%)");
+    expect(first).toBeGreaterThan(-1);
+    expect(second).toBeGreaterThan(first);
+  });
+
+  test("and leaves out a check under the line", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([30, 90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const text = sentText(h);
+    expect(text).toContain("- reply uses stock phrases. (90%)");
+    expect(text).not.toContain("repeats itself");
+  });
+
+  test("when Jev did not read the reply, the block is left out", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([90]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+    expect(sentText(h)).not.toContain("<found>");
+  });
+
+  test("and when Jev could not decide, it is left out too", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, blocks: FOUND_BLOCKS }, chat(), { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    expect(sentText(h)).not.toContain("<found>");
+  });
+
+  // Have Jev check the rewrite: Jev reads what the refine model wrote, and a
+  // check still at or over the line gets the reply one more refine, once.
+  const FIRST = "She stepped through and the cold hit her.";
+  const SECOND = "The cold hit her as she stepped through.";
+  // Jev's answers in turn: the first list for the reply, the next for the
+  // rewrite.
+  const inTurn = (...lists: number[][]) => {
+    let i = 0;
+    return (url: string, init: any) => says(lists[Math.min(i++, lists.length - 1)])(url, init);
+  };
+  async function keyedWith(answers: string[], over: any, opts: any) {
+    const h = await armed(answers, { ...TWO, ...over }, chat(), opts);
+    await h.front({ type: "jev_key_set", requestId: "k", key: "sk-made-up-key" });
+    return h;
+  }
+
+  test("with Have Jev check the rewrite off, Jev reads the reply once", async () => {
+    const h = await keyedWith([FIRST, SECOND], {}, { jev: inTurn([80], [80]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe(FIRST);
+  });
+
+  test("on, a rewrite Jev finds nothing more in is saved as it is", async () => {
+    const h = await keyedWith([FIRST, SECOND], { judgeAfter: true }, { jev: inTurn([80], [10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.jevCalls[1].body.state.reply).toBe(FIRST);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe(FIRST);
+    const again = said(h).filter((m: any) => m.after);
+    expect(again.length).toBe(1);
+    expect(again[0].refine).toBe(false);
+  });
+
+  test("on, a check still over the line gets one more refine, with what Jev found this time", async () => {
+    const h = await keyedWith([FIRST, SECOND], { judgeAfter: true, blocks: FOUND_BLOCKS }, { jev: inTurn([90, 20], [20, 70]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe(SECOND);
+    const second = (h.asked[1].messages || []).map((m: any) => m.content).join("\n\n");
+    expect(second).toContain(FIRST);
+    expect(second).toContain("- reply uses stock phrases. (70%)");
+    expect(second).not.toContain("repeats itself");
+    expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "again")).toBe(true);
+  });
+
+  test("and only once, however the second rewrite reads", async () => {
+    const h = await keyedWith([FIRST, SECOND], { judgeAfter: true }, { jev: inTurn([90], [90], [90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.asked.length).toBe(2);
+  });
+
+  test("a second refine that is turned down leaves the first rewrite saved, and says so", async () => {
+    const h = await keyedWith([FIRST, ""], { judgeAfter: true }, { jev: inTurn([90], [90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.body("m2")).toBe(FIRST);
+    expect(h.sent.some((m: any) => m.type === "refine_again_dropped")).toBe(true);
+  });
+
+  test("Jev failing on the rewrite keeps the rewrite", async () => {
+    let n = 0;
+    const jev = (url: string, init: any) => (n++ === 0 ? says([90])(url, init) : { status: 500, body: "{}" });
+    const h = await keyedWith([FIRST, SECOND], { judgeAfter: true }, { jev: jev });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe(FIRST);
+    expect(said(h).filter((m: any) => m.after)[0].failed).toBe(true);
+  });
+
+  test("Stop while Jev reads the rewrite saves nothing", async () => {
+    let n = 0;
+    let h: any = null;
+    const jev = (url: string, init: any) => {
+      if (n++ === 0) return says([90])(url, init);
+      h.front({ type: "cancel_refine", requestId: "s" });
+      return says([10])(url, init);
+    };
+    h = await keyedWith([FIRST, SECOND], { judgeAfter: true }, { jev: jev });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.body("m2")).toBe(REPLY);
+  });
+
+  test("Stop during the second refine saves nothing, not even the first rewrite", async () => {
+    let h: any = null;
+    let asks = 0;
+    h = await keyedWith([FIRST, SECOND], { judgeAfter: true }, {
+      jev: inTurn([90], [90]),
+      whileAsking: () => {
+        if (asks++ === 1) h.front({ type: "cancel_refine", requestId: "s" });
+      },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe(REPLY);
+  });
+
+  test("a button refine with Jev left out of it is never checked afterwards either", async () => {
+    const h = await keyedWith([FIRST, SECOND], { judgeAfter: true }, { jev: inTurn([90], [90]) });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.jevCalls.length).toBe(0);
+    expect(h.asked.length).toBe(1);
+  });
+
   // Refine every reply here is a refine you start yourself, one reply at a
   // time, so it follows the same switch as the button on a message.
   const twoReplies = (): Msg[] => [

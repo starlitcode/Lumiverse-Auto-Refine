@@ -34,6 +34,32 @@ describe("the prompts that come with it", () => {
     expect(forMine().length).toBe(2);
   });
 
+  // What Jev found goes only to the prompts for replies, since Jev never reads
+  // your own messages. Off, so nothing changes for anybody who does not turn
+  // it on.
+  test("each prompt for replies carries What Jev Found, switched off", () => {
+    for (const p of forReplies()) {
+      const b = p.blocks.find((x: any) => x.id === "jevfound");
+      expect(b).toBeTruthy();
+      expect(b.on).toBe(false);
+      expect(String(b.text)).toContain("{{jev_found}}");
+    }
+  });
+
+  test("and neither prompt for your own messages does", () => {
+    for (const p of forMine())
+      expect(p.blocks.some((x: any) => String(x.text).indexOf("{{jev_found}}") >= 0)).toBe(false);
+  });
+
+  // The mark tells a reader the built-in prompts changed. A block added
+  // switched off is still new wording to take, so it has to move the mark.
+  test("the mark moves for a block added switched off", () => {
+    const { markShape } = __testing as any;
+    const blocks = forReplies()[0].blocks;
+    const without = blocks.filter((x: any) => x.id !== "jevfound");
+    expect(markShape(blocks)).not.toBe(markShape(without));
+  });
+
   // Stored under a name of its own, shown under the heading's. Two entries
   // sharing a stored name would overwrite each other; two sharing a shown one
   // read fine, because the heading above says which prompt it is for.

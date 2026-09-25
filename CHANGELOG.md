@@ -6,9 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.17.1
+## 1.18.0
 
 _2026-09-25_
+
+### Added
+
+- **What Jev Found**, a block in both built-in prompts for replies, switched off. With two models, it hands the refine model the checks Jev found in the reply, strongest first, with their scores. A short lead-in says each one is a lead to check, not an order, since Jev can be wrong. The block is left out whenever Jev did not read the reply. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
+- **`{{jev_found}}`**, the macro that block uses, for a prompt of your own.
+- **Have Jev check the rewrite**, in **One model or two**, off by default. On, Jev also reads what the refine model wrote. If a check still reaches your line, the reply is refined once more, with what Jev found in the rewrite. It happens once, and costs one more Jev call per refine. See [Having Jev check the rewrite](docs/jev.md#having-jev-check-the-rewrite).
+- **The One model or two card says when nothing takes what Jev finds**, and where to switch it on.
+
+### Changed
+
+- **The Prompt tab tells you the built-in prompts have changed.** They now hold What Jev Found. Your own prompt is not touched. To get the new block, load a built-in prompt for replies again.
 
 ### Fixed
 

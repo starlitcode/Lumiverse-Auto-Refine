@@ -125,6 +125,40 @@ Two things are never sent to Jev, whichever way the switch is set:
 
 Jev is asked after **Seconds between automatic refines**, when that is set, and the panel says "Jev is reading the reply" while it does. **Stop** works while it is reading.
 
+## Passing on what Jev found
+
+Jev works out which of your checks a reply matches. The refine model can be given that list, so it starts from the problems Jev found.
+
+To turn it on:
+
+1. Go to the **Prompt** tab, on **For replies**.
+2. Switch on the block called **What Jev Found**. Both built-in prompts for replies have it, switched off.
+
+If your prompt is your own, add a block with `{{jev_found}}` in it instead. The **One model or two** card says when no block is taking what Jev finds.
+
+What the refine model is given:
+
+- A short lead-in. It says another model scored the passage against checks you wrote, and that each check is a lead, not an order. Where a check does not fit the passage, the model is told to leave that part alone.
+- Each check that reached your line, strongest first, with its score, like `- reply repeats itself. (91%)`.
+
+The block is empty, and left out of the prompt, whenever Jev did not read the reply or could not decide. That includes one model, a selection, and a button refine with **Let Jev check refines you start yourself** off.
+
+Jev can be wrong, which is why the lead-in calls the checks leads. Your other rules still apply as they are.
+
+## Having Jev check the rewrite
+
+**Have Jev check the rewrite**, in **One model or two**, is off by default. On, Jev also reads what the refine model wrote:
+
+- If no check reaches your line, the rewrite is saved.
+- If a check still does, the reply is refined once more, starting from the rewrite. **What Jev Found** then holds what Jev found in the rewrite.
+- It happens once. The second rewrite is saved without another check.
+- If the second refine is turned down, for example as too long, the first rewrite is saved and the Log says why.
+- If Jev cannot read the rewrite, the rewrite is saved.
+
+It only happens on a refine Jev read first. A refine that skipped Jev is not checked afterwards either.
+
+While it runs, the panel says "Jev is reading the rewrite", then "Refining once more" if a check reached the line. **Stop** works at both points, and nothing is saved.
+
 ## When Jev cannot answer
 
 The reply is refined, the same as with one model. No key, a refused key, an account with no credit, a host that is down or an answer with nothing usable in it all end this way, and the Log says which. The beta failing costs you a refine you might not have needed, never a refine you did.
@@ -137,6 +171,7 @@ The reply is refined, the same as with one model. No key, a refused key, an acco
 - Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
 - Which Jev answered, and what the answer cost.
 - A count since the page opened: how many replies Jev read, how many it left alone, and so how many refines you did not pay for. Use it to see whether two models are saving you anything.
+- With **Have Jev check the rewrite** on, a read of a rewrite shows here too, marked **rewrite kept** or **refined again**. It is counted apart from the replies, as rewrites read and how many were sent back.
 - **Clear** empties the card and the count. It is kept only until you close the tab, like the Log.
 
 Every answer also goes in the Log as one line:
@@ -162,7 +197,9 @@ The key is never shown.
 
 ## What it costs
 
-Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev, and so is each press of **Test**. Where the host reports the cost of a call, the Log and the card show it.
+Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev, and so is each press of **Test**.
+
+With **Have Jev check the rewrite** on, each refine costs one more Jev call. A reply refined once more also costs a second refine from your refine provider. Where the host reports the cost of a call, the Log and the card show it.
 
 A test is very small, so its cost can be a tiny part of a cent. A host's own billing page may round it to nothing.
 
