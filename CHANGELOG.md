@@ -30,7 +30,8 @@ _2026-09-25_
   - Copy These Exactly is **Out of Bounds**, and How to Answer is **Hand It In**.
   - Your Characters is **Cast Sheet**, The User's Characters is **Player Sheet**, What Is True is **World Facts**, Earlier Pages is **Earlier Turns**, What Has Happened is **Memories**, Already Worn Out in This Chat is **Worn Out**, The Reply Around It is **Reply Around It**, and Passage to Refine is **Passage**.
   - What each block asks for is the same, apart from the changes listed here.
-- **The built-in prompts say plainly that the tone is yours.** They name the tones, from gentle and funny to dark, violent or sexually explicit. They say a soft scene stays soft, a graphic scene stays graphic, and sex, violence, swearing and insults keep their plain words.
+- **The built-in prompts say plainly that the tone is yours.** Gentle, sexual or violent, a passage comes back at the strength it went in. A gentle scene gets no heat added, and sex, gore, swearing and insults keep their plain words.
+- **The built-in prompts are written the way a person talks.** They use contractions, some swearing, and sentences of different shapes, so they do not read like the writing they exist to fix. What they ask for is the same.
 - **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit, now The judge, took out tags such as "she asked" before, which could leave nothing to say who spoke.
 
 ### Fixed

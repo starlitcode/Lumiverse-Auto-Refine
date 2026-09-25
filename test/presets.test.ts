@@ -235,7 +235,7 @@ describe("the prompts that come with it", () => {
       // The words these prompts use for standing back. Updated with the
       // prompts rather than loosened: the point is that a prompt for somebody's
       // own turn talks about leaving it alone, and it still has to say so.
-      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|what they meant to type/i);
+      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|not your call|what they meant to type/i);
     }
   });
 
