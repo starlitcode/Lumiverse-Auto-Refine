@@ -1688,6 +1688,13 @@ const OLD_BUILT_IN_NAMES: Record<string, string> = {
   "the copy edit": "The line judge",
   "the copy edit, for a model that thinks": "The line judge, for a model that thinks",
 };
+// The lines of a box, trimmed, with the empty ones dropped.
+const linesOf = (text: any): string[] =>
+  String(text == null ? "" : text)
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
 const renamedBuiltIn = (name: any): any => {
   const now = OLD_BUILT_IN_NAMES[String(name == null ? "" : name).trim().toLowerCase()];
   return now || name;
@@ -2687,6 +2694,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       delete into.shippedSeen;
     } catch (_) {}
+    // A list saved as the text of its box, which is how the box used to save
+    // it. Read back as the list it always meant to be.
+    for (const k of ["passNames", "wornFine"]) if (typeof into[k] === "string") into[k] = linesOf(into[k]);
     // A built-in prompt picked or chained under the name it had before.
     for (const k of ["presetPick", "presetPickYours"]) if (k in into) into[k] = renamedBuiltIn(into[k]);
     if (Array.isArray(into.passNames)) into.passNames = into.passNames.map(renamedBuiltIn);
@@ -7544,13 +7554,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       ta.setAttribute("aria-label", f.label);
       ta.className = "arf-field arf-mono";
       ta.rows = f.rows || 3;
-      ta.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
+      // A setting whose default is a list is stored as one, a line to an entry,
+      // since that is what the backend and the account copy read. Stored as the
+      // text in the box, it reached them as something that is not a list and
+      // was dropped, so the passes never ran and no phrase was left alone.
+      const isList = Array.isArray((CONFIG as any)[f.key]);
+      const shown = cfg[f.key];
+      ta.value = isList && Array.isArray(shown) ? shown.join("\n") : String(shown == null ? "" : shown);
+      const take = () => (isList ? linesOf(ta.value) : ta.value);
       ta.addEventListener("input", () => {
-        cfg[f.key] = ta.value;
+        cfg[f.key] = take();
         persist();
       });
       ta.addEventListener("blur", () => {
-        cfg[f.key] = ta.value;
+        cfg[f.key] = take();
         persist(true);
       });
       wrap.appendChild(ta);

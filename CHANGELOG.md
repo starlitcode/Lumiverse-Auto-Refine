@@ -36,6 +36,7 @@ _2026-09-25_
 
 ### Fixed
 
+- **Passes and phrases typed into their boxes did nothing.** **The passes, in order** and **Phrases to leave alone** saved what you typed as one piece of text, and the refine only reads a list. So typed passes never ran, and typed phrases were still reported. Both now save a list, one line to an entry, and anything already saved as text is read back as a list.
 - **A group chat labelled every reply in the run-up with the chat's first character.** Each reply is now labelled with the character who wrote it. The card sent with a reply is also the card of the character who wrote it, not always the chat's first one.
 - **A refine you start was said twice in the Log.** It wrote "refined a reply in" and "refined a reply on request in" for the same reply, and could show two toasts. It now says it once.
 - **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Worn Out** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.

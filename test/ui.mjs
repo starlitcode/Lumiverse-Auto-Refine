@@ -7785,6 +7785,30 @@ console.log("\na built-in prompt cannot be typed into");
       };
     });
 
+  // A box for a list saves a list. It used to save the text of the box, which
+  // the backend read as no list at all, so passes typed here never ran.
+  await inTab(browser, { saved: { passMode: "many" } }, async (page) => {
+    await goTab(page, "Limits");
+    const sent = await page.evaluate(async () => {
+      const area = document.querySelector('#drawer textarea[data-arf-field="passNames"]');
+      area.value = "The judge\n\n  The judge, for a model that thinks  ";
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+      area.dispatchEvent(new Event("blur"));
+      await new Promise((r) => setTimeout(r, 400));
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last && last.settings ? { names: last.settings.passNames, passes: (last.settings.passes || []).length } : null;
+    });
+    ok("the passes typed into the box are saved as a list",
+      !!sent && JSON.stringify(sent.names) === JSON.stringify(["The judge", "The judge, for a model that thinks"]), JSON.stringify(sent));
+    ok("and both of them go to the backend to run", !!sent && sent.passes === 2, JSON.stringify(sent));
+  });
+
+  await inTab(browser, { saved: { passMode: "many", passNames: "The judge\nMine" } }, async (page) => {
+    await goTab(page, "Limits");
+    const shown = await page.evaluate(() => document.querySelector('#drawer textarea[data-arf-field="passNames"]').value);
+    ok("passes already saved as text are read back as a list", shown === "The judge\nMine", JSON.stringify(shown));
+  });
+
   // The four were renamed. A pick and a pass saved under the old names follow
   // the rename rather than leaving the picker empty and the pass skipped.
   await inTab(
@@ -7795,11 +7819,7 @@ console.log("\na built-in prompt cannot be typed into");
       const pick = await page.evaluate(() => document.querySelector('#drawer [data-arf-field="presetPick"]').value);
       ok("a pick saved under an old built-in name follows the rename", pick === "The judge", JSON.stringify(pick));
       await goTab(page, "Limits");
-      const passes = await page.evaluate(() => {
-        const box = document.querySelector('#drawer [data-arf-field="passNames"]');
-        const area = box && (box.tagName === "TEXTAREA" ? box : box.querySelector("textarea"));
-        return area ? area.value : null;
-      });
+      const passes = await page.evaluate(() => document.querySelector('#drawer textarea[data-arf-field="passNames"]').value);
       ok("and so does a pass named after one, leaving your own names alone",
         passes === "The judge\nMine", JSON.stringify(passes));
     },
