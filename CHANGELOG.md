@@ -20,6 +20,7 @@ _2026-09-25_
 ### Changed
 
 - **The Prompt tab tells you the built-in prompts have changed.** They now hold What Jev Found. Your own prompt is not touched. To get the new block, load a built-in prompt for replies again.
+- **Use the shipped list is called Use the built-in list.** The button on **Where the input box is** was renamed in 1.13.0, and that version did not say so. It does the same thing.
 
 ### Fixed
 
@@ -217,7 +218,7 @@ _2026-09-19_
 
   A selector the browser cannot read is marked in red. **Test** covers the box as a whole, and a box with one typo and four good selectors still passes, so the mark goes on the line instead.
 
-  **Use the built-in list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
+  **Use the shipped list** puts the box back, and **Where the input box is** is its own part in the reset and transfer lists, so putting it back does not take the widget and the buttons with it.
 
 - **Tap a running refine to stop it.** Suggested by a Discord user. The buttons in the chat already turned into a spinner while one was working, and tapping the spinner did nothing but say a refine was already running.
 
