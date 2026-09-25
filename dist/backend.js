@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.19.1';
+const VERSION = '1.19.2';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -1013,6 +1013,48 @@ const WORN_SHOWN = 12;
 // Narration only. A character repeating a phrase is characterisation, and
 // flagging somebody's catchphrase as slop would be telling them off for writing.
 // Everything between one quotation mark and the next comes out.
+// Everything in a reply that is not prose, taken out before anything is
+// counted. Markup, trackers and status lines are printed to the same shape in
+// every reply, so their words would come back as a worn-out phrase every time.
+//
+// A colour tag matters twice over: its attribute quotes, as in color="#aabbcc",
+// read as a line of speech opening and closing, which throws off the dialogue
+// check that follows.
+//
+// A line of prose that looks like a label line, such as one with a colon near
+// its start, is only left out of the counting. Nothing here changes a reply.
+function markupOut(text) {
+    const cut = String(text == null ? '' : text)
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/~~~[\s\S]*?~~~/g, ' ')
+        .replace(/<!--[\s\S]*?-->/g, ' ')
+        .replace(/<\/?[a-zA-Z][^>]*>/g, ' ')
+        .replace(/&(?:[a-zA-Z]+|#[0-9]+|#x[0-9a-fA-F]+);/g, ' ')
+        .replace(/【[^】\n]*】/g, ' ')
+        // A label in brackets in the middle of a line, such as [Mood: tense].
+        .replace(/\[[^\]\n]{0,120}:[^\]\n]{0,160}\]/g, ' ')
+        .replace(/\bhttps?:\/\/\S+/g, ' ');
+    return cut
+        .split('\n')
+        .filter((line) => !trackerLine(line))
+        .join('\n');
+}
+// A line printed to a fixed shape rather than written: a table row, a status
+// bar split by pipes, a line held in brackets or braces, or a short label and a
+// colon, such as "Mood: tense" or "**Location:** the docks".
+function trackerLine(line) {
+    const t = String(line).replace(/[*_]/g, '').trim();
+    if (!t)
+        return false;
+    if ((t.match(/\|/g) || []).length >= 2)
+        return true;
+    if (/^[\[{].*[\]}]$/.test(t))
+        return true;
+    const label = /^([^:"\u201c\n]{1,30}):\s*\S/.exec(t);
+    if (label && label[1].trim().split(/\s+/).length <= 3)
+        return true;
+    return false;
+}
 function narrationOf(text) {
     const s = String(text == null ? '' : text);
     let out = '';
@@ -1049,13 +1091,16 @@ function narrationOf(text) {
 }
 // Down to the words a phrase is made of. Markup, punctuation and case all go,
 // because "her hand, shaking," and "her hand shaking" are the same habit.
+// Letters in any alphabet count as word characters, accented ones included,
+// so "café" stays one word and a chat in Russian or Greek is counted too.
+// Emoji and punctuation are not letters, so they split words and are dropped.
 function wordsOf(text, skip) {
     return String(text == null ? '' : text)
         .toLowerCase()
         .replace(/```[\s\S]*?```/g, ' ')
         .replace(/`[^`]*`/g, ' ')
         .replace(/[*_~>#\[\]()]/g, ' ')
-        .replace(/[^a-z0-9'\s]/g, ' ')
+        .replace(/[^\p{L}\p{M}\p{N}'\s]/gu, ' ')
         .split(/\s+/)
         .filter((w) => w && !skip.has(w));
 }
@@ -1076,7 +1121,7 @@ function overusedIn(replies, opts) {
     // phrase -> which replies it turned up in, and how often in total.
     const seen = new Map();
     for (let r = 0; r < replies.length; r++) {
-        const words = wordsOf(narrationOf(replies[r]), skip);
+        const words = wordsOf(narrationOf(markupOut(replies[r])), skip);
         for (let n = PHRASE_MIN; n <= PHRASE_MAX; n++) {
             for (let i = 0; i + n <= words.length; i++) {
                 const run = words.slice(i, i + n);
@@ -1161,7 +1206,7 @@ function renderMap(raw) {
         // that the host kept means the selection will not match, which is refused
         // and said out loud; a marker kept that the host took out would shift every
         // offset after it, which is the kind of wrong that writes to the wrong place.
-        const wordish = (ch) => !!ch && /[A-Za-z0-9]/.test(ch);
+        const wordish = (ch) => !!ch && /[\p{L}\p{N}]/u.test(ch);
         const literalUnderscore = c === '_' && wordish(raw[i - 1]) && wordish(raw[i + 1]);
         if (!literalUnderscore && (c === '*' || c === '_') && raw[i + 1] === c) {
             i += 2;
@@ -1738,7 +1783,7 @@ let extraStrong = [];
 function setStrong(raw) {
     const out = [];
     for (const line of String(raw == null ? '' : raw).split(/[\n,]/)) {
-        const w = String(line).trim().toLowerCase().replace(/[^a-z0-9'-]/g, '');
+        const w = String(line).trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}'-]/gu, '');
         if (!w || w.length < 2)
             continue;
         if (STRONG.indexOf(w) >= 0 || out.indexOf(w) >= 0)
@@ -1756,7 +1801,7 @@ let guardSoften = true;
 let softenPct = 60;
 function strongIn(text) {
     const seen = {};
-    const words = String(text).toLowerCase().match(/[a-z0-9'-]+/g);
+    const words = String(text).toLowerCase().match(/[\p{L}\p{M}\p{N}'-]+/gu);
     if (!words)
         return seen;
     const list = STRONG.concat(extraStrong);
@@ -1911,7 +1956,7 @@ function setPairs(raw) {
 function saysIt(text, term) {
     const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     try {
-        return new RegExp('(^|[^a-z0-9])' + safe + '($|[^a-z0-9])', 'i').test(text);
+        return new RegExp('(^|[^\\p{L}\\p{M}\\p{N}])' + safe + '($|[^\\p{L}\\p{M}\\p{N}])', 'iu').test(text);
     }
     catch (_) {
         return false;
@@ -2478,7 +2523,8 @@ function gatherWorn(msgs, upTo, name, canon) {
         const m = msgs[i];
         if (!m || m.role === 'user')
             continue;
-        const body = String(m.content == null ? '' : m.content).trim();
+        // The reply's own working is left out. It is not writing anybody reads.
+        const body = splitThinking(String(m.content == null ? '' : m.content)).body.trim();
         if (body)
             replies.push(body);
     }

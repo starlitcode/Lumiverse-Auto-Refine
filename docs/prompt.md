@@ -256,8 +256,14 @@ What it counts:
 - **How far back it looks** is **How many replies to look across**, 60 by default.
 - **Narration only.** Everything in quotation marks is left out, because a character who repeats a phrase is being themselves. The **Dialogue** block handles speech instead.
 - **Three words at least.** A run of only common words, like "out of the", never counts.
+- **Any language with spaces between words.** Accented letters and other alphabets, such as Russian or Greek, are counted like English. Emoji are ignored. Chinese and Japanese do not put spaces between words, so phrases cannot be found in them.
 - **The longest phrase wins.** A six-word phrase is not also reported as the four-word phrase inside it.
 - **Left out:** your own messages, the character's name, words from the character card and the lorebook (they are the story, not a habit), and anything in backticks.
+- **Formatting, trackers and thinking are left out too.** These are taken out before anything is counted:
+  - HTML tags, such as a `<font color>` tag
+  - trackers and status lines: table rows, lines split by `|`, lines in brackets or braces, `【】` brackets, and short label lines such as `Mood: tense`
+  - a reply's own reasoning
+- A line of prose that looks like a label line, such as one with a colon near its start, is only left out of the counting. The reply itself is never changed.
 
 It adds no extra call, because it reads replies the refine already has. It does add tokens: about 150 to a request of about 1,600, so about a tenth more per refine while it is on.
 

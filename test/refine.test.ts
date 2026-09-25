@@ -4915,6 +4915,107 @@ describe("phrases this chat has worn out", () => {
     expect(wornSent(h)).toContain("shiver ran down her spine");
   });
 
+  // Colour tags are formatting. Their quote marks also read as a line of speech
+  // opening and closing, which let a spoken line through as narration.
+  test("colour tags and the words around them are not counted as a phrase", async () => {
+    const coloured = [
+      '<font color="#aa8844">"Mind the step."</font> Rook said, and lifted the lantern.',
+      '<font color="#aa8844">"Nearly there."</font> Rook said, and lifted the lantern.',
+      '<font color="#aa8844">"Hold the rope."</font> Rook said, and lifted the lantern.',
+      "The rope held, and the boat came in against the dock.",
+    ];
+    const h = await armed(
+      ["<REFINED>The rope held and the boat came in.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(coloured),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    const sent = wornSent(h);
+    expect(sent).not.toContain("font");
+    expect(sent).not.toContain("color");
+    expect(sent).not.toContain("mind the step");
+    // The narration still counts, so the check is not passing on an empty list.
+    expect(sent).toContain("and lifted the lantern");
+  });
+
+  // Trackers print the same labels in every reply. They are a format the card
+  // asked for, not the writing repeating itself.
+  test("trackers and status lines are not counted as a phrase", async () => {
+    const tracked = (line: string) =>
+      line + "\n\n**Location:** the east dock at low tide\nMood: tense and watchful\n" +
+      "HP 10/10 | Stamina 8/10 | Coins 12\n[Time: late evening | Weather: fog over the water]\n【Quest: find the lost ledger】";
+    const replies = [
+      tracked("Rook tied off the rope and lifted the lantern."),
+      tracked("The fog rolled in, and Rook lifted the lantern."),
+      tracked("A gull cried once, and Rook lifted the lantern."),
+      "The rope held, and the boat came in against the dock.",
+    ];
+    const h = await armed(
+      ["<REFINED>The rope held and the boat came in.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(replies),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    const sent = wornSent(h);
+    for (const bit of ["east dock", "tense and watchful", "stamina", "late evening", "fog over the water", "lost ledger"])
+      expect({ bit, found: sent.includes(bit) }).toEqual({ bit, found: false });
+    // The prose around the trackers still counts.
+    expect(sent).toContain("lifted the lantern");
+  });
+
+  // Letters in any alphabet are word characters. Only a to z were, so an
+  // accented word was cut in pieces and a chat in Russian was never counted.
+  test("accented words are counted whole, and so are other alphabets", async () => {
+    const french = [
+      "Elle a posé la lanterne sur le quai désert.",
+      "Le vent tomba, et elle a posé la lanterne sur le quai désert.",
+      "Plus tard, elle a posé la lanterne sur le quai désert encore.",
+      "La corde tint bon.",
+    ];
+    const h = await armed(
+      ["<REFINED>La corde tint.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(french),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(h)).toContain("la lanterne sur le quai désert");
+
+    const russian = [
+      "Она поставила фонарь на пустой причал.",
+      "Ветер стих, и она поставила фонарь на пустой причал.",
+      "Позже она поставила фонарь на пустой причал снова.",
+      "Верёвка выдержала.",
+    ];
+    const r = await armed(
+      ["<REFINED>Верёвка выдержала.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(russian),
+    );
+    await r.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(r)).toContain("поставила фонарь на пустой причал");
+  });
+
+  test("a reply's own thinking is not counted", async () => {
+    const thinking = [
+      "<think>keep the lamp in view the whole time</think>She walked on.",
+      "<think>keep the lamp in view the whole time</think>She stopped at the gate.",
+      "<think>keep the lamp in view the whole time</think>She looked back once.",
+      "The rope held, and the boat came in against the dock.",
+    ];
+    const h = await armed(
+      ["<REFINED>The rope held and the boat came in.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(thinking),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(h)).not.toContain("lamp in view");
+  });
+
   test("and the block is left out entirely with the setting off", async () => {
     const h = await armed(
       ["<REFINED>She set the lamp down and waited for the wind to drop at last.</REFINED>"],
