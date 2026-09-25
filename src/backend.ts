@@ -3818,6 +3818,24 @@ async function snipMessage(
   return saveRefined(chatId, m, original, next, userId, 'snip', onSwipe);
 }
 
+// The rewrite, moved onto a message whose thinking has changed since it was
+// read, or null when more than the thinking changed.
+//
+// The thinking at the start or end of a message can be moved while a refine
+// runs: into the Reasoning box, by the reader or by another extension on the
+// same event. The writing the refine was made from is still there, so the
+// refine is still good. It is put between the thinking as it is now, so the
+// write does not bring back what was moved out.
+function onFreshThinking(original: string, next: string, fresh: string): string | null {
+  const was = splitThinking(original);
+  const now = splitThinking(fresh);
+  if (now.body !== was.body) return null;
+  if (!next.startsWith(was.head) || !next.endsWith(was.tail)) return null;
+  if (next.length < was.head.length + was.tail.length) return null;
+  const middle = next.slice(was.head.length, next.length - was.tail.length);
+  return now.head + middle + now.tail;
+}
+
 async function saveRefined(
   chatId: string,
   m: any,
@@ -3838,21 +3856,23 @@ async function saveRefined(
   // edit to the writing on screen, and one added as a swipe landed out of
   // sight, so the log said it happened and the next snip could not find its
   // text. The kind check sits on the swipe branch below.
+  //
+  // The message is read, sent to a model, and written back, and the model
+  // call takes seconds. Anything editing that message in the meantime would
+  // be reverted by this write with no message: the reader editing the reply while
+  // waiting, or another extension writing on the same event.
+  //
+  // So the message is read again here and the write is refused if it moved.
+  // A refine is worth less than somebody else's edit: the refine can be run
+  // again on the new text, and the edit cannot be recovered.
   try {
-    // The message is read, sent to a model, and written back, and the model
-    // call takes seconds. Anything editing that message in the meantime would
-    // be reverted by this write with no message: the reader editing the reply while
-    // waiting, or another extension writing on the same event.
-    //
-    // So the message is read again here and the write is refused if it moved.
-    // A refine is worth less than somebody else's edit: the refine can be run
-    // again on the new text, and the edit cannot be recovered.
     const fresh = aimed ? await swipeContent(chatId, m.id, onSwipe as number) : await currentContent(chatId, m.id);
     if (fresh !== null && fresh !== original) {
-      return {
-        ok: false,
-        why: 'that message changed while the rewrite was being written, so it was left alone',
-      };
+      const moved = onFreshThinking(original, next, fresh);
+      if (moved === null)
+        return { ok: false, why: 'that message changed while the rewrite was being written, so it was left alone' };
+      original = fresh;
+      next = moved;
     }
     remember(ourWrites, k, next, OURS_MAX);
     remember(passes, String(m.id), (passes.get(String(m.id)) || 0) + 1, PASSES_MAX);

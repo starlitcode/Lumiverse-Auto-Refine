@@ -2882,6 +2882,33 @@ describe("when something else edits the reply mid-refine", () => {
     expect(h.writes.length).toBe(0);
   });
 
+  // Only the thinking moved, into the Reasoning box. The writing the refine
+  // was made from is unchanged, so the refine is saved, without the thinking.
+  test("the refine is kept when only the thinking was moved out", async () => {
+    const thought = chat();
+    thought[2].content = "<think>She is cold. Lead with that.</think>\n" + thought[2].content;
+    const h = host(thought, ["<refined>She stepped through and the cold hit her.</refined>"], {
+      whileAsking: () => h.edit("m2", "She stepped through and, suddenly, the cold just hit her."),
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and a changed reply is still left alone when the thinking moved too", async () => {
+    const thought = chat();
+    thought[2].content = "<think>She is cold. Lead with that.</think>\n" + thought[2].content;
+    const h = host(thought, ["<refined>She stepped through and the cold hit her.</refined>"], {
+      whileAsking: () => h.edit("m2", "Somebody else got here first."),
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("Somebody else got here first.");
+    expect(h.skipped().join(" ")).toMatch(/changed while the rewrite/i);
+  });
+
   // The guard must not fire when nothing actually moved.
   test("an untouched reply is still refined", async () => {
     const h = await armed(["<refined>She stepped through and the cold hit her.</refined>"]);

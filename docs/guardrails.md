@@ -119,6 +119,7 @@ A refine reads the reply, sends it to a model, and writes the answer back. That 
 
 - If the reply changed before the answer arrived, **the refine is dropped and nothing is written**. The refine can be run again on the new text. An edit written over cannot be recovered.
 - This covers you editing the reply while you wait, and another extension writing to it at the same time.
+- **Thinking moved out of the reply does not count as a change.** If only the thinking at the start or end of the reply was moved, for example into the Reasoning box, the refine is saved. It is saved without the thinking that was moved out.
 - If the reply cannot be read again at all, the refine goes ahead. A failed read does not mean anything changed.
 
 ## Putting one back
