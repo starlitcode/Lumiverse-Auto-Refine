@@ -7686,17 +7686,17 @@ export function setup(ctx, overrides) {
             (yours ? "the one it starts on" : DEFAULT_PROMPT_NAME) +
             " back.");
     }
-    // Whether this prompt asks the model to write down what it is doing. Only the
-    // two for a model that thinks do, so on any of the others the card that shows
-    // the working while it writes has nothing to show, and somebody waiting for
-    // it has no way of knowing why. Said here, where the prompt is.
+    // Whether this prompt asks the model to write down what it is doing. The four
+    // built-in prompts do. A prompt of somebody's own may not, and then the card
+    // that shows the working while it writes has nothing to show, and somebody
+    // waiting for it has no way of knowing why. Said here, where the prompt is.
     const asksForWorking = () => blockList().some((b) => b.on && NOTES_TAG.test(String(b.text || "")));
     function aboutWorking() {
         if (asksForWorking())
             return cfg.popup
                 ? "It asks the model for its working, which comes up on screen while it writes."
                 : "It asks the model for its working, but Show the before and after on screen is off under When a refine finishes, and that card is where the working appears.";
-        return "It does not ask the model for its working, so there is nothing to watch while it writes. The two for a model that thinks do.";
+        return "It does not ask the model for its working, so there is nothing to watch while it writes. The four built-in prompts do.";
     }
     // A block switched on or off, taken in where it stands.
     //
@@ -9183,7 +9183,7 @@ export function setup(ctx, overrides) {
         if (!keptNotes) {
             wrap.appendChild(note(asksForWorking()
                 ? "Nothing yet. The working from the last refine that finishes is shown here, and a refine you stop leaves what is already here alone."
-                : "The prompt you are on does not ask the model for its working, so there is none to keep. The two for a model that thinks ask for it."));
+                : "The prompt you are on does not ask the model for its working, so there is none to keep. The four built-in prompts ask for it."));
             return wrap;
         }
         const when = new Date(keptNotes.at).toTimeString().slice(0, 8);
