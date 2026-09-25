@@ -1646,6 +1646,35 @@ describe("asking first", () => {
     await wait(50);
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
+
+  // The result of a refine of the latest reply names the reply it refined.
+  // The panel matches it with the refined message by id to log the refine
+  // once, and an empty id matched nothing, so it was logged twice.
+  test("a refine of the latest reply reports the id of the reply it refined", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1" });
+    await wait(80);
+    const refinedMsg = h.sent.find((m) => m.type === "refined");
+    const result = h.sent.find((m) => m.type === "refine_result" && m.requestId === "r");
+    expect(refinedMsg && refinedMsg.messageId).toBe("m2");
+    expect(result && result.messageId).toBe("m2");
+  });
+
+  // Refine the latest reply sends no id when nothing has rendered since the
+  // page loaded, and the reply is found on the backend. The yes has to carry
+  // the id of that reply, or it looks for a message with no id and finds none.
+  test("a refine of the latest reply asks with that reply's id, and the yes saves it", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { confirmBeforeSave: true });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1" });
+    await wait(80);
+    const ask = h.sent.find((m) => m.type === "confirm_refine");
+    expect(ask && ask.messageId).toBe("m2");
+    await h.front({ type: "apply_refine", requestId: "a", chatId: "c1", messageId: ask.messageId, before: ask.before, after: ask.after });
+    await wait(50);
+    const done = h.sent.find((m) => m.type === "refine_result" && m.requestId === "a");
+    expect(done && done.ok).toBe(true);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
 });
 
 describe("when the model will not answer", () => {
@@ -3010,6 +3039,19 @@ describe("thinking the extension has to recognise", () => {
     expect(h.body("m2")).toBe(
       "# The plan\nkeep it short, end on the door\n</think>\n\nShe stepped through and the cold hit her.",
     );
+  });
+
+  // The model ran out of room, or was stopped, while it was still thinking. The
+  // opener is there and nothing closes it, so the whole message is working and
+  // none of it is a reply to rewrite.
+  test("a reply that is only thinking with no closer is not refined", async () => {
+    const msgs = withHead("");
+    msgs[2].content = "<think>\nShe is cold, so lead with that, and then the door";
+    const h = await armed(["<REFINED>Something new.</REFINED>"], {}, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe("<think>\nShe is cold, so lead with that, and then the door");
   });
 
   test("but a closer with an opener in front of it is left to the usual rule", async () => {

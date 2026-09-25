@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.19.1
+
+_2026-09-25_
+
+### Fixed
+
+- **Saying yes to a refine could fail with "that message is gone".** Reported by a Discord user. With **Ask before saving a refine** on, a refine started with **Refine the latest reply** could not be saved. When the panel had no id for the latest reply, the question you were asked held no id either, so the yes looked for a message with no id and found none. The question now holds the id of the reply that was refined.
+- **Thinking that was cut off could be refined as the reply.** A reply that was only reasoning, written in the message and cut off before its closing tag, was sent to the refine model as the passage. A thinking tag with nothing closing it is now treated as the model working, and that reply is left alone.
+- **Fixed again: a refine you start is said once in the Log.** 1.19.0 fixed this for a refine started on a message, and missed one case. A refine started with **Refine the latest reply**, when the panel had no id for that reply, was still said twice. The result of that refine now names the reply it refined, so the two lines are matched.
+
 ## 1.19.0
 
 _2026-09-25_
