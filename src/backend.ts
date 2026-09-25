@@ -1160,13 +1160,16 @@ function narrationOf(text: string): string {
 
 // Down to the words a phrase is made of. Markup, punctuation and case all go,
 // because "her hand, shaking," and "her hand shaking" are the same habit.
+// Letters in any alphabet count as word characters, accented ones included,
+// so "café" stays one word and a chat in Russian or Greek is counted too.
+// Emoji and punctuation are not letters, so they split words and are dropped.
 function wordsOf(text: string, skip: Set<string>): string[] {
   return String(text == null ? '' : text)
     .toLowerCase()
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`]*`/g, ' ')
     .replace(/[*_~>#\[\]()]/g, ' ')
-    .replace(/[^a-z0-9'\s]/g, ' ')
+    .replace(/[^\p{L}\p{M}\p{N}'\s]/gu, ' ')
     .split(/\s+/)
     .filter((w) => w && !skip.has(w));
 }
@@ -1285,7 +1288,7 @@ function renderMap(raw: string): { seen: string; from: number[] } {
     // that the host kept means the selection will not match, which is refused
     // and said out loud; a marker kept that the host took out would shift every
     // offset after it, which is the kind of wrong that writes to the wrong place.
-    const wordish = (ch: string | undefined) => !!ch && /[A-Za-z0-9]/.test(ch);
+    const wordish = (ch: string | undefined) => !!ch && /[\p{L}\p{N}]/u.test(ch);
     const literalUnderscore = c === '_' && wordish(raw[i - 1]) && wordish(raw[i + 1]);
     if (!literalUnderscore && (c === '*' || c === '_') && raw[i + 1] === c) {
       i += 2;
@@ -1874,7 +1877,7 @@ let extraStrong: string[] = [];
 function setStrong(raw: any): void {
   const out: string[] = [];
   for (const line of String(raw == null ? '' : raw).split(/[\n,]/)) {
-    const w = String(line).trim().toLowerCase().replace(/[^a-z0-9'-]/g, '');
+    const w = String(line).trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}'-]/gu, '');
     if (!w || w.length < 2) continue;
     if (STRONG.indexOf(w) >= 0 || out.indexOf(w) >= 0) continue;
     out.push(w);
@@ -1891,7 +1894,7 @@ let softenPct = 60;
 
 function strongIn(text: string): Record<string, number> {
   const seen: Record<string, number> = {};
-  const words = String(text).toLowerCase().match(/[a-z0-9'-]+/g);
+  const words = String(text).toLowerCase().match(/[\p{L}\p{M}\p{N}'-]+/gu);
   if (!words) return seen;
   const list = STRONG.concat(extraStrong);
   for (const w of words) if (list.indexOf(w) >= 0) seen[w] = (seen[w] || 0) + 1;
@@ -2039,7 +2042,7 @@ function setPairs(raw: any): void {
 function saysIt(text: string, term: string): boolean {
   const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   try {
-    return new RegExp('(^|[^a-z0-9])' + safe + '($|[^a-z0-9])', 'i').test(text);
+    return new RegExp('(^|[^\\p{L}\\p{M}\\p{N}])' + safe + '($|[^\\p{L}\\p{M}\\p{N}])', 'iu').test(text);
   } catch (_) {
     return false;
   }

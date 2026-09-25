@@ -13,6 +13,7 @@ _2026-09-25_
 ### Fixed
 
 - **Worn Out counted colour tags as a worn-out phrase.** A reply with dialogue in a `<font color>` tag gave phrases like "font color font he said". The quote marks inside the tag also made the dialogue check miss a spoken line. HTML tags are now taken out before anything is counted. Reported by a Discord user.
+- **Worn Out broke accented words and skipped other alphabets.** Only the letters a to z were read as letters. So "café" was counted as "caf", and a chat in Russian or Greek was never counted at all. Letters in any alphabet are now read as letters. The check that catches a softened rewrite reads them the same way, including words you add to it.
 - **Worn Out counted a reply's own thinking.** Reasoning written in the message was counted along with the story. It is now left out.
 - **Worn Out counted trackers and status lines.** Lines a card prints in every reply, such as `Mood: tense`, `HP 10/10 | Coins 12` or `[Time: evening]`, came back as worn-out phrases. Table rows, lines split by `|`, lines in brackets or braces, `【】` brackets and short label lines are now left out of the counting.
 

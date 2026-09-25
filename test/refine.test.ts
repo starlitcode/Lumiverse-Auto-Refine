@@ -4965,6 +4965,40 @@ describe("phrases this chat has worn out", () => {
     expect(sent).toContain("lifted the lantern");
   });
 
+  // Letters in any alphabet are word characters. Only a to z were, so an
+  // accented word was cut in pieces and a chat in Russian was never counted.
+  test("accented words are counted whole, and so are other alphabets", async () => {
+    const french = [
+      "Elle a posé la lanterne sur le quai désert.",
+      "Le vent tomba, et elle a posé la lanterne sur le quai désert.",
+      "Plus tard, elle a posé la lanterne sur le quai désert encore.",
+      "La corde tint bon.",
+    ];
+    const h = await armed(
+      ["<REFINED>La corde tint.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(french),
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(h)).toContain("la lanterne sur le quai désert");
+
+    const russian = [
+      "Она поставила фонарь на пустой причал.",
+      "Ветер стих, и она поставила фонарь на пустой причал.",
+      "Позже она поставила фонарь на пустой причал снова.",
+      "Верёвка выдержала.",
+    ];
+    const r = await armed(
+      ["<REFINED>Верёвка выдержала.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      chatWith(russian),
+    );
+    await r.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(wornSent(r)).toContain("поставила фонарь на пустой причал");
+  });
+
   test("a reply's own thinking is not counted", async () => {
     const thinking = [
       "<think>keep the lamp in view the whole time</think>She walked on.",

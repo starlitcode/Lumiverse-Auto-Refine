@@ -256,6 +256,7 @@ What it counts:
 - **How far back it looks** is **How many replies to look across**, 60 by default.
 - **Narration only.** Everything in quotation marks is left out, because a character who repeats a phrase is being themselves. The **Dialogue** block handles speech instead.
 - **Three words at least.** A run of only common words, like "out of the", never counts.
+- **Any language with spaces between words.** Accented letters and other alphabets, such as Russian or Greek, are counted like English. Emoji are ignored. Chinese and Japanese do not put spaces between words, so phrases cannot be found in them.
 - **The longest phrase wins.** A six-word phrase is not also reported as the four-word phrase inside it.
 - **Left out:** your own messages, the character's name, words from the character card and the lorebook (they are the story, not a habit), and anything in backticks.
 - **Formatting, trackers and thinking are left out too.** These are taken out before anything is counted:
