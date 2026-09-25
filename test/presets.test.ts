@@ -51,6 +51,70 @@ describe("the prompts that come with it", () => {
       expect(p.blocks.some((x: any) => String(x.text).indexOf("{{jev_found}}") >= 0)).toBe(false);
   });
 
+  // Every one scores before it changes anything, and the score has to rest on
+  // a quoted line. The answer asks for the scorecard ahead of the rewrite, so
+  // the scores are written before the rewrite is and cannot grade it after.
+  test("every one scores the passage, on quoted lines, before the rewrite", () => {
+    for (const p of BUILT_IN_PROMPTS) {
+      const score = p.blocks.find((x: any) => x.id === "score");
+      const answer = p.blocks.find((x: any) => x.id === "answer");
+      const t = String(score && score.text);
+      const a = String(answer && answer.text);
+      expect({
+        prompt: p.name,
+        on: !!(score && score.on),
+        quotes: /quote/.test(t),
+        leavesDoubt: /85 to 99: a line might fit, but you are not sure/.test(t),
+        onlyUnder: /Change only the areas that scored under 85/.test(t),
+        cardFirst: a.indexOf("<REFINE_NOTES>") >= 0 && a.indexOf("<REFINE_NOTES>") < a.indexOf("<REFINED>"),
+      }).toEqual({ prompt: p.name, on: true, quotes: true, leavesDoubt: true, onlyUnder: true, cardFirst: true });
+    }
+  });
+
+  // One card can hold several characters, and a group chat hands a reply to
+  // whichever card wrote it. Each prompt says who is in the scene stays who
+  // they were.
+  test("every one keeps each line with its speaker", () => {
+    for (const p of BUILT_IN_PROMPTS) {
+      const cast = p.blocks.find((x: any) => x.id === "cast");
+      expect({ prompt: p.name, on: !!(cast && cast.on), speaker: /keeps its speaker|Who says each line/.test(String(cast && cast.text)) })
+        .toEqual({ prompt: p.name, on: true, speaker: true });
+    }
+  });
+
+  test("the prompts for replies keep the names that say who is talking, and add nothing for the user's character", () => {
+    for (const p of forReplies()) {
+      const t = String(p.blocks.find((x: any) => x.id === "cast").text);
+      expect({
+        prompt: p.name,
+        tags: /a name or a plain speech tag/.test(t),
+        pronouns: /could mean two people, use the name/.test(t),
+        present: /still in it when you are done/.test(t),
+        user: /Add nothing that \{\{user\}\} says, does, thinks or feels/.test(t),
+      }).toEqual({ prompt: p.name, tags: true, pronouns: true, present: true, user: true });
+    }
+  });
+
+  // A speech tag that only names the speaker is the one thing that says who is
+  // talking in a crowded scene, so the rule about cutting tags leaves it.
+  test("and the rule about speech tags leaves a tag that only names the speaker", () => {
+    for (const p of forReplies()) {
+      const all = p.blocks.map((b: any) => String(b.text)).join("\n");
+      expect({ prompt: p.name, keeps: /tag that only says who is talking stays/.test(all) })
+        .toEqual({ prompt: p.name, keeps: true });
+    }
+  });
+
+  // Taking out lines written for the user's character changes what happens,
+  // which every other block forbids, so it is there to switch on and is off.
+  test("taking out lines written for the user is offered for replies, switched off", () => {
+    for (const p of forReplies()) {
+      const b = p.blocks.find((x: any) => x.id === "notuser");
+      expect({ prompt: p.name, there: !!b, on: b ? b.on : null }).toEqual({ prompt: p.name, there: true, on: false });
+    }
+    for (const p of forMine()) expect(p.blocks.some((x: any) => x.id === "notuser")).toBe(false);
+  });
+
   // The mark tells a reader the built-in prompts changed. A block added
   // switched off is still new wording to take, so it has to move the mark.
   test("the mark moves for a block added switched off", () => {

@@ -104,6 +104,8 @@ Four prompts come with it:
 - **The copy edit**, for your own messages. It fixes mistakes and leaves your style alone.
 - Each has a smaller version **for a model that thinks**.
 
+All four score the passage before they change it. Each score rests on a line the model quotes, and only low scores lead to a change. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
+
 **Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what Jev found, and the passes after the first.
 
 ## Documentation

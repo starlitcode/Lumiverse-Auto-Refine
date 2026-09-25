@@ -116,25 +116,43 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 **Take the answer from between the tags**, on the Limits tab, is on by default. Off, the whole answer is taken as the rewrite, and the other checks catch a preamble instead.
 
-## What a reasoning prompt asks for
+## The scorecard
 
-The two prompts for a model that thinks ask for the answer in two parts:
+All four built-in prompts ask the model to score the passage before it changes anything. The answer comes in two parts:
 
 ```
 <REFINE_NOTES>
-what is weak, what you intend to change and why, what you are leaving alone
+Area: score. "the weakest line, quoted"
+(one line for each area)
+The areas under 85.
 </REFINE_NOTES>
 <REFINED>
 the rewritten message
 </REFINED>
 ```
 
-- `<REFINE_NOTES>` is outside `<REFINED>`, so it can never reach your chat.
-- It is kept on the **Log** tab, under **What the model worked out**, to read when you like.
-- Only a refine that finishes replaces it. Stopping one keeps the last notes.
-- A prompt that asks for no notes keeps nothing and costs nothing extra.
+How the scoring works, from the **How to Score** block:
 
-**The two plain prompts do not ask for notes, on purpose.** A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost.
+- An area is one kind of fault the prompt tells the model to look for, such as stock phrases, repetition or speech.
+- Each area gets a score out of 100.
+- Each score has to rest on a line from the passage, quoted. An area with no line to quote scores 100.
+- From 85 to 99 means a line might fit, but the model is not sure. Those lines are left alone.
+- Only areas under 85 are changed, and in them only the lines that fit.
+- A passage can score 100 in every area. Then it comes back unchanged.
+
+Why it is there:
+
+- A model that has to quote a line before it changes it leaves alone the lines it cannot point at. This stops a refine rewriting a passage that was already fine.
+- The scores come before the rewrite, so they decide what changes. They do not grade the rewrite afterwards.
+- You can read them. The notes are kept on the **Log** tab, under **What the model worked out**.
+
+About the notes:
+
+- `<REFINE_NOTES>` is outside `<REFINED>`, so it can never reach your chat.
+- Only a refine that finishes replaces them. Stopping one keeps the last notes.
+- The two plain prompts keep the notes to one line an area, since a model that does not reason pays for every word in time. The two for a model that thinks also put the rest of their working there.
+- A score is the model's own judgement, not a measurement. The quoted line is the part to trust.
+- To stop the scoring, switch off **How to Score** and take the notes out of **How to Answer**. A prompt that asks for no notes keeps nothing and costs nothing extra.
 
 Both tags are in capitals so a model scanning the prompt finds them easily.
 
@@ -166,11 +184,13 @@ There are four: a line edit for replies and a copy edit for your own messages, e
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The line edit** | Tells the model it is a line editor: how a passage reads is its job, and what happens in it is yours. Then one block each for phrases, words, repetition, rhythm, speech, bodies, endings and restraint. The one to start with. | no |
-| **The line edit, for a model that thinks** | The same role, then one standard, the five places worth checking, keeping the writer's voice, and a check of its own rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **The line edit** | Tells the model it is a line editor: how a passage reads is its job, and what happens in it is yours. Then one block each for phrases, words, repetition, rhythm, speech, bodies, the cast, endings and restraint, and a score for each. The one to start with. | no |
+| **The line edit, for a model that thinks** | The same role, then one standard, the five places worth checking, keeping the writer's voice, the cast, and a check of its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - The version for a model that thinks is the smaller one. A reasoning model is given the standard and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name exact phrases, because "cut clichés" gives a model nothing to act on. They name the ones that appear often in machine-written roleplay: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, and an emotion given as a mix of two others.
+- **The Cast** block is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene, and adds nothing for your own character.
+- **Take Out Lines for the User** is switched off. On, it takes out anything the reply says or does for your character, and keeps what the other characters do. It changes what happens, which is why it is off.
 - Both have a block called **What Jev Found**, switched off. It is for two models. See [Passing on what Jev found](jev.md#passing-on-what-jev-found).
 - All four work as they are. Load one, change what you like, and save it under your own name.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
@@ -181,10 +201,11 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The copy edit** | Tells the model it is a copy editor: it fixes what went wrong on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. | no |
-| **The copy edit, for a model that thinks** | The same role, then one test for telling a mistake from a choice, and the places where fast typing goes wrong. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **The copy edit** | Tells the model it is a copy editor: it fixes what went wrong on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
+| **The copy edit, for a model that thinks** | The same role, then one test for telling a mistake from a choice, and the places where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - Each ends by saying that when a slip cannot be told from a choice, it is a choice. A short line, a fragment, or a plain "she left" stays as it is.
+- Their **The Cast** block keeps every line with its speaker when you write more than one character. It adds nothing for a character you do not play.
 - They are in the same menu, under their own heading. Loading one changes only the prompt for your own messages.
 
 ### The one thing they do not edit
@@ -208,7 +229,9 @@ Four settings on the **Context** tab. Three of them set a size, and every one of
 
 - **Messages of run-up to send** is how many messages before the one being refined are sent. The default is 4. 0 sends none, which is fine for rules about wording, but a model that cannot see earlier messages may lose the thread of the scene.
 - **Most tokens of run-up** is a size limit on the same messages. Whichever limit is reached first wins. Whole messages are kept or dropped, counting back from the one being refined, so the message just before it is always kept.
-- **Name the speakers in the run-up** is on by default. It puts each speaker's name at the start of their lines, which is the only way to tell the voices apart in one block of text. Turn it off for a chat whose messages already start with a name, like a group chat.
+- **Name the speakers in the run-up** is on by default. It puts each speaker's name at the start of their lines, which is the only way to tell the voices apart in one block of text. Turn it off for a chat whose messages already start with a name.
+
+**In a group chat**, each reply is named after the character who wrote it. The card sent in `{{description}}` is that character's card too, found by name among the cards in the chat. Where no card matches the name, the chat's own card is sent.
 - **Most tokens of lorebook** is a size limit on the lorebook entries. Whole entries are kept or dropped.
 
 Sizes are in tokens, not characters, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokeniser where it can, and estimated at four characters a token where it cannot.

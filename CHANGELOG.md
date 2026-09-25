@@ -12,10 +12,20 @@ _2026-09-25_
 
 ### Added
 
+- **The built-in prompts score a passage before they change it.** All four ask the model to score each area out of 100, and each score has to rest on a line it quotes. Only areas under 85 are changed. A line the model is not sure about is left alone. The scores are kept under **What the model worked out** on the Log tab. See [The scorecard](docs/prompt.md#the-scorecard).
+- **The Cast**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, uses a name where a pronoun could mean two people, and adds nothing for your character.
+- **Take Out Lines for the User**, a block in both built-in prompts for replies, switched off. On, it takes out what a reply says or does for your character.
+- **More phrases to cut** in The line edit: eyes that sparkle with mischief, ministrations, a testament to something, and a question asked in the narration and answered at once. Truly and utterly join the words to cut.
 - **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
+
+### Changed
+
+- **The Prompt tab tells you the built-in prompts have changed.** Your own prompt is not touched. To get the new blocks, load a built-in prompt again.
+- **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit took out tags such as "she asked" before, which could leave nothing to say who spoke.
 
 ### Fixed
 
+- **A group chat labelled every reply in the run-up with the chat's first character.** Each reply is now labelled with the character who wrote it. The card sent with a reply is also the card of the character who wrote it, not always the chat's first one.
 - **A refine you start was said twice in the Log.** It wrote "refined a reply in" and "refined a reply on request in" for the same reply, and could show two toasts. It now says it once.
 - **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Already Worn Out in This Chat** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
 - **Show me the request showed the wrong prompt with several passes on.** It built the prompt on the Prompt tab, which a refine with several passes never sends. It now shows the first pass as it would go out, and names every pass in order.

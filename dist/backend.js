@@ -2198,32 +2198,70 @@ function clip(s, max) {
     const t = String(s == null ? '' : s).trim();
     return t.length > max ? t.slice(0, max).trimEnd() + '…' : t;
 }
+// The name a message was posted under, where it carries one. In a group chat
+// this is which character wrote the reply. Empty where there is none, where it
+// is an unresolved macro, and where it is too long to be a name.
+function speakerOf(m) {
+    const name = String((m && m.name) == null ? '' : m.name).trim();
+    if (!name || name.indexOf('{{') >= 0 || name.length > 40)
+        return '';
+    return name;
+}
+// How many other cards a group chat is searched through for the one that wrote
+// a reply. Each is a host call, and a group larger than this is rare.
+const GROUP_CARDS_MAX = 16;
 // The character card as plain text, and the name on its own so the history can
 // label who is talking. Empty on any refusal, which is the normal case for a
 // reader who has not granted the characters permission.
-async function gatherCard(chatId, userId) {
+//
+// speaker is the name the reply was posted under. In a group chat the reply can
+// come from any card in it, so the card whose name matches is the one sent.
+// Where none matches, or there is no name, it is the chat's own card.
+async function gatherCard(chatId, userId, speaker) {
     const empty = { text: '', name: '', id: '' };
     try {
         if (!spindle.chats || typeof spindle.chats.get !== 'function')
             return empty;
         const chat = await spindle.chats.get(chatId, userId);
-        // A chat can hold several cards; character_id names the one it belongs to,
-        // and that is the one being rewritten.
+        // A chat can hold several cards; character_id names the one it belongs to.
         const cardId = chat && chat.character_id;
         if (!cardId)
             return empty;
         if (!spindle.characters || typeof spindle.characters.get !== 'function')
             return empty;
-        const card = await spindle.characters.get(cardId, userId);
+        let card = await spindle.characters.get(cardId, userId);
         if (!card)
             return empty;
+        let id = String(cardId);
+        const want = String(speaker || '').trim().toLowerCase();
+        const others = chat && chat.metadata && Array.isArray(chat.metadata.character_ids)
+            ? chat.metadata.character_ids.map((x) => String(x)).filter((x) => x && x !== id)
+            : [];
+        if (want && String(card.name || '').trim().toLowerCase() !== want && others.length) {
+            for (const other of others.slice(0, GROUP_CARDS_MAX)) {
+                let found = null;
+                try {
+                    found = await spindle.characters.get(other, userId);
+                }
+                catch (_) {
+                    // One card that cannot be read is skipped. The chat's own card is
+                    // still there to fall back on.
+                    found = null;
+                }
+                if (found && String(found.name || '').trim().toLowerCase() === want) {
+                    card = found;
+                    id = other;
+                    break;
+                }
+            }
+        }
         const lines = [];
         for (const pair of CARD_FIELDS) {
             const v = clip(card[pair[0]], CARD_MAX);
             if (v)
                 lines.push(pair[1] + ': ' + v);
         }
-        return { text: lines.join('\n\n'), name: String(card.name || '').trim(), id: String(cardId) };
+        return { text: lines.join('\n\n'), name: String(card.name || '').trim(), id: id };
     }
     catch (_) {
         // No permission, no such chat, or the host said no. The refine goes ahead
@@ -2290,10 +2328,13 @@ async function gatherHistory(msgs, at, charName, userId, youName) {
         const body = String(m.content == null ? '' : m.content).trim();
         if (!body)
             continue;
-        // Both characters named, so the run-up reads the way the chat does and the
-        // model is never working out which of two labels is a person. Off where the
-        // messages already carry names, which is what a group chat looks like.
-        out.push(nameSpeakers ? (m.role === 'user' ? you : them) + ': ' + body : body);
+        // Both sides named, so the run-up reads the way the chat does and the
+        // model is never working out which of two labels is a person. A reply
+        // posted under its own name keeps that name, so in a group chat each
+        // character's turn is labelled with who wrote it. Off where the messages
+        // already start with a name.
+        const label = m.role === 'user' ? you : speakerOf(m) || them;
+        out.push(nameSpeakers ? label + ': ' + body : body);
     }
     const kept = await fitToBudget(out, maxHistoryTokens, userId);
     return kept.reverse().join('\n\n');
@@ -3016,7 +3057,7 @@ pick) {
     for (const one of chain)
         for (const b of one.blocks)
             willSend.push(b);
-    const card = await gatherCard(chatId, userId);
+    const card = await gatherCard(chatId, userId, isUser ? '' : speakerOf(m));
     const at = msgs.findIndex((x) => x && x.id === m.id);
     // Read out here rather than inside the object, because the worn phrases are
     // checked against it and one field of an object cannot read another.
@@ -4708,7 +4749,7 @@ async function onPanel(payload, userId) {
                             isUser = m.role === 'user';
                             real = true;
                         }
-                        const card = await gatherCard(payload.chatId, userId);
+                        const card = await gatherCard(payload.chatId, userId, m && m.role !== 'user' ? speakerOf(m) : '');
                         const at = m ? msgs.findIndex((x) => x && x.id === m.id) : -1;
                         const youName = nameSpeakers
                             ? await gatherPersonaName(payload.chatId, card.id, userId)

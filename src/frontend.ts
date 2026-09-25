@@ -680,6 +680,13 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
 // one. That is the whole of the difference between the two on a side.
+//
+// All four score the passage before they change it: each area gets a score out
+// of 100 that rests on a quoted line, and only areas under 85 are touched. The
+// quote is the part that matters. A model that has to point at the line it
+// wants to change leaves alone the lines it cannot point at, which is what
+// stops a refine rewriting a passage that was already fine. The scores are
+// written into the notes, so the panel shows what was found and why.
 
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
@@ -797,8 +804,14 @@ const TURN_BLOCK: Block = {
 
 // The shape of the answer, drawn out as a template. A model matching a shape it
 // can see keeps to it far more reliably than one working from a sentence about
-// the shape, and the two tags are the only part of this prompt that has to come
+// the shape, and the tags are the only part of this prompt that has to come
 // back exactly right.
+//
+// The scorecard comes first, in the notes tag, so the scores are written before
+// the rewrite is. A model that writes the rewrite first and scores it after is
+// grading its own work rather than deciding what to change. The notes are kept
+// to one line an area, since a model that does not reason pays for every word
+// of them in time.
 //
 // Shouted, and read back case-insensitively so a prompt written in lower case
 // still works.
@@ -820,14 +833,19 @@ const HOW_TO_ANSWER: Block = {
   role: "user",
   text:
     "<how_to_answer>\n" +
-    "Give it back to me in this shape:\n\n" +
+    "Give it back to me in this shape, in this order:\n\n" +
+    "<REFINE_NOTES>\n" +
+    "One line for each area, in the order the rules give them:\n" +
+    "Area: score. \"the weakest line, quoted\"\n" +
+    "Then one line naming the areas under 85. Those are the only ones you change.\n" +
+    "</REFINE_NOTES>\n" +
     "<REFINED>\n" +
     "the passage, rewritten\n" +
     "</REFINED>\n\n" +
-    "Only what sits between those two tags is saved, so both belong in every " +
-    "answer. Inside them, write the passage as a reader would meet it.\n\n" +
-    "Anything outside the tags reaches me and never reaches the story, so a " +
-    "note about the edit belongs there if you have one.\n" +
+    "Keep the notes short. They reach me and never reach the story.\n\n" +
+    "Only what sits between <REFINED> and </REFINED> is saved, so both tags " +
+    "belong in every answer. Inside them, write the passage as a reader would " +
+    "meet it.\n" +
     "</how_to_answer>",
 };
 
@@ -837,9 +855,9 @@ const HOW_TO_ANSWER: Block = {
 // what makes asking for it worth the tokens: working nobody reads is only a
 // bill.
 //
-// Only the reasoning prompts carry it. A model that does not reason, handed a
-// thinking tag, fills it with a summary of what it is about to do and then does
-// something else.
+// The scorecard is the same as in the plain answer. What this one adds is where
+// the rest of the working goes: a model that reasons will write some whatever
+// it is told, and this keeps it inside the one tag that never reaches the story.
 const THINKS_ANSWER: Block = {
   id: "answer",
   name: "How to Answer",
@@ -849,9 +867,9 @@ const THINKS_ANSWER: Block = {
     "<how_to_answer>\n" +
     "Give it back to me in this shape, in this order:\n\n" +
     "<REFINE_NOTES>\n" +
-    "What reads weakly as it stands, quoted so I can see the line you mean.\n" +
-    "What you are going to change, and why.\n" +
-    "What you looked at and chose to keep.\n" +
+    "One line for each area, in the order the rules give them:\n" +
+    "Area: score. \"the weakest line, quoted\"\n" +
+    "Then one line naming the areas under 85, and what changes in each.\n" +
     "</REFINE_NOTES>\n" +
     "<REFINED>\n" +
     "the passage, rewritten\n" +
@@ -907,6 +925,7 @@ const PHRASES =
   // Faces and voices running the same stock business.
   "- a smirk, a wicked grin, a knowing look, an eyebrow raised, quirked or arched\n" +
   "- a smile that does not reach the eyes\n" +
+  "- eyes that sparkle, glint or dance with mischief or amusement\n" +
   "- a mouth whose corner quirks, twitches or lifts\n" +
   "- an expression called unreadable, neutral or blank\n" +
   "- a voice given a texture: velvety, husky, gravelly, silky, raspy\n" +
@@ -919,6 +938,8 @@ const PHRASES =
   "- a sound placed out of reach: somewhere, a door slams\n" +
   "- time slowing, the world falling away, the world narrowing\n" +
   "- a pause named instead of filled: a long moment, a beat, a silence that stretches\n" +
+  "- ministrations, and a touch called featherlight\n" +
+  "- something called a testament to something else\n" +
   // Shapes rather than particular phrases. A model produces these whatever
   // the scene is, so naming the shape catches every filling of it where naming
   // one example catches one.
@@ -930,6 +951,7 @@ const PHRASES =
   "- an action given and then graded: they laughed, and it was thin\n" +
   "- a laugh, a breath or a sound that escapes somebody\n" +
   "- a softened double negative: not unkind, no small thing\n" +
+  "- a question asked in the narration and answered at once: did it matter? It did not\n" +
   "- closing the distance\n" +
   "- doing something before they could stop themselves\n" +
   "- not knowing whether to do one thing or another";
@@ -937,7 +959,7 @@ const PHRASES =
 const FILLER =
   "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
   "seemed to, began to, found themselves, could not help but, visibly, " +
-  "practically, simply, merely";
+  "practically, simply, merely, truly, utterly";
 
 const COPY_EXACTLY: Block = {
   id: "hands_off",
@@ -985,12 +1007,10 @@ const JOB_BLOCK: Block = {
     "they could before.\n\n" +
     "That holds when a line reads badly. It holds when you cannot see why a " +
     "line is there. It is there because the user put it there.\n\n" +
-    "You are marking up a page that already exists. When a sentence matches " +
-    "something named below, change it, and do not stop to weigh whether this " +
-    "one is borderline; the user can undo anything you do. When a sentence " +
-    "matches nothing below, leave it exactly as it is. A passage returned " +
-    "with a change in every line is a worse edit than one carrying four good " +
-    "changes.\n\n" +
+    "You are marking up a page that already exists. A sentence that matches " +
+    "something named below is one to change. A sentence that matches nothing " +
+    "below stays exactly as it is. A passage returned with a change in every " +
+    "line is a worse edit than one carrying four good changes.\n\n" +
     "Anything that carries meaning stays, even where it reads plainly. " +
     "Taking out an action or a line of speech is rewriting, and rewriting is " +
     "not what this pass is for.\n\n" +
@@ -1028,6 +1048,114 @@ const LEAVE_ALONE: Block = {
     "</what_to_leave>",
 };
 
+
+// Who is in the scene, for a reply. One card can hold several characters, and
+// a group chat hands a reply to whichever card wrote it, so a refine meets a
+// crowded scene as often as a single character. The faults here are the ones a
+// line edit makes in a crowd: a speech tag cut where it was the only thing
+// naming the speaker, a pronoun that now points at two people, two voices
+// smoothed into one, and a character dropped because their one line read
+// weakly. The last paragraph is the one every roleplay prompt carries: the
+// user's character is theirs to write.
+const CAST_BLOCK: Block = {
+  id: "cast",
+  name: "The Cast",
+  on: true,
+  role: "system",
+  text:
+    "<the_cast>\n" +
+    "A passage can hold one character or several. Before you change a line, " +
+    "know who is in the scene.\n\n" +
+    "Who says each line and who does each action stays the same. A line of " +
+    "speech never moves to another character.\n\n" +
+    "With two or more people in the scene, a name or a plain speech tag is " +
+    "often the only thing saying who is talking. Keep it.\n\n" +
+    "Where he, she or they could mean two people, use the name.\n\n" +
+    "Each character keeps their own way of talking. Two characters who " +
+    "sounded different in the passage still sound different in your " +
+    "rewrite.\n\n" +
+    "A character in the passage is still in it when you are done, even one " +
+    "with a single line.\n\n" +
+    "{{user}} is played by the user. Add nothing that {{user}} says, does, " +
+    "thinks or feels.\n" +
+    "</the_cast>",
+};
+
+// Off. A reply that speaks or acts for the user's character is the complaint
+// people bring to a roleplay prompt more than any other, and the one fault a
+// refine can take out after the fact. It changes what happens, which every
+// other block forbids, so it says so and is left for the reader to switch on.
+const NOT_FOR_USER_BLOCK: Block = {
+  id: "notuser",
+  name: "Take Out Lines for the User",
+  on: false,
+  role: "system",
+  text:
+    "<lines_for_the_user>\n" +
+    "The passage may speak or act for {{user}}. That is the user's to write, " +
+    "so take it out here, even though this changes what happens.\n\n" +
+    "Take out every line of speech, action, thought or feeling given to " +
+    "{{user}}. Keep what the other characters do. Where a sentence needs " +
+    "{{user}} to make sense, write it from the other character's side: " +
+    "{{user}} takes the cup becomes she holds the cup out.\n\n" +
+    "Where the passage ends on {{user}} doing something, end it on the last " +
+    "thing another character did.\n" +
+    "</lines_for_the_user>",
+};
+
+// Who is in the scene, for the user's own turn. Shorter than the one for
+// replies, because a copy edit changes so little that most of those faults
+// cannot happen. The two that can: a line moved to the wrong speaker while a
+// sentence is untangled, and a reply written for a character the user does not
+// play.
+const YOURS_CAST: Block = {
+  id: "cast",
+  name: "The Cast",
+  on: true,
+  role: "system",
+  text:
+    "<the_cast>\n" +
+    "The user may write one character or several in the same turn. Every " +
+    "line of speech keeps its speaker, and every action keeps the person " +
+    "doing it.\n\n" +
+    "Where their turn names a character the user does not play, add nothing " +
+    "for that character: no answer, no reaction, no line.\n" +
+    "</the_cast>",
+};
+
+// The scoring, shared by all four. The anchors say what each band means rather
+// than leaving a model to invent its own scale, and the band from 85 to 99 is
+// where doubt goes: a line that might fit and might not is left alone. On the
+// user's own turn that is the rule already, where a line that might be a slip
+// might also be a choice.
+//
+// An area is left for the model to find in the rules above it rather than
+// listed here, so a block switched off is an area that is not scored.
+const SCORE_BLOCK: Block = {
+  id: "score",
+  name: "How to Score",
+  on: true,
+  role: "system",
+  text:
+    "<how_to_score>\n" +
+    "Score the passage before you change anything. An area is one kind of " +
+    "fault the rules above tell you to look for. Each area gets a score out " +
+    "of 100, and each score rests on a line you can quote.\n\n" +
+    "For each area, find the lines in the passage that fit it, and quote the " +
+    "weakest one. An area with no line to quote scores 100.\n\n" +
+    "- 100: nothing in the passage fits this area.\n" +
+    "- 85 to 99: a line might fit, but you are not sure, or a change would " +
+    "cost more than it gains.\n" +
+    "- 60 to 84: one or two lines fit.\n" +
+    "- under 60: lines that fit run all through the passage.\n\n" +
+    "Change only the areas that scored under 85, and in those only the lines " +
+    "that fit. Every other line comes back exactly as it was, even where you " +
+    "would have written it another way.\n\n" +
+    "Score what is on the page, not what the passage could have been. A " +
+    "passage can score 100 in every area. Then it comes back unchanged, and " +
+    "that is a correct answer.\n" +
+    "</how_to_score>",
+};
 
 // ---- a model that does not reason, in full ----
 // The same rules, one to a block, each said at length.
@@ -1103,9 +1231,10 @@ const PLAIN_LONG: Block[] = [
       "<speech>\n" +
       "Every line keeps its meaning and its speaker. Where phrasing is stiff, " +
       "loosen the phrasing and leave the meaning where it is.\n\n" +
-      "Take out the tag that explains its own line: they said angrily, they " +
-      "asked, curious. Where the tone is missing from the words, mend the " +
-      "words.\n\n" +
+      "Take out the part of a tag that explains its own line: they said " +
+      "angrily, she asked, curious. Where the tone is missing from the words, " +
+      "mend the words. A plain tag that only says who is talking stays " +
+      "whenever two or more people are in the scene.\n\n" +
       "Take out speech that repeats back what somebody else just said or did " +
       "before answering it.\n\n" +
       "Cut the line that announces itself before it arrives: here is the deal, " +
@@ -1148,6 +1277,8 @@ const PLAIN_LONG: Block[] = [
       "emotion left unwritten. Write what the person does.\n" +
       "</bodies_and_feeling>",
   },
+  CAST_BLOCK,
+  NOT_FOR_USER_BLOCK,
   {
     id: "endings",
     name: "How It Ends",
@@ -1163,6 +1294,7 @@ const PLAIN_LONG: Block[] = [
       "</how_it_ends>",
   },
   LEAVE_ALONE,
+  SCORE_BLOCK,
   COPY_EXACTLY,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
@@ -1194,8 +1326,9 @@ const THINKS_JOB: Block = {
     "ends. That holds when a line reads badly, and it holds when you cannot " +
     "see why a line is there. Keep the person, the tense, and the head it " +
     "was written from.\n\n" +
-    "Use your reasoning to decide which sentences earn a change, then change " +
-    "only those. Reasoning about a sentence is not a reason to touch it. A " +
+    "Use your reasoning to score the passage as set out below, then change " +
+    "only what the scores point to. Reasoning about a sentence is not a " +
+    "reason to touch it. A " +
     "passage returned with a change in every line is a worse edit than one " +
     "carrying four good changes.\n\n" +
     "Anything that carries meaning stays, even where it reads plainly.\n\n" +
@@ -1438,7 +1571,9 @@ const YOURS_LONG: Block[] = [
   YOURS_JOB,
   YOURS_HAND,
   YOURS_MEND_LONG,
+  YOURS_CAST,
   YOURS_NOT_YOURS,
+  SCORE_BLOCK,
   COPY_EXACTLY,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
@@ -1472,7 +1607,7 @@ const THINKS_LONG: Block[] = [
       "The body. Hands and eyes acting alone, a pulse standing in for a " +
       "feeling, three physical details where one would carry it.\n\n" +
       "The speech tag. Where it explains the tone, the line under it is " +
-      "carrying too little.\n\n" +
+      "carrying too little. A tag that only says who is talking stays.\n\n" +
       "The stock phrase. A held breath, a hammering heart, a whisper, a " +
       "shiver, air thick with something. These arrive by habit.\n\n" +
       "The last line. A passage ending by pointing at what comes next is " +
@@ -1493,6 +1628,8 @@ const THINKS_LONG: Block[] = [
       "character.\n" +
       "</voice>",
   },
+  CAST_BLOCK,
+  NOT_FOR_USER_BLOCK,
   RESTRAINT,
   {
     id: "check",
@@ -1501,14 +1638,17 @@ const THINKS_LONG: Block[] = [
     role: "system",
     text:
       "<before_you_answer>\n" +
-      "Read your rewrite against the original once more and answer two " +
+      "Read your rewrite against the original once more and answer three " +
       "questions.\n\n" +
       "Did anything happen in yours that did not happen in theirs? Take it " +
       "out.\n\n" +
+      "Did a line move to another speaker, or a character drop out of the " +
+      "scene? Put it back.\n\n" +
       "Is yours longer? Find what you added and decide whether it earns the " +
       "room. It usually does not.\n" +
       "</before_you_answer>",
   },
+  SCORE_BLOCK,
   COPY_EXACTLY,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
@@ -1526,7 +1666,9 @@ const YOURS_THINKS_LONG: Block[] = [
   YOURS_THINKS_JOB,
   YOURS_TEST,
   YOURS_WHERE,
+  YOURS_CAST,
   YOURS_NOT_YOURS,
+  SCORE_BLOCK,
   COPY_EXACTLY,
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
@@ -1562,7 +1704,7 @@ const BUILT_IN_PROMPTS: BuiltIn[] = [
     mine: false,
     blocks: PLAIN_LONG,
     thinking: "off",
-    what: "Start here. It is handed the job, then one subject at a time: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Everything to look at is set out for it rather than left to be worked out. Runs on any model.",
+    what: "Start here. It is handed the job, then one subject at a time: phrases, words, repetition, rhythm, speech, bodies, the cast, endings. It scores each one against a line it quotes and changes only what scores under 85. Works with one character or several. Runs on any model.",
   },
   {
     name: "The line edit, for a model that thinks",
@@ -1570,7 +1712,7 @@ const BUILT_IN_PROMPTS: BuiltIn[] = [
     mine: false,
     blocks: THINKS_LONG,
     thinking: "inherit",
-    what: "The same job, given as a standard to apply rather than a list to match: the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Needs a model that reasons.",
+    what: "The same job, given as a standard to apply rather than a list to match: the five places worth checking, the cast, holding the voice it was written in, a score for each area, and a pass back over its own rewrite. Needs a model that reasons.",
   },
   {
     name: "The copy edit",
@@ -1578,7 +1720,7 @@ const BUILT_IN_PROMPTS: BuiltIn[] = [
     mine: true,
     blocks: YOURS_LONG,
     thinking: "off",
-    what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your wording, your sentences and your plain lines come back as they went in. Runs on any model.",
+    what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. It scores each against a line it quotes and mends only what scores low. Your wording, your sentences and your plain lines come back as they went in, for every character you write. Runs on any model.",
   },
   {
     name: "The copy edit, for a model that thinks",
@@ -1586,7 +1728,7 @@ const BUILT_IN_PROMPTS: BuiltIn[] = [
     mine: true,
     blocks: YOURS_THINKS_LONG,
     thinking: "inherit",
-    what: "The same job, worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, and what is never a repair. Needs a model that reasons.",
+    what: "The same job, worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, a score for each area, and what is never a repair. Needs a model that reasons.",
   },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);

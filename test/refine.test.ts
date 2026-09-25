@@ -59,6 +59,14 @@ const CARD = {
   mes_example: "Wren: You are late.",
 };
 
+// The second card in a group chat.
+const OTHER_CARD = {
+  name: "Oriel",
+  description: "A lamp keeper on the far bank who counts every boat.",
+  personality: "Talks too much and remembers everything.",
+  scenario: "",
+};
+
 // answers is what the stubbed model says, one per call, in order.
 function host(
   messages: Msg[],
@@ -99,6 +107,10 @@ function host(
     asking?: () => Promise<void>;
     // The one account that can see the chats, for a server with several.
     chatOwner?: string;
+    // A group chat: the chat's own card is Wren, and Oriel is a second card in
+    // it. Each card read is counted, since each one is a host call.
+    group?: boolean;
+    cardReads?: string[];
   } = {},
 ) {
   // An install scoped to an operator refuses a model call that names no
@@ -227,15 +239,16 @@ function host(
         // with the characters permission refused, it comes back empty, which is
         // what the real one does and what the extension has to cope with.
         const known = !!(opt && opt.chatId) && !opts.cardFail && !opts.noCard;
+        const card = opts.group && opt && opt.characterId === "ch2" ? OTHER_CARD : CARD;
         return String(text)
-          .replace(/\{\{description\}\}/g, known ? CARD.description : "")
+          .replace(/\{\{description\}\}/g, known ? card.description : "")
           .replace(/\{\{personality\}\}/g, known ? CARD.personality : "")
           .replace(/\{\{scenario\}\}/g, known ? CARD.scenario : "")
           .replace(/\{\{persona\}\}/g, known ? "A traveller who arrived at night." : "")
           // The name the reader's own character goes by, which is what labels
           // their side of the run-up. noPersona is a chat with none set.
           .replace(/\{\{user\}\}/g, known && !opts.noPersona ? "Tam" : "")
-          .replace(/\{\{char\}\}/g, known ? CARD.name : "");
+          .replace(/\{\{char\}\}/g, known ? card.name : "");
       },
     },
     world_books: {
@@ -255,7 +268,10 @@ function host(
         if (opts.chatOwner !== undefined && userId !== undefined && userId !== opts.chatOwner) return null;
         if (opts.whileReading) opts.whileReading();
         if (opts.chatFail) throw new Error(opts.chatFail);
-        return opts.noCard ? { id: "c1" } : { id: "c1", character_id: "ch1" };
+        if (opts.noCard) return { id: "c1" };
+        return opts.group
+          ? { id: "c1", character_id: "ch1", metadata: { character_ids: ["ch1", "ch2"] } }
+          : { id: "c1", character_id: "ch1" };
       },
       // What Lumiverse remembers of the chat, as its own call hands it over:
       // already written out with the reader's header and chunk templates.
@@ -273,9 +289,10 @@ function host(
           },
     },
     characters: {
-      get: async () => {
+      get: async (id?: string) => {
+        if (opts.cardReads) opts.cardReads.push(String(id));
         if (opts.cardFail) throw new Error(opts.cardFail);
-        return { ...CARD };
+        return opts.group && id === "ch2" ? { ...OTHER_CARD } : { ...CARD };
       },
     },
     chat: {
@@ -1761,6 +1778,50 @@ describe("what the model is told about the scene", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
     expect(said(h)).toContain("Tam: i walk through it");
+  });
+
+  // A group chat: two cards, and each reply posted under the name of the one
+  // that wrote it.
+  const groupChat = (): Msg[] => [
+    { id: "m0", role: "assistant", name: "Wren", content: "The gate stands open, and the road past it is dark." } as any,
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", name: "Oriel", content: "Oriel lifted the lamp and, suddenly, counted the boats again." } as any,
+  ];
+
+  test("in a group chat each reply in the run-up carries the name it was posted under", async () => {
+    const h = await armed(["Oriel lifted the lamp and counted the boats again."], {}, groupChat(), { group: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("Wren: The gate stands open");
+    expect(said(h)).toContain("Tam: i walk through it");
+  });
+
+  test("and the card sent is the one that wrote the reply, not the chat's first card", async () => {
+    const h = await armed(["Oriel lifted the lamp and counted the boats again."], {}, groupChat(), { group: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A lamp keeper on the far bank");
+    expect(said(h)).not.toContain("A ferry pilot who has crossed the same water");
+  });
+
+  test("a reply from the chat's own card reads no other card", async () => {
+    const reads: string[] = [];
+    const msgs = groupChat();
+    (msgs[2] as any).name = "Wren";
+    const h = await armed(["She lifted the lamp."], {}, msgs, { group: true, cardReads: reads });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A ferry pilot who has crossed the same water");
+    expect(reads).not.toContain("ch2");
+  });
+
+  test("a name that matches no card keeps the chat's own card", async () => {
+    const msgs = groupChat();
+    (msgs[2] as any).name = "Somebody Else";
+    const h = await armed(["She lifted the lamp."], {}, msgs, { group: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A ferry pilot who has crossed the same water");
   });
 
   test("and a chat with no persona set falls back rather than labelling a blank", async () => {
