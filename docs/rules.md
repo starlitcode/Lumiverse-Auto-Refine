@@ -6,6 +6,43 @@ Your own prompt can do more. It can know your story, your model and your taste. 
 
 [How the prompt is built](prompt.md) explains blocks, macros and roles. This page is about what to write in them.
 
+## What every prompt must have
+
+These are not about quality. Without them, a refine does not work, or it saves the wrong thing into your chat.
+
+**1. A block with `{{message}}` in it, switched on.**
+
+- `{{message}}` is the reply being refined. It is how the model sees the passage.
+- Without it, nothing is sent. The panel says: "Your prompt has no {{message}} block, so there is nothing to rewrite."
+- The built-in prompts keep it in the **Passage** block.
+
+**2. A request for the answer between `<REFINED>` and `</REFINED>`.**
+
+- Only what is between these two tags is saved into your chat.
+- Without the tags, the whole answer is saved. That includes anything the model writes around the rewrite, like "Here is the rewritten message" or a list of scores.
+- With the tags, a rewrite that was cut off halfway is caught and not saved.
+- The built-in prompts ask for the tags in the **Hand It In** block.
+
+**3. At least one block sent as User.**
+
+- Some providers return an error for a request made only of System messages.
+- The built-in prompts send the **Passage** block and the **Hand It In** block as User. Keep them that way.
+
+**4. The Protected Formatting block, if you hide markup.**
+
+- **Hide markup from the model**, on the **Limits** tab, is on by default. It swaps your formatting for tokens like `[[AR1]]` before the refine.
+- The **Protected Formatting** block tells the model to keep those tokens.
+- Without that block, the model may drop a token. Then the rewrite is not saved.
+
+**5. Notes outside the tags, if you ask for notes.**
+
+- If you ask the model for scores or notes, ask for them outside `<REFINED>`. Anything inside the tags goes into your chat.
+- To see the notes while the model writes, put them in `<REFINE_NOTES>`.
+
+**The easy way to get all five:** start from a built-in prompt, as in Step 1. Keep the **Passage**, **Hand It In** and **Protected Formatting** blocks, and change the rest.
+
+**Your own messages have their own prompt.** If you refine what you wrote yourself, that prompt needs all five as well.
+
 ## The short version
 
 1. Start from a built-in prompt and save it under your own name.
