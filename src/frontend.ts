@@ -1014,11 +1014,13 @@ const JOB_BLOCK: Block = {
     "Anything that carries meaning stays, even where it reads plainly. " +
     "Taking out an action or a line of speech is rewriting, and rewriting is " +
     "not what this pass is for.\n\n" +
-    "The user decides where the story goes, and that takes in how dark, " +
-    "explicit or crude it gets. A passage comes back at the strength it went " +
-    "in, the same heat and the same violence in the same places, in words as " +
-    "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-    "should have been written is theirs.\n\n" +
+    "The user sets the tone of the story. It can be gentle, funny, romantic, " +
+    "tense, dark, violent or sexually explicit, and every one of those is " +
+    "edited to the same standard. A passage comes back at the strength it " +
+    "went in. A soft scene stays soft. A graphic scene stays graphic, with " +
+    "the same detail in the same places. Sex, violence, swearing and insults " +
+    "keep their plain words and are not swapped for polite ones. How a line " +
+    "reads is yours. What the story shows is theirs.\n\n" +
     "There is one exception, and it is not the user's call either. Sexual " +
     "content involving anyone under eighteen, or anyone written as a child, " +
     "is not edited. Hand that passage back exactly as it came, and say " +
@@ -1231,7 +1233,7 @@ const PLAIN_LONG: Block[] = [
       "buddy, chief, boss. A character who already talks that way keeps " +
       "it.\n\n" +
       "A character who speaks badly goes on speaking badly. Short, " +
-      "rambling, plain or crude is a voice, and smoothing it returns a " +
+      "rambling, plain or foul-mouthed is a voice, and smoothing it returns a " +
       "different character.\n" +
       "</speech>",
   },
@@ -1308,11 +1310,13 @@ const THINKS_JOB: Block = {
     "passage returned with a change in every line is a worse edit than one " +
     "carrying four good changes.\n\n" +
     "Anything that carries meaning stays, even where it reads plainly.\n\n" +
-    "The user decides where the story goes, and that takes in how dark, " +
-    "explicit or crude it gets. A passage comes back at the strength it went " +
-    "in, the same heat and the same violence in the same places, in words as " +
-    "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-    "should have been written is theirs.\n\n" +
+    "The user sets the tone of the story. It can be gentle, funny, romantic, " +
+    "tense, dark, violent or sexually explicit, and every one of those is " +
+    "edited to the same standard. A passage comes back at the strength it " +
+    "went in. A soft scene stays soft. A graphic scene stays graphic, with " +
+    "the same detail in the same places. Sex, violence, swearing and insults " +
+    "keep their plain words and are not swapped for polite ones. How a line " +
+    "reads is yours. What the story shows is theirs.\n\n" +
     "There is one exception, and it is not the user's call either. Sexual " +
     "content involving anyone under eighteen, or anyone written as a child, " +
     "is not edited. Hand that passage back exactly as it came, and say " +
@@ -1385,10 +1389,11 @@ const YOURS_JOB: Block = {
     "write something that was never there, stop at that point: their turn " +
     "belongs to them.\n\n" +
     "Whatever they put in stays in. A plain line is allowed to be plain.\n\n" +
-    "The user decides where the story goes, and that takes in how dark, " +
-    "explicit or crude it gets. A passage comes back at the strength it went " +
-    "in. How a line reads is not yours to judge here, only whether it came " +
-    "out the way they meant to type it.\n\n" +
+    "The user sets the tone of the story. It can be gentle, funny, romantic, " +
+    "tense, dark, violent or sexually explicit. A passage comes back at the " +
+    "strength it went in. Sex, violence, swearing and insults keep the words " +
+    "they were written in. How a line reads is not yours to judge here, only " +
+    "whether it came out the way they meant to type it.\n\n" +
     "There is one exception, and it is not the user's call either. Sexual " +
     "content involving anyone under eighteen, or anyone written as a child, " +
     "is not edited. Hand that passage back exactly as it came, and say " +
@@ -1486,10 +1491,11 @@ const YOURS_THINKS_JOB: Block = {
     "a mistake, and an unusual word is a decision. Where the two look alike, " +
     "treat it as a decision and leave it. Reasoning about a line is not a " +
     "reason to touch it.\n\n" +
-    "The user decides where the story goes, and that takes in how dark, " +
-    "explicit or crude it gets. A passage comes back at the strength it went " +
-    "in. How a line reads is not yours to judge here, only whether it came " +
-    "out the way they meant to type it.\n\n" +
+    "The user sets the tone of the story. It can be gentle, funny, romantic, " +
+    "tense, dark, violent or sexually explicit. A passage comes back at the " +
+    "strength it went in. Sex, violence, swearing and insults keep the words " +
+    "they were written in. How a line reads is not yours to judge here, only " +
+    "whether it came out the way they meant to type it.\n\n" +
     "There is one exception, and it is not the user's call either. Sexual " +
     "content involving anyone under eighteen, or anyone written as a child, " +
     "is not edited. Hand that passage back exactly as it came, and say " +
@@ -1600,7 +1606,7 @@ const THINKS_LONG: Block[] = [
       "The passage has a voice, and yours is a different one. Mend what is weak " +
       "in the voice that is there and return it still sounding like itself.\n\n" +
       "This matters most with a character who speaks badly on purpose: " +
-      "short, rambling, plain, crude. Smoothing that returns a different " +
+      "short, rambling, plain, foul-mouthed. Smoothing that returns a different " +
       "character.\n" +
       "</voice>",
   },

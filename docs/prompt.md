@@ -209,7 +209,7 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 ### The one thing they do not edit
 
-Each of the four tells the model that how dark, explicit or crude a story gets is the writer's decision, then names one exception. This is the paragraph, word for word, in the **Your Role** block of all four:
+Each of the four tells the model that the tone of the story is the writer's decision. It names the tones, from gentle and funny to dark, violent or sexually explicit. It says a soft scene stays soft and a graphic one stays graphic, and that sex, violence, swearing and insults keep their plain words. Then it names one exception. This is the paragraph, word for word, in the **Your Role** block of all four:
 
 > There is one exception, and it is not the user's call either. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited. Hand that passage back exactly as it came, and say outside the tags that this is why. A younger character in a scene with nothing sexual in it is edited like anyone else.
 

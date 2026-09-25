@@ -21,6 +21,7 @@ _2026-09-25_
 
 - **The Prompt tab tells you the built-in prompts have changed.** Your own prompt is not touched. To get the new blocks, load a built-in prompt again.
 - **Shorter tags and block names in the built-in prompts.** Each block is still named after the tag it holds. Already Worn Out in This Chat is now **Worn Out**, The User's Characters is **User Characters**, The Reply Around It is **Reply Around It**, The Way They Write is **Their Voice**, Copy These Exactly is **Copy Exactly**, Bodies and Feeling is **Body Language**, Before You Answer is **Final Check**, What Has Happened is **Memories**, and Passage to Refine is **Passage**. What each one says is the same.
+- **The built-in prompts say plainly that the tone is yours.** They name the tones, from gentle and funny to dark, violent or sexually explicit. They say a soft scene stays soft, a graphic scene stays graphic, and sex, violence, swearing and insults keep their plain words.
 - **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit took out tags such as "she asked" before, which could leave nothing to say who spoke.
 
 ### Fixed
