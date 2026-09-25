@@ -50,7 +50,7 @@ The greeting is never refined. Your own messages are only refined when you press
 ## Context
 
 - **How much it is told** sets how many messages of chat history are sent, whether each line names who said it, and the size limits for history and lorebook. See [How much it is told](prompt.md#how-much-it-is-told).
-- **See what gets sent** builds the real request and shows it, without calling a model. **Raw** shows it as the JSON that is sent. **Expand** opens it full screen.
+- **See what gets sent** builds the request a refine would send and shows it, without calling a model. What Jev found and the passes after the first are named rather than shown. **Raw** shows it as the JSON that is sent. **Expand** opens it full screen.
 
 ## Model
 
@@ -174,7 +174,7 @@ It rewrites only what you selected. It works in your own messages too, with thei
 
 **Take out what I selected** appears in the same places. It deletes the selection without calling a model, so it costs nothing.
 
-- It tidies the gap: one space, not two, and one blank line when a paragraph goes.
+- It tidies the gap. It leaves one space where a phrase was cut, and one blank line where a paragraph was.
 - It will not delete the whole message.
 - **Put it back** undoes it.
 

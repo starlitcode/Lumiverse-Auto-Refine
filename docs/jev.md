@@ -143,12 +143,17 @@ If your prompt is your own, add a block with `{{jev_found}}` in it instead. The 
 
 What the refine model is given:
 
-- A short lead-in. It says another model scored the passage against checks you wrote, and that each check is a lead, not an order. Where a check does not fit the passage, the model is told to leave that part alone.
+- A short lead-in. It says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone.
 - Each check that reached your line, strongest first, with its score, like `- reply repeats itself. (91%)`.
 
 The block is empty, and left out of the prompt, whenever Jev did not read the reply or could not decide. That includes one model, a selection, and a button refine with **Let Jev check refines you start yourself** off.
 
 Jev can be wrong, which is why the lead-in calls the checks leads. Your other rules still apply as they are.
+
+To see that it was sent:
+
+- **The Log** says "what Jev found went to the refine model", with how many checks, on each refine that sent it.
+- **Show me the request** on the **Context** tab does not show it. A preview never asks Jev, so the block is empty there and left out. The card says so.
 
 ## Having Jev check the rewrite
 
@@ -167,7 +172,7 @@ While it runs, the panel says "Jev is reading the rewrite", then "Refining once 
 
 ## When Jev cannot answer
 
-The reply is refined, the same as with one model. No key, a refused key, an account with no credit, a host that is down or an answer with nothing usable in it all end this way, and the Log says which. The beta failing costs you a refine you might not have needed, never a refine you did.
+The reply is refined, the same as with one model. This happens when the key is missing or refused, the account has no credit, the host is down, or the answer has nothing usable in it. The Log says which. The beta failing costs you a refine you might not have needed, never a refine you did.
 
 ## Reading what it decided
 

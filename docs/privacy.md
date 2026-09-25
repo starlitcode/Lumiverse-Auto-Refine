@@ -17,12 +17,12 @@ The refine call carries the blocks you see under **How the prompt is built**, an
 - any block you wrote yourself
 - the fixed instruction that makes it an edit, not a new turn
 
-The panel shows exactly what is sent:
+The panel shows what is sent:
 
 - A block that is switched off is not sent.
 - **Messages of run-up to send** set to 0 sends no chat history.
-- Switching off the **Your Characters** block sends no card.
-- **Show me the request**, on the Context tab, builds the real request and shows it to you without sending it anywhere.
+- Switching off the **Cast Sheet** block sends no card.
+- **Show me the request**, on the Context tab, builds the request a refine would send and shows it to you without sending it anywhere. What Jev found is not in it, since a preview does not ask Jev. The Log says when a refine sent it.
 
 Two things are taken out of a message before it is sent:
 
@@ -44,7 +44,7 @@ With **How many models** set to two, each finished reply is sent to Jev before i
 - the list of phrases this chat has worn out, if **Also check for worn-out phrases** is on
 - your Jev key, which tells the host the call is yours
 
-Nothing else goes to Jev: no card, no chat history, no lore, no memories, no settings. A refine you start yourself never goes to Jev.
+Nothing else goes to Jev. Your card, chat history, lore, memories and settings stay out of it. A refine you start yourself never goes to Jev.
 
 Your key:
 
@@ -81,7 +81,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 ## What it keeps
 
 - **Your settings**, in your browser and in Lumiverse's storage for your account, so they follow you to other devices.
-- **The chats you switched it off in**, in your browser. Only the chat ids: no titles, no text.
+- **The chats you switched it off in**, in your browser. Only the chat ids are kept. Chat titles and text are not.
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
 - **Your Jev key**, if you saved one, in Lumiverse's secure store for your account and nowhere else.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.

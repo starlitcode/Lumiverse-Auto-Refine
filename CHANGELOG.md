@@ -6,6 +6,47 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.19.0
+
+_2026-09-25_
+
+### Added
+
+- **The built-in prompts score a passage before they change it.** All four ask the model to score each area out of 100, and each score has to rest on a line it could quote. Only areas under 85 are changed. A line the model is not sure about is left alone. The two for a model that thinks write the scores down, and they are kept under **What the model worked out** on the Log tab. The two plain ones score silently and send back only the rewrite. See [The scorecard](docs/prompt.md#the-scorecard).
+- **Roll Call**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, and uses a name where a pronoun could mean two people.
+- **A step-by-step guide to making your own prompt.** It shows how to start from a built-in prompt, find what annoys you, group it by kind, keep it short, match your model, add your own taste, and test it. See [Making your own prompt](docs/rules.md). It starts with what every prompt must have to work.
+- **The docs warn about prefills and samplers.** Many newer models no longer accept an Assistant block at the end of a request, or some sampler settings. The docs say when to avoid both, and what to do if a refine fails because of them. See [Roles](docs/prompt.md#roles) and [Sampler settings](docs/prompt.md#sampler-settings).
+- **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
+
+### Changed
+
+- **The Prompt tab tells you the built-in prompts have changed.** Your own prompt is not touched. To get the new blocks, load a built-in prompt again.
+- **The four built-in prompts have new names.** The line edit is now **A judge**, and The copy edit is now **A line judge**. The versions for a model that thinks are **A judge that thinks** and **A line judge that thinks**. A prompt you had picked, or named as a pass, follows the new name.
+- **The built-in prompts are written around a scorecard.** The model is the judge on a reply, and the line judge on your own writing. Each block is named after the tag it holds, and several were renamed:
+  - Your Role is **The Judge** in the prompts for replies, and **Line Judge** in the prompts for your own messages.
+  - Phrases to Cut is **Instant Penalties**, Words to Cut is **Dead Weight**, Repetition is **Echoes**, Speech is **Dialogue**, Bodies and Feeling is **Body Language**, and How It Ends is **The Finish**.
+  - What to Leave is **Clean Run** in the prompts for replies, and **Not Your Call** in the prompts for your own messages.
+  - The Standard is **The Bar**, Where to Look is **Hot Spots**, Restraint is **No Extra Credit**, and Before You Answer is **Review the Tape**.
+  - What to Mend is **Clear Faults**, The Test is **The Call**, and The Way They Write is **Their Voice**.
+  - Copy These Exactly is **Out of Bounds**, and How to Answer is **Hand It In**.
+  - Your Characters is **Cast Sheet**, The User's Characters is **Player Sheet**, What Is True is **World Facts**, Earlier Pages is **Earlier Turns**, What Has Happened is **Memories**, Already Worn Out in This Chat is **Worn Out**, The Reply Around It is **Reply Around It**, and Passage to Refine is **Passage**.
+  - What each block asks for is the same, apart from the changes listed here.
+- **The built-in prompts say plainly that the tone is yours.** Gentle, sexual or violent, a passage comes back at the strength it went in. A gentle scene gets no heat added, and sex, gore, swearing and insults keep their plain words.
+- **The built-in prompts are written the way a person talks.** They use contractions, some swearing, and sentences of different shapes, so they do not read like the writing they exist to fix. What they ask for is the same. The lead-in before what Jev found now says to treat each check as a lead to check.
+- **Instant Penalties is shorter and catches more.** It lists kinds of stock writing with a few examples each, instead of every phrase. New kinds: fancy stand-ins for plain words, office and maths talk in fiction, the negation trick, do-then-undo, and saying the same thing twice. **Dead Weight** also catches hedges like "something like fear" and two adjectives stacked on one noun. **Body Language** also cuts filters like "she noticed". Truly and utterly join **Dead Weight**.
+- **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit, now A judge, took out tags such as "she asked" before, which could leave nothing to say who spoke.
+
+### Fixed
+
+- **Passes and phrases typed into their boxes did nothing.** **The passes, in order** and **Phrases to leave alone** saved what you typed as one piece of text, and the refine only reads a list. So typed passes never ran, and typed phrases were still reported. Both now save a list, one line to an entry, and anything already saved as text is read back as a list.
+- **A group chat labelled every reply in the run-up with the chat's first character.** Each reply is now labelled with the character who wrote it. The card sent with a reply is also the card of the character who wrote it, not always the chat's first one.
+- **A refine you start was said twice in the Log.** It wrote "refined a reply in" and "refined a reply on request in" for the same reply, and could show two toasts. It now says it once.
+- **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Worn Out** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
+- **Show me the request showed the wrong prompt with several passes on.** It built the prompt on the Prompt tab, which a refine with several passes never sends. It now shows the first pass as it would go out, and names every pass in order.
+- **Show me the request left out What Jev Found without saying so.** A preview never asks Jev, so the block was empty and left out, and the request looked as if the findings were never sent. The card now says the block is left out here, in the plain view and in **Raw**, and that the Log says when a real refine sent it. The README and the docs no longer call the preview exactly what is sent. See [Seeing what gets sent](docs/prompt.md#seeing-what-gets-sent).
+
+---
+
 ## 1.18.0
 
 _2026-09-25_

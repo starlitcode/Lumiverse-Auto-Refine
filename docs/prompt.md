@@ -41,7 +41,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. |
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
-| `{{jev_found}}` | With two models, the checks Jev found in the reply, strongest first, each with its score. They come after a short lead-in that calls them leads to check, not orders. Only filled in when Jev read the reply and picked it out. See [Passing on what Jev found](jev.md#passing-on-what-jev-found). |
+| `{{jev_found}}` | With two models, the checks Jev found in the reply, strongest first, each with its score. They come after a short lead-in that says to treat each one as a lead to check. Only filled in when Jev read the reply and picked it out. See [Passing on what Jev found](jev.md#passing-on-what-jev-found). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. |
 
@@ -69,7 +69,7 @@ then a chat with no memories still sends `Keep these in mind.`, which now refers
 
 - It is Lumiverse's own memory of the chat, written out with your own header and chunk templates, as many pieces as your chat memory settings ask for.
 - A chat with memory off, or with nothing stored yet, gives nothing, and the block is left out.
-- The block that uses it, **What Has Happened**, starts switched off, because its size is set by your chat memory settings and it is sent on every refine. Switch it on under **Prompt** when you want the refine to know more of the story.
+- The block that uses it, **Memories**, starts switched off, because its size is set by your chat memory settings and it is sent on every refine. Switch it on under **Prompt** when you want the refine to know more of the story.
 
 **About `{{protect_notes}}`:** it has its own block, **Protected Formatting**. When protection has hidden something, it becomes:
 
@@ -87,22 +87,30 @@ The built-in prompts are ordered from what never changes to what changes every t
 
 1. **The rules.** The same on every refine.
 2. **The setting**: who the story follows, who you are writing with, and what is true in its world. The same for a whole chat.
-3. **What Has Happened.** Lumiverse's memory of the chat. Off by default.
-4. **Earlier Pages.** The recent messages, which change every turn.
-5. **Passage to Refine.** Different every time.
-6. **How to Answer.** Below the passage on purpose, and sent as **User**.
+3. **Memories.** Lumiverse's memory of the chat. Off by default.
+4. **Earlier Turns.** The recent messages, which change every turn.
+5. **Passage.** Different every time.
+6. **Hand It In.** Below the passage on purpose, and sent as **User**.
 7. **Protected Formatting.** Only sent when something was hidden.
 
-**Why How to Answer comes last.** A rule about the shape of the answer is followed best when it is the last thing the model reads. Placed at the top, some models forget the tags, and a rewrite without its tags is dropped, which costs you the call.
+**Why Hand It In comes last.** A rule about the shape of the answer is followed best when it is the last thing the model reads. Placed at the top, some models forget the tags, and a rewrite without its tags is dropped, which costs you the call.
 
 It is sent as **User** because it is your instruction about what you want back, so the model reads your passage and your request together.
 
 ## Roles
 
-System is right for almost everything. Two cases where changing it helps:
+System is right for almost everything. One case where changing it helps:
 
 - **A model that ignores system instructions.** Some providers pay more attention to the last user message. Move your rules to **User**.
-- **A model that continues the message instead of editing it.** Sending the turn as **Assistant** makes it read as already written, which can stop the model adding a new paragraph.
+
+**Be careful with Assistant.** A block sent as **Assistant** at the end of the request is called a prefill. It puts words in the model's mouth before it starts.
+
+- Many newer models no longer accept a prefill. Some return an error. Some ignore it.
+- This is changing fast, and more models are dropping it.
+- Only end on an **Assistant** block if you know your model accepts one. Check your provider's docs, and test it on one reply first.
+- An **Assistant** block earlier in the request, with a **User** block after it, is fine for any model.
+
+The built-in prompts end on **User** blocks for this reason.
 
 ## The answer it asks for
 
@@ -112,29 +120,42 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 - If there is an opening tag with no closing tag, the answer was cut off. Nothing is saved, and your reply stays as it was.
 - The tags are read without caring about capitals, so a prompt written in lower case still works.
 
-**Asking for the tags is your prompt's job.** The built-in prompts ask in the **How to Answer** block, in plain words you can reword, move or delete. No hidden macro adds the instruction.
+**Asking for the tags is your prompt's job.** The built-in prompts ask in the **Hand It In** block, in plain words you can reword, move or delete. No hidden macro adds the instruction.
 
 **Take the answer from between the tags**, on the Limits tab, is on by default. Off, the whole answer is taken as the rewrite, and the other checks catch a preamble instead.
 
-## What a reasoning prompt asks for
+## The scorecard
 
-The two prompts for a model that thinks ask for the answer in two parts:
+All four built-in prompts ask the model to score the passage before it changes anything. How the scoring works, from the **Scorecard** block:
+
+- An area is one kind of fault the prompt tells the model to look for, such as stock phrases, repetition or speech.
+- Each area gets a score out of 100.
+- A score has to rest on a line from the passage that the model could quote. An area with nothing to quote scores 100.
+- From 85 to 99 means a line might fit, but the model is not sure. Those lines are left alone.
+- Only areas under 85 are changed, and in them only the lines that fit.
+- A passage can score 100 in every area. Then it comes back unchanged.
+
+Why it is there: a model that has to point at a line before it changes it leaves alone the lines it cannot point at. This stops a refine rewriting a passage that was already fine.
+
+**The two for a model that thinks write the scorecard down.** Their answer comes in two parts:
 
 ```
 <REFINE_NOTES>
-what is weak, what you intend to change and why, what you are leaving alone
+Area: score. "the worst line, quoted"
+(one line for each area)
+The areas under 85, and what changes in each.
 </REFINE_NOTES>
 <REFINED>
 the rewritten message
 </REFINED>
 ```
 
+- The scores come before the rewrite, so they decide what changes. They do not grade the rewrite afterwards.
 - `<REFINE_NOTES>` is outside `<REFINED>`, so it can never reach your chat.
-- It is kept on the **Log** tab, under **What the model worked out**, to read when you like.
-- Only a refine that finishes replaces it. Stopping one keeps the last notes.
-- A prompt that asks for no notes keeps nothing and costs nothing extra.
+- The notes are kept on the **Log** tab, under **What the model worked out**. Only a refine that finishes replaces them. Stopping one keeps the last notes.
+- A score is only the model's judgement. The quoted line is the part to trust.
 
-**The two plain prompts do not ask for notes, on purpose.** A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost.
+**The two plain prompts score silently.** They ask for the rewrite and nothing else. A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost. So these two keep the same rules and write nothing down.
 
 Both tags are in capitals so a model scanning the prompt finds them easily.
 
@@ -142,7 +163,7 @@ Both tags are in capitals so a model scanning the prompt finds them easily.
 
 Nothing outside the `<REFINED>` tags is ever saved into your chat. So a prompt can safely ask for a report around the rewrite: what was cut, what was added, what was left alone.
 
-Add the tags you want to the **How to Answer** block, in your own words. For example:
+Add the tags you want to the **Hand It In** block, in your own words. For example:
 
 ```
 Before the rewrite, list what you changed:
@@ -160,17 +181,18 @@ Then give the rewrite between <REFINED> and </REFINED>.
 
 ## The prompts built in
 
-There are four: a line edit for replies and a copy edit for your own messages, each in two versions. Pick the version by whether your model reasons.
+There are four: a judge for replies and a line judge for your own messages, each in two versions. Pick the version by whether your model reasons.
 
 ### For replies
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The line edit** | Tells the model it is a line editor: how a passage reads is its job, and what happens in it is yours. Then one block each for phrases, words, repetition, rhythm, speech, bodies, endings and restraint. The one to start with. | no |
-| **The line edit, for a model that thinks** | The same role, then one standard, the five places worth checking, keeping the writer's voice, and a check of its own rewrite. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A judge** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard for all of them. The one to start with. | no |
+| **A judge that thinks** | The same role, then The Bar to clear, five Hot Spots, the writer's Voice, Roll Call, and Review the Tape for its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
 
-- The version for a model that thinks is the smaller one. A reasoning model is given the standard and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
-- The rules name exact phrases, because "cut clichés" gives a model nothing to act on. They name the ones that appear often in machine-written roleplay: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, and an emotion given as a mix of two others.
+- The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
+- The rules name kinds of stock writing, with a few examples each, because "cut clichés" gives a model nothing to act on. A model reads a kind as a pattern and catches the versions that are not listed. The kinds include held breaths and hammering hearts, stock faces, voices given a texture, the air doing the mood's job, fancy stand-ins for plain words, office talk in fiction, and the negation trick: "it wasn't a request, it was a command".
+- **Roll Call** is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
 - Both have a block called **What Jev Found**, switched off. It is for two models. See [Passing on what Jev found](jev.md#passing-on-what-jev-found).
 - All four work as they are. Load one, change what you like, and save it under your own name.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
@@ -181,15 +203,16 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The copy edit** | Tells the model it is a copy editor: it fixes what went wrong on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. | no |
-| **The copy edit, for a model that thinks** | The same role, then one test for telling a mistake from a choice, and the places where fast typing goes wrong. Asks for its working in `<REFINE_NOTES>`. | yes |
+| **A line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
+| **A line judge that thinks** | The same role, then The Call for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
-- Each ends by saying that when a slip cannot be told from a choice, it is a choice. A short line, a fragment, or a plain "she left" stays as it is.
+- Each ends by saying that when a slip cannot be told from a choice, it is a choice. So a plain "she left" stays as it is.
+- Their **Roll Call** block keeps every line with its speaker when you write more than one character. It adds no line for any character.
 - They are in the same menu, under their own heading. Loading one changes only the prompt for your own messages.
 
 ### The one thing they do not edit
 
-Each of the four tells the model that how dark, explicit or crude a story gets is the writer's decision, then names one exception. This is the paragraph, word for word, in the **Your Role** block of all four:
+Each of the four tells the model that the tone of the story is the writer's decision, whether it is a gentle scene, sexual content or graphic violence. It says a passage comes back at the strength it went in, that a gentle scene gets no heat added, and that sex, gore, swearing and insults keep their plain words. Then it names one exception. This is the paragraph, word for word, in the first block of all four, **The Judge** or **Line Judge**:
 
 > There is one exception, and it is not the user's call either. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited. Hand that passage back exactly as it came, and say outside the tags that this is why. A younger character in a scene with nothing sexual in it is edited like anyone else.
 
@@ -200,7 +223,7 @@ What it does and does not do:
 - **A younger character in a scene with nothing sexual in it is edited like anyone else.** Age alone is not the exception. Nothing else is excepted.
 - **A prompt of your own carries only what you put in it.** A preset you save from one of the four keeps the paragraph, where you can read it. One you write yourself does not have it.
 
-The checks on what comes back are separate. A model that refuses to edit a scene, for any reason, including misreading an adult character as a minor, has written a refusal, not a rewrite. With **Refuse an answer that declines the job** on, which it is by default, a refusal is dropped and your reply is left as it was. See [The model answered the wrong question](guardrails.md#the-model-answered-the-wrong-question).
+The checks on what comes back are separate. A model that refuses to edit a scene, for any reason, including misreading an adult character as a minor, has written a refusal instead of a rewrite. With **Refuse an answer that declines the job** on, which it is by default, a refusal is dropped and your reply is left as it was. See [The model answered the wrong question](guardrails.md#the-model-answered-the-wrong-question).
 
 ## How much it is told
 
@@ -208,10 +231,12 @@ Four settings on the **Context** tab. Three of them set a size, and every one of
 
 - **Messages of run-up to send** is how many messages before the one being refined are sent. The default is 4. 0 sends none, which is fine for rules about wording, but a model that cannot see earlier messages may lose the thread of the scene.
 - **Most tokens of run-up** is a size limit on the same messages. Whichever limit is reached first wins. Whole messages are kept or dropped, counting back from the one being refined, so the message just before it is always kept.
-- **Name the speakers in the run-up** is on by default. It puts each speaker's name at the start of their lines, which is the only way to tell the voices apart in one block of text. Turn it off for a chat whose messages already start with a name, like a group chat.
+- **Name the speakers in the run-up** is on by default. It puts each speaker's name at the start of their lines, which is the only way to tell the voices apart in one block of text. Turn it off for a chat whose messages already start with a name.
+
+**In a group chat**, each reply is named after the character who wrote it. The card sent in `{{description}}` is that character's card too, found by name among the cards in the chat. Where no card matches the name, the chat's own card is sent.
 - **Most tokens of lorebook** is a size limit on the lorebook entries. Whole entries are kept or dropped.
 
-Sizes are in tokens, not characters, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokeniser where it can, and estimated at four characters a token where it cannot.
+Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokeniser where it can, and estimated at four characters a token where it cannot.
 
 ## Phrases this chat has worn out
 
@@ -229,7 +254,7 @@ What it counts:
 
 - **Across replies, not within one.** A phrase has to be in a number of different replies, three by default. Set this with **How many replies a phrase has to be in**. Five times in one reply never counts.
 - **How far back it looks** is **How many replies to look across**, 60 by default.
-- **Narration only.** Everything in quotation marks is left out, because a character who repeats a phrase is being themselves. The **Speech** block handles dialogue instead.
+- **Narration only.** Everything in quotation marks is left out, because a character who repeats a phrase is being themselves. The **Dialogue** block handles speech instead.
 - **Three words at least.** A run of only common words, like "out of the", never counts.
 - **The longest phrase wins.** A six-word phrase is not also reported as the four-word phrase inside it.
 - **Left out:** your own messages, the character's name, words from the character card and the lorebook (they are the story, not a habit), and anything in backticks.
@@ -242,7 +267,7 @@ It adds no extra call, because it reads replies the refine already has. It does 
 
 A refine is one model call by default. **How many passes a refine makes**, on the Limits tab, can make it several, each pass given what the one before it wrote. For example, one pass cuts filler and the next fixes rhythm, so no single prompt has to do both.
 
-**The passes, in order** takes one preset name per line, top to bottom. It can be one of yours or a built-in prompt. Yours wins when the names match. Presets are named, not copied, so editing a preset changes every pass that uses it.
+**The passes, in order** takes one preset name per line, top to bottom. It can be one of yours or a built-in prompt. Yours wins when the names match. A pass uses the preset by name, so editing a preset changes every pass that uses it.
 
 The built-in prompts are whole refines, so running two in a row does the same work twice. Build a chain from presets of your own that each do one thing.
 
@@ -292,11 +317,11 @@ What is not hidden:
 
 **Patterns to keep visible** keeps a region visible even when a rule above would hide it. The usual use is a colour span in the middle of a sentence, which the model handles better when it can see it.
 
-Some things cannot be found by pattern, such as a stat block or a translation line. The built-in prompts have a **What to Leave** block that tells the model to keep these as they are.
+Some things cannot be found by pattern, such as a stat block or a translation line. The built-in prompts have an **Out of Bounds** block that tells the model to keep these as they are.
 
 ### The reply's own reasoning
 
-**Keep the reply's own reasoning out of the refine** is also on by default. A reasoning model's working is not your writing. It is taken off before the refine and put back afterwards, unchanged.
+**Keep the reply's own reasoning out of the refine** is also on by default. A reasoning model's working is taken off before the refine and put back afterwards, unchanged.
 
 Three forms are recognised by tag name:
 
@@ -356,6 +381,11 @@ On the **Model** tab, every sampler starts blank. Blank means your connection's 
 - **Longest answer** set too low cuts the rewrite off, and it is then dropped as too short.
 - **Clear them all** sets every sampler back to blank.
 
+**Some models do not accept samplers.** Many newer models, reasoning models most of all, ignore temperature and the other samplers, or return an error when one is sent. This is changing fast too.
+
+- If a refine fails with an error from the provider after you set a sampler, clear that sampler and try again.
+- Leaving them blank is always safe.
+
 ## How much thinking it does
 
 On the **Model** tab, **Let it think first** has three choices:
@@ -370,9 +400,12 @@ On the **Model** tab, **Let it think first** has three choices:
 
 - **The line at the top** gives the whole request in tokens, with the character count. If the tokeniser cannot answer, it says **roughly**.
 - **Where the tokens go** lists each block, largest first, with its share. This shows you when history or lorebook takes most of every request.
-- It is built by the same code a real refine uses, so it is exactly what the model gets. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
+- It is built by the same code a real refine uses, so it is what the model gets, apart from the two things below. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
 - Below the messages, it also shows the connection, thinking and samplers the call would use.
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
+- The worn-out phrases are worked out the same way a refine works them out, so **Worn Out** shows what a refine would send.
+- With **Several passes** on, it shows the first pass as it would go out, and names every pass in order. The passes after the first are sent the rewrite the one before wrote, so they cannot be shown until a refine runs.
+- **What Jev Found** is left out, because a preview never asks Jev. The card says so when a switched-on block uses `{{jev_found}}`. The Log says when a real refine sent it.
 - **Copy it** copies the whole thing, useful when asking why a refine did something odd.
 
 ## Starting a block from nothing
@@ -401,7 +434,7 @@ What a preset never changes: whether refining is on, the length limits, whether 
 **Model setup to load with it** links a preset to one of your saved model setups, so loading the preset loads that setup too. Leave it at **None** to leave the Model tab alone.
 
 - The link can only be set on a preset of your own. To link one to a built-in prompt, pick the setup, then press **Save as new**. The card says this while you are there.
-- The setup is linked by name, not copied, so a preset can be shared. If you load a preset that names a setup you do not have, the preset still loads and the card says which setup it wanted.
+- The setup is linked by name, so a preset can be shared. If you load a preset that names a setup you do not have, the preset still loads and the card says which setup it wanted.
 
 **Picking a preset loads it.** Its prompt is on screen and in use straight away. This means the prompt on screen is always the preset the picker names, so **Update selected** can never save one preset over another by mistake.
 

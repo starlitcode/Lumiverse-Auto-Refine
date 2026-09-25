@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.18.0";
+const VERSION = "1.19.0";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -146,7 +146,7 @@ const DEBUG_PARTS = [
     { id: "prompt", label: "The shape of your prompt", what: "Block names, roles, order and which macros each one uses. Not what the blocks say." },
     { id: "counts", label: "Counts for this session", what: "How many refines were saved, dropped and put back, and why." },
     { id: "log", label: "What it has been doing", what: "The last dozen lines from the Log tab." },
-    { id: "chat", label: "Where you are", what: "Whether a chat is open and whether it has a card. No ids, no names." },
+    { id: "chat", label: "Where you are", what: "Whether a chat is open and whether it has a card. Chat ids and names are left out." },
     { id: "browser", label: "Your browser", what: "The user agent string and the screen size, which is what a layout bug needs." },
 ];
 // What the manifest asks for, what each one is for, and what still works
@@ -615,8 +615,8 @@ const MACROS = [
             "They come after this lead-in: \"Another model, Jev, read this passage " +
             "before you and scored it against checks the user wrote. The checks below " +
             "reached the user's line of 50%, strongest first. In them, \"reply\" means " +
-            "the passage you are rewriting. Look at these first. Each one is a lead, " +
-            "not an order: where a check does not fit the passage, leave that part as " +
+            "the passage you are rewriting. Look at these first. Treat each one as a " +
+            "lead to check. If a check does not fit the passage, leave that part as " +
             "it is. Everything else in these instructions still applies.\" The 50% " +
             "there is an example: it says whatever line you set under Refine when a " +
             "check reaches, and only checks at or over that line are listed. Empty on " +
@@ -660,7 +660,7 @@ const TURN_MACRO = "{{message}}";
 // prompt that does not ask for it has nothing to show while it writes.
 const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // ---- the prompts that come with it ----
-// One question, four answers. A line edit for a reply and a copy edit for what
+// One question, four answers. A judge for a reply and a line judge for what
 // you wrote yourself, and on each of those two sides one for a model that
 // reasons and one for a model that does not. The question is which model you
 // are running, and nothing else.
@@ -674,30 +674,40 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // A model that reasons is given the standard and left to apply it. A model that
 // does not is given the list, because it will match a list and will not derive
 // one. That is the whole of the difference between the two on a side.
+//
+// All four score the passage before they change it: each area gets a score out
+// of 100 that rests on a line the model can point to, and only areas under 85
+// are touched. A model that has to point at the line it wants to change leaves
+// alone the lines it cannot point at, which is what stops a refine rewriting a
+// passage that was already fine. The two for a model that reasons write the
+// scorecard into the notes, so the panel shows it. The two for a model that
+// does not score silently and write nothing but the rewrite, since working
+// written out by a model that does not reason costs time and rarely changes
+// what it does.
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
 // ones that change every turn.
 const SCENE_BLOCKS = [
     {
         id: "character",
-        name: "Your Characters",
+        name: "Cast Sheet",
         on: true,
         role: "system",
-        text: "<your_characters>\n{{description}}\n</your_characters>",
+        text: "<cast_sheet>\n{{description}}\n</cast_sheet>",
     },
     {
         id: "persona",
-        name: "The User's Characters",
+        name: "Player Sheet",
         on: true,
         role: "system",
-        text: "<the_users_characters>\n{{persona}}\n</the_users_characters>",
+        text: "<player_sheet>\n{{persona}}\n</player_sheet>",
     },
     {
         id: "lore",
-        name: "What Is True",
+        name: "World Facts",
         on: true,
         role: "system",
-        text: "<what_is_true>\n{{lore}}\n</what_is_true>",
+        text: "<world_facts>\n{{lore}}\n</world_facts>",
     },
 ];
 // What Lumiverse remembers of the chat from before the run-up. Below the three
@@ -716,10 +726,10 @@ const SCENE_BLOCKS = [
 // memory settings are; a reader who never opens this card is not paying for it.
 const MEMORY_BLOCK = {
     id: "memory",
-    name: "What Has Happened",
+    name: "Memories",
     on: false,
     role: "system",
-    text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
+    text: "<memories>\n{{memories}}\n</memories>",
 };
 // The phrases this chat keeps reaching for. On in every built-in prompt, and that
 // costs nothing: the macro is empty until Find phrases this chat has worn out is
@@ -732,15 +742,15 @@ const MEMORY_BLOCK = {
 // somebody put on a list.
 const WORN_BLOCK = {
     id: "worn",
-    name: "Already Worn Out in This Chat",
+    name: "Worn Out",
     on: true,
     role: "system",
-    text: "<already_worn_out_in_this_chat>\n{{overused}}\n</already_worn_out_in_this_chat>",
+    text: "<worn_out>\n{{overused}}\n</worn_out>",
 };
 // What Jev found in the reply, with two models on. Off in both built-in prompts
 // for replies, and in neither prompt for your own messages, since Jev never
 // reads those. The macro brings its own lead-in, which says the checks are
-// leads rather than orders, so the block is the tag and nothing else and is
+// leads to check, so the block is the tag and nothing else and is
 // left out whenever Jev found nothing.
 const JEV_FOUND_BLOCK = {
     id: "jevfound",
@@ -757,33 +767,36 @@ const JEV_FOUND_BLOCK = {
 // directly above the passage, which is where the thing it describes sits.
 const AROUND_BLOCK = {
     id: "around",
-    name: "The Reply Around It",
+    name: "Reply Around It",
     on: true,
     role: "system",
-    text: "<the_reply_around_it>\n" +
+    text: "<reply_around_it>\n" +
         "{{whole_reply}}\n" +
-        "</the_reply_around_it>",
+        "</reply_around_it>",
 };
 // The pages before this one. Redrawn every single turn, so it goes as late as it
 // can and still be read as setting.
 const RECENT_BLOCK = {
     id: "history",
-    name: "Earlier Pages",
+    name: "Earlier Turns",
     on: true,
     role: "system",
-    text: "<earlier_pages>\n{{history}}\n</earlier_pages>",
+    text: "<earlier_turns>\n{{history}}\n</earlier_turns>",
 };
 const TURN_BLOCK = {
     id: "turn",
-    name: "Passage to Refine",
+    name: "Passage",
     on: true,
     role: "user",
-    text: "<passage_to_refine>\n{{message}}\n</passage_to_refine>",
+    text: "<passage>\n{{message}}\n</passage>",
 };
 // The shape of the answer, drawn out as a template. A model matching a shape it
 // can see keeps to it far more reliably than one working from a sentence about
-// the shape, and the two tags are the only part of this prompt that has to come
+// the shape, and the tags are the only part of this prompt that has to come
 // back exactly right.
+//
+// No notes here. This one is for a model that does not reason, which scores
+// silently and hands back the rewrite and nothing else.
 //
 // Shouted, and read back case-insensitively so a prompt written in lower case
 // still works.
@@ -800,19 +813,17 @@ const TURN_BLOCK = {
 // setup's, and it sits beside the passage in the same message that way.
 const HOW_TO_ANSWER = {
     id: "answer",
-    name: "How to Answer",
+    name: "Hand It In",
     on: true,
     role: "user",
-    text: "<how_to_answer>\n" +
-        "Give it back to me in this shape:\n\n" +
-        "<REFINED>\n" +
-        "the passage, rewritten\n" +
-        "</REFINED>\n\n" +
-        "Only what sits between those two tags is saved, so both belong in every " +
-        "answer. Inside them, write the passage as a reader would meet it.\n\n" +
-        "Anything outside the tags reaches me and never reaches the story, so a " +
-        "note about the edit belongs there if you have one.\n" +
-        "</how_to_answer>",
+    text: "<hand_it_in>\n" +
+        "Hand it in like this:\n\n" +
+        "<REFINED>\nthe passage, rewritten\n</REFINED>\n\n" +
+        "Only what's between those two tags gets saved, so both go in every " +
+        "time. Inside them, just the passage, the way a reader would see it.\n\n" +
+        "If you need to tell the user something, like why you handed it back " +
+        "untouched, say it outside the tags. It reaches them and never the story." +
+        "\n</hand_it_in>",
 };
 // The reasoning version. The working goes in a tag of its own, ahead of the
 // rewrite, and that tag sits outside <REFINED> so none of it can reach the
@@ -820,34 +831,31 @@ const HOW_TO_ANSWER = {
 // what makes asking for it worth the tokens: working nobody reads is only a
 // bill.
 //
-// Only the reasoning prompts carry it. A model that does not reason, handed a
-// thinking tag, fills it with a summary of what it is about to do and then does
-// something else.
+// The scorecard goes first, in the notes, so the scores are written before the
+// rewrite is. A model that writes the rewrite first and scores it after is
+// grading its own work rather than deciding what to change. The rest of the
+// working goes in the same tag: a model that reasons will write some whatever
+// it is told, and this keeps it inside the one tag that never reaches the story.
 const THINKS_ANSWER = {
     id: "answer",
-    name: "How to Answer",
+    name: "Hand It In",
     on: true,
     role: "user",
-    text: "<how_to_answer>\n" +
-        "Give it back to me in this shape, in this order:\n\n" +
-        "<REFINE_NOTES>\n" +
-        "What reads weakly as it stands, quoted so I can see the line you mean.\n" +
-        "What you are going to change, and why.\n" +
-        "What you looked at and chose to keep.\n" +
-        "</REFINE_NOTES>\n" +
-        "<REFINED>\n" +
-        "the passage, rewritten\n" +
-        "</REFINED>\n\n" +
-        "<REFINE_NOTES> is the one place your working goes. Where you would reach " +
-        "for <think>, <thinking>, <reasoning> or a scratchpad of your own, put that " +
-        "line inside <REFINE_NOTES> instead, and let that tag be the only one you " +
-        "open.\n\n" +
-        "What you write there reaches me and never reaches the story, so it costs " +
-        "the draft nothing however long it runs.\n\n" +
-        "Only what sits between <REFINED> and </REFINED> is saved. Inside those " +
-        "tags, write the passage as a reader would meet it; what you changed and " +
-        "why is already said above.\n" +
-        "</how_to_answer>",
+    text: "<hand_it_in>\n" +
+        "Hand it in like this, in this order:\n\n" +
+        "<REFINE_NOTES>\nOne line per area, in the order the rules list them:\n" +
+        "Area: score. \"the worst line, quoted\"\nThen one line saying which " +
+        "areas scored under 85, and what you're changing in each.\n" +
+        "</REFINE_NOTES>\n<REFINED>\nthe passage, rewritten\n</REFINED>\n\n" +
+        "All your working goes in <REFINE_NOTES>. If you'd normally reach for " +
+        "<think>, <thinking>, <reasoning> or some scratchpad of your own, put " +
+        "it in <REFINE_NOTES> instead and don't open any other tag.\n\n" +
+        "Write as much in there as you need. It never goes into the story, so " +
+        "it can't hurt the rewrite.\n\n" +
+        "Only what's between <REFINED> and </REFINED> gets saved. Inside them, " +
+        "just the passage, the way a reader would see it. Your reasons are " +
+        "already on the scorecard." +
+        "\n</hand_it_in>",
 };
 // The note about the tokens standing in for protected formatting. It has a
 // tag of its own, like every other macro in the list.
@@ -855,10 +863,10 @@ const THINKS_ANSWER = {
 // It needs a block of its own to carry a tag rather than a line of its own. A
 // block whose content comes out as nothing but tags is dropped whole, and this
 // macro is empty on any refine where nothing needed protecting, which is most
-// of them. Left inside How to Answer, that check could never fire, because that
+// of them. Left inside Hand It In, that check could never fire, because that
 // block always has prose in it: the tag pair would be sent empty every time.
 //
-// Last, under How to Answer, which is where the macro already sat. So what a
+// Last, under Hand It In, which is where the macro already sat. So what a
 // model is sent is what it was sent before, with the tag around it.
 const PROTECT_BLOCK = {
     id: "protect",
@@ -870,132 +878,194 @@ const PROTECT_BLOCK = {
 // The phrase list, the same in both lengths. These turn up in machine-written
 // fiction several times a session and in published fiction almost never.
 const PHRASES = 
-// Bodies standing in for a feeling nobody wrote.
-"- a breath they did not know they were holding\n" +
-    "- a breath that hitches or catches\n" +
-    "- a heart hammering, pounding, racing or thundering against ribs\n" +
-    "- a shiver down a spine, or sent anywhere\n" +
-    "- a stomach dropping, knuckles whitening, a jaw tightening\n" +
-    "- swallowing hard, or a throat bobbing\n" +
-    "- pupils blown wide, or eyes darkening\n" +
-    "- a body going rigid, going still, or steeling itself\n" +
-    // Feeling packed into a container and handed over unopened.
-    "- a jolt, a surge, a wave, a rush, a pang, a flicker or a ghost of something\n" +
-    "- an emotion given as a mixture of two others, or warring with another\n" +
-    "- being acutely, keenly, painfully or achingly aware of something\n" +
-    "- the weight of a look, a word, a silence, or of an unnamed it\n" +
-    // Faces and voices running the same stock business.
-    "- a smirk, a wicked grin, a knowing look, an eyebrow raised, quirked or arched\n" +
-    "- a smile that does not reach the eyes\n" +
-    "- a mouth whose corner quirks, twitches or lifts\n" +
-    "- an expression called unreadable, neutral or blank\n" +
-    "- a voice given a texture: velvety, husky, gravelly, silky, raspy\n" +
-    "- a voice that purrs, growls, or drops an octave\n" +
-    "- a voice barely above a whisper\n" +
-    // The room doing work the characters should be doing.
-    "- the air thick with anything, or charged, or shifting\n" +
-    "- something crackling or hanging between people\n" +
-    "- a setting given a will of its own: a house that watches, a forest that breathes\n" +
-    "- a sound placed out of reach: somewhere, a door slams\n" +
-    "- time slowing, the world falling away, the world narrowing\n" +
-    "- a pause named instead of filled: a long moment, a beat, a silence that stretches\n" +
-    // Shapes rather than particular phrases. A model produces these whatever
-    // the scene is, so naming the shape catches every filling of it where naming
-    // one example catches one.
-    "- a thing said by what it is not, then corrected: not a question, an order\n" +
-    "- the same thing twice with the weaker one kept: they did not just leave, they ran\n" +
-    "- three of anything in a row: three adjectives, three fragments, three clauses\n" +
-    "- two or three actions strung onto one sentence with as\n" +
-    "- a sentence opened on a participle: reaching for the glass, they\n" +
-    "- an action given and then graded: they laughed, and it was thin\n" +
+// Grouped by kind, with a few examples each. A model reads a group as a
+// pattern and catches the ones not listed; a list of every filling is longer
+// and catches nothing more.
+"- the held breath family: a breath they didn't know they were holding, a breath that hitches or catches\n" +
+    "- bodies on autopilot: a shiver down a spine, a hammering heart, a racing pulse, a dropping stomach, whitening knuckles, a tight jaw\n" +
+    "- stock faces: pupils blown wide, darkening eyes, a smirk, an arched brow, a mouth corner that quirks, a smile that doesn't reach the eyes\n" +
+    "- feelings in containers or blends: a jolt of, a wave of, a pang of, a flicker of, a mix of, warring with\n" +
+    "- acutely or painfully aware, and the weight of a look, a word or a silence\n" +
+    "- voices given a texture or a volume knob: velvety, husky, gravelly, purring, growling, barely above a whisper, dropping an octave\n" +
+    "- the air doing the mood's job: thick, charged, hanging, crackling between people\n" +
+    "- rooms with a will of their own (the house watched, the room held its breath) and sounds from nowhere (somewhere, a door slammed)\n" +
+    "- pauses named instead of filled: a beat, a long moment, the silence stretched, time slowed, the world narrowed\n" +
+    "- fancy stand-ins for plain words: orbs, ministrations, crimson beads, palpable, a testament to, a tapestry of\n" +
+    "- office and maths talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten\n" +
+    "- negation tricks: it wasn't a request, it was a command; she didn't just leave, she ran; not unkind; less X than Y\n" +
+    "- an action, then a grade for it: she laughed, and it was thin; he smiled, slow and easy\n" +
     "- a laugh, a breath or a sound that escapes somebody\n" +
-    "- a softened double negative: not unkind, no small thing\n" +
-    "- closing the distance\n" +
-    "- doing something before they could stop themselves\n" +
-    "- not knowing whether to do one thing or another";
+    "- do-then-undo: reached out, then pulled back; opened her mouth, then closed it\n" +
+    "- the same thing twice: she looked at him, really looked at him; he worked his jaw, his jaw worked";
 const FILLER = "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
     "seemed to, began to, found themselves, could not help but, visibly, " +
-    "practically, simply, merely";
+    "practically, simply, merely, truly, utterly";
 const COPY_EXACTLY = {
     id: "hands_off",
-    name: "Copy These Exactly",
+    name: "Out of Bounds",
     on: true,
     role: "system",
-    text: "<copy_these_exactly>\n" +
-        "Some of what you are given is not prose, and none of it is yours to " +
-        "improve. Each of these comes through character for character, in the " +
-        "place it already sits:\n\n" +
-        "- HTML and XML tags, with everything inside the angle brackets\n" +
-        "- tokens shaped like [[AR1]], standing in for formatting lifted out " +
-        "before you saw it\n" +
-        "- code, fenced or inline, and anything in backticks\n" +
-        "- links, image links and file paths\n" +
-        "- stat blocks, status bars, trackers, inventories, timestamps, and any " +
-        "line printed to the same shape every time\n" +
-        "- a second language beside the first, with the line translating it: both " +
-        "stay as they are, in the order they are in\n" +
-        "- names as spelled, including odd spellings and capitalisation\n" +
-        "- numbers, dates, times and measurements\n\n" +
-        "Where you are unsure whether something is prose, treat it as one of these " +
-        "and leave it where it is.\n" +
-        "</copy_these_exactly>",
+    text: "<out_of_bounds>\n" +
+        "Some of what you get isn't prose, and you don't touch it. These come " +
+        "through character for character, right where they are:\n\n" +
+        "- HTML and XML tags, with everything inside the angle brackets\n- " +
+        "tokens shaped like [[AR1]], standing in for formatting lifted out " +
+        "before you saw it\n- code, fenced or inline, and anything in backticks\n" +
+        "- links, image links and file paths\n- stat blocks, status bars, " +
+        "trackers, inventories, timestamps, and any line printed to the same " +
+        "shape every time\n- a second language beside the first, with the line " +
+        "translating it: both stay as they are, in the order they are in\n- " +
+        "names as spelled, including odd spellings and capitalisation\n- " +
+        "numbers, dates, times and measurements\n\n" +
+        "If you're not sure whether something counts as prose, assume it " +
+        "doesn't and leave it." +
+        "\n</out_of_bounds>",
 };
 const JOB_BLOCK = {
     id: "job",
-    name: "Your Role",
+    name: "The Judge",
     on: true,
     role: "system",
-    text: "<your_role>\n" +
-        "You are the line editor on this story.\n\n" +
-        "A line editor works sentence by sentence. You change how a passage " +
-        "reads. You leave what happens in it alone, because that belongs to a " +
-        "different editor and to a different pass.\n\n" +
-        "The user is writing this story with you, turn by turn. The passage " +
-        "below was written for them, and it reaches you before they see it.\n\n" +
-        "What it means is already settled. Whatever happens in it still happens. " +
-        "Whoever says a thing still says it and still means it. It ends where it " +
-        "already ends. Keep the person, the tense, and the head it was written " +
-        "from: what one character can see, hear and think of another is what " +
-        "they could before.\n\n" +
-        "That holds when a line reads badly. It holds when you cannot see why a " +
-        "line is there. It is there because the user put it there.\n\n" +
-        "You are marking up a page that already exists. When a sentence matches " +
-        "something named below, change it, and do not stop to weigh whether this " +
-        "one is borderline; the user can undo anything you do. When a sentence " +
-        "matches nothing below, leave it exactly as it is. A passage returned " +
-        "with a change in every line is a worse edit than one carrying four good " +
-        "changes.\n\n" +
-        "Anything that carries meaning stays, even where it reads plainly. " +
-        "Taking out an action or a line of speech is rewriting, and rewriting is " +
-        "not what this pass is for.\n\n" +
-        "The user decides where the story goes, and that takes in how dark, " +
-        "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in, the same heat and the same violence in the same places, in words as " +
-        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-        "should have been written is theirs.\n\n" +
+    text: "<the_judge>\n" +
+        "You're judging this story line by line, and you've got the red pen. " +
+        "You've read a thousand shivers down a thousand spines by now. So has " +
+        "the user. Catch them.\n\n" +
+        "The passage below was written for the user, and you get it before " +
+        "they do. How it reads is your job. What happens in it is theirs. If " +
+        "someone slams a door in the original, that door still gets slammed, and whoever said a line still says it and means it. " +
+        "Don't write past where it ends. Keep the person, the tense, and whose head we're in. Cutting " +
+        "an action or a line of dialogue counts as changing what happens.\n\n" +
+        "Only mark lines that break a rule below, even when some other line " +
+        "reads badly or makes no sense to you. The user put it there. Leave " +
+        "everything else the hell alone. Four good fixes outscore forty fussy " +
+        "ones.\n\n" +
+        "Tone is the user's call. Maybe it's a cozy café scene. Maybe it's " +
+        "smut, or somebody's getting their throat cut. Doesn't matter, you " +
+        "judge it all by the same rules. It comes back at the strength it went " +
+        "in. Gentle stays gentle, so don't go adding heat nobody wrote, and " +
+        "graphic stays graphic, with the same detail in the same places. Sex, " +
+        "gore, swearing and insults keep their actual words. Don't swap in " +
+        "polite ones. How it reads is your business. What it shows is theirs.\n\n" +
         "There is one exception, and it is not the user's call either. Sexual " +
-        "content involving anyone under eighteen, or anyone written as a child, " +
-        "is not edited. Hand that passage back exactly as it came, and say " +
-        "outside the tags that this is why. A younger character in a scene with " +
-        "nothing sexual in it is edited like anyone else." +
-        "\n\n" +
-        "Same story, told better.\n" +
-        "</your_role>",
+        "content involving anyone under eighteen, or anyone written as a " +
+        "child, is not edited. Hand that passage back exactly as it came, and " +
+        "say outside the tags that this is why. A younger character in a scene " +
+        "with nothing sexual in it is edited like anyone else." +
+        "\n</the_judge>",
 };
 const LEAVE_ALONE = {
     id: "leave",
-    name: "What to Leave",
+    name: "Clean Run",
     on: true,
     role: "system",
-    text: "<what_to_leave>\n" +
-        "A passage that already reads well comes back exactly as it was. " +
-        "Rewriting what did not need it costs more than anything else you can do " +
-        "here: it takes away a line the user chose, and they cannot see what " +
-        "moved.\n\n" +
-        "A rewrite that came back longer has usually added rather than mended, so " +
-        "it is worth a second look before you hand it over.\n\n" +
-        "Finding nothing worth changing is a real answer. Hand it back as it is.\n" +
-        "</what_to_leave>",
+    text: "<clean_run>\n" +
+        "A passage that already reads fine goes back untouched, and that " +
+        "counts as a perfect score.\n\n" +
+        "Rewriting a line that didn't need it is about the worst thing you can " +
+        "do here. The user picked that line. Now it's gone, and they can't " +
+        "even see what moved.\n\n" +
+        "If your version came out longer, you probably added stuff instead of " +
+        "fixing stuff. Look again before you hand it in." +
+        "\n</clean_run>",
+};
+// Who is in the scene, for a reply. One card can hold several characters, and
+// a group chat hands a reply to whichever card wrote it, so a refine meets a
+// crowded scene as often as a single character. The faults here are the ones a
+// line edit makes in a crowd: a speech tag cut where it was the only thing
+// naming the speaker, a pronoun that now points at two people, two voices
+// smoothed into one, and a character dropped because their one line read
+// weakly.
+//
+// Nothing here says who plays which character. Some people write their own
+// character and some let the model write it too, and a refine works for both.
+const CAST_BLOCK = {
+    id: "cast",
+    name: "Roll Call",
+    on: true,
+    role: "system",
+    text: "<roll_call>\n" +
+        "Figure out who's in the scene before you start cutting. Could be one " +
+        "person, could be eight.\n\n" +
+        "Who says each line and who does each action doesn't change. Dialogue " +
+        "never switches owners.\n\n" +
+        "In a crowded scene, a name or a plain speech tag is sometimes the " +
+        "only way anyone knows who's talking. Leave it.\n\n" +
+        "Where he, she or they could mean two people, use the name.\n\n" +
+        "Everybody keeps their own voice. If two characters sounded different " +
+        "going in, they'd better sound different coming out.\n\n" +
+        "Anyone in the passage is still in it when you are done, including " +
+        "whoever only got one line." +
+        "\n</roll_call>",
+};
+// Who is in the scene, for the user's own turn. Shorter than the one for
+// replies, because a copy edit changes so little that most of those faults
+// cannot happen. The two that can: a line moved to the wrong speaker while a
+// sentence is untangled, and a line added for another character.
+const YOURS_CAST = {
+    id: "cast",
+    name: "Roll Call",
+    on: true,
+    role: "system",
+    text: "<roll_call>\n" +
+        "They might be writing one character or a few at once. Every line of " +
+        "dialogue keeps its speaker, and every action keeps whoever did it.\n\n" +
+        "Leave everybody else alone. If the user didn't write a reply for " +
+        "someone, you don't get to write one either." +
+        "\n</roll_call>",
+};
+// The written scorecard, for the two that reason. The anchors say what each band means rather
+// than leaving a model to invent its own scale, and the band from 85 to 99 is
+// where doubt goes: a line that might fit and might not is left alone. On the
+// user's own turn that is the rule already, where a line that might be a slip
+// might also be a choice.
+//
+// An area is left for the model to find in the rules above it rather than
+// listed here, so a block switched off is an area that is not scored.
+const THINKS_SCORE_BLOCK = {
+    id: "score",
+    name: "Scorecard",
+    on: true,
+    role: "system",
+    text: "<scorecard>\n" +
+        "Do the scorecard before you touch anything. An area is one kind of " +
+        "fault the rules above go after. Give each area a score out of 100 and " +
+        "back it up with a line from the passage, quoted.\n\n" +
+        "For each area, find what fits and quote the worst offender. Nothing " +
+        "to quote means 100.\n\n" +
+        "- 100: clean.\n- 85 to 99: a line might fit, but you are not sure, or " +
+        "fixing it would do more harm than good.\n- 60 to 84: one or two lines " +
+        "fit.\n- under 60: it's all over the place.\n\n" +
+        "Change only the areas that scored under 85, and in those, only the " +
+        "lines that earned it. Everything else goes back exactly as it came, " +
+        "even if you'd have written it differently.\n\n" +
+        "Score what's actually on the page. A passage that gets 100 everywhere " +
+        "comes back unchanged, and that's a legit result." +
+        "\n</scorecard>",
+};
+// The same scoring for the two that do not reason, done silently. The rules
+// are the same, down to the bands, and the only difference is that nothing is
+// written down: the answer is the rewrite and nothing else.
+const SCORE_BLOCK = {
+    id: "score",
+    name: "Scorecard",
+    on: true,
+    role: "system",
+    text: "<scorecard>\n" +
+        "Score it in your head before you touch anything. Don't write the scores " +
+        "down, just use them. An area is one kind of fault the rules above go " +
+        "after. Give each area a score out of 100, and only count a fault you " +
+        "could point at: a real line in the passage, one you could quote.\n\n" +
+        "- 100: clean.\n" +
+        "- 85 to 99: a line might fit, but you are not sure, or fixing it would " +
+        "do more harm than good.\n" +
+        "- 60 to 84: one or two lines fit.\n" +
+        "- under 60: it's all over the place.\n\n" +
+        "Change only the areas that scored under 85, and in those, only the " +
+        "lines that earned it. Everything else goes back exactly as it came, " +
+        "even if you'd have written it differently.\n\n" +
+        "A passage that scores 100 everywhere comes back unchanged, and that's " +
+        "a legit result." +
+        "\n</scorecard>",
 };
 // ---- a model that does not reason, in full ----
 // The same rules, one to a block, each said at length.
@@ -1003,47 +1073,50 @@ const PLAIN_LONG = [
     JOB_BLOCK,
     {
         id: "cut",
-        name: "Phrases to Cut",
+        name: "Instant Penalties",
         on: true,
         role: "system",
-        text: "<phrases_to_cut>\n" +
-            "These turn up in machine-written fiction several times a session and in " +
-            "published fiction almost never. Worth losing wherever they appear:\n\n" +
+        text: "<instant_penalties>\n" +
+            "Every one of these costs points the second you spot it. Models churn " +
+            "them out constantly. Actual novelists almost never go near them.\n\n" +
             PHRASES +
-            "\n\nLet a phrase go instead of swapping it for a near neighbour. Where " +
-            "the moment still needs carrying, carry it with what this person is " +
-            "doing in this room; where nothing is happening there, let the line go.\n" +
-            "</phrases_to_cut>",
+            "\n\n" +
+            "Cut the phrase outright. Swapping a shiver for a tremble is the same " +
+            "crap in a new coat. If the moment still needs something there, give " +
+            "it whatever this person is actually doing in this room. If they're " +
+            "not doing anything, let the line go." +
+            "\n</instant_penalties>",
     },
     {
         id: "words",
-        name: "Words to Cut",
+        name: "Dead Weight",
         on: true,
         role: "system",
-        text: "<words_to_cut>\n" +
-            "These can go wherever the sentence still stands without them: " +
+        text: "<dead_weight>\n" +
+            "These words mostly just take up space: " +
             FILLER +
-            ".\n\n" +
-            "Take out an adverb that repeats what its verb already said: whispered " +
-            "quietly, hurried quickly.\n\n" +
-            "Where an intensifier is doing work a stronger word would do alone, use " +
-            "the stronger word. Very tired is tired said weakly; exhausted is the " +
-            "word.\n" +
-            "</words_to_cut>",
+            ". If the sentence still stands without one, cut it.\n\n" +
+            "Adverbs that repeat their verb go too, like whispered quietly. So do " +
+            "hedges on a feeling, like something like fear or a kind of sadness. " +
+            "Name the feeling or show it.\n\n" +
+            "Two adjectives stacked on one noun, like a cold, gray morning, " +
+            "usually need only one. Keep the one that changes the picture." +
+            "\n</dead_weight>",
     },
     {
         id: "repeats",
-        name: "Repetition",
+        name: "Echoes",
         on: true,
         role: "system",
-        text: "<repetition>\n" +
-            "Read the passage twice: once for sense, once for what it says twice.\n\n" +
-            "The commonest fault in writing like this is a sentence restating the one " +
-            "before it in other words. One of the two is doing the work. Keep that " +
-            "one and let the other go.\n\n" +
-            "Watch for a word used twice in three lines where the second use was " +
-            "meant as no echo.\n" +
-            "</repetition>",
+        text: "<echoes>\n" +
+            "Go through it twice. First for what happens, then just hunting for " +
+            "repeats.\n\n" +
+            "What you'll find most is a sentence saying what the one before it " +
+            "already said, dressed up a little differently. Keep whichever one's " +
+            "doing the work and cut the other.\n\n" +
+            "Keep an eye out for the same word showing up twice within a few lines " +
+            "when nobody meant it as an echo." +
+            "\n</echoes>",
     },
     {
         id: "rhythm",
@@ -1051,79 +1124,70 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<rhythm>\n" +
-            "Read for length before you read for meaning. Three sentences of about " +
-            "the same length in a row is a rhythm a reader stops hearing: vary one " +
-            "of them.\n\n" +
-            "One fragment works. Three in a row is a tic.\n\n" +
-            "A paragraph running past six lines usually holds two paragraphs.\n" +
-            "</rhythm>",
+            "Before you read for meaning, just listen. Three sentences in a row " +
+            "that are all about the same length start to drone, so break one up or " +
+            "let one run long.\n\n" +
+            "A single fragment can hit hard. Three in a row is a tic.\n\n" +
+            "If a paragraph runs past about six lines, it's probably two " +
+            "paragraphs wearing a trench coat." +
+            "\n</rhythm>",
     },
     {
         id: "speech",
-        name: "Speech",
+        name: "Dialogue",
         on: true,
         role: "system",
-        text: "<speech>\n" +
-            "Every line keeps its meaning and its speaker. Where phrasing is stiff, " +
-            "loosen the phrasing and leave the meaning where it is.\n\n" +
-            "Take out the tag that explains its own line: they said angrily, they " +
-            "asked, curious. Where the tone is missing from the words, mend the " +
-            "words.\n\n" +
-            "Take out speech that repeats back what somebody else just said or did " +
-            "before answering it.\n\n" +
-            "Cut the line that announces itself before it arrives: here is the deal, " +
-            "here is the thing, bottom line, long story short, the short version, " +
-            "two things. Let the first sentence carry the point. Somebody quoting " +
-            "terms or running triage may lay a delivery out in order; nobody else " +
-            "does it in conversation.\n\n" +
-            "Cut the line that only grades what was just said: I respect that, fair " +
-            "enough, that is valid, honestly as a lead-in. Every line wants " +
-            "something. It deflects, probes, demands, confesses or lies.\n\n" +
-            "Counselling talk belongs to characters who counsel for a living. What I " +
-            "am hearing is, that is completely valid, you do not have to answer " +
-            "that, how are you holding up. Handed something heavy, a character " +
-            "answers like a person: badly, or too late, or by making it about " +
-            "themselves, or by changing the subject.\n\n" +
-            "Cut a soft name added to take the edge off a line: champ, friend, " +
-            "buddy, chief, boss. A character who already talks that way keeps " +
-            "it.\n\n" +
-            "A character who speaks badly goes on speaking badly. Short, " +
-            "rambling, plain or crude is a voice, and smoothing it returns a " +
-            "different character.\n" +
-            "</speech>",
+        text: "<dialogue>\n" +
+            "Dialogue keeps its meaning and its speaker. Stiff phrasing can loosen " +
+            "up, but what they meant stays put.\n\n" +
+            "When a tag has to explain the line (she said angrily), the line is " +
+            "too weak. Fix the line and drop the explaining. A plain tag that only " +
+            "says who is talking stays, though, whenever there's more than one " +
+            "person in the room.\n\n" +
+            "Cut a character parroting back what someone just said before they " +
+            "answer. Cut the throat-clearing too, like here's the thing or long " +
+            "story short, and lines that only grade the last line, like fair " +
+            "enough.\n\n" +
+            "Therapist-speak, like what I'm hearing is or that's completely " +
+            "valid, belongs to therapists. A real person handed something heavy " +
+            "handles it badly, or late, or makes it about themselves.\n\n" +
+            "And if a character talks like shit on purpose, they keep talking like " +
+            "shit. Smooth them out and you've written somebody else." +
+            "\n</dialogue>",
     },
     {
         id: "bodies",
-        name: "Bodies and Feeling",
+        name: "Body Language",
         on: true,
         role: "system",
-        text: "<bodies_and_feeling>\n" +
-            "Give hands, eyes and breath an owner. Their hand found another's " +
-            "becomes they took that person's hand. Their eyes traced another's face " +
-            "becomes they looked at that person.\n\n" +
-            "Feeling belongs in what someone does. Where the action already carries " +
-            "it, the naming is the part to cut: somebody pulling their coat closed " +
-            "needs no line saying they felt exposed.\n\n" +
-            "One physical detail at a time. Three stacked together is a list, and a " +
-            "reader skims a list.\n\n" +
-            "A heartbeat, a shiver or a held breath standing in for an emotion is the " +
-            "emotion left unwritten. Write what the person does.\n" +
-            "</bodies_and_feeling>",
+        text: "<body_language>\n" +
+            "Hands, eyes and breath belong to somebody. Her hand found his becomes " +
+            "she took his hand.\n\n" +
+            "Feelings show up in what people do. If the action already makes it " +
+            "obvious, the line naming the feeling can go. Someone yanking their " +
+            "coat shut doesn't need a sentence explaining they felt exposed.\n\n" +
+            "Cut the filter between the reader and the thing. She noticed the door " +
+            "was open is just the door was open.\n\n" +
+            "One physical detail at a time is plenty. Pile them up and the reader " +
+            "skims past all of them." +
+            "\n</body_language>",
     },
+    CAST_BLOCK,
     {
         id: "endings",
-        name: "How It Ends",
+        name: "The Finish",
         on: true,
         role: "system",
-        text: "<how_it_ends>\n" +
-            "The passage ends where it ends. Where the last line sets up what " +
-            "happens next, or turns into a question aimed at the user, that " +
-            "last line is what to trim back.\n\n" +
-            "Where it already ends on a hook, keep the hook. The shape of the turn " +
-            "belongs to whoever wrote it.\n" +
-            "</how_it_ends>",
+        text: "<the_finish>\n" +
+            "The passage stops where it stops. If the last line is setting up what " +
+            "happens next, or suddenly turns around and asks the user a question, " +
+            "trim that bit.\n\n" +
+            "Already ends on a good hook? Leave it. How the turn ends is the " +
+            "writer's call." +
+            "\n</the_finish>",
     },
     LEAVE_ALONE,
+    SCORE_BLOCK,
     COPY_EXACTLY,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
@@ -1137,65 +1201,56 @@ const PLAIN_LONG = [
 ];
 const THINKS_JOB = {
     id: "job",
-    name: "Your Role",
+    name: "The Judge",
     on: true,
     role: "system",
-    text: "<your_role>\n" +
-        "You are the line editor on this story.\n\n" +
-        "A line editor works sentence by sentence. You change how a passage " +
-        "reads. You leave what happens in it alone, because that belongs to a " +
-        "different editor and to a different pass.\n\n" +
-        "The user is writing this story with you, turn by turn. The passage " +
-        "below was written for them, and it reaches you before they see it.\n\n" +
-        "Work out what is weak in how it is written, mend that, and stop there. " +
-        "What it means is settled: whatever happens still happens, whoever says " +
-        "a thing still says it and still means it, and it ends where it already " +
-        "ends. That holds when a line reads badly, and it holds when you cannot " +
-        "see why a line is there. Keep the person, the tense, and the head it " +
-        "was written from.\n\n" +
-        "Use your reasoning to decide which sentences earn a change, then change " +
-        "only those. Reasoning about a sentence is not a reason to touch it. A " +
-        "passage returned with a change in every line is a worse edit than one " +
-        "carrying four good changes.\n\n" +
-        "Anything that carries meaning stays, even where it reads plainly.\n\n" +
-        "The user decides where the story goes, and that takes in how dark, " +
-        "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in, the same heat and the same violence in the same places, in words as " +
-        "plain as the ones it arrived in. How a line reads is yours. Whether it " +
-        "should have been written is theirs.\n\n" +
+    text: "<the_judge>\n" +
+        "You're judging this story line by line, and you've got the red pen. " +
+        "The passage below was written for the user, and you see it first.\n\n" +
+        "Find what's weak in how it's written, fix that, then stop. What happens isn't yours to change. Events stay and speakers keep " +
+        "their lines, and you don't write past where it ends. Keep the person, the tense, and " +
+        "whose head we're in.\n\n" +
+        "Use your reasoning to fill in the scorecard below, then only change " +
+        "what the scores point at. Thinking about a sentence isn't a reason to " +
+        "touch it. Four good fixes outscore forty fussy ones.\n\n" +
+        "Tone is the user's call. Maybe it's a cozy café scene. Maybe it's " +
+        "smut, or somebody's getting their throat cut. Doesn't matter, you " +
+        "judge it all by the same rules. It comes back at the strength it went " +
+        "in. Gentle stays gentle, so don't go adding heat nobody wrote, and " +
+        "graphic stays graphic, with the same detail in the same places. Sex, " +
+        "gore, swearing and insults keep their actual words. Don't swap in " +
+        "polite ones. How it reads is your business. What it shows is theirs.\n\n" +
         "There is one exception, and it is not the user's call either. Sexual " +
-        "content involving anyone under eighteen, or anyone written as a child, " +
-        "is not edited. Hand that passage back exactly as it came, and say " +
-        "outside the tags that this is why. A younger character in a scene with " +
-        "nothing sexual in it is edited like anyone else." +
-        "\n" +
-        "</your_role>",
+        "content involving anyone under eighteen, or anyone written as a " +
+        "child, is not edited. Hand that passage back exactly as it came, and " +
+        "say outside the tags that this is why. A younger character in a scene " +
+        "with nothing sexual in it is edited like anyone else." +
+        "\n</the_judge>",
 };
 const THE_STANDARD = {
     id: "standard",
-    name: "The Standard",
+    name: "The Bar",
     on: true,
     role: "system",
-    text: "<the_standard>\n" +
-        "A sentence that would sit just as well in any other story is the one to " +
-        "work on. It is the mark of writing assembled from what usually goes " +
-        "here rather than from what is in front of you.\n\n" +
-        "Put in its place what is true of these characters, in this room, now. " +
-        "Where nothing is true there, let the line go and close the gap.\n\n" +
-        "Hold speech to it, hold gesture to it, hold description to it, and hold " +
-        "your own rewrite to it before you return it.\n" +
-        "</the_standard>",
+    text: "<the_bar>\n" +
+        "If a sentence could be dropped into any other story and nobody would " +
+        "notice, it fails. It's only there because that's what usually goes " +
+        "there.\n\n" +
+        "Swap it for something true about these characters, in this room, " +
+        "right now. If nothing true fits, cut it and close the gap.\n\n" +
+        "Hold everything to that, your own rewrite included." +
+        "\n</the_bar>",
 };
 const RESTRAINT = {
     id: "restraint",
-    name: "Restraint",
+    name: "No Extra Credit",
     on: true,
     role: "system",
-    text: "<restraint>\n" +
-        "A passage that already reads well comes back exactly as it was.\n\n" +
-        "Length is rarely the improvement. Shorter with nothing wasted is the " +
-        "answer more often than not.\n" +
-        "</restraint>",
+    text: "<no_extra_credit>\n" +
+        "If it already reads well, it goes back exactly as it was.\n\n" +
+        "Length earns you nothing. Shorter with nothing wasted wins most of " +
+        "the time." +
+        "\n</no_extra_credit>",
 };
 // The prompt for your own passages. A different job: the text is already in
 // your voice, and the failure to watch for is a refine that returns it in the
@@ -1207,176 +1262,172 @@ const RESTRAINT = {
 // the reply prompts say what to look for and how to do it better.
 const YOURS_JOB = {
     id: "job",
-    name: "Your Role",
+    name: "Line Judge",
     on: true,
     role: "system",
-    text: "<your_role>\n" +
-        "You are the copy editor on the user's own writing.\n\n" +
-        "A copy editor fixes what went wrong on the way to the page: spelling, " +
-        "grammar, punctuation, a word typed twice, a word left out. Improving " +
-        "their prose belongs to somebody else. Their style is not yours to have " +
-        "an opinion about.\n\n" +
-        "The passage below is theirs. They wrote it as their character, in their " +
-        "own voice, and every line in it is a choice until it proves otherwise." +
-        "\n\n" +
-        "Fix a mistake and leave a decision. A misspelling is a mistake, and an " +
-        "unusual word is a decision. A missing full stop is a mistake, and a " +
-        "sentence fragment is a decision. A word typed twice in one sentence is " +
-        "a mistake, and a word repeated across three sentences for emphasis is a " +
-        "decision. Where you cannot tell which one you are looking at, treat it " +
-        "as a decision and leave it.\n\n" +
-        "Whatever they left out stays out. Where you find yourself about to " +
-        "write something that was never there, stop at that point: their turn " +
-        "belongs to them.\n\n" +
-        "Whatever they put in stays in. A plain line is allowed to be plain.\n\n" +
-        "The user decides where the story goes, and that takes in how dark, " +
-        "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in. How a line reads is not yours to judge here, only whether it came " +
+    text: "<line_judge>\n" +
+        "You're the line judge on the user's own writing. Line judges call " +
+        "clear faults and that's it: typos, broken grammar, busted " +
+        "punctuation, a word typed twice or dropped. Making their prose better " +
+        "isn't your job, and their style isn't yours to score.\n\n" +
+        "The passage below is theirs. They wrote it as their character, in " +
+        "their own voice, and until something is obviously a slip, treat it as " +
+        "a choice.\n\n" +
+        "A misspelling gets fixed, but a weird word is probably on purpose. " +
+        "Missing full stop? Fix it. A fragment is usually style, so it stays. " +
+        "The same word typed twice back to back is a slip, while the same word " +
+        "repeated across three sentences is somebody going for emphasis. Can't " +
+        "tell which one you're looking at? Then it's a choice, and you leave " +
+        "it.\n\n" +
+        "Whatever they left out stays out. If you catch yourself writing " +
+        "something that was never there, stop. It's their turn.\n\n" +
+        "Whatever they put in stays in. Plain lines are allowed to be plain.\n\n" +
+        "Tone is theirs too. Soft, silly, filthy, brutal, whatever they went " +
+        "for. It comes back at the strength it went in, and sex, gore, " +
+        "swearing and insults keep the exact words they typed. Whether a line " +
+        "reads well isn't your call here. The only question is whether it came " +
         "out the way they meant to type it.\n\n" +
         "There is one exception, and it is not the user's call either. Sexual " +
-        "content involving anyone under eighteen, or anyone written as a child, " +
-        "is not edited. Hand that passage back exactly as it came, and say " +
-        "outside the tags that this is why. A younger character in a scene with " +
-        "nothing sexual in it is edited like anyone else." +
-        "\n" +
-        "</your_role>",
+        "content involving anyone under eighteen, or anyone written as a " +
+        "child, is not edited. Hand that passage back exactly as it came, and " +
+        "say outside the tags that this is why. A younger character in a scene " +
+        "with nothing sexual in it is edited like anyone else." +
+        "\n</line_judge>",
 };
 const YOURS_HAND = {
     id: "voice",
-    name: "The Way They Write",
+    name: "Their Voice",
     on: true,
     role: "system",
-    text: "<the_way_they_write>\n" +
-        "This is the user writing, not a narrator, and the two do not sound the " +
-        "same. Keep the way they write.\n\n" +
-        "Short plain lines stay short and plain. Lower case stays lower case. " +
-        "Present tense stays present tense, and first person stays first person. " +
-        "A passage returned in polished third person is one they will read as " +
-        "somebody else's.\n\n" +
-        "Their length is their choice: a one line passage stays a one line " +
-        "passage.\n" +
-        "</the_way_they_write>",
+    text: "<their_voice>\n" +
+        "This is the user writing, not some narrator, and they don't sound the " +
+        "same. Keep how they write.\n\n" +
+        "Short plain lines stay short and plain. Lowercase stays lowercase. " +
+        "Present tense stays present tense, first person stays first person. " +
+        "Hand back polished third person and it'll read like somebody else " +
+        "wrote their turn.\n\n" +
+        "How long it is? Their call. One line in, one line out." +
+        "\n</their_voice>",
 };
 // The same list, gone through properly. Every entry is still a repair rather
 // than an improvement: the long version is longer about what counts as one.
 const YOURS_MEND_LONG = {
     id: "fix",
-    name: "What to Mend",
+    name: "Clear Faults",
     on: true,
     role: "system",
-    text: "<what_to_mend>\n" +
-        "A typing slip. Letters swapped, a doubled word, a word plainly meant to " +
-        "be its neighbour: form for from, breath for breathe.\n\n" +
-        "A missing word. Where a line cannot be read as written and one small " +
-        "word puts it right, put it in.\n\n" +
-        "Punctuation that came out wrong by accident: a sentence with no stop, a " +
-        "quotation mark opened and not closed, a comma splice long enough that " +
-        "the sentence is hard to follow. Where the punctuation is the style, " +
-        "and lower case usually is, it stays exactly as it is.\n\n" +
-        "A sentence tangled enough that it has to be read twice. Say the same " +
-        "thing, in their words, in an order that reads once.\n\n" +
-        "A word repeated close enough to itself to notice. Change the second one " +
-        "for a word they would have used, or drop it.\n\n" +
-        "That is the list, and it ends there. Their word choice, their level of " +
-        "detail, their plain lines and their rhythm are theirs.\n" +
-        "</what_to_mend>",
+    text: "<clear_faults>\n" +
+        "These are the only things you call.\n\n" +
+        "Typing slips. Swapped letters, a doubled word, or a word that was " +
+        "clearly meant to be a different one: form for from, breath for " +
+        "breathe.\n\n" +
+        "A missing word, when the line can't be read without it and one small " +
+        "word fixes it.\n\n" +
+        "Punctuation that went wrong by accident, like a sentence with no full " +
+        "stop, a quote mark that opens and never closes, or a comma splice so " +
+        "long you get lost in it. If the punctuation is their style (lowercase " +
+        "usually is), it stays.\n\n" +
+        "A sentence so tangled you have to read it twice. Say the same thing, " +
+        "in their words, in an order that reads once.\n\n" +
+        "A word repeated close enough that it clunks. Swap the second one for " +
+        "a word they'd use, or drop it.\n\n" +
+        "That's the whole list. Word choice, detail, plain lines and rhythm " +
+        "all belong to them." +
+        "\n</clear_faults>",
 };
 // What the mend list cannot say without becoming a style guide. It is here to
 // name the temptations rather than to describe good writing, because on
 // somebody's own turn every one of these is a way of taking it off them.
 const YOURS_NOT_YOURS = {
     id: "leave",
-    name: "Not Yours",
+    name: "Not Your Call",
     on: true,
     role: "system",
-    text: "<not_yours>\n" +
-        "Not a repair, and not to be done here:\n\n" +
-        "Adding a gesture, a glance, a breath or a pause they did not write.\n\n" +
-        "Making a plain line vivid. If they wrote they left, they left.\n\n" +
-        "Giving a line more feeling than it was written with. Understatement is a " +
-        "choice and reads as one.\n\n" +
-        "Finishing a thought they left unfinished, or answering a question they " +
+    text: "<not_your_call>\n" +
+        "None of this is a repair. It's not your call.\n\n" +
+        "Adding a gesture or a glance or a breath they didn't write.\n\n" +
+        "Punching up a plain line. If they wrote they left, they left.\n\n" +
+        "Cranking the feeling higher than they wrote it. Understatement is a " +
+        "choice.\n\n" +
+        "Finishing a thought they left hanging, or answering a question they " +
         "left open.\n\n" +
-        "Tidying a fragment into a sentence, where the fragment is how they " +
-        "write.\n\n" +
-        "Where you are unsure whether something is a slip or a choice, it is a " +
-        "choice. Leave it.\n" +
-        "</not_yours>",
+        "Tidying fragments into full sentences when fragments are just how " +
+        "they write.\n\n" +
+        "If you can't tell a slip from a choice, it's a choice. Leave it." +
+        "\n</not_your_call>",
 };
 const YOURS_THINKS_JOB = {
     id: "job",
-    name: "Your Role",
+    name: "Line Judge",
     on: true,
     role: "system",
-    text: "<your_role>\n" +
-        "You are the copy editor on the user's own writing.\n\n" +
-        "A copy editor fixes what went wrong on the way to the page: spelling, " +
-        "grammar, punctuation, a word typed twice, a word left out. Improving " +
-        "their prose belongs to somebody else.\n\n" +
-        "Everything they did, said and meant stays, and so does the way they " +
-        "write it: the tense, the person, the capitalisation, the length, the " +
-        "plainness. Work the standard below and change nothing it does not " +
-        "name.\n\n" +
-        "Use your reasoning to tell a mistake from a decision. A misspelling is " +
-        "a mistake, and an unusual word is a decision. Where the two look alike, " +
-        "treat it as a decision and leave it. Reasoning about a line is not a " +
-        "reason to touch it.\n\n" +
-        "The user decides where the story goes, and that takes in how dark, " +
-        "explicit or crude it gets. A passage comes back at the strength it went " +
-        "in. How a line reads is not yours to judge here, only whether it came " +
+    text: "<line_judge>\n" +
+        "You're the line judge on the user's own writing. You call clear " +
+        "faults and that's it: typos, grammar, punctuation, a doubled word, a " +
+        "dropped one. Making their prose better is somebody else's job.\n\n" +
+        "Everything they did, said and meant stays. So does how they write it. " +
+        "Three words in lowercase, first person, present tense? That's what comes " +
+        "back. " +
+        "Only call what the rules below name.\n\n" +
+        "Use your reasoning to tell a mistake from a decision. When they look " +
+        "alike, it's a decision, and you leave it. Thinking hard about a line " +
+        "isn't a reason to touch it.\n\n" +
+        "Tone is theirs too. Soft, silly, filthy, brutal, whatever they went " +
+        "for. It comes back at the strength it went in, and sex, gore, " +
+        "swearing and insults keep the exact words they typed. Whether a line " +
+        "reads well isn't your call here. The only question is whether it came " +
         "out the way they meant to type it.\n\n" +
         "There is one exception, and it is not the user's call either. Sexual " +
-        "content involving anyone under eighteen, or anyone written as a child, " +
-        "is not edited. Hand that passage back exactly as it came, and say " +
-        "outside the tags that this is why. A younger character in a scene with " +
-        "nothing sexual in it is edited like anyone else." +
-        "\n" +
-        "</your_role>",
+        "content involving anyone under eighteen, or anyone written as a " +
+        "child, is not edited. Hand that passage back exactly as it came, and " +
+        "say outside the tags that this is why. A younger character in a scene " +
+        "with nothing sexual in it is edited like anyone else." +
+        "\n</line_judge>",
 };
 // The reply prompts judge the writing. This one judges the repair: the reply
 // prompts ask what could read better, and this asks what actually went wrong,
 // which is the only thing anybody wants touched in their own turn.
 const YOURS_TEST = {
     id: "standard",
-    name: "The Test",
+    name: "The Call",
     on: true,
     role: "system",
-    text: "<the_test>\n" +
-        "Every change has to be one the user would look at and recognise as what " +
-        "they meant to type.\n\n" +
-        "A slip they would have caught themselves passes. A word you preferred " +
-        "does not. A sentence untangled so it reads in one pass passes, as long " +
-        "as it is untangled into their words and not yours.\n\n" +
-        "Anything short of that comes back exactly as it went in. A passage you " +
-        "found nothing wrong with comes back unchanged, and that is a correct " +
-        "answer.\n" +
-        "</the_test>",
+    text: "<the_call>\n" +
+        "Every change has to be one the user would look at and go, yeah, " +
+        "that's what I meant to type.\n\n" +
+        "A slip they'd have caught themselves? Good call. A word you just " +
+        "happen to like better? Bad call. Untangling a sentence so it reads in " +
+        "one go is fine, as long as it comes out in their words and not yours.\n" +
+        "\nAnything short of that goes back exactly as it came. If nothing's " +
+        "wrong, it comes back unchanged, and that's the right call." +
+        "\n</the_call>",
 };
 const YOURS_WHERE = {
     id: "where",
-    name: "Where to Look",
+    name: "Hot Spots",
     on: true,
     role: "system",
-    text: "<where_to_look>\n" +
-        "Where a passage typed at speed goes wrong. Check each, and hold each to " +
-        "the test above.\n\n" +
-        "The word that is nearly the right word. Typed quickly, one letter out, " +
-        "and it reads as a real word so nothing flags it.\n\n" +
-        "The sentence that lost a word on the way. Usually small: a, to, of, not. " +
-        "The line still scans and means the opposite.\n\n" +
-        "The run-on. Two thoughts joined by a comma where the second one started " +
-        "somewhere new.\n\n" +
-        "The quotation mark or bracket opened and never closed.\n\n" +
-        "The word used twice in one line, where the second one was meant to be " +
+    text: "<hot_spots>\n" +
+        "Where stuff typed fast tends to go wrong. Check each one, and hold " +
+        "every fix to the call above.\n\n" +
+        "The almost-right word. One letter off and still a real word, so " +
+        "nothing flags it.\n\n" +
+        "The sentence that dropped a word somewhere, usually a tiny one like " +
+        "a, to, of or not. It still reads fine and now means the opposite.\n\n" +
+        "The run-on, where two thoughts got glued together with a comma.\n\n" +
+        "A quote mark or bracket that opens and never closes.\n\n" +
+        "The same word twice in one line when the second was supposed to be " +
         "something else.\n\n" +
-        "None of these is a matter of taste, which is why they are the list.\n" +
-        "</where_to_look>",
+        "None of this is taste. That's why it's the list." +
+        "\n</hot_spots>",
 };
 const YOURS_LONG = [
     YOURS_JOB,
     YOURS_HAND,
     YOURS_MEND_LONG,
+    YOURS_CAST,
     YOURS_NOT_YOURS,
+    SCORE_BLOCK,
     COPY_EXACTLY,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
@@ -1395,23 +1446,24 @@ const THINKS_LONG = [
     THE_STANDARD,
     {
         id: "where",
-        name: "Where to Look",
+        name: "Hot Spots",
         on: true,
         role: "system",
-        text: "<where_to_look>\n" +
-            "Five places account for most of what goes wrong in writing like this. " +
-            "Check each before deciding the passage is finished.\n\n" +
-            "The second sentence. It often restates the first in other words. One of " +
-            "the two is doing the work.\n\n" +
-            "The body. Hands and eyes acting alone, a pulse standing in for a " +
-            "feeling, three physical details where one would carry it.\n\n" +
-            "The speech tag. Where it explains the tone, the line under it is " +
-            "carrying too little.\n\n" +
-            "The stock phrase. A held breath, a hammering heart, a whisper, a " +
-            "shiver, air thick with something. These arrive by habit.\n\n" +
-            "The last line. A passage ending by pointing at what comes next is " +
-            "asking the user to do the work.\n" +
-            "</where_to_look>",
+        text: "<hot_spots>\n" +
+            "Most of the damage in writing like this happens in five spots. Hit " +
+            "all five before you call it done.\n\n" +
+            "The second sentence, which loves repeating the first one in new " +
+            "words. One of them is doing the work.\n\n" +
+            "The body. Watch for hands and eyes wandering around on their own, " +
+            "and for a pulse standing in for a feeling.\n\n" +
+            "Speech tags. When a tag has to explain the tone, the line under it is " +
+            "too weak. A tag that only says who is talking stays.\n\n" +
+            "Stock moves. Held breaths, hammering hearts, air thick with whatever, " +
+            "and the negation trick, where it wasn't a request, it was a command. " +
+            "They show up out of pure habit.\n\n" +
+            "The last line. If the passage ends by pointing at what's coming next, " +
+            "it's handing the user homework." +
+            "\n</hot_spots>",
     },
     {
         id: "voice",
@@ -1419,28 +1471,32 @@ const THINKS_LONG = [
         on: true,
         role: "system",
         text: "<voice>\n" +
-            "The passage has a voice, and yours is a different one. Mend what is weak " +
-            "in the voice that is there and return it still sounding like itself.\n\n" +
-            "This matters most with a character who speaks badly on purpose: " +
-            "short, rambling, plain, crude. Smoothing that returns a different " +
-            "character.\n" +
-            "</voice>",
+            "The passage has its own voice, and yours isn't it. Fix what's weak " +
+            "without swapping yours in, and hand it back still sounding like " +
+            "itself.\n\n" +
+            "This matters most with characters who talk badly on purpose. Clean up " +
+            "a foul-mouthed rambler and you've killed the character." +
+            "\n</voice>",
     },
+    CAST_BLOCK,
     RESTRAINT,
     {
         id: "check",
-        name: "Before You Answer",
+        name: "Review the Tape",
         on: true,
         role: "system",
-        text: "<before_you_answer>\n" +
-            "Read your rewrite against the original once more and answer two " +
+        text: "<review_the_tape>\n" +
+            "Before you hand it in, reread yours against the original. Three " +
             "questions.\n\n" +
-            "Did anything happen in yours that did not happen in theirs? Take it " +
+            "Did something happen in yours that didn't happen in theirs? Take it " +
             "out.\n\n" +
-            "Is yours longer? Find what you added and decide whether it earns the " +
-            "room. It usually does not.\n" +
-            "</before_you_answer>",
+            "Did a line end up with a different speaker, or did somebody vanish " +
+            "from the scene? Put them back.\n\n" +
+            "Is yours longer? Find what you added and ask if it's actually earning " +
+            "the space. Usually it isn't." +
+            "\n</review_the_tape>",
     },
+    THINKS_SCORE_BLOCK,
     COPY_EXACTLY,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
@@ -1456,7 +1512,9 @@ const YOURS_THINKS_LONG = [
     YOURS_THINKS_JOB,
     YOURS_TEST,
     YOURS_WHERE,
+    YOURS_CAST,
     YOURS_NOT_YOURS,
+    THINKS_SCORE_BLOCK,
     COPY_EXACTLY,
     ...SCENE_BLOCKS,
     MEMORY_BLOCK,
@@ -1470,39 +1528,61 @@ const YOURS_THINKS_LONG = [
 const DEFAULT_BLOCKS = PLAIN_LONG;
 const BUILT_IN_PROMPTS = [
     {
-        name: "The line edit",
-        label: "The line edit",
+        name: "A judge",
+        label: "A judge",
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "Start here. It is handed the job, then one subject at a time: phrases, words, repetition, rhythm, speech, bodies, endings, restraint. Everything to look at is set out for it rather than left to be worked out. Runs on any model.",
+        what: "Start here. It judges the reply one rule at a time: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish. It scores each against a line it quotes and changes only what scores under 85. Works with one character or several. Runs on any model.",
     },
     {
-        name: "The line edit, for a model that thinks",
-        label: "The line edit, for a model that thinks",
+        name: "A judge that thinks",
+        label: "A judge that thinks",
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
-        what: "The same job, given as a standard to apply rather than a list to match: the five places worth checking, holding the voice it was written in, and a pass back over its own rewrite. Needs a model that reasons.",
+        what: "The same job, given as a bar to clear. It checks five hot spots and the roll call, keeps the voice the reply was written in, and reviews its own rewrite before handing it in. Needs a model that reasons.",
     },
     {
-        name: "The copy edit",
-        label: "The copy edit",
+        name: "A line judge",
+        label: "A line judge",
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
-        what: "Start here. Slips, missing words, punctuation that came out wrong, and then it stops. Your wording, your sentences and your plain lines come back as they went in. Runs on any model.",
+        what: "Start here. A line judge for your own writing: slips, missing words, punctuation that came out wrong, and then it stops. It scores each against a line it quotes and fixes only what scores low. Your wording, your sentences and your plain lines come back as they went in, for every character you write. Runs on any model.",
     },
     {
-        name: "The copy edit, for a model that thinks",
-        label: "The copy edit, for a model that thinks",
+        name: "A line judge that thinks",
+        label: "A line judge that thinks",
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
-        what: "The same job, worked out rather than listed: one test for whether a line is a mistake or a choice, where to look, and what is never a repair. Needs a model that reasons.",
+        what: "The same job, worked out rather than listed: one call for telling a mistake from a choice, the hot spots, a scorecard, and what is never a repair. Needs a model that reasons.",
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
+// The names the four have gone by before. A pick
+// or a pass saved under one of these is carried to the name it has now, so
+// nobody finds their picker empty or a pass skipped after updating.
+const OLD_BUILT_IN_NAMES = {
+    "the line edit": "A judge",
+    "the line edit, for a model that thinks": "A judge that thinks",
+    "the copy edit": "A line judge",
+    "the copy edit, for a model that thinks": "A line judge that thinks",
+    "the judge": "A judge",
+    "the judge, for a model that thinks": "A judge that thinks",
+    "the line judge": "A line judge",
+    "the line judge, for a model that thinks": "A line judge that thinks",
+};
+// The lines of a box, trimmed, with the empty ones dropped.
+const linesOf = (text) => String(text == null ? "" : text)
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+const renamedBuiltIn = (name) => {
+    const now = OLD_BUILT_IN_NAMES[String(name == null ? "" : name).trim().toLowerCase()];
+    return now || name;
+};
 // The prompt it starts on is one of the four, and which one is worth saying
 // out loud. Back to the default and a fresh install both land here, and
 // "the default" on its own does not tell you what you are about to get.
@@ -1577,7 +1657,7 @@ const SHIELD_FIELDS = [
         type: "lines",
         needs: { key: "protectOn" },
         under: true,
-        hint: "Optional. One regular expression per line, not case-sensitive. Code, links, tags and the like are kept already. One that will not work is named under this box.",
+        hint: "Optional. One regular expression per line. Capitals do not matter. Code, links, tags and the like are kept already. One that will not work is named under this box.",
     },
     {
         key: "shieldKeep",
@@ -1603,7 +1683,7 @@ const GUARD_FIELDS = [
         key: "guardPreamble",
         label: "Refuse an answer that talks about the edit",
         type: "bool",
-        hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is ignored, not saved.",
+        hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is never saved.",
     },
     {
         key: "guardSoften",
@@ -2403,6 +2483,17 @@ export function setup(ctx, overrides) {
             delete into.shippedSeen;
         }
         catch (_) { }
+        // A list saved as the text of its box, which is how the box used to save
+        // it. Read back as the list it always meant to be.
+        for (const k of ["passNames", "wornFine"])
+            if (typeof into[k] === "string")
+                into[k] = linesOf(into[k]);
+        // A built-in prompt picked or chained under the name it had before.
+        for (const k of ["presetPick", "presetPickYours"])
+            if (k in into)
+                into[k] = renamedBuiltIn(into[k]);
+        if (Array.isArray(into.passNames))
+            into.passNames = into.passNames.map(renamedBuiltIn);
         return into;
     }
     // A panel with nothing saved is a fresh install, and a fresh install is
@@ -3268,6 +3359,9 @@ export function setup(ctx, overrides) {
     // Jev spared a refine. That count is how somebody tells whether two models
     // are saving them anything.
     const jevTally = { read: 0, spared: 0, failed: 0, cost: 0, rechecked: 0, again: 0 };
+    // The last refine the Log and the toast have already said was saved, so the
+    // answer to the button that asked for it does not say it a second time.
+    let announced = null;
     // The whole answer, when the message carries one. Every ending sends it, and
     // it is the better copy of what the stream was showing a trimmed tail of.
     //
@@ -7260,13 +7354,20 @@ export function setup(ctx, overrides) {
             ta.setAttribute("aria-label", f.label);
             ta.className = "arf-field arf-mono";
             ta.rows = f.rows || 3;
-            ta.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
+            // A setting whose default is a list is stored as one, a line to an entry,
+            // since that is what the backend and the account copy read. Stored as the
+            // text in the box, it reached them as something that is not a list and
+            // was dropped, so the passes never ran and no phrase was left alone.
+            const isList = Array.isArray(CONFIG[f.key]);
+            const shown = cfg[f.key];
+            ta.value = isList && Array.isArray(shown) ? shown.join("\n") : String(shown == null ? "" : shown);
+            const take = () => (isList ? linesOf(ta.value) : ta.value);
             ta.addEventListener("input", () => {
-                cfg[f.key] = ta.value;
+                cfg[f.key] = take();
                 persist();
             });
             ta.addEventListener("blur", () => {
-                cfg[f.key] = ta.value;
+                cfg[f.key] = take();
                 persist(true);
             });
             wrap.appendChild(ta);
@@ -7549,10 +7650,10 @@ export function setup(ctx, overrides) {
             (yours ? "the one it starts on" : DEFAULT_PROMPT_NAME) +
             " back.");
     }
-    // Whether this prompt asks the model to write down what it is doing. Only the
-    // two for a model that thinks do, so on any of the others the card that shows
-    // the working while it writes has nothing to show, and somebody waiting for
-    // it has no way of knowing why. Said here, where the prompt is.
+    // Whether this prompt asks the model to write down what it is doing. The two
+    // built-in prompts for a model that thinks do. Any other may not, and then the card
+    // that shows the working while it writes has nothing to show, and somebody
+    // waiting for it has no way of knowing why. Said here, where the prompt is.
     const asksForWorking = () => blockList().some((b) => b.on && NOTES_TAG.test(String(b.text || "")));
     function aboutWorking() {
         if (asksForWorking())
@@ -7863,7 +7964,7 @@ export function setup(ctx, overrides) {
         // extension. Switching a block on or off chooses which of its parts go to
         // the model; it does not rewrite a word of what they say, which is what
         // cannot be written over. Locking it with the rest made the parts that come
-        // switched off unreachable: What Has Happened is one of them, so anybody
+        // switched off unreachable: Memories is one of them, so anybody
         // wanting their memories in the prompt had to save a copy under a name of
         // their own before they could turn it on, for a switch that was right there.
         //
@@ -8107,9 +8208,11 @@ export function setup(ctx, overrides) {
         wrap.appendChild(note("Counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not."));
         return wrap;
     }
-    // The request itself, exactly as it goes out. Built by the backend with the
-    // same function a real refine uses, so this cannot become a nice description
-    // of something the extension does not actually send.
+    // The request a refine would send. Built by the backend with the same
+    // function a real refine uses, so this cannot become a nice description of
+    // something the extension does not actually send. What only a real refine
+    // can fill in, Jev's findings and the passes after the first, is named on
+    // the card rather than shown.
     function buildPreviewCard() {
         const wrap = card("See what gets sent", "Builds the request for the reply you are looking at and shows it, message by message, without calling a model. Nothing is sent and nothing is charged.");
         const row = el("div", "arf-row");
@@ -8179,12 +8282,38 @@ export function setup(ctx, overrides) {
         // reply preset while their own message is the newest one gets a preview of
         // the prompt they did not touch, and nothing here said so.
         const which = String(preview.which || "");
-        if (which) {
+        // Not with several passes on: then neither list on the Prompt tab is sent,
+        // and the line about passes below says what is.
+        if (which && !(Array.isArray(preview.passes) && preview.passes.length)) {
             const line = note(which === "yours"
                 ? "Built from your prompt for your own writing, because the message being previewed is yours. A preset loaded into the reply prompt will not show here."
                 : "Built from your prompt for replies, because the message being previewed is a reply. A preset loaded into the prompt for your own writing will not show here.");
             line.setAttribute("data-arf-preview", "which");
             wrap.appendChild(line);
+        }
+        // Said above the request in both views, the raw one included, since each
+        // names something the request below does not hold.
+        //
+        // With several passes, what is shown is the first pass. The rest are named,
+        // since each is sent the rewrite the pass before it wrote, and that does
+        // not exist until a refine runs.
+        const passNames = Array.isArray(preview.passes) ? preview.passes.map((x) => String(x)) : [];
+        if (passNames.length) {
+            const passLine = note(passNames.length === 1
+                ? "Several passes are on, with one pass: " + passNames[0] + ". This is its request, not the prompt on the Prompt tab."
+                : "Several passes are on, so this is pass 1 of " + passNames.length + ", " + passNames[0] +
+                    ". Each pass after it is sent the rewrite the pass before it wrote, so it cannot be shown until a refine runs. In order: " +
+                    passNames.join(", ") + ".");
+            passLine.setAttribute("data-arf-preview", "passes");
+            wrap.appendChild(passLine);
+        }
+        // The preview never asks Jev, so a block holding {{jev_found}} is empty
+        // here and left out. Without this line the card would show a request with
+        // no findings in it and call that what gets sent.
+        if (preview.jevFoundLeftOut) {
+            const left = note("What Jev found is left out here. It is filled in only when Jev reads the reply during a refine, and a preview does not ask Jev. The Log says when it was sent.");
+            left.setAttribute("data-arf-preview", "jevfound");
+            wrap.appendChild(left);
         }
         const msgs = Array.isArray(preview.messages) ? preview.messages : [];
         let chars = 0;
@@ -8214,7 +8343,7 @@ export function setup(ctx, overrides) {
             chars.toLocaleString() +
             " characters";
         if (previewRaw) {
-            wrap.appendChild(note(size + ". This is the request as it goes out."));
+            wrap.appendChild(note(size + ". This is the request as a refine of this reply would send it, apart from anything named above."));
             wrap.appendChild(el("div", "arf-well arf-scroll arf-mono arf-tall", previewAsRaw(preview)));
             return wrap;
         }
@@ -9989,7 +10118,7 @@ export function setup(ctx, overrides) {
         return out;
     }
     function applyImport(body) {
-        const s = body.settings;
+        const s = carryOldNames(body.settings);
         // Only the keys the chosen parts cover. Everything else in the file is
         // read past, so a file carrying somebody's whole setup can be used to take
         // just their prompt.
@@ -13327,6 +13456,16 @@ export function setup(ctx, overrides) {
                     // moved if Jev is letting too much through or too little.
                     // A second refine after Jev read the rewrite, turned down by a check.
                     // The first rewrite is what gets saved, and the Log says why.
+                    // What Jev found went into the request. A real request is not shown
+                    // anywhere, so this line is how somebody can tell it was sent.
+                    if (msg.type === "jev_found_sent") {
+                        const n = Math.max(0, Number(msg.count) || 0);
+                        const checks = n + (n === 1 ? " check" : " checks");
+                        log(msg.after
+                            ? "what Jev found in the rewrite went to the second refine: " + checks
+                            : "what Jev found went to the refine model: " + checks, true);
+                        return;
+                    }
                     if (msg.type === "refine_again_dropped") {
                         log("the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
                         return;
@@ -13617,6 +13756,7 @@ export function setup(ctx, overrides) {
                     if (msg.type === "refined") {
                         const wasSnip = msg.kind === "snip";
                         if (!wasSnip) {
+                            announced = { key: String(msg.chatId) + ":" + String(msg.messageId), at: Date.now() };
                             markBusy(false);
                             keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
                             tally.saved++;
@@ -13819,8 +13959,18 @@ export function setup(ctx, overrides) {
                         });
                         if (msg.ok) {
                             lastRun = { ms: lastRunMs, ok: true, why: "" };
-                            log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
-                            toast("Reply refined.", true);
+                            // A saved refine is said once. The save itself already wrote the
+                            // Log line for this reply a moment ago, and the toast too when
+                            // toasts are on. A refine asked for by hand is always answered
+                            // with a toast, so that one is still given with toasts off. All
+                            // of it is still said when the save was not heard.
+                            const key = String(msg.chatId) + ":" + String(msg.messageId);
+                            if (!(announced && announced.key === key && Date.now() - announced.at < 10000)) {
+                                log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+                                toast("Reply refined.", true);
+                            }
+                            else if (!cfg.toast)
+                                toast("Reply refined.", true);
                         }
                         else {
                             const why = String(msg.why || "no reason given");

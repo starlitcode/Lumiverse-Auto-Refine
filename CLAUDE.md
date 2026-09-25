@@ -31,6 +31,16 @@ behaves, goes into both.
   `spindle.x.y(` call. Keep comments above the `try`, not between it and the call.
 - `test/presets.test.ts` needs every setting in `CONFIG` to belong to a part in
   `PARTS`, or be listed as staying put.
+- The built-in prompts are written around a scorecard, at the owner's request.
+  The model is the judge on a reply and the line judge on the user's own
+  writing, and the block names and tags follow that. They are written in a
+  human voice: contractions, some swearing, and varied sentence shapes, with
+  none of the patterns they tell the model to cut, such as "not X, not Y" or
+  a list of three. This is the one place a metaphor or a contraction is used.
+  Docs, comments and panel text stay plain. The paragraph about minors stays
+  word for word.
+- The built-in prompts use no `{{user}}`, `{{char}}` or `{{charGroupFocused}}`,
+  so they suit group chats and do not assume who plays which character.
 - The built-in prompts carry a mark worked out from their text. Changing their
   text tells every user the built-in prompts have changed, so do it on purpose.
 
@@ -45,8 +55,8 @@ shown in Lumiverse.
 - No contractions in docs, the changelog, the README or text shown in the panel.
 - Comments describe the code as it is and why. They are not change notes.
 - A hint under a field is one line, two at most. Detail goes in `docs/`.
-- Write plainly and literally, for readers with a learning disability or
-  dyslexia: short sentences, one idea each, steps and bullets over long
+- Write plainly and literally, for readers with a learning disability,
+  dyslexia or autism: short sentences, one idea each, steps and bullets over long
   paragraphs. No figurative words such as "quietly", "hammers" or "breathes".
 - No clichés such as "deliberate", and no grand, old-fashioned or showy words.
 - No dry, generic AI phrasing and no filler. Say the fact and stop.

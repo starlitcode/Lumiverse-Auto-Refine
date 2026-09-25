@@ -51,6 +51,99 @@ describe("the prompts that come with it", () => {
       expect(p.blocks.some((x: any) => String(x.text).indexOf("{{jev_found}}") >= 0)).toBe(false);
   });
 
+  // Every one scores before it changes anything, and the score has to rest on
+  // a line the model could quote. The two for a model that reasons write the
+  // scorecard ahead of the rewrite, so the scores are written before the
+  // rewrite is and cannot grade it after. The two for a model that does not
+  // score silently and are never asked for notes.
+  test("every one scores the passage, on lines it could quote", () => {
+    for (const p of BUILT_IN_PROMPTS) {
+      const score = p.blocks.find((x: any) => x.id === "score");
+      const t = String(score && score.text);
+      expect({
+        prompt: p.name,
+        on: !!(score && score.on),
+        quotes: /quote/.test(t),
+        leavesDoubt: /85 to 99: a line might fit, but you are not sure/.test(t),
+        onlyUnder: /Change only the areas that scored under 85/.test(t),
+      }).toEqual({ prompt: p.name, on: true, quotes: true, leavesDoubt: true, onlyUnder: true });
+    }
+  });
+
+  test("the ones for a model that reasons write the scorecard before the rewrite", () => {
+    for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking !== "off")) {
+      const a = String(p.blocks.find((x: any) => x.id === "answer").text);
+      expect({ prompt: p.name, cardFirst: a.indexOf("<REFINE_NOTES>") >= 0 && a.indexOf("<REFINE_NOTES>") < a.indexOf("<REFINED>") })
+        .toEqual({ prompt: p.name, cardFirst: true });
+    }
+  });
+
+  test("and the ones for a model that does not reason ask for no notes at all", () => {
+    for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking === "off")) {
+      const all = p.blocks.map((b: any) => String(b.text)).join("\n");
+      const score = String(p.blocks.find((x: any) => x.id === "score").text);
+      expect({ prompt: p.name, notes: /refine_notes/i.test(all), silent: /Don't write the scores down/.test(score) })
+        .toEqual({ prompt: p.name, notes: false, silent: true });
+    }
+  });
+
+  // One card can hold several characters, and a group chat hands a reply to
+  // whichever card wrote it. Each prompt says who is in the scene stays who
+  // they were.
+  test("every one keeps each line with its speaker", () => {
+    for (const p of BUILT_IN_PROMPTS) {
+      const cast = p.blocks.find((x: any) => x.id === "cast");
+      expect({ prompt: p.name, on: !!(cast && cast.on), speaker: /keeps its speaker|Who says each line/.test(String(cast && cast.text)) })
+        .toEqual({ prompt: p.name, on: true, speaker: true });
+    }
+  });
+
+  test("the prompts for replies keep the names that say who is talking", () => {
+    for (const p of forReplies()) {
+      const t = String(p.blocks.find((x: any) => x.id === "cast").text);
+      expect({
+        prompt: p.name,
+        tags: /a name or a plain speech tag/.test(t),
+        pronouns: /could mean two people, use the name/.test(t),
+        present: /still in it when you are done/.test(t),
+      }).toEqual({ prompt: p.name, tags: true, pronouns: true, present: true });
+    }
+  });
+
+  // A speech tag that only names the speaker is the one thing that says who is
+  // talking in a crowded scene, so the rule about cutting tags leaves it.
+  test("and the rule about speech tags leaves a tag that only names the speaker", () => {
+    for (const p of forReplies()) {
+      const all = p.blocks.map((b: any) => String(b.text)).join("\n");
+      expect({ prompt: p.name, keeps: /tag that only says who is talking stays/.test(all) })
+        .toEqual({ prompt: p.name, keeps: true });
+    }
+  });
+
+  // A tag reads as a label, so it stays short, and each block is named after
+  // the tag it holds, so the Prompt tab and the prompt say the same thing.
+  test("every tag is short, and every block is named after its tag", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      for (const b of p.blocks) {
+        const m = /^<([a-z_]+)>/.exec(String(b.text));
+        const tag = m ? m[1] : "";
+        const fromName = String(b.name).toLowerCase().replace(/[^a-z ]/g, "").trim().replace(/ +/g, "_");
+        expect({ block: p.name + "/" + b.id, short: tag.length > 0 && tag.length <= 20, named: fromName === tag })
+          .toEqual({ block: p.name + "/" + b.id, short: true, named: true });
+      }
+  });
+
+  // A name macro fills in one name. In a group chat that is one character out
+  // of several, so a built-in prompt that leans on it is wrong for everyone
+  // else in the scene. The macros stay in the list for a prompt of your own.
+  test("none of them uses a macro that fills in one character's name", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      for (const b of p.blocks) {
+        const hit = /\{\{\s*(?:user|char|charGroupFocused)\s*\}\}/i.exec(String(b.text));
+        expect({ block: p.name + "/" + b.id, macro: hit ? hit[0] : "" }).toEqual({ block: p.name + "/" + b.id, macro: "" });
+      }
+  });
+
   // The mark tells a reader the built-in prompts changed. A block added
   // switched off is still new wording to take, so it has to move the mark.
   test("the mark moves for a block added switched off", () => {
@@ -107,8 +200,8 @@ describe("the prompts that come with it", () => {
     const mine = forMine().map((p: any) => p.label);
     const replies = forReplies().map((p: any) => p.label);
     for (const one of mine) expect(replies).not.toContain(one);
-    expect(mine.every((l: string) => /copy edit/i.test(l))).toBe(true);
-    expect(replies.every((l: string) => /line edit/i.test(l))).toBe(true);
+    expect(mine.every((l: string) => /^A line judge/.test(l))).toBe(true);
+    expect(replies.every((l: string) => /^A judge/.test(l))).toBe(true);
   });
 
   // A prompt for your own turn loaded over the prompt for replies would be the
@@ -121,8 +214,8 @@ describe("the prompts that come with it", () => {
   // hands the model: a line edit on a reply, a copy edit on your own turn. The
   // only thing separating them is which model they were written for.
   test("each set is named for the job it does", () => {
-    for (const [set, job] of [[forReplies(), "The line edit"], [forMine(), "The copy edit"]] as any) {
-      const stems = set.map((p: any) => p.label.split(",")[0].trim());
+    for (const [set, job] of [[forReplies(), "A judge"], [forMine(), "A line judge"]] as any) {
+      const stems = set.map((p: any) => p.label.replace(/ that thinks$/, "").trim());
       expect(stems.filter((n: string) => n === job).length).toBe(2);
     }
   });
@@ -132,7 +225,7 @@ describe("the prompts that come with it", () => {
   test("the ones that need a reasoning model say so in their name", () => {
     for (const p of BUILT_IN_PROMPTS) {
       const needs = p.thinking !== "off";
-      expect({ name: p.name, said: /model that thinks/i.test(p.name) })
+      expect({ name: p.name, said: /that thinks/i.test(p.name) })
         .toEqual({ name: p.name, said: needs });
     }
   });
@@ -142,8 +235,8 @@ describe("the prompts that come with it", () => {
   // so, and this is what holds that claim to the text.
   test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
-      ["The line edit, for a model that thinks", "The line edit"],
-      ["The copy edit, for a model that thinks", "The copy edit"],
+      ["A judge that thinks", "A judge"],
+      ["A line judge that thinks", "A line judge"],
     ];
     for (const [small, big] of pairs)
       expect(sizeOf(named(small))).toBeLessThan(sizeOf(named(big)));
@@ -158,7 +251,7 @@ describe("the prompts that come with it", () => {
       // The words these prompts use for standing back. Updated with the
       // prompts rather than loosened: the point is that a prompt for somebody's
       // own turn talks about leaving it alone, and it still has to say so.
-      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|what they meant to type/i);
+      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|not your call|what they meant to type/i);
     }
   });
 

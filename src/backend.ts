@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.18.0';
+const VERSION = '1.19.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -308,6 +308,7 @@ const HISTORY_MACRO = '{{history}}';
 const LORE_MACRO = '{{lore}}';
 const MEMORY_MACRO = '{{memories}}';
 const OVERUSED_MACRO = '{{overused}}';
+const JEV_FOUND_MACRO = '{{jev_found}}';
 
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
@@ -2333,30 +2334,70 @@ function clip(s: any, max: number): string {
   return t.length > max ? t.slice(0, max).trimEnd() + '…' : t;
 }
 
+// The name a message was posted under, where it carries one. In a group chat
+// this is which character wrote the reply. Empty where there is none, where it
+// is an unresolved macro, and where it is too long to be a name.
+function speakerOf(m: any): string {
+  const name = String((m && m.name) == null ? '' : m.name).trim();
+  if (!name || name.indexOf('{{') >= 0 || name.length > 40) return '';
+  return name;
+}
+
+// How many other cards a group chat is searched through for the one that wrote
+// a reply. Each is a host call, and a group larger than this is rare.
+const GROUP_CARDS_MAX = 16;
+
 // The character card as plain text, and the name on its own so the history can
 // label who is talking. Empty on any refusal, which is the normal case for a
 // reader who has not granted the characters permission.
+//
+// speaker is the name the reply was posted under. In a group chat the reply can
+// come from any card in it, so the card whose name matches is the one sent.
+// Where none matches, or there is no name, it is the chat's own card.
 async function gatherCard(
   chatId: string,
   userId?: string,
+  speaker?: string,
 ): Promise<{ text: string; name: string; id: string }> {
   const empty = { text: '', name: '', id: '' };
   try {
     if (!spindle.chats || typeof spindle.chats.get !== 'function') return empty;
     const chat = await spindle.chats.get(chatId, userId);
-    // A chat can hold several cards; character_id names the one it belongs to,
-    // and that is the one being rewritten.
+    // A chat can hold several cards; character_id names the one it belongs to.
     const cardId = chat && chat.character_id;
     if (!cardId) return empty;
     if (!spindle.characters || typeof spindle.characters.get !== 'function') return empty;
-    const card = await spindle.characters.get(cardId, userId);
+    let card = await spindle.characters.get(cardId, userId);
     if (!card) return empty;
+    let id = String(cardId);
+    const want = String(speaker || '').trim().toLowerCase();
+    const others =
+      chat && chat.metadata && Array.isArray(chat.metadata.character_ids)
+        ? chat.metadata.character_ids.map((x: any) => String(x)).filter((x: string) => x && x !== id)
+        : [];
+    if (want && String(card.name || '').trim().toLowerCase() !== want && others.length) {
+      for (const other of others.slice(0, GROUP_CARDS_MAX)) {
+        let found: any = null;
+        try {
+          found = await spindle.characters.get(other, userId);
+        } catch (_) {
+          // One card that cannot be read is skipped. The chat's own card is
+          // still there to fall back on.
+          found = null;
+        }
+        if (found && String(found.name || '').trim().toLowerCase() === want) {
+          card = found;
+          id = other;
+          break;
+        }
+      }
+    }
     const lines: string[] = [];
     for (const pair of CARD_FIELDS) {
       const v = clip(card[pair[0]], CARD_MAX);
       if (v) lines.push(pair[1] + ': ' + v);
     }
-    return { text: lines.join('\n\n'), name: String(card.name || '').trim(), id: String(cardId) };
+    return { text: lines.join('\n\n'), name: String(card.name || '').trim(), id: id };
   } catch (_) {
     // No permission, no such chat, or the host said no. The refine goes ahead
     // without a card rather than failing over one.
@@ -2429,10 +2470,13 @@ async function gatherHistory(
     if (!m || (m.role !== 'assistant' && m.role !== 'user')) continue;
     const body = String(m.content == null ? '' : m.content).trim();
     if (!body) continue;
-    // Both characters named, so the run-up reads the way the chat does and the
-    // model is never working out which of two labels is a person. Off where the
-    // messages already carry names, which is what a group chat looks like.
-    out.push(nameSpeakers ? (m.role === 'user' ? you : them) + ': ' + body : body);
+    // Both sides named, so the run-up reads the way the chat does and the
+    // model is never working out which of two labels is a person. A reply
+    // posted under its own name keeps that name, so in a group chat each
+    // character's turn is labelled with who wrote it. Off where the messages
+    // already start with a name.
+    const label = m.role === 'user' ? you : speakerOf(m) || them;
+    out.push(nameSpeakers ? label + ': ' + body : body);
   }
   const kept = await fitToBudget(out, maxHistoryTokens, userId);
   return kept.reverse().join('\n\n');
@@ -3151,7 +3195,7 @@ async function refineMessage(
   // gathered for it.
   const willSend: Block[] = [];
   for (const one of chain) for (const b of one.blocks) willSend.push(b);
-  const card = await gatherCard(chatId, userId);
+  const card = await gatherCard(chatId, userId, isUser ? '' : speakerOf(m));
   const at = msgs.findIndex((x: any) => x && x.id === m.id);
   // Read out here rather than inside the object, because the worn phrases are
   // checked against it and one field of an object cannot read another.
@@ -3240,6 +3284,10 @@ async function refineMessage(
     // Handed on for {{jev_found}}. Empty when Jev could not decide, since then
     // there is nothing it found.
     if (!verdict.failed) scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver) };
+    // Said in the Log, since a real request is not shown anywhere and the
+    // preview never asks Jev. Only when a block is there to take it.
+    if (scene.jevFound && promptWants(JEV_FOUND_MACRO, isUser, willSend))
+      tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, count: jevHits(verdict.scores, judgeOver).length });
   }
   let pickAt: { start: number; end: number } | null = null;
   if (pick && String(pick.text || '').trim()) {
@@ -3439,6 +3487,8 @@ async function refineMessage(
       if (!after.failed && after.refine) {
         say('info', 'Jev read the rewrite and a check still reached the line, so it is refined once more');
         scene = { ...scene, jevFound: jevFoundText(after.scores, judgeOver) };
+        if (promptWants(JEV_FOUND_MACRO, isUser, willSend))
+          tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, after: true, count: jevHits(after.scores, judgeOver).length });
         tell(userId, { type: 'refine_progress', stage: 'again' });
         const again = await runChain(carried);
         if (stopped) return { ok: false, stood: true, notes: notes, why: 'stopped during the second refine' };
@@ -4060,14 +4110,19 @@ async function judgeReply(userId: string | undefined, reply: string, worn: strin
 // says the checks are leads, since Jev can be wrong,
 // and a model told to fix each one would change writing that was fine.
 // Empty when no check reached the line, which leaves the block out.
+// The checks that reached the line, strongest first.
+function jevHits(scores: JevScore[] | undefined, over: number): JevScore[] {
+  return (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
+}
+
 function jevFoundText(scores: JevScore[] | undefined, over: number): string {
-  const hits = (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
+  const hits = jevHits(scores, over);
   if (!hits.length) return '';
   return (
     'Another model, Jev, read this passage before you and scored it against checks the user wrote. ' +
     'The checks below reached the user\'s line of ' + over + '%, strongest first. ' +
     'In them, "reply" means the passage you are rewriting. Look at these first. ' +
-    'Each one is a lead, not an order: where a check does not fit the passage, leave that part as it is. ' +
+    'Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. ' +
     'Everything else in these instructions still applies.\n' +
     hits.map((x) => '- ' + x.check.replace(/`/g, '') + ' (' + x.pct + '%)').join('\n')
   );
@@ -4879,16 +4934,21 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
               isUser = m.role === 'user';
               real = true;
             }
-            const card = await gatherCard(payload.chatId, userId);
+            const card = await gatherCard(payload.chatId, userId, m && m.role !== 'user' ? speakerOf(m) : '');
             const at = m ? msgs.findIndex((x: any) => x && x.id === m.id) : -1;
             const youName = nameSpeakers
               ? await gatherPersonaName(payload.chatId, card.id, userId)
               : '';
+            const lore = await gatherLore(payload.chatId, userId);
             scene = {
               character: card.text,
               context: at > 0 ? await gatherHistory(msgs, at, card.name, userId, youName) : '',
-              lore: await gatherLore(payload.chatId, userId),
+              lore: lore,
               memory: await gatherMemory(payload.chatId, userId),
+              // Worked out the way a refine works it out, from the replies
+              // before this one, so {{overused}} shows here what a refine of
+              // this reply would send. Empty while the setting is off.
+              worn: gatherWorn(msgs, at, card.name, card.text + '\n' + lore),
               name: card.name,
               chatId: payload.chatId,
               characterId: card.id,
@@ -4906,7 +4966,14 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         const armed = shield(split.body);
         if (armed.parts.length) scene = { ...scene, shieldNote: SHIELD_NOTE };
         const blockParts: Array<{ name: string; text: string }> = [];
-        const messages = await buildPrompt(armed.text, isUser, scene, userId, blockParts);
+        // With several passes, a refine sends each pass's own prompt and never
+        // the one on the Prompt tab. The first pass is built here as it would
+        // go out. The ones after it are handed the rewrite the one before wrote,
+        // which does not exist until a refine runs, so they are named instead.
+        const chain = manyPasses && passList.length ? passList : null;
+        const allBlocks: Block[] = [];
+        if (chain) for (const one of chain) for (const b of one.blocks) allBlocks.push(b);
+        const messages = await buildPrompt(armed.text, isUser, scene, userId, blockParts, chain ? chain[0].blocks : undefined);
         const whichPrompt = isUser ? 'yours' : 'replies';
         // Counted here rather than in the panel, because the tokeniser lives on
         // this side and characters over four is the number this card exists to
@@ -4945,6 +5012,11 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           wrapOutput: wrapOutput,
           connectionId: connectionId || '',
           reasoning: reasoningFor(),
+          // A preview never asks Jev, so a block holding {{jev_found}} comes
+          // out empty here and is left out, where a real refine Jev read would
+          // send it. Flagged so the panel can say so.
+          jevFoundLeftOut: !isUser && judgeMode === 'two' && promptWants(JEV_FOUND_MACRO, false, chain ? allBlocks : undefined),
+          passes: chain ? chain.map((one) => one.name) : [],
         });
       } catch (e: any) {
         replyTo(userId, {

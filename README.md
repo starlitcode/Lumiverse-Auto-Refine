@@ -46,9 +46,9 @@ Auto Refine is not intended for sexual content involving minors, and I do not co
 So nobody has to guess what that means for their own writing, here is exactly how it works:
 
 - **The code does not judge your story.** It does not read your writing for this, keeps no list of words about it, and does not block, change or delete anything on its own account.
-- **The four built-in prompts carry one paragraph about it.** It tells the model that sexual content involving anyone under eighteen, or anyone written as a child, is not edited, and to hand that passage back exactly as it came and say why. It sits in the **Your Role** block of each, where you can read it, and word for word on [How the prompt is built](docs/prompt.md#the-one-thing-they-do-not-edit).
+- **The four built-in prompts carry one paragraph about it.** It tells the model that sexual content involving anyone under eighteen, or anyone written as a child, is not edited, and to hand that passage back exactly as it came and say why. It sits in the first block of each, **The Judge** or **Line Judge**, where you can read it, and word for word on [How the prompt is built](docs/prompt.md#the-one-thing-they-do-not-edit).
 - **When a model follows it, your reply is left exactly as it was.** Nothing is saved, and the Log says the model handed it back and why.
-- **Nothing else is excepted.** A younger character in a scene with nothing sexual in it is edited like anyone else, and how dark, explicit or crude a story between adults gets is yours to decide.
+- **Nothing else is excepted.** A younger character in a scene with nothing sexual in it is edited like anyone else, and the tone of a story between adults, from gentle to dark, violent or sexually explicit, is yours to decide.
 - **A prompt you write yourself carries only what you put in it.**
 
 I cannot control what somebody does with an extension once they have it. What I can do is say plainly where I stand, and make sure nothing in this one is built to help.
@@ -100,16 +100,18 @@ The whole request is a list of blocks you can edit, reorder, switch off or add t
 
 Four prompts come with it:
 
-- **The line edit**, for replies. It improves how a reply reads and leaves what happens alone.
-- **The copy edit**, for your own messages. It fixes mistakes and leaves your style alone.
-- Each has a smaller version **for a model that thinks**.
+- **A judge**, for replies. It improves how a reply reads and leaves what happens alone.
+- **A line judge**, for your own messages. It fixes mistakes and leaves your style alone.
+- Each has a smaller version **that thinks**, for a model that reasons.
 
-**Show me the request**, on the Context tab, shows exactly what would be sent, without calling a model or costing anything.
+All four score the passage before they change it. A score has to rest on a line the model could quote, and only low scores lead to a change. The two for a model that thinks write the scores down, and the two plain ones score silently. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
+
+**Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what Jev found, and the passes after the first.
 
 ## Documentation
 
 - [How the prompt is built](docs/prompt.md): blocks, macros, roles, the built-in prompts, and the preview
-- [Writing rules](docs/rules.md): what to ask a refine for, and what not to
+- [Making your own prompt](docs/rules.md): a step-by-step guide to a prompt that fits your story and your model
 - [What it refuses to save](docs/guardrails.md): the checks on what comes back
 - [Settings](docs/settings.md): every tab and setting
 - [Ways to reach it](docs/settings.md#setup): the floating button, the chat buttons, and refining a selection
@@ -126,7 +128,7 @@ Four prompts come with it:
 - The extension has no networking of its own. Search the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and you will find nothing.
 - **Nothing is ever added to your chat.** It only edits messages that already exist.
 - **Refine what I am typing** reads and writes the input box on the page, because Lumiverse has no API for it. If an update moves the box, **Where the input box is** on the Setup tab points it at the new one.
-- The files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`. They are plain, readable JavaScript, not minified.
+- The files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`. They are plain, readable JavaScript. Nothing is minified.
 
 It asks for seven permissions:
 

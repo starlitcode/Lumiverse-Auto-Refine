@@ -1642,7 +1642,7 @@ console.log("\neach list keeps its own lock");
 
     await side("userBlocks");
     await settle(page);
-    await load("The copy edit");
+    await load("A line judge");
     await settle(page);
     const mine = await look();
     ok("a built-in prompt for your messages is locked", mine.locked && mine.note, JSON.stringify(mine));
@@ -1656,17 +1656,17 @@ console.log("\neach list keeps its own lock");
     await settle(page);
     const back = await look();
     ok("going back, it is still named and still locked",
-      back.pick === "The copy edit" && back.locked && back.note, JSON.stringify(back));
+      back.pick === "A line judge" && back.locked && back.note, JSON.stringify(back));
 
     await side("blocks");
     await settle(page);
-    await load("The line edit");
+    await load("A judge");
     await settle(page);
     await side("userBlocks");
     await settle(page);
     const both = await look();
     ok("loading one for replies leaves the other list's lock alone",
-      both.pick === "The copy edit" && both.locked, JSON.stringify(both));
+      both.pick === "A line judge" && both.locked, JSON.stringify(both));
 
     // One of your own, picked for replies, is named on that list only. Named
     // on both, the list for your messages stops naming the built-in prompt it
@@ -1679,7 +1679,7 @@ console.log("\neach list keeps its own lock");
     await settle(page);
     const yours = await look();
     ok("loading one of your own for replies leaves the other list's lock alone too",
-      yours.pick === "The copy edit" && yours.locked && yours.note, JSON.stringify(yours));
+      yours.pick === "A line judge" && yours.locked && yours.note, JSON.stringify(yours));
   });
   ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
 }
@@ -1891,6 +1891,30 @@ console.log("\none model or two");
 // ---- what Jev decided ----
 // The card on the Log tab that lays out Jev's last decision: one bar per check,
 // the ones that reached the line marked, and which Jev answered.
+console.log("\na refine you start is logged once");
+{
+  // A refine asked for by hand is answered twice: once as the save, once as the
+  // answer to the button. The Log says it once.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    await goTab(page, "Log");
+    // Read by wording rather than counted: the Log tab shows each line twice,
+    // once in the Log and once in the report below it.
+    const text = () => page.evaluate(() => document.querySelector("#drawer").textContent);
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", before: "The old line.", after: "The new line." });
+      window.__fromBackend({ type: "refine_result", chatId: "c1", messageId: "m2", ok: true });
+    });
+    await closed(page);
+    const once = await text();
+    ok("a saved refine asked for by hand is said once, as the save",
+      /refined a reply in/.test(once) && !/refined a reply on request/.test(once));
+    // An answer with no save heard before it still says so.
+    await page.evaluate(() => window.__fromBackend({ type: "refine_result", chatId: "c1", messageId: "m9", ok: true }));
+    await closed(page);
+    ok("an answer with no save before it is still logged", /refined a reply on request/.test(await text()));
+  });
+}
+
 console.log("\nwhat Jev found has somewhere to go");
 {
   // The line about What Jev Found is for somebody whose prompt has nowhere to
@@ -2005,6 +2029,17 @@ console.log("\nwhat Jev decided");
     ok("and is counted apart from the replies", /read 3 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
     const logged = await page.evaluate(() => document.querySelector("#drawer").textContent);
     ok("the Log says Jev read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
+    // A real request is not shown anywhere, so the Log says when what Jev found
+    // went into it.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "jev_found_sent", chatId: "c1", messageId: "m2", count: 2 });
+      window.__fromBackend({ type: "jev_found_sent", chatId: "c1", messageId: "m2", after: true, count: 1 });
+    });
+    await closed(page);
+    const sentLog = await page.evaluate(() => document.querySelector("#drawer").textContent);
+    ok("the Log says what Jev found went to the refine model, and how many checks",
+      /what Jev found went to the refine model: 2 checks/.test(sentLog));
+    ok("and says so for the second refine too", /went to the second refine: 1 check/.test(sentLog));
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
       b.click();
@@ -2205,7 +2240,7 @@ console.log("\na preset that names a model setup");
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }, value);
 
-    await pickPreset("The line edit");
+    await pickPreset("A judge");
     await settle(page);
     ok("nothing is said about a built-in prompt before a setup is picked", (await builtInNote()) === false);
     await page.evaluate(() => {
@@ -2737,12 +2772,12 @@ console.log("\nloading a preset from where you were reading");
       };
       // Start on the smaller of the pair, since a fresh install already holds
       // the bigger one and loading it again would grow nothing to follow.
-      load(/^The line edit, for a model that thinks$/);
+      load(/^A judge that thinks$/);
       await new Promise((r) => setTimeout(r, 120));
       const was = { scroll: s.scrollTop, card: seen() };
       // The biggest one, which is the one that grows the panel most when it
       // loads and so the one most likely to throw the scroll.
-      const detailed = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const detailed = Array.from(pick.options).find((o) => /^A judge$/.test(o.textContent.trim()));
       pick.value = detailed.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       document.querySelector('#drawer [data-arf-preset="load"]').click();
@@ -4696,9 +4731,9 @@ console.log("\nthe preview says which prompt it used");
   // the list they did not touch. Saying nothing about that reads as a preset
   // that failed to load.
   await inTab(browser, {}, async (page) => {
-    const feed = async (which) => {
+    const feed = async (which, jevLeft, passes) => {
       await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
-      await page.evaluate((w) => {
+      await page.evaluate(({ w, jevLeft, passes }) => {
         const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
         window.__fromBackend({
           type: "prompt_preview",
@@ -4711,14 +4746,21 @@ console.log("\nthe preview says which prompt it used");
           parameters: null,
           wrapOutput: true,
           connectionId: "",
+          jevFoundLeftOut: !!jevLeft,
+          passes: passes || [],
         });
-      }, which);
+      }, { w: which, jevLeft, passes });
       await settle(page);
       return page.evaluate(() => {
         const n = document.querySelector('#drawer [data-arf-preview="which"]');
         return n ? n.textContent : null;
       });
     };
+    const jevLine = () =>
+      page.evaluate(() => {
+        const n = document.querySelector('#drawer [data-arf-preview="jevfound"]');
+        return n ? n.textContent : null;
+      });
     await goTab(page, "Context");
     const replies = await feed("replies");
     ok("a reply preview says it used the reply prompt",
@@ -4728,7 +4770,55 @@ console.log("\nthe preview says which prompt it used");
     const yours = await feed("yours");
     ok("your own turn says it used the prompt for your writing",
       /your own writing/.test(yours || ""), yours);
+    ok("with nothing left out for Jev, nothing is said about it", (await jevLine()) === null);
+    // A preview never asks Jev, so a block holding {{jev_found}} is empty here.
+    await feed("replies", true);
+    const left = await jevLine();
+    ok("a preview with What Jev Found left out says so, and where to look instead",
+      /left out here/.test(left || "") && /The Log says when it was sent/.test(left || ""), left);
+    // With several passes, neither list on the Prompt tab is sent, so the line
+    // naming one gives way to a line naming the passes.
+    const withPasses = await feed("replies", false, ["Tighten", "Polish"]);
+    const passLine = await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-preview="passes"]');
+      return n ? n.textContent : null;
+    });
+    ok("with several passes, the preview says it is pass 1 and names them in order",
+      /pass 1 of 2, Tighten/.test(passLine || "") && /In order: Tighten, Polish/.test(passLine || ""), passLine);
+    ok("and does not name a Prompt tab list it did not use", withPasses === null, withPasses);
   });
+}
+
+console.log("\nthe refine card rises into place");
+{
+  // The card saying a refine happened comes up from its corner with the dim
+  // fading in behind it, then settles. With less movement asked for, both just
+  // appear.
+  for (const reduce of [false, true]) {
+    await inTab(browser, { saved: { enabled: true, popup: true } }, async (page) => {
+      if (reduce) await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.evaluate(() =>
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line of the reply.", after: "The new line of the reply." }),
+      );
+      await page.waitForTimeout(40);
+      const got = await page.evaluate(() => {
+        const pop = document.querySelector(".arf-pop");
+        const shade = document.querySelector(".arf-shade");
+        return pop ? { pop: getComputedStyle(pop).animationName, shade: shade ? getComputedStyle(shade).animationName : null, opacity: Number(getComputedStyle(pop).opacity) } : null;
+      });
+      await page.waitForTimeout(450);
+      const settled = await page.evaluate(() => {
+        const p = document.querySelector(".arf-pop");
+        return p ? { transform: getComputedStyle(p).transform, opacity: Number(getComputedStyle(p).opacity) } : null;
+      });
+      if (reduce) {
+        ok("with less movement asked for, the refine card just appears", !!got && got.pop === "none" && got.shade === "none" && got.opacity === 1, JSON.stringify(got));
+      } else {
+        ok("the refine card rises in with the dim fading behind it", !!got && got.pop === "arf-rise" && got.shade === "arf-fade" && got.opacity < 1, JSON.stringify(got));
+        ok("and settles in place", !!settled && settled.opacity === 1 && /matrix\(1, 0, 0, 1, 0, 0\)|none/.test(settled.transform), JSON.stringify(settled));
+      }
+    });
+  }
 }
 
 console.log("\nthe raw view");
@@ -4747,6 +4837,7 @@ console.log("\nthe raw view");
         parameters: { temperature: 0.4 },
         connectionId: "c-fast",
         reasoning: { source: "off" },
+        jevFoundLeftOut: true,
       });
     });
     await settle(page);
@@ -4755,6 +4846,11 @@ console.log("\nthe raw view");
     const raw = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
     ok("raw shows the request as data", /"messages"/.test(raw) && /"temperature": 0.4/.test(raw));
     ok("with the connection it goes to", /c-fast/.test(raw));
+    // What the request below does not hold is said in the raw view too, not
+    // only in the one it was first written for.
+    ok("and says What Jev Found is left out, in the raw view as well",
+      !!(await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="jevfound"]'))));
+    ok("without calling it the request exactly as it goes out", !/as it goes out\./.test(raw) && /apart from anything named above/.test(raw));
   });
 }
 
@@ -4981,7 +5077,7 @@ console.log("\nthe working, read as prose");
   // the rewrite. Taking it would put the rewrite itself under What the model
   // worked out, which is neither what the card says nor what anybody is looking
   // for there.
-  await inTab(browser, {}, async (page) => {
+  await inTab(browser, { saved: { blocks: [{ id: "rules", name: "Only rules", on: true, role: "system", text: "cut filler {{message}}" }] } }, async (page) => {
     await page.evaluate(() => {
       window.__fromBackend({
         type: "refined",
@@ -7644,7 +7740,7 @@ console.log("\nsaying the built-in prompts have changed");
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
       const sel = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const builtIn = Array.from(sel.options).find((o) => /The line edit/.test(o.textContent));
+      const builtIn = Array.from(sel.options).find((o) => /A judge/.test(o.textContent));
       sel.value = builtIn.value;
       sel.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 60));
@@ -7657,7 +7753,7 @@ console.log("\nsaying the built-in prompts have changed");
         line: !!document.querySelector("#drawer [data-arf-builtinmoved]"),
       };
     });
-    ok("the built-in prompt really was the one loaded", /The line edit/.test(out.picked), JSON.stringify(out));
+    ok("the built-in prompt really was the one loaded", /A judge/.test(out.picked), JSON.stringify(out));
     ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
     ok("so the line goes with it", !out.line, JSON.stringify(out));
   });
@@ -7689,6 +7785,46 @@ console.log("\na built-in prompt cannot be typed into");
       };
     });
 
+  // A box for a list saves a list. It used to save the text of the box, which
+  // the backend read as no list at all, so passes typed here never ran.
+  await inTab(browser, { saved: { passMode: "many" } }, async (page) => {
+    await goTab(page, "Limits");
+    const sent = await page.evaluate(async () => {
+      const area = document.querySelector('#drawer textarea[data-arf-field="passNames"]');
+      area.value = "A judge\n\n  A judge that thinks  ";
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+      area.dispatchEvent(new Event("blur"));
+      await new Promise((r) => setTimeout(r, 400));
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+      return last && last.settings ? { names: last.settings.passNames, passes: (last.settings.passes || []).length } : null;
+    });
+    ok("the passes typed into the box are saved as a list",
+      !!sent && JSON.stringify(sent.names) === JSON.stringify(["A judge", "A judge that thinks"]), JSON.stringify(sent));
+    ok("and both of them go to the backend to run", !!sent && sent.passes === 2, JSON.stringify(sent));
+  });
+
+  await inTab(browser, { saved: { passMode: "many", passNames: "A judge\nMine" } }, async (page) => {
+    await goTab(page, "Limits");
+    const shown = await page.evaluate(() => document.querySelector('#drawer textarea[data-arf-field="passNames"]').value);
+    ok("passes already saved as text are read back as a list", shown === "A judge\nMine", JSON.stringify(shown));
+  });
+
+  // The four were renamed. A pick and a pass saved under the old names follow
+  // the rename rather than leaving the picker empty and the pass skipped.
+  await inTab(
+    browser,
+    { saved: { presetPick: "The line edit", passMode: "many", passNames: ["The line edit", "Mine"] } },
+    async (page) => {
+      await goTab(page, "Prompt");
+      const pick = await page.evaluate(() => document.querySelector('#drawer [data-arf-field="presetPick"]').value);
+      ok("a pick saved under an old built-in name follows the rename", pick === "A judge", JSON.stringify(pick));
+      await goTab(page, "Limits");
+      const passes = await page.evaluate(() => document.querySelector('#drawer textarea[data-arf-field="passNames"]').value);
+      ok("and so does a pass named after one, leaving your own names alone",
+        passes === "A judge\nMine", JSON.stringify(passes));
+    },
+  );
+
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const fresh = await look(page);
@@ -7697,7 +7833,7 @@ console.log("\na built-in prompt cannot be typed into");
 
     const picked = await page.evaluate(async () => {
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const one = [...pick.options].find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const one = [...pick.options].find((o) => /^A judge$/.test(o.textContent.trim()));
       pick.value = one.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
@@ -7730,7 +7866,7 @@ console.log("\na built-in prompt cannot be typed into");
       ok("the lock is on before the panel is taken down", before.readOnly === true, JSON.stringify(before));
       ok("and still on when Lumiverse builds it again", after.readOnly === true, JSON.stringify(after));
       ok("with the note still saying why", after.said === true, JSON.stringify(after));
-      ok("and the picker still naming the prompt", pick === "The line edit", JSON.stringify(pick));
+      ok("and the picker still naming the prompt", pick === "A judge", JSON.stringify(pick));
     }
     const held = await look(page);
     ok("the blocks stop taking typing", held.readOnly === true, JSON.stringify(held));
@@ -7751,12 +7887,12 @@ console.log("\na built-in prompt cannot be typed into");
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const one = [...pick.options].find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const one = [...pick.options].find((o) => /^A judge$/.test(o.textContent.trim()));
       pick.value = one.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
       const name = document.querySelector('#drawer [data-arf-field="presetName"]');
-      name.value = "Mine, off the line edit";
+      name.value = "Mine, off the judge";
       name.dispatchEvent(new Event("input", { bubbles: true }));
       document.querySelector('#drawer [data-arf-preset="new"]').click();
       await new Promise((r) => setTimeout(r, 300));
@@ -7788,7 +7924,7 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
         return n ? { kind: n.getAttribute("data-arf-preset-drift"), text: n.textContent } : null;
       };
       const pick = document.querySelector('#drawer [data-arf-field="presetPick"]');
-      const builtIn = Array.from(pick.options).find((o) => /^The line edit$/.test(o.textContent.trim()));
+      const builtIn = Array.from(pick.options).find((o) => /^A judge$/.test(o.textContent.trim()));
       pick.value = builtIn.value;
       pick.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 250));
@@ -9435,7 +9571,7 @@ console.log("\nthe rows that only appear when switched on, at both sizes");
   const ON = {
     enabled: true,
     passMode: "many",
-    passNames: ["The line edit", "The line edit, for a model that thinks"],
+    passNames: ["A judge", "A judge that thinks"],
     wornOn: true,
     wornBack: 60,
     wornLeast: 3,

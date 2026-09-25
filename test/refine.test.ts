@@ -59,6 +59,14 @@ const CARD = {
   mes_example: "Wren: You are late.",
 };
 
+// The second card in a group chat.
+const OTHER_CARD = {
+  name: "Oriel",
+  description: "A lamp keeper on the far bank who counts every boat.",
+  personality: "Talks too much and remembers everything.",
+  scenario: "",
+};
+
 // answers is what the stubbed model says, one per call, in order.
 function host(
   messages: Msg[],
@@ -99,6 +107,10 @@ function host(
     asking?: () => Promise<void>;
     // The one account that can see the chats, for a server with several.
     chatOwner?: string;
+    // A group chat: the chat's own card is Wren, and Oriel is a second card in
+    // it. Each card read is counted, since each one is a host call.
+    group?: boolean;
+    cardReads?: string[];
   } = {},
 ) {
   // An install scoped to an operator refuses a model call that names no
@@ -227,15 +239,16 @@ function host(
         // with the characters permission refused, it comes back empty, which is
         // what the real one does and what the extension has to cope with.
         const known = !!(opt && opt.chatId) && !opts.cardFail && !opts.noCard;
+        const card = opts.group && opt && opt.characterId === "ch2" ? OTHER_CARD : CARD;
         return String(text)
-          .replace(/\{\{description\}\}/g, known ? CARD.description : "")
+          .replace(/\{\{description\}\}/g, known ? card.description : "")
           .replace(/\{\{personality\}\}/g, known ? CARD.personality : "")
           .replace(/\{\{scenario\}\}/g, known ? CARD.scenario : "")
           .replace(/\{\{persona\}\}/g, known ? "A traveller who arrived at night." : "")
           // The name the reader's own character goes by, which is what labels
           // their side of the run-up. noPersona is a chat with none set.
           .replace(/\{\{user\}\}/g, known && !opts.noPersona ? "Tam" : "")
-          .replace(/\{\{char\}\}/g, known ? CARD.name : "");
+          .replace(/\{\{char\}\}/g, known ? card.name : "");
       },
     },
     world_books: {
@@ -255,7 +268,10 @@ function host(
         if (opts.chatOwner !== undefined && userId !== undefined && userId !== opts.chatOwner) return null;
         if (opts.whileReading) opts.whileReading();
         if (opts.chatFail) throw new Error(opts.chatFail);
-        return opts.noCard ? { id: "c1" } : { id: "c1", character_id: "ch1" };
+        if (opts.noCard) return { id: "c1" };
+        return opts.group
+          ? { id: "c1", character_id: "ch1", metadata: { character_ids: ["ch1", "ch2"] } }
+          : { id: "c1", character_id: "ch1" };
       },
       // What Lumiverse remembers of the chat, as its own call hands it over:
       // already written out with the reader's header and chunk templates.
@@ -273,9 +289,10 @@ function host(
           },
     },
     characters: {
-      get: async () => {
+      get: async (id?: string) => {
+        if (opts.cardReads) opts.cardReads.push(String(id));
         if (opts.cardFail) throw new Error(opts.cardFail);
-        return { ...CARD };
+        return opts.group && id === "ch2" ? { ...OTHER_CARD } : { ...CARD };
       },
     },
     chat: {
@@ -933,7 +950,7 @@ describe("two models: Jev reads the reply first", () => {
     await wait(50);
     const text = sentText(h);
     expect(text).toContain("<found>");
-    expect(text).toContain("Each one is a lead, not an order");
+    expect(text).toContain("Treat each one as a lead to check.");
     expect(text).toContain("line of 50%");
     const first = text.indexOf("- reply uses stock phrases. (90%)");
     const second = text.indexOf("- reply repeats itself. (60%)");
@@ -958,6 +975,44 @@ describe("two models: Jev reads the reply first", () => {
     expect(text).toContain("line of 65%");
     expect(text).toContain("- reply uses stock phrases. (70%)");
     expect(text).not.toContain("repeats itself");
+  });
+
+  // A real request is not shown anywhere, so the panel is told when what Jev
+  // found went into it, and how many checks.
+  test("the panel is told what Jev found went to the refine model", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([60, 90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const told = h.sent.filter((m: any) => m.type === "jev_found_sent");
+    expect(told.length).toBe(1);
+    expect(told[0].count).toBe(2);
+  });
+
+  test("but not when no block takes it", async () => {
+    const h = await keyed({}, { jev: says([60, 90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+    expect(h.sent.some((m: any) => m.type === "jev_found_sent")).toBe(false);
+  });
+
+  // The preview never asks Jev, so it says the block is left out rather than
+  // showing a request without it and calling that what is sent.
+  test("the preview says What Jev Found is left out, with two models and a block for it", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([90]) });
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    expect(got.jevFoundLeftOut).toBe(true);
+    expect(h.jevCalls.length).toBe(0);
+  });
+
+  test("and does not with one model", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS, judgeMode: "one" }, { jev: says([90]) });
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    expect(got.jevFoundLeftOut).toBe(false);
   });
 
   test("when Jev did not read the reply, the block is left out", async () => {
@@ -1026,6 +1081,10 @@ describe("two models: Jev reads the reply first", () => {
     expect(second).toContain("- reply uses stock phrases. (70%)");
     expect(second).not.toContain("repeats itself");
     expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "again")).toBe(true);
+    const told = h.sent.filter((m: any) => m.type === "jev_found_sent");
+    expect(told.length).toBe(2);
+    expect(told[1].after).toBe(true);
+    expect(told[1].count).toBe(1);
   });
 
   test("and only once, however the second rewrite reads", async () => {
@@ -1180,6 +1239,56 @@ describe("two models: Jev reads the reply first", () => {
     expect(done.ok).toBe(false);
     expect(done.pct).toBe(null);
     expect(done.why).toMatch(/not with a usable score/);
+  });
+
+  // Show me the request builds its own scene. {{overused}} has to be filled
+  // there the same way, or the preview drops a block a refine sends.
+  test("the preview fills {{overused}} the way a refine does", async () => {
+    const worn: Msg[] = [
+      { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
+      { id: "m1", role: "user", content: "i go on" },
+      { id: "m2", role: "assistant", content: "Rain came down and the cold wind bit at her hands." },
+      { id: "m3", role: "user", content: "i keep going" },
+      { id: "m4", role: "assistant", content: "She went through the gate, and the cold wind bit at her again." },
+    ];
+    const WORN = { id: "worn", name: "Worn", on: true, role: "system", text: "<worn>\n{{overused}}\n</worn>" };
+    const h = await keyed({ wornOn: true, wornLeast: 2, blocks: FOUND_BLOCKS.concat([WORN]) }, { jev: says([10]) }, worn);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m4" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    const text = (got.messages || []).map((m: any) => m.content).join("\n");
+    expect(text).toContain("<worn>");
+    expect(text).toMatch(/cold wind bit/);
+  });
+
+  // With several passes, a refine sends each pass's own prompt. The preview
+  // builds the first one and names them all, and never shows the Prompt tab's
+  // list, which is not sent.
+  test("with several passes, the preview is the first pass, and names them all", async () => {
+    const pass = (name: string, line: string) => ({
+      name: name,
+      on: true,
+      blocks: [
+        { id: "r", name: "Rule", on: true, role: "system", text: line },
+        { id: "t", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
+      ],
+    });
+    const h = await keyed(
+      {
+        blocks: [{ id: "tab", name: "Tab", on: true, role: "user", text: "THE PROMPT TAB LIST {{message}}" }],
+        passMode: "many",
+        passes: [pass("Tighten", "FIRST PASS RULE"), pass("Polish", "SECOND PASS RULE")],
+      },
+      { jev: says([10]) },
+    );
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    const text = (got.messages || []).map((m: any) => m.content).join("\n");
+    expect(text).toContain("FIRST PASS RULE");
+    expect(text).not.toContain("SECOND PASS RULE");
+    expect(text).not.toContain("THE PROMPT TAB LIST");
+    expect(got.passes).toEqual(["Tighten", "Polish"]);
   });
 
   test("worn phrases are asked about when they are on", async () => {
@@ -1671,6 +1780,50 @@ describe("what the model is told about the scene", () => {
     expect(said(h)).toContain("Tam: i walk through it");
   });
 
+  // A group chat: two cards, and each reply posted under the name of the one
+  // that wrote it.
+  const groupChat = (): Msg[] => [
+    { id: "m0", role: "assistant", name: "Wren", content: "The gate stands open, and the road past it is dark." } as any,
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", name: "Oriel", content: "Oriel lifted the lamp and, suddenly, counted the boats again." } as any,
+  ];
+
+  test("in a group chat each reply in the run-up carries the name it was posted under", async () => {
+    const h = await armed(["Oriel lifted the lamp and counted the boats again."], {}, groupChat(), { group: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("Wren: The gate stands open");
+    expect(said(h)).toContain("Tam: i walk through it");
+  });
+
+  test("and the card sent is the one that wrote the reply, not the chat's first card", async () => {
+    const h = await armed(["Oriel lifted the lamp and counted the boats again."], {}, groupChat(), { group: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A lamp keeper on the far bank");
+    expect(said(h)).not.toContain("A ferry pilot who has crossed the same water");
+  });
+
+  test("a reply from the chat's own card reads no other card", async () => {
+    const reads: string[] = [];
+    const msgs = groupChat();
+    (msgs[2] as any).name = "Wren";
+    const h = await armed(["She lifted the lamp."], {}, msgs, { group: true, cardReads: reads });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A ferry pilot who has crossed the same water");
+    expect(reads).not.toContain("ch2");
+  });
+
+  test("a name that matches no card keeps the chat's own card", async () => {
+    const msgs = groupChat();
+    (msgs[2] as any).name = "Somebody Else";
+    const h = await armed(["She lifted the lamp."], {}, msgs, { group: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("A ferry pilot who has crossed the same water");
+  });
+
   test("and a chat with no persona set falls back rather than labelling a blank", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noPersona: true });
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -1914,7 +2067,7 @@ describe("seeing what gets sent", () => {
     // still a line inside How to Answer.
     expect(whole).not.toContain("protected_formatting");
     // And the check is looking at a real prompt rather than an empty string.
-    expect(whole).toContain("<passage_to_refine>");
+    expect(whole).toContain("<passage>");
   });
 
   // A reasoning model's working is cut off before the call, so a preview that
@@ -4083,7 +4236,7 @@ describe("what Lumiverse remembers of the chat", () => {
         name: "What has happened before now",
         on: true,
         role: "system",
-        text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
+        text: "<memories>\n{{memories}}\n</memories>",
       },
     ]),
     ...extra,
@@ -4094,7 +4247,7 @@ describe("what Lumiverse remembers of the chat", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
     expect(said(h)).toContain("Wren lost a brother to the crossing, years ago.");
-    expect(said(h)).toContain("<what_has_happened>");
+    expect(said(h)).toContain("<memories>");
   });
 
   test("it is asked for against the chat and the account", async () => {
@@ -4112,7 +4265,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
     expect(said(h)).not.toContain("never read this");
   });
 
@@ -4122,7 +4275,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
   });
 
   test("a build without the call refines anyway, with the block left out", async () => {
@@ -4131,7 +4284,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
@@ -4141,7 +4294,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
@@ -4155,7 +4308,7 @@ describe("what Lumiverse remembers of the chat", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
     expect(h.memoryAsked.length).toBe(0);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
   });
 
   test("switched on, the same built-in prompt asks for it", async () => {
@@ -4981,8 +5134,8 @@ describe("the built-in prompt carries the new macros", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(60);
     const sent = JSON.stringify(h.asked[0].messages);
-    expect(sent).not.toContain("already_worn_out_in_this_chat");
-    expect(sent).not.toContain("the_reply_around_it");
+    expect(sent).not.toContain("<worn_out>");
+    expect(sent).not.toContain("<reply_around_it>");
   });
 
   test("refining a selection sends the one that has something to say", async () => {
@@ -5007,10 +5160,10 @@ describe("the built-in prompt carries the new macros", () => {
     await wait(80);
     const sent = JSON.stringify(h.asked[0].messages);
     // The reply around it, so the fragment is not read without its context.
-    expect(sent).toContain("the_reply_around_it");
+    expect(sent).toContain("<reply_around_it>");
     expect(sent).toContain("<<<She tried the handle twice anyway.>>>");
     // And still not the worn one, whose setting is off.
-    expect(sent).not.toContain("already_worn_out_in_this_chat");
+    expect(sent).not.toContain("<worn_out>");
   });
 
   test("switching the worn setting on is all it takes", async () => {
@@ -5031,7 +5184,7 @@ describe("the built-in prompt carries the new macros", () => {
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
     await wait(80);
     const sent = JSON.stringify(h.asked[0].messages);
-    expect(sent).toContain("already_worn_out_in_this_chat");
+    expect(sent).toContain("<worn_out>");
     expect(sent).toContain("shiver ran down her spine");
   });
 });

@@ -63,7 +63,7 @@ describe("the prompts page keeps up with the panel", () => {
 
   test("and none of the reasoning ones is described as a question", () => {
     const asked = rows
-      .filter((r) => /for a model that thinks/.test(r.name) && r.what.includes("?"))
+      .filter((r) => /that thinks/.test(r.name) && r.what.includes("?"))
       .map((r) => r.what);
     expect(asked).toEqual([]);
   });
