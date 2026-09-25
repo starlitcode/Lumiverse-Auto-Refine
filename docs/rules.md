@@ -27,6 +27,7 @@ These are not about quality. Without them, a refine does not work, or it saves t
 
 - Some providers return an error for a request made only of System messages.
 - The built-in prompts send the **Passage** block and the **Hand It In** block as User. Keep them that way.
+- **Do not end on an Assistant block** unless you know your model accepts one. An Assistant block at the end is called a prefill, and many newer models no longer accept it. See [Roles](prompt.md#roles).
 
 **4. The Protected Formatting block, if you hide markup.**
 

@@ -99,10 +99,18 @@ It is sent as **User** because it is your instruction about what you want back, 
 
 ## Roles
 
-System is right for almost everything. Two cases where changing it helps:
+System is right for almost everything. One case where changing it helps:
 
 - **A model that ignores system instructions.** Some providers pay more attention to the last user message. Move your rules to **User**.
-- **A model that continues the message instead of editing it.** Sending the turn as **Assistant** makes it read as already written, which can stop the model adding a new paragraph.
+
+**Be careful with Assistant.** A block sent as **Assistant** at the end of the request is called a prefill. It puts words in the model's mouth before it starts.
+
+- Many newer models no longer accept a prefill. Some return an error. Some ignore it.
+- This is changing fast, and more models are dropping it.
+- Only end on an **Assistant** block if you know your model accepts one. Check your provider's docs, and test it on one reply first.
+- An **Assistant** block earlier in the request, with a **User** block after it, is fine for any model.
+
+The built-in prompts end on **User** blocks for this reason.
 
 ## The answer it asks for
 
@@ -372,6 +380,11 @@ On the **Model** tab, every sampler starts blank. Blank means your connection's 
 - **Temperature** is the one worth changing. A rewrite usually wants it lower than for roleplay, since you want the same scene said better.
 - **Longest answer** set too low cuts the rewrite off, and it is then dropped as too short.
 - **Clear them all** sets every sampler back to blank.
+
+**Some models do not accept samplers.** Many newer models, reasoning models most of all, ignore temperature and the other samplers, or return an error when one is sent. This is changing fast too.
+
+- If a refine fails with an error from the provider after you set a sampler, clear that sampler and try again.
+- Leaving them blank is always safe.
 
 ## How much thinking it does
 
