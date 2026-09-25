@@ -2067,7 +2067,7 @@ describe("seeing what gets sent", () => {
     // still a line inside How to Answer.
     expect(whole).not.toContain("protected_formatting");
     // And the check is looking at a real prompt rather than an empty string.
-    expect(whole).toContain("<passage_to_refine>");
+    expect(whole).toContain("<passage>");
   });
 
   // A reasoning model's working is cut off before the call, so a preview that
@@ -4236,7 +4236,7 @@ describe("what Lumiverse remembers of the chat", () => {
         name: "What has happened before now",
         on: true,
         role: "system",
-        text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
+        text: "<memories>\n{{memories}}\n</memories>",
       },
     ]),
     ...extra,
@@ -4247,7 +4247,7 @@ describe("what Lumiverse remembers of the chat", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
     expect(said(h)).toContain("Wren lost a brother to the crossing, years ago.");
-    expect(said(h)).toContain("<what_has_happened>");
+    expect(said(h)).toContain("<memories>");
   });
 
   test("it is asked for against the chat and the account", async () => {
@@ -4265,7 +4265,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
     expect(said(h)).not.toContain("never read this");
   });
 
@@ -4275,7 +4275,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
   });
 
   test("a build without the call refines anyway, with the block left out", async () => {
@@ -4284,7 +4284,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
@@ -4294,7 +4294,7 @@ describe("what Lumiverse remembers of the chat", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
@@ -4308,7 +4308,7 @@ describe("what Lumiverse remembers of the chat", () => {
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(60);
     expect(h.memoryAsked.length).toBe(0);
-    expect(said(h)).not.toContain("<what_has_happened>");
+    expect(said(h)).not.toContain("<memories>");
   });
 
   test("switched on, the same built-in prompt asks for it", async () => {
@@ -5134,8 +5134,8 @@ describe("the built-in prompt carries the new macros", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(60);
     const sent = JSON.stringify(h.asked[0].messages);
-    expect(sent).not.toContain("already_worn_out_in_this_chat");
-    expect(sent).not.toContain("the_reply_around_it");
+    expect(sent).not.toContain("<worn_out>");
+    expect(sent).not.toContain("<reply_around_it>");
   });
 
   test("refining a selection sends the one that has something to say", async () => {
@@ -5160,10 +5160,10 @@ describe("the built-in prompt carries the new macros", () => {
     await wait(80);
     const sent = JSON.stringify(h.asked[0].messages);
     // The reply around it, so the fragment is not read without its context.
-    expect(sent).toContain("the_reply_around_it");
+    expect(sent).toContain("<reply_around_it>");
     expect(sent).toContain("<<<She tried the handle twice anyway.>>>");
     // And still not the worn one, whose setting is off.
-    expect(sent).not.toContain("already_worn_out_in_this_chat");
+    expect(sent).not.toContain("<worn_out>");
   });
 
   test("switching the worn setting on is all it takes", async () => {
@@ -5184,7 +5184,7 @@ describe("the built-in prompt carries the new macros", () => {
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
     await wait(80);
     const sent = JSON.stringify(h.asked[0].messages);
-    expect(sent).toContain("already_worn_out_in_this_chat");
+    expect(sent).toContain("<worn_out>");
     expect(sent).toContain("shiver ran down her spine");
   });
 });

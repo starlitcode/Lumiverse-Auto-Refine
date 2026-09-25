@@ -69,7 +69,7 @@ then a chat with no memories still sends `Keep these in mind.`, which now refers
 
 - It is Lumiverse's own memory of the chat, written out with your own header and chunk templates, as many pieces as your chat memory settings ask for.
 - A chat with memory off, or with nothing stored yet, gives nothing, and the block is left out.
-- The block that uses it, **What Has Happened**, starts switched off, because its size is set by your chat memory settings and it is sent on every refine. Switch it on under **Prompt** when you want the refine to know more of the story.
+- The block that uses it, **Memories**, starts switched off, because its size is set by your chat memory settings and it is sent on every refine. Switch it on under **Prompt** when you want the refine to know more of the story.
 
 **About `{{protect_notes}}`:** it has its own block, **Protected Formatting**. When protection has hidden something, it becomes:
 
@@ -87,9 +87,9 @@ The built-in prompts are ordered from what never changes to what changes every t
 
 1. **The rules.** The same on every refine.
 2. **The setting**: who the story follows, who you are writing with, and what is true in its world. The same for a whole chat.
-3. **What Has Happened.** Lumiverse's memory of the chat. Off by default.
+3. **Memories.** Lumiverse's memory of the chat. Off by default.
 4. **Earlier Pages.** The recent messages, which change every turn.
-5. **Passage to Refine.** Different every time.
+5. **Passage.** Different every time.
 6. **How to Answer.** Below the passage on purpose, and sent as **User**.
 7. **Protected Formatting.** Only sent when something was hidden.
 
@@ -395,7 +395,7 @@ On the **Model** tab, **Let it think first** has three choices:
 - It is built by the same code a real refine uses, so it is what the model gets, apart from the two things below. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
 - Below the messages, it also shows the connection, thinking and samplers the call would use.
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
-- The worn-out phrases are worked out the same way a refine works them out, so **Already Worn Out in This Chat** shows what a refine would send.
+- The worn-out phrases are worked out the same way a refine works them out, so **Worn Out** shows what a refine would send.
 - With **Several passes** on, it shows the first pass as it would go out, and names every pass in order. The passes after the first are sent the rewrite the one before wrote, so they cannot be shown until a refine runs.
 - **What Jev Found** is left out, because a preview never asks Jev. The card says so when a switched-on block uses `{{jev_found}}`. The Log says when a real refine sent it.
 - **Copy it** copies the whole thing, useful when asking why a refine did something odd.

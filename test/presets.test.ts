@@ -104,6 +104,19 @@ describe("the prompts that come with it", () => {
     }
   });
 
+  // A tag reads as a label, so it stays short, and each block is named after
+  // the tag it holds, so the Prompt tab and the prompt say the same thing.
+  test("every tag is short, and every block is named after its tag", () => {
+    for (const p of BUILT_IN_PROMPTS)
+      for (const b of p.blocks) {
+        const m = /^<([a-z_]+)>/.exec(String(b.text));
+        const tag = m ? m[1] : "";
+        const fromName = String(b.name).toLowerCase().replace(/[^a-z ]/g, "").trim().replace(/ +/g, "_");
+        expect({ block: p.name + "/" + b.id, short: tag.length > 0 && tag.length <= 20, named: fromName === tag })
+          .toEqual({ block: p.name + "/" + b.id, short: true, named: true });
+      }
+  });
+
   // A name macro fills in one name. In a group chat that is one character out
   // of several, so a built-in prompt that leans on it is wrong for everyone
   // else in the scene. The macros stay in the list for a prompt of your own.

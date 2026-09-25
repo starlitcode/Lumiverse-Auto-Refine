@@ -701,10 +701,10 @@ const SCENE_BLOCKS: Block[] = [
   },
   {
     id: "persona",
-    name: "The User's Characters",
+    name: "User Characters",
     on: true,
     role: "system",
-    text: "<the_users_characters>\n{{persona}}\n</the_users_characters>",
+    text: "<user_characters>\n{{persona}}\n</user_characters>",
   },
   {
     id: "lore",
@@ -731,10 +731,10 @@ const SCENE_BLOCKS: Block[] = [
 // memory settings are; a reader who never opens this card is not paying for it.
 const MEMORY_BLOCK: Block = {
   id: "memory",
-  name: "What Has Happened",
+  name: "Memories",
   on: false,
   role: "system",
-  text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
+  text: "<memories>\n{{memories}}\n</memories>",
 };
 
 // The phrases this chat keeps reaching for. On in every built-in prompt, and that
@@ -748,10 +748,10 @@ const MEMORY_BLOCK: Block = {
 // somebody put on a list.
 const WORN_BLOCK: Block = {
   id: "worn",
-  name: "Already Worn Out in This Chat",
+  name: "Worn Out",
   on: true,
   role: "system",
-  text: "<already_worn_out_in_this_chat>\n{{overused}}\n</already_worn_out_in_this_chat>",
+  text: "<worn_out>\n{{overused}}\n</worn_out>",
 };
 
 // What Jev found in the reply, with two models on. Off in both built-in prompts
@@ -775,13 +775,13 @@ const JEV_FOUND_BLOCK: Block = {
 // directly above the passage, which is where the thing it describes sits.
 const AROUND_BLOCK: Block = {
   id: "around",
-  name: "The Reply Around It",
+  name: "Reply Around It",
   on: true,
   role: "system",
   text:
-    "<the_reply_around_it>\n" +
+    "<reply_around_it>\n" +
     "{{whole_reply}}\n" +
-    "</the_reply_around_it>",
+    "</reply_around_it>",
 };
 
 // The pages before this one. Redrawn every single turn, so it goes as late as it
@@ -796,10 +796,10 @@ const RECENT_BLOCK: Block = {
 
 const TURN_BLOCK: Block = {
   id: "turn",
-  name: "Passage to Refine",
+  name: "Passage",
   on: true,
   role: "user",
-  text: "<passage_to_refine>\n{{message}}\n</passage_to_refine>",
+  text: "<passage>\n{{message}}\n</passage>",
 };
 
 // The shape of the answer, drawn out as a template. A model matching a shape it
@@ -963,11 +963,11 @@ const FILLER =
 
 const COPY_EXACTLY: Block = {
   id: "hands_off",
-  name: "Copy These Exactly",
+  name: "Copy Exactly",
   on: true,
   role: "system",
   text:
-    "<copy_these_exactly>\n" +
+    "<copy_exactly>\n" +
     "Some of what you are given is not prose, and none of it is yours to " +
     "improve. Each of these comes through character for character, in the " +
     "place it already sits:\n\n" +
@@ -984,7 +984,7 @@ const COPY_EXACTLY: Block = {
     "- numbers, dates, times and measurements\n\n" +
     "Where you are unsure whether something is prose, treat it as one of these " +
     "and leave it where it is.\n" +
-    "</copy_these_exactly>",
+    "</copy_exactly>",
 };
 
 const JOB_BLOCK: Block = {
@@ -1237,11 +1237,11 @@ const PLAIN_LONG: Block[] = [
   },
   {
     id: "bodies",
-    name: "Bodies and Feeling",
+    name: "Body Language",
     on: true,
     role: "system",
     text:
-      "<bodies_and_feeling>\n" +
+      "<body_language>\n" +
       "Give hands, eyes and breath an owner. Their hand found another's " +
       "becomes they took that person's hand. Their eyes traced another's face " +
       "becomes they looked at that person.\n\n" +
@@ -1252,7 +1252,7 @@ const PLAIN_LONG: Block[] = [
       "reader skims a list.\n\n" +
       "A heartbeat, a shiver or a held breath standing in for an emotion is the " +
       "emotion left unwritten. Write what the person does.\n" +
-      "</bodies_and_feeling>",
+      "</body_language>",
   },
   CAST_BLOCK,
   {
@@ -1400,11 +1400,11 @@ const YOURS_JOB: Block = {
 
 const YOURS_HAND: Block = {
   id: "voice",
-  name: "The Way They Write",
+  name: "Their Voice",
   on: true,
   role: "system",
   text:
-    "<the_way_they_write>\n" +
+    "<their_voice>\n" +
     "This is the user writing, not a narrator, and the two do not sound the " +
     "same. Keep the way they write.\n\n" +
     "Short plain lines stay short and plain. Lower case stays lower case. " +
@@ -1413,7 +1413,7 @@ const YOURS_HAND: Block = {
     "somebody else's.\n\n" +
     "Their length is their choice: a one line passage stays a one line " +
     "passage.\n" +
-    "</the_way_they_write>",
+    "</their_voice>",
 };
 
 
@@ -1608,11 +1608,11 @@ const THINKS_LONG: Block[] = [
   RESTRAINT,
   {
     id: "check",
-    name: "Before You Answer",
+    name: "Final Check",
     on: true,
     role: "system",
     text:
-      "<before_you_answer>\n" +
+      "<final_check>\n" +
       "Read your rewrite against the original once more and answer three " +
       "questions.\n\n" +
       "Did anything happen in yours that did not happen in theirs? Take it " +
@@ -1621,7 +1621,7 @@ const THINKS_LONG: Block[] = [
       "scene? Put it back.\n\n" +
       "Is yours longer? Find what you added and decide whether it earns the " +
       "room. It usually does not.\n" +
-      "</before_you_answer>",
+      "</final_check>",
   },
   SCORE_BLOCK,
   COPY_EXACTLY,
@@ -8181,7 +8181,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // extension. Switching a block on or off chooses which of its parts go to
     // the model; it does not rewrite a word of what they say, which is what
     // cannot be written over. Locking it with the rest made the parts that come
-    // switched off unreachable: What Has Happened is one of them, so anybody
+    // switched off unreachable: Memories is one of them, so anybody
     // wanting their memories in the prompt had to save a copy under a name of
     // their own before they could turn it on, for a switch that was right there.
     //

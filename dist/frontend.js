@@ -694,10 +694,10 @@ const SCENE_BLOCKS = [
     },
     {
         id: "persona",
-        name: "The User's Characters",
+        name: "User Characters",
         on: true,
         role: "system",
-        text: "<the_users_characters>\n{{persona}}\n</the_users_characters>",
+        text: "<user_characters>\n{{persona}}\n</user_characters>",
     },
     {
         id: "lore",
@@ -723,10 +723,10 @@ const SCENE_BLOCKS = [
 // memory settings are; a reader who never opens this card is not paying for it.
 const MEMORY_BLOCK = {
     id: "memory",
-    name: "What Has Happened",
+    name: "Memories",
     on: false,
     role: "system",
-    text: "<what_has_happened>\n{{memories}}\n</what_has_happened>",
+    text: "<memories>\n{{memories}}\n</memories>",
 };
 // The phrases this chat keeps reaching for. On in every built-in prompt, and that
 // costs nothing: the macro is empty until Find phrases this chat has worn out is
@@ -739,10 +739,10 @@ const MEMORY_BLOCK = {
 // somebody put on a list.
 const WORN_BLOCK = {
     id: "worn",
-    name: "Already Worn Out in This Chat",
+    name: "Worn Out",
     on: true,
     role: "system",
-    text: "<already_worn_out_in_this_chat>\n{{overused}}\n</already_worn_out_in_this_chat>",
+    text: "<worn_out>\n{{overused}}\n</worn_out>",
 };
 // What Jev found in the reply, with two models on. Off in both built-in prompts
 // for replies, and in neither prompt for your own messages, since Jev never
@@ -764,12 +764,12 @@ const JEV_FOUND_BLOCK = {
 // directly above the passage, which is where the thing it describes sits.
 const AROUND_BLOCK = {
     id: "around",
-    name: "The Reply Around It",
+    name: "Reply Around It",
     on: true,
     role: "system",
-    text: "<the_reply_around_it>\n" +
+    text: "<reply_around_it>\n" +
         "{{whole_reply}}\n" +
-        "</the_reply_around_it>",
+        "</reply_around_it>",
 };
 // The pages before this one. Redrawn every single turn, so it goes as late as it
 // can and still be read as setting.
@@ -782,10 +782,10 @@ const RECENT_BLOCK = {
 };
 const TURN_BLOCK = {
     id: "turn",
-    name: "Passage to Refine",
+    name: "Passage",
     on: true,
     role: "user",
-    text: "<passage_to_refine>\n{{message}}\n</passage_to_refine>",
+    text: "<passage>\n{{message}}\n</passage>",
 };
 // The shape of the answer, drawn out as a template. A model matching a shape it
 // can see keeps to it far more reliably than one working from a sentence about
@@ -940,10 +940,10 @@ const FILLER = "suddenly, slowly, slightly, just, really, very, almost, somehow,
     "practically, simply, merely, truly, utterly";
 const COPY_EXACTLY = {
     id: "hands_off",
-    name: "Copy These Exactly",
+    name: "Copy Exactly",
     on: true,
     role: "system",
-    text: "<copy_these_exactly>\n" +
+    text: "<copy_exactly>\n" +
         "Some of what you are given is not prose, and none of it is yours to " +
         "improve. Each of these comes through character for character, in the " +
         "place it already sits:\n\n" +
@@ -960,7 +960,7 @@ const COPY_EXACTLY = {
         "- numbers, dates, times and measurements\n\n" +
         "Where you are unsure whether something is prose, treat it as one of these " +
         "and leave it where it is.\n" +
-        "</copy_these_exactly>",
+        "</copy_exactly>",
 };
 const JOB_BLOCK = {
     id: "job",
@@ -1194,10 +1194,10 @@ const PLAIN_LONG = [
     },
     {
         id: "bodies",
-        name: "Bodies and Feeling",
+        name: "Body Language",
         on: true,
         role: "system",
-        text: "<bodies_and_feeling>\n" +
+        text: "<body_language>\n" +
             "Give hands, eyes and breath an owner. Their hand found another's " +
             "becomes they took that person's hand. Their eyes traced another's face " +
             "becomes they looked at that person.\n\n" +
@@ -1208,7 +1208,7 @@ const PLAIN_LONG = [
             "reader skims a list.\n\n" +
             "A heartbeat, a shiver or a held breath standing in for an emotion is the " +
             "emotion left unwritten. Write what the person does.\n" +
-            "</bodies_and_feeling>",
+            "</body_language>",
     },
     CAST_BLOCK,
     {
@@ -1346,10 +1346,10 @@ const YOURS_JOB = {
 };
 const YOURS_HAND = {
     id: "voice",
-    name: "The Way They Write",
+    name: "Their Voice",
     on: true,
     role: "system",
-    text: "<the_way_they_write>\n" +
+    text: "<their_voice>\n" +
         "This is the user writing, not a narrator, and the two do not sound the " +
         "same. Keep the way they write.\n\n" +
         "Short plain lines stay short and plain. Lower case stays lower case. " +
@@ -1358,7 +1358,7 @@ const YOURS_HAND = {
         "somebody else's.\n\n" +
         "Their length is their choice: a one line passage stays a one line " +
         "passage.\n" +
-        "</the_way_they_write>",
+        "</their_voice>",
 };
 // The same list, gone through properly. Every entry is still a repair rather
 // than an improvement: the long version is longer about what counts as one.
@@ -1535,10 +1535,10 @@ const THINKS_LONG = [
     RESTRAINT,
     {
         id: "check",
-        name: "Before You Answer",
+        name: "Final Check",
         on: true,
         role: "system",
-        text: "<before_you_answer>\n" +
+        text: "<final_check>\n" +
             "Read your rewrite against the original once more and answer three " +
             "questions.\n\n" +
             "Did anything happen in yours that did not happen in theirs? Take it " +
@@ -1547,7 +1547,7 @@ const THINKS_LONG = [
             "scene? Put it back.\n\n" +
             "Is yours longer? Find what you added and decide whether it earns the " +
             "room. It usually does not.\n" +
-            "</before_you_answer>",
+            "</final_check>",
     },
     SCORE_BLOCK,
     COPY_EXACTLY,
@@ -7977,7 +7977,7 @@ export function setup(ctx, overrides) {
         // extension. Switching a block on or off chooses which of its parts go to
         // the model; it does not rewrite a word of what they say, which is what
         // cannot be written over. Locking it with the rest made the parts that come
-        // switched off unreachable: What Has Happened is one of them, so anybody
+        // switched off unreachable: Memories is one of them, so anybody
         // wanting their memories in the prompt had to save a copy under a name of
         // their own before they could turn it on, for a switch that was right there.
         //

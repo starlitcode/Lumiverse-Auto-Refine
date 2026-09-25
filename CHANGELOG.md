@@ -20,13 +20,14 @@ _2026-09-25_
 ### Changed
 
 - **The Prompt tab tells you the built-in prompts have changed.** Your own prompt is not touched. To get the new blocks, load a built-in prompt again.
+- **Shorter tags and block names in the built-in prompts.** Each block is still named after the tag it holds. Already Worn Out in This Chat is now **Worn Out**, The User's Characters is **User Characters**, The Reply Around It is **Reply Around It**, The Way They Write is **Their Voice**, Copy These Exactly is **Copy Exactly**, Bodies and Feeling is **Body Language**, Before You Answer is **Final Check**, What Has Happened is **Memories**, and Passage to Refine is **Passage**. What each one says is the same.
 - **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit took out tags such as "she asked" before, which could leave nothing to say who spoke.
 
 ### Fixed
 
 - **A group chat labelled every reply in the run-up with the chat's first character.** Each reply is now labelled with the character who wrote it. The card sent with a reply is also the card of the character who wrote it, not always the chat's first one.
 - **A refine you start was said twice in the Log.** It wrote "refined a reply in" and "refined a reply on request in" for the same reply, and could show two toasts. It now says it once.
-- **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Already Worn Out in This Chat** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
+- **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Worn Out** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
 - **Show me the request showed the wrong prompt with several passes on.** It built the prompt on the Prompt tab, which a refine with several passes never sends. It now shows the first pass as it would go out, and names every pass in order.
 - **Show me the request left out What Jev Found without saying so.** A preview never asks Jev, so the block was empty and left out, and the request looked as if the findings were never sent. The card now says the block is left out here, in the plain view and in **Raw**, and that the Log says when a real refine sent it. The README and the docs no longer call the preview exactly what is sent. See [Seeing what gets sent](docs/prompt.md#seeing-what-gets-sent).
 
