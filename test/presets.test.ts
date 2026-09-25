@@ -200,8 +200,8 @@ describe("the prompts that come with it", () => {
     const mine = forMine().map((p: any) => p.label);
     const replies = forReplies().map((p: any) => p.label);
     for (const one of mine) expect(replies).not.toContain(one);
-    expect(mine.every((l: string) => /^The line judge/.test(l))).toBe(true);
-    expect(replies.every((l: string) => /^The judge/.test(l))).toBe(true);
+    expect(mine.every((l: string) => /^A line judge/.test(l))).toBe(true);
+    expect(replies.every((l: string) => /^A judge/.test(l))).toBe(true);
   });
 
   // A prompt for your own turn loaded over the prompt for replies would be the
@@ -214,8 +214,8 @@ describe("the prompts that come with it", () => {
   // hands the model: a line edit on a reply, a copy edit on your own turn. The
   // only thing separating them is which model they were written for.
   test("each set is named for the job it does", () => {
-    for (const [set, job] of [[forReplies(), "The judge"], [forMine(), "The line judge"]] as any) {
-      const stems = set.map((p: any) => p.label.split(",")[0].trim());
+    for (const [set, job] of [[forReplies(), "A judge"], [forMine(), "A line judge"]] as any) {
+      const stems = set.map((p: any) => p.label.replace(/ that thinks$/, "").trim());
       expect(stems.filter((n: string) => n === job).length).toBe(2);
     }
   });
@@ -225,7 +225,7 @@ describe("the prompts that come with it", () => {
   test("the ones that need a reasoning model say so in their name", () => {
     for (const p of BUILT_IN_PROMPTS) {
       const needs = p.thinking !== "off";
-      expect({ name: p.name, said: /model that thinks/i.test(p.name) })
+      expect({ name: p.name, said: /that thinks/i.test(p.name) })
         .toEqual({ name: p.name, said: needs });
     }
   });
@@ -235,8 +235,8 @@ describe("the prompts that come with it", () => {
   // so, and this is what holds that claim to the text.
   test("the one for a reasoning model is the smaller of its pair", () => {
     const pairs = [
-      ["The judge, for a model that thinks", "The judge"],
-      ["The line judge, for a model that thinks", "The line judge"],
+      ["A judge that thinks", "A judge"],
+      ["A line judge that thinks", "A line judge"],
     ];
     for (const [small, big] of pairs)
       expect(sizeOf(named(small))).toBeLessThan(sizeOf(named(big)));

@@ -173,14 +173,14 @@ Then give the rewrite between <REFINED> and </REFINED>.
 
 ## The prompts built in
 
-There are four: the judge for replies and the line judge for your own messages, each in two versions. Pick the version by whether your model reasons.
+There are four: a judge for replies and a line judge for your own messages, each in two versions. Pick the version by whether your model reasons.
 
 ### For replies
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The judge** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard for all of them. The one to start with. | no |
-| **The judge, for a model that thinks** | The same role, then The Bar to clear, five Hot Spots, the writer's Voice, Roll Call, and Review the Tape for its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
+| **A judge** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard for all of them. The one to start with. | no |
+| **A judge that thinks** | The same role, then The Bar to clear, five Hot Spots, the writer's Voice, Roll Call, and Review the Tape for its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name exact phrases, because "cut clichés" gives a model nothing to act on. They name the ones that appear often in machine-written roleplay: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, and an emotion given as a mix of two others.
@@ -195,8 +195,8 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **The line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
-| **The line judge, for a model that thinks** | The same role, then The Call for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
+| **A line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
+| **A line judge that thinks** | The same role, then The Call for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - Each ends by saying that when a slip cannot be told from a choice, it is a choice. So a plain "she left" stays as it is.
 - Their **Roll Call** block keeps every line with its speaker when you write more than one character. It adds no line for any character.

@@ -660,7 +660,7 @@ const TURN_MACRO = "{{message}}";
 // prompt that does not ask for it has nothing to show while it writes.
 const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // ---- the prompts that come with it ----
-// One question, four answers. The judge for a reply and the line judge for what
+// One question, four answers. A judge for a reply and a line judge for what
 // you wrote yourself, and on each of those two sides one for a model that
 // reasons and one for a model that does not. The question is which model you
 // are running, and nothing else.
@@ -1576,32 +1576,32 @@ const YOURS_THINKS_LONG = [
 const DEFAULT_BLOCKS = PLAIN_LONG;
 const BUILT_IN_PROMPTS = [
     {
-        name: "The judge",
-        label: "The judge",
+        name: "A judge",
+        label: "A judge",
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
         what: "Start here. It judges the reply one rule at a time: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish. It scores each against a line it quotes and changes only what scores under 85. Works with one character or several. Runs on any model.",
     },
     {
-        name: "The judge, for a model that thinks",
-        label: "The judge, for a model that thinks",
+        name: "A judge that thinks",
+        label: "A judge that thinks",
         mine: false,
         blocks: THINKS_LONG,
         thinking: "inherit",
         what: "The same job, given as a bar to clear. It checks five hot spots and the roll call, keeps the voice the reply was written in, and reviews its own rewrite before handing it in. Needs a model that reasons.",
     },
     {
-        name: "The line judge",
-        label: "The line judge",
+        name: "A line judge",
+        label: "A line judge",
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
         what: "Start here. A line judge for your own writing: slips, missing words, punctuation that came out wrong, and then it stops. It scores each against a line it quotes and fixes only what scores low. Your wording, your sentences and your plain lines come back as they went in, for every character you write. Runs on any model.",
     },
     {
-        name: "The line judge, for a model that thinks",
-        label: "The line judge, for a model that thinks",
+        name: "A line judge that thinks",
+        label: "A line judge that thinks",
         mine: true,
         blocks: YOURS_THINKS_LONG,
         thinking: "inherit",
@@ -1609,14 +1609,18 @@ const BUILT_IN_PROMPTS = [
     },
 ];
 const BUILT_IN = BUILT_IN_PROMPTS.map((p) => p.name);
-// The names the four went by before they were named for the scorecard. A pick
+// The names the four have gone by before. A pick
 // or a pass saved under one of these is carried to the name it has now, so
 // nobody finds their picker empty or a pass skipped after updating.
 const OLD_BUILT_IN_NAMES = {
-    "the line edit": "The judge",
-    "the line edit, for a model that thinks": "The judge, for a model that thinks",
-    "the copy edit": "The line judge",
-    "the copy edit, for a model that thinks": "The line judge, for a model that thinks",
+    "the line edit": "A judge",
+    "the line edit, for a model that thinks": "A judge that thinks",
+    "the copy edit": "A line judge",
+    "the copy edit, for a model that thinks": "A line judge that thinks",
+    "the judge": "A judge",
+    "the judge, for a model that thinks": "A judge that thinks",
+    "the line judge": "A line judge",
+    "the line judge, for a model that thinks": "A line judge that thinks",
 };
 // The lines of a box, trimmed, with the empty ones dropped.
 const linesOf = (text) => String(text == null ? "" : text)

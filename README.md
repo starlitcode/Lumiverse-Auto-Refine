@@ -100,9 +100,9 @@ The whole request is a list of blocks you can edit, reorder, switch off or add t
 
 Four prompts come with it:
 
-- **The judge**, for replies. It improves how a reply reads and leaves what happens alone.
-- **The line judge**, for your own messages. It fixes mistakes and leaves your style alone.
-- Each has a smaller version **for a model that thinks**.
+- **A judge**, for replies. It improves how a reply reads and leaves what happens alone.
+- **A line judge**, for your own messages. It fixes mistakes and leaves your style alone.
+- Each has a smaller version **that thinks**, for a model that reasons.
 
 All four score the passage before they change it. A score has to rest on a line the model could quote, and only low scores lead to a change. The two for a model that thinks write the scores down, and the two plain ones score silently. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
 
