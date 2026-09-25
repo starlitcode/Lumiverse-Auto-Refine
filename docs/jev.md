@@ -103,13 +103,20 @@ If you make a mistake in **What Jev checks**, press **Use the built-in checks** 
 
 Always on the automatic pass.
 
-A refine you start yourself, with **Refine the latest reply** or the button on a message, goes straight to the refine model by default. Pressing it is you deciding the reply needs one, so Jev is not asked and nothing is sent to it.
+A refine you start yourself goes straight to the refine model by default. That covers:
 
-**Let Jev check refines you start yourself** changes that. On, Jev reads the reply first, the same as on the automatic pass:
+- **Refine the latest reply**.
+- The button on a message.
+- **Refine every reply here**.
+
+Pressing one is you deciding the replies need a refine, so Jev is not asked and nothing is sent to it.
+
+**Let Jev check refines you start yourself** changes that. On, Jev reads each reply first, the same as on the automatic pass:
 
 - If a check reaches your line, the reply is refined.
 - If none does, the reply is left alone, and the Log and the **What Jev decided** card say so.
-- Each press costs one Jev call as well as the refine.
+- With **Refine every reply here**, Jev reads the replies one at a time, and only the ones it picks out are refined.
+- Each reply Jev reads costs one Jev call, as well as the refine when there is one.
 
 Two things are never sent to Jev, whichever way the switch is set:
 

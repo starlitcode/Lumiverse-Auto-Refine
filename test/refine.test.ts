@@ -919,6 +919,39 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls.length).toBe(0);
   });
 
+  // Refine every reply here is a refine you start yourself, one reply at a
+  // time, so it follows the same switch as the button on a message.
+  const twoReplies = (): Msg[] => [
+    ...chat(),
+    { id: "m3", role: "user", content: "i keep going" },
+    { id: "m4", role: "assistant", content: "The road bent, and, suddenly, the trees just closed over it." },
+  ];
+
+  test("refining every reply goes straight to the refine model with the switch off", async () => {
+    const h = await keyed({}, { jev: says([80]) }, twoReplies());
+    await h.front({ type: "refine_all", requestId: "a", chatId: "c1" });
+    await wait(150);
+    expect(h.jevCalls.length).toBe(0);
+    expect(h.asked.length).toBe(2);
+  });
+
+  test("with the switch on, Jev reads each reply first, and one per reply", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([80]) }, twoReplies());
+    await h.front({ type: "refine_all", requestId: "a", chatId: "c1" });
+    await wait(150);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.asked.length).toBe(2);
+  });
+
+  test("and the replies Jev finds nothing wrong with are left alone", async () => {
+    const h = await keyed({ judgeByHand: true }, { jev: says([10]) }, twoReplies());
+    await h.front({ type: "refine_all", requestId: "a", chatId: "c1" });
+    await wait(150);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe(REPLY);
+  });
+
   test("with one model Jev is never asked", async () => {
     const h = await keyed({ judgeMode: "one" }, { jev: says([0]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });

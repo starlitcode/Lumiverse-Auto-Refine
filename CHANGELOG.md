@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.17.1
+
+_2026-09-25_
+
+### Fixed
+
+- **The Jev switch did not say it covers Refine every reply here.** **Let Jev check refines you start yourself** has always covered it, but the hint and the docs named only **Refine the latest reply** and the button on a message. Both now say so. With the switch on, Jev reads the replies one at a time, and only the ones it picks out are refined. See [When Jev is asked](docs/jev.md#when-jev-is-asked).
+
+---
+
 ## 1.17.0
 
 _2026-09-24_

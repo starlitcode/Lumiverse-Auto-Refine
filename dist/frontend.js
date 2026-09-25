@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.17.0";
+const VERSION = "1.17.1";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -1815,7 +1815,7 @@ const JUDGE_FIELDS = [
         label: "Let Jev check refines you start yourself",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Off by default, so a refine button goes straight to the refine model. On, Jev reads the reply first and may leave it alone. A selection is never sent to Jev.",
+        hint: "Off by default, so a refine you start, on one reply or on every reply, goes straight to the refine model. On, Jev reads each reply first and may leave it alone. A selection is never sent to Jev.",
     },
 ];
 // Every field that another can hang off, by key, so a row can ask whether the
