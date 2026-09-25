@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.19.0';
+const VERSION = '1.19.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -894,6 +894,17 @@ function splitThinking(text) {
                 head = src.slice(0, end) + /^\s*/.exec(src.slice(end))[0];
             }
         }
+    }
+    // Working that never finished. The message opens on a thinking tag and
+    // nothing closes it, because the model ran out of room or was stopped while
+    // it was still thinking. All of it is working, so all of it is held back and
+    // there is no reply left to rewrite.
+    if (!head && protectThinking) {
+        const alt = thinkNames().join('|');
+        const opener = new RegExp('^\\s*(?:<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\])', 'i');
+        const closer = new RegExp('<\\|?\\/(?:' + alt + ')\\s*\\|?>|\\[\\/(?:' + alt + ')\\s*\\]', 'i');
+        if (opener.test(src) && !closer.test(src))
+            head = src;
     }
     // No working in front of the reply, but the markers that open the turn and
     // introduce the answer are still not prose and still must not be rewritten.
@@ -2945,6 +2956,21 @@ function latestReply(msgs, greetingId) {
     }
     return null;
 }
+// The id of the latest reply in a chat, or nothing when the chat cannot be
+// read or has no reply. Nothing is passed on as it is, and refineMessage then
+// says why there was nothing to refine.
+async function latestReplyId(chatId) {
+    try {
+        const msgs = await spindle.chat.getMessages(chatId);
+        if (!Array.isArray(msgs))
+            return null;
+        const m = latestReply(msgs, greetingIdOf(msgs));
+        return m ? m.id : null;
+    }
+    catch (_) {
+        return null;
+    }
+}
 async function refineMessage(chatId, messageId, userId, byHand, 
 // Set when a refine was asked for on part of a reply rather than the whole of
 // it. text is what the selection read as on screen, ordinal says how many
@@ -3464,10 +3490,13 @@ pick) {
         ? split.head + split.body.slice(0, pickAt.start) + back.text + split.body.slice(pickAt.end)
         : split.head + back.text) + split.tail;
     if (confirmBeforeSave) {
+        // The id of the reply that was refined, which is the one the yes has to
+        // find. A refine of the latest reply arrives with no id and the reply is
+        // found here, so the id that came in can be empty.
         replyTo(userId, {
             type: 'confirm_refine',
             chatId: chatId,
-            messageId: messageId,
+            messageId: m.id,
             before: original,
             after: whole,
             notes: notes,
@@ -4524,12 +4553,18 @@ async function onPanel(payload, userId) {
         // Refine one message on request, which is the path both buttons use.
         if (payload.type === 'refine_now') {
             replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
-            const done = await refineMessage(payload.chatId, payload.messageId, userId, true);
+            // The latest reply is named here when the panel sent no id, so the
+            // result carries the same id as every other message about this refine.
+            // The panel matches them by id, and an empty one matches nothing.
+            const id = payload.messageId == null || payload.messageId === ''
+                ? await latestReplyId(payload.chatId)
+                : payload.messageId;
+            const done = await refineMessage(payload.chatId, id, userId, true);
             replyTo(userId, {
                 type: 'refine_result',
                 requestId: payload.requestId,
                 chatId: payload.chatId,
-                messageId: payload.messageId,
+                messageId: id,
                 ok: done.ok,
                 why: done.why,
                 same: !!done.same,

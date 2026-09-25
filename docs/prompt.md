@@ -323,6 +323,13 @@ Some things cannot be found by pattern, such as a stat block or a translation li
 
 **Keep the reply's own reasoning out of the refine** is also on by default. A reasoning model's working is taken off before the refine and put back afterwards, unchanged.
 
+**A reply that is only reasoning is not refined.** This covers two cases:
+
+- The reasoning closes and nothing follows it.
+- The reasoning opens with a tag and never closes, because the model ran out of room or was stopped while it was still thinking.
+
+In both, there is no reply to rewrite, so the refine stops and says why in the Log.
+
 Three forms are recognised by tag name:
 
 | Form | Example |
