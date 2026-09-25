@@ -20,9 +20,10 @@ _2026-09-25_
 
 ### Fixed
 
+- **A refine you start was said twice in the Log.** It wrote "refined a reply in" and "refined a reply on request in" for the same reply, and could show two toasts. It now says it once.
 - **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Already Worn Out in This Chat** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
 - **Show me the request showed the wrong prompt with several passes on.** It built the prompt on the Prompt tab, which a refine with several passes never sends. It now shows the first pass as it would go out, and names every pass in order.
-- **Show me the request left out What Jev Found without saying so.** A preview never asks Jev, so the block was empty and left out, and the request looked as if the findings were never sent. The card now says the block is left out here, and that the Log says when a real refine sent it. See [Seeing what gets sent](docs/prompt.md#seeing-what-gets-sent).
+- **Show me the request left out What Jev Found without saying so.** A preview never asks Jev, so the block was empty and left out, and the request looked as if the findings were never sent. The card now says the block is left out here, in the plain view and in **Raw**, and that the Log says when a real refine sent it. The README and the docs no longer call the preview exactly what is sent. See [Seeing what gets sent](docs/prompt.md#seeing-what-gets-sent).
 
 ---
 

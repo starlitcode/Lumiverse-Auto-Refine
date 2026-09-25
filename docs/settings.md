@@ -50,7 +50,7 @@ The greeting is never refined. Your own messages are only refined when you press
 ## Context
 
 - **How much it is told** sets how many messages of chat history are sent, whether each line names who said it, and the size limits for history and lorebook. See [How much it is told](prompt.md#how-much-it-is-told).
-- **See what gets sent** builds the real request and shows it, without calling a model. **Raw** shows it as the JSON that is sent. **Expand** opens it full screen.
+- **See what gets sent** builds the request a refine would send and shows it, without calling a model. What Jev found and the passes after the first are named rather than shown. **Raw** shows it as the JSON that is sent. **Expand** opens it full screen.
 
 ## Model
 

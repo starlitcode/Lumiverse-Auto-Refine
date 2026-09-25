@@ -370,7 +370,7 @@ On the **Model** tab, **Let it think first** has three choices:
 
 - **The line at the top** gives the whole request in tokens, with the character count. If the tokeniser cannot answer, it says **roughly**.
 - **Where the tokens go** lists each block, largest first, with its share. This shows you when history or lorebook takes most of every request.
-- It is built by the same code a real refine uses, so it is exactly what the model gets. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
+- It is built by the same code a real refine uses, so it is what the model gets, apart from the two things below. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
 - Below the messages, it also shows the connection, thinking and samplers the call would use.
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
 - The worn-out phrases are worked out the same way a refine works them out, so **Already Worn Out in This Chat** shows what a refine would send.

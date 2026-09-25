@@ -3268,6 +3268,9 @@ export function setup(ctx, overrides) {
     // Jev spared a refine. That count is how somebody tells whether two models
     // are saving them anything.
     const jevTally = { read: 0, spared: 0, failed: 0, cost: 0, rechecked: 0, again: 0 };
+    // The last refine the Log and the toast have already said was saved, so the
+    // answer to the button that asked for it does not say it a second time.
+    let announced = null;
     // The whole answer, when the message carries one. Every ending sends it, and
     // it is the better copy of what the stream was showing a trimmed tail of.
     //
@@ -8113,9 +8116,11 @@ export function setup(ctx, overrides) {
         wrap.appendChild(note("Counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not."));
         return wrap;
     }
-    // The request itself, exactly as it goes out. Built by the backend with the
-    // same function a real refine uses, so this cannot become a nice description
-    // of something the extension does not actually send.
+    // The request a refine would send. Built by the backend with the same
+    // function a real refine uses, so this cannot become a nice description of
+    // something the extension does not actually send. What only a real refine
+    // can fill in, Jev's findings and the passes after the first, is named on
+    // the card rather than shown.
     function buildPreviewCard() {
         const wrap = card("See what gets sent", "Builds the request for the reply you are looking at and shows it, message by message, without calling a model. Nothing is sent and nothing is charged.");
         const row = el("div", "arf-row");
@@ -8197,6 +8202,30 @@ export function setup(ctx, overrides) {
             line.setAttribute("data-arf-preview", "which");
             wrap.appendChild(line);
         }
+        // Said above the request in both views, the raw one included, since each
+        // names something the request below does not hold.
+        //
+        // With several passes, what is shown is the first pass. The rest are named,
+        // since each is sent the rewrite the pass before it wrote, and that does
+        // not exist until a refine runs.
+        const passNames = Array.isArray(preview.passes) ? preview.passes.map((x) => String(x)) : [];
+        if (passNames.length) {
+            const passLine = note(passNames.length === 1
+                ? "Several passes are on, with one pass: " + passNames[0] + ". This is its request, not the prompt on the Prompt tab."
+                : "Several passes are on, so this is pass 1 of " + passNames.length + ", " + passNames[0] +
+                    ". Each pass after it is sent the rewrite the pass before it wrote, so it cannot be shown until a refine runs. In order: " +
+                    passNames.join(", ") + ".");
+            passLine.setAttribute("data-arf-preview", "passes");
+            wrap.appendChild(passLine);
+        }
+        // The preview never asks Jev, so a block holding {{jev_found}} is empty
+        // here and left out. Without this line the card would show a request with
+        // no findings in it and call that what gets sent.
+        if (preview.jevFoundLeftOut) {
+            const left = note("What Jev found is left out here. It is filled in only when Jev reads the reply during a refine, and a preview does not ask Jev. The Log says when it was sent.");
+            left.setAttribute("data-arf-preview", "jevfound");
+            wrap.appendChild(left);
+        }
         const msgs = Array.isArray(preview.messages) ? preview.messages : [];
         let chars = 0;
         for (const m of msgs)
@@ -8225,33 +8254,12 @@ export function setup(ctx, overrides) {
             chars.toLocaleString() +
             " characters";
         if (previewRaw) {
-            wrap.appendChild(note(size + ". This is the request as it goes out."));
+            wrap.appendChild(note(size + ". This is the request as a refine of this reply would send it, apart from anything named above."));
             wrap.appendChild(el("div", "arf-well arf-scroll arf-mono arf-tall", previewAsRaw(preview)));
             return wrap;
         }
         wrap.appendChild(note(size +
             (preview.real ? "" : ", with a stand-in where your reply would go, since no reply was found on screen")));
-        // With several passes, what is shown is the first pass. The rest are named,
-        // since each is sent the rewrite the pass before it wrote, and that does
-        // not exist until a refine runs.
-        const passNames = Array.isArray(preview.passes) ? preview.passes.map((x) => String(x)) : [];
-        if (passNames.length) {
-            const passLine = note(passNames.length === 1
-                ? "Several passes are on, with one pass: " + passNames[0] + ". This is its request, not the prompt on the Prompt tab."
-                : "Several passes are on, so this is pass 1 of " + passNames.length + ", " + passNames[0] +
-                    ". Each pass after it is sent the rewrite the pass before it wrote, so it cannot be shown until a refine runs. In order: " +
-                    passNames.join(", ") + ".");
-            passLine.setAttribute("data-arf-preview", "passes");
-            wrap.appendChild(passLine);
-        }
-        // The preview never asks Jev, so a block holding {{jev_found}} is empty
-        // here and left out. Without this line the card would show a request with
-        // no findings in it and call that what gets sent.
-        if (preview.jevFoundLeftOut) {
-            const left = note("What Jev found is left out here. It is filled in only when Jev reads the reply during a refine, and a preview does not ask Jev. The Log says when it was sent.");
-            left.setAttribute("data-arf-preview", "jevfound");
-            wrap.appendChild(left);
-        }
         // What this one would cost, before it is spent. What comes back cannot be
         // known until it arrives, so it is taken as the same size as the passage:
         // a rewrite is the passage said better, and the length limits are what keep
@@ -13659,6 +13667,7 @@ export function setup(ctx, overrides) {
                     if (msg.type === "refined") {
                         const wasSnip = msg.kind === "snip";
                         if (!wasSnip) {
+                            announced = { key: String(msg.chatId) + ":" + String(msg.messageId), at: Date.now() };
                             markBusy(false);
                             keepNotes({ chatId: msg.chatId, messageId: msg.messageId, ok: true });
                             tally.saved++;
@@ -13861,8 +13870,18 @@ export function setup(ctx, overrides) {
                         });
                         if (msg.ok) {
                             lastRun = { ms: lastRunMs, ok: true, why: "" };
-                            log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
-                            toast("Reply refined.", true);
+                            // A saved refine is said once. The save itself already wrote the
+                            // Log line for this reply a moment ago, and the toast too when
+                            // toasts are on. A refine asked for by hand is always answered
+                            // with a toast, so that one is still given with toasts off. All
+                            // of it is still said when the save was not heard.
+                            const key = String(msg.chatId) + ":" + String(msg.messageId);
+                            if (!(announced && announced.key === key && Date.now() - announced.at < 10000)) {
+                                log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+                                toast("Reply refined.", true);
+                            }
+                            else if (!cfg.toast)
+                                toast("Reply refined.", true);
                         }
                         else {
                             const why = String(msg.why || "no reason given");

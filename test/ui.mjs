@@ -1891,6 +1891,30 @@ console.log("\none model or two");
 // ---- what Jev decided ----
 // The card on the Log tab that lays out Jev's last decision: one bar per check,
 // the ones that reached the line marked, and which Jev answered.
+console.log("\na refine you start is logged once");
+{
+  // A refine asked for by hand is answered twice: once as the save, once as the
+  // answer to the button. The Log says it once.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    await goTab(page, "Log");
+    // Read by wording rather than counted: the Log tab shows each line twice,
+    // once in the Log and once in the report below it.
+    const text = () => page.evaluate(() => document.querySelector("#drawer").textContent);
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", before: "The old line.", after: "The new line." });
+      window.__fromBackend({ type: "refine_result", chatId: "c1", messageId: "m2", ok: true });
+    });
+    await closed(page);
+    const once = await text();
+    ok("a saved refine asked for by hand is said once, as the save",
+      /refined a reply in/.test(once) && !/refined a reply on request/.test(once));
+    // An answer with no save heard before it still says so.
+    await page.evaluate(() => window.__fromBackend({ type: "refine_result", chatId: "c1", messageId: "m9", ok: true }));
+    await closed(page);
+    ok("an answer with no save before it is still logged", /refined a reply on request/.test(await text()));
+  });
+}
+
 console.log("\nwhat Jev found has somewhere to go");
 {
   // The line about What Jev Found is for somebody whose prompt has nowhere to
@@ -4803,6 +4827,7 @@ console.log("\nthe raw view");
         parameters: { temperature: 0.4 },
         connectionId: "c-fast",
         reasoning: { source: "off" },
+        jevFoundLeftOut: true,
       });
     });
     await settle(page);
@@ -4811,6 +4836,11 @@ console.log("\nthe raw view");
     const raw = await page.evaluate(() => document.querySelector("#drawer .arf-body").textContent);
     ok("raw shows the request as data", /"messages"/.test(raw) && /"temperature": 0.4/.test(raw));
     ok("with the connection it goes to", /c-fast/.test(raw));
+    // What the request below does not hold is said in the raw view too, not
+    // only in the one it was first written for.
+    ok("and says What Jev Found is left out, in the raw view as well",
+      !!(await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="jevfound"]'))));
+    ok("without calling it the request exactly as it goes out", !/as it goes out\./.test(raw) && /apart from anything named above/.test(raw));
   });
 }
 

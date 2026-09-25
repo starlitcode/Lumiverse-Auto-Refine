@@ -17,12 +17,12 @@ The refine call carries the blocks you see under **How the prompt is built**, an
 - any block you wrote yourself
 - the fixed instruction that makes it an edit, not a new turn
 
-The panel shows exactly what is sent:
+The panel shows what is sent:
 
 - A block that is switched off is not sent.
 - **Messages of run-up to send** set to 0 sends no chat history.
 - Switching off the **Your Characters** block sends no card.
-- **Show me the request**, on the Context tab, builds the real request and shows it to you without sending it anywhere.
+- **Show me the request**, on the Context tab, builds the request a refine would send and shows it to you without sending it anywhere. What Jev found is not in it, since a preview does not ask Jev. The Log says when a refine sent it.
 
 Two things are taken out of a message before it is sent:
 

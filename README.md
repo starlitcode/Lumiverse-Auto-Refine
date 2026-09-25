@@ -104,7 +104,7 @@ Four prompts come with it:
 - **The copy edit**, for your own messages. It fixes mistakes and leaves your style alone.
 - Each has a smaller version **for a model that thinks**.
 
-**Show me the request**, on the Context tab, shows exactly what would be sent, without calling a model or costing anything.
+**Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what Jev found, and the passes after the first.
 
 ## Documentation
 
