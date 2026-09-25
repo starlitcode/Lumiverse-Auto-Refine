@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -319,7 +319,7 @@ const OVERUSED_MACRO = '{{overused}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused'];
+const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused', 'jev_found'];
 
 interface Scene {
   character: string;
@@ -339,6 +339,11 @@ interface Scene {
   // asked for on a selection rather than on the message. Empty on every other
   // refine, which leaves the block carrying it out of the prompt entirely.
   wholeReply?: string;
+  // What Jev found in the reply: the checks that reached the line, strongest
+  // first, with a lead-in saying what they are. Set only when Jev read the
+  // reply and picked it out, so on every other refine the block holding it is
+  // left out.
+  jevFound?: string;
 }
 const NO_SCENE: Scene = { character: '', context: '', lore: '', memory: '', name: '' };
 
@@ -995,6 +1000,7 @@ function fillOurs(
     shieldNote?: string;
     wholeReply?: string;
     worn?: string;
+    jevFound?: string;
   },
 ): string {
   return String(text).replace(/\u0000ARF:([a-z_]+)\u0000/g, (whole, name) => {
@@ -1007,6 +1013,7 @@ function fillOurs(
     if (id === 'protect_notes') return p.shieldNote || '';
     if (id === 'whole_reply') return p.wholeReply || '';
     if (id === 'overused') return p.worn || '';
+    if (id === 'jev_found') return p.jevFound || '';
     return '';
   });
 }
@@ -1414,6 +1421,7 @@ async function buildPrompt(
     shieldNote: scene.shieldNote,
     wholeReply: scene.wholeReply,
     worn: scene.worn,
+    jevFound: scene.jevFound,
   };
   const out: any[] = [];
   for (const b of use && use.length ? use : activeBlocks(isUser)) {
@@ -3192,9 +3200,11 @@ async function refineMessage(
   // asked for that, since pressing it is already a decision the reply needs
   // one. Never on a selection, which is part of a reply and not what the checks
   // are about, and never on the reader's own message, which is not a reply.
-  if (judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick) {
+  const jevReads = judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick;
+  const jevWorn = jevReads && judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
+  if (jevReads) {
     tell(userId, { type: 'refine_progress', stage: 'judging' });
-    const worn = judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
+    const worn = jevWorn;
     // Held like a call to the refine model, so Stop reaches it. The request to
     // Jev cannot be pulled back once sent, so Stop is honoured when it answers.
     let stopped = false;
@@ -3227,6 +3237,9 @@ async function refineMessage(
         why: 'Jev found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
       };
     }
+    // Handed on for {{jev_found}}. Empty when Jev could not decide, since then
+    // there is nothing it found.
+    if (!verdict.failed) scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver) };
   }
   let pickAt: { start: number; end: number } | null = null;
   if (pick && String(pick.text || '').trim()) {
@@ -3297,7 +3310,12 @@ async function refineMessage(
   // What the next pass is handed. The shield is applied once, before any of
   // them, so the tokens standing in for markup are the same throughout and the
   // instruction about them stays true for every pass.
-  let carried = armed.text;
+  // Every pass in order over start, then the end of the chain judged against
+  // the reply it began from. Returns the rewrite, or the refusal to hand back
+  // as the refine's answer. Run once, and once more when Jev reads the rewrite
+  // and a check still reaches the line.
+  async function runChain(start: string): Promise<{ ok: true; text: string } | { ok: false; out: RefineOutcome }> {
+  let carried = start;
   // What each pass was given and what it returned. A chain that came out
   // worse is otherwise one before and one after with three calls somewhere in
   // between, and no way to tell which of them did it.
@@ -3323,7 +3341,7 @@ async function refineMessage(
     waits = 0;
     verdict = { ok: false, text: '', why: 'nothing was tried' };
     const got = await walkPass(pass, carried);
-    if (!got.ok) return got.out;
+    if (!got.ok) return got;
     if (chain.length > 1)
       steps.push({
         name: pass.name,
@@ -3342,13 +3360,16 @@ async function refineMessage(
       say('info', 'another reply started, so the chain stopped after pass ' + (step + 1));
       return {
         ok: false,
-        stood: true,
-        notes: notes,
-        why:
-          'another reply started while the rewrite was being written, so the chain stopped after pass ' +
-          (step + 1) +
-          ' of ' +
-          chain.length,
+        out: {
+          ok: false,
+          stood: true,
+          notes: notes,
+          why:
+            'another reply started while the rewrite was being written, so the chain stopped after pass ' +
+            (step + 1) +
+            ' of ' +
+            chain.length,
+        },
       };
     }
   }
@@ -3362,16 +3383,77 @@ async function refineMessage(
   // Each pass was judged against what it was given, which on its own lets a
   // chain drift: three passes each tightening by a third leaves a reply half its
   // length, and no single pass did anything the limits object to. So the end of
-  // the chain is judged once more against the reply it started from.
+  // the chain is judged once more against the reply it started from. Against
+  // the reply itself on a second run too, so two runs cannot drift further than
+  // one.
   if (chain.length > 1) {
     const whole = judge(carried, armed.text);
     if (!whole.ok)
       return {
         ok: false,
-        notes: notes,
-        same: !!whole.same,
-        why: 'across all ' + chain.length + ' passes, ' + whole.why,
+        out: {
+          ok: false,
+          notes: notes,
+          same: !!whole.same,
+          why: 'across all ' + chain.length + ' passes, ' + whole.why,
+        },
       };
+  }
+  return { ok: true, text: carried };
+  }
+
+  const first = await runChain(armed.text);
+  if (!first.ok) return first.out;
+  let carried = first.text;
+
+  // Jev reads the rewrite as well, when the reader asked for that and Jev read
+  // the reply before it. A check still at or over the line means the refine
+  // missed something, so it runs once more on the rewrite, with what Jev found
+  // this time in {{jev_found}}. Once, not until Jev is satisfied: each round is
+  // a Jev call and a full refine, and a check Jev keeps flagging after two
+  // rewrites is more likely Jev being wrong than the model.
+  if (jevReads && judgeAfter) {
+    tell(userId, { type: 'refine_progress', stage: 'rechecking' });
+    // Held like any call, so Stop reaches it, and kept held through the second
+    // refine too. A Stop there has to stop the first rewrite being saved, and
+    // this is how that is known, whatever the refine model's call says.
+    let stopped = false;
+    const handle = { abort: () => { stopped = true; } };
+    holdRun(userId, handle);
+    try {
+      const after = await judgeReply(userId, unshield(carried, armed.parts).text, jevWorn);
+      if (stopped) return { ok: false, stood: true, notes: notes, why: 'stopped while Jev was reading the rewrite' };
+      tell(userId, {
+        type: 'judge_said',
+        chatId: chatId,
+        messageId: m.id,
+        after: true,
+        refine: after.refine,
+        failed: !!after.failed,
+        why: after.why || '',
+        scores: after.scores || [],
+        cost: after.cost || 0,
+        model: after.model || '',
+        over: judgeOver,
+      });
+      if (!after.failed && after.refine) {
+        say('info', 'Jev read the rewrite and a check still reached the line, so it is refined once more');
+        scene = { ...scene, jevFound: jevFoundText(after.scores, judgeOver) };
+        tell(userId, { type: 'refine_progress', stage: 'again' });
+        const again = await runChain(carried);
+        if (stopped) return { ok: false, stood: true, notes: notes, why: 'stopped during the second refine' };
+        if (again.ok) carried = again.text;
+        else if (again.out.stood) return again.out;
+        // The first rewrite passed every check and is kept. A second one
+        // turned down, too long or refused, is no reason to lose it.
+        else {
+          say('info', 'the second refine was not used: ' + again.out.why);
+          tell(userId, { type: 'refine_again_dropped', chatId: chatId, messageId: m.id, why: String(again.out.why || '') });
+        }
+      }
+    } finally {
+      dropRun(userId, handle);
+    }
   }
   verdict = { ok: true, text: carried, why: '' };
 
@@ -3791,6 +3873,9 @@ let judgeWorn = true;
 // Whether Jev also reads a reply before a refine somebody starts with a button.
 // Off, a refine asked for by hand goes ahead without Jev.
 let judgeByHand = false;
+// Whether Jev reads the rewrite too, and a check still over the line gets the
+// reply one more refine.
+let judgeAfter = false;
 
 interface JevScore {
   id: string;
@@ -3965,6 +4050,27 @@ async function judgeReply(userId: string | undefined, reply: string, worn: strin
   }
   if (!scores.length) return { refine: true, failed: true, why: 'Jev sent back no usable answers', cost: got.cost, model: got.model };
   return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost, model: got.model };
+}
+
+// What {{jev_found}} puts in: the checks that reached the line, strongest
+// first. The lead-in is written here rather than left to the prompt because
+// the percentages and the line are this extension's own, and nothing in a chat
+// could describe them. The backticks the checks use to name Jev's input are
+// taken out, since the refine model is not given that input by that name. It
+// says the checks are leads, since Jev can be wrong,
+// and a model told to fix each one would change writing that was fine.
+// Empty when no check reached the line, which leaves the block out.
+function jevFoundText(scores: JevScore[] | undefined, over: number): string {
+  const hits = (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
+  if (!hits.length) return '';
+  return (
+    'Another model, Jev, read this passage before you and scored it against checks the user wrote. ' +
+    'The checks below reached the user\'s line of ' + over + '%, strongest first. ' +
+    'In them, "reply" means the passage you are rewriting. Look at these first. ' +
+    'Each one is a lead, not an order: where a check does not fit the passage, leave that part as it is. ' +
+    'Everything else in these instructions still applies.\n' +
+    hits.map((x) => '- ' + x.check.replace(/`/g, '') + ' (' + x.pct + '%)').join('\n')
+  );
 }
 
 // Everything the manifest asks for, so the panel can name what is missing
@@ -4174,6 +4280,7 @@ function applyRules(s: any): void {
   judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
   judgeWorn = s.judgeWorn !== false;
   judgeByHand = s.judgeByHand === true;
+  judgeAfter = s.judgeAfter === true;
   asSwipe = !!s.asSwipe;
   wornOn = !!s.wornOn;
   wornBack = Number(s.wornBack);

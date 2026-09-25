@@ -1709,6 +1709,8 @@ console.log("\none model or two");
           version: vis('#drawer [data-arf-row="judgeVersion"]'),
           name: vis('#drawer [data-arf-row="judgeName"]'),
           byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
+          after: vis('#drawer [data-arf-row="judgeAfter"]'),
+          found: vis("#drawer [data-arf-jevfound]"),
         };
       });
     const pick = (key, value) =>
@@ -1733,7 +1735,7 @@ console.log("\none model or two");
         about.target === "_blank" && /noopener/.test(about.rel),
       JSON.stringify(about),
     );
-    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand, JSON.stringify(one));
+    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand && !one.after && !one.found, JSON.stringify(one));
     const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
     ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
 
@@ -1744,6 +1746,8 @@ console.log("\none model or two");
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
     ok("and so does the switch for refines you start yourself", two.byHand, JSON.stringify(two));
+    ok("and the switch for Jev checking the rewrite", two.after, JSON.stringify(two));
+    ok("and, with no block taking what Jev finds, a line saying where to switch one on", two.found, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
     ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
     ok("and the typed name waits for A name I type", !two.name, JSON.stringify(two));
@@ -1887,6 +1891,31 @@ console.log("\none model or two");
 // ---- what Jev decided ----
 // The card on the Log tab that lays out Jev's last decision: one bar per check,
 // the ones that reached the line marked, and which Jev answered.
+console.log("\nwhat Jev found has somewhere to go");
+{
+  // The line about What Jev Found is for somebody whose prompt has nowhere to
+  // put it. Once a block takes {{jev_found}}, it has nothing to say.
+  const errors = await inTab(
+    browser,
+    {
+      saved: {
+        judgeMode: "two",
+        blocks: [
+          { id: "t", name: "Passage", on: true, role: "user", text: "<passage>{{message}}</passage>" },
+          { id: "j", name: "Found", on: true, role: "system", text: "<found>{{jev_found}}</found>" },
+        ],
+      },
+    },
+    async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const note = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-jevfound]"));
+      ok("with a block taking {{jev_found}}, the line is not shown", !note);
+    },
+  );
+  ok("no errors with a block taking what Jev found", errors.length === 0, errors.join("\n         "));
+}
+
 console.log("\nwhat Jev decided");
 {
   const card = (page) =>
@@ -1963,6 +1992,19 @@ console.log("\nwhat Jev decided");
     await closed(page);
     const tally = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
     ok("it counts the replies Jev read, left alone and could not decide on", /read 3 replies/.test(tally) && /left 1 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
+    // Jev reading a rewrite, with a check still over the line. It is not a
+    // reply read, so the count of replies stays where it was.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m2", after: true, refine: true, failed: false, why: "", scores: [{ id: "check_1", check: "`reply` repeats itself.", pct: 81 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
+    });
+    await closed(page);
+    const again = await card(page);
+    const tally2 = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
+    ok("a read of the rewrite says so, and that the reply was refined once more",
+      !!again && /read a rewrite/.test(again.text) && /refined once more/.test(again.text) && /refined again/.test(again.text), JSON.stringify(again));
+    ok("and is counted apart from the replies", /read 3 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
+    const logged = await page.evaluate(() => document.querySelector("#drawer").textContent);
+    ok("the Log says Jev read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
       b.click();
@@ -5647,6 +5689,15 @@ console.log("\nthe live line while a refine is running");
       after.replace(/\d+s/, "") === running.replace(/\d+s/, ""),
       JSON.stringify(running) + " became " + JSON.stringify(after),
     );
+    // Jev reading the rewrite, and the refine that can follow it, each named.
+    await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "rechecking" }));
+    await settle(page);
+    const rereading = await line(page);
+    ok("Jev reading the rewrite is named", /Jev is reading the rewrite/.test(rereading), JSON.stringify(rereading));
+    await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "again" }));
+    await settle(page);
+    const again = await line(page);
+    ok("and so is the refine after it", /Refining once more/.test(again), JSON.stringify(again));
   });
 }
 

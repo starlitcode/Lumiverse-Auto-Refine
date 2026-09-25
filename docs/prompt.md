@@ -41,6 +41,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. |
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
+| `{{jev_found}}` | With two models, the checks Jev found in the reply, strongest first, each with its score. They come after a short lead-in that calls them leads to check, not orders. Only filled in when Jev read the reply and picked it out. See [Passing on what Jev found](jev.md#passing-on-what-jev-found). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. |
 
@@ -170,6 +171,7 @@ There are four: a line edit for replies and a copy edit for your own messages, e
 
 - The version for a model that thinks is the smaller one. A reasoning model is given the standard and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name exact phrases, because "cut clichés" gives a model nothing to act on. They name the ones that appear often in machine-written roleplay: a held breath, a hammering heart, a whisper, darkening eyes, a shiver, the ghost of a smile, air thick with something, and an emotion given as a mix of two others.
+- Both have a block called **What Jev Found**, switched off. It is for two models. See [Passing on what Jev found](jev.md#passing-on-what-jev-found).
 - All four work as they are. Load one, change what you like, and save it under your own name.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
 

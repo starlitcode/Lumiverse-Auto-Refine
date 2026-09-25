@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.17.0";
+const VERSION = "1.18.0";
 
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
@@ -134,7 +134,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeByHand"],
+    keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeByHand", "judgeAfter"],
   },
   {
     id: "switches",
@@ -483,6 +483,9 @@ const CONFIG = {
   // Jev reads the reply before a refine started with a button as well as on
   // the automatic pass. Off, pressing refine goes straight to the refine model.
   judgeByHand: false,
+  // Jev reads the rewrite as well, and a check still at or over the line gets
+  // the reply one more refine. Off, the rewrite is saved as it comes.
+  judgeAfter: false,
   // Asking for the rewrite inside <REFINED> tags rather than on its own. A
   // model that cannot help adding a sentence of its own still puts the rewrite
   // between the tags, and taking what is between them is exact.
@@ -601,6 +604,23 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
       "and is not here. Dialogue is left out, since a character repeating " +
       "themselves is characterisation. Empty unless Find phrases this chat has " +
       "worn out is on under Limits.",
+    ours: true,
+  },
+  {
+    tag: "{{jev_found}}",
+    what:
+      "Only with two models, when Jev read the reply and picked it out for a " +
+      "refine. The checks that reached your line, strongest first, one per line " +
+      "with the score, so a line reads \"- reply repeats itself. (91%)\". " +
+      "They come after this lead-in: \"Another model, Jev, read this passage " +
+      "before you and scored it against checks the user wrote. The checks below " +
+      "reached the user's line of 50%, strongest first. In them, \"reply\" means " +
+      "the passage you are rewriting. Look at these first. Each one is a lead, " +
+      "not an order: where a check does not fit the passage, leave that part as " +
+      "it is. Everything else in these instructions still applies.\" The 50% " +
+      "there is an example: it says whatever line you set under Refine when a " +
+      "check reaches, and only checks at or over that line are listed. Empty on " +
+      "every other refine, which leaves the block carrying it out of the prompt.",
     ours: true,
   },
   {
@@ -725,6 +745,19 @@ const WORN_BLOCK: Block = {
   on: true,
   role: "system",
   text: "<already_worn_out_in_this_chat>\n{{overused}}\n</already_worn_out_in_this_chat>",
+};
+
+// What Jev found in the reply, with two models on. Off in both built-in prompts
+// for replies, and in neither prompt for your own messages, since Jev never
+// reads those. The macro brings its own lead-in, which says the checks are
+// leads rather than orders, so the block is the tag and nothing else and is
+// left out whenever Jev found nothing.
+const JEV_FOUND_BLOCK: Block = {
+  id: "jevfound",
+  name: "What Jev Found",
+  on: false,
+  role: "system",
+  text: "<what_jev_found>\n{{jev_found}}\n</what_jev_found>",
 };
 
 // What surrounds the part being rewritten, and only when part of a reply is what
@@ -1134,6 +1167,7 @@ const PLAIN_LONG: Block[] = [
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
+  JEV_FOUND_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
@@ -1479,6 +1513,7 @@ const THINKS_LONG: Block[] = [
   ...SCENE_BLOCKS,
   MEMORY_BLOCK,
   WORN_BLOCK,
+  JEV_FOUND_BLOCK,
   RECENT_BLOCK,
   AROUND_BLOCK,
   TURN_BLOCK,
@@ -1618,7 +1653,16 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string 
 
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
 
-const BUILT_IN_MARK = markText(BUILT_IN_SHAPES.map((p) => p.shape).join("\u0003"));
+// The mark counts blocks that are switched off, which the shape does not. A
+// block added switched off changes nothing that is sent, but it is still new
+// wording to take, and a mark that skipped it would never tell anybody it is
+// there.
+const markShape = (raw: Block[]): string =>
+  raw
+    .map((b) => (b.on === false ? "off" : "on") + "\u0001" + String(b.role || "system") + "\u0001" + String(b.text || "").trim())
+    .join("\u0002");
+
+const BUILT_IN_MARK = markText(BUILT_IN_PROMPTS.map((p) => markShape(p.blocks)).join("\u0003"));
 
 const ROLE_OPTIONS = [
   { value: "system", label: "System" },
@@ -1952,7 +1996,14 @@ const JUDGE_FIELDS: Field[] = [
     label: "Let Jev check refines you start yourself",
     type: "bool",
     needs: { key: "judgeMode", is: "two" },
-    hint: "Off by default, so a refine button goes straight to the refine model. On, Jev reads the reply first and may leave it alone. A selection is never sent to Jev.",
+    hint: "Off by default, so a refine you start, on one reply or on every reply, goes straight to the refine model. On, Jev reads each reply first and may leave it alone. A selection is never sent to Jev.",
+  },
+  {
+    key: "judgeAfter",
+    label: "Have Jev check the rewrite",
+    type: "bool",
+    needs: { key: "judgeMode", is: "two" },
+    hint: "Off by default. On, Jev reads the rewrite too, and if a check still reaches your line the reply is refined once more. One more Jev call per refine.",
   },
 ];
 
@@ -3400,11 +3451,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // name sent, and in which format. A test is not a reply, so it is kept
     // out of the count below.
     test?: { url: string; sent: string; kind: string };
+    // Set when this was Jev reading a rewrite rather than a reply. Kept out of
+    // the replies it read and spared, since the refine was already paid for.
+    after?: boolean;
   } | null = null;
   // Every decision since the page loaded, so the card can say how many replies
   // Jev spared a refine. That count is how somebody tells whether two models
   // are saving them anything.
-  const jevTally = { read: 0, spared: 0, failed: 0, cost: 0 };
+  const jevTally = { read: 0, spared: 0, failed: 0, cost: 0, rechecked: 0, again: 0 };
 
   // The whole answer, when the message carries one. Every ending sends it, and
   // it is the better copy of what the stream was showing a trimmed tail of.
@@ -3542,7 +3596,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // a stage a refine that takes forty seconds looks the same as one that has
   // failed, and a model that streams looks the same as one that has not
   // started.
-  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" | "queued" = "";
+  let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" | "rechecking" | "again" | "queued" = "";
   let streamed = 0;
 
   // How long a refine is given, in seconds, or 0 for as long as it takes. One
@@ -3563,6 +3617,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       return "Writing" + (streamed ? ", " + streamed.toLocaleString() + " characters" : "") + clockPart;
     if (stage === "checking") return "Checking the answer" + clockPart;
     if (stage === "judging") return "Jev is reading the reply" + clockPart;
+    if (stage === "rechecking") return "Jev is reading the rewrite" + clockPart;
+    if (stage === "again") return "Refining once more, since Jev still found something" + clockPart;
     // Another account on this install has a refine running, and this one waits
     // for it to finish before it can start.
     if (stage === "queued") return "Waiting for another account's refine to finish" + clockPart;
@@ -3752,7 +3808,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function markBusy(
     on: boolean,
-    why?: "asking" | "thinking" | "writing" | "checking" | "waiting" | "judging" | "queued",
+    why?: "asking" | "thinking" | "writing" | "checking" | "waiting" | "judging" | "rechecking" | "again" | "queued",
   ) {
     if (on && !busy) {
       runStartedAt = Date.now();
@@ -4872,6 +4928,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   const noWornBlock = () =>
     !blockList("blocks").some(
       (b) => b.on && String(b.text || "").indexOf("{{overused}}") >= 0,
+    );
+  // The same for what Jev found. Only the prompt for replies, since Jev never
+  // reads your own messages.
+  const noJevFoundBlock = () =>
+    !blockList("blocks").some(
+      (b) => b.on && String(b.text || "").indexOf("{{jev_found}}") >= 0,
     );
 
   function statusLine(): { text: string; tone: "off" | "idle" | "busy" } {
@@ -8664,6 +8726,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     checksRow.appendChild(builtIn);
     wrap.appendChild(hangsOff(checksRow, () => cfg.judgeMode === "two", "jev checks"));
     for (const f of afterChecks) wrap.appendChild(fieldRow(f));
+    // Where the findings go is a block on the Prompt tab, which is a long way
+    // from here. Said only while nothing is set up to take them.
+    if (cfg.judgeMode === "two" && noJevFoundBlock()) {
+      const found = note(
+        "What Jev finds is not passed to the refine model. To pass it on, switch on What Jev Found on the Prompt tab, or add a block with {{jev_found}} in it.",
+      );
+      found.setAttribute("data-arf-jevfound", "off");
+      wrap.appendChild(found);
+    }
     if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
       wrap.appendChild(
         bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."),
@@ -9237,7 +9308,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       last
         ? last.test
           ? last.failed ? "test failed" : "test"
-          : last.failed ? "could not decide" : last.refine ? "refined" : "left alone"
+          : last.after
+            ? last.failed ? "could not check" : last.refine ? "refined again" : "rewrite kept"
+            : last.failed ? "could not decide" : last.refine ? "refined" : "left alone"
         : undefined,
     );
     wrap.setAttribute("data-arf-jevcard", "1");
@@ -9271,6 +9344,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         sent.style.overflowWrap = "anywhere";
         wrap.appendChild(sent);
       }
+    } else if (last.after) {
+      wrap.appendChild(
+        note(
+          last.failed
+            ? who + " could not read the rewrite at " + when + ": " + last.why + ". The rewrite was kept."
+            : who + " read a rewrite at " + when + ". A check at " + last.over + "% or more means one more refine." +
+              (last.refine ? " At least one did, so the reply was refined once more." : " None did, so the rewrite was kept."),
+        ),
+      );
     } else {
       wrap.appendChild(
         note(
@@ -9308,6 +9390,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       "Since this page opened, Jev read " + t.read + (t.read === 1 ? " reply" : " replies") +
         " and left " + t.spared + " alone, so " + t.spared + (t.spared === 1 ? " refine was" : " refines were") + " not paid for." +
         (t.failed ? " It could not decide on " + t.failed + ", and those were refined." : "") +
+        (t.rechecked
+          ? " It read " + t.rechecked + (t.rechecked === 1 ? " rewrite" : " rewrites") + " and sent " + t.again + " back for one more refine."
+          : "") +
         (t.cost > 0 ? " Jev cost " + t.cost.toFixed(6) + " in all." : ""),
     );
     sum.setAttribute("data-arf-jevtally", "1");
@@ -9318,7 +9403,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const clear = button("Clear", false);
     clear.addEventListener("click", () => {
       jevLast = null;
-      jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = 0;
+      jevTally.read = jevTally.spared = jevTally.failed = jevTally.cost = jevTally.rechecked = jevTally.again = 0;
       paint();
     });
     rowB.appendChild(clear);
@@ -13741,6 +13826,12 @@ export function setup(ctx: Ctx, overrides?: any) {
           // Jev's answer on one reply, for the Log. Each check with its
           // percentage, so a reply left alone can be read back and the line
           // moved if Jev is letting too much through or too little.
+          // A second refine after Jev read the rewrite, turned down by a check.
+          // The first rewrite is what gets saved, and the Log says why.
+          if (msg.type === "refine_again_dropped") {
+            log("the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
+            return;
+          }
           if (msg.type === "judge_said") {
             const list = Array.isArray(msg.scores) ? msg.scores : [];
             jevLast = {
@@ -13755,16 +13846,29 @@ export function setup(ctx: Ctx, overrides?: any) {
               over: Number(msg.over) || 50,
               model: String(msg.model || "").slice(0, 60),
               cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
+              after: !!msg.after,
             };
-            jevTally.read++;
-            if (msg.failed) jevTally.failed++;
-            else if (!msg.refine) jevTally.spared++;
+            if (msg.after) {
+              jevTally.rechecked++;
+              if (!msg.failed && msg.refine) jevTally.again++;
+            } else {
+              jevTally.read++;
+              if (msg.failed) jevTally.failed++;
+              else if (!msg.refine) jevTally.spared++;
+            }
             jevTally.cost += jevLast.cost;
             const each = list
               .map((x: any) => String(x.check || "").replace(/`/g, "") + " " + Number(x.pct) + "%")
               .join("; ");
             const cost = Number(msg.cost) > 0 ? ", cost " + Number(msg.cost).toFixed(6) : "";
             const by = msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "";
+            if (msg.after) {
+              if (msg.failed)
+                log("Jev could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
+              else if (msg.refine) log("Jev" + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
+              else log("Jev" + by + " read the rewrite and found nothing more: " + each + cost, true);
+              return;
+            }
             if (msg.failed)
               log("Jev could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
             else if (msg.refine) log("Jev" + by + " says refine: " + each + cost, true);
@@ -14585,6 +14689,7 @@ export const __testing = {
   MACROS,
   BUILT_IN_PROMPTS,
   DEFAULT_BLOCKS,
+  markShape,
   ROLE_OPTIONS,
   SAMPLER_FIELDS,
   refineIcon,

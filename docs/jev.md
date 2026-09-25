@@ -90,6 +90,11 @@ Jev answers these best when each one:
 
 **Refine when a check reaches** is the line, 50 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
 
+It goes from 1 to 99. The two ends are left out because each one makes Jev a cost with no use:
+
+- At 100, a check would have to score exactly 100%. Jev almost never does, so nearly every reply would be left alone, and each one would still cost a Jev call. To stop refining, switch automatic refining off.
+- At 0, every check always reaches the line, so every reply is refined. That is the same as one model, with a Jev call added. To refine every reply, pick one model.
+
 **Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it.
 
 ### Putting the built-in checks back
@@ -103,13 +108,20 @@ If you make a mistake in **What Jev checks**, press **Use the built-in checks** 
 
 Always on the automatic pass.
 
-A refine you start yourself, with **Refine the latest reply** or the button on a message, goes straight to the refine model by default. Pressing it is you deciding the reply needs one, so Jev is not asked and nothing is sent to it.
+A refine you start yourself goes straight to the refine model by default. That covers:
 
-**Let Jev check refines you start yourself** changes that. On, Jev reads the reply first, the same as on the automatic pass:
+- **Refine the latest reply**.
+- The button on a message.
+- **Refine every reply here**.
+
+Pressing one is you deciding the replies need a refine, so Jev is not asked and nothing is sent to it.
+
+**Let Jev check refines you start yourself** changes that. On, Jev reads each reply first, the same as on the automatic pass:
 
 - If a check reaches your line, the reply is refined.
 - If none does, the reply is left alone, and the Log and the **What Jev decided** card say so.
-- Each press costs one Jev call as well as the refine.
+- With **Refine every reply here**, Jev reads the replies one at a time, and only the ones it picks out are refined.
+- Each reply Jev reads costs one Jev call, as well as the refine when there is one.
 
 Two things are never sent to Jev, whichever way the switch is set:
 
@@ -117,6 +129,41 @@ Two things are never sent to Jev, whichever way the switch is set:
 - Your own messages, since the checks are about the character's replies.
 
 Jev is asked after **Seconds between automatic refines**, when that is set, and the panel says "Jev is reading the reply" while it does. **Stop** works while it is reading.
+
+## Passing on what Jev found
+
+Jev works out which of your checks a reply matches. The refine model can be given that list, so it starts from the problems Jev found.
+
+To turn it on:
+
+1. Go to the **Prompt** tab, on **For replies**.
+2. Switch on the block called **What Jev Found**. Both built-in prompts for replies have it, switched off.
+
+If your prompt is your own, add a block with `{{jev_found}}` in it instead. The **One model or two** card says when no block is taking what Jev finds.
+
+What the refine model is given:
+
+- A short lead-in. It says another model scored the passage against checks you wrote, and that each check is a lead, not an order. Where a check does not fit the passage, the model is told to leave that part alone.
+- Each check that reached your line, strongest first, with its score, like `- reply repeats itself. (91%)`.
+
+The block is empty, and left out of the prompt, whenever Jev did not read the reply or could not decide. That includes one model, a selection, and a button refine with **Let Jev check refines you start yourself** off.
+
+Jev can be wrong, which is why the lead-in calls the checks leads. Your other rules still apply as they are.
+
+## Having Jev check the rewrite
+
+**Have Jev check the rewrite**, in **One model or two**, is off by default. On, Jev also reads what the refine model wrote:
+
+- If no check reaches your line, the rewrite is saved.
+- If a check still does, the reply is refined once more, starting from the rewrite. **What Jev Found** then holds what Jev found in the rewrite.
+- It happens once. The second rewrite is saved without another check.
+- With several passes set up, the second refine runs every pass again, so it costs as many calls as the first.
+- If the second refine is turned down, for example as too long, the first rewrite is saved and the Log says why.
+- If Jev cannot read the rewrite, the rewrite is saved.
+
+It only happens on a refine Jev read first. A refine that skipped Jev is not checked afterwards either.
+
+While it runs, the panel says "Jev is reading the rewrite", then "Refining once more" if a check reached the line. **Stop** works at both points, and nothing is saved.
 
 ## When Jev cannot answer
 
@@ -130,6 +177,7 @@ The reply is refined, the same as with one model. No key, a refused key, an acco
 - Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
 - Which Jev answered, and what the answer cost.
 - A count since the page opened: how many replies Jev read, how many it left alone, and so how many refines you did not pay for. Use it to see whether two models are saving you anything.
+- With **Have Jev check the rewrite** on, a read of a rewrite shows here too, marked **rewrite kept** or **refined again**. It is counted apart from the replies, as rewrites read and how many were sent back.
 - **Clear** empties the card and the count. It is kept only until you close the tab, like the Log.
 
 Every answer also goes in the Log as one line:
@@ -155,7 +203,9 @@ The key is never shown.
 
 ## What it costs
 
-Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev, and so is each press of **Test**. Where the host reports the cost of a call, the Log and the card show it.
+Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev, and so is each press of **Test**.
+
+With **Have Jev check the rewrite** on, each refine costs one more Jev call. A reply refined once more also costs a second refine from your refine provider, one call per pass. Where the host reports the cost of a call, the Log and the card show it.
 
 A test is very small, so its cost can be a tiny part of a cent. A host's own billing page may round it to nothing.
 
