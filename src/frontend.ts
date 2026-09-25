@@ -617,7 +617,9 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
       "reached the user's line of 50%, strongest first. In them, \"reply\" means " +
       "the passage you are rewriting. Look at these first. Each one is a lead, " +
       "not an order: where a check does not fit the passage, leave that part as " +
-      "it is. Everything else in these instructions still applies.\" Empty on " +
+      "it is. Everything else in these instructions still applies.\" The 50% " +
+      "there is an example: it says whatever line you set under Refine when a " +
+      "check reaches, and only checks at or over that line are listed. Empty on " +
       "every other refine, which leaves the block carrying it out of the prompt.",
     ours: true,
   },

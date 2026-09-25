@@ -950,6 +950,16 @@ describe("two models: Jev reads the reply first", () => {
     expect(text).not.toContain("repeats itself");
   });
 
+  test("the line is the reader's own, not a fixed half", async () => {
+    const h = await keyed({ blocks: FOUND_BLOCKS, judgeOver: 65 }, { jev: says([60, 70]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const text = sentText(h);
+    expect(text).toContain("line of 65%");
+    expect(text).toContain("- reply uses stock phrases. (70%)");
+    expect(text).not.toContain("repeats itself");
+  });
+
   test("when Jev did not read the reply, the block is left out", async () => {
     const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([90]) });
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });

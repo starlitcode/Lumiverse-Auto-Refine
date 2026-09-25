@@ -90,6 +90,11 @@ Jev answers these best when each one:
 
 **Refine when a check reaches** is the line, 50 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
 
+It goes from 1 to 99. The two ends are left out because each one makes Jev a cost with no use:
+
+- At 100, a check would have to score exactly 100%. Jev almost never does, so nearly every reply would be left alone, and each one would still cost a Jev call. To stop refining, switch automatic refining off.
+- At 0, every check always reaches the line, so every reply is refined. That is the same as one model, with a Jev call added. To refine every reply, pick one model.
+
 **Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it.
 
 ### Putting the built-in checks back
@@ -152,6 +157,7 @@ Jev can be wrong, which is why the lead-in calls the checks leads. Your other ru
 - If no check reaches your line, the rewrite is saved.
 - If a check still does, the reply is refined once more, starting from the rewrite. **What Jev Found** then holds what Jev found in the rewrite.
 - It happens once. The second rewrite is saved without another check.
+- With several passes set up, the second refine runs every pass again, so it costs as many calls as the first.
 - If the second refine is turned down, for example as too long, the first rewrite is saved and the Log says why.
 - If Jev cannot read the rewrite, the rewrite is saved.
 
@@ -199,7 +205,7 @@ The key is never shown.
 
 Jev is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call to Jev, and so is each press of **Test**.
 
-With **Have Jev check the rewrite** on, each refine costs one more Jev call. A reply refined once more also costs a second refine from your refine provider. Where the host reports the cost of a call, the Log and the card show it.
+With **Have Jev check the rewrite** on, each refine costs one more Jev call. A reply refined once more also costs a second refine from your refine provider, one call per pass. Where the host reports the cost of a call, the Log and the card show it.
 
 A test is very small, so its cost can be a tiny part of a cent. A host's own billing page may round it to nothing.
 

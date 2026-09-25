@@ -24,6 +24,7 @@ _2026-09-25_
 ### Fixed
 
 - **The Jev switch did not say it covers Refine every reply here.** **Let Jev check refines you start yourself** has always covered it, but the hint and the docs named only **Refine the latest reply** and the button on a message. Both now say so. With the switch on, Jev reads the replies one at a time, and only the ones it picks out are refined. See [When Jev is asked](docs/jev.md#when-jev-is-asked).
+- **The docs did not say why Refine when a check reaches stops at 99.** They now explain both ends: at 100 nearly every reply would be left alone, and at 0 every reply would be refined, with a Jev call paid for either way. See [What Jev checks](docs/jev.md#what-jev-checks).
 
 ---
 
