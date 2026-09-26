@@ -241,7 +241,7 @@ While it runs, the panel says, for example, "Jev is reading the rewrite", then "
 
 ## When it cannot answer
 
-The reply is refined, the same as with one model. This happens when the key is missing or refused, the account has no credit, the host is down, or the answer has nothing usable in it. The Log says which. The beta failing costs you a refine you might not have needed, never a refine you did.
+The reply is refined, the same as with one model. This happens when the key is missing or refused, the account has no credit, the host is down, or the answer has nothing usable in it. The Log says which. When a key is refused, it also gives the status the host sent and the host's own message. The beta failing costs you a refine you might not have needed, never a refine you did.
 
 ## Reading what it decided
 

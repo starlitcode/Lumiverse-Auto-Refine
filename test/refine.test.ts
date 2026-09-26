@@ -879,7 +879,16 @@ describe("two models: Jev reads the reply first", () => {
     await wait(50);
     expect(h.asked.length).toBe(1);
     expect(said(h)[0].failed).toBe(true);
-    expect(said(h)[0].why).toMatch(/key was refused/);
+    expect(said(h)[0].why).toBe("the Jev key was refused (401: no)");
+  });
+
+  // A refused call is not always a wrong key, so the status and the host's own
+  // words are kept, whichever field the host puts them in.
+  test("a refused call says the status and what the host said", async () => {
+    const h = await keyed({ judgeWho: "span", judgeHost: "respan" }, { jev: () => ({ status: 403, body: '{"detail":"Invalid API key"}' }) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].why).toBe("the Span key was refused (403: Invalid API key)");
   });
 
   test("Jev throwing refines anyway", async () => {
@@ -1562,7 +1571,7 @@ describe("two models: Jev reads the reply first", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(said(h)[0].failed).toBe(true);
-    expect(said(h)[0].why).toBe("the Span key was refused");
+    expect(said(h)[0].why).toBe("the Span key was refused (401)");
   });
 
   test("and what it found is said with Span's name too", async () => {

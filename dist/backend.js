@@ -4042,12 +4042,16 @@ async function askJev(userId, state, questions) {
     catch (_) {
         data = null;
     }
-    const said = data && (data.error || data.detail);
+    const said = data && (data.error || data.detail || data.message);
     const saidText = typeof said === 'string' ? said : said && said.message ? String(said.message) : '';
+    // The status and the host's own words go with it. A refused call is not
+    // always a wrong key: a key for another host, or a host that turns the
+    // proxy away, look the same without them.
+    const why = ' (' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') + ')';
     if (res.status === 401 || res.status === 403)
-        return { error: 'the ' + who() + ' key was refused' };
+        return { error: 'the ' + who() + ' key was refused' + why };
     if (res.status === 402)
-        return { error: 'the ' + who() + ' account has no credit left' };
+        return { error: 'the ' + who() + ' account has no credit left' + why };
     if (res.status < 200 || res.status >= 300 || saidText)
         return { error: who() + ' answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
     // A chat API answer is JSON written as the text of the reply: the assistant
