@@ -74,11 +74,15 @@ Every answer says which exact Jev gave it. The Log shows it next to each decisio
 The ones it starts with:
 
 ```
-`reply` repeats a word, a phrase or a sentence shape inside itself.
-`reply` uses stock phrases that turn up in many stories.
-`reply` states a character's feeling outright where the scene could show it.
+`reply` repeats the same phrase, or starts several sentences the same way, close together.
+`reply` uses a stock phrase, such as a held breath or a shiver down a spine.
+`reply` names a character's feeling when their actions already show it.
 `reply` piles up adjectives or strained comparisons.
+`reply` says what something was not before saying what it was, as in "it wasn't a request, it was a command".
+`reply` ends by asking the user what happens next, or by pointing at what is about to happen.
 ```
+
+Each one has to be false of a clean reply. A reply is refined when any one check reaches the line, so a check that is true of almost every reply sends every reply through. For example, "repeats a word" is true of any reply that uses a name twice. The last two match rules the built-in reply prompts carry, so a reply Jev sends through is one the refine has a rule for.
 
 Write them to match what your prompt fixes. A check for something your prompt never touches refines replies for a reason the refine will not act on.
 
@@ -87,6 +91,7 @@ Jev answers these best when each one:
 - asks about one thing. A statement joined with "and" is two checks.
 - names something that shows on the page, rather than a judgement of the whole reply.
 - is plainly true or false of the text, so a reader could check it without guessing at intent.
+- is false of a reply with nothing wrong in it. Give an example or two, so a common phrase is not read as a stock one.
 
 **Refine when a check reaches** is the line, 50 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
 
@@ -188,8 +193,8 @@ The reply is refined, the same as with one model. This happens when the key is m
 Every answer also goes in the Log as one line:
 
 ```
-Jev (jev-1.13.0) says leave it: reply repeats a word, a phrase or a sentence shape inside itself 12%; ...
-Jev (jev-1.13.0) says refine: ... uses stock phrases that turn up in many stories 71%; ...
+Jev (jev-1.13.0) says leave it: reply repeats the same phrase, or starts several sentences the same way, close together 12%; ...
+Jev (jev-1.13.0) says refine: ... uses a stock phrase, such as a held breath or a shiver down a spine 71%; ...
 ```
 
 A reply Jev left alone also says so where a refine that stood down would, with the highest percentage it gave. If Jev is letting through replies you would have refined, lower the line or add the check it is missing. If it refines replies that were fine, raise the line or drop the check that keeps firing.

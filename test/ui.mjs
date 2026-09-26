@@ -8011,46 +8011,60 @@ console.log("\nwhen a default moves under somebody who was on it");
       return n ? n.textContent : null;
     });
 
-  // Still on the old 90 seconds, so this one is told.
-  await inTab(browser, { saved: { timeoutSecs: 90 } }, async (page) => {
-    const said = await seen(page);
-    ok("somebody on the old default is told", !!said, JSON.stringify(said));
-    ok("and the line names the setting", !!said && /Give up waiting after/.test(said), JSON.stringify(said));
-    const after = await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
-      await new Promise((r) => setTimeout(r, 200));
+  // The checks as they came before, word for word. A reader still holding them
+  // never wrote their own.
+  const OLD_CHECKS = [
+    "`reply` repeats a word, a phrase or a sentence shape inside itself.",
+    "`reply` uses stock phrases that turn up in many stories.",
+    "`reply` states a character's feeling outright where the scene could show it.",
+    "`reply` piles up adjectives or strained comparisons.",
+  ].join("\n");
+  const stored = (page) =>
+    page.evaluate(() => {
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
-        now: raw ? JSON.parse(raw).timeoutSecs : null,
+        now: raw ? JSON.parse(raw).judgeChecks : null,
         line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
       };
     });
-    ok("taking it moves them to the new one", after.now === 240, JSON.stringify(after));
+
+  // Two models on and still on the old checks, so this one is told.
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody on the old default is told", !!said, JSON.stringify(said));
+    ok("and the line names the setting", !!said && /What Jev checks/.test(said), JSON.stringify(said));
+    await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    const after = await stored(page);
+    ok("taking it moves them to the new one", /held breath/.test(String(after.now)), JSON.stringify(after));
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 
-  // Set their own, so nothing of theirs moved and nothing is said.
-  await inTab(browser, { saved: { timeoutSecs: 600 } }, async (page) => {
+  // One model, so the checks are never read and nothing is said about them.
+  await inTab(browser, { saved: { judgeMode: "one", judgeChecks: OLD_CHECKS } }, async (page) => {
+    ok("somebody the setting does nothing for is left alone", (await seen(page)) === null, "");
+  });
+
+  // Wrote their own, so nothing of theirs moved and nothing is said.
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: "`reply` is too long." } }, async (page) => {
     ok("somebody who chose their own is left alone", (await seen(page)) === null, "");
   });
 
-  // Already on the new one, which is everybody installing fresh.
-  await inTab(browser, { saved: { timeoutSecs: 240 } }, async (page) => {
+  // Already on the new ones, which is everybody installing fresh.
+  await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
   // Keep mine puts it away without changing the setting.
-  await inTab(browser, { saved: { timeoutSecs: 90 } }, async (page) => {
-    const after = await page.evaluate(async () => {
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
+    await page.evaluate(async () => {
       document.querySelector('#drawer [data-arf-moveddefault="keep"]').click();
       await new Promise((r) => setTimeout(r, 200));
-      const raw = localStorage.getItem("lv-auto-refine:settings:v1");
-      return {
-        now: raw ? JSON.parse(raw).timeoutSecs : null,
-        line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
-      };
     });
-    ok("keeping yours leaves the setting alone", after.now === 90, JSON.stringify(after));
+    const after = await stored(page);
+    ok("keeping yours leaves the setting alone", after.now === OLD_CHECKS, JSON.stringify(after));
     ok("and still takes the line away", !after.line, JSON.stringify(after));
   });
 }
