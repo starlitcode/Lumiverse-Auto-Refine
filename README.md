@@ -30,7 +30,7 @@ It lives in a tab in the sidebar drawer, so you can keep it open while you write
 
 3. Open the sidebar drawer and pick the **Auto Refine** tab.
 
-A prompt comes with it, so switching it on is all the setup you need. Everything else is optional.
+A prompt comes with it, so switching it on is all the setup you need. Everything else is optional. For the settings that work well for most people, see [What to use](docs/recommended.md).
 
 ## You are in control
 
@@ -110,6 +110,7 @@ All four change only a line the model could quote as breaking a rule. The two fo
 
 ## Documentation
 
+- [What to use](docs/recommended.md): the prompt, model, thinking and sampler settings to start with
 - [How the prompt is built](docs/prompt.md): blocks, macros, roles, the built-in prompts, and the preview
 - [Making your own prompt](docs/rules.md): a step-by-step guide to a prompt that fits your story and your model
 - [What it refuses to save](docs/guardrails.md): the checks on what comes back

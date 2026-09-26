@@ -54,6 +54,8 @@ The greeting is never refined. Your own messages are only refined when you press
 
 ## Model
 
+Not sure what to pick? [What to use](recommended.md) has settings that work well for most people.
+
 - **Refine using** picks the model that refines, from your connection profiles. Leave it on the default to use the model you chat with.
 - **Let it think first** is off by default. You can leave it to your connection's setting, or pick an effort level. See [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** stops a refine that has not come back.
