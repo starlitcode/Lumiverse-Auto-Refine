@@ -15,10 +15,23 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.20.0";
-// TypeSafe's own introduction to Jev, for somebody meeting the name for the
-// first time on the Model tab.
-const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
+const VERSION = "1.21.0";
+// A block's text as it is read in from anywhere it was kept: settings, presets
+// or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
+// only second model, and a block that still carries it is given the name the
+// backend fills in, so a prompt written then keeps getting the checks.
+function blockText(raw) {
+    return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
+}
+// The second models, one entry each: the name the panel uses for it, who
+// makes it, and the page that says what it is. The picker, the name in every
+// line about what the model did, and the links under the card all come from
+// here, so a model added later is one more entry, beside its entry in the
+// backend.
+const SECOND_MODELS = [
+    { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
+    { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
+];
 // A link in the panel's own colours. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
 function linkTo(url, text) {
@@ -123,8 +136,8 @@ const PARTS = [
     {
         id: "judge",
         label: "One model or two",
-        what: "Whether Jev reads a reply first, where Jev is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeByHand", "judgeAfter"],
+        what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeBefore", "judgeByHand", "judgeAfter"],
     },
     {
         id: "switches",
@@ -194,22 +207,23 @@ const PERMS = [
     {
         id: "cors_proxy",
         label: "CORS proxy",
-        why: "Reaches Jev, the second model in two-model mode, which is not a chat model and so has no connection profile.",
-        without: "Two-model mode cannot ask Jev, so every reply is refined as it is with one model. Nothing else changes.",
+        why: "Reaches the second model in two-model mode, Jev or Span, which is not a chat model and so has no connection profile.",
+        without: "Two-model mode cannot ask the second model, so every reply is refined as it is with one model. Nothing else changes.",
     },
 ];
-// What Jev checks a reply for until somebody writes their own. Each is a
-// statement about `reply` that is plainly true or false of the text, which is
-// the question Jev answers best: one thing, visible on the page.
+// What the second model checks a reply for until somebody writes their own.
+// Each is a statement about `reply` that is plainly true or false of the text,
+// which is the question a scoring model answers best: one thing, visible on
+// the page.
 //
-// Each has to be false of a clean reply. Jev refines a reply when any check
+// Each has to be false of a clean reply. A reply is refined when any check
 // reaches the line, so a check that is true of nearly every reply, such as one
 // about repeating a word, sends every reply through and saves nothing. The
 // examples in the stock phrase check are there for the same reason: without
 // them, "she smiled" is a phrase that turns up in many stories.
 //
 // The last two match rules the reply prompts carry, the negation trick and The
-// Finish, so a reply Jev sends through is one the refine has a rule for. The
+// Finish, so a reply the second model sends through is one the refine has a rule for. The
 // Finish keeps an ending that is a good hook, so the check asks only about a
 // question put to the user, which the refine always trims. A check that also
 // counted an ending pointing ahead would send hooks through for a refine that
@@ -490,26 +504,33 @@ const CONFIG = {
     // that lands inside the gap waits for it rather than being skipped, so a
     // provider that meters calls per minute is not asked twice in one breath.
     refineGap: 0,
-    // One model refines every reply. Two has Jev, a small decision model, read a
+    // One model refines every reply. Two has a small scoring model read a
     // reply first and say whether it needs a refine, so the refine model runs on
     // the replies that do. A beta, and off until asked for.
     judgeMode: "one",
-    // Where Jev is reached, and for "custom" the address and model name.
+    // Which second model reads the reply: Jev, or Span.
+    judgeWho: "jev",
+    // Which Span: Lite at no cost, Lite paid, or the full model.
+    spanTier: "free",
+    // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
     judgeUrl: "",
     judgeModel: "",
     judgeVersion: "latest",
     judgeName: "",
-    // One statement a line. Jev gives the chance each is true of `reply`.
+    // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
     judgeOver: 50,
-    // With worn phrases on, Jev is also asked whether the reply uses one.
+    // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
-    // Jev reads the reply before a refine started with a button as well as on
+    // The reply before this one goes to the second model too, and it is asked
+    // whether this reply repeats it.
+    judgeBefore: false,
+    // The second model reads the reply before a refine started with a button as well as on
     // the automatic pass. Off, pressing refine goes straight to the refine model.
     judgeByHand: false,
-    // Jev reads the rewrite as well, and a check still at or over the line gets
+    // The second model reads the rewrite as well, and a check still at or over the line gets
     // the reply one more refine. Off, the rewrite is saved as it comes.
     judgeAfter: false,
     // Asking for the rewrite inside <REFINED> tags rather than on its own. A
@@ -616,7 +637,7 @@ const MACROS = [
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
     {
         tag: "{{memories}}",
-        what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the permission is not granted.",
+        what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the Chats permission is not granted.",
         ours: true,
     },
     {
@@ -631,11 +652,11 @@ const MACROS = [
         ours: true,
     },
     {
-        tag: "{{jev_found}}",
-        what: "Only with two models, when Jev read the reply and picked it out for a " +
+        tag: "{{checks_found}}",
+        what: "Only with two models, when the second model read the reply and picked it out for a " +
             "refine. The checks that reached your line, strongest first, one per line " +
             "with the score, so a line reads \"- reply repeats itself. (91%)\". " +
-            "They come after this lead-in: \"Another model, Jev, read this passage " +
+            "They come after this lead-in, with the name of the second model you picked: \"Another model, Jev, read this passage " +
             "before you and scored it against checks the user wrote. The checks below " +
             "reached the user's line of 50%, strongest first. In them, \"reply\" means " +
             "the passage you are rewriting. Look at these first. Treat each one as a " +
@@ -771,17 +792,20 @@ const WORN_BLOCK = {
     role: "system",
     text: "<worn_out>\n{{overused}}\n</worn_out>",
 };
-// What Jev found in the reply, with two models on. Off in both built-in prompts
-// for replies, and in neither prompt for your own messages, since Jev never
-// reads those. The macro brings its own lead-in, which says the checks are
-// leads to check, so the block is the tag and nothing else and is
-// left out whenever Jev found nothing.
+// What the checks found in the reply, with two models on. Off in both built-in
+// prompts for replies, and in neither prompt for your own messages, since the
+// second model never reads those. The macro brings its own lead-in, which says
+// the checks are leads to check, so the block is the tag and nothing else and
+// is left out whenever nothing was found.
+//
+// The id is the one it had when it was named for Jev, so a fold or a switch
+// saved against it still finds it.
 const JEV_FOUND_BLOCK = {
     id: "jevfound",
-    name: "What Jev Found",
+    name: "Checks Found",
     on: false,
     role: "system",
-    text: "<what_jev_found>\n{{jev_found}}\n</what_jev_found>",
+    text: "<checks_found>\n{{checks_found}}\n</checks_found>",
 };
 // What surrounds the part being rewritten, and only when part of a reply is what
 // was asked for. Empty on every ordinary refine, so the block leaves the prompt.
@@ -1655,8 +1679,8 @@ const MOVED_DEFAULTS = [
     {
         key: "judgeChecks",
         was: JUDGE_CHECKS_1_19,
-        label: "What Jev checks",
-        why: "Some of the checks were true of almost any reply, so Jev sent nearly every reply to be refined. They are narrower now, and there are two more.",
+        label: "What the second model checks",
+        why: "Some of the checks were true of almost any reply, so nearly every reply was sent to be refined. They are narrower now, and there are two more.",
         needs: { key: "judgeMode", is: "two" },
     },
 ];
@@ -1875,22 +1899,45 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "one", label: "One: every reply is refined" },
-            { value: "two", label: "Two: Jev picks the replies to refine (beta)" },
+            { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
         ],
-        hint: "With two, Jev reads each finished reply first and the refine runs only where one of its checks says so. Jev is a separate service with its own key and its own bill. A refine you start yourself is never held back by it.",
+        hint: "With two, a second model reads each finished reply first and the refine runs only where one of its checks says so. It is a separate service with its own key.",
+    },
+    {
+        key: "judgeWho",
+        label: "Which second model",
+        type: "pick",
+        options: SECOND_MODELS.map((m) => ({ value: m.value, label: m.name + ", from " + m.from })),
+        needs: { key: "judgeMode", is: "two" },
+        hint: "Both answer the same checks. Span-01 Lite is free on OpenRouter and on Respan's own API.",
     },
     {
         key: "judgeHost",
-        label: "Where Jev is reached",
+        label: "Where it is reached",
         type: "pick",
         options: [
             { value: "openrouter", label: "OpenRouter" },
-            { value: "nanogpt", label: "NanoGPT" },
-            { value: "typesafe", label: "TypeSafe" },
+            { value: "nanogpt", label: "NanoGPT", needs: { key: "judgeWho", is: "jev" } },
+            { value: "typesafe", label: "TypeSafe", needs: { key: "judgeWho", is: "jev" } },
+            { value: "respan", label: "Respan", needs: { key: "judgeWho", is: "span" } },
             { value: "custom", label: "Another address" },
         ],
         needs: { key: "judgeMode", is: "two" },
         hint: "The key you save below has to be one from this host.",
+    },
+    {
+        key: "spanTier",
+        label: "Which Span",
+        type: "pick",
+        options: [
+            { value: "free", label: "Span-01 Lite, free" },
+            { value: "lite", label: "Span-01 Lite, paid", needs: { key: "judgeHost", is: "openrouter" } },
+            { value: "full", label: "Span-01" },
+        ],
+        needs: { key: "judgeWho", is: "span" },
+        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
+        under: true,
+        hint: "The free one costs nothing. Respan's own API calls the two span-01-free and span-01-pro.",
     },
     {
         key: "judgeVersion",
@@ -1902,7 +1949,8 @@ const JUDGE_FIELDS = [
             { value: "exact", label: "Jev 1.13 exactly" },
             { value: "own", label: "A name I type" },
         ],
-        needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] },
+        needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
+        also: { key: "judgeWho", is: "jev" },
         under: true,
         hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.13 to keep them steady.",
     },
@@ -1911,6 +1959,7 @@ const JUDGE_FIELDS = [
         label: "Model name",
         type: "text",
         needs: { key: "judgeVersion", is: "own" },
+        also: { key: "judgeWho", is: "jev" },
         under: true,
         placeholder: "typesafe/jev-1.13",
         hint: "What your host calls Jev now, as its own docs spell it. Left empty, 1.13 is used.",
@@ -1922,7 +1971,7 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeHost", is: "custom" },
         under: true,
         placeholder: "https://jev.example.com/v1/decisions",
-        hint: "Any host that serves Jev. Paste its full Jev address, not only the base. It ends in something like /decisions, /chat/completions or /messages.",
+        hint: "Any host that serves the model. Paste its full address, not only the base. It ends in something like /decisions, /scores, /chat/completions or /messages.",
     },
     {
         key: "judgeModel",
@@ -1931,15 +1980,15 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeHost", is: "custom" },
         under: true,
         placeholder: "typesafe/jev-latest",
-        hint: "What that host calls Jev, as its own docs spell it.",
+        hint: "What that host calls the model, as its own docs spell it.",
     },
     {
         key: "judgeChecks",
-        label: "What Jev checks",
+        label: "What the second model checks",
         type: "lines",
         rows: 10,
         needs: { key: "judgeMode", is: "two" },
-        hint: "One check per line. Call the reply reply, in backticks, like the checks already here. Jev scores how likely each one is true.",
+        hint: "One check per line. Call the reply reply, in backticks, like the checks already here. The second model scores how likely each one is true.",
     },
     {
         key: "judgeOver",
@@ -1956,21 +2005,28 @@ const JUDGE_FIELDS = [
         label: "Also check for worn-out phrases",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Asks Jev whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
+        hint: "Asks the second model whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
+    },
+    {
+        key: "judgeBefore",
+        label: "Also compare with the reply before it",
+        type: "bool",
+        needs: { key: "judgeMode", is: "two" },
+        hint: "Off by default. On, the reply before it is sent too, and the second model checks whether this one repeats it.",
     },
     {
         key: "judgeByHand",
-        label: "Let Jev check refines you start yourself",
+        label: "Let it check refines you start yourself",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Off by default, so a refine you start, on one reply or on every reply, goes straight to the refine model. On, Jev reads each reply first and may leave it alone. A selection is never sent to Jev.",
+        hint: "Off by default, so a refine you start, on one reply or on every reply, goes straight to the refine model. On, the second model reads each reply first and may leave it alone. A selection is never sent to it.",
     },
     {
         key: "judgeAfter",
-        label: "Have Jev check the rewrite",
+        label: "Have it check the rewrite",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Off by default. On, Jev reads the rewrite too, and if a check still reaches your line the reply is refined once more. One more Jev call per refine.",
+        hint: "Off by default. On, the second model reads the rewrite too, and if a check still reaches your line the reply is refined once more. One more call to it per refine.",
     },
 ];
 // Every field that another can hang off, by key, so a row can ask whether the
@@ -2555,7 +2611,7 @@ export function setup(ctx, overrides) {
                     id: String(b.id),
                     on: b.on !== false,
                     role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-                    text: b.text == null ? "" : String(b.text),
+                    text: blockText(b.text),
                     name: b.name == null ? "" : String(b.name),
                 }));
             }
@@ -2712,6 +2768,11 @@ export function setup(ctx, overrides) {
     // empty lines left out. A box that was clicked into and typed in a little
     // can hold a space at the end of a line or an empty line under the last one,
     // and that is still the text the reader started with.
+    // The second model's name, for everything the panel says about what it did.
+    function whoName() {
+        const m = SECOND_MODELS.find((x) => x.value === cfg.judgeWho) || SECOND_MODELS[0];
+        return m.name;
+    }
     function sameAsWas(now, was) {
         if (typeof was !== "string")
             return steady(now) === steady(was);
@@ -3411,12 +3472,12 @@ export function setup(ctx, overrides) {
     // before it, and a stop is exactly that.
     let liveNotes = "";
     let keptNotes = null;
-    // What Jev decided about the last reply it read, for the card on the Log
+    // What the second model decided about the last reply it read, for the card on the Log
     // tab. The Log line says the same in one line; the card lays each check out
     // against the line, which is what somebody tuning the checks needs to see.
     let jevLast = null;
     // Every decision since the page loaded, so the card can say how many replies
-    // Jev spared a refine. That count is how somebody tells whether two models
+    // the second model spared a refine. That count is how somebody tells whether two models
     // are saving them anything.
     const jevTally = { read: 0, spared: 0, failed: 0, cost: 0, rechecked: 0, again: 0 };
     // The last refine the Log and the toast have already said was saved, so the
@@ -3570,11 +3631,11 @@ export function setup(ctx, overrides) {
         if (stage === "checking")
             return "Checking the answer" + clockPart;
         if (stage === "judging")
-            return "Jev is reading the reply" + clockPart;
+            return whoName() + " is reading the reply" + clockPart;
         if (stage === "rechecking")
-            return "Jev is reading the rewrite" + clockPart;
+            return whoName() + " is reading the rewrite" + clockPart;
         if (stage === "again")
-            return "Refining once more, since Jev still found something" + clockPart;
+            return "Refining once more, since " + whoName() + " still found something" + clockPart;
         // Another account on this install has a refine running, and this one waits
         // for it to finish before it can start.
         if (stage === "queued")
@@ -4254,7 +4315,7 @@ export function setup(ctx, overrides) {
         ".arf-sbs-col{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:4px}" +
         ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-well.arf-tall{max-height:340px}" +
-        // A bar per Jev check, with a mark where the line is. The fill takes the
+        // A bar per check, with a mark where the line is. The fill takes the
         // accent where the check reached the line and the muted text colour where
         // it did not, so the one that decided it stands out in any theme.
         ".arf-jevbar{position:relative;height:6px;margin-top:4px;border-radius:3px;overflow:hidden;" +
@@ -4907,9 +4968,9 @@ export function setup(ctx, overrides) {
     // before that block existed does not carry it, so switching the setting on
     // would otherwise fill nothing and say nothing about why.
     const noWornBlock = () => !blockList("blocks").some((b) => b.on && String(b.text || "").indexOf("{{overused}}") >= 0);
-    // The same for what Jev found. Only the prompt for replies, since Jev never
-    // reads your own messages.
-    const noJevFoundBlock = () => !blockList("blocks").some((b) => b.on && String(b.text || "").indexOf("{{jev_found}}") >= 0);
+    // The same for what the checks found. Only the prompt for replies, since
+    // the second model never reads your own messages.
+    const noJevFoundBlock = () => !blockList("blocks").some((b) => b.on && String(b.text || "").indexOf("{{checks_found}}") >= 0);
     function statusLine() {
         if (!cfg.enabled)
             return { text: "Off", tone: "off" };
@@ -7327,10 +7388,12 @@ export function setup(ctx, overrides) {
     }
     // Whether a row has anything to do where it sits.
     // A row also waits on whatever the row it hangs off waits on. The address for
-    // Jev hangs off the host being your own, and the host hangs off two models:
+    // the second model hangs off the host being your own, and the host hangs off two models:
     // checking only the host left the address on screen with one model, for
     // anybody who had once picked another address.
     function fieldShows(f, depth) {
+        if (f.also && !optionShows(f.also))
+            return false;
         if (!f.needs)
             return true;
         if (!optionShows(f.needs))
@@ -7540,6 +7603,13 @@ export function setup(ctx, overrides) {
             sel.addEventListener("change", () => {
                 cfg[f.key] = sel.value;
                 persist(true);
+                // The second model's name is written into the rows around it, the key
+                // most of all, so changing it redraws the card rather than only
+                // showing and hiding rows.
+                if (f.key === "judgeWho") {
+                    paint();
+                    return;
+                }
                 reveal();
                 settle();
             });
@@ -7622,7 +7692,7 @@ export function setup(ctx, overrides) {
             id: String(b.id),
             on: b.on !== false,
             role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-            text: b.text == null ? "" : String(b.text),
+            text: blockText(b.text),
             name: b.name == null ? "" : String(b.name),
         }));
         if (!list.length)
@@ -8301,7 +8371,7 @@ export function setup(ctx, overrides) {
     // The request a refine would send. Built by the backend with the same
     // function a real refine uses, so this cannot become a nice description of
     // something the extension does not actually send. What only a real refine
-    // can fill in, Jev's findings and the passes after the first, is named on
+    // can fill in, what the checks found and the passes after the first, is named on
     // the card rather than shown.
     function buildPreviewCard() {
         const wrap = card("See what gets sent", "Builds the request for the reply you are looking at and shows it, message by message, without calling a model. Nothing is sent and nothing is charged.");
@@ -8397,11 +8467,11 @@ export function setup(ctx, overrides) {
             passLine.setAttribute("data-arf-preview", "passes");
             wrap.appendChild(passLine);
         }
-        // The preview never asks Jev, so a block holding {{jev_found}} is empty
+        // The preview never asks the second model, so a block holding {{checks_found}} is empty
         // here and left out. Without this line the card would show a request with
         // no findings in it and call that what gets sent.
         if (preview.jevFoundLeftOut) {
-            const left = note("What Jev found is left out here. It is filled in only when Jev reads the reply during a refine, and a preview does not ask Jev. The Log says when it was sent.");
+            const left = note("What " + whoName() + " found is left out here. It is filled in only when " + whoName() + " reads the reply during a refine, and a preview does not ask it. The Log says when it was sent.");
             left.setAttribute("data-arf-preview", "jevfound");
             wrap.appendChild(left);
         }
@@ -8548,7 +8618,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(bad("The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above."));
         return wrap;
     }
-    // Two-model mode, and the key Jev is reached with. The key is sent to the
+    // Two-model mode, and the key the second model is reached with. The key is sent to the
     // backend once and kept in Lumiverse's secure store. The panel is only told
     // whether there is one, so it never sits in the settings or an export.
     let jevHas = null;
@@ -8558,10 +8628,14 @@ export function setup(ctx, overrides) {
     // each one sent a question per keystroke while the answer was on its way.
     let jevStatusAsked = false;
     function buildJudgeCard() {
-        const wrap = card("One model or two", "Beta. With two, a small model called Jev reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
+        const wrap = card("One model or two", "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
         const about = note("");
         about.setAttribute("data-arf-jevabout", "1");
-        about.appendChild(linkTo(JEV_ABOUT_URL, "What is Jev?"));
+        SECOND_MODELS.forEach((m, i) => {
+            if (i)
+                about.appendChild(document.createTextNode(" "));
+            about.appendChild(linkTo(m.about, "What is " + m.name + "?"));
+        });
         wrap.appendChild(about);
         // Everything above the checks sits above the key: the mode, the host, and
         // how that host is reached. Split by key rather than by count, so a row
@@ -8571,7 +8645,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(fieldRow(f));
         const keyRow = el("div", "arf-col");
         keyRow.setAttribute("data-arf-jevkey", "1");
-        const lab = el("span", "arf-lab", "Jev key");
+        const lab = el("span", "arf-lab", whoName() + " key");
         lab.id = "arf-jevkey-name";
         keyRow.appendChild(lab);
         const box = document.createElement("input");
@@ -8580,7 +8654,7 @@ export function setup(ctx, overrides) {
         box.setAttribute("aria-labelledby", lab.id);
         box.setAttribute("autocomplete", "off");
         box.setAttribute("data-arf-jevkey-box", "1");
-        box.placeholder = jevHas ? "A key is saved. Paste a new one to replace it." : "Paste the key from your Jev host";
+        box.placeholder = jevHas ? "A key is saved. Paste a new one to replace it." : "Paste the key from your " + whoName() + " host";
         keyRow.appendChild(box);
         const acts = el("div", "arf-row");
         const save = button("Save key", false);
@@ -8613,7 +8687,7 @@ export function setup(ctx, overrides) {
         test.disabled = !jevHas;
         test.style.opacity = test.disabled ? "0.45" : "1";
         test.addEventListener("click", () => {
-            jevSaid = "Asking Jev one small question.";
+            jevSaid = "Asking " + whoName() + " one small question.";
             jevAsk = newId();
             send({ type: "jev_test", requestId: jevAsk });
             paint();
@@ -8649,7 +8723,7 @@ export function setup(ctx, overrides) {
             }
             askFirst("jevchecks", {
                 title: "Use the built-in checks",
-                message: "Replace what is in What Jev checks with the built-in checks? What you wrote there is not kept.",
+                message: "Replace what is in What the second model checks with the built-in checks? What you wrote there is not kept.",
                 confirmLabel: "Replace",
             }, "Press Use the built-in checks again to replace yours.", () => {
                 cfg.judgeChecks = JUDGE_CHECKS;
@@ -8666,13 +8740,13 @@ export function setup(ctx, overrides) {
         // Where the findings go is a block on the Prompt tab, which is a long way
         // from here. Said only while nothing is set up to take them.
         if (cfg.judgeMode === "two" && noJevFoundBlock()) {
-            const found = note("What Jev finds is not passed to the refine model. To pass it on, switch on What Jev Found on the Prompt tab, or add a block with {{jev_found}} in it.");
+            const found = note("What " + whoName() + " finds is not passed to the refine model. To pass it on, switch on Checks Found on the Prompt tab, or add a block with {{checks_found}} in it.");
             found.setAttribute("data-arf-jevfound", "off");
             wrap.appendChild(found);
         }
         if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
-            wrap.appendChild(bad("The CORS proxy permission is refused, so Jev cannot be asked and every reply is refined as it is with one model."));
-        // Asked only once two models are on, since nothing about Jev shows before.
+            wrap.appendChild(bad("The CORS proxy permission is refused, so " + whoName() + " cannot be asked and every reply is refined as it is with one model."));
+        // Asked only once two models are on, since nothing about the second model shows before.
         if (cfg.judgeMode === "two" && jevHas == null && !jevStatusAsked) {
             jevStatusAsked = true;
             send({ type: "jev_key_status", requestId: newId() });
@@ -9132,12 +9206,12 @@ export function setup(ctx, overrides) {
         }
         return wrap;
     }
-    // Each check Jev answered about the last reply it read, as a bar against the
+    // Each check the second model answered about the last reply it read, as a bar against the
     // line, so somebody tuning the checks can see which one decided it and by
     // how much. Kept for the session only, like the Log.
     function buildJevCard() {
         const last = jevLast;
-        const wrap = card("What Jev decided", undefined, last
+        const wrap = card("What " + whoName() + " decided", undefined, last
             ? last.test
                 ? last.failed ? "test failed" : "test"
                 : last.after
@@ -9146,11 +9220,11 @@ export function setup(ctx, overrides) {
             : undefined);
         wrap.setAttribute("data-arf-jevcard", "1");
         if (!last) {
-            wrap.appendChild(note("Nothing yet. After Jev reads a reply, each check and its score is shown here."));
+            wrap.appendChild(note("Nothing yet. After " + whoName() + " reads a reply, each check and its score is shown here."));
             return wrap;
         }
         const when = new Date(last.at).toTimeString().slice(0, 8);
-        const who = "Jev" + (last.model ? " (" + last.model + ")" : "");
+        const who = whoName() + (last.model ? " (" + last.model + ")" : "");
         if (last.test) {
             wrap.setAttribute("data-arf-jevtest", last.failed ? "failed" : "ok");
             wrap.appendChild(note(last.failed
@@ -9207,13 +9281,13 @@ export function setup(ctx, overrides) {
         else if (last.test && !last.failed)
             wrap.appendChild(note("The host reported no cost for it."));
         const t = jevTally;
-        const sum = note("Since this page opened, Jev read " + t.read + (t.read === 1 ? " reply" : " replies") +
+        const sum = note("Since this page opened, " + whoName() + " read " + t.read + (t.read === 1 ? " reply" : " replies") +
             " and left " + t.spared + " alone, so " + t.spared + (t.spared === 1 ? " refine was" : " refines were") + " not paid for." +
             (t.failed ? " It could not decide on " + t.failed + ", and those were refined." : "") +
             (t.rechecked
                 ? " It read " + t.rechecked + (t.rechecked === 1 ? " rewrite" : " rewrites") + " and sent " + t.again + " back for one more refine."
                 : "") +
-            (t.cost > 0 ? " Jev cost " + t.cost.toFixed(6) + " in all." : ""));
+            (t.cost > 0 ? " " + whoName() + " cost " + t.cost.toFixed(6) + " in all." : ""));
         sum.setAttribute("data-arf-jevtally", "1");
         // Only once a real reply is counted. A test alone would read as nothing
         // counted at all.
@@ -10242,7 +10316,7 @@ export function setup(ctx, overrides) {
                     id: String(b.id),
                     on: b.on !== false,
                     role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-                    text: b.text == null ? "" : String(b.text),
+                    text: blockText(b.text),
                     name: b.name == null ? "" : String(b.name),
                 }));
                 took++;
@@ -10980,7 +11054,7 @@ export function setup(ctx, overrides) {
                     id: String(b.id),
                     on: b.on !== false,
                     role: ROLE_OPTIONS.some((r) => r.value === String(b.role)) ? String(b.role) : "system",
-                    text: b.text == null ? "" : String(b.text),
+                    text: blockText(b.text),
                     name: b.name == null ? "" : String(b.name),
                 }));
                 took++;
@@ -13552,25 +13626,27 @@ export function setup(ctx, overrides) {
                         send({ type: "list_connections", requestId: newId() });
                         return;
                     }
-                    // Jev's answer on one reply, for the Log. Each check with its
-                    // percentage, so a reply left alone can be read back and the line
-                    // moved if Jev is letting too much through or too little.
-                    // A second refine after Jev read the rewrite, turned down by a check.
-                    // The first rewrite is what gets saved, and the Log says why.
-                    // What Jev found went into the request. A real request is not shown
-                    // anywhere, so this line is how somebody can tell it was sent.
+                    // What the second model found went into the request. A real request
+                    // is not shown anywhere, so this line is how somebody can tell it was
+                    // sent.
                     if (msg.type === "jev_found_sent") {
                         const n = Math.max(0, Number(msg.count) || 0);
                         const checks = n + (n === 1 ? " check" : " checks");
                         log(msg.after
-                            ? "what Jev found in the rewrite went to the second refine: " + checks
-                            : "what Jev found went to the refine model: " + checks, true);
+                            ? "what " + whoName() + " found in the rewrite went to the second refine: " + checks
+                            : "what " + whoName() + " found went to the refine model: " + checks, true);
                         return;
                     }
+                    // A second refine after the second model read the rewrite, turned
+                    // down by a check. The first rewrite is what gets saved, and the Log
+                    // says why.
                     if (msg.type === "refine_again_dropped") {
                         log("the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
                         return;
                     }
+                    // The second model's answer on one reply, for the Log. Each check
+                    // with its percentage, so a reply left alone can be read back and the
+                    // line moved if it is letting too much through or too little.
                     if (msg.type === "judge_said") {
                         const list = Array.isArray(msg.scores) ? msg.scores : [];
                         jevLast = {
@@ -13607,19 +13683,19 @@ export function setup(ctx, overrides) {
                         const by = msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "";
                         if (msg.after) {
                             if (msg.failed)
-                                log("Jev could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
+                                log(whoName() + " could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
                             else if (msg.refine)
-                                log("Jev" + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
+                                log(whoName() + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
                             else
-                                log("Jev" + by + " read the rewrite and found nothing more: " + each + cost, true);
+                                log(whoName() + by + " read the rewrite and found nothing more: " + each + cost, true);
                             return;
                         }
                         if (msg.failed)
-                            log("Jev could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
+                            log(whoName() + " could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
                         else if (msg.refine)
-                            log("Jev" + by + " says refine: " + each + cost, true);
+                            log(whoName() + by + " says refine: " + each + cost, true);
                         else
-                            log("Jev" + by + " says leave it: " + each + cost, true);
+                            log(whoName() + by + " says leave it: " + each + cost, true);
                         return;
                     }
                     // Whether a key is saved is true whichever question it answers, so
@@ -13660,10 +13736,10 @@ export function setup(ctx, overrides) {
                             },
                         };
                         jevSaid = msg.ok
-                            ? "Jev" + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
-                                " answered. The key works. The Log tab shows the test under What Jev decided."
-                            : "Jev did not answer: " + String(msg.why || "no reason given") + ". The Log tab shows where the test was sent.";
-                        log(msg.ok ? "Jev answered a test question" : "Jev test failed: " + String(msg.why || ""), true);
+                            ? whoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
+                                " answered. The key works. The Log tab shows the test under What " + whoName() + " decided."
+                            : whoName() + " did not answer: " + String(msg.why || "no reason given") + ". The Log tab shows where the test was sent.";
+                        log(msg.ok ? whoName() + " answered a test question" : whoName() + " test failed: " + String(msg.why || ""), true);
                         paint();
                         return;
                     }
@@ -14467,6 +14543,7 @@ export function setup(ctx, overrides) {
 // never loads.
 export const __testing = {
     splitSelectorList,
+    blockText,
     INPUT_PICKS,
     CONFIG,
     PARTS,

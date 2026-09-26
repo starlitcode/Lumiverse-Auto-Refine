@@ -1688,6 +1688,74 @@ console.log("\neach list keeps its own lock");
 // The Jev card on the Model tab. Everything under the mode waits on two, the
 // address waits on the host being your own, and the key goes to the backend
 // once and is never kept by the panel.
+console.log("\nSpan, the other second model");
+{
+  // Picking Span changes the rows to Span's: its hosts, which Span, and the
+  // name the key and the lines use. Jev's version picker goes.
+  const errors = await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    const read = () =>
+      page.evaluate(() => {
+        const vis = (sel) => {
+          const n = document.querySelector(sel);
+          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+        };
+        const opts = (key) =>
+          [...(document.querySelector('#drawer [data-arf-field="' + key + '"]') || { options: [] }).options].map((o) => o.value);
+        return {
+          who: opts("judgeWho"),
+          hosts: opts("judgeHost"),
+          tiers: opts("spanTier"),
+          tierShown: vis('#drawer [data-arf-row="spanTier"]'),
+          versionShown: vis('#drawer [data-arf-row="judgeVersion"]'),
+          key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
+          links: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href),
+        };
+      });
+    const pick = async (key, value) => {
+      await page.evaluate(
+        ({ key, value }) => {
+          const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+          sel.value = value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+        },
+        { key, value },
+      );
+      await settle(page);
+      await settle(page);
+    };
+
+    const jev = await read();
+    ok("both second models are offered", jev.who.join() === "jev,span", JSON.stringify(jev.who));
+    ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
+    ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
+    ok("the key is called the Jev key", jev.key === "Jev key", String(jev.key));
+    ok("there is a link for each model", jev.links.length === 2 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
+
+    await pick("judgeWho", "span");
+    await closed(page);
+    const span = await read();
+    ok("with Span, Span's hosts are offered", span.hosts.join() === "openrouter,respan,custom", JSON.stringify(span.hosts));
+    ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
+    ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
+    ok("the key is called the Span key", span.key === "Span key", String(span.key));
+
+    await pick("judgeHost", "respan");
+    const respan = await read();
+    ok("on Respan, the paid Lite is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
+
+    await pick("judgeHost", "custom");
+    await closed(page);
+    const custom = await read();
+    ok("Another address is offered for Span, and Which Span waits for a host", !custom.tierShown, JSON.stringify(custom));
+
+    const sent = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
+    ok("the choice is saved", sent.judgeWho === "span" && sent.judgeHost === "custom", JSON.stringify({ who: sent.judgeWho, host: sent.judgeHost }));
+  });
+  ok("no console errors", !errors || !errors.length, JSON.stringify(errors));
+}
+
 console.log("\none model or two");
 {
   const errors = await inTab(browser, {}, async (page) => {
@@ -1710,6 +1778,7 @@ console.log("\none model or two");
           name: vis('#drawer [data-arf-row="judgeName"]'),
           byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
           after: vis('#drawer [data-arf-row="judgeAfter"]'),
+          before: vis('#drawer [data-arf-row="judgeBefore"]'),
           found: vis("#drawer [data-arf-jevfound]"),
         };
       });
@@ -1735,7 +1804,7 @@ console.log("\none model or two");
         about.target === "_blank" && /noopener/.test(about.rel),
       JSON.stringify(about),
     );
-    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand && !one.after && !one.found, JSON.stringify(one));
+    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand && !one.after && !one.before && !one.found, JSON.stringify(one));
     const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
     ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
 
@@ -1747,6 +1816,7 @@ console.log("\none model or two");
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
     ok("and so does the switch for refines you start yourself", two.byHand, JSON.stringify(two));
     ok("and the switch for Jev checking the rewrite", two.after, JSON.stringify(two));
+    ok("and the switch for sending the reply before it", two.before, JSON.stringify(two));
     ok("and, with no block taking what Jev finds, a line saying where to switch one on", two.found, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
     ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
@@ -1924,8 +1994,8 @@ console.log("\na refine you start is logged once");
 
 console.log("\nwhat Jev found has somewhere to go");
 {
-  // The line about What Jev Found is for somebody whose prompt has nowhere to
-  // put it. Once a block takes {{jev_found}}, it has nothing to say.
+  // The line about Checks Found is for somebody whose prompt has nowhere to
+  // put it. Once a block takes {{checks_found}}, it has nothing to say.
   const errors = await inTab(
     browser,
     {
@@ -1933,7 +2003,7 @@ console.log("\nwhat Jev found has somewhere to go");
         judgeMode: "two",
         blocks: [
           { id: "t", name: "Passage", on: true, role: "user", text: "<passage>{{message}}</passage>" },
-          { id: "j", name: "Found", on: true, role: "system", text: "<found>{{jev_found}}</found>" },
+          { id: "j", name: "Found", on: true, role: "system", text: "<found>{{checks_found}}</found>" },
         ],
       },
     },
@@ -1941,7 +2011,7 @@ console.log("\nwhat Jev found has somewhere to go");
       await goTab(page, "Model");
       await settle(page);
       const note = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-jevfound]"));
-      ok("with a block taking {{jev_found}}, the line is not shown", !note);
+      ok("with a block taking {{checks_found}}, the line is not shown", !note);
     },
   );
   ok("no errors with a block taking what Jev found", errors.length === 0, errors.join("\n         "));
@@ -2063,7 +2133,7 @@ console.log("\nwhat Jev decided");
         ok: true,
         why: "",
         model: "jev-1.13.0",
-        check: "The door in `text` is open.",
+        check: "The door in `reply` is open.",
         pct: 98,
         over: 50,
         cost: 0,
@@ -2085,7 +2155,7 @@ console.log("\nwhat Jev decided");
           }
         : null;
     });
-    ok("a test shows in the card, marked as a test", !!test && test.mark === "ok" && /made-up question/.test(test.text) && /The door in text is open/.test(test.text) && test.widths.join() === "98%", JSON.stringify(test));
+    ok("a test shows in the card, marked as a test", !!test && test.mark === "ok" && /made-up question/.test(test.text) && /The door in reply is open/.test(test.text) && test.widths.join() === "98%", JSON.stringify(test));
     ok("it says where the test went, in which format, and the name sent", !!test && /jev\.example\.com\/v1\/chat\/completions/.test(test.sent) && /OpenAI chat request/.test(test.sent) && /typesafe\/jev-latest/.test(test.sent), JSON.stringify(test));
     ok("it says when the host reported no cost", !!test && /reported no cost/.test(test.text), JSON.stringify(test));
     ok("a test is not counted as a reply", !!test && !test.tally, JSON.stringify(test));
@@ -4875,10 +4945,10 @@ console.log("\nthe preview says which prompt it used");
     ok("your own turn says it used the prompt for your writing",
       /your own writing/.test(yours || ""), yours);
     ok("with nothing left out for Jev, nothing is said about it", (await jevLine()) === null);
-    // A preview never asks Jev, so a block holding {{jev_found}} is empty here.
+    // A preview never asks Jev, so a block holding {{checks_found}} is empty here.
     await feed("replies", true);
     const left = await jevLine();
-    ok("a preview with What Jev Found left out says so, and where to look instead",
+    ok("a preview with Checks Found left out says so, and where to look instead",
       /left out here/.test(left || "") && /The Log says when it was sent/.test(left || ""), left);
     // With several passes, neither list on the Prompt tab is sent, so the line
     // naming one gives way to a line naming the passes.
@@ -4952,7 +5022,7 @@ console.log("\nthe raw view");
     ok("with the connection it goes to", /c-fast/.test(raw));
     // What the request below does not hold is said in the raw view too, not
     // only in the one it was first written for.
-    ok("and says What Jev Found is left out, in the raw view as well",
+    ok("and says Checks Found is left out, in the raw view as well",
       !!(await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="jevfound"]'))));
     ok("without calling it the request exactly as it goes out", !/as it goes out\./.test(raw) && /apart from anything named above/.test(raw));
   });
@@ -8094,7 +8164,7 @@ console.log("\nwhen a default moves under somebody who was on it");
   await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
     const said = await seen(page);
     ok("somebody on the old default is told", !!said, JSON.stringify(said));
-    ok("and the line names the setting", !!said && /What Jev checks/.test(said), JSON.stringify(said));
+    ok("and the line names the setting", !!said && /What the second model checks/.test(said), JSON.stringify(said));
     await page.evaluate(async () => {
       document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
       await new Promise((r) => setTimeout(r, 200));

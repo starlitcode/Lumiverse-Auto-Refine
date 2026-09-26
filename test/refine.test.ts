@@ -936,15 +936,15 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls.length).toBe(0);
   });
 
-  // {{jev_found}} hands the refine model what Jev picked out, so it does not
+  // {{checks_found}} hands the refine model what Jev picked out, so it does not
   // have to find the problems again from nothing.
   const FOUND_BLOCKS = [
     { id: "t", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
-    { id: "j", name: "Found", on: true, role: "system", text: "<found>\n{{jev_found}}\n</found>" },
+    { id: "j", name: "Found", on: true, role: "system", text: "<found>\n{{checks_found}}\n</found>" },
   ];
   const sentText = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
 
-  test("{{jev_found}} lists the checks that reached the line, strongest first", async () => {
+  test("{{checks_found}} lists the checks that reached the line, strongest first", async () => {
     const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([60, 90]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
@@ -998,7 +998,7 @@ describe("two models: Jev reads the reply first", () => {
 
   // The preview never asks Jev, so it says the block is left out rather than
   // showing a request without it and calling that what is sent.
-  test("the preview says What Jev Found is left out, with two models and a block for it", async () => {
+  test("the preview says Checks Found is left out, with two models and a block for it", async () => {
     const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([90]) });
     await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
     await wait(50);
@@ -1212,7 +1212,7 @@ describe("two models: Jev reads the reply first", () => {
   test("Test asks one small question with nothing from any chat in it", async () => {
     const h = await keyed({}, { jev: says([100]) });
     await h.front({ type: "jev_test", requestId: "t" });
-    expect(h.jevCalls[0].body.state).toEqual({ text: "The door is open." });
+    expect(h.jevCalls[0].body.state).toEqual({ reply: "The door is open." });
     const done = h.sent.find((m: any) => m.type === "jev_tested");
     expect(done.ok).toBe(true);
   });
@@ -1305,6 +1305,271 @@ describe("two models: Jev reads the reply first", () => {
     const body = h.jevCalls[0].body;
     expect(body.state.worn_phrases).toMatch(/cold wind bit/);
     expect(body.questions.worn.type).toBe("noul");
+  });
+
+  // ---- Span, the other second model ----
+  // On OpenRouter Span takes the same decisions request as Jev, so only the
+  // model name changes. Each kind of Span by the name OpenRouter gives it.
+  for (const [tier, model] of [
+    ["free", "respan/span-01-lite:free"],
+    ["lite", "respan/span-01-lite"],
+    ["full", "respan/span-01"],
+  ]) {
+    test("Span on OpenRouter, " + tier + ": " + model, async () => {
+      const h = await keyed({ judgeWho: "span", spanTier: tier }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+      expect(h.jevCalls[0].body.model).toBe(model);
+      expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+      expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
+    });
+  }
+
+  test("a host that serves only Jev, left picked, sends Span to OpenRouter", async () => {
+    const h = await keyed({ judgeWho: "span", judgeHost: "nanogpt" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(h.jevCalls[0].body.model).toBe("respan/span-01-lite:free");
+  });
+
+  test("and Respan, left picked when Jev is chosen again, sends Jev to OpenRouter", async () => {
+    const h = await keyed({ judgeWho: "jev", judgeHost: "respan" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(h.jevCalls[0].body.model).toBe("~typesafe/jev-latest");
+  });
+
+  // Respan's own API takes a scores request: the reply as the assistant's
+  // turn, and each check as a behavior with a definition. Each result comes
+  // back with the chance it is present, which is the score.
+  const scoresSay = (pcts: number[]) => (_url: string, init: any) => {
+    const b = JSON.parse(init.body);
+    const results = (b.behaviors || []).map((x: any, i: number) => {
+      const p = (pcts[i] ?? pcts[pcts.length - 1]) / 100;
+      return { id: x.id, p_present: p, p_absent: (1 - p) * 0.9, p_not_observable: (1 - p) * 0.1 };
+    });
+    return { status: 200, body: JSON.stringify({ model: b.model, results: results }) };
+  };
+
+  for (const [tier, model] of [
+    ["free", "span-01-free"],
+    ["full", "span-01-pro"],
+    ["lite", "span-01-free"],
+  ]) {
+    test("Span on Respan, " + tier + ": " + model, async () => {
+      const h = await keyed({ judgeWho: "span", judgeHost: "respan", spanTier: tier }, { jev: scoresSay([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe("https://api.respan.ai/api/v1/scores");
+      expect(h.jevCalls[0].body.model).toBe(model);
+    });
+  }
+
+  test("a scores request carries the reply as the assistant's turn and each check as a behavior", async () => {
+    const h = await keyed({ judgeWho: "span", judgeHost: "respan" }, { jev: scoresSay([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const call = h.jevCalls[0];
+    expect(call.init.headers.Authorization).toBe("Bearer sk-made-up-key");
+    expect(call.body.span).toEqual({ input: [], output: { role: "assistant", content: REPLY } });
+    expect(call.body.behaviors).toEqual([
+      { id: "check_1", definition: "The reply repeats itself." },
+      { id: "check_2", definition: "The reply uses stock phrases." },
+    ]);
+    expect(call.body.state).toBeUndefined();
+    expect(call.body.questions).toBeUndefined();
+  });
+
+  test("and the chance each behavior is present is its score", async () => {
+    const h = await keyed({ judgeWho: "span", judgeHost: "respan" }, { jev: scoresSay([10, 72]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].failed).toBe(false);
+    expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 72]);
+    expect(said(h)[0].refine).toBe(true);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("an address ending in /scores is sent a scores request", async () => {
+    const h = await keyed(
+      { judgeWho: "span", judgeHost: "custom", judgeUrl: "https://scores.example.test/api/v1/scores", judgeModel: "span-01-free" },
+      { jev: scoresSay([10]) },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.behaviors.length).toBe(2);
+    expect(h.jevCalls[0].body.span.output.content).toBe(REPLY);
+  });
+
+  // Another address is not tied to one second model: the end of the address
+  // picks the request, for Span as for Jev.
+  test("Span through a chat completions address is sent a chat request", async () => {
+    const h = await keyed(
+      { judgeWho: "span", judgeHost: "custom", judgeUrl: "https://router.example.test/v1/chat/completions", judgeModel: "respan/span-01-lite:free" },
+      { jev: chatSays([10, 60]) },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const body = h.jevCalls[0].body;
+    expect(body.model).toBe("respan/span-01-lite:free");
+    expect(body.response_format.type).toBe("questions");
+    expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 60]);
+  });
+
+  test("worn phrases go to Respan written out in the behavior", async () => {
+    const worn: Msg[] = [
+      { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
+      { id: "m1", role: "user", content: "i go on" },
+      { id: "m2", role: "assistant", content: "Rain came down and the cold wind bit at her hands." },
+      { id: "m3", role: "user", content: "i keep going" },
+      { id: "m4", role: "assistant", content: "She went through the gate, and the cold wind bit at her again." },
+    ];
+    const h = await keyed({ judgeWho: "span", judgeHost: "respan", wornOn: true, wornLeast: 2 }, { jev: scoresSay([10]) }, worn);
+    await h.ended({ chatId: "c1", messageId: "m4", generationId: "g1" });
+    await wait(50);
+    const worned = h.jevCalls[0].body.behaviors.find((b: any) => b.id === "worn");
+    expect(worned.definition).toMatch(/^At least one phrase listed in this list of phrases \(.*cold wind bit.*\) appears in the reply\.$/);
+  });
+
+  // The reply before this one, sent when the reader asks, so a check can
+  // compare the two. It is the last reply before it, with the reader's own
+  // messages and the model's working left out.
+  const BEATS = "`reply` follows the same beats as `previous_reply`.";
+  const EARLIER = "The gate stands open, and the road past it is dark.";
+
+  test("the reply before it is not sent unless asked for", async () => {
+    const h = await keyed({ judgeChecks: "`reply` repeats itself.\n" + BEATS }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+    // A check about a reply that is not sent is not asked.
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1"]);
+  });
+
+  test("asked for, it goes as previous_reply, without the working, and the check is asked", async () => {
+    const msgs = chat();
+    msgs[0].content = "<think>\nThe plan for the gate\n</think>\n\n" + EARLIER;
+    const h = await keyed({ judgeBefore: true, judgeChecks: BEATS }, { jev: says([10]) }, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY, previous_reply: EARLIER });
+    expect(h.jevCalls[0].body.questions.check_1.instructions).toBe(BEATS);
+  });
+
+  // Nobody has to write a check for it: the switch brings its own three.
+  const BUILT_IN_BEFORE = ["before_beats", "before_speakers", "before_place"];
+
+  test("on, three checks about repeating the reply before it are added", async () => {
+    const h = await keyed({ judgeBefore: true }, { jev: says([10, 20, 30, 40, 70]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const q = h.jevCalls[0].body.questions;
+    expect(Object.keys(q)).toEqual(["check_1", "check_2", ...BUILT_IN_BEFORE]);
+    for (const id of BUILT_IN_BEFORE) {
+      expect(q[id].type).toBe("noul");
+      expect(q[id].instructions).toContain("`previous_reply`");
+    }
+    // Shown by name, and a hit on one refines the reply like any check.
+    const got = said(h)[0];
+    expect(got.scores.map((x: any) => x.check).slice(2)).toEqual([
+      "Repeats the beats of the reply before it",
+      "Has the characters speak in the same order as the reply before it",
+      "Describes the surroundings again with the same details as the reply before it",
+    ]);
+    expect(got.refine).toBe(true);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("off, or with no reply before it, they are not asked", async () => {
+    let h = await keyed({}, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1", "check_2"]);
+    h = await keyed({ judgeBefore: true }, { jev: says([10]) }, [
+      { id: "m1", role: "user", content: "i walk through it" },
+      { id: "m2", role: "assistant", content: REPLY },
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1", "check_2"]);
+  });
+
+  test("the docs list the three checks exactly as they are sent", async () => {
+    const page = readFileSync(new URL("../docs/two-models.md", import.meta.url), "utf8");
+    const h = await keyed({ judgeBefore: true }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const q = h.jevCalls[0].body.questions;
+    for (const id of BUILT_IN_BEFORE) expect(page).toContain("\n" + q[id].instructions + "\n");
+  });
+
+  test("with no reply before it, a check that names it is left out", async () => {
+    const msgs: Msg[] = [
+      { id: "m1", role: "user", content: "i walk through it" },
+      { id: "m2", role: "assistant", content: REPLY },
+    ];
+    const h = await keyed({ judgeBefore: true, judgeChecks: "`reply` repeats itself.\n" + BEATS }, { jev: says([10]) }, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1"]);
+  });
+
+  test("on Respan, the reply before it is the turn ahead of the reply", async () => {
+    const h = await keyed({ judgeWho: "span", judgeHost: "respan", judgeBefore: true, judgeChecks: BEATS }, { jev: scoresSay([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const body = h.jevCalls[0].body;
+    expect(body.span.input).toEqual([{ role: "assistant", content: EARLIER }]);
+    expect(body.span.output).toEqual({ role: "assistant", content: REPLY });
+    expect(body.behaviors[0]).toEqual({ id: "check_1", definition: "The reply follows the same beats as the previous reply." });
+    expect(body.behaviors.find((b: any) => b.id === "before_speakers").definition).toBe(
+      "The reply has the characters speak in the same order as the previous reply.",
+    );
+  });
+
+  test("the rewrite is compared with the same reply before it", async () => {
+    const h = await armed(
+      ["She stepped through and the cold hit her.", "The cold hit her as she stepped through."],
+      { ...TWO, judgeBefore: true, judgeAfter: true, judgeChecks: BEATS },
+      chat(),
+      { jev: says([90]) },
+    );
+    await h.front({ type: "jev_key_set", requestId: "k", key: "sk-made-up-key" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.jevCalls.length).toBe(2);
+    expect(h.jevCalls[1].body.state.previous_reply).toBe(EARLIER);
+  });
+
+  test("in {{checks_found}}, previous_reply is written as the reply before it", async () => {
+    const blocks = [
+      { id: "t", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
+      { id: "j", name: "Found", on: true, role: "system", text: "<found>\n{{checks_found}}\n</found>" },
+    ];
+    const h = await keyed({ judgeBefore: true, judgeChecks: BEATS, blocks: blocks }, { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const text = (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
+    expect(text).toContain("- reply follows the same beats as the reply before it. (90%)");
+  });
+
+  test("what goes wrong is said with Span's name", async () => {
+    const h = await keyed({ judgeWho: "span" }, { jev: () => ({ status: 401, body: "{}" }) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].failed).toBe(true);
+    expect(said(h)[0].why).toBe("the Span key was refused");
+  });
+
+  test("and what it found is said with Span's name too", async () => {
+    const h = await keyed({ judgeWho: "span" }, { jev: says([10, 20]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.stood().some((w: string) => /^Span found nothing/.test(w))).toBe(true);
   });
 });
 

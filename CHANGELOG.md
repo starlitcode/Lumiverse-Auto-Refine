@@ -6,13 +6,43 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.21.0
+
+_2026-09-26_
+
+### Added
+
+- **Span, a second choice for the second model.** Span is a scoring model from Respan. Pick it under **Which second model**, in **One model or two**. It answers the same checks as Jev. See [Two models](docs/two-models.md).
+- **Which Span.** Span-01 Lite, free, Span-01 Lite, paid, and Span-01. On Respan's own API these are called span-01-free and span-01-pro. See [Which Span](docs/two-models.md#which-span).
+- **Respan as a host**, under **Where it is reached**, while Span is picked.
+- **Another address takes Respan's scores format.** An address ending in `/scores` is sent the kind of request Respan's own API takes. See [Another address](docs/two-models.md#another-address).
+- **What is Span?**, a link on the Model tab to Respan's page introducing Span.
+- **Also compare with the reply before it**, in **One model or two**, off by default. On, the second model is also sent the reply before the one it reads. Three checks are added for you: whether the reply repeats its beats, has the characters speak in the same order, or describes the surroundings again with the same details. Your own checks can name it too, as `previous_reply`. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
+- **`{{checks_found}}`**, the macro for what the checks found. It works the same whichever second model is picked, and its lead-in names that model.
+
+### Changed
+
+- **The two-model settings are no longer named after Jev.** **Where Jev is reached** is now **Where it is reached**. **What Jev checks** is now **What the second model checks**. **Let Jev check refines you start yourself** is now **Let it check refines you start yourself**. **Have Jev check the rewrite** is now **Have it check the rewrite**. The key box, the status lines, the Log and the **What Jev decided** card use the name of the model you picked.
+- **The block What Jev Found is now called Checks Found**, and its tag is `<checks_found>`. The Prompt tab says the built-in prompts have changed. Load a built-in prompt for replies again to get it.
+- **`{{jev_found}}` is replaced by `{{checks_found}}`.** A block you saved with `{{jev_found}}` is switched to `{{checks_found}}` when it is loaded, so it keeps working.
+- **The Two models page is now [docs/two-models.md](docs/two-models.md)**, and covers both models.
+
+- **Making your own prompt explains where thinking steps go.** It says why they work best at the end, after the passage, and why the built-in prompts that think put them in **Hand It In**. See [More ways to make it work better](docs/rules.md#more-ways-to-make-it-work-better).
+
+### Fixed
+
+- **The macro list did not say which permission `{{memories}}` needs.** It said the block is empty where "the permission" is not granted. It now names the Chats permission.
+- **The hint under How many models said a refine you start yourself is never held back by Jev.** With **Let Jev check refines you start yourself** on, Jev can leave such a reply alone. The hint no longer says this. The switch has its own hint.
+
+---
+
 ## 1.20.0
 
 _2026-09-26_
 
 ### Added
 
-- **Two more checks for Jev.** One finds the negation trick, as in "it wasn't a request, it was a command". The other finds a reply that ends by turning to you with a question, such as what you do next. Both match rules the built-in reply prompts carry. See [What Jev checks](docs/jev.md#what-jev-checks).
+- **Two more checks for Jev.** One finds the negation trick, as in "it wasn't a request, it was a command". The other finds a reply that ends by turning to you with a question, such as what you do next. Both match rules the built-in reply prompts carry. See [What Jev checks](docs/two-models.md#what-the-second-model-checks).
 
 ### Changed
 
@@ -95,7 +125,7 @@ _2026-09-25_
 - **Roll Call**, a block in all four built-in prompts. It keeps every line with its speaker, and each character's way of talking, in a scene with one character or several. In the prompts for replies it also keeps a name or a plain speech tag where it is the only thing saying who is talking, and uses a name where a pronoun could mean two people.
 - **A step-by-step guide to making your own prompt.** It shows how to start from a built-in prompt, find what annoys you, group it by kind, keep it short, match your model, add your own taste, and test it. See [Making your own prompt](docs/rules.md). It starts with what every prompt must have to work.
 - **The docs warn about prefills and samplers.** Many newer models no longer accept an Assistant block at the end of a request, or some sampler settings. The docs say when to avoid both, and what to do if a refine fails because of them. See [Roles](docs/prompt.md#roles) and [Sampler settings](docs/prompt.md#sampler-settings).
-- **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
+- **The Log says when what Jev found went to the refine model**, with how many checks, such as "what Jev found went to the refine model: 2 checks". It also says so for the second refine that **Have Jev check the rewrite** can start. A real request is not shown anywhere else, so this is how to tell it was sent. See [Passing on what Jev found](docs/two-models.md#passing-on-what-the-checks-found).
 
 ### Changed
 
@@ -132,9 +162,9 @@ _2026-09-25_
 
 ### Added
 
-- **What Jev Found**, a block in both built-in prompts for replies, switched off. With two models, it hands the refine model the checks Jev found in the reply, strongest first, with their scores. A short lead-in says each one is a lead to check, not an order, since Jev can be wrong. The block is left out whenever Jev did not read the reply. See [Passing on what Jev found](docs/jev.md#passing-on-what-jev-found).
+- **What Jev Found**, a block in both built-in prompts for replies, switched off. With two models, it hands the refine model the checks Jev found in the reply, strongest first, with their scores. A short lead-in says each one is a lead to check, not an order, since Jev can be wrong. The block is left out whenever Jev did not read the reply. See [Passing on what Jev found](docs/two-models.md#passing-on-what-the-checks-found).
 - **`{{jev_found}}`**, the macro that block uses, for a prompt of your own.
-- **Have Jev check the rewrite**, in **One model or two**, off by default. On, Jev also reads what the refine model wrote. If a check still reaches your line, the reply is refined once more, with what Jev found in the rewrite. It happens once, and costs one more Jev call per refine. See [Having Jev check the rewrite](docs/jev.md#having-jev-check-the-rewrite).
+- **Have Jev check the rewrite**, in **One model or two**, off by default. On, Jev also reads what the refine model wrote. If a check still reaches your line, the reply is refined once more, with what Jev found in the rewrite. It happens once, and costs one more Jev call per refine. See [Having Jev check the rewrite](docs/two-models.md#having-it-check-the-rewrite).
 - **The One model or two card says when nothing takes what Jev finds**, and where to switch it on.
 
 ### Changed
@@ -144,8 +174,8 @@ _2026-09-25_
 
 ### Fixed
 
-- **The Jev switch did not say it covers Refine every reply here.** **Let Jev check refines you start yourself** has always covered it, but the hint and the docs named only **Refine the latest reply** and the button on a message. Both now say so. With the switch on, Jev reads the replies one at a time, and only the ones it picks out are refined. See [When Jev is asked](docs/jev.md#when-jev-is-asked).
-- **The docs did not say why Refine when a check reaches stops at 99.** They now explain both ends: at 100 nearly every reply would be left alone, and at 0 every reply would be refined, with a Jev call paid for either way. See [What Jev checks](docs/jev.md#what-jev-checks).
+- **The Jev switch did not say it covers Refine every reply here.** **Let Jev check refines you start yourself** has always covered it, but the hint and the docs named only **Refine the latest reply** and the button on a message. Both now say so. With the switch on, Jev reads the replies one at a time, and only the ones it picks out are refined. See [When Jev is asked](docs/two-models.md#when-it-is-asked).
+- **The docs did not say why Refine when a check reaches stops at 99.** They now explain both ends: at 100 nearly every reply would be left alone, and at 0 every reply would be refined, with a Jev call paid for either way. See [What Jev checks](docs/two-models.md#what-the-second-model-checks).
 
 ---
 
@@ -155,7 +185,7 @@ _2026-09-24_
 
 ### Added
 
-- **Let Jev check refines you start yourself**, in **One model or two**, while two models are on. Off by default, so a refine button goes straight to the refine model as before. On, Jev reads the reply first when you press **Refine the latest reply** or the button on a message, and a reply it finds nothing wrong with is left alone. A selection and your own messages are never sent to Jev. See [When Jev is asked](docs/jev.md#when-jev-is-asked).
+- **Let Jev check refines you start yourself**, in **One model or two**, while two models are on. Off by default, so a refine button goes straight to the refine model as before. On, Jev reads the reply first when you press **Refine the latest reply** or the button on a message, and a reply it finds nothing wrong with is left alone. A selection and your own messages are never sent to Jev. See [When Jev is asked](docs/two-models.md#when-it-is-asked).
 
 ### Fixed
 
@@ -181,7 +211,7 @@ _2026-09-24_
 
 ### Added
 
-- **Test shows its answer in What Jev decided**, on the Log tab, marked as a test. See [Reading a test](docs/jev.md#reading-a-test).
+- **Test shows its answer in What Jev decided**, on the Log tab, marked as a test. See [Reading a test](docs/two-models.md#reading-a-test).
   - The score for the test question, and which Jev answered.
   - The address the test went to, the format it was sent in, and the model name it asked for.
   - What the host said the test cost, or that it reported no cost.
@@ -207,18 +237,18 @@ _2026-09-23_
 
 ### Added
 
-- **Which Jev.** In **One model or two**, under **Where Jev is reached**. Pick **The latest Jev**, **The preview Jev**, **Jev 1.13 exactly**, or **A name I type**. See [Which Jev](docs/jev.md#which-jev).
+- **Which Jev.** In **One model or two**, under **Where Jev is reached**. Pick **The latest Jev**, **The preview Jev**, **Jev 1.13 exactly**, or **A name I type**. See [Which Jev](docs/two-models.md#which-jev).
   - The latest moves to each new Jev by itself, so its answers can change. Jev 1.13 exactly keeps them steady.
   - The preview runs ahead of the latest when TypeSafe has a preview build. Only TypeSafe names one, so it is only offered when the host is TypeSafe.
   - A name you type is sent as you typed it, for a host that renames Jev.
 
-- **What Jev decided**, a card on the Log tab while two models are on. It shows the last reply Jev read: each check with its score as a bar, the line marked on each bar, whether the reply was refined, which Jev answered, and the cost. It also counts, since the page opened, how many replies Jev left alone, which is how many refines you did not pay for. See [Reading what it decided](docs/jev.md#reading-what-it-decided).
+- **What Jev decided**, a card on the Log tab while two models are on. It shows the last reply Jev read: each check with its score as a bar, the line marked on each bar, whether the reply was refined, which Jev answered, and the cost. It also counts, since the page opened, how many replies Jev left alone, which is how many refines you did not pay for. See [Reading what it decided](docs/two-models.md#reading-what-it-decided).
 
 - **What is Jev?**, a link on the Model tab to TypeSafe's own introduction to Jev.
 
 - **The Log names the Jev that answered**, for example "Jev (jev-1.13.0) says leave it". **Test** names it too.
 
-- **Another address takes OpenAI and Claude format addresses.** An address ending in `/chat/completions`, `/responses` or `/messages` is sent the kind of request that format takes. The address and model name boxes show an example, and [Another address](docs/jev.md#another-address) lists the addresses known to work.
+- **Another address takes OpenAI and Claude format addresses.** An address ending in `/chat/completions`, `/responses` or `/messages` is sent the kind of request that format takes. The address and model name boxes show an example, and [Another address](docs/two-models.md#another-address) lists the addresses known to work.
 
 ### Changed
 
@@ -232,7 +262,7 @@ _2026-09-23_
 
 ### Added
 
-- **Two models, a beta.** On the Model tab, under **One model or two**. With two, a small model called Jev reads each new reply first and checks it against a list you write. The reply is refined only if a check reaches the line you set, so replies that are already fine cost nothing. See [Two models](docs/jev.md).
+- **Two models, a beta.** On the Model tab, under **One model or two**. With two, a small model called Jev reads each new reply first and checks it against a list you write. The reply is refined only if a check reaches the line you set, so replies that are already fine cost nothing. See [Two models](docs/two-models.md).
   - Jev is reached through OpenRouter, NanoGPT, TypeSafe, or another address.
   - Your Jev key is kept in Lumiverse's secure store, never in your settings or an export.
   - If Jev cannot answer, the reply is refined as normal, and the Log says why.

@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.20.0';
+const VERSION = '1.21.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -308,7 +308,8 @@ const HISTORY_MACRO = '{{history}}';
 const LORE_MACRO = '{{lore}}';
 const MEMORY_MACRO = '{{memories}}';
 const OVERUSED_MACRO = '{{overused}}';
-const JEV_FOUND_MACRO = '{{jev_found}}';
+// What the checks found, whichever second model scored them.
+const CHECKS_FOUND_MACRO = '{{checks_found}}';
 
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
@@ -320,7 +321,7 @@ const JEV_FOUND_MACRO = '{{jev_found}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused', 'jev_found'];
+const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused', 'checks_found'];
 
 interface Scene {
   character: string;
@@ -340,8 +341,9 @@ interface Scene {
   // asked for on a selection rather than on the message. Empty on every other
   // refine, which leaves the block carrying it out of the prompt entirely.
   wholeReply?: string;
-  // What Jev found in the reply: the checks that reached the line, strongest
-  // first, with a lead-in saying what they are. Set only when Jev read the
+  // What the second model found in the reply: the checks that reached the
+  // line, strongest first, with a lead-in saying what they are. Set only when
+  // it read the
   // reply and picked it out, so on every other refine the block holding it is
   // left out.
   jevFound?: string;
@@ -457,6 +459,11 @@ function activeBlocks(isUser?: boolean): Block[] {
 // refused rather than paid for.
 function promptHasTurn(isUser?: boolean): boolean {
   return promptWants(TURN_MACRO, isUser);
+}
+
+// Whether a prompt takes what the checks found.
+function wantsFound(isUser?: boolean, use?: Block[]): boolean {
+  return promptWants(CHECKS_FOUND_MACRO, isUser, use);
 }
 
 // Whether any block that is actually being sent asks for this. What a block
@@ -1024,7 +1031,7 @@ function fillOurs(
     if (id === 'protect_notes') return p.shieldNote || '';
     if (id === 'whole_reply') return p.wholeReply || '';
     if (id === 'overused') return p.worn || '';
-    if (id === 'jev_found') return p.jevFound || '';
+    if (id === 'checks_found') return p.jevFound || '';
     return '';
   });
 }
@@ -2657,6 +2664,18 @@ function fromTheStory(phrase: string, known: string): boolean {
   return false;
 }
 
+// The last reply before the one at `at`, without its working, for a check that
+// compares the two. Empty when there is none.
+function replyBefore(msgs: any[], at: number): string {
+  for (let i = at - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (!m || m.role !== 'assistant') continue;
+    const body = splitThinking(String(m.content == null ? '' : m.content)).body.trim();
+    if (body) return body;
+  }
+  return '';
+}
+
 // The phrases this chat has worn out, written out for a prompt. Read from replies
 // already in hand, so this costs no call of its own.
 //
@@ -3307,28 +3326,30 @@ async function refineMessage(
   // Where the selection sits in the body. Worked out against the body rather
   // than the whole message, because the model's own working is in front of it
   // and counting through that would put every offset out by its length.
-  // Two models: Jev reads the reply before the refine model is asked. Always on
-  // the automatic pass. On a refine started with a button only when the reader
-  // asked for that, since pressing it is already a decision the reply needs
-  // one. Never on a selection, which is part of a reply and not what the checks
+  // Two models: the second model reads the reply before the refine model is
+  // asked. Always on the automatic pass. On a refine started with a button only
+  // when the reader asked for that, since pressing it is already a decision the
+  // reply needs one. Never on a selection, which is part of a reply and not what the checks
   // are about, and never on the reader's own message, which is not a reply.
   const jevReads = judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick;
   const jevWorn = jevReads && judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
+  const jevBefore = jevReads && judgeBefore ? replyBefore(msgs, at) : '';
   if (jevReads) {
     tell(userId, { type: 'refine_progress', stage: 'judging' });
     const worn = jevWorn;
     // Held like a call to the refine model, so Stop reaches it. The request to
-    // Jev cannot be pulled back once sent, so Stop is honoured when it answers.
+    // the second model cannot be pulled back once sent, so Stop is honoured
+    // when it answers.
     let stopped = false;
     const handle = { abort: () => { stopped = true; } };
     holdRun(userId, handle);
     let verdict: JevVerdict;
     try {
-      verdict = await judgeReply(userId, split.body, worn);
+      verdict = await judgeReply(userId, split.body, worn, jevBefore);
     } finally {
       dropRun(userId, handle);
     }
-    if (stopped) return { ok: false, stood: true, why: 'stopped while Jev was reading the reply' };
+    if (stopped) return { ok: false, stood: true, why: 'stopped while ' + who() + ' was reading the reply' };
     tell(userId, {
       type: 'judge_said',
       chatId: chatId,
@@ -3346,15 +3367,15 @@ async function refineMessage(
       return {
         ok: false,
         stood: true,
-        why: 'Jev found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
+        why: who() + ' found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
       };
     }
-    // Handed on for {{jev_found}}. Empty when Jev could not decide, since then
+    // Handed on for {{checks_found}}. Empty when it could not decide, since then
     // there is nothing it found.
     if (!verdict.failed) scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver) };
     // Said in the Log, since a real request is not shown anywhere and the
-    // preview never asks Jev. Only when a block is there to take it.
-    if (scene.jevFound && promptWants(JEV_FOUND_MACRO, isUser, willSend))
+    // preview never asks the second model. Only when a block is there to take it.
+    if (scene.jevFound && wantsFound(isUser, willSend))
       tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, count: jevHits(verdict.scores, judgeOver).length });
   }
   let pickAt: { start: number; end: number } | null = null;
@@ -3428,8 +3449,8 @@ async function refineMessage(
   // instruction about them stays true for every pass.
   // Every pass in order over start, then the end of the chain judged against
   // the reply it began from. Returns the rewrite, or the refusal to hand back
-  // as the refine's answer. Run once, and once more when Jev reads the rewrite
-  // and a check still reaches the line.
+  // as the refine's answer. Run once, and once more when the second model
+  // reads the rewrite and a check still reaches the line.
   async function runChain(start: string): Promise<{ ok: true; text: string } | { ok: false; out: RefineOutcome }> {
   let carried = start;
   // What each pass was given and what it returned. A chain that came out
@@ -3522,12 +3543,13 @@ async function refineMessage(
   if (!first.ok) return first.out;
   let carried = first.text;
 
-  // Jev reads the rewrite as well, when the reader asked for that and Jev read
-  // the reply before it. A check still at or over the line means the refine
-  // missed something, so it runs once more on the rewrite, with what Jev found
-  // this time in {{jev_found}}. Once, not until Jev is satisfied: each round is
-  // a Jev call and a full refine, and a check Jev keeps flagging after two
-  // rewrites is more likely Jev being wrong than the model.
+  // The second model reads the rewrite as well, when the reader asked for that
+  // and it read the reply before it. A check still at or over the line means
+  // the refine missed something, so it runs once more on the rewrite, with what
+  // was found this time in {{checks_found}}. Once, not until the second model
+  // is satisfied: each round is one more call to it and a full refine, and a
+  // check it keeps flagging after two rewrites is more likely to be wrong than
+  // the refine model.
   if (jevReads && judgeAfter) {
     tell(userId, { type: 'refine_progress', stage: 'rechecking' });
     // Held like any call, so Stop reaches it, and kept held through the second
@@ -3537,8 +3559,8 @@ async function refineMessage(
     const handle = { abort: () => { stopped = true; } };
     holdRun(userId, handle);
     try {
-      const after = await judgeReply(userId, unshield(carried, armed.parts).text, jevWorn);
-      if (stopped) return { ok: false, stood: true, notes: notes, why: 'stopped while Jev was reading the rewrite' };
+      const after = await judgeReply(userId, unshield(carried, armed.parts).text, jevWorn, jevBefore);
+      if (stopped) return { ok: false, stood: true, notes: notes, why: 'stopped while ' + who() + ' was reading the rewrite' };
       tell(userId, {
         type: 'judge_said',
         chatId: chatId,
@@ -3553,9 +3575,9 @@ async function refineMessage(
         over: judgeOver,
       });
       if (!after.failed && after.refine) {
-        say('info', 'Jev read the rewrite and a check still reached the line, so it is refined once more');
+        say('info', who() + ' read the rewrite and a check still reached the line, so it is refined once more');
         scene = { ...scene, jevFound: jevFoundText(after.scores, judgeOver) };
-        if (promptWants(JEV_FOUND_MACRO, isUser, willSend))
+        if (wantsFound(isUser, willSend))
           tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, after: true, count: jevHits(after.scores, judgeOver).length });
         tell(userId, { type: 'refine_progress', stage: 'again' });
         const again = await runChain(carried);
@@ -3939,14 +3961,14 @@ async function saveRefined(
   }
 }
 
-// ---- Jev, the second model ----
+// ---- the second model, Jev or Span ----
 // In two-model mode a second, much smaller model reads a finished reply first
-// and says whether it needs a refine. Jev answers each check with the chance,
+// and says whether it needs a refine. It answers each check with the chance,
 // from 0 to 1, that a statement about the reply is true, and nothing else: it
 // writes no text, so there is nothing of its own to save over a reply. The
-// refine model then runs only on the replies Jev picks out.
+// refine model then runs only on the replies it picks out.
 //
-// Reached through Lumiverse's CORS proxy, since Jev is not a chat model and no
+// Reached through Lumiverse's CORS proxy, since it is not a chat model and no
 // connection profile can hold it. The key is kept in the secure enclave, per
 // account, and never goes into the settings, an export or the panel.
 // Each host's name for Jev 1.13, for the alias that follows the newest stable
@@ -3957,15 +3979,37 @@ async function saveRefined(
 //
 // Hosts take one of four kinds of request. A decisions request sends the
 // state and the questions as they are, and reads `answers` back. The other
-// three fit Jev into a chat API: the state is the text of the input, and the
+// three fit the second model into a chat API: the state is the text of the input, and the
 // answers come back as JSON text in the reply. A chat completions request
 // carries the questions in `response_format`, a responses request in
 // `text.format`, and a Claude-style messages request in `output_config.format`.
-type JevKind = 'decisions' | 'chat' | 'responses' | 'messages';
+//
+// Span answers the same checks. On OpenRouter it takes the same decisions
+// request as Jev. Respan's own API takes a scores request: the reply goes in
+// as the assistant's turn of a span, each check goes in as a behavior with a
+// definition, and each answer comes back as the chance the behavior is
+// present, beside the chance it is absent and the chance it cannot be judged.
+type JevKind = 'decisions' | 'chat' | 'responses' | 'messages' | 'scores';
 const JEV_HOSTS: Record<string, { url: string; model: string; latest?: string; preview?: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
   nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', latest: 'typesafe/jev-latest', kind: 'decisions' },
   typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
+};
+
+// Each host's names for the three kinds of Span. Respan's own API has no paid
+// Lite, so asking it for one gets the free one, which is the same model.
+type SpanTier = 'free' | 'lite' | 'full';
+const SPAN_HOSTS: Record<string, { url: string; models: Partial<Record<SpanTier, string>>; kind: JevKind }> = {
+  openrouter: {
+    url: 'https://openrouter.ai/api/alpha/decisions',
+    models: { free: 'respan/span-01-lite:free', lite: 'respan/span-01-lite', full: 'respan/span-01' },
+    kind: 'decisions',
+  },
+  respan: {
+    url: 'https://api.respan.ai/api/v1/scores',
+    models: { free: 'span-01-free', full: 'span-01-pro' },
+    kind: 'scores',
+  },
 };
 
 // The text of a responses API reply when it has no `output_text` of its own:
@@ -3986,6 +4030,7 @@ function jevKindOf(url: string): JevKind {
   if (/\/chat\/completions\/?(\?.*)?$/i.test(url)) return 'chat';
   if (/\/responses\/?(\?.*)?$/i.test(url)) return 'responses';
   if (/\/messages\/?(\?.*)?$/i.test(url)) return 'messages';
+  if (/\/scores\/?(\?.*)?$/i.test(url)) return 'scores';
   return 'decisions';
 }
 const JEV_KEY = 'jev_api_key';
@@ -3996,13 +4041,17 @@ const JEV_TIMEOUT_MS = 20000;
 // since the text leaves Lumiverse for somebody else's server.
 const JEV_REPLY_MAX = 60000;
 const JEV_CHECKS_MAX = 20;
-// The one kind of question put to Jev: the chance, 0 to 1, that a statement is
+// The one kind of question put to the second model: the chance, 0 to 1, that a statement is
 // true. Named so it does not read as one of the bridge's message types.
 const NOUL = 'noul';
 // The response format a chat request names to get decisions back rather than
 // prose. Named for the same reason as NOUL.
 const QUESTIONS_FORMAT = 'questions';
 let judgeMode: 'one' | 'two' = 'one';
+// Which second model reads the reply. Everything else about two models, the
+// checks, the line and the key, is the same for both.
+let judgeWho = 'jev';
+let spanTier: SpanTier = 'free';
 let judgeHost = 'openrouter';
 let judgeUrl = '';
 let judgeModel = '';
@@ -4011,10 +4060,14 @@ let judgeName = '';
 let judgeChecks: string[] = [];
 let judgeOver = 50;
 let judgeWorn = true;
-// Whether Jev also reads a reply before a refine somebody starts with a button.
-// Off, a refine asked for by hand goes ahead without Jev.
+// Whether the reply before the one being read goes to the second model too, as
+// `previous_reply`, with the checks in BEFORE_CHECKS. A check of the reader's
+// own can name it as well.
+let judgeBefore = false;
+// Whether the second model also reads a reply before a refine somebody starts
+// with a button. Off, a refine asked for by hand goes ahead without it.
 let judgeByHand = false;
-// Whether Jev reads the rewrite too, and a check still over the line gets the
+// Whether the second model reads the rewrite too, and a check still over the line gets the
 // reply one more refine.
 let judgeAfter = false;
 
@@ -4025,7 +4078,7 @@ interface JevScore {
 }
 interface JevVerdict {
   refine: boolean;
-  // Jev could not be asked, or sent back nothing to go on. The reply is refined
+  // The second model could not be asked, or sent back nothing to go on. The reply is refined
   // anyway: the beta failing should cost a call, not a refine.
   failed?: boolean;
   why?: string;
@@ -4034,13 +4087,52 @@ interface JevVerdict {
   model?: string;
 }
 
+// The second models, one entry each. An entry names the model, lists the hosts
+// it can be reached on with where to send it and what kind of request that
+// host takes, and says which model name to ask a host for. Everything else,
+// the checks, the line, the key and what is found, is the same for all of
+// them, so a model added later is one more entry here and one more option in
+// the panel.
+interface SecondModel {
+  name: string;
+  hosts: Record<string, { url: string; kind: JevKind }>;
+  model: (host: string) => string;
+}
+const SECOND_MODELS: Record<string, SecondModel> = {
+  jev: {
+    name: 'Jev',
+    hosts: JEV_HOSTS,
+    model: (host) => {
+      const h = JEV_HOSTS[host];
+      // A name typed in wins, so a host that renames Jev needs no update here.
+      if (judgeVersion === 'own' && judgeName) return judgeName;
+      const moving = judgeVersion === 'preview' ? h.preview || h.latest : judgeVersion === 'latest' ? h.latest : '';
+      return moving || h.model;
+    },
+  },
+  span: {
+    name: 'Span',
+    hosts: SPAN_HOSTS,
+    model: (host) => SPAN_HOSTS[host].models[spanTier] || SPAN_HOSTS[host].models.free || '',
+  },
+};
+
+function secondModel(): SecondModel {
+  return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
+}
+
+// The second model's name, for everything that is said about what it did.
+function who(): string {
+  return secondModel().name;
+}
+
 function jevWhere(): { url: string; model: string; kind: JevKind } {
   if (judgeHost === 'custom') return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
-  const host = JEV_HOSTS[judgeHost] || JEV_HOSTS.openrouter;
-  // A name typed in wins, so a host that renames Jev needs no update here.
-  if (judgeVersion === 'own' && judgeName) return { url: host.url, model: judgeName, kind: host.kind };
-  const moving = judgeVersion === 'preview' ? host.preview || host.latest : judgeVersion === 'latest' ? host.latest : '';
-  return { url: host.url, model: moving || host.model, kind: host.kind };
+  const m = secondModel();
+  // A host this model is not on, left picked from another model, falls back
+  // to OpenRouter, which is what the panel shows in its place.
+  const host = m.hosts[judgeHost] ? judgeHost : 'openrouter';
+  return { url: m.hosts[host].url, model: m.model(host), kind: m.hosts[host].kind };
 }
 
 async function jevKey(userId?: string): Promise<string> {
@@ -4064,23 +4156,47 @@ function cleanJevKey(raw: any): string {
 function jevTimeout<T>(work: Promise<T>): Promise<T> {
   let timer: any = null;
   const late = new Promise<T>((_, no) => {
-    timer = setTimeout(() => no(new Error('Jev did not answer within ' + JEV_TIMEOUT_MS / 1000 + 's')), JEV_TIMEOUT_MS);
+    timer = setTimeout(() => no(new Error(who() + ' did not answer within ' + JEV_TIMEOUT_MS / 1000 + 's')), JEV_TIMEOUT_MS);
   });
   return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
 
-// One call to Jev. Answers with what Jev said, or with why it could not be
-// asked, in words fit for the Log.
+// A scores request for Respan's own API. The checks are written about the
+// reply by the name a decisions request gives it, in backticks, and a behavior is written
+// about a conversation, so the names are put in words: the reply becomes the
+// reply, and the list of worn phrases is written out after the words that name
+// it. The reply goes in as the assistant's turn. The reply before it, when it
+// is sent, goes in as the one turn ahead of it, and is named the previous reply.
+function scoresRequest(model: string, state: Record<string, string>, questions: Record<string, any>): any {
+  const words = (line: string): string => {
+    const plain = String(line || '')
+      .replace(/`reply`/g, 'the reply')
+      .replace(/`previous_reply`/g, 'the previous reply')
+      .replace(/`worn_phrases`/g, 'this list of phrases (' + String(state.worn_phrases || '').replace(/\s*\n\s*/g, '; ') + ')');
+    return plain.charAt(0).toUpperCase() + plain.slice(1);
+  };
+  return {
+    model: model,
+    span: {
+      input: state.previous_reply ? [{ role: 'assistant', content: String(state.previous_reply) }] : [],
+      output: { role: 'assistant', content: String(state.reply || '') },
+    },
+    behaviors: Object.keys(questions).map((id) => ({ id: id, definition: words(questions[id] && questions[id].instructions) })),
+  };
+}
+
+// One call to the second model. Answers with what it said, or with why it
+// could not be asked, in words fit for the Log.
 async function askJev(
   userId: string | undefined,
   state: Record<string, string>,
   questions: Record<string, any>,
 ): Promise<{ answers?: any; cost?: number; model?: string; error?: string }> {
   const where = jevWhere();
-  if (!where.url) return { error: 'no address is set for Jev' };
-  if (!where.model) return { error: 'no model name is set for Jev' };
+  if (!where.url) return { error: 'no address is set for ' + who() };
+  if (!where.model) return { error: 'no model name is set for ' + who() };
   const key = await jevKey(userId);
-  if (!key) return { error: 'no Jev key is saved' };
+  if (!key) return { error: 'no ' + who() + ' key is saved' };
   if (typeof spindle.cors !== 'function')
     return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
   // A chat API request carries the state as text. It goes as JSON, so the
@@ -4095,7 +4211,9 @@ async function askJev(
         ? { model: where.model, input: stateText, text: { format: asked }, stream: false, store: false }
         : where.kind === 'messages'
           ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: asked }, stream: false }
-          : { model: where.model, state: state, questions: questions },
+          : where.kind === 'scores'
+            ? scoresRequest(where.model, state, questions)
+            : { model: where.model, state: state, questions: questions },
   );
   // Claude-style hosts read the key from x-api-key and want a version header.
   // Both go only to the address the user picked, the same as the bearer key.
@@ -4123,7 +4241,7 @@ async function askJev(
     await new Promise<void>((r) => setTimeout(r, 1200));
     res = await send();
   }
-  if (!res || res.error || !res.status) return { error: 'Jev could not be reached: ' + ((res && res.error) || 'no answer') };
+  if (!res || res.error || !res.status) return { error: who() + ' could not be reached: ' + ((res && res.error) || 'no answer') };
   let data: any = null;
   try {
     data = JSON.parse(String(res.body || ''));
@@ -4132,14 +4250,24 @@ async function askJev(
   }
   const said = data && (data.error || data.detail);
   const saidText = typeof said === 'string' ? said : said && said.message ? String(said.message) : '';
-  if (res.status === 401 || res.status === 403) return { error: 'the Jev key was refused' };
-  if (res.status === 402) return { error: 'the Jev account has no credit left' };
+  if (res.status === 401 || res.status === 403) return { error: 'the ' + who() + ' key was refused' };
+  if (res.status === 402) return { error: 'the ' + who() + ' account has no credit left' };
   if (res.status < 200 || res.status >= 300 || saidText)
-    return { error: 'Jev answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
+    return { error: who() + ' answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
   // A chat API answer is JSON written as the text of the reply: the assistant
   // message for chat completions, `output_text` or the output message for
   // responses, the first text block for messages.
-  if (where.kind !== 'decisions' && data && !data.answers) {
+  // A scores answer is a list of results, one per behavior, each with the
+  // chance it is present. That chance is the score, the same as Jev's.
+  if (where.kind === 'scores' && data && Array.isArray(data.results)) {
+    const answers: Record<string, any> = {};
+    for (const r of data.results) {
+      const p = r && Number(r.p_present);
+      if (r && typeof r.id === 'string' && Number.isFinite(p)) answers[r.id] = { noul: p };
+    }
+    data = { ...data, answers: answers };
+  }
+  if (where.kind !== 'decisions' && where.kind !== 'scores' && data && !data.answers) {
     const text =
       where.kind === 'chat'
         ? data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
@@ -4152,10 +4280,10 @@ async function askJev(
       const parsed = typeof text === 'string' ? JSON.parse(text) : null;
       if (parsed && typeof parsed === 'object') data = { ...data, answers: parsed };
     } catch (_) {
-      return { error: 'Jev answered, but not with the JSON a ' + where.kind + ' request should get back' };
+      return { error: who() + ' answered, but not with the JSON a ' + where.kind + ' request should get back' };
     }
   }
-  if (!data || typeof data.answers !== 'object' || !data.answers) return { error: 'Jev sent back no answers' };
+  if (!data || typeof data.answers !== 'object' || !data.answers) return { error: who() + ' sent back no answers' };
   const cost = Number(data.usage && data.usage.cost);
   // The exact version that answered. Asked by an alias, this is the only
   // place that says which release the alias pointed at.
@@ -4163,24 +4291,59 @@ async function askJev(
   return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0, model: model };
 }
 
-// The checks, and the worn phrases when there are any, put to Jev about one
-// reply. A check above the line is a reply worth refining.
-async function judgeReply(userId: string | undefined, reply: string, worn: string): Promise<JevVerdict> {
+// What is asked about the reply before this one, when that is sent. Each is
+// about one thing, and each is about repeating, so a reply that carries the
+// same scene on is not caught by it. The display name is what the Log, the
+// card and {{checks_found}} show.
+const BEFORE_CHECKS: Array<{ id: string; line: string; shown: string }> = [
+  {
+    id: 'before_beats',
+    line: '`reply` repeats the beats of `previous_reply`: the same actions and events, in the same order.',
+    shown: 'Repeats the beats of the reply before it',
+  },
+  {
+    id: 'before_speakers',
+    line: '`reply` has the characters speak in the same order as `previous_reply`.',
+    shown: 'Has the characters speak in the same order as the reply before it',
+  },
+  {
+    id: 'before_place',
+    line: '`reply` describes the surroundings again with the same details `previous_reply` already gave.',
+    shown: 'Describes the surroundings again with the same details as the reply before it',
+  },
+];
+
+// The checks, and the worn phrases when there are any, put to the second model
+// about one reply. A check above the line is a reply worth refining.
+//
+// A check that names `previous_reply` is left out when there is no reply
+// before this one to send, since a question about input that is not there has
+// no answer worth reading.
+async function judgeReply(userId: string | undefined, reply: string, worn: string, before?: string): Promise<JevVerdict> {
   const questions: Record<string, any> = {};
   const asked: Array<{ id: string; check: string }> = [];
+  const hasBefore = !!(before && before.trim());
   judgeChecks.slice(0, JEV_CHECKS_MAX).forEach((line, i) => {
+    if (!hasBefore && line.indexOf('`previous_reply`') >= 0) return;
     const id = 'check_' + (i + 1);
     questions[id] = { type: NOUL, instructions: line };
     asked.push({ id: id, check: line });
   });
   const state: Record<string, string> = { reply: reply.slice(0, JEV_REPLY_MAX) };
+  if (hasBefore) {
+    state.previous_reply = String(before).slice(0, JEV_REPLY_MAX);
+    for (const one of BEFORE_CHECKS) {
+      questions[one.id] = { type: NOUL, instructions: one.line };
+      asked.push({ id: one.id, check: one.shown });
+    }
+  }
   if (judgeWorn && worn.trim()) {
     state.worn_phrases = worn;
     const line = 'At least one phrase listed in `worn_phrases` appears in `reply`.';
     questions.worn = { type: NOUL, instructions: line };
     asked.push({ id: 'worn', check: 'Uses a phrase this chat has worn out' });
   }
-  if (!asked.length) return { refine: true, failed: true, why: 'there are no checks for Jev to answer' };
+  if (!asked.length) return { refine: true, failed: true, why: 'there are no checks for ' + who() + ' to answer' };
   const got = await askJev(userId, state, questions);
   if (got.error) return { refine: true, failed: true, why: got.error };
   const scores: JevScore[] = [];
@@ -4189,33 +4352,36 @@ async function judgeReply(userId: string | undefined, reply: string, worn: strin
     if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1)
       scores.push({ id: one.id, check: one.check, pct: Math.round(v * 100) });
   }
-  if (!scores.length) return { refine: true, failed: true, why: 'Jev sent back no usable answers', cost: got.cost, model: got.model };
+  if (!scores.length) return { refine: true, failed: true, why: who() + ' sent back no usable answers', cost: got.cost, model: got.model };
   return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost, model: got.model };
 }
 
-// What {{jev_found}} puts in: the checks that reached the line, strongest
-// first. The lead-in is written here rather than left to the prompt because
-// the percentages and the line are this extension's own, and nothing in a chat
-// could describe them. The backticks the checks use to name Jev's input are
-// taken out, since the refine model is not given that input by that name. It
-// says the checks are leads, since Jev can be wrong,
-// and a model told to fix each one would change writing that was fine.
-// Empty when no check reached the line, which leaves the block out.
 // The checks that reached the line, strongest first.
 function jevHits(scores: JevScore[] | undefined, over: number): JevScore[] {
   return (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
 }
 
+// What {{checks_found}} puts in: the checks that reached the line, strongest
+// first. The lead-in is written here rather than left to the prompt because
+// the percentages and the line are this extension's own, and nothing in a chat
+// could describe them. The backticks the checks use to name the second model's
+// input are taken out, and `previous_reply` is put in words, since the refine
+// model is not given that input by those names. It says the checks are leads,
+// since the second model can be wrong, and a model told to fix each one would
+// change writing that was fine.
+// Empty when no check reached the line, which leaves the block out.
 function jevFoundText(scores: JevScore[] | undefined, over: number): string {
   const hits = jevHits(scores, over);
   if (!hits.length) return '';
   return (
-    'Another model, Jev, read this passage before you and scored it against checks the user wrote. ' +
+    'Another model, ' + who() + ', read this passage before you and scored it against checks the user wrote. ' +
     'The checks below reached the user\'s line of ' + over + '%, strongest first. ' +
     'In them, "reply" means the passage you are rewriting. Look at these first. ' +
     'Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. ' +
     'Everything else in these instructions still applies.\n' +
-    hits.map((x) => '- ' + x.check.replace(/`/g, '') + ' (' + x.pct + '%)').join('\n')
+    hits
+      .map((x) => '- ' + x.check.replace(/`previous_reply`/g, 'the reply before it').replace(/`/g, '') + ' (' + x.pct + '%)')
+      .join('\n')
   );
 }
 
@@ -4410,7 +4576,9 @@ function applyRules(s: any): void {
   refineGap = Number(s.refineGap);
   refineGap = Number.isFinite(refineGap) ? Math.min(120, Math.max(0, refineGap)) : 0;
   judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
-  judgeHost = ['openrouter', 'nanogpt', 'typesafe', 'custom'].indexOf(String(s.judgeHost)) >= 0
+  judgeWho = Object.prototype.hasOwnProperty.call(SECOND_MODELS, String(s.judgeWho)) ? String(s.judgeWho) : 'jev';
+  spanTier = s.spanTier === 'lite' || s.spanTier === 'full' ? s.spanTier : 'free';
+  judgeHost = String(s.judgeHost) === 'custom' || Object.keys(SECOND_MODELS).some((k) => !!SECOND_MODELS[k].hosts[String(s.judgeHost)])
     ? String(s.judgeHost)
     : 'openrouter';
   judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
@@ -4425,6 +4593,7 @@ function applyRules(s: any): void {
   judgeOver = Number(s.judgeOver);
   judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
   judgeWorn = s.judgeWorn !== false;
+  judgeBefore = s.judgeBefore === true;
   judgeByHand = s.judgeByHand === true;
   judgeAfter = s.judgeAfter === true;
   asSwipe = !!s.asSwipe;
@@ -5109,10 +5278,11 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           wrapOutput: wrapOutput,
           connectionId: connectionId || '',
           reasoning: reasoningFor(),
-          // A preview never asks Jev, so a block holding {{jev_found}} comes
-          // out empty here and is left out, where a real refine Jev read would
+          // A preview never asks the second model, so a block holding
+          // {{checks_found}} comes out empty here and is left out, where a real
+          // refine it read would
           // send it. Flagged so the panel can say so.
-          jevFoundLeftOut: !isUser && judgeMode === 'two' && promptWants(JEV_FOUND_MACRO, false, chain ? allBlocks : undefined),
+          jevFoundLeftOut: !isUser && judgeMode === 'two' && wantsFound(false, chain ? allBlocks : undefined),
           passes: chain ? chain.map((one) => one.name) : [],
         });
       } catch (e: any) {
@@ -5129,7 +5299,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // Which build this half is on. Asked on every panel load rather than only
     // announced at startup: this module comes up once and stays up, so a panel
     // opened at any point after that missed the announcement.
-    // The Jev key. It comes in once, goes into the enclave, and is never sent
+    // The key for the second model. It comes in once, goes into the enclave, and is never sent
     // back: the panel is only ever told whether there is one.
     if (payload.type === 'jev_key_set' || payload.type === 'jev_key_forget' || payload.type === 'jev_key_status') {
       let said = '';
@@ -5156,8 +5326,8 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // One small question with nothing from any chat in it, so a key can be
     // checked before a reply depends on it.
     if (payload.type === 'jev_test') {
-      const check = 'The door in `text` is open.';
-      const got = await askJev(userId, { text: 'The door is open.' }, { open: { type: NOUL, instructions: check } });
+      const check = 'The door in `reply` is open.';
+      const got = await askJev(userId, { reply: 'The door is open.' }, { open: { type: NOUL, instructions: check } });
       const v = got.answers && got.answers.open && got.answers.open.noul;
       const scored = typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
       // Where the test went and in which format, so a failed test on another
@@ -5167,7 +5337,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         type: 'jev_tested',
         requestId: payload.requestId,
         ok: !got.error && scored,
-        why: got.error || (scored ? '' : 'Jev answered, but not with a usable score'),
+        why: got.error || (scored ? '' : who() + ' answered, but not with a usable score'),
         model: got.model || '',
         check: check,
         pct: scored ? Math.round(v * 100) : null,

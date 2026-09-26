@@ -207,6 +207,7 @@ A model that reasons and a model that does not need different prompts.
 - Give it a standard, like "a sentence that could sit in any other story is the one to fix".
 - Tell it where to look.
 - You can ask it to write its working in `<REFINE_NOTES>`. You can read that on the **Log** tab, and it shows you why it changed each line.
+- Put the steps it should work through at the end of the prompt, after the passage. See [More ways to make it work better](#more-ways-to-make-it-work-better).
 
 ## Step 7: Add your own taste
 
@@ -258,6 +259,16 @@ These are small habits. Each one fixes a way a prompt can go wrong without you n
 **Give it a bar to clear.** Without one, the model changes something every time. For a model that reasons, a score works well: "Score each area out of 100. Only change an area that scores under 85." For a model that does not reason, give the bar as a rule: "Only change a line that clearly breaks a rule. A line in doubt stays." The built-in prompts do this in the **Scorecard** block.
 
 **Give the reason in one short sentence.** "Cut filter words" is a rule. "Cut filter words, so the reader sees the door and not the character seeing it" is a rule the model can apply to cases you did not list.
+
+**Put the thinking steps at the end, after the passage.** Thinking steps tell the model what to work through before it writes, and in what order. For example: score each area, quote the worst line, then say what to change. Put them after the passage, as close to the end of the prompt as you can. The two built-in prompts that think do this. Their steps are in **Hand It In**, the block after **Passage**.
+
+There are three reasons:
+
+- The model has read the passage by then. It applies the steps to that passage, not to the rules in general.
+- The instructions a model reads last, just before it answers, are the ones it follows most closely. Steps near the top can get lost behind the card, the lore, the run-up and the passage.
+- The steps are the first thing the model does when it answers. Put last, they lead straight into the answer.
+
+The rules can stay near the top. The steps only say how to use them. This is for a model that thinks. A model that does not reason writes its answer in one go, so give it rules, not steps. See [Step 6](#step-6-match-your-model).
 
 **Show one small before and after.** One example shows the model how big a fix should be. Keep it short and made up, with characters from no story of yours, so the model does not copy it into your reply.
 
