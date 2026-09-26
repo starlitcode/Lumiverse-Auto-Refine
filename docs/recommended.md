@@ -81,3 +81,7 @@ The Log tab shows how long each refine took, so you can compare settings.
 - A rewrite with nothing to fix comes back unchanged, and that is a correct result.
 - If a passage has clear faults and still comes back unchanged, try a larger model in **Refine using**.
 - Check that the prompt blocks you need are switched on, on the Prompt tab.
+
+---
+
+[Back to the README](../README.md)
