@@ -2916,6 +2916,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     return lines(now) === lines(was);
   }
 
+  // Whether a selector box already holds the built-in list: the same selectors
+  // in the same order, whatever the spacing around the commas.
+  function sameSelectors(now: any, builtIn: string[]): boolean {
+    const mine = splitSelectorList(String(now == null ? "" : now));
+    return mine.length === builtIn.length && mine.every((one, i) => one === builtIn[i]);
+  }
+
+  // Said on the line beside the button, the way a name already in use is said
+  // under the preset buttons, and nothing is changed. A pop-up for a press that
+  // did nothing would read as if something had happened.
+  function alreadyBuiltIn(line: HTMLElement, words: string): void {
+    line.textContent = words;
+    line.setAttribute("role", "status");
+    line.style.color = "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+  }
+
   function markMovedSeen() {
     if (cfg.movedSeen === MOVED_MARK) return;
     cfg.movedSeen = MOVED_MARK;
@@ -8921,9 +8937,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const checksRow = el("div", "arf-row");
     const builtIn = button("Use the built-in checks", false);
     builtIn.setAttribute("data-arf-jevchecks", "builtin");
+    const checksSaid = el("span", "arf-note");
+    checksSaid.setAttribute("data-arf-jevchecks", "said");
     builtIn.addEventListener("click", () => {
-      if (String(cfg.judgeChecks || "").trim() === JUDGE_CHECKS.trim()) {
-        toast("These are already the built-in checks.", true);
+      if (sameAsWas(cfg.judgeChecks, JUDGE_CHECKS)) {
+        alreadyBuiltIn(checksSaid, "These are already the built-in checks. Nothing changed.");
         return;
       }
       askFirst(
@@ -8943,6 +8961,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       );
     });
     checksRow.appendChild(builtIn);
+    checksRow.appendChild(checksSaid);
     wrap.appendChild(hangsOff(checksRow, () => cfg.judgeMode === "two", "jev checks"));
     for (const f of afterChecks) wrap.appendChild(fieldRow(f));
     // Where the findings go is a block on the Prompt tab, which is a long way
@@ -10283,6 +10302,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const put = button("Use the built-in list", false);
     put.setAttribute("data-arf-resetswipe", "1");
     put.addEventListener("click", () => {
+      if (sameSelectors(cfg.swipeSelector, SWIPE_PICKS)) {
+        alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
+        return;
+      }
       cfg.swipeSelector = SWIPE_PICKS.join(", ");
       persist(true);
       paint();
@@ -10415,6 +10438,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const put = button("Use the built-in list", false);
     put.setAttribute("data-arf-resetinput", "1");
     put.addEventListener("click", () => {
+      if (sameSelectors(cfg.inputSelector, INPUT_PICKS)) {
+        alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
+        return;
+      }
       cfg.inputSelector = INPUT_PICKS.join(", ");
       persist(true);
       paint();

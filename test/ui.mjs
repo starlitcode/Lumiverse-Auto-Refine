@@ -1813,7 +1813,7 @@ console.log("\none model or two");
     const checksNow = () =>
       page.evaluate(() => document.querySelector('#drawer [data-arf-field="judgeChecks"]').value);
     const pressBuiltIn = async () => {
-      await page.evaluate(() => document.querySelector("#drawer [data-arf-jevchecks]").click());
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-jevchecks="builtin"]').click());
       await settle(page);
       await settle(page);
     };
@@ -1822,9 +1822,16 @@ console.log("\none model or two");
       window.__toasts = [];
     });
     await pressBuiltIn();
-    const same = await page.evaluate(() => ({ asked: window.__confirms.length, told: window.__toasts.slice() }));
+    const same = await page.evaluate(() => ({
+      asked: window.__confirms.length,
+      told: window.__toasts.slice(),
+      line: (document.querySelector('#drawer [data-arf-jevchecks="said"]') || {}).textContent || "",
+    }));
     ok("pressed on the built-in checks, it asks nothing", same.asked === 0, JSON.stringify(same));
-    ok("and says they are already the built-in ones", same.told.some((t) => /already the built-in checks/.test(t)), JSON.stringify(same));
+    // On the line beside the button, the way a name already in use is said
+    // under the preset buttons, and not as a pop-up.
+    ok("and says beside the button they are already the built-in ones", /already the built-in checks\. Nothing changed\./.test(same.line), JSON.stringify(same));
+    ok("without a pop-up", same.told.length === 0, JSON.stringify(same));
     await page.evaluate(() => {
       const ta = document.querySelector('#drawer [data-arf-field="judgeChecks"]');
       ta.value = "`reply` is made-up.";
@@ -3248,6 +3255,61 @@ console.log("\nwhen the tab sleeps past the time to give up");
     ok("it stops once the clock is past the limit", !said.spinning, said.body.slice(0, 200));
     ok("and says the tab was in the background", /in the background/.test(said.toasts), said.toasts);
     ok("without claiming nothing changed", !/Nothing was changed/.test(said.toasts), said.toasts);
+  });
+}
+
+console.log("\nUse the built-in list, when it is already the built-in list");
+{
+  // Pressed with the built-in list already in the box, nothing changes and the
+  // line beside the button says so. Pressed on a list of your own, the
+  // built-in one goes back in.
+  const tryBox = async (page, key, button) => {
+    const press = () =>
+      page.evaluate((button) => {
+        document.querySelector("#drawer [" + button + "]").click();
+      }, button);
+    const read = () =>
+      page.evaluate(({ key, button }) => {
+        const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+        const said = document.querySelector("#drawer [" + button + "]").parentElement.textContent;
+        return { value: box ? box.value : null, said };
+      }, { key, button });
+    const before = await read();
+    await page.evaluate(() => (window.__toasts = []));
+    await press();
+    await settle(page);
+    const already = await read();
+    const toasts = await page.evaluate(() => window.__toasts.length);
+    await page.evaluate((key) => {
+      const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+      box.value = ".my-own-box";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      box.dispatchEvent(new Event("blur"));
+    }, key);
+    await settle(page);
+    await press();
+    await settle(page);
+    const back = await read();
+    return { before, already, toasts, back };
+  };
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Setup");
+    const out = await tryBox(page, "inputSelector", "data-arf-resetinput");
+    ok("input box: pressed on the built-in list, it says so", /already the built-in list\. Nothing changed\./.test(out.already.said), JSON.stringify(out.already).slice(0, 200));
+    ok("and changes nothing", out.already.value === out.before.value, JSON.stringify(out).slice(0, 300));
+    ok("without a pop-up", out.toasts === 0, String(out.toasts));
+    ok("pressed on a list of your own, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
+  });
+
+  // On Limits, under the switch it hangs off.
+  await inTab(browser, { saved: { enabled: true, asSwipe: true } }, async (page) => {
+    await goTab(page, "Limits");
+    const out = await tryBox(page, "swipeSelector", "data-arf-resetswipe");
+    ok("swipe button: pressed on the built-in list, it says so", /already the built-in list\. Nothing changed\./.test(out.already.said), JSON.stringify(out.already).slice(0, 200));
+    ok("and changes nothing", out.already.value === out.before.value, JSON.stringify(out).slice(0, 300));
+    ok("pressed on a list of your own, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
   });
 }
 
