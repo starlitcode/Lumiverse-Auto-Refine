@@ -74,12 +74,12 @@ Every answer says which exact Jev gave it. The Log shows it next to each decisio
 The ones it starts with:
 
 ```
-`reply` repeats the same phrase, or starts several sentences the same way, close together.
+`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.
 `reply` uses a stock phrase, such as a held breath or a shiver down a spine.
 `reply` names a character's feeling when their actions already show it.
 `reply` piles up adjectives or strained comparisons.
 `reply` says what something was not before saying what it was, as in "it wasn't a request, it was a command".
-`reply` ends by asking the user what happens next, or by pointing at what is about to happen.
+`reply` ends by turning to the user with a question, such as what they do next.
 ```
 
 Each one has to be false of a clean reply. A reply is refined when any one check reaches the line, so a check that is true of almost every reply sends every reply through. For example, "repeats a word" is true of any reply that uses a name twice. The last two match rules the built-in reply prompts carry, so a reply Jev sends through is one the refine has a rule for.
@@ -193,7 +193,7 @@ The reply is refined, the same as with one model. This happens when the key is m
 Every answer also goes in the Log as one line:
 
 ```
-Jev (jev-1.13.0) says leave it: reply repeats the same phrase, or starts several sentences the same way, close together 12%; ...
+Jev (jev-1.13.0) says leave it: reply repeats the same phrase close together, or starts three or more sentences in a row the same way 12%; ...
 Jev (jev-1.13.0) says refine: ... uses a stock phrase, such as a held breath or a shiver down a spine 71%; ...
 ```
 

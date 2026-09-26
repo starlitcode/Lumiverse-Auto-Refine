@@ -209,14 +209,18 @@ const PERMS = [
 // them, "she smiled" is a phrase that turns up in many stories.
 //
 // The last two match rules the reply prompts carry, the negation trick and The
-// Finish, so a reply Jev sends through is one the refine has a rule for.
+// Finish, so a reply Jev sends through is one the refine has a rule for. The
+// Finish keeps an ending that is a good hook, so the check asks only about a
+// question put to the user, which the refine always trims. A check that also
+// counted an ending pointing ahead would send hooks through for a refine that
+// then leaves them as they are.
 const JUDGE_CHECKS = [
-    "`reply` repeats the same phrase, or starts several sentences the same way, close together.",
+    "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
     "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
     "`reply` names a character's feeling when their actions already show it.",
     "`reply` piles up adjectives or strained comparisons.",
     "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
-    "`reply` ends by asking the user what happens next, or by pointing at what is about to happen.",
+    "`reply` ends by turning to the user with a question, such as what they do next.",
 ].join("\n");
 // The checks as they were in 1.19.4 and before, word for word. A reader still
 // holding exactly these never wrote their own, and is offered the ones above.
