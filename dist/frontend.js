@@ -12808,7 +12808,7 @@ export function setup(ctx, overrides) {
                 for (let i = 0; i < stale.length; i++) {
                     const one = stale[i];
                     const kind = String(one.getAttribute("data-arf-slot") || "");
-                    // The toolbar carries three of these now, so which setting a button
+                    // The toolbar carries three of these, so which setting a button
                     // answers to is read from where it sits rather than from one name.
                     if (kind.indexOf("bar") === 0 ? wantBar : wantMsg)
                         continue;

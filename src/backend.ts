@@ -1706,7 +1706,7 @@ const REFUSED_SUBJECT =
   // Consent, which is refused by name as often as by act.
   "non-?consensual\\w*|non-?consent\\w*|noncon|dubcon|dubious consent|questionable consent|" +
   "unclear consent|consent (?:is|being) (?:unclear|ambiguous|absent|dubious)|coerc\\w+|" +
-  // Kink, which was the largest hole: none of this was recognised at all.
+  // Kink, by the words a refusal uses for it.
   // "choking" is left out on purpose, since a scene can choke on smoke.
   "bdsm|bondage|sadomasochis\\w*|sadis\\w*|masochis\\w*|degradation|humiliation|" +
   "breath ?play|impact play|age ?play|pet ?play|kinks?|fetish\\w*|power exchange|" +
