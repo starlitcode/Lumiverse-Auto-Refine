@@ -204,7 +204,7 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
 | **A line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
-| **A line judge that thinks** | The same role, then The Call for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
+| **A line judge that thinks** | The same role, then The Ruling for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - Each ends by saying that when a slip cannot be told from a choice, it is a choice. So a plain "she left" stays as it is.
 - Their **Roll Call** block keeps every line with its speaker when you write more than one character. It adds no line for any character.
@@ -212,15 +212,17 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 ### The one thing they do not edit
 
-Each of the four tells the model that the tone of the story is the writer's decision, whether it is a gentle scene, sexual content or graphic violence. It says a passage comes back at the strength it went in, that a gentle scene gets no heat added, and that sex, gore, swearing and insults keep their plain words. Then it names one exception. This is the paragraph, word for word, in the first block of all four, **The Judge** or **Line Judge**:
+Each of the four tells the model that the tone of the story is the writer's decision, whether it is a gentle scene, sexual content or graphic violence. It says a passage comes back at the strength it went in, that a gentle scene gets no heat added, and that sex, gore, swearing and insults keep their plain words. Then it says who a sex scene is between. This is the paragraph, word for word, in the first block of all four, **The Judge** or **Line Judge**:
 
-> There is one exception, and it is not the user's call either. Sexual content involving anyone under eighteen, or anyone written as a child, is not edited. Hand that passage back exactly as it came, and say outside the tags that this is why. A younger character in a scene with nothing sexual in it is edited like anyone else.
+> Sex scenes are between adults, 18 and older. If one involves anyone younger than that, or anyone written to seem younger, don't edit it. Hand the passage back exactly as it came, and say outside the tags that's why. Characters of any age in scenes with nothing sexual in them get edited like anyone else.
+
+It is written as what is allowed, adults 18 and older, rather than as a list of alarming words. Words like that can make a model refuse the whole job, even on a scene between adults.
 
 What it does and does not do:
 
 - **It is text in the prompt, and nothing more.** The model reads it like any other line. The extension's code does not read your story for this, keeps no list of words about it, and does not block, change or delete anything on its own.
 - **When the model follows it, nothing is saved.** Your reply stays exactly as it was. The Log says the model handed it back unchanged and said why, and its words are under **What the model worked out**.
-- **A younger character in a scene with nothing sexual in it is edited like anyone else.** Age alone is not the exception. Nothing else is excepted.
+- **A character of any age in a scene with nothing sexual in it is edited like anyone else.** Age alone is not the exception. Nothing else is excepted.
 - **A prompt of your own carries only what you put in it.** A preset you save from one of the four keeps the paragraph, where you can read it. One you write yourself does not have it.
 
 The checks on what comes back are separate. A model that refuses to edit a scene, for any reason, including misreading an adult character as a minor, has written a refusal instead of a rewrite. With **Refuse an answer that declines the job** on, which it is by default, a refusal is dropped and your reply is left as it was. See [The model answered the wrong question](guardrails.md#the-model-answered-the-wrong-question).

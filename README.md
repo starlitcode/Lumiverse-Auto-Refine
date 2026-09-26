@@ -46,7 +46,7 @@ Auto Refine is not intended for sexual content involving minors, and I do not co
 So nobody has to guess what that means for their own writing, here is exactly how it works:
 
 - **The code does not judge your story.** It does not read your writing for this, keeps no list of words about it, and does not block, change or delete anything on its own account.
-- **The four built-in prompts carry one paragraph about it.** It tells the model that sexual content involving anyone under eighteen, or anyone written as a child, is not edited, and to hand that passage back exactly as it came and say why. It sits in the first block of each, **The Judge** or **Line Judge**, where you can read it, and word for word on [How the prompt is built](docs/prompt.md#the-one-thing-they-do-not-edit).
+- **The four built-in prompts carry one paragraph about it.** It tells the model that sex scenes are between adults, 18 and older. A sexual scene involving anyone younger, or anyone written to seem younger, is not edited: the model hands that passage back exactly as it came and says why. It sits in the first block of each, **The Judge** or **Line Judge**, where you can read it, and word for word on [How the prompt is built](docs/prompt.md#the-one-thing-they-do-not-edit).
 - **When a model follows it, your reply is left exactly as it was.** Nothing is saved, and the Log says the model handed it back and why.
 - **Nothing else is excepted.** A younger character in a scene with nothing sexual in it is edited like anyone else, and the tone of a story between adults, from gentle to dark, violent or sexually explicit, is yours to decide.
 - **A prompt you write yourself carries only what you put in it.**

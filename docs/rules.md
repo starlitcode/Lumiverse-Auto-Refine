@@ -239,6 +239,24 @@ You can also write rules about your own story:
 2. It is too far from the passage. Move it lower.
 3. It shares a block with several other rules, and the model only followed the first one.
 
+## More ways to make it work better
+
+These are small habits. Each one fixes a way a prompt can go wrong without you noticing.
+
+**Use one name for each thing.** If one block says "the user" and another says "the writer", the model has to guess whether they are the same person. Pick one word, like "the user" or "the passage", and use it every time.
+
+**Describe a limit by what is allowed.** Some words sound alarming to a model, even in a rule that forbids something. They can make it refuse the whole job, even when your story is fine. So write the rule as what is allowed. For example, "Sex scenes are between adults, 18 and older" works better than a list of what is banned.
+
+**Say what good looks like, not only what is banned.** A long list of banned words can make the model more likely to use them. Describe the result you want as well. See [Step 4](#step-4-say-what-to-write-instead).
+
+**Watch your own repeated words.** Models copy the words they are given. If one word turns up in every block, like "call" or "clean", it can start turning up in your story too. Read your prompt through once and change any word you used more than two or three times.
+
+**Give it a bar to clear.** Without one, the model changes something every time. A score works well: "Score each area out of 100. Only change an area that scores under 85." The built-in prompts do this in the **Scorecard** block.
+
+**Give the reason in one short sentence.** "Cut filter words" is a rule. "Cut filter words, so the reader sees the door and not the character seeing it" is a rule the model can apply to cases you did not list.
+
+**Show one small before and after.** One example shows the model how big a fix should be. Keep it short and made up, with characters from no story of yours, so the model does not copy it into your reply.
+
 ## Rules to keep in every prompt
 
 These go wrong without any warning, so every prompt needs them. The built-in prompts have all of them. If you start from one, you already have them.

@@ -6,6 +6,22 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.19.3
+
+_2026-09-26_
+
+### Fixed
+
+- **The Finish did not say whose choice the ending is.** It said "the writer's call", and "writer" is used nowhere else in the prompts, so a model could read it as you or as itself. It now says whoever wrote the passage picked the ending.
+
+### Changed
+
+- **The paragraph about adults is reworded.** It now says that sex scenes are between adults, 18 and older. A sexual scene involving anyone younger, or anyone written to seem younger, is handed back unedited with a note saying why. It no longer uses alarm words, which can make a model refuse to edit a scene between adults. What it protects is the same. See [The one thing they do not edit](docs/prompt.md#the-one-thing-they-do-not-edit).
+- **The built-in prompts use the word "call" far less.** It was in most blocks. Two blocks in the prompts for your own messages are renamed: **Not Your Call** is now **Hands Off**, and **The Call** is now **The Ruling**.
+- **The guide to making your own prompt has a new section.** [More ways to make it work better](docs/rules.md#more-ways-to-make-it-work-better) covers using one name for each thing, describing a limit by what is allowed, watching your own repeated words, and giving the model a bar to clear.
+
+---
+
 ## 1.19.2
 
 _2026-09-25_
@@ -554,7 +570,7 @@ _2026-09-13_
 
 A prompt you already have is yours and is not touched by any of this. To take the new wording, load a built-in prompt from the **Prompt** tab, which overwrites the list you are on.
 
-- **It says when the prompts that come with it have changed.** One line on the **Prompt** tab, with a **Got it** that puts it away for good. Your own prompt is never touched by it and it never loads anything for you: loading a built-in prompt writes over the list you are on, so that stays your call.
+- **It says when the prompts that come with it have changed.** One line on the **Prompt** tab, with a **Got it** that puts it away for good. Your own prompt is never touched by it and it never loads anything for you: loading a built-in prompt writes over the list you are on, so that stays your choice.
 
   Only for somebody who has loaded one of the eight before. A prompt that is entirely your own is not affected by the built-in ones changing, so there is nothing to tell you. A fresh install is marked as up to date, so this release is quiet for everybody and the first thing it says is about the next change.
 

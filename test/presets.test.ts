@@ -251,7 +251,7 @@ describe("the prompts that come with it", () => {
       // The words these prompts use for standing back. Updated with the
       // prompts rather than loosened: the point is that a prompt for somebody's
       // own turn talks about leaving it alone, and it still has to say so.
-      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|not your call|what they meant to type/i);
+      expect(whole).toMatch(/leave the writing to them|not a repair|not yours|hands off|what they meant to type/i);
     }
   });
 
@@ -559,3 +559,29 @@ describe("every block in a built-in prompt is one the panel can hold", () => {
 // Macros Lumiverse fills in rather than this extension. Listed here because the
 // check above cannot tell one it has never heard of from one the host answers.
 const HOSTS = ["{{description}}", "{{persona}}", "{{char}}", "{{user}}", "{{scenario}}", "{{personality}}", "{{whose}}"];
+
+// The paragraph about who a sex scene is between. It is the same in all four
+// prompts and quoted word for word in the docs, so the three cannot drift
+// apart. It says what is allowed rather than naming alarm words, because
+// those can make a model refuse to edit a scene between adults.
+describe("the paragraph about adults", () => {
+  const { BUILT_IN_PROMPTS } = __testing as any;
+  const doc = readFileSync(new URL("../docs/prompt.md", import.meta.url), "utf8");
+  const section = doc.split("### The one thing they do not edit")[1] || "";
+  const quote = ((section.match(/^> (.+)$/m) || [])[1] || "").trim();
+
+  test("the docs quote it", () => {
+    expect(quote).toMatch(/^Sex scenes are between adults, 18 and older\./);
+  });
+
+  for (const p of BUILT_IN_PROMPTS) {
+    const first = (p.blocks || [])[0];
+    test(p.name + ": its first block carries it word for word", () => {
+      expect(first && first.text).toContain(quote);
+    });
+    test(p.name + ": no alarm words anywhere in it", () => {
+      const whole = (p.blocks || []).map((b: any) => b.text).join(" ");
+      expect(whole).not.toMatch(/under eighteen|\bchild\b|\bminors?\b/i);
+    });
+  }
+});
