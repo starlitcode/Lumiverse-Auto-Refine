@@ -51,12 +51,10 @@ describe("the prompts that come with it", () => {
       expect(p.blocks.some((x: any) => String(x.text).indexOf("{{jev_found}}") >= 0)).toBe(false);
   });
 
-  // Every one scores before it changes anything, and the score has to rest on
-  // a line the model could quote. The two for a model that reasons write the
-  // scorecard ahead of the rewrite, so the scores are written before the
-  // rewrite is and cannot grade it after. The two for a model that does not
-  // score silently and are never asked for notes.
-  test("every one scores the passage, on lines it could quote", () => {
+  // Every one holds a change to a line the model could quote. The two for a
+  // model that reasons score each area in the notes, ahead of the rewrite, so
+  // the scores are written before the rewrite is and cannot grade it after.
+  test("every one changes only a line it could quote, and leaves one in doubt", () => {
     for (const p of BUILT_IN_PROMPTS) {
       const score = p.blocks.find((x: any) => x.id === "score");
       const t = String(score && score.text);
@@ -64,27 +62,51 @@ describe("the prompts that come with it", () => {
         prompt: p.name,
         on: !!(score && score.on),
         quotes: /quote/.test(t),
-        leavesDoubt: /85 to 99: a line might fit, but you are not sure/.test(t),
-        onlyUnder: /Change only the areas that scored under 85/.test(t),
-      }).toEqual({ prompt: p.name, on: true, quotes: true, leavesDoubt: true, onlyUnder: true });
+        leavesDoubt: /might (fit|break a rule)/.test(t),
+        restStays: /Everything else goes back exactly as it came/.test(t),
+      }).toEqual({ prompt: p.name, on: true, quotes: true, leavesDoubt: true, restStays: true });
     }
   });
 
-  test("the ones for a model that reasons write the scorecard before the rewrite", () => {
+  test("the ones for a model that reasons score each area and write it before the rewrite", () => {
     for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking !== "off")) {
+      const s = String(p.blocks.find((x: any) => x.id === "score").text);
       const a = String(p.blocks.find((x: any) => x.id === "answer").text);
-      expect({ prompt: p.name, cardFirst: a.indexOf("<REFINE_NOTES>") >= 0 && a.indexOf("<REFINE_NOTES>") < a.indexOf("<REFINED>") })
-        .toEqual({ prompt: p.name, cardFirst: true });
+      expect({
+        prompt: p.name,
+        bands: /85 to 99: a line might fit, but you are not sure/.test(s),
+        onlyUnder: /Change only the areas that scored under 85/.test(s),
+        cardFirst: a.indexOf("<REFINE_NOTES>") >= 0 && a.indexOf("<REFINE_NOTES>") < a.indexOf("<REFINED>"),
+      }).toEqual({ prompt: p.name, bands: true, onlyUnder: true, cardFirst: true });
     }
   });
 
   test("and the ones for a model that does not reason ask for no notes at all", () => {
     for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking === "off")) {
       const all = p.blocks.map((b: any) => String(b.text)).join("\n");
-      const score = String(p.blocks.find((x: any) => x.id === "score").text);
-      expect({ prompt: p.name, notes: /refine_notes/i.test(all), silent: /Don't write the scores down/.test(score) })
-        .toEqual({ prompt: p.name, notes: false, silent: true });
+      expect({ prompt: p.name, notes: /refine_notes/i.test(all) }).toEqual({ prompt: p.name, notes: false });
     }
+  });
+
+  // A model that does not reason writes its answer once, start to end. There
+  // is no step before it to score in and no step after it to check in, so an
+  // instruction for either is ignored or answered in the output. The words
+  // here are the ones that ask for such a step.
+  const LOOK_BACK = /in your head|score it|scores? (it|each|every)|look again|twice\. first|go through it|before you (read|touch|start|hand)|catch yourself|re-?read|review|double-check|check (it|each|every|yours|your)|go back over|once you're done|when you're done/i;
+
+  test("the ones for a model that does not reason ask for no step before or after the answer", () => {
+    for (const p of BUILT_IN_PROMPTS.filter((x: any) => x.thinking === "off")) {
+      const hits = p.blocks
+        .filter((b: any) => b.on)
+        .map((b: any) => (String(b.text).match(LOOK_BACK) || [""])[0] && b.name + ": " + String(b.text).match(LOOK_BACK)![0])
+        .filter(Boolean);
+      expect({ prompt: p.name, hits }).toEqual({ prompt: p.name, hits: [] });
+    }
+  });
+
+  test("and the look-back words are still caught", () => {
+    for (const t of ["Score it in your head.", "Look again before you hand it in.", "Go through it twice. First for this.", "If you catch yourself adding, stop.", "Reread yours against theirs.", "Check each one."])
+      expect(LOOK_BACK.test(t)).toBe(true);
   });
 
   // One card can hold several characters, and a group chat hands a reply to

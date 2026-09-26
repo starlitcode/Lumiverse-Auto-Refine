@@ -675,15 +675,16 @@ const NOTES_TAG = /<\s*refine_notes\s*>/i;
 // does not is given the list, because it will match a list and will not derive
 // one. That is the whole of the difference between the two on a side.
 //
-// All four score the passage before they change it: each area gets a score out
-// of 100 that rests on a line the model can point to, and only areas under 85
-// are touched. A model that has to point at the line it wants to change leaves
-// alone the lines it cannot point at, which is what stops a refine rewriting a
-// passage that was already fine. The two for a model that reasons write the
-// scorecard into the notes, so the panel shows it. The two for a model that
-// does not score silently and write nothing but the rewrite, since working
-// written out by a model that does not reason costs time and rarely changes
-// what it does.
+// All four hold a change to a line the model could quote as breaking a rule. A
+// model that has to point at the line it wants to change leaves alone the lines
+// it cannot point at, which is what stops a refine rewriting a passage that was
+// already fine. The two for a model that reasons score each area out of 100 in
+// the notes, before the rewrite, so the panel shows it, and only areas under 85
+// are touched. The two for a model that does not reason get the same limit as a
+// plain rule and write nothing but the rewrite. That model writes its answer
+// once, from start to end, with no step before it and no step after. So their
+// wording never asks it to score, check or look again: an instruction for a
+// step it has no place to take is ignored, or answered in the output.
 // The pages of setting that hold still for a whole chat: who the story follows,
 // who is writing it with you, and what is true in its world. They sit above the
 // ones that change every turn.
@@ -795,8 +796,8 @@ const TURN_BLOCK = {
 // the shape, and the tags are the only part of this prompt that has to come
 // back exactly right.
 //
-// No notes here. This one is for a model that does not reason, which scores
-// silently and hands back the rewrite and nothing else.
+// No notes here. This one is for a model that does not reason, which hands
+// back the rewrite and nothing else.
 //
 // Shouted, and read back case-insensitively so a prompt written in lower case
 // still works.
@@ -964,8 +965,8 @@ const LEAVE_ALONE = {
         "Rewriting a line that didn't need it is about the worst thing you can " +
         "do here. The user picked that line. Now it's gone, and they can't " +
         "even see what moved.\n\n" +
-        "If your version came out longer, you probably added stuff instead of " +
-        "fixing stuff. Look again before you hand it in." +
+        "Yours comes out about as long as theirs, or shorter. A fix swaps out " +
+        "what was there. It doesn't stack new stuff on top." +
         "\n</clean_run>",
 };
 // Who is in the scene, for a reply. One card can hold several characters, and
@@ -984,8 +985,7 @@ const CAST_BLOCK = {
     on: true,
     role: "system",
     text: "<roll_call>\n" +
-        "Figure out who's in the scene before you start cutting. Could be one " +
-        "person, could be eight.\n\n" +
+        "The scene might have one person in it. It might have eight.\n\n" +
         "Who says each line and who does each action doesn't change. Dialogue " +
         "never switches owners.\n\n" +
         "In a crowded scene, a name or a plain speech tag is sometimes the " +
@@ -1042,29 +1042,25 @@ const THINKS_SCORE_BLOCK = {
         "comes back unchanged, and that's a legit result." +
         "\n</scorecard>",
 };
-// The same scoring for the two that do not reason, done silently. The rules
-// are the same, down to the bands, and the only difference is that nothing is
-// written down: the answer is the rewrite and nothing else.
+// The same limit for the two that do not reason, given as a rule. A model that
+// does not reason has no step before its answer to score anything in, so bands
+// and a threshold would be numbers it never works out. What it keeps is the part
+// it can act on as it writes: a line changes when it clearly breaks a rule and
+// could be quoted, and a line in doubt stays.
 const SCORE_BLOCK = {
     id: "score",
     name: "Scorecard",
     on: true,
     role: "system",
     text: "<scorecard>\n" +
-        "Score it in your head before you touch anything. Don't write the scores " +
-        "down, just use them. An area is one kind of fault the rules above go " +
-        "after. Give each area a score out of 100, and only count a fault you " +
-        "could point at: a real line in the passage, one you could quote.\n\n" +
-        "- 100: clean.\n" +
-        "- 85 to 99: a line might fit, but you are not sure, or fixing it would " +
-        "do more harm than good.\n" +
-        "- 60 to 84: one or two lines fit.\n" +
-        "- under 60: it's all over the place.\n\n" +
-        "Change only the areas that scored under 85, and in those, only the " +
-        "lines that earned it. Everything else goes back exactly as it came, " +
-        "even if you'd have written it differently.\n\n" +
-        "A passage that scores 100 everywhere comes back unchanged, and that's " +
-        "a legit result." +
+        "Here's how the marks work. A line loses points when it clearly breaks " +
+        "a rule above, and you could quote it as the proof. Those are the lines " +
+        "you change.\n\n" +
+        "A line that might break a rule keeps full marks and stays as it is. " +
+        "So does a line where the fix would do more harm than good.\n\n" +
+        "Everything else goes back exactly as it came, even if you'd have " +
+        "written it differently. A passage where no line breaks a rule comes " +
+        "back unchanged, and that's a perfect score." +
         "\n</scorecard>",
 };
 // ---- a model that does not reason, in full ----
@@ -1109,13 +1105,11 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<echoes>\n" +
-            "Go through it twice. First for what happens, then just hunting for " +
-            "repeats.\n\n" +
-            "What you'll find most is a sentence saying what the one before it " +
-            "already said, dressed up a little differently. Keep whichever one's " +
-            "doing the work and cut the other.\n\n" +
-            "Keep an eye out for the same word showing up twice within a few lines " +
-            "when nobody meant it as an echo." +
+            "The usual one is a sentence saying what the one before it already " +
+            "said, dressed up a little differently. Keep whichever one's doing the " +
+            "work and cut the other.\n\n" +
+            "Same goes for a word showing up twice within a few lines when nobody " +
+            "meant it as an echo. Swap one out or drop it." +
             "\n</echoes>",
     },
     {
@@ -1124,9 +1118,8 @@ const PLAIN_LONG = [
         on: true,
         role: "system",
         text: "<rhythm>\n" +
-            "Before you read for meaning, just listen. Three sentences in a row " +
-            "that are all about the same length start to drone, so break one up or " +
-            "let one run long.\n\n" +
+            "Three sentences in a row that are all about the same length start to " +
+            "drone, so break one up or let one run long.\n\n" +
             "A single fragment can hit hard. Three in a row is a tic.\n\n" +
             "If a paragraph runs past about six lines, it's probably two " +
             "paragraphs wearing a trench coat." +
@@ -1279,8 +1272,8 @@ const YOURS_JOB = {
         "repeated across three sentences is somebody going for emphasis. Can't " +
         "tell which one you're looking at? Then it's a choice, and you leave " +
         "it.\n\n" +
-        "Whatever they left out stays out. If you catch yourself writing " +
-        "something that was never there, stop. It's their turn.\n\n" +
+        "Whatever they left out stays out. Don't write in anything that wasn't " +
+        "there. It's their turn.\n\n" +
         "Whatever they put in stays in. Plain lines are allowed to be plain.\n\n" +
         "Tone is theirs too. Soft, silly, filthy, brutal, whatever they went " +
         "for. It comes back at the strength it went in, and sex, gore, " +
@@ -1311,6 +1304,10 @@ const YOURS_HAND = {
 };
 // The same list, gone through properly. Every entry is still a repair rather
 // than an improvement: the long version is longer about what counts as one.
+//
+// It ends on one fix shown whole, typed and then returned. A model that does
+// not reason copies the shape of an example more closely than it follows a
+// sentence about it, and this one shows a slip mended and the style kept.
 const YOURS_MEND_LONG = {
     id: "fix",
     name: "Clear Faults",
@@ -1327,12 +1324,15 @@ const YOURS_MEND_LONG = {
         "stop, a quote mark that opens and never closes, or a comma splice so " +
         "long you get lost in it. If the punctuation is their style (lowercase " +
         "usually is), it stays.\n\n" +
-        "A sentence so tangled you have to read it twice. Say the same thing, " +
-        "in their words, in an order that reads once.\n\n" +
+        "A sentence so tangled a reader would have to go over it twice. Say " +
+        "the same thing, in their words, in an order that reads once.\n\n" +
         "A word repeated close enough that it clunks. Swap the second one for " +
         "a word they'd use, or drop it.\n\n" +
         "That's the whole list. Word choice, detail, plain lines and rhythm " +
-        "all belong to them." +
+        "all belong to them.\n\n" +
+        "Here's one done right. They typed: i grabbed teh rope and and pulled " +
+        "it tight. It comes back: i grabbed the rope and pulled it tight. The " +
+        "lowercase stayed, and so did every word they meant." +
         "\n</clear_faults>",
 };
 // What the mend list cannot say without becoming a style guide. It is here to
@@ -1533,7 +1533,7 @@ const BUILT_IN_PROMPTS = [
         mine: false,
         blocks: PLAIN_LONG,
         thinking: "off",
-        what: "Start here. It judges the reply one rule at a time: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish. It scores each against a line it quotes and changes only what scores under 85. Works with one character or several. Runs on any model.",
+        what: "Start here. It judges the reply one rule at a time: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish. It changes only a line that clearly breaks a rule, and leaves any line it is not sure about. Works with one character or several. Runs on any model.",
     },
     {
         name: "A judge that thinks",
@@ -1549,7 +1549,7 @@ const BUILT_IN_PROMPTS = [
         mine: true,
         blocks: YOURS_LONG,
         thinking: "off",
-        what: "Start here. A line judge for your own writing: slips, missing words, punctuation that came out wrong, and then it stops. It scores each against a line it quotes and fixes only what scores low. Your wording, your sentences and your plain lines come back as they went in, for every character you write. Runs on any model.",
+        what: "Start here. A line judge for your own writing: slips, missing words, punctuation that came out wrong, and then it stops. It fixes only a clear slip, and leaves any line it is not sure about. Your wording, your sentences and your plain lines come back as they went in, for every character you write. Runs on any model.",
     },
     {
         name: "A line judge that thinks",

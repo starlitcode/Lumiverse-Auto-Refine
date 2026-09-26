@@ -18,7 +18,14 @@ _2026-09-26_
 
 - **The paragraph about adults is reworded.** It now says that sex scenes are between adults, 18 and older. A sexual scene involving anyone younger, or anyone written to seem younger, is handed back unedited with a note saying why. It no longer uses alarm words, which can make a model refuse to edit a scene between adults. What it protects is the same. See [The one thing they do not edit](docs/prompt.md#the-one-thing-they-do-not-edit).
 - **The built-in prompts use the word "call" far less.** It was in most blocks. Two blocks in the prompts for your own messages are renamed: **Not Your Call** is now **Hands Off**, and **The Call** is now **The Ruling**.
-- **The guide to making your own prompt has a new section.** [More ways to make it work better](docs/rules.md#more-ways-to-make-it-work-better) covers using one name for each thing, describing a limit by what is allowed, watching your own repeated words, and giving the model a bar to clear.
+- **The two plain built-in prompts no longer ask the model to check its work.** A model that does not reason writes its answer once, from start to end. It has no step to score in its head, look again or reread. So **A judge** and **A line judge** now say what to change and what to leave, as rules it can follow while it writes:
+  - Their **Scorecard** block says to change only a line that clearly breaks a rule and could be quoted. A line in doubt stays. It no longer gives scores out of 100.
+  - **Clean Run** says the rewrite comes out about as long as the original, or shorter. It no longer says to look again.
+  - **Echoes** and **Rhythm** no longer ask for a second read.
+  - **A line judge** ends its list of faults with one fix shown before and after.
+  - The two that think keep their scores and their review steps. **Roll Call**, which all four share, now opens without "before you start cutting".
+  See [The scorecard](docs/prompt.md#the-scorecard).
+- **The guide to making your own prompt has a new section.** [More ways to make it work better](docs/rules.md#more-ways-to-make-it-work-better) covers using one name for each thing, describing a limit by what is allowed, watching your own repeated words, and giving the model a bar to clear. **Match your model** now says how to write for a model that does not reason.
 
 ---
 
