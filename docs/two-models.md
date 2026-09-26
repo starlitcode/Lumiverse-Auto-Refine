@@ -70,6 +70,7 @@ Respan has no paid Lite, so it is not in the list for Respan. If you picked it o
 - Each check is sent as a behavior. The word `reply` in backticks is written out as "the reply".
 - With **Also compare with the reply before it** on, that reply is sent as the turn before, and `previous_reply` is written out as "the previous reply". See [Comparing with the reply before it](#comparing-with-the-reply-before-it).
 - A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
+- Respan's own API only scores once Respan has switched Span-01 on for your account. Until then, **Test** says "Span turned the call down (403: Span-01 scoring is not enabled for your organization...)". Ask Respan for access, or pick OpenRouter as the host, which needs no access request.
 - Respan answers each behavior with three chances: present, absent, and not enough to judge. The chance it is present is the score.
 
 ## Another address
@@ -241,7 +242,7 @@ While it runs, the panel says, for example, "Jev is reading the rewrite", then "
 
 ## When it cannot answer
 
-The reply is refined, the same as with one model. This happens when the key is missing or refused, the account has no credit, the host is down, or the answer has nothing usable in it. The Log says which. The beta failing costs you a refine you might not have needed, never a refine you did.
+The reply is refined, the same as with one model. This happens when the key is missing or refused, the account has no credit, the host is down, or the answer has nothing usable in it. The Log says which. When the host refuses the call, it also gives the status the host sent and the host's own message. The beta failing costs you a refine you might not have needed, never a refine you did.
 
 ## Reading what it decided
 

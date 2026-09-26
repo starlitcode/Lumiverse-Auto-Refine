@@ -26,6 +26,7 @@ _2026-09-26_
 - **The block What Jev Found is now called Checks Found**, and its tag is `<checks_found>`. The Prompt tab says the built-in prompts have changed. Load a built-in prompt for replies again to get it.
 - **`{{jev_found}}` is replaced by `{{checks_found}}`.** A block you saved with `{{jev_found}}` is switched to `{{checks_found}}` when it is loaded, so it keeps working.
 - **The Two models page is now [docs/two-models.md](docs/two-models.md)**, and covers both models.
+- **A refused call now says more.** The Log and the Test line give the status the host sent and the host's own message. A wrong key reads as "the key was refused (401: ...)". A host that turns your account away, such as Respan before Span-01 is switched on for it, reads as "turned the call down (403: ...)".
 
 - **Making your own prompt explains where thinking steps go.** It says why they work best at the end, after the passage, and why the built-in prompts that think put them in **Hand It In**. See [More ways to make it work better](docs/rules.md#more-ways-to-make-it-work-better).
 
