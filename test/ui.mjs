@@ -8042,6 +8042,17 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 
+  // The same checks with a space left at the end of a line and an empty line
+  // after them, which is what a box that was clicked into and typed in a
+  // little can hold. Still the checks they started with.
+  await inTab(
+    browser,
+    { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS.replace("\n", "  \n") + "\n\n" } },
+    async (page) => {
+      ok("spaces and empty lines do not hide the line", !!(await seen(page)), "");
+    },
+  );
+
   // One model, so the checks are never read and nothing is said about them.
   await inTab(browser, { saved: { judgeMode: "one", judgeChecks: OLD_CHECKS } }, async (page) => {
     ok("somebody the setting does nothing for is left alone", (await seen(page)) === null, "");

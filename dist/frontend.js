@@ -2706,7 +2706,21 @@ export function setup(ctx, overrides) {
     function movedForMe() {
         if (String(cfg.movedSeen || "") === MOVED_MARK)
             return [];
-        return MOVED_DEFAULTS.filter((m) => steady(cfg[m.key]) === steady(m.was) && (!m.needs || cfg[m.needs.key] === m.needs.is));
+        return MOVED_DEFAULTS.filter((m) => sameAsWas(cfg[m.key], m.was) && (!m.needs || cfg[m.needs.key] === m.needs.is));
+    }
+    // Text is compared a line at a time, with the spaces at each end and the
+    // empty lines left out. A box that was clicked into and typed in a little
+    // can hold a space at the end of a line or an empty line under the last one,
+    // and that is still the text the reader started with.
+    function sameAsWas(now, was) {
+        if (typeof was !== "string")
+            return steady(now) === steady(was);
+        const lines = (v) => String(v == null ? "" : v)
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .join("\n");
+        return lines(now) === lines(was);
     }
     function markMovedSeen() {
         if (cfg.movedSeen === MOVED_MARK)
