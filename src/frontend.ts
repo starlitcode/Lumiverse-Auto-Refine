@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.19.4";
+const VERSION = "1.20.0";
 
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
@@ -217,7 +217,27 @@ const PERMS: Array<{ id: string; label: string; why: string; without: string; fa
 // What Jev checks a reply for until somebody writes their own. Each is a
 // statement about `reply` that is plainly true or false of the text, which is
 // the question Jev answers best: one thing, visible on the page.
+//
+// Each has to be false of a clean reply. Jev refines a reply when any check
+// reaches the line, so a check that is true of nearly every reply, such as one
+// about repeating a word, sends every reply through and saves nothing. The
+// examples in the stock phrase check are there for the same reason: without
+// them, "she smiled" is a phrase that turns up in many stories.
+//
+// The last two match rules the reply prompts carry, the negation trick and The
+// Finish, so a reply Jev sends through is one the refine has a rule for.
 const JUDGE_CHECKS = [
+  "`reply` repeats the same phrase, or starts several sentences the same way, close together.",
+  "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
+  "`reply` names a character's feeling when their actions already show it.",
+  "`reply` piles up adjectives or strained comparisons.",
+  "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
+  "`reply` ends by asking the user what happens next, or by pointing at what is about to happen.",
+].join("\n");
+
+// The checks as they were in 1.19.4 and before, word for word. A reader still
+// holding exactly these never wrote their own, and is offered the ones above.
+const JUDGE_CHECKS_1_19 = [
   "`reply` repeats a word, a phrase or a sentence shape inside itself.",
   "`reply` uses stock phrases that turn up in many stories.",
   "`reply` states a character's feeling outright where the scene could show it.",
@@ -1733,12 +1753,17 @@ function markText(text: string): string {
 //
 // One entry per default that moves, added in the release that moves it and
 // taken out one release later. Empty is the normal state.
-const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string }> = [
+//
+// `needs` keeps the line from somebody the setting does nothing for. The checks
+// are only read with two models on, so a reader on one model is not told about
+// them. If they switch to two models later, the line comes up then.
+const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string; needs?: { key: string; is: any } }> = [
   {
-    key: "timeoutSecs",
-    was: 90,
-    label: "Give up waiting after",
-    why: "90 seconds was under what a reasoning model or a local one needs, so a refine could be cut off mid-thought. It is four minutes now.",
+    key: "judgeChecks",
+    was: JUDGE_CHECKS_1_19,
+    label: "What Jev checks",
+    why: "Some of the checks were true of almost any reply, so Jev sent nearly every reply to be refined. They are narrower now, and there are two more.",
+    needs: { key: "judgeMode", is: "two" },
   },
 ];
 
@@ -2867,7 +2892,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // value is not on the list, because nothing about their setup moved.
   function movedForMe(): Array<{ key: string; was: any; label: string; why: string }> {
     if (String(cfg.movedSeen || "") === MOVED_MARK) return [];
-    return MOVED_DEFAULTS.filter((m) => steady((cfg as any)[m.key]) === steady(m.was));
+    return MOVED_DEFAULTS.filter(
+      (m) => steady((cfg as any)[m.key]) === steady(m.was) && (!m.needs || (cfg as any)[m.needs.key] === m.needs.is),
+    );
   }
 
   function markMovedSeen() {
@@ -14879,6 +14906,8 @@ export const __testing = {
   CONFIG,
   PARTS,
   MOVED_DEFAULTS,
+  JUDGE_FIELDS,
+  JUDGE_CHECKS,
   COST_FIELDS,
   LIMIT_FIELDS,
   MACROS,
