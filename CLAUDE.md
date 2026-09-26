@@ -38,7 +38,9 @@ behaves, goes into both.
   none of the patterns they tell the model to cut, such as "not X, not Y" or
   a list of three. This is the one place a metaphor or a contraction is used.
   Docs, comments and panel text stay plain. The paragraph about minors stays
-  word for word.
+  word for word unless the owner asks for a change. It says what is allowed
+  (sex scenes are between adults, 18 and older) and avoids alarm words, which
+  can make a model refuse the whole job.
 - The built-in prompts use no `{{user}}`, `{{char}}` or `{{charGroupFocused}}`,
   so they suit group chats and do not assume who plays which character.
 - The built-in prompts carry a mark worked out from their text. Changing their
