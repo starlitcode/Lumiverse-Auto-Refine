@@ -37,18 +37,28 @@ describe("the prompts that come with it", () => {
   // What Jev found goes only to the prompts for replies, since Jev never reads
   // your own messages. Off, so nothing changes for anybody who does not turn
   // it on.
-  test("each prompt for replies carries What Jev Found, switched off", () => {
+  // {{jev_found}} was the name of {{checks_found}} while Jev was the only
+  // second model. A block saved with it is read in with the name the backend
+  // fills in, wherever it was kept.
+  test("a block saved with {{jev_found}} is read in with {{checks_found}}", () => {
+    const { blockText } = __testing as any;
+    expect(blockText("<what_jev_found>\n{{jev_found}}\n</what_jev_found>")).toBe("<what_jev_found>\n{{checks_found}}\n</what_jev_found>");
+    expect(blockText("{{jev_found}} and {{jev_found}}")).toBe("{{checks_found}} and {{checks_found}}");
+    expect(blockText(null)).toBe("");
+  });
+
+  test("each prompt for replies carries Checks Found, switched off", () => {
     for (const p of forReplies()) {
       const b = p.blocks.find((x: any) => x.id === "jevfound");
       expect(b).toBeTruthy();
       expect(b.on).toBe(false);
-      expect(String(b.text)).toContain("{{jev_found}}");
+      expect(String(b.text)).toContain("{{checks_found}}");
     }
   });
 
   test("and neither prompt for your own messages does", () => {
     for (const p of forMine())
-      expect(p.blocks.some((x: any) => String(x.text).indexOf("{{jev_found}}") >= 0)).toBe(false);
+      expect(p.blocks.some((x: any) => String(x.text).indexOf("{{checks_found}}") >= 0)).toBe(false);
   });
 
   // Every one holds a change to a line the model could quote. The two for a

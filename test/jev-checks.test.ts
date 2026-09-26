@@ -9,7 +9,7 @@ import { __testing } from "../src/frontend";
 
 const { JUDGE_CHECKS } = __testing as any;
 const checks = String(JUDGE_CHECKS).split("\n");
-const page = readFileSync(join(import.meta.dir, "..", "docs/jev.md"), "utf8");
+const page = readFileSync(join(import.meta.dir, "..", "docs/two-models.md"), "utf8");
 
 test("there are checks to read", () => {
   expect(checks.length).toBeGreaterThan(0);

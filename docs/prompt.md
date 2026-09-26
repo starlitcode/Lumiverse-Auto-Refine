@@ -41,7 +41,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. |
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
-| `{{jev_found}}` | With two models, the checks Jev found in the reply, strongest first, each with its score. They come after a short lead-in that says to treat each one as a lead to check. Only filled in when Jev read the reply and picked it out. See [Passing on what Jev found](jev.md#passing-on-what-jev-found). |
+| `{{checks_found}}` | With two models, the checks the second model found in the reply, strongest first, each with its score. They come after a short lead-in that names the second model and says to treat each one as a lead to check. Only filled in when the second model read the reply and picked it out. A block saved with the older `{{jev_found}}` is switched to this one when it is loaded. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. |
 
@@ -199,7 +199,7 @@ There are four: a judge for replies and a line judge for your own messages, each
 - The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name kinds of stock writing, with a few examples each, because "cut clichés" gives a model nothing to act on. A model reads a kind as a pattern and catches the versions that are not listed. The kinds include held breaths and hammering hearts, stock faces, voices given a texture, the air doing the mood's job, fancy stand-ins for plain words, office talk in fiction, and the negation trick: "it wasn't a request, it was a command".
 - **Roll Call** is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
-- Both have a block called **What Jev Found**, switched off. It is for two models. See [Passing on what Jev found](jev.md#passing-on-what-jev-found).
+- Both have a block called **Checks Found**, switched off. It is for two models. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found).
 - All four work as they are. Load one, change what you like, and save it under your own name.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
 
@@ -426,7 +426,7 @@ On the **Model** tab, **Let it think first** has three choices:
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
 - The worn-out phrases are worked out the same way a refine works them out, so **Worn Out** shows what a refine would send.
 - With **Several passes** on, it shows the first pass as it would go out, and names every pass in order. The passes after the first are sent the rewrite the one before wrote, so they cannot be shown until a refine runs.
-- **What Jev Found** is left out, because a preview never asks Jev. The card says so when a switched-on block uses `{{jev_found}}`. The Log says when a real refine sent it.
+- **Checks Found** is left out, because a preview never asks the second model. The card says so when a switched-on block uses `{{checks_found}}`. The Log says when a real refine sent it.
 - **Copy it** copies the whole thing, useful when asking why a refine did something odd.
 
 ## Starting a block from nothing

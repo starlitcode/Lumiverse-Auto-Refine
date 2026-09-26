@@ -50,7 +50,7 @@ The greeting is never refined. Your own messages are only refined when you press
 ## Context
 
 - **How much it is told** sets how many messages of chat history are sent, whether each line names who said it, and the size limits for history and lorebook. See [How much it is told](prompt.md#how-much-it-is-told).
-- **See what gets sent** builds the request a refine would send and shows it, without calling a model. What Jev found and the passes after the first are named rather than shown. **Raw** shows it as the JSON that is sent. **Expand** opens it full screen.
+- **See what gets sent** builds the request a refine would send and shows it, without calling a model. What the checks found and the passes after the first are named rather than shown. **Raw** shows it as the JSON that is sent. **Expand** opens it full screen.
 
 ## Model
 
@@ -75,7 +75,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
-- **One model or two** is a beta. With two, a small model called Jev checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks. See [Two models](jev.md).
+- **One model or two** is a beta. With two, a small second model, Jev or Span, checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks. See [Two models](two-models.md).
 
 ## Limits
 
@@ -204,7 +204,7 @@ While the floating button is on screen, its menu holds these extra actions. With
   - Alerts and sound
   - Buttons and the widget
   - Where the input box is
-  - One model or two (never the Jev key)
+  - One model or two (never the key for the second model)
   - The on and off switches
   - Saved presets
   - Saved model setups

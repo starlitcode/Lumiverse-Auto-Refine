@@ -90,7 +90,7 @@ A refine is a second model call on every reply it refines. To spend less:
 - **Refine using** (Model tab): point it at a cheaper model than the one you chat with.
 - **Let it think first** (Model tab): off by default. Rewriting does not need a reasoning model.
 - **How much it is told** (Context tab): less chat history means a cheaper call.
-- **Two models** (Model tab, beta): a small model called Jev checks each reply first, so only the ones that need it are refined.
+- **Two models** (Model tab, beta): a small second model, Jev or Span, checks each reply first, so only the ones that need it are refined.
 
 Put your provider's prices on the Model tab to see costs in money instead of tokens. On a free tier or a local model, **Wait out a provider that will not take the call** (Limits tab) waits and tries again when the provider is busy.
 
@@ -106,7 +106,7 @@ Four prompts come with it:
 
 All four change only a line the model could quote as breaking a rule. The two for a model that thinks score each area and write the scores down. The two plain ones give the same limit as a plain rule, and never ask the model to check its work, because a model that does not reason writes its answer once. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
 
-**Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what Jev found, and the passes after the first.
+**Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what the checks found, and the passes after the first.
 
 ## Documentation
 
@@ -117,7 +117,7 @@ All four change only a line the model could quote as breaking a rule. The two fo
 - [Settings](docs/settings.md): every tab and setting
 - [Ways to reach it](docs/settings.md#setup): the floating button, the chat buttons, and refining a selection
 - [Presets](docs/prompt.md#presets) and [Import and export](docs/prompt.md#import-and-export)
-- [Two models](docs/jev.md): Jev, a beta that picks which replies to refine
+- [Two models](docs/two-models.md): a beta where a second model, Jev or Span, picks which replies to refine
 - [Privacy](docs/privacy.md): what it can reach, what it sends, and what it keeps
 - [Security policy](SECURITY.md): how to report a security problem
 - [Changelog](CHANGELOG.md): what changed in every version
@@ -125,7 +125,7 @@ All four change only a line the model could quote as breaking a rule. The two fo
 ## How it works
 
 - The refining runs in the extension's backend, because editing a saved message is a backend job.
-- Every refine goes through Lumiverse to the provider you set up. With two models on, the call to Jev goes through Lumiverse's own proxy to the Jev host you picked.
+- Every refine goes through Lumiverse to the provider you set up. With two models on, the call to the second model goes through Lumiverse's own proxy to the host you picked.
 - The extension has no networking of its own. Search the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and you will find nothing.
 - **Nothing is ever added to your chat.** It only edits messages that already exist.
 - **Refine what I am typing** reads and writes the input box on the page, because Lumiverse has no API for it. If an update moves the box, **Where the input box is** on the Setup tab points it at the new one.
@@ -141,7 +141,7 @@ It asks for seven permissions:
 | `characters` | reading the character card |
 | `world_books` | reading the lore the chat has active |
 | `ui_panels` | the floating button |
-| `cors_proxy` | reaching Jev, when two models are on |
+| `cors_proxy` | reaching the second model, when two models are on |
 
 [Privacy](docs/privacy.md) says what still works without each one.
 
