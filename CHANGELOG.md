@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.19.4
+
+_2026-09-26_
+
+### Fixed
+
+- **Give up waiting after did not work while the tab was in the background.** On a phone, a tab left idle has its timers paused. So a refine could show "Thinking, 1175s" with the limit set to 1000. The limit is now checked against the real time while the panel runs, and again as soon as you come back to the tab. If the tab was in the background, the message says so and asks you to check the reply, since a reply that finished while the tab was asleep can miss the panel.
+
+---
+
 ## 1.19.3
 
 _2026-09-26_

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.19.3";
+const VERSION = "1.19.4";
 // TypeSafe's own introduction to Jev, for somebody meeting the name for the
 // first time on the Model tab.
 const JEV_ABOUT_URL = "https://typesafe.ai/blog/introducing-system-one-models-and-jev";
@@ -2805,8 +2805,12 @@ export function setup(ctx, overrides) {
                 return;
             if (document.visibilityState === "hidden") {
                 hiddenAt = Date.now();
+                if (busy)
+                    awayInRun = true;
                 return;
             }
+            if (pastDeadline())
+                giveUpWaiting();
             if (!hiddenAt || Date.now() - hiddenAt < STALE_AFTER_MS || saveTimer)
                 return;
             hiddenAt = 0;
@@ -3639,6 +3643,18 @@ export function setup(ctx, overrides) {
     // started.
     let deadFrom = 0;
     let deadAllow = 0;
+    // The same deadline as a time on the clock. A phone pauses the timers of a
+    // tab in the background, and the timer below can come due long after the
+    // deadline, or not until the tab is used again. The clock on the page keeps
+    // real time, so every tick of the status line checks this as well, and
+    // coming back to the tab ends a run that ran out while it was away.
+    let deadAt = 0;
+    // Whether the tab went into the background during this run. A reply the
+    // backend sent while the tab was asleep can be lost on the way, so the
+    // message on giving up cannot say for certain that nothing changed.
+    let awayInRun = false;
+    // What the Log says when the deadline passes, worked out with it.
+    let deadWhy = "";
     //
     // `fresh` starts the stretch again rather than continuing it. A run through
     // the chat is the one caller that wants that: each reply it finishes proves
@@ -3674,23 +3690,34 @@ export function setup(ctx, overrides) {
         const left = Math.max(1, secs - (Date.now() - deadFrom) / 1000);
         // The backend gives up at the timeout, so this waits a little longer than
         // that: it should only ever fire when the answer itself went missing.
-        deadman = setTimeout(() => {
-            deadman = null;
-            if (!busy)
-                return;
-            markBusy(false);
-            const why = cap
-                ? "nothing came back within " + Math.round(secs) + "s"
-                : "nothing came back in an hour, and the wait is switched off, so this is the backstop";
-            deadFrom = 0;
-            deadAllow = 0;
-            tally.dropped++;
-            countDrop(why);
-            lastRun = { ms: lastRunMs, ok: false, why: why };
-            log("gave up waiting: " + why);
-            toast("The refine never came back. Nothing was changed.", true);
-            paint();
-        }, left * 1000);
+        deadAt = deadFrom + secs * 1000;
+        deadWhy = cap
+            ? "nothing came back within " + Math.round(secs) + "s"
+            : "nothing came back in an hour, and the wait is switched off, so this is the backstop";
+        deadman = setTimeout(giveUpWaiting, left * 1000);
+    }
+    function giveUpWaiting() {
+        if (deadman)
+            clearTimeout(deadman);
+        deadman = null;
+        if (!busy)
+            return;
+        // Read before markBusy, which clears both for the next run.
+        const away = awayInRun;
+        const why = deadWhy + (away ? ", and the tab was in the background" : "");
+        markBusy(false);
+        tally.dropped++;
+        countDrop(why);
+        lastRun = { ms: lastRunMs, ok: false, why: why };
+        log("gave up waiting: " + why);
+        toast(away
+            ? "The refine did not come back while this tab was in the background. Check the reply to see whether it changed."
+            : "The refine never came back. Nothing was changed.", true);
+        paint();
+    }
+    // Checked on the clock rather than left to the timer alone. See deadAt.
+    function pastDeadline() {
+        return busy && deadAt > 0 && Date.now() >= deadAt;
     }
     disposers.push(() => {
         if (deadman)
@@ -3701,6 +3728,7 @@ export function setup(ctx, overrides) {
     function markBusy(on, why) {
         if (on && !busy) {
             runStartedAt = Date.now();
+            awayInRun = typeof document !== "undefined" && document.visibilityState === "hidden";
             streamed = 0;
             // What is on screen belongs to the refine that is running. What the Log
             // is holding belongs to the last one that finished, and stays until
@@ -3717,6 +3745,8 @@ export function setup(ctx, overrides) {
             }
             deadFrom = 0;
             deadAllow = 0;
+            deadAt = 0;
+            awayInRun = false;
         }
         if (!on && busy && runStartedAt)
             lastRunMs = Date.now() - runStartedAt;
@@ -3900,6 +3930,10 @@ export function setup(ctx, overrides) {
     // second would close an open select and take the cursor out of whatever box
     // somebody was typing in.
     function tickLive() {
+        if (pastDeadline()) {
+            giveUpWaiting();
+            return;
+        }
         try {
             if (liveEls) {
                 const now = liveNow();
