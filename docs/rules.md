@@ -193,10 +193,14 @@ The built-in prompts use tags. That is one choice, not a rule. Mixing formats in
 
 A model that reasons and a model that does not need different prompts.
 
-**A model that does not reason** follows a list better than an idea.
+**A model that does not reason** follows a list better than an idea. It writes its answer once, from start to end. It cannot go back and check it.
 
 - Give it the list of kinds, with examples.
 - Ask for the rewrite and nothing else.
+- Write rules it can follow while it writes: "cut X", "keep Y", "a line in doubt stays".
+- Do not ask it to check its work. "Look again before you hand it in", "reread yours" and "score it in your head" ask for a step it does not have. It ignores them, or writes the check into the answer.
+- Do not ask it to read the passage twice, or in a set order. It reads it once.
+- One short example of a fix, before and after, works better than a paragraph about the fix.
 
 **A model that reasons** can work from an idea.
 
@@ -251,7 +255,7 @@ These are small habits. Each one fixes a way a prompt can go wrong without you n
 
 **Watch your own repeated words.** Models copy the words they are given. If one word turns up in every block, like "call" or "clean", it can start turning up in your story too. Read your prompt through once and change any word you used more than two or three times.
 
-**Give it a bar to clear.** Without one, the model changes something every time. A score works well: "Score each area out of 100. Only change an area that scores under 85." The built-in prompts do this in the **Scorecard** block.
+**Give it a bar to clear.** Without one, the model changes something every time. For a model that reasons, a score works well: "Score each area out of 100. Only change an area that scores under 85." For a model that does not reason, give the bar as a rule: "Only change a line that clearly breaks a rule. A line in doubt stays." The built-in prompts do this in the **Scorecard** block.
 
 **Give the reason in one short sentence.** "Cut filter words" is a rule. "Cut filter words, so the reader sees the door and not the character seeing it" is a rule the model can apply to cases you did not list.
 

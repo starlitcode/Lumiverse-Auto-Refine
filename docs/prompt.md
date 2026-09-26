@@ -126,7 +126,9 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 ## The scorecard
 
-All four built-in prompts ask the model to score the passage before it changes anything. How the scoring works, from the **Scorecard** block:
+All four built-in prompts have a **Scorecard** block. It limits what the model can change. The two for a model that thinks score each area. The two plain ones give the same limit as a plain rule.
+
+How the scoring works in the two that think:
 
 - An area is one kind of fault the prompt tells the model to look for, such as stock phrases, repetition or speech.
 - Each area gets a score out of 100.
@@ -136,6 +138,8 @@ All four built-in prompts ask the model to score the passage before it changes a
 - A passage can score 100 in every area. Then it comes back unchanged.
 
 Why it is there: a model that has to point at a line before it changes it leaves alone the lines it cannot point at. This stops a refine rewriting a passage that was already fine.
+
+**The two plain prompts give a rule instead of a score.** A line is changed only when it clearly breaks a rule and the model could quote it. A line that might break a rule stays. So does a line where the fix would do more harm than good.
 
 **The two for a model that thinks write the scorecard down.** Their answer comes in two parts:
 
@@ -155,7 +159,9 @@ the rewritten message
 - The notes are kept on the **Log** tab, under **What the model worked out**. Only a refine that finishes replaces them. Stopping one keeps the last notes.
 - A score is only the model's judgement. The quoted line is the part to trust.
 
-**The two plain prompts score silently.** They ask for the rewrite and nothing else. A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost. So these two keep the same rules and write nothing down.
+**The two plain prompts ask for the rewrite and nothing else.** A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost.
+
+**The two plain prompts never ask the model to check its work.** A model that does not reason writes its answer once, from start to end. It has no step before the answer to score in, and no step after it to look again. So these two do not say "score it in your head", "look again" or "reread yours". They say what to change and what to leave, as rules it can follow while it writes. The two that think keep their review steps, because a reasoning model does have a step before the answer.
 
 Both tags are in capitals so a model scanning the prompt finds them easily.
 
@@ -187,7 +193,7 @@ There are four: a judge for replies and a line judge for your own messages, each
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **A judge** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard for all of them. The one to start with. | no |
+| **A judge** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard rule for all of them. The one to start with. | no |
 | **A judge that thinks** | The same role, then The Bar to clear, five Hot Spots, the writer's Voice, Roll Call, and Review the Tape for its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
@@ -203,7 +209,7 @@ The same two versions, for a different job. A reply is prose to improve. Your ow
 
 | Prompt | What it is | Needs a reasoning model |
 | --- | --- | --- |
-| **A line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Scores each kind of slip. | no |
+| **A line judge** | Tells the model it is a line judge: it calls clear faults on the way to the page and leaves your style alone. Then the full list, plus a block naming what is not a repair: adding a gesture, making a plain line vivid, finishing a thought you left open. Ends with one fix shown before and after. | no |
 | **A line judge that thinks** | The same role, then The Ruling for telling a mistake from a choice, and the Hot Spots where fast typing goes wrong. Scores each area in `<REFINE_NOTES>`. | yes |
 
 - Each ends by saying that when a slip cannot be told from a choice, it is a choice. So a plain "she left" stays as it is.

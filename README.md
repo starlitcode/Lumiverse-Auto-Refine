@@ -104,7 +104,7 @@ Four prompts come with it:
 - **A line judge**, for your own messages. It fixes mistakes and leaves your style alone.
 - Each has a smaller version **that thinks**, for a model that reasons.
 
-All four score the passage before they change it. A score has to rest on a line the model could quote, and only low scores lead to a change. The two for a model that thinks write the scores down, and the two plain ones score silently. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
+All four change only a line the model could quote as breaking a rule. The two for a model that thinks score each area and write the scores down. The two plain ones give the same limit as a plain rule, and never ask the model to check its work, because a model that does not reason writes its answer once. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
 
 **Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what Jev found, and the passes after the first.
 
