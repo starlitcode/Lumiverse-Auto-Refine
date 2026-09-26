@@ -39,7 +39,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{message}}` | The turn being refined. |
 | `{{history}}` | The messages before it, as many as the **Context** tab says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
-| `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. |
+| `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. Empty when memory is off for the chat, or when the `chats` permission is not granted. |
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
 | `{{checks_found}}` | With two models, the checks the second model found in the reply, strongest first, each with its score. They come after a short lead-in that names the second model and says to treat each one as a lead to check. Only filled in when the second model read the reply and picked it out. A block saved with the older `{{jev_found}}` is switched to this one when it is loaded. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
@@ -196,6 +196,7 @@ There are four: a judge for replies and a line judge for your own messages, each
 | **A judge** | Tells the model it is the judge: how a passage reads is its job, and what happens in it is yours. Then one block for each rule: Instant Penalties, Dead Weight, Echoes, Rhythm, Dialogue, Body Language, Roll Call and The Finish, with a scorecard rule for all of them. The one to start with. | no |
 | **A judge that thinks** | The same role, then The Bar to clear, five Hot Spots, the writer's Voice, Roll Call, and Review the Tape for its own rewrite. Scores each area in `<REFINE_NOTES>`. | yes |
 
+- In the two that think, the thinking steps are in **Hand It In**, after the passage, near the end of the prompt. The reasons are in [Put the thinking steps at the end](rules.md#more-ways-to-make-it-work-better).
 - The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name kinds of stock writing, with a few examples each, because "cut clichés" gives a model nothing to act on. A model reads a kind as a pattern and catches the versions that are not listed. The kinds include held breaths and hammering hearts, stock faces, voices given a texture, the air doing the mood's job, fancy stand-ins for plain words, office talk in fiction, and the negation trick: "it wasn't a request, it was a command".
 - **Roll Call** is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.

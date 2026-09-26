@@ -68,9 +68,9 @@ Respan has no paid Lite, so it is not in the list for Respan. If you picked it o
 
 - The reply is sent as the assistant's turn of a conversation.
 - Each check is sent as a behavior. The word `reply` in backticks is written out as "the reply".
+- With **Also compare with the reply before it** on, that reply is sent as the turn before, and `previous_reply` is written out as "the previous reply". See [Comparing with the reply before it](#comparing-with-the-reply-before-it).
+- A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
 - Respan answers each behavior with three chances: present, absent, and not enough to judge. The chance it is present is the score.
-
-A key for Respan's own API comes from [platform.respan.ai](https://platform.respan.ai). A key for OpenRouter comes from OpenRouter.
 
 ## Another address
 
@@ -139,24 +139,32 @@ It goes from 1 to 99. The two ends are left out because each one makes the secon
 
 ### Comparing with the reply before it
 
-By default the second model only reads the reply. It does not see the reply before it, so a check such as "uses the same beats as the last reply" has nothing to compare with.
+By default the second model only reads the reply. It does not see the reply before it, so it cannot tell when a reply repeats the one before.
 
-**Also send the reply before it** changes that. It is off by default. On:
+**Also compare with the reply before it** changes that. It is off by default. On:
 
 - The last reply before this one is sent too, without its thinking. Your own messages are skipped.
-- A check names it `previous_reply`, with backticks, the same way `reply` names the reply.
-- A check that names `previous_reply` is not asked when there is no reply before it, such as on the first reply of a chat. It is also not asked while the switch is off.
+- Three checks are added for you. You do not need to write them:
+
+```
+`reply` repeats the beats of `previous_reply`: the same actions and events, in the same order.
+`reply` has the characters speak in the same order as `previous_reply`.
+`reply` describes the surroundings again with the same details `previous_reply` already gave.
+```
+
+- They use the same line as your own checks, under **Refine when a check reaches**.
+- They are not asked when there is no reply before this one, such as on the first reply of a chat.
 - With **Have it check the rewrite** on, the rewrite is compared with the same reply.
 
-For example, three checks, one for each thing to compare:
+Each one is about repeating. A reply that carries the same scene on, in the same place, should not reach the line.
+
+You can also write your own checks about it. Name it `previous_reply`, with backticks, the same way `reply` names the reply. For example:
 
 ```
-`reply` follows the same order of events as `previous_reply`.
-`reply` describes the same details of the place as `previous_reply`.
-`reply` has the characters speak in the same order as `previous_reply`.
+`reply` opens the same way as `previous_reply`.
 ```
 
-A scene that carries on will share some details with the reply before it. Write the checks about repeating, so they are false of a reply that only continues the scene.
+A check of your own that names `previous_reply` is only asked while the switch is on and there is a reply before this one.
 
 ### Putting the built-in checks back
 
@@ -269,7 +277,7 @@ The key is never shown.
 
 ## What it costs
 
-The second model is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call, and so is each press of **Test**. **Also send the reply before it** makes each call longer, which costs more on a host that charges for what is sent. Span-01 Lite, free costs nothing.
+The second model is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call, and so is each press of **Test**. **Also compare with the reply before it** makes each call longer, which costs more on a host that charges for what is sent. Span-01 Lite, free costs nothing.
 
 With **Have it check the rewrite** on, each refine costs one more call. A reply refined once more also costs a second refine from your refine provider, one call per pass. Where the host reports the cost of a call, the Log and the card show it.
 

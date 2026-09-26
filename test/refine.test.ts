@@ -1459,6 +1459,53 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls[0].body.questions.check_1.instructions).toBe(BEATS);
   });
 
+  // Nobody has to write a check for it: the switch brings its own three.
+  const BUILT_IN_BEFORE = ["before_beats", "before_speakers", "before_place"];
+
+  test("on, three checks about repeating the reply before it are added", async () => {
+    const h = await keyed({ judgeBefore: true }, { jev: says([10, 20, 30, 40, 70]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const q = h.jevCalls[0].body.questions;
+    expect(Object.keys(q)).toEqual(["check_1", "check_2", ...BUILT_IN_BEFORE]);
+    for (const id of BUILT_IN_BEFORE) {
+      expect(q[id].type).toBe("noul");
+      expect(q[id].instructions).toContain("`previous_reply`");
+    }
+    // Shown by name, and a hit on one refines the reply like any check.
+    const got = said(h)[0];
+    expect(got.scores.map((x: any) => x.check).slice(2)).toEqual([
+      "Repeats the beats of the reply before it",
+      "Has the characters speak in the same order as the reply before it",
+      "Describes the surroundings again with the same details as the reply before it",
+    ]);
+    expect(got.refine).toBe(true);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("off, or with no reply before it, they are not asked", async () => {
+    let h = await keyed({}, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1", "check_2"]);
+    h = await keyed({ judgeBefore: true }, { jev: says([10]) }, [
+      { id: "m1", role: "user", content: "i walk through it" },
+      { id: "m2", role: "assistant", content: REPLY },
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1", "check_2"]);
+  });
+
+  test("the docs list the three checks exactly as they are sent", async () => {
+    const page = readFileSync(new URL("../docs/two-models.md", import.meta.url), "utf8");
+    const h = await keyed({ judgeBefore: true }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const q = h.jevCalls[0].body.questions;
+    for (const id of BUILT_IN_BEFORE) expect(page).toContain("\n" + q[id].instructions + "\n");
+  });
+
   test("with no reply before it, a check that names it is left out", async () => {
     const msgs: Msg[] = [
       { id: "m1", role: "user", content: "i walk through it" },
@@ -1478,7 +1525,10 @@ describe("two models: Jev reads the reply first", () => {
     const body = h.jevCalls[0].body;
     expect(body.span.input).toEqual([{ role: "assistant", content: EARLIER }]);
     expect(body.span.output).toEqual({ role: "assistant", content: REPLY });
-    expect(body.behaviors).toEqual([{ id: "check_1", definition: "The reply follows the same beats as the previous reply." }]);
+    expect(body.behaviors[0]).toEqual({ id: "check_1", definition: "The reply follows the same beats as the previous reply." });
+    expect(body.behaviors.find((b: any) => b.id === "before_speakers").definition).toBe(
+      "The reply has the characters speak in the same order as the previous reply.",
+    );
   });
 
   test("the rewrite is compared with the same reply before it", async () => {

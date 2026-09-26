@@ -341,8 +341,9 @@ interface Scene {
   // asked for on a selection rather than on the message. Empty on every other
   // refine, which leaves the block carrying it out of the prompt entirely.
   wholeReply?: string;
-  // What Jev found in the reply: the checks that reached the line, strongest
-  // first, with a lead-in saying what they are. Set only when Jev read the
+  // What the second model found in the reply: the checks that reached the
+  // line, strongest first, with a lead-in saying what they are. Set only when
+  // it read the
   // reply and picked it out, so on every other refine the block holding it is
   // left out.
   jevFound?: string;
@@ -460,6 +461,11 @@ function promptHasTurn(isUser?: boolean): boolean {
   return promptWants(TURN_MACRO, isUser);
 }
 
+// Whether a prompt takes what the checks found.
+function wantsFound(isUser?: boolean, use?: Block[]): boolean {
+  return promptWants(CHECKS_FOUND_MACRO, isUser, use);
+}
+
 // Whether any block that is actually being sent asks for this. What a block
 // that is switched off wants is nothing, since it is not sent.
 //
@@ -468,11 +474,6 @@ function promptHasTurn(isUser?: boolean): boolean {
 // switching the memory block off left every refine retrieving the chat's memory
 // and throwing it away. A macro nobody is going to see is a call nobody has to
 // make.
-// Whether a prompt takes what the checks found.
-function wantsFound(isUser?: boolean, use?: Block[]): boolean {
-  return promptWants(CHECKS_FOUND_MACRO, isUser, use);
-}
-
 function promptWants(macro: string, isUser?: boolean, use?: Block[]): boolean {
   // use is every block that is going to be sent, which in a chain of passes is
   // all of their lists together. The scene is built once before the first pass
@@ -2663,11 +2664,6 @@ function fromTheStory(phrase: string, known: string): boolean {
   return false;
 }
 
-// The phrases this chat has worn out, written out for a prompt. Read from replies
-// already in hand, so this costs no call of its own.
-//
-// Your own messages are left out. This is about the model's habits, and your
-// writing is not the thing being rewritten here.
 // The last reply before the one at `at`, without its working, for a check that
 // compares the two. Empty when there is none.
 function replyBefore(msgs: any[], at: number): string {
@@ -2680,6 +2676,11 @@ function replyBefore(msgs: any[], at: number): string {
   return '';
 }
 
+// The phrases this chat has worn out, written out for a prompt. Read from replies
+// already in hand, so this costs no call of its own.
+//
+// Your own messages are left out. This is about the model's habits, and your
+// writing is not the thing being rewritten here.
 function gatherWorn(msgs: any[], upTo: number, name?: string, canon?: string): string {
   if (!wornOn) return '';
   const replies: string[] = [];
@@ -3325,10 +3326,10 @@ async function refineMessage(
   // Where the selection sits in the body. Worked out against the body rather
   // than the whole message, because the model's own working is in front of it
   // and counting through that would put every offset out by its length.
-  // Two models: Jev reads the reply before the refine model is asked. Always on
-  // the automatic pass. On a refine started with a button only when the reader
-  // asked for that, since pressing it is already a decision the reply needs
-  // one. Never on a selection, which is part of a reply and not what the checks
+  // Two models: the second model reads the reply before the refine model is
+  // asked. Always on the automatic pass. On a refine started with a button only
+  // when the reader asked for that, since pressing it is already a decision the
+  // reply needs one. Never on a selection, which is part of a reply and not what the checks
   // are about, and never on the reader's own message, which is not a reply.
   const jevReads = judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick;
   const jevWorn = jevReads && judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
@@ -3337,7 +3338,8 @@ async function refineMessage(
     tell(userId, { type: 'refine_progress', stage: 'judging' });
     const worn = jevWorn;
     // Held like a call to the refine model, so Stop reaches it. The request to
-    // Jev cannot be pulled back once sent, so Stop is honoured when it answers.
+    // the second model cannot be pulled back once sent, so Stop is honoured
+    // when it answers.
     let stopped = false;
     const handle = { abort: () => { stopped = true; } };
     holdRun(userId, handle);
@@ -3368,11 +3370,11 @@ async function refineMessage(
         why: who() + ' found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
       };
     }
-    // Handed on for {{checks_found}}. Empty when Jev could not decide, since then
+    // Handed on for {{checks_found}}. Empty when it could not decide, since then
     // there is nothing it found.
     if (!verdict.failed) scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver) };
     // Said in the Log, since a real request is not shown anywhere and the
-    // preview never asks Jev. Only when a block is there to take it.
+    // preview never asks the second model. Only when a block is there to take it.
     if (scene.jevFound && wantsFound(isUser, willSend))
       tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, count: jevHits(verdict.scores, judgeOver).length });
   }
@@ -3447,8 +3449,8 @@ async function refineMessage(
   // instruction about them stays true for every pass.
   // Every pass in order over start, then the end of the chain judged against
   // the reply it began from. Returns the rewrite, or the refusal to hand back
-  // as the refine's answer. Run once, and once more when Jev reads the rewrite
-  // and a check still reaches the line.
+  // as the refine's answer. Run once, and once more when the second model
+  // reads the rewrite and a check still reaches the line.
   async function runChain(start: string): Promise<{ ok: true; text: string } | { ok: false; out: RefineOutcome }> {
   let carried = start;
   // What each pass was given and what it returned. A chain that came out
@@ -3541,12 +3543,13 @@ async function refineMessage(
   if (!first.ok) return first.out;
   let carried = first.text;
 
-  // Jev reads the rewrite as well, when the reader asked for that and Jev read
-  // the reply before it. A check still at or over the line means the refine
-  // missed something, so it runs once more on the rewrite, with what Jev found
-  // this time in {{checks_found}}. Once, not until Jev is satisfied: each round is
-  // a Jev call and a full refine, and a check Jev keeps flagging after two
-  // rewrites is more likely Jev being wrong than the model.
+  // The second model reads the rewrite as well, when the reader asked for that
+  // and it read the reply before it. A check still at or over the line means
+  // the refine missed something, so it runs once more on the rewrite, with what
+  // was found this time in {{checks_found}}. Once, not until the second model
+  // is satisfied: each round is one more call to it and a full refine, and a
+  // check it keeps flagging after two rewrites is more likely to be wrong than
+  // the refine model.
   if (jevReads && judgeAfter) {
     tell(userId, { type: 'refine_progress', stage: 'rechecking' });
     // Held like any call, so Stop reaches it, and kept held through the second
@@ -3958,14 +3961,14 @@ async function saveRefined(
   }
 }
 
-// ---- Jev, the second model ----
+// ---- the second model, Jev or Span ----
 // In two-model mode a second, much smaller model reads a finished reply first
-// and says whether it needs a refine. Jev answers each check with the chance,
+// and says whether it needs a refine. It answers each check with the chance,
 // from 0 to 1, that a statement about the reply is true, and nothing else: it
 // writes no text, so there is nothing of its own to save over a reply. The
-// refine model then runs only on the replies Jev picks out.
+// refine model then runs only on the replies it picks out.
 //
-// Reached through Lumiverse's CORS proxy, since Jev is not a chat model and no
+// Reached through Lumiverse's CORS proxy, since it is not a chat model and no
 // connection profile can hold it. The key is kept in the secure enclave, per
 // account, and never goes into the settings, an export or the panel.
 // Each host's name for Jev 1.13, for the alias that follows the newest stable
@@ -3976,7 +3979,7 @@ async function saveRefined(
 //
 // Hosts take one of four kinds of request. A decisions request sends the
 // state and the questions as they are, and reads `answers` back. The other
-// three fit Jev into a chat API: the state is the text of the input, and the
+// three fit the second model into a chat API: the state is the text of the input, and the
 // answers come back as JSON text in the reply. A chat completions request
 // carries the questions in `response_format`, a responses request in
 // `text.format`, and a Claude-style messages request in `output_config.format`.
@@ -4038,7 +4041,7 @@ const JEV_TIMEOUT_MS = 20000;
 // since the text leaves Lumiverse for somebody else's server.
 const JEV_REPLY_MAX = 60000;
 const JEV_CHECKS_MAX = 20;
-// The one kind of question put to Jev: the chance, 0 to 1, that a statement is
+// The one kind of question put to the second model: the chance, 0 to 1, that a statement is
 // true. Named so it does not read as one of the bridge's message types.
 const NOUL = 'noul';
 // The response format a chat request names to get decisions back rather than
@@ -4058,12 +4061,13 @@ let judgeChecks: string[] = [];
 let judgeOver = 50;
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
-// `previous_reply`, so a check can compare the two.
+// `previous_reply`, with the checks in BEFORE_CHECKS. A check of the reader's
+// own can name it as well.
 let judgeBefore = false;
-// Whether Jev also reads a reply before a refine somebody starts with a button.
-// Off, a refine asked for by hand goes ahead without Jev.
+// Whether the second model also reads a reply before a refine somebody starts
+// with a button. Off, a refine asked for by hand goes ahead without it.
 let judgeByHand = false;
-// Whether Jev reads the rewrite too, and a check still over the line gets the
+// Whether the second model reads the rewrite too, and a check still over the line gets the
 // reply one more refine.
 let judgeAfter = false;
 
@@ -4074,7 +4078,7 @@ interface JevScore {
 }
 interface JevVerdict {
   refine: boolean;
-  // Jev could not be asked, or sent back nothing to go on. The reply is refined
+  // The second model could not be asked, or sent back nothing to go on. The reply is refined
   // anyway: the beta failing should cost a call, not a refine.
   failed?: boolean;
   why?: string;
@@ -4083,7 +4087,6 @@ interface JevVerdict {
   model?: string;
 }
 
-// The second model's name, for everything that is said about what it did.
 // The second models, one entry each. An entry names the model, lists the hosts
 // it can be reached on with where to send it and what kind of request that
 // host takes, and says which model name to ask a host for. Everything else,
@@ -4158,10 +4161,8 @@ function jevTimeout<T>(work: Promise<T>): Promise<T> {
   return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
 
-// One call to Jev. Answers with what Jev said, or with why it could not be
-// asked, in words fit for the Log.
 // A scores request for Respan's own API. The checks are written about the
-// reply by the name Jev knows it by, in backticks, and a behavior is written
+// reply by the name a decisions request gives it, in backticks, and a behavior is written
 // about a conversation, so the names are put in words: the reply becomes the
 // reply, and the list of worn phrases is written out after the words that name
 // it. The reply goes in as the assistant's turn. The reply before it, when it
@@ -4184,6 +4185,8 @@ function scoresRequest(model: string, state: Record<string, string>, questions: 
   };
 }
 
+// One call to the second model. Answers with what it said, or with why it
+// could not be asked, in words fit for the Log.
 async function askJev(
   userId: string | undefined,
   state: Record<string, string>,
@@ -4288,6 +4291,28 @@ async function askJev(
   return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0, model: model };
 }
 
+// What is asked about the reply before this one, when that is sent. Each is
+// about one thing, and each is about repeating, so a reply that carries the
+// same scene on is not caught by it. The display name is what the Log, the
+// card and {{checks_found}} show.
+const BEFORE_CHECKS: Array<{ id: string; line: string; shown: string }> = [
+  {
+    id: 'before_beats',
+    line: '`reply` repeats the beats of `previous_reply`: the same actions and events, in the same order.',
+    shown: 'Repeats the beats of the reply before it',
+  },
+  {
+    id: 'before_speakers',
+    line: '`reply` has the characters speak in the same order as `previous_reply`.',
+    shown: 'Has the characters speak in the same order as the reply before it',
+  },
+  {
+    id: 'before_place',
+    line: '`reply` describes the surroundings again with the same details `previous_reply` already gave.',
+    shown: 'Describes the surroundings again with the same details as the reply before it',
+  },
+];
+
 // The checks, and the worn phrases when there are any, put to the second model
 // about one reply. A check above the line is a reply worth refining.
 //
@@ -4305,7 +4330,13 @@ async function judgeReply(userId: string | undefined, reply: string, worn: strin
     asked.push({ id: id, check: line });
   });
   const state: Record<string, string> = { reply: reply.slice(0, JEV_REPLY_MAX) };
-  if (hasBefore) state.previous_reply = String(before).slice(0, JEV_REPLY_MAX);
+  if (hasBefore) {
+    state.previous_reply = String(before).slice(0, JEV_REPLY_MAX);
+    for (const one of BEFORE_CHECKS) {
+      questions[one.id] = { type: NOUL, instructions: one.line };
+      asked.push({ id: one.id, check: one.shown });
+    }
+  }
   if (judgeWorn && worn.trim()) {
     state.worn_phrases = worn;
     const line = 'At least one phrase listed in `worn_phrases` appears in `reply`.';
@@ -4325,19 +4356,20 @@ async function judgeReply(userId: string | undefined, reply: string, worn: strin
   return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost, model: got.model };
 }
 
-// What {{checks_found}} puts in: the checks that reached the line, strongest
-// first. The lead-in is written here rather than left to the prompt because
-// the percentages and the line are this extension's own, and nothing in a chat
-// could describe them. The backticks the checks use to name Jev's input are
-// taken out, since the refine model is not given that input by that name. It
-// says the checks are leads, since Jev can be wrong,
-// and a model told to fix each one would change writing that was fine.
-// Empty when no check reached the line, which leaves the block out.
 // The checks that reached the line, strongest first.
 function jevHits(scores: JevScore[] | undefined, over: number): JevScore[] {
   return (scores || []).filter((x) => x.pct >= over).sort((a, b) => b.pct - a.pct);
 }
 
+// What {{checks_found}} puts in: the checks that reached the line, strongest
+// first. The lead-in is written here rather than left to the prompt because
+// the percentages and the line are this extension's own, and nothing in a chat
+// could describe them. The backticks the checks use to name the second model's
+// input are taken out, and `previous_reply` is put in words, since the refine
+// model is not given that input by those names. It says the checks are leads,
+// since the second model can be wrong, and a model told to fix each one would
+// change writing that was fine.
+// Empty when no check reached the line, which leaves the block out.
 function jevFoundText(scores: JevScore[] | undefined, over: number): string {
   const hits = jevHits(scores, over);
   if (!hits.length) return '';
@@ -5246,8 +5278,9 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           wrapOutput: wrapOutput,
           connectionId: connectionId || '',
           reasoning: reasoningFor(),
-          // A preview never asks Jev, so a block holding {{checks_found}} comes
-          // out empty here and is left out, where a real refine Jev read would
+          // A preview never asks the second model, so a block holding
+          // {{checks_found}} comes out empty here and is left out, where a real
+          // refine it read would
           // send it. Flagged so the panel can say so.
           jevFoundLeftOut: !isUser && judgeMode === 'two' && wantsFound(false, chain ? allBlocks : undefined),
           passes: chain ? chain.map((one) => one.name) : [],
@@ -5266,7 +5299,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // Which build this half is on. Asked on every panel load rather than only
     // announced at startup: this module comes up once and stays up, so a panel
     // opened at any point after that missed the announcement.
-    // The Jev key. It comes in once, goes into the enclave, and is never sent
+    // The key for the second model. It comes in once, goes into the enclave, and is never sent
     // back: the panel is only ever told whether there is one.
     if (payload.type === 'jev_key_set' || payload.type === 'jev_key_forget' || payload.type === 'jev_key_status') {
       let said = '';

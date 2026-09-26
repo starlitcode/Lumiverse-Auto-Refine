@@ -16,8 +16,6 @@
  * wants, hands it to the backend, and shows what came back.
  */
 const VERSION = "1.21.0";
-// TypeSafe's own introduction to Jev, for somebody meeting the name for the
-// first time on the Model tab.
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
@@ -213,18 +211,19 @@ const PERMS = [
         without: "Two-model mode cannot ask the second model, so every reply is refined as it is with one model. Nothing else changes.",
     },
 ];
-// What Jev checks a reply for until somebody writes their own. Each is a
-// statement about `reply` that is plainly true or false of the text, which is
-// the question Jev answers best: one thing, visible on the page.
+// What the second model checks a reply for until somebody writes their own.
+// Each is a statement about `reply` that is plainly true or false of the text,
+// which is the question a scoring model answers best: one thing, visible on
+// the page.
 //
-// Each has to be false of a clean reply. Jev refines a reply when any check
+// Each has to be false of a clean reply. A reply is refined when any check
 // reaches the line, so a check that is true of nearly every reply, such as one
 // about repeating a word, sends every reply through and saves nothing. The
 // examples in the stock phrase check are there for the same reason: without
 // them, "she smiled" is a phrase that turns up in many stories.
 //
 // The last two match rules the reply prompts carry, the negation trick and The
-// Finish, so a reply Jev sends through is one the refine has a rule for. The
+// Finish, so a reply the second model sends through is one the refine has a rule for. The
 // Finish keeps an ending that is a good hook, so the check asks only about a
 // question put to the user, which the refine always trims. A check that also
 // counted an ending pointing ahead would send hooks through for a refine that
@@ -505,7 +504,7 @@ const CONFIG = {
     // that lands inside the gap waits for it rather than being skipped, so a
     // provider that meters calls per minute is not asked twice in one breath.
     refineGap: 0,
-    // One model refines every reply. Two has Jev, a small decision model, read a
+    // One model refines every reply. Two has a small scoring model read a
     // reply first and say whether it needs a refine, so the refine model runs on
     // the replies that do. A beta, and off until asked for.
     judgeMode: "one",
@@ -513,23 +512,25 @@ const CONFIG = {
     judgeWho: "jev",
     // Which Span: Lite at no cost, Lite paid, or the full model.
     spanTier: "free",
-    // Where Jev is reached, and for "custom" the address and model name.
+    // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
     judgeUrl: "",
     judgeModel: "",
     judgeVersion: "latest",
     judgeName: "",
-    // One statement a line. Jev gives the chance each is true of `reply`.
+    // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
     judgeOver: 50,
-    // With worn phrases on, Jev is also asked whether the reply uses one.
+    // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
+    // The reply before this one goes to the second model too, and it is asked
+    // whether this reply repeats it.
     judgeBefore: false,
-    // Jev reads the reply before a refine started with a button as well as on
+    // The second model reads the reply before a refine started with a button as well as on
     // the automatic pass. Off, pressing refine goes straight to the refine model.
     judgeByHand: false,
-    // Jev reads the rewrite as well, and a check still at or over the line gets
+    // The second model reads the rewrite as well, and a check still at or over the line gets
     // the reply one more refine. Off, the rewrite is saved as it comes.
     judgeAfter: false,
     // Asking for the rewrite inside <REFINED> tags rather than on its own. A
@@ -636,7 +637,7 @@ const MACROS = [
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
     {
         tag: "{{memories}}",
-        what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the permission is not granted.",
+        what: "What Lumiverse remembers of this chat from further back than the run-up. Empty where memory is off for the chat, or where the Chats permission is not granted.",
         ours: true,
     },
     {
@@ -1900,7 +1901,7 @@ const JUDGE_FIELDS = [
             { value: "one", label: "One: every reply is refined" },
             { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
         ],
-        hint: "With two, a second model reads each finished reply first and the refine runs only where one of its checks says so. It is a separate service with its own key. A refine you start yourself is never held back by it.",
+        hint: "With two, a second model reads each finished reply first and the refine runs only where one of its checks says so. It is a separate service with its own key.",
     },
     {
         key: "judgeWho",
@@ -2008,10 +2009,10 @@ const JUDGE_FIELDS = [
     },
     {
         key: "judgeBefore",
-        label: "Also send the reply before it",
+        label: "Also compare with the reply before it",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Off by default. On, a check can compare the two. Call it previous_reply, in backticks.",
+        hint: "Off by default. On, the reply before it is sent too, and the second model checks whether this one repeats it.",
     },
     {
         key: "judgeByHand",
@@ -3471,12 +3472,12 @@ export function setup(ctx, overrides) {
     // before it, and a stop is exactly that.
     let liveNotes = "";
     let keptNotes = null;
-    // What Jev decided about the last reply it read, for the card on the Log
+    // What the second model decided about the last reply it read, for the card on the Log
     // tab. The Log line says the same in one line; the card lays each check out
     // against the line, which is what somebody tuning the checks needs to see.
     let jevLast = null;
     // Every decision since the page loaded, so the card can say how many replies
-    // Jev spared a refine. That count is how somebody tells whether two models
+    // the second model spared a refine. That count is how somebody tells whether two models
     // are saving them anything.
     const jevTally = { read: 0, spared: 0, failed: 0, cost: 0, rechecked: 0, again: 0 };
     // The last refine the Log and the toast have already said was saved, so the
@@ -4314,7 +4315,7 @@ export function setup(ctx, overrides) {
         ".arf-sbs-col{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:4px}" +
         ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-well.arf-tall{max-height:340px}" +
-        // A bar per Jev check, with a mark where the line is. The fill takes the
+        // A bar per check, with a mark where the line is. The fill takes the
         // accent where the check reached the line and the muted text colour where
         // it did not, so the one that decided it stands out in any theme.
         ".arf-jevbar{position:relative;height:6px;margin-top:4px;border-radius:3px;overflow:hidden;" +
@@ -7387,7 +7388,7 @@ export function setup(ctx, overrides) {
     }
     // Whether a row has anything to do where it sits.
     // A row also waits on whatever the row it hangs off waits on. The address for
-    // Jev hangs off the host being your own, and the host hangs off two models:
+    // the second model hangs off the host being your own, and the host hangs off two models:
     // checking only the host left the address on screen with one model, for
     // anybody who had once picked another address.
     function fieldShows(f, depth) {
@@ -8370,7 +8371,7 @@ export function setup(ctx, overrides) {
     // The request a refine would send. Built by the backend with the same
     // function a real refine uses, so this cannot become a nice description of
     // something the extension does not actually send. What only a real refine
-    // can fill in, Jev's findings and the passes after the first, is named on
+    // can fill in, what the checks found and the passes after the first, is named on
     // the card rather than shown.
     function buildPreviewCard() {
         const wrap = card("See what gets sent", "Builds the request for the reply you are looking at and shows it, message by message, without calling a model. Nothing is sent and nothing is charged.");
@@ -8466,7 +8467,7 @@ export function setup(ctx, overrides) {
             passLine.setAttribute("data-arf-preview", "passes");
             wrap.appendChild(passLine);
         }
-        // The preview never asks Jev, so a block holding {{checks_found}} is empty
+        // The preview never asks the second model, so a block holding {{checks_found}} is empty
         // here and left out. Without this line the card would show a request with
         // no findings in it and call that what gets sent.
         if (preview.jevFoundLeftOut) {
@@ -8617,7 +8618,7 @@ export function setup(ctx, overrides) {
             wrap.appendChild(bad("The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above."));
         return wrap;
     }
-    // Two-model mode, and the key Jev is reached with. The key is sent to the
+    // Two-model mode, and the key the second model is reached with. The key is sent to the
     // backend once and kept in Lumiverse's secure store. The panel is only told
     // whether there is one, so it never sits in the settings or an export.
     let jevHas = null;
@@ -8745,7 +8746,7 @@ export function setup(ctx, overrides) {
         }
         if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
             wrap.appendChild(bad("The CORS proxy permission is refused, so " + whoName() + " cannot be asked and every reply is refined as it is with one model."));
-        // Asked only once two models are on, since nothing about Jev shows before.
+        // Asked only once two models are on, since nothing about the second model shows before.
         if (cfg.judgeMode === "two" && jevHas == null && !jevStatusAsked) {
             jevStatusAsked = true;
             send({ type: "jev_key_status", requestId: newId() });
@@ -9205,7 +9206,7 @@ export function setup(ctx, overrides) {
         }
         return wrap;
     }
-    // Each check Jev answered about the last reply it read, as a bar against the
+    // Each check the second model answered about the last reply it read, as a bar against the
     // line, so somebody tuning the checks can see which one decided it and by
     // how much. Kept for the session only, like the Log.
     function buildJevCard() {
@@ -13625,13 +13626,9 @@ export function setup(ctx, overrides) {
                         send({ type: "list_connections", requestId: newId() });
                         return;
                     }
-                    // Jev's answer on one reply, for the Log. Each check with its
-                    // percentage, so a reply left alone can be read back and the line
-                    // moved if Jev is letting too much through or too little.
-                    // A second refine after Jev read the rewrite, turned down by a check.
-                    // The first rewrite is what gets saved, and the Log says why.
-                    // What Jev found went into the request. A real request is not shown
-                    // anywhere, so this line is how somebody can tell it was sent.
+                    // What the second model found went into the request. A real request
+                    // is not shown anywhere, so this line is how somebody can tell it was
+                    // sent.
                     if (msg.type === "jev_found_sent") {
                         const n = Math.max(0, Number(msg.count) || 0);
                         const checks = n + (n === 1 ? " check" : " checks");
@@ -13640,10 +13637,16 @@ export function setup(ctx, overrides) {
                             : "what " + whoName() + " found went to the refine model: " + checks, true);
                         return;
                     }
+                    // A second refine after the second model read the rewrite, turned
+                    // down by a check. The first rewrite is what gets saved, and the Log
+                    // says why.
                     if (msg.type === "refine_again_dropped") {
                         log("the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
                         return;
                     }
+                    // The second model's answer on one reply, for the Log. Each check
+                    // with its percentage, so a reply left alone can be read back and the
+                    // line moved if it is letting too much through or too little.
                     if (msg.type === "judge_said") {
                         const list = Array.isArray(msg.scores) ? msg.scores : [];
                         jevLast = {

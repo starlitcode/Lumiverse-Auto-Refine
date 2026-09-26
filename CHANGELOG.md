@@ -17,7 +17,7 @@ _2026-09-26_
 - **Respan as a host**, under **Where it is reached**, while Span is picked.
 - **Another address takes Respan's scores format.** An address ending in `/scores` is sent the kind of request Respan's own API takes. See [Another address](docs/two-models.md#another-address).
 - **What is Span?**, a link on the Model tab to Respan's page introducing Span.
-- **Also send the reply before it**, in **One model or two**, off by default. On, the second model is also sent the reply before the one it reads, as `previous_reply`, so a check can compare the two. A check that names it is not asked when there is no reply before it. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
+- **Also compare with the reply before it**, in **One model or two**, off by default. On, the second model is also sent the reply before the one it reads. Three checks are added for you: whether the reply repeats its beats, has the characters speak in the same order, or describes the surroundings again with the same details. Your own checks can name it too, as `previous_reply`. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
 - **`{{checks_found}}`**, the macro for what the checks found. It works the same whichever second model is picked, and its lead-in names that model.
 
 ### Changed
@@ -26,6 +26,13 @@ _2026-09-26_
 - **The block What Jev Found is now called Checks Found**, and its tag is `<checks_found>`. The Prompt tab says the built-in prompts have changed. Load a built-in prompt for replies again to get it.
 - **`{{jev_found}}` is replaced by `{{checks_found}}`.** A block you saved with `{{jev_found}}` is switched to `{{checks_found}}` when it is loaded, so it keeps working.
 - **The Two models page is now [docs/two-models.md](docs/two-models.md)**, and covers both models.
+
+- **Making your own prompt explains where thinking steps go.** It says why they work best at the end, after the passage, and why the built-in prompts that think put them in **Hand It In**. See [More ways to make it work better](docs/rules.md#more-ways-to-make-it-work-better).
+
+### Fixed
+
+- **The macro list did not say which permission `{{memories}}` needs.** It said the block is empty where "the permission" is not granted. It now names the Chats permission.
+- **The hint under How many models said a refine you start yourself is never held back by Jev.** With **Let Jev check refines you start yourself** on, Jev can leave such a reply alone. The hint no longer says this. The switch has its own hint.
 
 ---
 

@@ -10,10 +10,10 @@ The refine call carries the blocks you see under **How the prompt is built**, an
 
 - the message being refined
 - the rules you wrote
-- the character card, if that block is on and the permission is granted
+- the character card, if that block is on and the `characters` permission is granted
 - the last few messages of the chat, if that block is on, cut to a size limit
-- the lorebook entries this chat has active, if that block is on, cut to a size limit
-- what Lumiverse remembers of the chat, if that block is on
+- the lorebook entries this chat has active, if that block is on and the `world_books` permission is granted, cut to a size limit
+- what Lumiverse remembers of the chat, if that block is on and the `chats` permission is granted
 - any block you wrote yourself
 - the fixed instruction that makes it an edit, not a new turn
 
@@ -42,7 +42,7 @@ With **How many models** set to two, each finished reply is sent to the second m
 - the reply, with its thinking taken out
 - the checks you wrote under **What the second model checks**
 - the list of phrases this chat has worn out, if **Also check for worn-out phrases** is on
-- the reply before it, with its thinking taken out, if **Also send the reply before it** is on
+- the reply before it, with its thinking taken out, if **Also compare with the reply before it** is on
 - your key, which tells the host the call is yours
 
 Nothing else goes to the second model. Your card, your own messages, the rest of the chat, lore, memories and settings stay out of it.
