@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.20.0
+
+_2026-09-26_
+
+### Added
+
+- **Two more checks for Jev.** One finds the negation trick, as in "it wasn't a request, it was a command". The other finds a reply that ends by turning to you with a question, such as what you do next. Both match rules the built-in reply prompts carry. See [What Jev checks](docs/jev.md#what-jev-checks).
+
+### Changed
+
+- **Jev's first three checks are narrower.** "Repeats a word" and "stock phrases that turn up in many stories" were true of almost any reply, so Jev sent nearly every reply to be refined. They now ask about a repeated phrase, or three or more sentences in a row that start the same way, and give examples of stock phrases. The check about feelings now counts only a feeling the character's actions already show.
+- **With two models on, and the checks you started with, a line above the tabs offers the new checks.** Press **Take it** to use them, or **Keep mine**. A space at the end of a line or an empty line does not count as a change. Checks you wrote yourself are not touched, and nothing is said about them.
+
+---
+
 ## 1.19.4
 
 _2026-09-26_
