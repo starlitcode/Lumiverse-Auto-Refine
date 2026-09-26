@@ -4048,8 +4048,12 @@ async function askJev(userId, state, questions) {
     // always a wrong key: a key for another host, or a host that turns the
     // proxy away, look the same without them.
     const why = ' (' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') + ')';
-    if (res.status === 401 || res.status === 403)
+    // 401 is the key. 403 is the host saying no to this account, which a key
+    // that works everywhere else can still get, so it is not called a bad key.
+    if (res.status === 401)
         return { error: 'the ' + who() + ' key was refused' + why };
+    if (res.status === 403)
+        return { error: who() + ' turned the call down' + why };
     if (res.status === 402)
         return { error: 'the ' + who() + ' account has no credit left' + why };
     if (res.status < 200 || res.status >= 300 || saidText)

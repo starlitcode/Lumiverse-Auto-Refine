@@ -888,7 +888,7 @@ describe("two models: Jev reads the reply first", () => {
     const h = await keyed({ judgeWho: "span", judgeHost: "respan" }, { jev: () => ({ status: 403, body: '{"detail":"Invalid API key"}' }) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
-    expect(said(h)[0].why).toBe("the Span key was refused (403: Invalid API key)");
+    expect(said(h)[0].why).toBe("Span turned the call down (403: Invalid API key)");
   });
 
   test("Jev throwing refines anyway", async () => {
