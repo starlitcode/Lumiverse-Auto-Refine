@@ -1,4 +1,4 @@
-![Auto Refine: a writer at a desk under a purple night sky, turning messy pages into clean ones.](docs/banner.png)
+![Auto Refine: a woman writes at a desk on a balcony at night, with messy pages beside her and clean pages floating away into the sky.](docs/banner.png)
 
 # Auto Refine
 
