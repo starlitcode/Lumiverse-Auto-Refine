@@ -54,12 +54,15 @@ The greeting is never refined. Your own messages are only refined when you press
 
 ## Model
 
+Not sure what to pick? [What to use](recommended.md) has settings that work well for most people.
+
 - **Refine using** picks the model that refines, from your connection profiles. Leave it on the default to use the model you chat with.
 - **Let it think first** is off by default. You can leave it to your connection's setting, or pick an effort level. See [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** stops a refine that has not come back.
   - The default is four minutes. The most is an hour. 0 means never give up.
   - Four minutes is long on purpose. A fast model answers in seconds. A reasoning model on a high setting, or a local model loading, can take minutes, and stopping it early throws that work away.
   - With it off you are never stuck: **Stop this refine** is always there.
+  - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab. A reply that finished while the tab was asleep can miss the panel, so check the reply itself.
 - **Input price, per million tokens** and **Output price, per million tokens** are your provider's prices.
   - Input is what you send. Output is what the model writes back.
   - Both start at 0, which hides all costs.

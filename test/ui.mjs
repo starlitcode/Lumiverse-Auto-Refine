@@ -3209,6 +3209,48 @@ console.log("\nwhen the backend is not there at all");
   });
 }
 
+console.log("\nwhen the tab sleeps past the time to give up");
+{
+  // A phone pauses the timers of a tab in the background. Here the long timers
+  // never fire at all, which is the worst case, and the clock is moved past the
+  // limit. The status line's own tick has to end the run.
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    const started = await page.evaluate(() => {
+      const real = window.setTimeout;
+      window.setTimeout = (fn, ms) => (ms >= 20000 ? 0 : real(fn, ms));
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Refine the latest reply/.test(b.textContent))
+        .click();
+      const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+      window.__fromBackend({ type: "refine_ack", requestId: id });
+      window.__fromBackend({ type: "refine_progress", stage: "thinking" });
+      return /Thinking|Refining/.test(document.querySelector("#drawer").textContent);
+    });
+    ok("a refine is running", started);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { get: () => "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      const realNow = Date.now;
+      Date.now = () => realNow() + 2000 * 1000;
+    });
+    await new Promise((r) => setTimeout(r, 1000));
+    const said = await page.evaluate(() => ({
+      spinning: /Thinking|Refining/.test(document.querySelector("#drawer").textContent),
+      toasts: (window.__toasts || []).join(" | "),
+      body: document.querySelector("#drawer .arf-body").textContent,
+    }));
+    ok("it stops once the clock is past the limit", !said.spinning, said.body.slice(0, 200));
+    ok("and says the tab was in the background", /in the background/.test(said.toasts), said.toasts);
+    ok("without claiming nothing changed", !/Nothing was changed/.test(said.toasts), said.toasts);
+  });
+}
+
 console.log("\na temporary chat");
 {
   // A chat with no card on it is the temporary chat: a scratch conversation
