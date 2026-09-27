@@ -47,6 +47,16 @@ describe("the prompts that come with it", () => {
     expect(blockText(null)).toBe("");
   });
 
+  // What Update selected and Put it back compare with, to say when a press
+  // would change nothing.
+  test("the same settings match whatever order their keys are in", () => {
+    const { sameSettings } = __testing as any;
+    expect(sameSettings({ a: 1, b: [{ x: 1, y: 2 }] }, { b: [{ y: 2, x: 1 }], a: 1 })).toBe(true);
+    expect(sameSettings({ a: 1, b: undefined }, { a: 1 })).toBe(true);
+    expect(sameSettings({ a: 1 }, { a: 2 })).toBe(false);
+    expect(sameSettings({ a: [1, 2] }, { a: [2, 1] })).toBe(false);
+  });
+
   test("each prompt for replies carries Checks Found, switched off", () => {
     for (const p of forReplies()) {
       const b = p.blocks.find((x: any) => x.id === "jevfound");

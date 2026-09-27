@@ -15,11 +15,28 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.21.1";
+const VERSION = "1.22.0";
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
 // backend fills in, so a prompt written then keeps getting the checks.
+// Whether two saved settings hold the same values, whatever order their keys
+// were written in. A key left undefined counts as not there, the way it is
+// when saved. Used to tell an update or a put-back that would change nothing.
+function sameSettings(a, b) {
+    const norm = (v) => {
+        if (Array.isArray(v))
+            return v.map(norm);
+        if (!v || typeof v !== "object")
+            return v;
+        const out = {};
+        for (const k of Object.keys(v).sort())
+            if (v[k] !== undefined)
+                out[k] = norm(v[k]);
+        return out;
+    };
+    return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
 function blockText(raw) {
     return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
 }
@@ -212,37 +229,39 @@ const PERMS = [
     },
 ];
 // What the second model checks a reply for until somebody writes their own.
-// Each is a statement about `reply` that is plainly true or false of the text,
-// which is the question a scoring model answers best: one thing, visible on
-// the page.
+// A scoring model scores whether the statement is true of the reply, and does
+// not stretch a check to cover what was meant, so each one names something
+// that can be seen on the page, with examples of it. A check that asks for a
+// judgement, such as whether a feeling is already shown, scores less steadily
+// from one reply to the next, and is left out.
 //
 // Each has to be false of a clean reply. A reply is refined when any check
 // reaches the line, so a check that is true of nearly every reply, such as one
-// about repeating a word, sends every reply through and saves nothing. The
-// examples in the stock phrase check are there for the same reason: without
-// them, "she smiled" is a phrase that turns up in many stories.
+// about repeating a word, sends every reply through and saves nothing.
 //
-// The last two match rules the reply prompts carry, the negation trick and The
-// Finish, so a reply the second model sends through is one the refine has a rule for. The
-// Finish keeps an ending that is a good hook, so the check asks only about a
-// question put to the user, which the refine always trims. A check that also
-// counted an ending pointing ahead would send hooks through for a refine that
-// then leaves them as they are.
+// All but the first match rules the reply prompts carry, with the same
+// examples, so a reply the second model sends through is one the refine has a
+// rule for. The negation check names both forms of it, a thing and an action,
+// because one example of the first form let the second through. The last one
+// asks only about a question put to the user, which the refine always trims,
+// and not about an ending that points ahead, which The Finish keeps as a hook.
 const JUDGE_CHECKS = [
+    "`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.",
+    "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
+    "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
+    "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
+    "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
+    "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
+].join("\n");
+// The checks as they were in 1.20.0 to 1.21.1, word for word. A reader still
+// holding exactly these never wrote their own, and is offered the ones above.
+const JUDGE_CHECKS_1_20 = [
     "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
     "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
     "`reply` names a character's feeling when their actions already show it.",
     "`reply` piles up adjectives or strained comparisons.",
     "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
     "`reply` ends by turning to the user with a question, such as what they do next.",
-].join("\n");
-// The checks as they were in 1.19.4 and before, word for word. A reader still
-// holding exactly these never wrote their own, and is offered the ones above.
-const JUDGE_CHECKS_1_19 = [
-    "`reply` repeats a word, a phrase or a sentence shape inside itself.",
-    "`reply` uses stock phrases that turn up in many stories.",
-    "`reply` states a character's feeling outright where the scene could show it.",
-    "`reply` piles up adjectives or strained comparisons.",
 ].join("\n");
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
@@ -521,7 +540,7 @@ const CONFIG = {
     // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
-    judgeOver: 50,
+    judgeOver: 40,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -1678,9 +1697,16 @@ function markText(text) {
 const MOVED_DEFAULTS = [
     {
         key: "judgeChecks",
-        was: JUDGE_CHECKS_1_19,
+        was: JUDGE_CHECKS_1_20,
         label: "What the second model checks",
-        why: "Some of the checks were true of almost any reply, so nearly every reply was sent to be refined. They are narrower now, and there are two more.",
+        why: "The second model scores whether each check is true of the reply, so a check has to describe the pattern it means. The checks now name what to look for on the page, with examples. Two that asked for a judgement are gone, and two that match rules in the reply prompts are new.",
+        needs: { key: "judgeMode", is: "two" },
+    },
+    {
+        key: "judgeOver",
+        was: 50,
+        label: "Refine when a check reaches",
+        why: "At 50, a reply with a problem the second model was not sure of, such as a score of 44%, was left alone. At 40 it is refined. A clean reply still scores well under 40.",
         needs: { key: "judgeMode", is: "two" },
     },
 ];
@@ -1901,7 +1927,7 @@ const JUDGE_FIELDS = [
             { value: "one", label: "One: every reply is refined" },
             { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
         ],
-        hint: "With two, a second model reads each finished reply first and the refine runs only where one of its checks says so. It is a separate service with its own key.",
+        hint: "With two, a second model reads each finished reply first, and only the replies it picks out are refined. It can be wrong in either direction. It is a separate service with its own key.",
     },
     {
         key: "judgeWho",
@@ -1998,7 +2024,7 @@ const JUDGE_FIELDS = [
         min: 1,
         max: 99,
         needs: { key: "judgeMode", is: "two" },
-        hint: "A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+        hint: "A percentage, 40 by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "judgeWorn",
@@ -8819,6 +8845,12 @@ export function setup(ctx, overrides) {
             const back = setupUndo;
             if (!back)
                 return;
+            if (back.pick === setupPick && sameSettings(back.settings, setupFromNow())) {
+                setupUndo = null;
+                setupSaid = "This is already what was here before. Nothing changed.";
+                paint();
+                return;
+            }
             applySetup({ name: "", at: 0, settings: back.settings });
             setupPick = back.pick;
             setupName = back.pick;
@@ -8857,6 +8889,11 @@ export function setup(ctx, overrides) {
             const one = chosen();
             if (!one)
                 return;
+            if (sameSettings(one.settings, setupFromNow())) {
+                setupSaid = one.name + " already holds these settings. Nothing changed.";
+                paint();
+                return;
+            }
             one.settings = setupFromNow();
             one.at = Date.now();
             saveSetups();
@@ -9255,6 +9292,15 @@ export function setup(ctx, overrides) {
                 ? who + " could not decide at " + when + ": " + last.why + ". The reply was refined anyway."
                 : who + " read a reply at " + when + ". A check at " + last.over + "% or more means refine." +
                     (last.refine ? " At least one did, so the reply was refined." : " None did, so the reply was left alone.")));
+            // Said where somebody looks when a reply they wanted refined was not.
+            // The second model can miss a problem, and the way to refine this one
+            // anyway is on the message itself.
+            if (!last.failed && !last.refine) {
+                const wrong = note(whoName() + " can be wrong. To refine this reply anyway, press the refine button on the message. If it keeps missing one kind of problem, lower " +
+                    "Refine when a check reaches or add an example to that check.");
+                wrong.setAttribute("data-arf-jevwrong", "1");
+                wrap.appendChild(wrong);
+            }
         }
         for (const s of last.scores) {
             const hit = s.pct >= last.over;
@@ -11369,6 +11415,14 @@ export function setup(ctx, overrides) {
             const back = presetUndo;
             if (!back)
                 return;
+            if (back.pick === currentPick() &&
+                sameSettings(back.settings, presetFromNow()) &&
+                sameSettings(back.setup, setupFromNow())) {
+                presetUndo = null;
+                presetSaid = "This is already what was here before. Nothing changed.";
+                paint();
+                return;
+            }
             applyPreset({ name: "", at: 0, settings: back.settings }, back.list);
             applySetup({ name: "", at: 0, settings: back.setup });
             // The picker goes back with it. Leaving it on the preset that was just
@@ -11418,6 +11472,11 @@ export function setup(ctx, overrides) {
             const p = chosen();
             if (!p || isBuiltIn(p.name))
                 return;
+            if (sameSettings(p.settings, presetFromNow()) && String(p.setup || "") === String(presetSetup || "")) {
+                presetSaid = p.name + " already holds these settings. Nothing changed.";
+                paint();
+                return;
+            }
             p.settings = presetFromNow();
             p.setup = presetSetup || undefined;
             p.at = Date.now();
@@ -13658,7 +13717,7 @@ export function setup(ctx, overrides) {
                                 check: String(x.check || "").replace(/`/g, "").slice(0, 300),
                                 pct: Math.max(0, Math.min(100, Math.round(Number(x.pct) || 0))),
                             })),
-                            over: Number(msg.over) || 50,
+                            over: Number(msg.over) || 40,
                             model: String(msg.model || "").slice(0, 60),
                             cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
                             after: !!msg.after,
@@ -13726,7 +13785,7 @@ export function setup(ctx, overrides) {
                             scores: Number.isFinite(pct)
                                 ? [{ check: String(msg.check || "").replace(/`/g, "").slice(0, 300), pct: Math.max(0, Math.min(100, Math.round(pct))) }]
                                 : [],
-                            over: Number(msg.over) || 50,
+                            over: Number(msg.over) || 40,
                             model: String(msg.model || "").slice(0, 60),
                             cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
                             test: {
@@ -14544,6 +14603,7 @@ export function setup(ctx, overrides) {
 export const __testing = {
     splitSelectorList,
     blockText,
+    sameSettings,
     INPUT_PICKS,
     CONFIG,
     PARTS,

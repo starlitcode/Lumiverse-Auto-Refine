@@ -1536,6 +1536,22 @@ console.log("\nrenaming a preset");
     await renameTo("Third");
     await settle(page);
     ok("a new name goes through", (await names()).join() === "First,Third", await names());
+
+    // Update and Put it back that would change nothing say so, the same as a
+    // rename to its own name.
+    const press = (w) => page.evaluate((w) => document.querySelector('#drawer [data-arf-preset="' + w + '"]').click(), w);
+    const savedAt = () =>
+      page.evaluate(() => (JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").find((p) => p.name === "Third") || {}).at);
+    const at = await savedAt();
+    await press("update");
+    await settle(page);
+    ok("updating with nothing changed says it already holds these settings", /Third already holds these settings/i.test(await said()));
+    ok("and saves nothing", (await savedAt()) === at, [at, await savedAt()]);
+    await press("load");
+    await settle(page);
+    await press("undo");
+    await settle(page);
+    ok("putting back a load that changed nothing says so", /already what was here before/i.test(await said()));
   });
   ok("no errors renaming a preset", errors.length === 0, errors.join("\n         "));
 }
@@ -2084,6 +2100,17 @@ console.log("\nwhat Jev decided");
     ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
     ok("each bar is as long as its score", !!got && got.widths.join() === "72%,18%", JSON.stringify(got));
     ok("it names the Jev that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
+    const wrongOnRefined = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-jevwrong]"));
+    ok("a refined reply does not say the second model can be wrong", !wrongOnRefined);
+    // A reply left alone says the second model can be wrong, and how to
+    // refine it anyway, since that is when somebody wonders why.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m5", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 12 }], cost: 0, model: "jev-1.13.0", over: 40 });
+    });
+    await closed(page);
+    const wrong = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevwrong]") || {}).textContent || "");
+    ok("a reply left alone says the second model can be wrong, and how to refine it anyway",
+      /can be wrong/.test(wrong) && /press the refine button on the message/.test(wrong), wrong);
     // A second reply left alone, and a third Jev could not decide on.
     await page.evaluate(() => {
       window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m3", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 10 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
@@ -2092,7 +2119,7 @@ console.log("\nwhat Jev decided");
     // Log lines landing together are painted once, a moment after the first.
     await closed(page);
     const tally = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
-    ok("it counts the replies Jev read, left alone and could not decide on", /read 3 replies/.test(tally) && /left 1 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
+    ok("it counts the replies Jev read, left alone and could not decide on", /read 4 replies/.test(tally) && /left 2 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
     // Jev reading a rewrite, with a check still over the line. It is not a
     // reply read, so the count of replies stays where it was.
     await page.evaluate(() => {
@@ -2103,7 +2130,7 @@ console.log("\nwhat Jev decided");
     const tally2 = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
     ok("a read of the rewrite says so, and that the reply was refined once more",
       !!again && /read a rewrite/.test(again.text) && /refined once more/.test(again.text) && /refined again/.test(again.text), JSON.stringify(again));
-    ok("and is counted apart from the replies", /read 3 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
+    ok("and is counted apart from the replies", /read 4 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
     const logged = await page.evaluate(() => document.querySelector("#drawer").textContent);
     ok("the Log says Jev read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
     // A real request is not shown anywhere, so the Log says when what Jev found
@@ -7131,6 +7158,29 @@ console.log("\nmodel setups");
     ok("renaming to its own name is refused", /already its name/i.test(await said(page)), await said(page));
     ok("and it keeps that name", (await named(page)).join() === "Cheaper", await named(page));
 
+    // Update with nothing changed since the save, and Put it back with nothing
+    // to undo, change nothing. Each says so, the way a rename to the same name
+    // does, rather than reporting a save or an undo that did not happen.
+    await press(page, "update");
+    await settle(page);
+    ok("updating with nothing changed says it already holds these settings",
+      /Cheaper already holds these settings/i.test(await said(page)), await said(page));
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="thinkingMode"]');
+      sel.value = sel.value === "off" ? "inherit" : "off";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    await press(page, "update");
+    await settle(page);
+    ok("and after a change, it updates", /Updated Cheaper/i.test(await said(page)), await said(page));
+    await press(page, "load");
+    await settle(page);
+    await press(page, "undo");
+    await settle(page);
+    ok("putting back a load that changed nothing says so",
+      /already what was here before/i.test(await said(page)), await said(page));
+
     // Load and the three below it act on whatever the picker names, and saving
     // a new one is what puts it there.
     await press(page, "load");
@@ -8146,10 +8196,12 @@ console.log("\nwhen a default moves under somebody who was on it");
   // The checks as they came before, word for word. A reader still holding them
   // never wrote their own.
   const OLD_CHECKS = [
-    "`reply` repeats a word, a phrase or a sentence shape inside itself.",
-    "`reply` uses stock phrases that turn up in many stories.",
-    "`reply` states a character's feeling outright where the scene could show it.",
+    "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
+    "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
+    "`reply` names a character's feeling when their actions already show it.",
     "`reply` piles up adjectives or strained comparisons.",
+    "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
+    "`reply` ends by turning to the user with a question, such as what they do next.",
   ].join("\n");
   const stored = (page) =>
     page.evaluate(() => {
@@ -8170,7 +8222,7 @@ console.log("\nwhen a default moves under somebody who was on it");
       await new Promise((r) => setTimeout(r, 200));
     });
     const after = await stored(page);
-    ok("taking it moves them to the new one", /held breath/.test(String(after.now)), JSON.stringify(after));
+    ok("taking it moves them to the new one", /she didn't just leave, she ran/.test(String(after.now)), JSON.stringify(after));
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 
@@ -8198,6 +8250,23 @@ console.log("\nwhen a default moves under somebody who was on it");
   // Already on the new ones, which is everybody installing fresh.
   await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
+  });
+
+  // The line at the old default of 50 is offered the new one, and taking it
+  // sets 40.
+  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 50 } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody still on a line of 50 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+    await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
+    ok("and taking it sets the line to 40", line === 40, String(line));
+  });
+  // A line of their own choosing is left alone.
+  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 65 } }, async (page) => {
+    ok("somebody who set their own line is left alone", (await seen(page)) === null, "");
   });
 
   // Keep mine puts it away without changing the setting.

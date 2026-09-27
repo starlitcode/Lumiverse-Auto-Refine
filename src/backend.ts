@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.21.1';
+const VERSION = '1.22.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4058,7 +4058,7 @@ let judgeModel = '';
 let judgeVersion: 'latest' | 'preview' | 'exact' | 'own' = 'latest';
 let judgeName = '';
 let judgeChecks: string[] = [];
-let judgeOver = 50;
+let judgeOver = 40;
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
 // `previous_reply`, with the checks in BEFORE_CHECKS. A check of the reader's
@@ -4623,7 +4623,7 @@ function applyRules(s: any): void {
     .filter(Boolean)
     .slice(0, JEV_CHECKS_MAX);
   judgeOver = Number(s.judgeOver);
-  judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
+  judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 40;
   judgeWorn = s.judgeWorn !== false;
   judgeBefore = s.judgeBefore === true;
   judgeByHand = s.judgeByHand === true;

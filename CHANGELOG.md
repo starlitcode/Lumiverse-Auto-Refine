@@ -6,6 +6,27 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.22.0
+
+_2026-09-27_
+
+### Added
+
+- **A guide to writing checks for the second model.** It scores whether the statement you wrote is true of the reply, and does not stretch a check to cover what you meant. The guide says how to write checks it can answer. See [How the second model reads a check](docs/two-models.md#how-the-second-model-reads-a-check).
+- **The second model is said to be able to be wrong.** The hint under **How many models** says so, and so does the README. When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway. The docs have a section on the mistakes it makes and what to do about them. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
+
+### Changed
+
+- **Refine when a check reaches is 40 by default, not 50.** At 50, a reply with a problem the second model was not sure of was left alone. A clean reply still scores well under 40. With two models on, and the line still at 50, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
+- **The built-in checks are rewritten for how the second model scores them.** Each one names what to look for on the page, with examples. The check for the negation trick now names both forms, so a line about an action, such as "she didn't just leave, she ran", is caught, not only "it wasn't a request, it was a command". The two checks that asked for a judgement, about feelings the actions already show and about strained comparisons, are gone. Two new ones match rules in the built-in reply prompts: an action followed by a comment on how it came out, and an action started then taken back. With two models on, and the checks you started with, a line above the tabs offers the new ones. Press **Take it**, or **Keep mine**.
+
+### Fixed
+
+- **Update selected said it updated when nothing had changed.** This is on saved presets and saved model setups. When the one picked already holds the settings on the panel, the line beside the buttons now says so, and nothing is saved. It works the same way as a name already in use.
+- **Put it back said it put something back when nothing had changed.** When what is on the panel is already what was there before the load, the line now says so.
+
+---
+
 ## 1.21.1
 
 _2026-09-27_
