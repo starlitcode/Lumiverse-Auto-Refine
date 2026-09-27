@@ -148,6 +148,12 @@ It goes from 1 to 99. The two ends are left out because each one makes the secon
 
 **Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it.
 
+The check it sends is in **How it asks**, under the switch. You can change it. Call the list `worn_phrases` and the reply `reply`, both in backticks. An empty box asks nothing about worn phrases. **Use the built-in checks** under it puts the built-in one back:
+
+```
+`reply` contains at least one phrase listed in `worn_phrases`.
+```
+
 ### Comparing with the reply before it
 
 By default the second model only reads the reply. It does not see the reply before it, so it cannot tell when a reply repeats the one before.
@@ -222,7 +228,7 @@ If your prompt is your own, add a block with `{{checks_found}}` in it instead. I
 
 What the refine model is given:
 
-- A short lead-in, with the name of the second model you picked. It says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone.
+- A short lead-in. It is the text in **What the refine model is told about the checks**, on the Model tab. You can change it, and **Use the built-in text** puts it back. In it, `{{second_model}}` becomes the name of the second model you picked, and `{{checks_line}}` becomes your line. The built-in lead-in says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone. An empty box sends the checks with no lead-in.
 - Each check that reached your line, strongest first, with its score, like `- reply repeats itself. (91%)`. The backticks are taken out, and `previous_reply` is written as "the reply before it".
 
 The block is empty, and left out of the prompt, whenever the second model did not read the reply or could not decide. That includes one model, a selection, and a button refine with **Let it check refines you start yourself** off.

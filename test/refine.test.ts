@@ -1472,7 +1472,7 @@ describe("two models: Jev reads the reply first", () => {
     await h.ended({ chatId: "c1", messageId: "m4", generationId: "g1" });
     await wait(50);
     const worned = h.jevCalls[0].body.behaviors.find((b: any) => b.id === "worn");
-    expect(worned.definition).toMatch(/^At least one phrase listed in this list of phrases \(.*cold wind bit.*\) appears in the reply\.$/);
+    expect(worned.definition).toMatch(/^The reply contains at least one phrase listed in this list of phrases \(.*cold wind bit.*\)\.$/);
   });
 
   // The reply before this one, sent when the reader asks, so a check can
@@ -1601,6 +1601,66 @@ describe("two models: Jev reads the reply first", () => {
     await wait(50);
     const text = (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
     expect(text).toContain("- reply follows the same order of events as the reply before it. (90%)");
+  });
+
+  // The worn-phrase check is the reader's to change, under How it asks. The
+  // backend's default is the panel's.
+  const WORN_MSGS = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
+    { id: "m1", role: "user", content: "i go on" },
+    { id: "m2", role: "assistant", content: "Rain came down and the cold wind bit at her hands." },
+    { id: "m3", role: "user", content: "i keep going" },
+    { id: "m4", role: "assistant", content: "She went through the gate, and the cold wind bit at her again." },
+  ];
+  const wornAsked = async (over: any) => {
+    const h = await keyed({ wornOn: true, wornLeast: 2, ...over }, { jev: says([10]) }, WORN_MSGS());
+    await h.ended({ chatId: "c1", messageId: "m4", generationId: "g1" });
+    await wait(50);
+    return h.jevCalls[0].body.questions.worn;
+  };
+
+  test("the worn-phrase check is the panel's own by default", async () => {
+    const q = await wornAsked({ judgeWornCheck: undefined });
+    expect(q.instructions).toBe((__testing as any).WORN_CHECK);
+  });
+
+  test("a worn-phrase check of the reader's own is sent in its place", async () => {
+    const q = await wornAsked({ judgeWornCheck: "`reply` repeats a phrase from `worn_phrases` word for word." });
+    expect(q.instructions).toBe("`reply` repeats a phrase from `worn_phrases` word for word.");
+  });
+
+  test("and an empty one asks none", async () => {
+    expect(await wornAsked({ judgeWornCheck: "" })).toBeUndefined();
+  });
+
+  // The lead-in to {{checks_found}} is the reader's to change, with the model's
+  // name and the line filled in.
+  const foundWith = async (over: any) => {
+    const blocks = [
+      { id: "t", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
+      { id: "j", name: "Found", on: true, role: "system", text: "<found>\n{{checks_found}}\n</found>" },
+    ];
+    const h = await keyed({ blocks: blocks, judgeOver: 45, ...over }, { jev: says([90, 10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    return (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
+  };
+
+  test("the lead-in is the panel's own by default, with the name and the line filled in", async () => {
+    const text = await foundWith({ judgeFoundLead: undefined });
+    const want = String((__testing as any).FOUND_LEAD).replace("{{second_model}}", "Jev").replace("{{checks_line}}", "45");
+    expect(text).toContain(want + "\n- reply repeats itself. (90%)");
+  });
+
+  test("a lead-in of the reader's own is sent in its place", async () => {
+    const text = await foundWith({ judgeFoundLead: "{{second_model}} flagged these at {{checks_line}}% or more:" });
+    expect(text).toContain("Jev flagged these at 45% or more:\n- reply repeats itself. (90%)");
+    expect(text).not.toContain("Another model");
+  });
+
+  test("and an empty one sends the checks alone", async () => {
+    const text = await foundWith({ judgeFoundLead: "" });
+    expect(text).toContain("<found>\n- reply repeats itself. (90%)\n</found>");
   });
 
   test("what goes wrong is said with Span's name", async () => {
@@ -2359,6 +2419,31 @@ describe("seeing what gets sent", () => {
       .messages.map((m: any) => m.content)
       .join("\n");
     expect(whole).not.toContain("tokens shaped like");
+  });
+
+  // The note is the reader's to change, on the Context tab. Their own wording
+  // is sent in its place, and an empty box sends none.
+  const withFont = (): Msg[] => [
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content: 'She stepped <font color="#ff0000">through</font> it, suddenly.' },
+  ];
+  const previewText = async (over: any) => {
+    const h = await armed(["x"], over, withFont());
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    return h.sent.find((m) => m.type === "prompt_preview").messages.map((m: any) => m.content).join("\n");
+  };
+
+  test("a note of the reader's own is sent in place of the built-in one", async () => {
+    const whole = await previewText({ protectNote: "Keep every [[AR1]] where it stands, spelled the same." });
+    expect(whole).toContain("Keep every [[AR1]] where it stands, spelled the same.");
+    expect(whole).not.toContain("tokens shaped like");
+  });
+
+  test("and an empty note sends none", async () => {
+    const whole = await previewText({ protectNote: "" });
+    expect(whole).not.toContain("tokens shaped like");
+    expect(whole).not.toContain("[[AR1]] where it stands");
   });
 
   // A phrase from the token note and from nowhere else in a built-in prompt. The

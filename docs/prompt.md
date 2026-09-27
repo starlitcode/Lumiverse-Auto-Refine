@@ -43,7 +43,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
 | `{{checks_found}}` | With two models, the checks the second model found in the reply, strongest first, each with its score. They come after a short lead-in that names the second model and says to treat each one as a lead to check. Only filled in when the second model read the reply and picked it out. A block saved with the older `{{jev_found}}` is switched to this one when it is loaded. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
-| `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. |
+| `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. You can change it on the Limits tab. |
 
 **Lumiverse's macros:** `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{user}}`, and anything else that works in a character card or a preset.
 
@@ -71,11 +71,11 @@ then a chat with no memories still sends `Keep these in mind.`, which now refers
 - A chat with memory off, or with nothing stored yet, gives nothing, and the block is left out.
 - The block that uses it, **Memories**, starts switched off, because its size is set by your chat memory settings and it is sent on every refine. Switch it on under **Prompt** when you want the refine to know more of the story.
 
-**About `{{protect_notes}}`:** it has its own block, **Protected Formatting**. When protection has hidden something, it becomes:
+**About `{{protect_notes}}`:** it has its own block, **Protected Formatting**. When protection has hidden something, it becomes the text in **What the model is told about the stand-ins**, on the Limits tab. You can change it there, and **Use the built-in text** puts it back. The built-in text is:
 
 > Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.
 
-When nothing was hidden, it becomes nothing and the block is not sent.
+When nothing was hidden, it becomes nothing and the block is not sent. If you empty the box, it becomes nothing as well. The stand-ins are then sent with no note, and a model is more likely to change or drop one, which makes the refine fail.
 
 There is no macro for whether the passage is a reply or your own message. Instead, your own messages have their own prompt, under **For your messages**. There is also no macro for the model's working. See [Asking it what it changed](#asking-it-what-it-changed).
 

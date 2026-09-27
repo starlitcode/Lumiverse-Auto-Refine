@@ -1816,6 +1816,57 @@ console.log("\nwhat it compares with the reply before it");
   );
 }
 
+console.log("\nevery fixed text is a box of its own");
+{
+  // Nothing sent to a model is hidden: the worn-phrase check, the lead-in to
+  // what the checks found, and the note about the stand-ins each have a box
+  // with the built-in text in it and a way back to it.
+  const vis = (page, sel) =>
+    page.evaluate((sel) => {
+      const n = document.querySelector(sel);
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    }, sel);
+  const val = (page, key) =>
+    page.evaluate((k) => (document.querySelector('#drawer [data-arf-field="' + k + '"]') || {}).value, key);
+
+  await inTab(browser, { saved: { judgeMode: "two", judgeWorn: true } }, async (page) => {
+    await goTab(page, "Model");
+    await closed(page);
+    ok("How it asks shows the built-in worn-phrase check", (await val(page, "judgeWornCheck")) === String(__testing.WORN_CHECK), await val(page, "judgeWornCheck"));
+    ok("with its own button", await vis(page, '#drawer [data-arf-jevworn="builtin"]'));
+    ok("the lead-in to what the checks found shows the built-in text", (await val(page, "judgeFoundLead")) === String(__testing.FOUND_LEAD), await val(page, "judgeFoundLead"));
+    ok("with its own button", await vis(page, '#drawer [data-arf-jevlead="builtin"]'));
+    // Typed over, then put back with the button: a first press asks for a
+    // second, with no host dialog on this page.
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="judgeFoundLead"]');
+      ta.value = "Made-up lead-in.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    for (let i = 0; i < 2; i++) {
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-jevlead="builtin"]').click());
+      await settle(page);
+      await settle(page);
+    }
+    ok("and the button puts the built-in lead-in back", (await val(page, "judgeFoundLead")) === String(__testing.FOUND_LEAD), await val(page, "judgeFoundLead"));
+  });
+
+  await inTab(browser, { saved: { judgeMode: "two", judgeWorn: false } }, async (page) => {
+    await goTab(page, "Model");
+    await closed(page);
+    ok("with worn phrases off, How it asks is not shown", !(await vis(page, '#drawer [data-arf-row="judgeWornCheck"]')));
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Limits");
+    await closed(page);
+    ok("the note about the stand-ins shows the built-in text", (await val(page, "protectNote")) === String(__testing.PROTECT_NOTE), await val(page, "protectNote"));
+    ok("with its own button", await vis(page, '#drawer [data-arf-protectnote="builtin"]'));
+  });
+}
+
 console.log("\none model or two");
 {
   const errors = await inTab(browser, {}, async (page) => {

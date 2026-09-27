@@ -119,6 +119,7 @@ const PARTS = [
             "stripAnswerThinking",
             "shieldAdd",
             "shieldKeep",
+            "protectNote",
             "guardRefusal",
             "guardPreamble",
             "guardSoften",
@@ -154,7 +155,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -264,6 +265,26 @@ const BEFORE_CHECKS = [
     "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
     "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
 ].join("\n");
+// The check sent with the worn-out phrases, with Also check for worn-out
+// phrases on. The backend holds the same text for settings that do not carry it.
+const WORN_CHECK = "`reply` contains at least one phrase listed in `worn_phrases`.";
+// What the refine model is told before the checks in {{checks_found}}.
+// {{second_model}} becomes the second model's name and {{checks_line}} the
+// reader's line, filled in by the backend, which holds the same text. It calls
+// the checks leads, since the second model can be wrong, and a model told to
+// fix each one would change writing that was fine.
+const FOUND_LEAD = "Another model, {{second_model}}, read this passage before you and scored it against checks the user wrote. " +
+    "The checks below reached the user's line of {{checks_line}}%, strongest first. " +
+    "In them, \"reply\" means the passage you are rewriting. Look at these first. " +
+    "Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. " +
+    "Everything else in these instructions still applies.";
+// What {{protect_notes}} puts in when something was hidden. The stand-ins are
+// this extension's own, so nothing in a chat could describe them. The backend
+// holds the same text.
+const PROTECT_NOTE = "Parts of this passage have been replaced with tokens shaped like [[AR1]], " +
+    "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
+    "edit exactly as it is. Copy every one into your answer unchanged and in the " +
+    "same place, treating each as a single character you cannot spell.";
 // The checks as they were in 1.20.0 to 1.21.1, word for word. A reader still
 // holding exactly these never wrote their own, and is offered the ones above.
 const JUDGE_CHECKS_1_20 = [
@@ -558,6 +579,9 @@ const CONFIG = {
     // whether this reply repeats it.
     judgeBefore: false,
     judgeBeforeChecks: BEFORE_CHECKS,
+    judgeWornCheck: WORN_CHECK,
+    judgeFoundLead: FOUND_LEAD,
+    protectNote: PROTECT_NOTE,
     // The second model reads the reply before a refine started with a button as well as on
     // the automatic pass. Off, pressing refine goes straight to the refine model.
     judgeByHand: false,
@@ -687,14 +711,8 @@ const MACROS = [
         what: "Only with two models, when the second model read the reply and picked it out for a " +
             "refine. The checks that reached your line, strongest first, one per line " +
             "with the score, so a line reads \"- reply repeats itself. (91%)\". " +
-            "They come after this lead-in, with the name of the second model you picked: \"Another model, Jev, read this passage " +
-            "before you and scored it against checks the user wrote. The checks below " +
-            "reached the user's line of 50%, strongest first. In them, \"reply\" means " +
-            "the passage you are rewriting. Look at these first. Treat each one as a " +
-            "lead to check. If a check does not fit the passage, leave that part as " +
-            "it is. Everything else in these instructions still applies.\" The 50% " +
-            "there is an example: it says whatever line you set under Refine when a " +
-            "check reaches, and only checks at or over that line are listed. Empty on " +
+            "They come after the lead-in in What the refine model is told about the checks, on the " +
+            "Model tab, where you can read and change it. Only checks at or over your line are listed. Empty on " +
             "every other refine, which leaves the block carrying it out of the prompt.",
         ours: true,
     },
@@ -708,13 +726,9 @@ const MACROS = [
     },
     {
         tag: "{{protect_notes}}",
-        what: "Only when protection is on and it found something. Puts in: \"Parts of this passage " +
-            "have been replaced with tokens shaped like [[AR1]], [[AR2]] and so on. Each stands in " +
-            "for formatting that has to survive the edit exactly as it is. Copy every one into your " +
-            "answer unchanged and in the same place, treating each as a single character you cannot " +
-            "spell.\" It is the one macro that puts words rather than your chat into the prompt, and " +
-            "they are here so you can read them: the tokens are this extension's own invention and " +
-            "nothing in your chat could describe them.",
+        what: "Only when protection is on and it found something. Puts in the text in What the model is " +
+            "told about the stand-ins, on the Limits tab, where you can read and change it. The stand-ins " +
+            "are this extension's own, and nothing in your chat could describe them.",
         ours: true,
     },
     { tag: "{{description}}", what: "The character card's description.", ours: false },
@@ -2046,6 +2060,15 @@ const JUDGE_FIELDS = [
         hint: "Asks the second model whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
     },
     {
+        key: "judgeWornCheck",
+        label: "How it asks",
+        type: "lines",
+        rows: 2,
+        needs: { key: "judgeWorn" },
+        under: true,
+        hint: "The check sent with the list. Call the list worn_phrases and the reply reply, in backticks.",
+    },
+    {
         key: "judgeBefore",
         label: "Also compare with the reply before it",
         type: "bool",
@@ -2074,6 +2097,14 @@ const JUDGE_FIELDS = [
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
         hint: "Off by default. On, the second model reads the rewrite too, and if a check still reaches your line the reply is refined once more. One more call to it per refine.",
+    },
+    {
+        key: "judgeFoundLead",
+        label: "What the refine model is told about the checks",
+        type: "lines",
+        rows: 5,
+        needs: { key: "judgeMode", is: "two" },
+        hint: "Goes before the checks in {{checks_found}}. {{second_model}} is the second model's name and {{checks_line}} is your line.",
     },
 ];
 // Every field that another can hang off, by key, so a row can ask whether the
@@ -8754,41 +8785,15 @@ export function setup(ctx, overrides) {
         wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
         const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
         wrap.appendChild(fieldRow(checksField));
-        // The way back to the built-in checks, beside the box it fills. Resetting
-        // the whole "One model or two" part would also switch back to one model
-        // and move the host and the threshold, which is more than somebody who
-        // mistyped a check wants.
-        const builtInRow = (key, list, label, tag, shows) => {
-            const row = el("div", "arf-row");
-            const builtIn = button("Use the built-in checks", false);
-            builtIn.setAttribute("data-arf-" + tag, "builtin");
-            const said = el("span", "arf-note");
-            said.setAttribute("data-arf-" + tag, "said");
-            builtIn.addEventListener("click", () => {
-                if (sameAsWas(cfg[key], list)) {
-                    alreadyBuiltIn(said, "These are already the built-in checks. Nothing changed.");
-                    return;
-                }
-                askFirst(tag, {
-                    title: "Use the built-in checks",
-                    message: "Replace what is in " + label + " with the built-in checks? What you wrote there is not kept.",
-                    confirmLabel: "Replace",
-                }, "Press Use the built-in checks again to replace yours.", () => {
-                    cfg[key] = list;
-                    persist(true);
-                    paint();
-                    toast("The built-in checks are back.", true);
-                });
-            });
-            row.appendChild(builtIn);
-            row.appendChild(said);
-            return hangsOff(row, shows, tag);
-        };
-        wrap.appendChild(builtInRow("judgeChecks", JUDGE_CHECKS, "What the second model checks", "jevchecks", () => cfg.judgeMode === "two"));
+        wrap.appendChild(builtInRow("judgeChecks", JUDGE_CHECKS, "What the second model checks", "jevchecks", () => cfg.judgeMode === "two", "checks"));
         for (const f of afterChecks) {
             wrap.appendChild(fieldRow(f));
             if (f.key === "judgeBeforeChecks")
-                wrap.appendChild(builtInRow("judgeBeforeChecks", BEFORE_CHECKS, "What it compares", "jevbefore", () => cfg.judgeMode === "two" && !!cfg.judgeBefore));
+                wrap.appendChild(builtInRow("judgeBeforeChecks", BEFORE_CHECKS, "What it compares", "jevbefore", () => cfg.judgeMode === "two" && !!cfg.judgeBefore, "checks"));
+            if (f.key === "judgeWornCheck")
+                wrap.appendChild(builtInRow("judgeWornCheck", WORN_CHECK, "How it asks", "jevworn", () => cfg.judgeMode === "two" && !!cfg.judgeWorn, "checks"));
+            if (f.key === "judgeFoundLead")
+                wrap.appendChild(builtInRow("judgeFoundLead", FOUND_LEAD, "What the refine model is told about the checks", "jevlead", () => cfg.judgeMode === "two"));
         }
         // Where the findings go is a block on the Prompt tab, which is a long way
         // from here. Said only while nothing is set up to take them.
@@ -9077,6 +9082,36 @@ export function setup(ctx, overrides) {
             wrap._arfHint = s.hint;
         return wrap;
     }
+    // The way back to the built-in text of a box, beside the box. Resetting the
+    // whole part it belongs to would move every other setting in it too, which
+    // is more than somebody who mistyped a line wants.
+    function builtInRow(key, list, label, tag, shows, what = "text") {
+        const these = what === "checks" ? "the built-in checks" : "the built-in text";
+        const row = el("div", "arf-row");
+        const builtIn = button("Use " + these, false);
+        builtIn.setAttribute("data-arf-" + tag, "builtin");
+        const said = el("span", "arf-note");
+        said.setAttribute("data-arf-" + tag, "said");
+        builtIn.addEventListener("click", () => {
+            if (sameAsWas(cfg[key], list)) {
+                alreadyBuiltIn(said, (what === "checks" ? "These are already " : "This is already ") + these + ". Nothing changed.");
+                return;
+            }
+            askFirst(tag, {
+                title: "Use " + these,
+                message: "Replace what is in " + label + " with " + these + "? What you wrote there is not kept.",
+                confirmLabel: "Replace",
+            }, "Press Use " + these + " again to replace yours.", () => {
+                cfg[key] = list;
+                persist(true);
+                paint();
+                toast(what === "checks" ? "The built-in checks are back." : "The built-in text is back.", true);
+            });
+        });
+        row.appendChild(builtIn);
+        row.appendChild(said);
+        return hangsOff(row, shows, tag);
+    }
     // ---- Limits ----
     function buildProtectCard() {
         const wrap = card("Protecting what is not prose", "A model asked to improve writing can change colour tags, code blocks or image links. These keep that kind of text exactly as it was.");
@@ -9093,6 +9128,15 @@ export function setup(ctx, overrides) {
             needs: { key: "protectOn" },
             hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it. Anything carrying an attribute is hidden either way.",
         }));
+        wrap.appendChild(fieldRow({
+            key: "protectNote",
+            label: "What the model is told about the stand-ins",
+            type: "lines",
+            rows: 4,
+            needs: { key: "protectOn" },
+            hint: "Goes in {{protect_notes}} when something was hidden. Name the stand-in shape, [[AR1]], so the model keeps each one.",
+        }));
+        wrap.appendChild(builtInRow("protectNote", PROTECT_NOTE, "What the model is told about the stand-ins", "protectnote", () => !!cfg.protectOn));
         wrap.appendChild(fieldRow({
             key: "protectThinking",
             label: "Keep the reply's own reasoning out of the refine",
@@ -14638,6 +14682,9 @@ export const __testing = {
     JUDGE_FIELDS,
     JUDGE_CHECKS,
     BEFORE_CHECKS,
+    WORN_CHECK,
+    FOUND_LEAD,
+    PROTECT_NOTE,
     COST_FIELDS,
     LIMIT_FIELDS,
     MACROS,

@@ -635,6 +635,8 @@ function unshield(text, parts) {
             lost.push(i);
     return { text: out, lost: lost };
 }
+// What {{protect_notes}} puts in by default. The panel holds the same text and
+// the reader can change it, under protectNote.
 const SHIELD_NOTE = 'Parts of this passage have been replaced with tokens shaped like [[AR1]], ' +
     '[[AR2]] and so on. Each stands in for formatting that has to survive the ' +
     'edit exactly as it is. Copy every one into your answer unchanged and in the ' +
@@ -3261,7 +3263,7 @@ pick) {
     // was never meant to touch.
     const armed = shield(target);
     if (armed.parts.length)
-        scene = { ...scene, shieldNote: SHIELD_NOTE };
+        scene = { ...scene, shieldNote: protectNote == null ? SHIELD_NOTE : protectNote };
     // The reply the selection came out of, with the part being rewritten marked,
     // so a prompt can show the model what surrounds the fragment it was given.
     // Left unset on an ordinary refine, which keeps the block carrying it out of
@@ -3895,6 +3897,12 @@ let judgeBefore = false;
 // The reader's own comparison checks. Null until the panel sends the box,
 // which leaves BEFORE_CHECKS in use.
 let judgeBeforeChecks = null;
+// The reader's own wording for the worn-phrase check, the lead-in to
+// {{checks_found}} and the note in {{protect_notes}}. Null until the panel
+// sends them, which leaves the built-in text in use. Empty sends none.
+let judgeWornCheck = null;
+let judgeFoundLead = null;
+let protectNote = null;
 // Whether the second model also reads a reply before a refine somebody starts
 // with a button. Off, a refine asked for by hand goes ahead without it.
 let judgeByHand = false;
@@ -4123,6 +4131,17 @@ async function askJev(userId, state, questions) {
 // reader has not written their own. The same list as the panel's box, so a
 // reader who never opened it is asked what the panel shows. Each is about
 // repeating, so a reply that carries the same scene on is not caught by it.
+// The check sent with the worn-out phrases, when the reader has not written
+// their own. The same text as the panel's box.
+const WORN_CHECK = '`reply` contains at least one phrase listed in `worn_phrases`.';
+// What the refine model is told before the checks in {{checks_found}}, when
+// the reader has not written their own. The same text as the panel's box.
+// {{second_model}} and {{checks_line}} are filled in here.
+const FOUND_LEAD = 'Another model, {{second_model}}, read this passage before you and scored it against checks the user wrote. ' +
+    "The checks below reached the user's line of {{checks_line}}%, strongest first. " +
+    'In them, "reply" means the passage you are rewriting. Look at these first. ' +
+    'Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. ' +
+    'Everything else in these instructions still applies.';
 const BEFORE_CHECKS = [
     "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
     "`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.",
@@ -4158,9 +4177,11 @@ async function judgeReply(userId, reply, worn, before) {
     }
     if (judgeWorn && worn.trim()) {
         state.worn_phrases = worn;
-        const line = 'At least one phrase listed in `worn_phrases` appears in `reply`.';
-        questions.worn = { type: NOUL, instructions: line };
-        asked.push({ id: 'worn', check: 'Uses a phrase this chat has worn out' });
+        const line = judgeWornCheck == null ? WORN_CHECK : judgeWornCheck;
+        if (line) {
+            questions.worn = { type: NOUL, instructions: line };
+            asked.push({ id: 'worn', check: line });
+        }
     }
     if (!asked.length)
         return { refine: true, failed: true, why: 'there are no checks for ' + who() + ' to answer' };
@@ -4194,11 +4215,11 @@ function jevFoundText(scores, over) {
     const hits = jevHits(scores, over);
     if (!hits.length)
         return '';
-    return ('Another model, ' + who() + ', read this passage before you and scored it against checks the user wrote. ' +
-        'The checks below reached the user\'s line of ' + over + '%, strongest first. ' +
-        'In them, "reply" means the passage you are rewriting. Look at these first. ' +
-        'Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. ' +
-        'Everything else in these instructions still applies.\n' +
+    const lead = (judgeFoundLead == null ? FOUND_LEAD : judgeFoundLead)
+        .replace(/\{\{second_model\}\}/g, who())
+        .replace(/\{\{checks_line\}\}/g, String(over))
+        .trim();
+    return ((lead ? lead + '\n' : '') +
         hits
             .map((x) => '- ' + x.check.replace(/`previous_reply`/g, 'the reply before it').replace(/`/g, '') + ' (' + x.pct + '%)')
             .join('\n'));
@@ -4418,6 +4439,9 @@ function applyRules(s) {
     judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 40;
     judgeWorn = s.judgeWorn !== false;
     judgeBefore = s.judgeBefore === true;
+    judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;
+    judgeFoundLead = typeof s.judgeFoundLead === 'string' ? s.judgeFoundLead.trim().slice(0, 2000) : null;
+    protectNote = typeof s.protectNote === 'string' ? s.protectNote.trim().slice(0, 2000) : null;
     judgeBeforeChecks =
         typeof s.judgeBeforeChecks === 'string'
             ? s.judgeBeforeChecks
@@ -5057,7 +5081,7 @@ async function onPanel(payload, userId) {
                 const split = splitThinking(text);
                 const armed = shield(split.body);
                 if (armed.parts.length)
-                    scene = { ...scene, shieldNote: SHIELD_NOTE };
+                    scene = { ...scene, shieldNote: protectNote == null ? SHIELD_NOTE : protectNote };
                 const blockParts = [];
                 // With several passes, a refine sends each pass's own prompt and never
                 // the one on the Prompt tab. The first pass is built here as it would

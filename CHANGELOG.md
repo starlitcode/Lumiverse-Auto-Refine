@@ -17,6 +17,11 @@ _2026-09-27_
 
 - **What it compares**, a box under **Also compare with the reply before it**, with its own **Use the built-in checks** button. It holds the checks that compare a reply with the one before it, so you can change them. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
 
+- **Every fixed text sent to a model can be read and changed in the panel.** Each box has a **Use the built-in** button beside it.
+  - **How it asks**, under **Also check for worn-out phrases**: the check sent with the worn-out phrases.
+  - **What the refine model is told about the checks**, on the Model tab: the lead-in to `{{checks_found}}`. `{{second_model}}` and `{{checks_line}}` in it become the model's name and your line.
+  - **What the model is told about the stand-ins**, on the Limits tab: the text `{{protect_notes}}` puts in.
+
 ### Changed
 
 - **The checks that compare a reply with the one before it are clearer, and there are two more.** They say what repeating looks like, each with an example. The new ones ask whether a reply opens the same way, or ends the same way, as the one before it.
