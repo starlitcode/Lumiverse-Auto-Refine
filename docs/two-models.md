@@ -124,14 +124,14 @@ All but the first match rules the built-in reply prompts carry, with the same ex
 
 ### How the second model reads a check
 
-The second model is not a chat model. It does not work out what you meant. It reads each check word for word, and scores how closely the reply matches those words. So a check that a chat model would understand can still miss.
+The second model is not a chat model. It reads the meaning of a check, not only its words. But it scores whether the statement you wrote is true of the reply, and it does not stretch a check to cover what you meant. So a check that describes a different pattern from the one you have in mind scores low, even on a reply that has your pattern.
 
 For example, a check that says "says what something was not before saying what it was, as in 'it wasn't a request, it was a command'" does not catch "He didn't walk. Just stayed there." That line is about an action, not a thing, and it has no second half that says what it was. The built-in check names both forms for this reason.
 
 Write each check so that:
 
-- **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgement, and the answer depends on how the model reads the words.
-- **It gives examples, one for each form.** The model matches examples closely. One example catches that shape and can miss the others.
+- **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgement. Scores for a judgement change more from one reply to the next.
+- **It gives examples, one for each form.** Examples show which pattern you mean. With one example, another form of the same habit can score low.
 - **It asks about one thing.** A statement joined with "and" is two checks.
 - **It is false of a reply with nothing wrong in it.** A check that is true of most replies sends every reply to be refined.
 
@@ -247,6 +247,22 @@ To see that it was sent:
 It only happens on a refine the second model read first. A refine that skipped it is not checked afterwards either.
 
 While it runs, the panel says, for example, "Jev is reading the rewrite", then "Refining once more" if a check reached the line. **Stop** works at both points, and nothing is saved.
+
+## It can be wrong
+
+The second model gives each check a chance, not a certain answer. It is a small model, and it makes mistakes:
+
+- It can score a check low on a reply that has the problem. The reply is left alone.
+- It can score a check high on a reply that is fine. The reply is refined when it did not need it.
+- A score close to your line is the least certain. A reply at 45% was nearly refined, and one at 55% was nearly left alone.
+
+When it gets a reply wrong:
+
+- Press the refine button on the message. With **Let it check refines you start yourself** off, which is the default, a refine you start goes straight to the refine model.
+- If it keeps missing one kind of problem, add an example of that kind to the check. See [How the second model reads a check](#how-the-second-model-reads-a-check).
+- If it lets too much through, lower **Refine when a check reaches**. If it refines too much, raise it.
+
+The refine model is told the same. **Checks Found** calls each check a lead, and says to leave alone any part a check does not fit.
 
 ## When it cannot answer
 

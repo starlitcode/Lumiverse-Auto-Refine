@@ -243,11 +243,11 @@ const PERMS: Array<{ id: string; label: string; why: string; without: string; fa
 ];
 
 // What the second model checks a reply for until somebody writes their own.
-// A scoring model reads each check word for word and does not guess at what
-// was meant, so each one names something that can be seen on the page, with
-// examples of it. A check that asks for a judgement, such as whether a feeling
-// is already shown, gets an answer that depends on how the model reads the
-// word, and is left out.
+// A scoring model scores whether the statement is true of the reply, and does
+// not stretch a check to cover what was meant, so each one names something
+// that can be seen on the page, with examples of it. A check that asks for a
+// judgement, such as whether a feeling is already shown, scores less steadily
+// from one reply to the next, and is left out.
 //
 // Each has to be false of a clean reply. A reply is refined when any check
 // reaches the line, so a check that is true of nearly every reply, such as one
@@ -1807,7 +1807,7 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
     key: "judgeChecks",
     was: JUDGE_CHECKS_1_20,
     label: "What the second model checks",
-    why: "The second model reads each check word for word. The checks now name what to look for on the page, with examples. Two that asked for a judgement are gone, and two that match rules in the reply prompts are new.",
+    why: "The second model scores whether each check is true of the reply, so a check has to describe the pattern it means. The checks now name what to look for on the page, with examples. Two that asked for a judgement are gone, and two that match rules in the reply prompts are new.",
     needs: { key: "judgeMode", is: "two" },
   },
 ];
