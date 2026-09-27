@@ -6,23 +6,35 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.22.0
+## 1.23.0
 
 _2026-09-27_
 
 ### Added
 
-- **A guide to writing checks for the second model.** It scores whether the statement you wrote is true of the reply, and does not stretch a check to cover what you meant. The guide says how to write checks it can answer. See [How the second model reads a check](docs/two-models.md#how-the-second-model-reads-a-check).
-- **The panel says the second model can be wrong.** The hint under **How many models** says so, and so does the README. When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway. The docs have a section on the mistakes it makes and what to do about them. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
-- **What it compares**, a box under **Also compare with the reply before it**, with its own **Use the built-in checks** button. It holds the checks that compare a reply with the one before it, so you can change them. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
 - **Every fixed text sent to a model can be read and changed in the panel.** Each box has a button beside it that puts the built-in text back.
   - **How it asks**, under **Also check for worn-out phrases**: the check sent with the worn-out phrases.
   - **What the refine model is told about the checks**, on the Model tab: the lead-in to `{{checks_found}}`. `{{second_model}}` and `{{checks_line}}` in it become the model's name and your line.
   - **What the model is told about the stand-ins**, on the Limits tab: the text `{{protect_notes}}` puts in.
+- **What it compares**, a box under **Also compare with the reply before it**, with its own **Use the built-in checks** button. It holds the checks that compare a reply with the one before it, so you can change them. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
 
 ### Changed
 
 - **The checks that compare a reply with the one before it are clearer, and there are two more.** They say what repeating looks like, each with an example. The new ones ask whether a reply opens the same way, or ends the same way, as the one before it.
+
+---
+
+## 1.22.0
+
+_2026-09-26_
+
+### Added
+
+- **A guide to writing checks for the second model.** It scores whether the statement you wrote is true of the reply, and does not stretch a check to cover what you meant. The guide says how to write checks it can answer. See [How the second model reads a check](docs/two-models.md#how-the-second-model-reads-a-check).
+- **The panel says the second model can be wrong.** The hint under **How many models** says so, and so does the README. When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway. The docs have a section on the mistakes it makes and what to do about them. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
+
+### Changed
+
 - **Refine when a check reaches is 40 by default, not 50.** At 50, a reply with a problem the second model was not sure of was left alone. A clean reply still scores well under 40. With two models on, and the line still at 50, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
 - **The built-in checks are rewritten for how the second model scores them.** Each one names what to look for on the page, with examples. The check for the negation trick now names both forms, so a line about an action, such as "she didn't just leave, she ran", is caught, not only "it wasn't a request, it was a command". The two checks that asked for a judgement, about feelings the actions already show and about strained comparisons, are gone. Two new ones match rules in the built-in reply prompts: an action followed by a comment on how it came out, and an action started then taken back. With two models on, and the checks you started with, a line above the tabs offers the new ones. Press **Take it**, or **Keep mine**.
 
@@ -35,7 +47,7 @@ _2026-09-27_
 
 ## 1.21.1
 
-_2026-09-27_
+_2026-09-26_
 
 ### Fixed
 
@@ -196,7 +208,7 @@ _2026-09-25_
 
 ## 1.18.0
 
-_2026-09-25_
+_2026-09-24_
 
 ### Added
 
@@ -394,7 +406,7 @@ _2026-09-19_
 
 ## 1.12.0
 
-_2026-09-19_
+_2026-09-18_
 
 ### Added
 
@@ -538,7 +550,7 @@ _2026-09-19_
 
 ## 1.11.0
 
-_2026-09-15_
+_2026-09-14_
 
 ### Added
 
