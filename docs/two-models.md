@@ -143,10 +143,21 @@ Each second model has its own line, and the panel shows the one for the model yo
 
 | Model | Line by default |
 | --- | --- |
-| **Jev** | 50 percent |
-| **Span** | 25 percent |
+| **Jev** | 30 percent |
+| **Span** | 15 percent |
 
-Span's line is lower because Span gives lower scores than Jev on the same reply. On a reply with a problem, Span often scores the check between 20% and 30%, where Jev scores it higher. With a line of 50, Span would leave most of those replies alone.
+Each line sits between two groups of scores, which are different for each model:
+
+| Model | A check it finds false | A check it finds true in the reply |
+| --- | --- | --- |
+| **Jev** | close to 0%, often 1% to 7% | often only 30% to 35% |
+| **Span** | close to 0%, often 2% or 3% | often only 15% to 25% |
+
+On the same reply, the two models mostly agree on which checks are false. Where they find a check true, Span's score is often about half of Jev's. That is why Span's line is half of Jev's.
+
+At a higher line, both models left alone replies that had the problem. For Jev that was 40 or 50, and for Span 20 or 25.
+
+The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%, on either model. The line matters most for the other checks.
 
 Changing one line does not change the other. If you switch model, the line you set for the other one is kept for when you switch back.
 
@@ -270,7 +281,7 @@ The second model gives each check a chance, not a certain answer. It is a small 
 
 - It can score a check low on a reply that has the problem. The reply is left alone.
 - It can score a check high on a reply that is fine. The reply is refined when it did not need it.
-- A score close to your line is the least certain. With a line of 50, a reply at 45% was nearly refined, and one at 55% was nearly left alone.
+- A score close to your line is the least certain. With a line of 30, a reply at 27% was nearly refined, and one at 33% was nearly left alone.
 
 When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway.
 

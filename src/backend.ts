@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.24.0';
+const VERSION = '1.25.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4647,7 +4647,7 @@ function applyRules(s: any): void {
     const n = Number(raw);
     return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
   };
-  judgeOver = judgeWho === 'span' ? lineOf(s.spanOver, 25) : lineOf(s.judgeOver, 50);
+  judgeOver = judgeWho === 'span' ? lineOf(s.spanOver, 15) : lineOf(s.judgeOver, 30);
   judgeWorn = s.judgeWorn !== false;
   judgeBefore = s.judgeBefore === true;
   judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;

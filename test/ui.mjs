@@ -1760,7 +1760,7 @@ console.log("\nSpan, the other second model");
     ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
     ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
     ok("the key is called the Span key", span.key === "Span key", String(span.key));
-    ok("and only Span's line shows, at 25", span.spanLine && !span.jevLine && span.spanLineValue === "25", JSON.stringify(span));
+    ok("and only Span's line shows, at 15", span.spanLine && !span.jevLine && span.spanLineValue === "15", JSON.stringify(span));
 
     await pick("judgeHost", "respan");
     const respan = await read();
@@ -8351,23 +8351,26 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
-  // Jev's line at the old default of 40 is offered 50, and taking it sets 50.
-  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 40 } }, async (page) => {
-    const said = await seen(page);
-    ok("somebody still on a line of 40 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
-    await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
-      await new Promise((r) => setTimeout(r, 200));
+  // Jev's line at either old default, 40 or 50, is offered 30, and taking it
+  // sets 30.
+  for (const was of [40, 50]) {
+    await inTab(browser, { saved: { judgeMode: "two", judgeOver: was } }, async (page) => {
+      const said = await seen(page);
+      ok("somebody on Jev still on a line of " + was + " is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+      await page.evaluate(async () => {
+        document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+        await new Promise((r) => setTimeout(r, 200));
+      });
+      const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
+      ok("and taking it sets the line to 30", line === 30, String(line));
     });
-    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
-    ok("and taking it sets the line to 50", line === 50, String(line));
-  });
+  }
   // Span has its own line, so a Jev line of 40 is not offered to somebody on Span.
   await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: 40 } }, async (page) => {
     ok("somebody on Span is not told about Jev's line", (await seen(page)) === null, "");
   });
   // A line somebody set themselves is given to Span too. A default is not.
-  for (const [was, want] of [[35, "35"], [40, "25"], [50, "25"]]) {
+  for (const [was, want] of [[35, "35"], [40, "15"], [50, "15"]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: was } }, async (page) => {
       await goTab(page, "Model");
       await settle(page);
@@ -8375,6 +8378,21 @@ console.log("\nwhen a default moves under somebody who was on it");
       ok("a Jev line of " + was + " gives Span a line of " + want, got === want, String(got));
     });
   }
+  // Span's line at the old default of 25 is offered 15, and taking it sets 15.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", spanOver: 25 } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody on Span still on a line of 25 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+    await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").spanOver);
+    ok("and taking it sets Span's line to 15", line === 15, String(line));
+  });
+  // Somebody on Jev is not told about Span's line.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", spanOver: 25 } }, async (page) => {
+    ok("somebody on Jev is not told about Span's line", (await seen(page)) === null, "");
+  });
   // A line of their own choosing is left alone.
   await inTab(browser, { saved: { judgeMode: "two", judgeOver: 65 } }, async (page) => {
     ok("somebody who set their own line is left alone", (await seen(page)) === null, "");

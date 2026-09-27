@@ -676,8 +676,8 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(0);
   });
 
-  test("Span has a line of its own, 25 by default", async () => {
-    const h = await keyed({ judgeWho: "span" }, { jev: says([30]) });
+  test("Span has a line of its own, 15 by default", async () => {
+    const h = await keyed({ judgeWho: "span" }, { jev: says([16]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(h.asked.length).toBe(1);
@@ -691,7 +691,7 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   test("and Span's line is not used for Jev", async () => {
-    const h = await keyed({ spanOver: 20 }, { jev: says([40]) });
+    const h = await keyed({ spanOver: 10 }, { jev: says([20]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(h.asked.length).toBe(0);
@@ -981,7 +981,7 @@ describe("two models: Jev reads the reply first", () => {
     const text = sentText(h);
     expect(text).toContain("<found>");
     expect(text).toContain("Treat each one as a lead to check.");
-    expect(text).toContain("line of 50%");
+    expect(text).toContain("line of 30%");
     const first = text.indexOf("- reply uses stock phrases. (90%)");
     const second = text.indexOf("- reply repeats itself. (60%)");
     expect(first).toBeGreaterThan(-1);
@@ -989,7 +989,7 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   test("and leaves out a check under the line", async () => {
-    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([30, 90]) });
+    const h = await keyed({ blocks: FOUND_BLOCKS }, { jev: says([20, 90]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     const text = sentText(h);
@@ -1693,7 +1693,7 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   test("and what it found is said with Span's name too", async () => {
-    const h = await keyed({ judgeWho: "span" }, { jev: says([10, 20]) });
+    const h = await keyed({ judgeWho: "span" }, { jev: says([3, 12]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(h.stood().some((w: string) => /^Span found nothing/.test(w))).toBe(true);

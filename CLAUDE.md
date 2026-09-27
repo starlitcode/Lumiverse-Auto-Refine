@@ -55,7 +55,7 @@ behaves, goes into both.
 - Each second model has its own **Refine when a check reaches** line, with its
   own default. Scoring models do not score on the same scale. Some give low
   scores even on a reply with a problem, and some give high ones. Span's line
-  is 25 and Jev's is 50 for this reason.
+  is 15 and Jev's is 30 for this reason.
 - A new second model gets its own line setting and its own default, set from
   how that model scores. It never reuses another model's line. Say in
   `docs/two-models.md` why its default is where it is.

@@ -6,6 +6,19 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.25.0
+
+_2026-09-27_
+
+### Changed
+
+- **Refine when a check reaches is lower for both second models.** Both often give a low score to a check they find true in the reply, and the old lines left many of those replies alone. A check they find false scores close to 0. See [What the second model checks](docs/two-models.md#what-the-second-model-checks).
+  - **Jev: 30 by default, not 50.** Jev often scores a check it finds true at only 30 to 35 percent.
+  - **Span: 15 by default, not 25.** Span often scores a check it finds true at only 15 to 25 percent.
+  - With two models on, and your line still at the old default for the model you picked, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
+
+---
+
 ## 1.24.0
 
 _2026-09-27_

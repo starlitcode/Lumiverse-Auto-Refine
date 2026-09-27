@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.24.0";
+const VERSION = "1.25.0";
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
@@ -572,8 +572,8 @@ const CONFIG = {
     // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
-    judgeOver: 50,
-    spanOver: 25,
+    judgeOver: 30,
+    spanOver: 15,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -1721,6 +1721,8 @@ function markText(text) {
 // `needs` keeps the line from somebody the setting does nothing for. The checks
 // are only read with two models on, so a reader on one model is not told about
 // them. If they switch to two models later, the line comes up then.
+// Why Jev's line moved. Said to a reader on either of its earlier defaults.
+const JEV_LINE_WHY = "Jev often scores a check it finds in the reply at only 30 to 35 percent. A higher line left many of those replies alone.";
 const MOVED_DEFAULTS = [
     {
         key: "judgeChecks",
@@ -1731,11 +1733,27 @@ const MOVED_DEFAULTS = [
     },
     {
         key: "judgeOver",
-        was: 40,
+        was: 50,
         label: "Refine when a check reaches",
-        why: "The line of 40 was set from Span's scores, which run lower than Jev's. Span has a line of its own now, so Jev's goes back to 50.",
+        why: JEV_LINE_WHY,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "jev" },
+    },
+    {
+        key: "judgeOver",
+        was: 40,
+        label: "Refine when a check reaches",
+        why: JEV_LINE_WHY,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "jev" },
+    },
+    {
+        key: "spanOver",
+        was: 25,
+        label: "Refine when a check reaches",
+        why: "Span often scores a check it finds in the reply at only 15 to 25 percent. A line of 25 left many of those replies alone.",
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "span" },
     },
 ];
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
@@ -2053,7 +2071,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "jev" },
-        hint: "For Jev. A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+        hint: "For Jev. A percentage, 30 by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "spanOver",
@@ -2064,7 +2082,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "span" },
-        hint: "For Span. A percentage, 25 by default, since Span scores lower than Jev on the same reply.",
+        hint: "For Span. A percentage, 15 by default, since Span scores lower than Jev on the same reply.",
     },
     {
         key: "judgeWorn",
