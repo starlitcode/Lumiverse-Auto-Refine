@@ -258,6 +258,8 @@ The second model gives each check a chance, not a certain answer. It is a small 
 - It can score a check high on a reply that is fine. The reply is refined when it did not need it.
 - A score close to your line is the least certain. A reply at 45% was nearly refined, and one at 55% was nearly left alone.
 
+When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway.
+
 When it gets a reply wrong:
 
 - Press the refine button on the message. With **Let it check refines you start yourself** off, which is the default, a refine you start goes straight to the refine model.

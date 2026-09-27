@@ -13,7 +13,7 @@ _2026-09-27_
 ### Added
 
 - **A guide to writing checks for the second model.** It scores whether the statement you wrote is true of the reply, and does not stretch a check to cover what you meant. The guide says how to write checks it can answer. See [How the second model reads a check](docs/two-models.md#how-the-second-model-reads-a-check).
-- **A section saying the second model can be wrong**, and what to do when it is. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
+- **The second model is said to be able to be wrong.** The hint under **How many models** says so, and so does the README. When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway. The docs have a section on the mistakes it makes and what to do about them. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
 
 ### Changed
 

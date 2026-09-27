@@ -90,7 +90,7 @@ A refine is a second model call on every reply it refines. To spend less:
 - **Refine using** (Model tab): point it at a cheaper model than the one you chat with.
 - **Let it think first** (Model tab): off by default. Rewriting does not need a reasoning model.
 - **How much it is told** (Context tab): less chat history means a cheaper call.
-- **Two models** (Model tab, beta): a small second model, Jev or Span, checks each reply first, so only the ones that need it are refined.
+- **Two models** (Model tab, beta): a small second model, Jev or Span, checks each reply first, so only the ones that need it are refined. It can be wrong, so a reply that needs a refine is sometimes left alone. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
 
 Put your provider's prices on the Model tab to see costs in money instead of tokens. On a free tier or a local model, **Wait out a provider that will not take the call** (Limits tab) waits and tries again when the provider is busy.
 

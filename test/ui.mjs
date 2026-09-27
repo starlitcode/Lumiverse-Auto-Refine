@@ -2100,6 +2100,17 @@ console.log("\nwhat Jev decided");
     ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
     ok("each bar is as long as its score", !!got && got.widths.join() === "72%,18%", JSON.stringify(got));
     ok("it names the Jev that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
+    const wrongOnRefined = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-jevwrong]"));
+    ok("a refined reply does not say the second model can be wrong", !wrongOnRefined);
+    // A reply left alone says the second model can be wrong, and how to
+    // refine it anyway, since that is when somebody wonders why.
+    await page.evaluate(() => {
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m5", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 12 }], cost: 0, model: "jev-1.13.0", over: 40 });
+    });
+    await closed(page);
+    const wrong = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevwrong]") || {}).textContent || "");
+    ok("a reply left alone says the second model can be wrong, and how to refine it anyway",
+      /can be wrong/.test(wrong) && /press the refine button on the message/.test(wrong), wrong);
     // A second reply left alone, and a third Jev could not decide on.
     await page.evaluate(() => {
       window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m3", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 10 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
@@ -2108,7 +2119,7 @@ console.log("\nwhat Jev decided");
     // Log lines landing together are painted once, a moment after the first.
     await closed(page);
     const tally = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
-    ok("it counts the replies Jev read, left alone and could not decide on", /read 3 replies/.test(tally) && /left 1 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
+    ok("it counts the replies Jev read, left alone and could not decide on", /read 4 replies/.test(tally) && /left 2 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
     // Jev reading a rewrite, with a check still over the line. It is not a
     // reply read, so the count of replies stays where it was.
     await page.evaluate(() => {
@@ -2119,7 +2130,7 @@ console.log("\nwhat Jev decided");
     const tally2 = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
     ok("a read of the rewrite says so, and that the reply was refined once more",
       !!again && /read a rewrite/.test(again.text) && /refined once more/.test(again.text) && /refined again/.test(again.text), JSON.stringify(again));
-    ok("and is counted apart from the replies", /read 3 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
+    ok("and is counted apart from the replies", /read 4 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
     const logged = await page.evaluate(() => document.querySelector("#drawer").textContent);
     ok("the Log says Jev read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
     // A real request is not shown anywhere, so the Log says when what Jev found

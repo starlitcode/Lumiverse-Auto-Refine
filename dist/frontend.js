@@ -1927,7 +1927,7 @@ const JUDGE_FIELDS = [
             { value: "one", label: "One: every reply is refined" },
             { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
         ],
-        hint: "With two, a second model reads each finished reply first and the refine runs only where one of its checks says so. It is a separate service with its own key.",
+        hint: "With two, a second model reads each finished reply first, and only the replies it picks out are refined. It can be wrong in either direction. It is a separate service with its own key.",
     },
     {
         key: "judgeWho",
@@ -9292,6 +9292,15 @@ export function setup(ctx, overrides) {
                 ? who + " could not decide at " + when + ": " + last.why + ". The reply was refined anyway."
                 : who + " read a reply at " + when + ". A check at " + last.over + "% or more means refine." +
                     (last.refine ? " At least one did, so the reply was refined." : " None did, so the reply was left alone.")));
+            // Said where somebody looks when a reply they wanted refined was not.
+            // The second model can miss a problem, and the way to refine this one
+            // anyway is on the message itself.
+            if (!last.failed && !last.refine) {
+                const wrong = note(whoName() + " can be wrong. To refine this reply anyway, press the refine button on the message. If it keeps missing one kind of problem, lower " +
+                    "Refine when a check reaches or add an example to that check.");
+                wrong.setAttribute("data-arf-jevwrong", "1");
+                wrap.appendChild(wrong);
+            }
         }
         for (const s of last.scores) {
             const hit = s.pct >= last.over;
