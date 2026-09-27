@@ -13,11 +13,9 @@ _2026-09-27_
 ### Added
 
 - **A guide to writing checks for the second model.** It scores whether the statement you wrote is true of the reply, and does not stretch a check to cover what you meant. The guide says how to write checks it can answer. See [How the second model reads a check](docs/two-models.md#how-the-second-model-reads-a-check).
-- **The second model is said to be able to be wrong.** The hint under **How many models** says so, and so does the README. When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway. The docs have a section on the mistakes it makes and what to do about them. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
-
+- **The panel says the second model can be wrong.** The hint under **How many models** says so, and so does the README. When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway. The docs have a section on the mistakes it makes and what to do about them. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
 - **What it compares**, a box under **Also compare with the reply before it**, with its own **Use the built-in checks** button. It holds the checks that compare a reply with the one before it, so you can change them. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
-
-- **Every fixed text sent to a model can be read and changed in the panel.** Each box has a **Use the built-in** button beside it.
+- **Every fixed text sent to a model can be read and changed in the panel.** Each box has a button beside it that puts the built-in text back.
   - **How it asks**, under **Also check for worn-out phrases**: the check sent with the worn-out phrases.
   - **What the refine model is told about the checks**, on the Model tab: the lead-in to `{{checks_found}}`. `{{second_model}}` and `{{checks_line}}` in it become the model's name and your line.
   - **What the model is told about the stand-ins**, on the Limits tab: the text `{{protect_notes}}` puts in.

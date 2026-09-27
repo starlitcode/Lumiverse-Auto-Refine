@@ -4037,9 +4037,8 @@ console.log("\nthe eye on the floating button");
     const mid = await ring();
 
     // A hair before the hold is up, which is the moment the ring has to be
-    // closed by. It used to be given the same length as the hold, so the timer
-    // beat it by a frame every time and the menu opened over a ring stopped a
-    // few per cent short.
+    // closed by. A ring timed to the same length as the hold finishes a frame
+    // after it, and the menu opens over a ring a few per cent short.
     await page.evaluate(() => new Promise((r) => setTimeout(r, 230)));
     const nearlyUp = await ring();
     ok(where + ": holding the button shows it", mid && mid.held === "1" && mid.shown > 0.5, JSON.stringify(mid));
@@ -5354,7 +5353,7 @@ console.log("\nthe working, read as prose");
 
   // A model that leaves the working's closing tag off, which is what a call cut
   // short looks like. Everything after the opening tag is the working, and
-  // showing it beats showing nothing.
+  // showing it is better than showing nothing.
   await inTab(browser, {}, async (page) => {
     await page.evaluate(() => {
       window.__fromBackend({

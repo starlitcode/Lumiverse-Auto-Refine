@@ -4462,8 +4462,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-rule{height:1px;background:var(--lumiverse-border,rgba(147,112,219,.12));margin:2px 0}" +
     ".arf-col{display:flex;flex-direction:column;gap:5px}" +
     // The browser hides a [hidden] element by giving it display:none, and any
-    // rule of ours that sets display beats it, because a class beats the user
-    // agent's sheet. Every arf-col above is display:flex, so hiding one did
+    // rule of ours that sets display overrides it, because a class takes
+    // priority over the user agent's sheet. Every arf-col above is display:flex, so hiding one did
     // nothing at all: the Watch card drew "What it is working out" with an
     // empty box under it on a refine that had no working to show. Said here,
     // once, rather than at each of the places that hide something.
@@ -5520,8 +5520,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         } catch (_) {}
       });
     } catch (_) {}
-    const beat = setInterval(themeMoved, THEME_TICK_MS);
-    disposers.push(() => clearInterval(beat));
+    const themeTick = setInterval(themeMoved, THEME_TICK_MS);
+    disposers.push(() => clearInterval(themeTick));
   }
 
   // A theme switch is several attribute writes in a row, and re-measuring the
@@ -6196,8 +6196,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // reader is looking at, since what they pressed is on its way out.
   type Anchor = { sel: string; nth: number; at: number; back?: Anchor };
 
-  // In the order they are worth holding on to. What you touched beats what
-  // happens to be on screen, and a named card outlives the blocks inside it.
+  // In the order they are worth holding on to. What you touched comes before
+  // what happens to be on screen, and a named card outlives the blocks inside it.
   const ANCHOR_MARKS = ["data-arf-field", "data-arf-btn", "data-arf-block", "data-arf-row", "data-arf-card"];
 
   function anchorSel(n: any): string | null {

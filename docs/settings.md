@@ -75,13 +75,14 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
-- **One model or two** is a beta. With two, a small second model, Jev or Span, checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks. See [Two models](two-models.md).
+- **One model or two** is a beta. With two, a small second model, Jev or Span, checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks, and every text it sends is in a box you can change. See [Two models](two-models.md).
 
 ## Limits
 
 **Protecting what is not prose.** See [Protecting what is not prose](prompt.md#protecting-what-is-not-prose).
 
 - **Hide markup from the model** and **Hide plain italic and bold too** keep formatting out of the rewrite.
+- **What the model is told about the stand-ins** is the text `{{protect_notes}}` puts in. You can change it. **Use the built-in text** puts it back.
 - **Keep the reply's own reasoning out of the refine** keeps the model's thinking out.
 - **Extra reasoning tag names** is folded under it. Thinking in these tags is already recognised: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Only add a name if your model uses a different one. Thinking that is not recognised is rewritten like prose and saved over the reply.
 - **Patterns of your own to hide** is folded under the markup switch.
