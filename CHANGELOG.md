@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.21.1
+
+_2026-09-27_
+
+### Fixed
+
+- **Span on OpenRouter answered with a 400.** OpenRouter takes Span's state as a conversation: the reply as the assistant's turn, and the reply before it, when it is sent, as the turn ahead. It was sent the named fields Jev takes. The checks are now also put in words for it, the same as on Respan's own API.
+
+---
+
 ## 1.21.0
 
 _2026-09-26_

@@ -1330,10 +1330,29 @@ describe("two models: Jev reads the reply first", () => {
       await wait(50);
       expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
       expect(h.jevCalls[0].body.model).toBe(model);
-      expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
-      expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
+      // OpenRouter takes Span's state as a conversation, and turns away
+      // named fields with a 400. The checks are put in words to match.
+      expect(h.jevCalls[0].body.state).toEqual({ input: [], output: { role: "assistant", content: REPLY } });
+      expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "The reply repeats itself." });
     });
   }
+
+  test("Span on OpenRouter gets the reply before it as the turn ahead", async () => {
+    const h = await keyed({ judgeWho: "span", judgeBefore: true }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const body = h.jevCalls[0].body;
+    expect(body.state.input).toEqual([{ role: "assistant", content: "The gate stands open, and the road past it is dark." }]);
+    expect(body.state.reply).toBeUndefined();
+    expect(body.questions.before_speakers.instructions).toBe("The reply has the characters speak in the same order as the previous reply.");
+  });
+
+  test("and Jev on OpenRouter keeps its named fields", async () => {
+    const h = await keyed({ judgeBefore: true }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(Object.keys(h.jevCalls[0].body.state)).toEqual(["reply", "previous_reply"]);
+  });
 
   test("a host that serves only Jev, left picked, sends Span to OpenRouter", async () => {
     const h = await keyed({ judgeWho: "span", judgeHost: "nanogpt" }, { jev: says([10]) });

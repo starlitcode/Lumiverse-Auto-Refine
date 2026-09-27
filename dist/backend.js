@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.21.0';
+const VERSION = '1.21.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3913,6 +3913,7 @@ const SECOND_MODELS = {
     },
     span: {
         name: 'Span',
+        turns: true,
         hosts: SPAN_HOSTS,
         model: (host) => SPAN_HOSTS[host].models[spanTier] || SPAN_HOSTS[host].models.free || '',
     },
@@ -3958,28 +3959,44 @@ function jevTimeout(work) {
     });
     return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
-// A scores request for Respan's own API. The checks are written about the
-// reply by the name a decisions request gives it, in backticks, and a behavior is written
-// about a conversation, so the names are put in words: the reply becomes the
-// reply, and the list of worn phrases is written out after the words that name
-// it. The reply goes in as the assistant's turn. The reply before it, when it
-// is sent, goes in as the one turn ahead of it, and is named the previous reply.
-function scoresRequest(model, state, questions) {
-    const words = (line) => {
-        const plain = String(line || '')
-            .replace(/`reply`/g, 'the reply')
-            .replace(/`previous_reply`/g, 'the previous reply')
-            .replace(/`worn_phrases`/g, 'this list of phrases (' + String(state.worn_phrases || '').replace(/\s*\n\s*/g, '; ') + ')');
-        return plain.charAt(0).toUpperCase() + plain.slice(1);
+// Span reads a conversation, not named fields. On Respan's own API and on
+// OpenRouter alike, the reply goes in as the assistant's turn, and the reply
+// before it, when it is sent, as the one turn ahead of it. The checks name
+// the reply in backticks, the way Jev's state does, so for Span the names are
+// put in words: the reply, the previous reply, and the list of worn phrases
+// written out after the words that name it.
+function spanTurns(state) {
+    return {
+        input: state.previous_reply ? [{ role: 'assistant', content: String(state.previous_reply) }] : [],
+        output: { role: 'assistant', content: String(state.reply || '') },
     };
+}
+function spanWords(line, state) {
+    const plain = String(line || '')
+        .replace(/`reply`/g, 'the reply')
+        .replace(/`previous_reply`/g, 'the previous reply')
+        .replace(/`worn_phrases`/g, 'this list of phrases (' + String(state.worn_phrases || '').replace(/\s*\n\s*/g, '; ') + ')');
+    return plain.charAt(0).toUpperCase() + plain.slice(1);
+}
+// A scores request, for Respan's own API: each check is a behavior with a
+// definition.
+function scoresRequest(model, state, questions) {
     return {
         model: model,
-        span: {
-            input: state.previous_reply ? [{ role: 'assistant', content: String(state.previous_reply) }] : [],
-            output: { role: 'assistant', content: String(state.reply || '') },
-        },
-        behaviors: Object.keys(questions).map((id) => ({ id: id, definition: words(questions[id] && questions[id].instructions) })),
+        span: spanTurns(state),
+        behaviors: Object.keys(questions).map((id) => ({
+            id: id,
+            definition: spanWords(questions[id] && questions[id].instructions, state),
+        })),
     };
+}
+// A decisions request for a model that reads a conversation, which is how
+// OpenRouter takes Span. It turns away any other state with a 400.
+function turnsRequest(model, state, questions) {
+    const asked = {};
+    for (const id of Object.keys(questions))
+        asked[id] = { ...questions[id], instructions: spanWords(questions[id] && questions[id].instructions, state) };
+    return { model: model, state: spanTurns(state), questions: asked };
 }
 // One call to the second model. Answers with what it said, or with why it
 // could not be asked, in words fit for the Log.
@@ -4007,7 +4024,9 @@ async function askJev(userId, state, questions) {
                 ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: asked }, stream: false }
                 : where.kind === 'scores'
                     ? scoresRequest(where.model, state, questions)
-                    : { model: where.model, state: state, questions: questions });
+                    : secondModel().turns
+                        ? turnsRequest(where.model, state, questions)
+                        : { model: where.model, state: state, questions: questions });
     // Claude-style hosts read the key from x-api-key and want a version header.
     // Both go only to the address the user picked, the same as the bearer key.
     const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
