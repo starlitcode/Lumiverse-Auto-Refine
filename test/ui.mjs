@@ -8211,7 +8211,7 @@ console.log("\nwhen a default moves under somebody who was on it");
       await new Promise((r) => setTimeout(r, 200));
     });
     const after = await stored(page);
-    ok("taking it moves them to the new one", /she didn't move/.test(String(after.now)), JSON.stringify(after));
+    ok("taking it moves them to the new one", /she didn't just leave, she ran/.test(String(after.now)), JSON.stringify(after));
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 

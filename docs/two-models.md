@@ -112,7 +112,7 @@ The ones it starts with:
 ```
 `reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.
 `reply` contains a stock phrase, such as "a breath she didn't know she was holding", "a shiver ran down his spine", "her heart hammered" or "a smile that didn't reach his eyes".
-`reply` says what someone did not do or what something was not, then what they did or what it was, as in "it wasn't a request, it was a command" or "she didn't move. She just stood there".
+`reply` says what someone did not do or what something was not, then what they did or what it was, as in "it wasn't a request, it was a command" or "she didn't just leave, she ran".
 `reply` follows an action with a comment on how it came out, as in "she laughed, and it was thin" or "he smiled, slow and easy".
 `reply` has a character start an action, then take it back, as in "reached out, then pulled back" or "opened her mouth, then closed it".
 `reply` ends with a question to the user about what they do next, as in "What do you do?".
@@ -126,7 +126,7 @@ All but the first match rules the built-in reply prompts carry, with the same ex
 
 The second model is not a chat model. It reads the meaning of a check, not only its words. But it scores whether the statement you wrote is true of the reply, and it does not stretch a check to cover what you meant. So a check that describes a different pattern from the one you have in mind scores low, even on a reply that has your pattern.
 
-For example, a check that says "says what something was not before saying what it was, as in 'it wasn't a request, it was a command'" does not catch "He didn't walk. Just stayed there." That line is about an action, not a thing, and it has no second half that says what it was. The built-in check names both forms for this reason.
+For example, a check that says "says what something was not before saying what it was, as in 'it wasn't a request, it was a command'" does not catch "The kettle didn't whistle. It screamed." That line is about what something did, not what it was. The statement in the check is false of it, so it scores low. The built-in check names both forms for this reason.
 
 Write each check so that:
 
