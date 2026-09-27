@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.21.2
+
+_2026-09-27_
+
+### Fixed
+
+- **Update selected said it updated when nothing had changed.** This is on saved presets and saved model setups. When the one picked already holds the settings on the panel, the line beside the buttons now says so, and nothing is saved. It works the same way as a name already in use.
+- **Put it back said it put something back when nothing had changed.** When what is on the panel is already what was there before the load, the line now says so.
+
+---
+
 ## 1.21.1
 
 _2026-09-27_

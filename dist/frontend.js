@@ -15,11 +15,28 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.21.1";
+const VERSION = "1.21.2";
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
 // backend fills in, so a prompt written then keeps getting the checks.
+// Whether two saved settings hold the same values, whatever order their keys
+// were written in. A key left undefined counts as not there, the way it is
+// when saved. Used to tell an update or a put-back that would change nothing.
+function sameSettings(a, b) {
+    const norm = (v) => {
+        if (Array.isArray(v))
+            return v.map(norm);
+        if (!v || typeof v !== "object")
+            return v;
+        const out = {};
+        for (const k of Object.keys(v).sort())
+            if (v[k] !== undefined)
+                out[k] = norm(v[k]);
+        return out;
+    };
+    return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
 function blockText(raw) {
     return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
 }
@@ -8819,6 +8836,12 @@ export function setup(ctx, overrides) {
             const back = setupUndo;
             if (!back)
                 return;
+            if (back.pick === setupPick && sameSettings(back.settings, setupFromNow())) {
+                setupUndo = null;
+                setupSaid = "This is already what was here before. Nothing changed.";
+                paint();
+                return;
+            }
             applySetup({ name: "", at: 0, settings: back.settings });
             setupPick = back.pick;
             setupName = back.pick;
@@ -8857,6 +8880,11 @@ export function setup(ctx, overrides) {
             const one = chosen();
             if (!one)
                 return;
+            if (sameSettings(one.settings, setupFromNow())) {
+                setupSaid = one.name + " already holds these settings. Nothing changed.";
+                paint();
+                return;
+            }
             one.settings = setupFromNow();
             one.at = Date.now();
             saveSetups();
@@ -11369,6 +11397,14 @@ export function setup(ctx, overrides) {
             const back = presetUndo;
             if (!back)
                 return;
+            if (back.pick === currentPick() &&
+                sameSettings(back.settings, presetFromNow()) &&
+                sameSettings(back.setup, setupFromNow())) {
+                presetUndo = null;
+                presetSaid = "This is already what was here before. Nothing changed.";
+                paint();
+                return;
+            }
             applyPreset({ name: "", at: 0, settings: back.settings }, back.list);
             applySetup({ name: "", at: 0, settings: back.setup });
             // The picker goes back with it. Leaving it on the preset that was just
@@ -11418,6 +11454,11 @@ export function setup(ctx, overrides) {
             const p = chosen();
             if (!p || isBuiltIn(p.name))
                 return;
+            if (sameSettings(p.settings, presetFromNow()) && String(p.setup || "") === String(presetSetup || "")) {
+                presetSaid = p.name + " already holds these settings. Nothing changed.";
+                paint();
+                return;
+            }
             p.settings = presetFromNow();
             p.setup = presetSetup || undefined;
             p.at = Date.now();
@@ -14544,6 +14585,7 @@ export function setup(ctx, overrides) {
 export const __testing = {
     splitSelectorList,
     blockText,
+    sameSettings,
     INPUT_PICKS,
     CONFIG,
     PARTS,

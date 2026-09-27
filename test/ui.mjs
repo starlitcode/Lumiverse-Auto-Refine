@@ -1536,6 +1536,22 @@ console.log("\nrenaming a preset");
     await renameTo("Third");
     await settle(page);
     ok("a new name goes through", (await names()).join() === "First,Third", await names());
+
+    // Update and Put it back that would change nothing say so, the same as a
+    // rename to its own name.
+    const press = (w) => page.evaluate((w) => document.querySelector('#drawer [data-arf-preset="' + w + '"]').click(), w);
+    const savedAt = () =>
+      page.evaluate(() => (JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").find((p) => p.name === "Third") || {}).at);
+    const at = await savedAt();
+    await press("update");
+    await settle(page);
+    ok("updating with nothing changed says it already holds these settings", /Third already holds these settings/i.test(await said()));
+    ok("and saves nothing", (await savedAt()) === at, [at, await savedAt()]);
+    await press("load");
+    await settle(page);
+    await press("undo");
+    await settle(page);
+    ok("putting back a load that changed nothing says so", /already what was here before/i.test(await said()));
   });
   ok("no errors renaming a preset", errors.length === 0, errors.join("\n         "));
 }
@@ -7130,6 +7146,29 @@ console.log("\nmodel setups");
     await settle(page);
     ok("renaming to its own name is refused", /already its name/i.test(await said(page)), await said(page));
     ok("and it keeps that name", (await named(page)).join() === "Cheaper", await named(page));
+
+    // Update with nothing changed since the save, and Put it back with nothing
+    // to undo, change nothing. Each says so, the way a rename to the same name
+    // does, rather than reporting a save or an undo that did not happen.
+    await press(page, "update");
+    await settle(page);
+    ok("updating with nothing changed says it already holds these settings",
+      /Cheaper already holds these settings/i.test(await said(page)), await said(page));
+    await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="thinkingMode"]');
+      sel.value = sel.value === "off" ? "inherit" : "off";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    await press(page, "update");
+    await settle(page);
+    ok("and after a change, it updates", /Updated Cheaper/i.test(await said(page)), await said(page));
+    await press(page, "load");
+    await settle(page);
+    await press(page, "undo");
+    await settle(page);
+    ok("putting back a load that changed nothing says so",
+      /already what was here before/i.test(await said(page)), await said(page));
 
     // Load and the three below it act on whatever the picker names, and saving
     // a new one is what puts it there.
