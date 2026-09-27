@@ -1772,6 +1772,101 @@ console.log("\nSpan, the other second model");
   ok("no console errors", !errors || !errors.length, JSON.stringify(errors));
 }
 
+console.log("\nwhat it compares with the reply before it");
+{
+  // The comparison checks are a box of their own under the switch, shown only
+  // while the switch is on, with their own way back to the built-in list.
+  const vis = (page, sel) =>
+    page.evaluate((sel) => {
+      const n = document.querySelector(sel);
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    }, sel);
+  const BUILT = String(__testing.BEFORE_CHECKS);
+
+  await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+    await goTab(page, "Model");
+    await closed(page);
+    ok("with the switch off, the box is not shown", !(await vis(page, '#drawer [data-arf-row="judgeBeforeChecks"]')));
+    ok("and nor is its button", !(await vis(page, '#drawer [data-arf-jevbefore="builtin"]')));
+  });
+
+  await inTab(
+    browser,
+    { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: "`reply` is made up to match `previous_reply`." } },
+    async (page) => {
+      await goTab(page, "Model");
+      await closed(page);
+      const box = () => page.evaluate(() => (document.querySelector('#drawer [data-arf-field="judgeBeforeChecks"]') || {}).value);
+      ok("with the switch on, the box shows what is saved", (await box()) === "`reply` is made up to match `previous_reply`.", await box());
+      ok("and its own button for the built-in checks", await vis(page, '#drawer [data-arf-jevbefore="builtin"]'));
+      const press = async () => {
+        await page.evaluate(() => document.querySelector('#drawer [data-arf-jevbefore="builtin"]').click());
+        await settle(page);
+        await settle(page);
+      };
+      // With no host dialog, the first press asks for a second one.
+      await press();
+      ok("the first press asks for a second, and changes nothing yet", (await box()) !== BUILT, await box());
+      await press();
+      ok("pressing it again puts the built-in comparison checks back", (await box()) === BUILT, await box());
+      await press();
+      const line = await page.evaluate(() => (document.querySelector('#drawer [data-arf-jevbefore="said"]') || {}).textContent || "");
+      ok("and pressed again, it says they are already the built-in ones", /already the built-in checks/.test(line), line);
+    },
+  );
+}
+
+console.log("\nevery fixed text is a box of its own");
+{
+  // Nothing sent to a model is hidden: the worn-phrase check, the lead-in to
+  // what the checks found, and the note about the stand-ins each have a box
+  // with the built-in text in it and a way back to it.
+  const vis = (page, sel) =>
+    page.evaluate((sel) => {
+      const n = document.querySelector(sel);
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    }, sel);
+  const val = (page, key) =>
+    page.evaluate((k) => (document.querySelector('#drawer [data-arf-field="' + k + '"]') || {}).value, key);
+
+  await inTab(browser, { saved: { judgeMode: "two", judgeWorn: true } }, async (page) => {
+    await goTab(page, "Model");
+    await closed(page);
+    ok("How it asks shows the built-in worn-phrase check", (await val(page, "judgeWornCheck")) === String(__testing.WORN_CHECK), await val(page, "judgeWornCheck"));
+    ok("with its own button", await vis(page, '#drawer [data-arf-jevworn="builtin"]'));
+    ok("the lead-in to what the checks found shows the built-in text", (await val(page, "judgeFoundLead")) === String(__testing.FOUND_LEAD), await val(page, "judgeFoundLead"));
+    ok("with its own button", await vis(page, '#drawer [data-arf-jevlead="builtin"]'));
+    // Typed over, then put back with the button: a first press asks for a
+    // second, with no host dialog on this page.
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field="judgeFoundLead"]');
+      ta.value = "Made-up lead-in.";
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(page);
+    for (let i = 0; i < 2; i++) {
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-jevlead="builtin"]').click());
+      await settle(page);
+      await settle(page);
+    }
+    ok("and the button puts the built-in lead-in back", (await val(page, "judgeFoundLead")) === String(__testing.FOUND_LEAD), await val(page, "judgeFoundLead"));
+  });
+
+  await inTab(browser, { saved: { judgeMode: "two", judgeWorn: false } }, async (page) => {
+    await goTab(page, "Model");
+    await closed(page);
+    ok("with worn phrases off, How it asks is not shown", !(await vis(page, '#drawer [data-arf-row="judgeWornCheck"]')));
+  });
+
+  await inTab(browser, {}, async (page) => {
+    await goTab(page, "Limits");
+    await closed(page);
+    ok("the note about the stand-ins shows the built-in text", (await val(page, "protectNote")) === String(__testing.PROTECT_NOTE), await val(page, "protectNote"));
+    ok("with its own button", await vis(page, '#drawer [data-arf-protectnote="builtin"]'));
+  });
+}
+
 console.log("\none model or two");
 {
   const errors = await inTab(browser, {}, async (page) => {
@@ -3942,9 +4037,8 @@ console.log("\nthe eye on the floating button");
     const mid = await ring();
 
     // A hair before the hold is up, which is the moment the ring has to be
-    // closed by. It used to be given the same length as the hold, so the timer
-    // beat it by a frame every time and the menu opened over a ring stopped a
-    // few per cent short.
+    // closed by. A ring timed to the same length as the hold finishes a frame
+    // after it, and the menu opens over a ring a few per cent short.
     await page.evaluate(() => new Promise((r) => setTimeout(r, 230)));
     const nearlyUp = await ring();
     ok(where + ": holding the button shows it", mid && mid.held === "1" && mid.shown > 0.5, JSON.stringify(mid));
@@ -5259,7 +5353,7 @@ console.log("\nthe working, read as prose");
 
   // A model that leaves the working's closing tag off, which is what a call cut
   // short looks like. Everything after the opening tag is the working, and
-  // showing it beats showing nothing.
+  // showing it is better than showing nothing.
   await inTab(browser, {}, async (page) => {
     await page.evaluate(() => {
       window.__fromBackend({

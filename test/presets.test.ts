@@ -446,15 +446,15 @@ describe("the macros offered and the macros answered", () => {
 
   // The one macro that puts words rather than chat into a prompt writes them
   // out where the macros are listed, so nothing reaches a model unread.
-  test("the macro that carries words says which words", () => {
+  // The words {{protect_notes}} puts in are the panel's to read and change,
+  // under What the model is told about the stand-ins. The backend's default
+  // is the panel's, word for word.
+  test("the macro that carries words has the same default on both sides", () => {
     const note = /const SHIELD_NOTE =\s*([\s\S]*?);\n/.exec(BE);
     const words = (note ? note[1] : "").match(/'([^']*)'/g) || [];
     const sentence = words.map((w) => w.slice(1, -1)).join("");
     expect(sentence.length).toBeGreaterThan(40);
-    const block = FE.slice(FE.indexOf("const MACROS"), FE.indexOf("type Block ="));
-    const shown = block.replace(/"\s*\+\s*\n\s*"/g, "").replace(/\\"/g, '"');
-    for (const part of sentence.split(". ").filter((x) => x.length > 20))
-      expect(shown).toContain(part.slice(0, 40));
+    expect(sentence).toBe((__testing as any).PROTECT_NOTE);
   });
 });
 

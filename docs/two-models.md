@@ -148,6 +148,12 @@ It goes from 1 to 99. The two ends are left out because each one makes the secon
 
 **Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it.
 
+The check it sends is in **How it asks**, under the switch. You can change it. Call the list `worn_phrases` and the reply `reply`, both in backticks. An empty box asks nothing about worn phrases. **Use the built-in checks** under it puts the built-in one back:
+
+```
+`reply` contains at least one phrase listed in `worn_phrases`.
+```
+
 ### Comparing with the reply before it
 
 By default the second model only reads the reply. It does not see the reply before it, so it cannot tell when a reply repeats the one before.
@@ -155,31 +161,30 @@ By default the second model only reads the reply. It does not see the reply befo
 **Also compare with the reply before it** changes that. It is off by default. On:
 
 - The last reply before this one is sent too, without its thinking. Your own messages are skipped.
-- Three checks are added for you. You do not need to write them:
-
-```
-`reply` repeats the beats of `previous_reply`: the same actions and events, in the same order.
-`reply` has the characters speak in the same order as `previous_reply`.
-`reply` describes the surroundings again with the same details `previous_reply` already gave.
-```
-
-- They use the same line as your own checks, under **Refine when a check reaches**.
+- The checks in **What it compares**, the box under the switch, are asked as well.
+- They use the same line as your other checks, under **Refine when a check reaches**.
 - They are not asked when there is no reply before this one, such as on the first reply of a chat.
 - With **Have it check the rewrite** on, the rewrite is compared with the same reply.
 
-Each one is about repeating. A reply that carries the same scene on, in the same place, should not reach the line.
-
-You can also write your own checks about it. Name it `previous_reply`, with backticks, the same way `reply` names the reply. For example:
+The ones it compares with:
 
 ```
-`reply` opens the same way as `previous_reply`.
+`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.
+`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.
+`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.
+`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.
+`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.
 ```
 
-A check of your own that names `previous_reply` is only asked while the switch is on and there is a reply before this one.
+Each one is about repeating, with an example. A reply that carries the same scene on, in the same place, should stay under the line.
+
+**What it compares** is yours to change. Write one check a line. Call this reply `reply` and the one before it `previous_reply`, both in backticks. An empty box asks none of them.
+
+A check in **What the second model checks** can name `previous_reply` too. It is only asked while the switch is on and there is a reply before this one.
 
 ### Putting the built-in checks back
 
-If you make a mistake in **What the second model checks**, press **Use the built-in checks** under the box.
+If you make a mistake in **What the second model checks** or **What it compares**, press **Use the built-in checks** under that box.
 
 - It asks first, because what you wrote is not kept.
 - It only changes the checks. The model, the host, the key, the threshold and the number of models stay as they are.
@@ -223,7 +228,7 @@ If your prompt is your own, add a block with `{{checks_found}}` in it instead. I
 
 What the refine model is given:
 
-- A short lead-in, with the name of the second model you picked. It says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone.
+- A short lead-in. It is the text in **What the refine model is told about the checks**, on the Model tab. You can change it, and **Use the built-in text** puts it back. In it, `{{second_model}}` becomes the name of the second model you picked, and `{{checks_line}}` becomes your line. The built-in lead-in says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone. An empty box sends the checks with no lead-in.
 - Each check that reached your line, strongest first, with its score, like `- reply repeats itself. (91%)`. The backticks are taken out, and `previous_reply` is written as "the reply before it".
 
 The block is empty, and left out of the prompt, whenever the second model did not read the reply or could not decide. That includes one model, a selection, and a button refine with **Let it check refines you start yourself** off.
