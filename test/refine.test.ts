@@ -1355,7 +1355,9 @@ describe("two models: Jev reads the reply first", () => {
     const body = h.jevCalls[0].body;
     expect(body.state.input).toEqual([{ role: "assistant", content: "The gate stands open, and the road past it is dark." }]);
     expect(body.state.reply).toBeUndefined();
-    expect(body.questions.before_speakers.instructions).toBe("The reply has the characters speak in the same order as the previous reply.");
+    expect(body.questions.before_2.instructions).toBe(
+      "The reply has the characters speak in the same order as the previous reply, such as the same character speaking first in both.",
+    );
   });
 
   test("and Jev on OpenRouter keeps its named fields", async () => {
@@ -1476,7 +1478,7 @@ describe("two models: Jev reads the reply first", () => {
   // The reply before this one, sent when the reader asks, so a check can
   // compare the two. It is the last reply before it, with the reader's own
   // messages and the model's working left out.
-  const BEATS = "`reply` follows the same beats as `previous_reply`.";
+  const BEATS = "`reply` follows the same order of events as `previous_reply`.";
   const EARLIER = "The gate stands open, and the road past it is dark.";
 
   test("the reply before it is not sent unless asked for", async () => {
@@ -1498,28 +1500,42 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls[0].body.questions.check_1.instructions).toBe(BEATS);
   });
 
-  // Nobody has to write a check for it: the switch brings its own three.
-  const BUILT_IN_BEFORE = ["before_beats", "before_speakers", "before_place"];
+  // Nobody has to write a check for it: the switch brings the panel's list,
+  // and the backend holds the same list for settings that do not carry it.
+  const BEFORE_LIST = String((__testing as any).BEFORE_CHECKS).split("\n");
+  const BUILT_IN_BEFORE = BEFORE_LIST.map((_: string, i: number) => "before_" + (i + 1));
 
-  test("on, three checks about repeating the reply before it are added", async () => {
-    const h = await keyed({ judgeBefore: true }, { jev: says([10, 20, 30, 40, 70]) });
+  test("on, the checks about repeating the reply before it are added", async () => {
+    const h = await keyed({ judgeBefore: true, judgeBeforeChecks: undefined }, { jev: says([10, 20, 10, 10, 10, 10, 70]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     const q = h.jevCalls[0].body.questions;
     expect(Object.keys(q)).toEqual(["check_1", "check_2", ...BUILT_IN_BEFORE]);
-    for (const id of BUILT_IN_BEFORE) {
-      expect(q[id].type).toBe("noul");
-      expect(q[id].instructions).toContain("`previous_reply`");
-    }
-    // Shown by name, and a hit on one refines the reply like any check.
+    // The backend's own list is the panel's, word for word.
+    expect(BUILT_IN_BEFORE.map((id: string) => q[id].instructions)).toEqual(BEFORE_LIST);
+    // A hit on one refines the reply like any check, and it is shown as written.
     const got = said(h)[0];
-    expect(got.scores.map((x: any) => x.check).slice(2)).toEqual([
-      "Repeats the beats of the reply before it",
-      "Has the characters speak in the same order as the reply before it",
-      "Describes the surroundings again with the same details as the reply before it",
-    ]);
+    expect(got.scores.map((x: any) => x.check).slice(2)).toEqual(BEFORE_LIST);
     expect(got.refine).toBe(true);
     expect(h.asked.length).toBe(1);
+  });
+
+  test("the reader's own comparison checks replace the built-in ones", async () => {
+    const mine = "`reply` opens with the same line of dialogue as `previous_reply`.";
+    const h = await keyed({ judgeBefore: true, judgeBeforeChecks: mine + "\n\n" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const q = h.jevCalls[0].body.questions;
+    expect(Object.keys(q)).toEqual(["check_1", "check_2", "before_1"]);
+    expect(q.before_1.instructions).toBe(mine);
+  });
+
+  test("an empty box asks none, and still sends the reply before it for checks that name it", async () => {
+    const h = await keyed({ judgeBefore: true, judgeBeforeChecks: "", judgeChecks: BEATS }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1"]);
+    expect(h.jevCalls[0].body.state.previous_reply).toBe(EARLIER);
   });
 
   test("off, or with no reply before it, they are not asked", async () => {
@@ -1534,15 +1550,6 @@ describe("two models: Jev reads the reply first", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1", "check_2"]);
-  });
-
-  test("the docs list the three checks exactly as they are sent", async () => {
-    const page = readFileSync(new URL("../docs/two-models.md", import.meta.url), "utf8");
-    const h = await keyed({ judgeBefore: true }, { jev: says([10]) });
-    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
-    await wait(50);
-    const q = h.jevCalls[0].body.questions;
-    for (const id of BUILT_IN_BEFORE) expect(page).toContain("\n" + q[id].instructions + "\n");
   });
 
   test("with no reply before it, a check that names it is left out", async () => {
@@ -1564,9 +1571,9 @@ describe("two models: Jev reads the reply first", () => {
     const body = h.jevCalls[0].body;
     expect(body.span.input).toEqual([{ role: "assistant", content: EARLIER }]);
     expect(body.span.output).toEqual({ role: "assistant", content: REPLY });
-    expect(body.behaviors[0]).toEqual({ id: "check_1", definition: "The reply follows the same beats as the previous reply." });
-    expect(body.behaviors.find((b: any) => b.id === "before_speakers").definition).toBe(
-      "The reply has the characters speak in the same order as the previous reply.",
+    expect(body.behaviors[0]).toEqual({ id: "check_1", definition: "The reply follows the same order of events as the previous reply." });
+    expect(body.behaviors.find((b: any) => b.id === "before_2").definition).toBe(
+      "The reply has the characters speak in the same order as the previous reply, such as the same character speaking first in both.",
     );
   });
 
@@ -1593,7 +1600,7 @@ describe("two models: Jev reads the reply first", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     const text = (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
-    expect(text).toContain("- reply follows the same beats as the reply before it. (90%)");
+    expect(text).toContain("- reply follows the same order of events as the reply before it. (90%)");
   });
 
   test("what goes wrong is said with Span's name", async () => {

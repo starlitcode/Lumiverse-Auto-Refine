@@ -1772,6 +1772,50 @@ console.log("\nSpan, the other second model");
   ok("no console errors", !errors || !errors.length, JSON.stringify(errors));
 }
 
+console.log("\nwhat it compares with the reply before it");
+{
+  // The comparison checks are a box of their own under the switch, shown only
+  // while the switch is on, with their own way back to the built-in list.
+  const vis = (page, sel) =>
+    page.evaluate((sel) => {
+      const n = document.querySelector(sel);
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    }, sel);
+  const BUILT = String(__testing.BEFORE_CHECKS);
+
+  await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+    await goTab(page, "Model");
+    await closed(page);
+    ok("with the switch off, the box is not shown", !(await vis(page, '#drawer [data-arf-row="judgeBeforeChecks"]')));
+    ok("and nor is its button", !(await vis(page, '#drawer [data-arf-jevbefore="builtin"]')));
+  });
+
+  await inTab(
+    browser,
+    { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: "`reply` is made up to match `previous_reply`." } },
+    async (page) => {
+      await goTab(page, "Model");
+      await closed(page);
+      const box = () => page.evaluate(() => (document.querySelector('#drawer [data-arf-field="judgeBeforeChecks"]') || {}).value);
+      ok("with the switch on, the box shows what is saved", (await box()) === "`reply` is made up to match `previous_reply`.", await box());
+      ok("and its own button for the built-in checks", await vis(page, '#drawer [data-arf-jevbefore="builtin"]'));
+      const press = async () => {
+        await page.evaluate(() => document.querySelector('#drawer [data-arf-jevbefore="builtin"]').click());
+        await settle(page);
+        await settle(page);
+      };
+      // With no host dialog, the first press asks for a second one.
+      await press();
+      ok("the first press asks for a second, and changes nothing yet", (await box()) !== BUILT, await box());
+      await press();
+      ok("pressing it again puts the built-in comparison checks back", (await box()) === BUILT, await box());
+      await press();
+      const line = await page.evaluate(() => (document.querySelector('#drawer [data-arf-jevbefore="said"]') || {}).textContent || "");
+      ok("and pressed again, it says they are already the built-in ones", /already the built-in checks/.test(line), line);
+    },
+  );
+}
+
 console.log("\none model or two");
 {
   const errors = await inTab(browser, {}, async (page) => {

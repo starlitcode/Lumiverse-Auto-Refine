@@ -15,7 +15,6 @@ The refine call carries the blocks you see under **How the prompt is built**, an
 - the lorebook entries this chat has active, if that block is on and the `world_books` permission is granted, cut to a size limit
 - what Lumiverse remembers of the chat, if that block is on and the `chats` permission is granted
 - any block you wrote yourself
-- the fixed instruction that makes it an edit, not a new turn
 
 The panel shows what is sent:
 

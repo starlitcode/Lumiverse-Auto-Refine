@@ -155,31 +155,30 @@ By default the second model only reads the reply. It does not see the reply befo
 **Also compare with the reply before it** changes that. It is off by default. On:
 
 - The last reply before this one is sent too, without its thinking. Your own messages are skipped.
-- Three checks are added for you. You do not need to write them:
-
-```
-`reply` repeats the beats of `previous_reply`: the same actions and events, in the same order.
-`reply` has the characters speak in the same order as `previous_reply`.
-`reply` describes the surroundings again with the same details `previous_reply` already gave.
-```
-
-- They use the same line as your own checks, under **Refine when a check reaches**.
+- The checks in **What it compares**, the box under the switch, are asked as well.
+- They use the same line as your other checks, under **Refine when a check reaches**.
 - They are not asked when there is no reply before this one, such as on the first reply of a chat.
 - With **Have it check the rewrite** on, the rewrite is compared with the same reply.
 
-Each one is about repeating. A reply that carries the same scene on, in the same place, should not reach the line.
-
-You can also write your own checks about it. Name it `previous_reply`, with backticks, the same way `reply` names the reply. For example:
+The ones it compares with:
 
 ```
-`reply` opens the same way as `previous_reply`.
+`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.
+`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.
+`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.
+`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.
+`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.
 ```
 
-A check of your own that names `previous_reply` is only asked while the switch is on and there is a reply before this one.
+Each one is about repeating, with an example. A reply that carries the same scene on, in the same place, should stay under the line.
+
+**What it compares** is yours to change. Write one check a line. Call this reply `reply` and the one before it `previous_reply`, both in backticks. An empty box asks none of them.
+
+A check in **What the second model checks** can name `previous_reply` too. It is only asked while the switch is on and there is a reply before this one.
 
 ### Putting the built-in checks back
 
-If you make a mistake in **What the second model checks**, press **Use the built-in checks** under the box.
+If you make a mistake in **What the second model checks** or **What it compares**, press **Use the built-in checks** under that box.
 
 - It asks first, because what you wrote is not kept.
 - It only changes the checks. The model, the host, the key, the threshold and the number of models stay as they are.

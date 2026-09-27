@@ -154,7 +154,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeBefore", "judgeByHand", "judgeAfter"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter"],
     },
     {
         id: "switches",
@@ -252,6 +252,17 @@ const JUDGE_CHECKS = [
     "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
     "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
     "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
+].join("\n");
+// What the second model is asked about the reply before this one, with Also
+// compare with the reply before it on. Each is about repeating, with an
+// example, so a reply that carries the same scene on stays under the line. The
+// backend holds the same list for a reader whose settings do not carry it.
+const BEFORE_CHECKS = [
+    "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
+    "`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.",
+    "`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.",
+    "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
+    "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
 ].join("\n");
 // The checks as they were in 1.20.0 to 1.21.1, word for word. A reader still
 // holding exactly these never wrote their own, and is offered the ones above.
@@ -546,6 +557,7 @@ const CONFIG = {
     // The reply before this one goes to the second model too, and it is asked
     // whether this reply repeats it.
     judgeBefore: false,
+    judgeBeforeChecks: BEFORE_CHECKS,
     // The second model reads the reply before a refine started with a button as well as on
     // the automatic pass. Off, pressing refine goes straight to the refine model.
     judgeByHand: false,
@@ -2039,6 +2051,15 @@ const JUDGE_FIELDS = [
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
         hint: "Off by default. On, the reply before it is sent too, and the second model checks whether this one repeats it.",
+    },
+    {
+        key: "judgeBeforeChecks",
+        label: "What it compares",
+        type: "lines",
+        rows: 7,
+        needs: { key: "judgeBefore" },
+        under: true,
+        hint: "One check per line. Call this reply reply and the one before it previous_reply, in backticks.",
     },
     {
         key: "judgeByHand",
@@ -8737,32 +8758,38 @@ export function setup(ctx, overrides) {
         // the whole "One model or two" part would also switch back to one model
         // and move the host and the threshold, which is more than somebody who
         // mistyped a check wants.
-        const checksRow = el("div", "arf-row");
-        const builtIn = button("Use the built-in checks", false);
-        builtIn.setAttribute("data-arf-jevchecks", "builtin");
-        const checksSaid = el("span", "arf-note");
-        checksSaid.setAttribute("data-arf-jevchecks", "said");
-        builtIn.addEventListener("click", () => {
-            if (sameAsWas(cfg.judgeChecks, JUDGE_CHECKS)) {
-                alreadyBuiltIn(checksSaid, "These are already the built-in checks. Nothing changed.");
-                return;
-            }
-            askFirst("jevchecks", {
-                title: "Use the built-in checks",
-                message: "Replace what is in What the second model checks with the built-in checks? What you wrote there is not kept.",
-                confirmLabel: "Replace",
-            }, "Press Use the built-in checks again to replace yours.", () => {
-                cfg.judgeChecks = JUDGE_CHECKS;
-                persist(true);
-                paint();
-                toast("The built-in checks are back.", true);
+        const builtInRow = (key, list, label, tag, shows) => {
+            const row = el("div", "arf-row");
+            const builtIn = button("Use the built-in checks", false);
+            builtIn.setAttribute("data-arf-" + tag, "builtin");
+            const said = el("span", "arf-note");
+            said.setAttribute("data-arf-" + tag, "said");
+            builtIn.addEventListener("click", () => {
+                if (sameAsWas(cfg[key], list)) {
+                    alreadyBuiltIn(said, "These are already the built-in checks. Nothing changed.");
+                    return;
+                }
+                askFirst(tag, {
+                    title: "Use the built-in checks",
+                    message: "Replace what is in " + label + " with the built-in checks? What you wrote there is not kept.",
+                    confirmLabel: "Replace",
+                }, "Press Use the built-in checks again to replace yours.", () => {
+                    cfg[key] = list;
+                    persist(true);
+                    paint();
+                    toast("The built-in checks are back.", true);
+                });
             });
-        });
-        checksRow.appendChild(builtIn);
-        checksRow.appendChild(checksSaid);
-        wrap.appendChild(hangsOff(checksRow, () => cfg.judgeMode === "two", "jev checks"));
-        for (const f of afterChecks)
+            row.appendChild(builtIn);
+            row.appendChild(said);
+            return hangsOff(row, shows, tag);
+        };
+        wrap.appendChild(builtInRow("judgeChecks", JUDGE_CHECKS, "What the second model checks", "jevchecks", () => cfg.judgeMode === "two"));
+        for (const f of afterChecks) {
             wrap.appendChild(fieldRow(f));
+            if (f.key === "judgeBeforeChecks")
+                wrap.appendChild(builtInRow("judgeBeforeChecks", BEFORE_CHECKS, "What it compares", "jevbefore", () => cfg.judgeMode === "two" && !!cfg.judgeBefore));
+        }
         // Where the findings go is a block on the Prompt tab, which is a long way
         // from here. Said only while nothing is set up to take them.
         if (cfg.judgeMode === "two" && noJevFoundBlock()) {
@@ -14610,6 +14637,7 @@ export const __testing = {
     MOVED_DEFAULTS,
     JUDGE_FIELDS,
     JUDGE_CHECKS,
+    BEFORE_CHECKS,
     COST_FIELDS,
     LIMIT_FIELDS,
     MACROS,

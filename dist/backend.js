@@ -3889,9 +3889,12 @@ let judgeChecks = [];
 let judgeOver = 40;
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
-// `previous_reply`, with the checks in BEFORE_CHECKS. A check of the reader's
-// own can name it as well.
+// `previous_reply`, with the checks in judgeBeforeChecks. A check in the main
+// list can name it as well.
 let judgeBefore = false;
+// The reader's own comparison checks. Null until the panel sends the box,
+// which leaves BEFORE_CHECKS in use.
+let judgeBeforeChecks = null;
 // Whether the second model also reads a reply before a refine somebody starts
 // with a button. Off, a refine asked for by hand goes ahead without it.
 let judgeByHand = false;
@@ -4116,26 +4119,16 @@ async function askJev(userId, state, questions) {
     const model = typeof data.model === 'string' ? data.model.slice(0, 100) : '';
     return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0, model: model };
 }
-// What is asked about the reply before this one, when that is sent. Each is
-// about one thing, and each is about repeating, so a reply that carries the
-// same scene on is not caught by it. The display name is what the Log, the
-// card and {{checks_found}} show.
+// What is asked about the reply before this one, when that is sent and the
+// reader has not written their own. The same list as the panel's box, so a
+// reader who never opened it is asked what the panel shows. Each is about
+// repeating, so a reply that carries the same scene on is not caught by it.
 const BEFORE_CHECKS = [
-    {
-        id: 'before_beats',
-        line: '`reply` repeats the beats of `previous_reply`: the same actions and events, in the same order.',
-        shown: 'Repeats the beats of the reply before it',
-    },
-    {
-        id: 'before_speakers',
-        line: '`reply` has the characters speak in the same order as `previous_reply`.',
-        shown: 'Has the characters speak in the same order as the reply before it',
-    },
-    {
-        id: 'before_place',
-        line: '`reply` describes the surroundings again with the same details `previous_reply` already gave.',
-        shown: 'Describes the surroundings again with the same details as the reply before it',
-    },
+    "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
+    "`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.",
+    "`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.",
+    "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
+    "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
 ];
 // The checks, and the worn phrases when there are any, put to the second model
 // about one reply. A check above the line is a reply worth refining.
@@ -4157,10 +4150,11 @@ async function judgeReply(userId, reply, worn, before) {
     const state = { reply: reply.slice(0, JEV_REPLY_MAX) };
     if (hasBefore) {
         state.previous_reply = String(before).slice(0, JEV_REPLY_MAX);
-        for (const one of BEFORE_CHECKS) {
-            questions[one.id] = { type: NOUL, instructions: one.line };
-            asked.push({ id: one.id, check: one.shown });
-        }
+        (judgeBeforeChecks || BEFORE_CHECKS).forEach((line, i) => {
+            const id = 'before_' + (i + 1);
+            questions[id] = { type: NOUL, instructions: line };
+            asked.push({ id: id, check: line });
+        });
     }
     if (judgeWorn && worn.trim()) {
         state.worn_phrases = worn;
@@ -4424,6 +4418,14 @@ function applyRules(s) {
     judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 40;
     judgeWorn = s.judgeWorn !== false;
     judgeBefore = s.judgeBefore === true;
+    judgeBeforeChecks =
+        typeof s.judgeBeforeChecks === 'string'
+            ? s.judgeBeforeChecks
+                .split('\n')
+                .map((l) => l.trim().slice(0, 500))
+                .filter(Boolean)
+                .slice(0, JEV_CHECKS_MAX)
+            : null;
     judgeByHand = s.judgeByHand === true;
     judgeAfter = s.judgeAfter === true;
     asSwipe = !!s.asSwipe;
