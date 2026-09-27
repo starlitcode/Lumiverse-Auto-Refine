@@ -50,6 +50,16 @@ behaves, goes into both.
 - The built-in prompts carry a mark worked out from their text. Changing their
   text tells every user the built-in prompts have changed, so do it on purpose.
 
+## Second models
+
+- Each second model has its own **Refine when a check reaches** line, with its
+  own default. Scoring models do not score on the same scale. Some give low
+  scores even on a reply with a problem, and some give high ones. Span's line
+  is 25 and Jev's is 50 for this reason.
+- A new second model gets its own line setting and its own default, set from
+  how that model scores. It never reuses another model's line. Say in
+  `docs/two-models.md` why its default is where it is.
+
 ## Writing
 
 This covers code comments, docs, the changelog, the README, and every word
