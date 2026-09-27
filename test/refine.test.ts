@@ -1226,6 +1226,17 @@ describe("two models: Jev reads the reply first", () => {
     expect(done.ok).toBe(true);
   });
 
+  // The Test button goes through the same call as a real check, so Span on
+  // OpenRouter gets the conversation there too, not the named field.
+  test("Test sends Span on OpenRouter the question as a conversation", async () => {
+    const h = await keyed({ judgeWho: "span" }, { jev: says([100]) });
+    await h.front({ type: "jev_test", requestId: "t" });
+    const body = h.jevCalls[0].body;
+    expect(body.state).toEqual({ input: [], output: { role: "assistant", content: "The door is open." } });
+    expect(body.questions.open.instructions).toBe("The door in the reply is open.");
+    expect(h.sent.find((m: any) => m.type === "jev_tested").ok).toBe(true);
+  });
+
   test("Test tells the panel its score, cost, and where it went, but never the key", async () => {
     const h = await keyed({ judgeOver: 60 }, { jev: says([97]) });
     await h.front({ type: "jev_test", requestId: "t" });
