@@ -3097,6 +3097,24 @@ export function setup(ctx: Ctx, overrides?: any) {
     return m.name;
   }
 
+  // The host the second model is reached on, as the host list shows it. A
+  // host the picked model is not on shows as OpenRouter, and the backend
+  // falls back the same way.
+  function keyHost(): string {
+    const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
+    const opt = f && f.options ? f.options.find((o: any) => o.value === cfg.judgeHost) : null;
+    if (!opt) return "openrouter";
+    const needs = (opt as any).needs;
+    return !needs || (cfg as any)[needs.key] === needs.is ? String(opt.value) : "openrouter";
+  }
+
+  // A host's name as the host list gives it.
+  function hostName(host: string): string {
+    const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
+    const opt = f && f.options ? f.options.find((o: any) => o.value === host) : null;
+    return opt ? String(opt.label) : host;
+  }
+
   function sameAsWas(now: any, was: any): boolean {
     if (typeof was !== "string") return steady(now) === steady(was);
     const lines = (v: any) =>
@@ -7924,10 +7942,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.addEventListener("change", () => {
         cfg[f.key] = sel.value;
         persist(true);
-        // The second model's name is written into the rows around it, the key
-        // most of all, so changing it redraws the card rather than only
-        // showing and hiding rows.
-        if (f.key === "judgeWho") {
+        // The second model's name and its host are written into the rows
+        // around them, and the key row is for the host, so changing either
+        // redraws the card rather than only showing and hiding rows.
+        if (f.key === "judgeWho" || f.key === "judgeHost") {
           paint();
           return;
         }
@@ -9041,13 +9059,25 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Two-model mode, and the key the second model is reached with. The key is sent to the
   // backend once and kept in Lumiverse's secure store. The panel is only told
   // whether there is one, so it never sits in the settings or an export.
+  // A key is kept for each host. jevHas is for the host shown, and jevHosts
+  // lists every host with a key kept.
   let jevHas: boolean | null = null;
+  let jevHosts: string[] = [];
   let jevSaid = "";
   let jevAsk = "";
-  // Asked once per panel. The card is rebuilt on every paint, and asking on
-  // each one sent a question per keystroke while the answer was on its way.
-  let jevStatusAsked = false;
+  // The host last asked about. Asked once per host rather than per paint: the
+  // card is rebuilt on every paint, and asking on each one sent a question per
+  // keystroke while the answer was on its way.
+  let jevStatusFor = "";
   function buildJudgeCard(): HTMLElement {
+    // Asked only once two models are on, since nothing about the second model
+    // shows before, and again whenever the host shown changes.
+    if (cfg.judgeMode === "two" && jevStatusFor !== keyHost()) {
+      jevStatusFor = keyHost();
+      jevHas = null;
+      jevSaid = "";
+      send({ type: "jev_key_status", requestId: newId(), host: jevStatusFor });
+    }
     const wrap = card(
       "One model or two",
       "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.",
@@ -9068,7 +9098,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const keyRow = el("div", "arf-col");
     keyRow.setAttribute("data-arf-jevkey", "1");
-    const lab = el("span", "arf-lab", whoName() + " key");
+    const lab = el("span", "arf-lab", keyHost() === "custom" ? "Key for another address" : "Key for " + hostName(keyHost()));
     lab.id = "arf-jevkey-name";
     keyRow.appendChild(lab);
     const box = document.createElement("input");
@@ -9077,7 +9107,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.setAttribute("aria-labelledby", lab.id);
     box.setAttribute("autocomplete", "off");
     box.setAttribute("data-arf-jevkey-box", "1");
-    box.placeholder = jevHas ? "A key is saved. Paste a new one to replace it." : "Paste the key from your " + whoName() + " host";
+    box.placeholder = jevHas
+      ? "A key is saved. Paste a new one to replace it."
+      : keyHost() === "custom"
+        ? "Paste the key for the address above"
+        : "Paste the key from " + hostName(keyHost());
     keyRow.appendChild(box);
     const acts = el("div", "arf-row");
     const save = button("Save key", false);
@@ -9092,7 +9126,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       jevSaid = "Saving.";
       jevAsk = newId();
-      send({ type: "jev_key_set", requestId: jevAsk, key: key });
+      send({ type: "jev_key_set", requestId: jevAsk, key: key, host: keyHost() });
       paint();
     });
     const forget = button("Forget key", false);
@@ -9102,7 +9136,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     forget.addEventListener("click", () => {
       jevSaid = "Forgetting.";
       jevAsk = newId();
-      send({ type: "jev_key_forget", requestId: jevAsk });
+      send({ type: "jev_key_forget", requestId: jevAsk, host: keyHost() });
       paint();
     });
     const test = button("Test", false);
@@ -9129,6 +9163,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     said.setAttribute("data-arf-jevsaid", "1");
     keyRow.appendChild(said);
+    if (jevHosts.length) {
+      const kept = note("Keys are saved for: " + jevHosts.map(hostName).join(", ") + ". Picking a host uses its key.");
+      kept.setAttribute("data-arf-jevkept", "1");
+      keyRow.appendChild(kept);
+    }
     wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
 
     const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
@@ -9162,11 +9201,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(
         bad("The CORS proxy permission is refused, so " + whoName() + " cannot be asked and every reply is refined as it is with one model."),
       );
-    // Asked only once two models are on, since nothing about the second model shows before.
-    if (cfg.judgeMode === "two" && jevHas == null && !jevStatusAsked) {
-      jevStatusAsked = true;
-      send({ type: "jev_key_status", requestId: newId() });
-    }
     return wrap;
   }
 
@@ -14410,6 +14444,13 @@ export function setup(ctx: Ctx, overrides?: any) {
           // Whether a key is saved is true whichever question it answers, so
           // every one of these is taken.
           if (msg.type === "jev_key") {
+            if (Array.isArray(msg.hosts)) jevHosts = msg.hosts.map((h: any) => String(h));
+            // An answer about a host no longer shown still updates the list,
+            // and leaves the rest alone.
+            if (msg.host && String(msg.host) !== keyHost()) {
+              paint();
+              return;
+            }
             jevHas = !!msg.has;
             const said = String(msg.said || "");
             jevSaid =

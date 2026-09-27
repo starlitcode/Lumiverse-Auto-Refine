@@ -21,12 +21,18 @@ Everything is on the Model tab, in **One model or two**.
 2. Pick **Which second model**: Jev or Span.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. See [Another address](#another-address).
 4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span).
-5. Paste a key from that host under the key box and press **Save key**. The box is called **Jev key** or **Span key**, after the model you picked. The key has to come from the host you picked.
+5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
 Two-model mode also needs the `cors_proxy` permission, since the second model is not a chat model and no connection profile can reach it. Without it the panel says so and every reply is refined, the same as with one model.
 
-There is one key box, whichever model you pick. If you change model or host, save a key from the new host.
+A key is kept for each host:
+
+- Save a key once for each host you use. Picking a host uses the key saved for it.
+- A key belongs to the host, not the model. An OpenRouter key is used for Jev and for Span on OpenRouter.
+- **Keys are saved for**, under the box, lists the hosts that have a key.
+- **Forget key** deletes the key for the host shown. The others are kept.
+- A key saved before keys were kept per host is moved to the host you have picked the first time it is used.
 
 ## Which Jev
 

@@ -10,6 +10,15 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-09-27_
 
+### Added
+
+- **A key is kept for each host.** Switching between Jev and Span, or between hosts, no longer means pasting a key again.
+  - Picking a host uses the key saved for it. The key box is named after the host, such as **Key for OpenRouter**.
+  - A key belongs to the host, not the model. An OpenRouter key is used for Jev and for Span on OpenRouter.
+  - **Keys are saved for**, under the box, lists the hosts that have a key.
+  - **Forget key** deletes the key for the host shown and keeps the others.
+  - The key you already saved is kept. It is moved to the host you have picked the first time it is used.
+
 ### Changed
 
 - **Refine when a check reaches is lower for both second models.** Both often give a low score to a check they find true in the reply, and the old lines left many of those replies alone. A check they find false scores close to 0. See [What the second model checks](docs/two-models.md#what-the-second-model-checks).

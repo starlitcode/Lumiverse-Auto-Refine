@@ -3863,7 +3863,12 @@ function jevKindOf(url) {
         return 'scores';
     return 'decisions';
 }
+// One key is kept for each host, since a key belongs to the host and not the
+// model: an OpenRouter key reaches Jev and Span alike. Each is its own secret,
+// named after the host. The name with nothing after it is where the one key
+// was kept before there was one per host.
 const JEV_KEY = 'jev_api_key';
+const keyName = (host) => JEV_KEY + '.' + host;
 // A decision comes back in well under a second, so twenty is a host that is
 // down rather than one that is slow.
 const JEV_TIMEOUT_MS = 20000;
@@ -3939,25 +3944,79 @@ function secondModel() {
 function who() {
     return secondModel().name;
 }
+// The host a model is reached on. A host this model is not on, left picked
+// from another model, falls back to OpenRouter, which is what the panel shows
+// in its place.
+function hostFor(who, host) {
+    if (host === 'custom')
+        return 'custom';
+    const m = SECOND_MODELS[who] || SECOND_MODELS.jev;
+    return m.hosts[host] ? host : 'openrouter';
+}
+// A host's name, for what the Log says. The panel's host list uses the same.
+const HOST_LABELS = {
+    openrouter: 'OpenRouter',
+    nanogpt: 'NanoGPT',
+    typesafe: 'TypeSafe',
+    respan: 'Respan',
+    custom: 'the address you gave',
+};
+const hostLabel = (host) => HOST_LABELS[host] || host;
+// Every host a key can be kept for.
+function keyHosts() {
+    const all = ['custom'];
+    for (const k of Object.keys(SECOND_MODELS))
+        for (const h of Object.keys(SECOND_MODELS[k].hosts))
+            if (all.indexOf(h) < 0)
+                all.push(h);
+    return all;
+}
 function jevWhere() {
-    if (judgeHost === 'custom')
+    const host = hostFor(judgeWho, judgeHost);
+    if (host === 'custom')
         return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
     const m = secondModel();
-    // A host this model is not on, left picked from another model, falls back
-    // to OpenRouter, which is what the panel shows in its place.
-    const host = m.hosts[judgeHost] ? judgeHost : 'openrouter';
     return { url: m.hosts[host].url, model: m.model(host), kind: m.hosts[host].kind };
 }
-async function jevKey(userId) {
+// The key kept for one host. A key saved before there was one per host is
+// moved to the first host it is looked for on, which is the host picked at
+// the time: the panel asks for it on load, and a reply asks for it before the
+// call.
+async function jevKey(userId, host) {
     try {
         if (!spindle.enclave || typeof spindle.enclave.get !== 'function')
             return '';
-        const got = await spindle.enclave.get(JEV_KEY, userId);
-        return got == null ? '' : String(got);
+        const got = await spindle.enclave.get(keyName(host), userId);
+        if (got != null && got !== '')
+            return String(got);
+        const old = await spindle.enclave.get(JEV_KEY, userId);
+        if (old == null || old === '')
+            return '';
+        await spindle.enclave.put(keyName(host), String(old), userId);
+        await spindle.enclave.delete(JEV_KEY, userId);
+        return String(old);
     }
     catch (_) {
         return '';
     }
+}
+// The hosts that have a key kept, for the panel to list. Read with has, so no
+// key is decrypted to answer.
+async function hostsWithKeys(userId) {
+    const out = [];
+    try {
+        if (!spindle.enclave)
+            return out;
+        for (const h of keyHosts()) {
+            const there = typeof spindle.enclave.has === 'function'
+                ? await spindle.enclave.has(keyName(h), userId)
+                : (await spindle.enclave.get(keyName(h), userId)) != null;
+            if (there)
+                out.push(h);
+        }
+    }
+    catch (_) { }
+    return out;
 }
 // What the enclave will take: printable ASCII, and far less of it than its
 // limit. A key with a line break pasted onto its end is the usual way this
@@ -4020,9 +4079,9 @@ async function askJev(userId, state, questions) {
         return { error: 'no address is set for ' + who() };
     if (!where.model)
         return { error: 'no model name is set for ' + who() };
-    const key = await jevKey(userId);
+    const key = await jevKey(userId, hostFor(judgeWho, judgeHost));
     if (!key)
-        return { error: 'no ' + who() + ' key is saved' };
+        return { error: 'no key is saved for ' + hostLabel(hostFor(judgeWho, judgeHost)) };
     if (typeof spindle.cors !== 'function')
         return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
     // A chat API request carries the state as text. It goes as JSON, so the
@@ -5159,6 +5218,10 @@ async function onPanel(payload, userId) {
         // The key for the second model. It comes in once, goes into the enclave, and is never sent
         // back: the panel is only ever told whether there is one.
         if (payload.type === 'jev_key_set' || payload.type === 'jev_key_forget' || payload.type === 'jev_key_status') {
+            // The host the panel shows, checked against the ones there are. A host
+            // this build does not know, or none, is the one the settings pick.
+            const asked = String(payload.host == null ? '' : payload.host);
+            const host = keyHosts().indexOf(asked) >= 0 ? asked : hostFor(judgeWho, judgeHost);
             let said = '';
             try {
                 if (!spindle.enclave)
@@ -5168,19 +5231,27 @@ async function onPanel(payload, userId) {
                     if (!key)
                         said = 'that does not look like a key: it has to be one line of plain characters';
                     else {
-                        await spindle.enclave.put(JEV_KEY, key, userId);
+                        await spindle.enclave.put(keyName(host), key, userId);
                         said = 'saved';
                     }
                 }
                 else if (payload.type === 'jev_key_forget') {
-                    await spindle.enclave.delete(JEV_KEY, userId);
+                    await spindle.enclave.delete(keyName(host), userId);
                     said = 'forgotten';
                 }
             }
             catch (e) {
                 said = 'the key could not be stored: ' + ((e && e.message) || String(e));
             }
-            replyTo(userId, { type: 'jev_key', requestId: payload.requestId, has: !!(await jevKey(userId)), said: said });
+            const has = !!(await jevKey(userId, host));
+            replyTo(userId, {
+                type: 'jev_key',
+                requestId: payload.requestId,
+                host: host,
+                has: has,
+                hosts: await hostsWithKeys(userId),
+                said: said,
+            });
             return;
         }
         // One small question with nothing from any chat in it, so a key can be

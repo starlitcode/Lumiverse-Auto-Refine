@@ -888,7 +888,7 @@ describe("two models: Jev reads the reply first", () => {
     const h = await keyed({}, { jev: says([90]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
-    expect(h.vault["u1:jev_api_key"]).toBe("sk-made-up-key");
+    expect(h.vault["u1:jev_api_key.openrouter"]).toBe("sk-made-up-key");
     expect(JSON.stringify(h.sent)).not.toContain("sk-made-up-key");
     expect(JSON.stringify(h.perUser)).not.toContain("sk-made-up-key");
     expect(JSON.stringify(h.shared)).not.toContain("sk-made-up-key");
@@ -930,7 +930,7 @@ describe("two models: Jev reads the reply first", () => {
     await wait(50);
     expect(h.jevCalls.length).toBe(0);
     expect(h.asked.length).toBe(1);
-    expect(said(h)[0].why).toMatch(/no Jev key/);
+    expect(said(h)[0].why).toBe("no key is saved for OpenRouter");
   });
 
   test("pressing the button is never held back by Jev", async () => {
@@ -1226,16 +1226,74 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "judging")).toBe(false);
   });
 
+  // A key belongs to its host, so one is kept for each. Switching host uses
+  // the key kept for it, and switching model on the same host keeps the key.
+  test("a key is kept for each host, and forgetting one leaves the others", async () => {
+    const h = await armed([], TWO);
+    await h.front({ type: "jev_key_set", requestId: "a", key: "sk-router-made-up", host: "openrouter" });
+    await h.front({ type: "jev_key_set", requestId: "b", key: "sk-typesafe-made-up", host: "typesafe" });
+    expect(h.vault["u1:jev_api_key.openrouter"]).toBe("sk-router-made-up");
+    expect(h.vault["u1:jev_api_key.typesafe"]).toBe("sk-typesafe-made-up");
+    await h.front({ type: "jev_key_status", requestId: "c", host: "typesafe" });
+    const status = h.sent.filter((m: any) => m.type === "jev_key").pop();
+    expect(status.host).toBe("typesafe");
+    expect(status.has).toBe(true);
+    expect(status.hosts.sort()).toEqual(["openrouter", "typesafe"]);
+    await h.front({ type: "jev_key_forget", requestId: "d", host: "typesafe" });
+    expect(h.vault["u1:jev_api_key.typesafe"]).toBeUndefined();
+    expect(h.vault["u1:jev_api_key.openrouter"]).toBe("sk-router-made-up");
+    expect(h.sent.filter((m: any) => m.type === "jev_key").pop().hosts).toEqual(["openrouter"]);
+    // No key is ever sent back.
+    expect(JSON.stringify(h.sent)).not.toContain("made-up");
+  });
+
+  test("a reply is checked with the key for the host picked", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeHost: "typesafe" }, chat(), { jev: says([10]) });
+    // Saved last, the other host's key is the one a single slot would hold.
+    await h.front({ type: "jev_key_set", requestId: "a", key: "sk-typesafe-made-up", host: "typesafe" });
+    await h.front({ type: "jev_key_set", requestId: "b", key: "sk-router-made-up", host: "openrouter" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].init.headers.Authorization).toBe("Bearer sk-typesafe-made-up");
+  });
+
+  test("the key kept for a host reaches both models on it", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeWho: "span" }, chat(), { jev: says([10]) });
+    await h.front({ type: "jev_key_set", requestId: "a", key: "sk-router-made-up", host: "openrouter" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].init.headers.Authorization).toBe("Bearer sk-router-made-up");
+  });
+
+  test("a key saved before there was one per host moves to the host picked", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeHost: "typesafe" }, chat(), { jev: says([10]) });
+    h.vault["u1:jev_api_key"] = "sk-older-made-up";
+    await h.front({ type: "jev_key_status", requestId: "a", host: "typesafe" });
+    expect(h.sent.filter((m: any) => m.type === "jev_key").pop().has).toBe(true);
+    expect(h.vault["u1:jev_api_key.typesafe"]).toBe("sk-older-made-up");
+    expect(h.vault["u1:jev_api_key"]).toBeUndefined();
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].init.headers.Authorization).toBe("Bearer sk-older-made-up");
+  });
+
+  test("a host the panel names that does not exist is the host the settings pick", async () => {
+    const h = await armed([], { ...TWO, judgeHost: "typesafe" });
+    await h.front({ type: "jev_key_set", requestId: "a", key: "sk-typesafe-made-up", host: "no-such-host" });
+    expect(h.vault["u1:jev_api_key.typesafe"]).toBe("sk-typesafe-made-up");
+    expect(h.vault["u1:jev_api_key.no-such-host"]).toBeUndefined();
+  });
+
   test("a pasted key is trimmed, and one that cannot be a key is refused", async () => {
     const h = await armed([], TWO);
     await h.front({ type: "jev_key_set", requestId: "a", key: "  sk-trimmed\n" });
-    expect(h.vault["u1:jev_api_key"]).toBe("sk-trimmed");
+    expect(h.vault["u1:jev_api_key.openrouter"]).toBe("sk-trimmed");
     await h.front({ type: "jev_key_set", requestId: "b", key: "two\nlines" });
     const back = h.sent.filter((m: any) => m.type === "jev_key");
     expect(back[1].said).toMatch(/does not look like a key/);
-    expect(h.vault["u1:jev_api_key"]).toBe("sk-trimmed");
+    expect(h.vault["u1:jev_api_key.openrouter"]).toBe("sk-trimmed");
     await h.front({ type: "jev_key_forget", requestId: "c" });
-    expect(h.vault["u1:jev_api_key"]).toBeUndefined();
+    expect(h.vault["u1:jev_api_key.openrouter"]).toBeUndefined();
     expect(h.sent.filter((m: any) => m.type === "jev_key")[2].has).toBe(false);
   });
 

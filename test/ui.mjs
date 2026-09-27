@@ -1749,7 +1749,7 @@ console.log("\nSpan, the other second model");
     ok("both second models are offered", jev.who.join() === "jev,span", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
-    ok("the key is called the Jev key", jev.key === "Jev key", String(jev.key));
+    ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
     ok("and only Jev's line shows", jev.jevLine && !jev.spanLine, JSON.stringify(jev));
     ok("there is a link for each model", jev.links.length === 2 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
 
@@ -1759,12 +1759,31 @@ console.log("\nSpan, the other second model");
     ok("with Span, Span's hosts are offered", span.hosts.join() === "openrouter,respan,custom", JSON.stringify(span.hosts));
     ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
     ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
-    ok("the key is called the Span key", span.key === "Span key", String(span.key));
+    ok("and the same key is used for Span on the same host", span.key === "Key for OpenRouter", String(span.key));
     ok("and only Span's line shows, at 15", span.spanLine && !span.jevLine && span.spanLineValue === "15", JSON.stringify(span));
 
     await pick("judgeHost", "respan");
     const respan = await read();
     ok("on Respan, the paid Lite is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
+    ok("and the key is Respan's", respan.key === "Key for Respan", String(respan.key));
+    const keys = await page.evaluate(async () => {
+      const asked = window.__sent.filter((m) => m.type === "jev_key_status").map((m) => m.host);
+      window.__fromBackend({ type: "jev_key", host: "respan", has: true, hosts: ["openrouter", "respan"], said: "" });
+      await new Promise((r) => setTimeout(r, 150));
+      const read = () => ({
+        said: (document.querySelector("#drawer [data-arf-jevsaid]") || {}).textContent || "",
+        kept: (document.querySelector("#drawer [data-arf-jevkept]") || {}).textContent || "",
+      });
+      const first = read();
+      // An answer about a host no longer shown, arriving late.
+      window.__fromBackend({ type: "jev_key", host: "openrouter", has: false, hosts: ["openrouter", "respan"], said: "" });
+      await new Promise((r) => setTimeout(r, 150));
+      return { asked, first, late: read() };
+    });
+    ok("changing host asks about that host's key", keys.asked.indexOf("respan") >= 0, JSON.stringify(keys.asked));
+    ok("the hosts with a key are listed by name", /Keys are saved for: OpenRouter, Respan\./.test(keys.first.kept), JSON.stringify(keys.first));
+    ok("and the host shown says its key is saved", /A key is saved/.test(keys.first.said), JSON.stringify(keys.first));
+    ok("a late answer about another host does not change it", /A key is saved/.test(keys.late.said), JSON.stringify(keys.late));
 
     await pick("judgeHost", "custom");
     await closed(page);
