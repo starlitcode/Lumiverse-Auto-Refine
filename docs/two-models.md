@@ -64,10 +64,10 @@ The name each host is sent:
 
 Respan has no paid Lite, so it is not in the list for Respan. If you picked it on OpenRouter and then change to Respan, the free one is sent.
 
-**On OpenRouter**, Span takes the same kind of request as Jev. **On Respan's own API**, the request is a different shape. The panel does this for you:
+Span reads a conversation, not named fields. **On OpenRouter** it takes the same kind of request as Jev, with the reply sent as a conversation. **On Respan's own API** the request is a scores request. The panel does this for you on both:
 
 - The reply is sent as the assistant's turn of a conversation.
-- Each check is sent as a behavior. The word `reply` in backticks is written out as "the reply".
+- The word `reply` in backticks is written out as "the reply" in each check. On Respan's own API, each check is sent as a behavior.
 - With **Also compare with the reply before it** on, that reply is sent as the turn before, and `previous_reply` is written out as "the previous reply". See [Comparing with the reply before it](#comparing-with-the-reply-before-it).
 - A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
 - Respan's own API only scores once Respan has switched Span-01 on for your account. Until then, **Test** says "Span turned the call down (403: Span-01 scoring is not enabled for your organization...)". Ask Respan for access, or pick OpenRouter as the host, which needs no access request.
