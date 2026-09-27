@@ -1749,7 +1749,7 @@ console.log("\nSpan, the other second model");
     ok("both second models are offered", jev.who.join() === "jev,span", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
-    ok("the key is called the Jev key", jev.key === "Jev key", String(jev.key));
+    ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
     ok("and only Jev's line shows", jev.jevLine && !jev.spanLine, JSON.stringify(jev));
     ok("there is a link for each model", jev.links.length === 2 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
 
@@ -1759,17 +1759,56 @@ console.log("\nSpan, the other second model");
     ok("with Span, Span's hosts are offered", span.hosts.join() === "openrouter,respan,custom", JSON.stringify(span.hosts));
     ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
     ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
-    ok("the key is called the Span key", span.key === "Span key", String(span.key));
-    ok("and only Span's line shows, at 25", span.spanLine && !span.jevLine && span.spanLineValue === "25", JSON.stringify(span));
+    ok("and the same key is used for Span on the same host", span.key === "Key for OpenRouter", String(span.key));
+    ok("and only Span's line shows, at 15", span.spanLine && !span.jevLine && span.spanLineValue === "15", JSON.stringify(span));
 
     await pick("judgeHost", "respan");
     const respan = await read();
     ok("on Respan, the paid Lite is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
+    ok("and the key is Respan's", respan.key === "Key for Respan", String(respan.key));
+    ok("the http switch is only for another address", !(await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-row="judgeHttpOk"]');
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    })), "");
+    const keys = await page.evaluate(async () => {
+      const asked = window.__sent.filter((m) => m.type === "jev_key_status").map((m) => m.host);
+      window.__fromBackend({ type: "jev_key", host: "respan", has: true, hosts: ["openrouter", "respan"], said: "" });
+      await new Promise((r) => setTimeout(r, 150));
+      const read = () => ({
+        said: (document.querySelector("#drawer [data-arf-jevsaid]") || {}).textContent || "",
+        kept: (document.querySelector("#drawer [data-arf-jevkept]") || {}).textContent || "",
+      });
+      const first = read();
+      // An answer about a host no longer shown, arriving late.
+      window.__fromBackend({ type: "jev_key", host: "openrouter", has: false, hosts: ["openrouter", "respan"], said: "" });
+      await new Promise((r) => setTimeout(r, 150));
+      return { asked, first, late: read() };
+    });
+    ok("changing host asks about that host's key", keys.asked.indexOf("respan") >= 0, JSON.stringify(keys.asked));
+    ok("the hosts with a key are listed by name", /Keys are saved for: OpenRouter, Respan\./.test(keys.first.kept), JSON.stringify(keys.first));
+    ok("and the host shown says its key is saved", /A key is saved/.test(keys.first.said), JSON.stringify(keys.first));
+    ok("a late answer about another host does not change it", /A key is saved/.test(keys.late.said), JSON.stringify(keys.late));
 
     await pick("judgeHost", "custom");
     await closed(page);
     const custom = await read();
     ok("Another address is offered for Span, and Which Span waits for a host", !custom.tierShown, JSON.stringify(custom));
+    const addr = await page.evaluate(async () => {
+      const vis = (sel) => {
+        const n = document.querySelector(sel);
+        return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+      };
+      const box = document.querySelector('#drawer [data-arf-field="judgeUrl"]');
+      box.focus();
+      box.value = "https://mine.example.test/v1/decide";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.blur();
+      await new Promise((r) => setTimeout(r, 150));
+      const last = window.__sent.filter((m) => m.type === "jev_key_status").pop();
+      return { httpOk: vis('#drawer [data-arf-row="judgeHttpOk"]'), last };
+    });
+    ok("the http switch shows for another address", addr.httpOk, JSON.stringify(addr));
+    ok("and leaving the address box asks about that address's key", !!addr.last && addr.last.host === "custom" && addr.last.url === "https://mine.example.test/v1/decide", JSON.stringify(addr.last));
 
     const sent = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
     ok("the choice is saved", sent.judgeWho === "span" && sent.judgeHost === "custom", JSON.stringify({ who: sent.judgeWho, host: sent.judgeHost }));
@@ -8351,23 +8390,26 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
-  // Jev's line at the old default of 40 is offered 50, and taking it sets 50.
-  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 40 } }, async (page) => {
-    const said = await seen(page);
-    ok("somebody still on a line of 40 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
-    await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
-      await new Promise((r) => setTimeout(r, 200));
+  // Jev's line at either old default, 40 or 50, is offered 30, and taking it
+  // sets 30.
+  for (const was of [40, 50]) {
+    await inTab(browser, { saved: { judgeMode: "two", judgeOver: was } }, async (page) => {
+      const said = await seen(page);
+      ok("somebody on Jev still on a line of " + was + " is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+      await page.evaluate(async () => {
+        document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+        await new Promise((r) => setTimeout(r, 200));
+      });
+      const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
+      ok("and taking it sets the line to 30", line === 30, String(line));
     });
-    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
-    ok("and taking it sets the line to 50", line === 50, String(line));
-  });
+  }
   // Span has its own line, so a Jev line of 40 is not offered to somebody on Span.
   await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: 40 } }, async (page) => {
     ok("somebody on Span is not told about Jev's line", (await seen(page)) === null, "");
   });
   // A line somebody set themselves is given to Span too. A default is not.
-  for (const [was, want] of [[35, "35"], [40, "25"], [50, "25"]]) {
+  for (const [was, want] of [[35, "35"], [40, "15"], [50, "15"]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: was } }, async (page) => {
       await goTab(page, "Model");
       await settle(page);
@@ -8375,6 +8417,21 @@ console.log("\nwhen a default moves under somebody who was on it");
       ok("a Jev line of " + was + " gives Span a line of " + want, got === want, String(got));
     });
   }
+  // Span's line at the old default of 25 is offered 15, and taking it sets 15.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", spanOver: 25 } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody on Span still on a line of 25 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+    await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").spanOver);
+    ok("and taking it sets Span's line to 15", line === 15, String(line));
+  });
+  // Somebody on Jev is not told about Span's line.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", spanOver: 25 } }, async (page) => {
+    ok("somebody on Jev is not told about Span's line", (await seen(page)) === null, "");
+  });
   // A line of their own choosing is left alone.
   await inTab(browser, { saved: { judgeMode: "two", judgeOver: 65 } }, async (page) => {
     ok("somebody who set their own line is left alone", (await seen(page)) === null, "");

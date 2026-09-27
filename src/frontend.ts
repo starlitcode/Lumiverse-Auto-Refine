@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.24.0";
+const VERSION = "1.25.0";
 
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
@@ -163,7 +163,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "spanOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -569,13 +569,14 @@ const CONFIG = {
   judgeHost: "openrouter",
   judgeUrl: "",
   judgeModel: "",
+  judgeHttpOk: false,
   judgeVersion: "latest",
   judgeName: "",
   // One statement a line. The second model gives the chance each is true of `reply`.
   judgeChecks: JUDGE_CHECKS,
   // A check at or above this percentage is a reply worth refining.
-  judgeOver: 50,
-  spanOver: 25,
+  judgeOver: 30,
+  spanOver: 15,
   // With worn phrases on, the second model is also asked whether the reply uses one.
   judgeWorn: true,
   // The reply before this one goes to the second model too, and it is asked
@@ -1835,6 +1836,10 @@ function markText(text: string): string {
 // `needs` keeps the line from somebody the setting does nothing for. The checks
 // are only read with two models on, so a reader on one model is not told about
 // them. If they switch to two models later, the line comes up then.
+// Why Jev's line moved. Said to a reader on either of its earlier defaults.
+const JEV_LINE_WHY =
+  "Jev often scores a check it finds in the reply at only 30 to 35 percent. A higher line left many of those replies alone.";
+
 const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string; needs?: { key: string; is: any }; also?: { key: string; is: any } }> = [
   {
     key: "judgeChecks",
@@ -1845,11 +1850,27 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
   },
   {
     key: "judgeOver",
-    was: 40,
+    was: 50,
     label: "Refine when a check reaches",
-    why: "The line of 40 was set from Span's scores, which run lower than Jev's. Span has a line of its own now, so Jev's goes back to 50.",
+    why: JEV_LINE_WHY,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "jev" },
+  },
+  {
+    key: "judgeOver",
+    was: 40,
+    label: "Refine when a check reaches",
+    why: JEV_LINE_WHY,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "jev" },
+  },
+  {
+    key: "spanOver",
+    was: 25,
+    label: "Refine when a check reaches",
+    why: "Span often scores a check it finds in the reply at only 15 to 25 percent. A line of 25 left many of those replies alone.",
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "span" },
   },
 ];
 
@@ -2185,7 +2206,7 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeHost", is: "custom" },
     under: true,
     placeholder: "https://jev.example.com/v1/decisions",
-    hint: "Any host that serves the model. Paste its full address, not only the base. It ends in something like /decisions, /scores, /chat/completions or /messages.",
+    hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
   },
   {
     key: "judgeModel",
@@ -2195,6 +2216,14 @@ const JUDGE_FIELDS: Field[] = [
     under: true,
     placeholder: "typesafe/jev-latest",
     hint: "What that host calls the model, as its own docs spell it.",
+  },
+  {
+    key: "judgeHttpOk",
+    label: "Let the key go over http://",
+    type: "bool",
+    needs: { key: "judgeHost", is: "custom" },
+    under: true,
+    hint: "Off by default. Only for an address on your own machine or network, such as another Docker container. Over http the key is not encrypted.",
   },
   {
     key: "judgeChecks",
@@ -2213,7 +2242,7 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "jev" },
-    hint: "For Jev. A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+    hint: "For Jev. A percentage, 30 by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "spanOver",
@@ -2224,7 +2253,7 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "span" },
-    hint: "For Span. A percentage, 25 by default, since Span scores lower than Jev on the same reply.",
+    hint: "For Span. A percentage, 15 by default, since Span scores lower than Jev on the same reply.",
   },
   {
     key: "judgeWorn",
@@ -3075,6 +3104,35 @@ export function setup(ctx: Ctx, overrides?: any) {
   function whoName(): string {
     const m = SECOND_MODELS.find((x) => x.value === cfg.judgeWho) || SECOND_MODELS[0];
     return m.name;
+  }
+
+  // The host the second model is reached on, as the host list shows it. A
+  // host the picked model is not on shows as OpenRouter, and the backend
+  // falls back the same way.
+  function keyHost(): string {
+    const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
+    const opt = f && f.options ? f.options.find((o: any) => o.value === cfg.judgeHost) : null;
+    if (!opt) return "openrouter";
+    const needs = (opt as any).needs;
+    return !needs || (cfg as any)[needs.key] === needs.is ? String(opt.value) : "openrouter";
+  }
+
+  // What a key answer is about: the host, and for another address the address
+  // too, since that key is kept for the address.
+  function keyFor(): string {
+    return keyHost() === "custom" ? "custom|" + String(cfg.judgeUrl || "").trim() : keyHost();
+  }
+  // What goes with every key message, so the backend keeps or reads the key for
+  // what the panel shows even before the settings reach it.
+  function keyWhere(): any {
+    return { host: keyHost(), url: String(cfg.judgeUrl || "").trim(), for: keyFor() };
+  }
+
+  // A host's name as the host list gives it.
+  function hostName(host: string): string {
+    const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
+    const opt = f && f.options ? f.options.find((o: any) => o.value === host) : null;
+    return opt ? String(opt.label) : host;
   }
 
   function sameAsWas(now: any, was: any): boolean {
@@ -7795,6 +7853,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.addEventListener("blur", () => {
         cfg[f.key] = box.value;
         persist(true);
+        // A key for another address is kept for the address, so a new one is
+        // asked about. The answer redraws the card.
+        if (f.key === "judgeUrl") askKeyStatus();
       });
       wrap.appendChild(box);
     } else if (f.type === "lines") {
@@ -7904,10 +7965,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.addEventListener("change", () => {
         cfg[f.key] = sel.value;
         persist(true);
-        // The second model's name is written into the rows around it, the key
-        // most of all, so changing it redraws the card rather than only
-        // showing and hiding rows.
-        if (f.key === "judgeWho") {
+        // The second model's name and its host are written into the rows
+        // around them, and the key row is for the host, so changing either
+        // redraws the card rather than only showing and hiding rows.
+        if (f.key === "judgeWho" || f.key === "judgeHost") {
           paint();
           return;
         }
@@ -9021,13 +9082,27 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Two-model mode, and the key the second model is reached with. The key is sent to the
   // backend once and kept in Lumiverse's secure store. The panel is only told
   // whether there is one, so it never sits in the settings or an export.
+  // A key is kept for each host. jevHas is for the host shown, and jevHosts
+  // lists every host with a key kept.
   let jevHas: boolean | null = null;
+  let jevHosts: string[] = [];
   let jevSaid = "";
   let jevAsk = "";
-  // Asked once per panel. The card is rebuilt on every paint, and asking on
-  // each one sent a question per keystroke while the answer was on its way.
-  let jevStatusAsked = false;
+  // The host last asked about. Asked once per host rather than per paint: the
+  // card is rebuilt on every paint, and asking on each one sent a question per
+  // keystroke while the answer was on its way.
+  let jevStatusFor = "";
+  function askKeyStatus(): void {
+    if (cfg.judgeMode !== "two" || jevStatusFor === keyFor()) return;
+    jevStatusFor = keyFor();
+    jevHas = null;
+    jevSaid = "";
+    send({ type: "jev_key_status", requestId: newId(), ...keyWhere() });
+  }
   function buildJudgeCard(): HTMLElement {
+    // Asked only once two models are on, since nothing about the second model
+    // shows before, and again whenever the host shown changes.
+    askKeyStatus();
     const wrap = card(
       "One model or two",
       "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.",
@@ -9048,7 +9123,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     const keyRow = el("div", "arf-col");
     keyRow.setAttribute("data-arf-jevkey", "1");
-    const lab = el("span", "arf-lab", whoName() + " key");
+    const lab = el("span", "arf-lab", keyHost() === "custom" ? "Key for another address" : "Key for " + hostName(keyHost()));
     lab.id = "arf-jevkey-name";
     keyRow.appendChild(lab);
     const box = document.createElement("input");
@@ -9057,7 +9132,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     box.setAttribute("aria-labelledby", lab.id);
     box.setAttribute("autocomplete", "off");
     box.setAttribute("data-arf-jevkey-box", "1");
-    box.placeholder = jevHas ? "A key is saved. Paste a new one to replace it." : "Paste the key from your " + whoName() + " host";
+    box.placeholder = jevHas
+      ? "A key is saved. Paste a new one to replace it."
+      : keyHost() === "custom"
+        ? "Paste the key for the address above"
+        : "Paste the key from " + hostName(keyHost());
     keyRow.appendChild(box);
     const acts = el("div", "arf-row");
     const save = button("Save key", false);
@@ -9072,7 +9151,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       jevSaid = "Saving.";
       jevAsk = newId();
-      send({ type: "jev_key_set", requestId: jevAsk, key: key });
+      send({ type: "jev_key_set", requestId: jevAsk, key: key, ...keyWhere() });
       paint();
     });
     const forget = button("Forget key", false);
@@ -9082,7 +9161,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     forget.addEventListener("click", () => {
       jevSaid = "Forgetting.";
       jevAsk = newId();
-      send({ type: "jev_key_forget", requestId: jevAsk });
+      send({ type: "jev_key_forget", requestId: jevAsk, ...keyWhere() });
       paint();
     });
     const test = button("Test", false);
@@ -9109,6 +9188,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     said.setAttribute("data-arf-jevsaid", "1");
     keyRow.appendChild(said);
+    if (jevHosts.length) {
+      const kept = note("Keys are saved for: " + jevHosts.map(hostName).join(", ") + ". Picking a host uses its key.");
+      kept.setAttribute("data-arf-jevkept", "1");
+      keyRow.appendChild(kept);
+    }
     wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
 
     const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
@@ -9142,11 +9226,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(
         bad("The CORS proxy permission is refused, so " + whoName() + " cannot be asked and every reply is refined as it is with one model."),
       );
-    // Asked only once two models are on, since nothing about the second model shows before.
-    if (cfg.judgeMode === "two" && jevHas == null && !jevStatusAsked) {
-      jevStatusAsked = true;
-      send({ type: "jev_key_status", requestId: newId() });
-    }
     return wrap;
   }
 
@@ -14390,6 +14469,13 @@ export function setup(ctx: Ctx, overrides?: any) {
           // Whether a key is saved is true whichever question it answers, so
           // every one of these is taken.
           if (msg.type === "jev_key") {
+            if (Array.isArray(msg.hosts)) jevHosts = msg.hosts.map((h: any) => String(h));
+            // An answer about a host or address no longer shown still updates
+            // the list, and leaves the rest alone.
+            if (msg.for ? String(msg.for) !== keyFor() : msg.host && String(msg.host) !== keyHost()) {
+              paint();
+              return;
+            }
             jevHas = !!msg.has;
             const said = String(msg.said || "");
             jevSaid =

@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.24.0';
+const VERSION = '1.25.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3863,7 +3863,51 @@ function jevKindOf(url) {
         return 'scores';
     return 'decisions';
 }
+// One key is kept for each host, since a key belongs to the host and not the
+// model: an OpenRouter key reaches Jev and Span alike. Each is its own secret,
+// named after the host. The name with nothing after it is where the one key
+// was kept before there was one per host.
+//
+// Another address is kept per origin: the scheme, the host name and the port.
+// The address is a setting, and settings can be imported from somebody
+// else's file. Tied to the origin, a key saved for one address is never sent
+// to a different one, so an imported address has no key until one is saved
+// for it.
 const JEV_KEY = 'jev_api_key';
+// Read with a pattern rather than URL, which the backend does not always
+// have. A user name or password in the address is left out, and each
+// scheme's own port is the same as no port.
+function originOf(url) {
+    const m = /^(https?):\/\/([^\/?#]+)/i.exec(String(url || '').trim());
+    if (!m)
+        return '';
+    const scheme = m[1].toLowerCase();
+    const place = m[2].replace(/^.*@/, '').toLowerCase();
+    if (!place)
+        return '';
+    const port = scheme === 'https' ? ':443' : ':80';
+    return scheme + '://' + (place.slice(-port.length) === port ? place.slice(0, -port.length) : place);
+}
+// Two 32-bit FNV-1a hashes, so the name stays short and within the letters
+// the secure store takes, whatever the address is.
+function originMark(origin) {
+    let a = 0x811c9dc5;
+    let b = 0x01000193;
+    for (let i = 0; i < origin.length; i++) {
+        const c = origin.charCodeAt(i);
+        a = Math.imul(a ^ c, 0x01000193) >>> 0;
+        b = Math.imul(b ^ c, 0x811c9dc5) >>> 0;
+    }
+    return ('00000000' + a.toString(16)).slice(-8) + ('00000000' + b.toString(16)).slice(-8);
+}
+// The secret's name for a host. Empty for another address with no usable
+// address yet, which has nowhere to keep a key.
+function keyName(host, url = judgeUrl) {
+    if (host !== 'custom')
+        return JEV_KEY + '.' + host;
+    const origin = originOf(url);
+    return origin ? JEV_KEY + '.custom.' + originMark(origin) : '';
+}
 // A decision comes back in well under a second, so twenty is a host that is
 // down rather than one that is slow.
 const JEV_TIMEOUT_MS = 20000;
@@ -3884,6 +3928,9 @@ let judgeWho = 'jev';
 let spanTier = 'free';
 let judgeHost = 'openrouter';
 let judgeUrl = '';
+// Set by the reader for an http address they know is their own, such as
+// another Docker container. See safeForKey.
+let judgeHttpOk = false;
 let judgeModel = '';
 let judgeVersion = 'latest';
 let judgeName = '';
@@ -3939,25 +3986,102 @@ function secondModel() {
 function who() {
     return secondModel().name;
 }
+// The host a model is reached on. A host this model is not on, left picked
+// from another model, falls back to OpenRouter, which is what the panel shows
+// in its place.
+function hostFor(who, host) {
+    if (host === 'custom')
+        return 'custom';
+    const m = SECOND_MODELS[who] || SECOND_MODELS.jev;
+    return m.hosts[host] ? host : 'openrouter';
+}
+// A host's name, for what the Log says. The panel's host list uses the same.
+const HOST_LABELS = {
+    openrouter: 'OpenRouter',
+    nanogpt: 'NanoGPT',
+    typesafe: 'TypeSafe',
+    respan: 'Respan',
+    custom: 'the address you gave',
+};
+const hostLabel = (host) => HOST_LABELS[host] || host;
+// Whether an address can be sent a key. Over plain http the key can be read
+// by anyone on the network between Lumiverse and the host, so http is only
+// taken for an address on the same computer, where it never goes over a
+// network. host.docker.internal is the machine Docker runs on. Any other http
+// address, such as another container's name, cannot be told apart from a
+// computer elsewhere, so it needs the reader's own switch. Every built-in
+// host is https.
+function safeForKey(url) {
+    const u = String(url || '').trim();
+    if (/^https:\/\//i.test(u))
+        return true;
+    if (!/^http:\/\//i.test(u))
+        return false;
+    if (/^http:\/\/(localhost|127(\.\d{1,3}){3}|\[::1\]|host\.docker\.internal)(:\d+)?(\/|$)/i.test(u))
+        return true;
+    return judgeHttpOk;
+}
+// Every host a key can be kept for.
+function keyHosts() {
+    const all = ['custom'];
+    for (const k of Object.keys(SECOND_MODELS))
+        for (const h of Object.keys(SECOND_MODELS[k].hosts))
+            if (all.indexOf(h) < 0)
+                all.push(h);
+    return all;
+}
 function jevWhere() {
-    if (judgeHost === 'custom')
+    const host = hostFor(judgeWho, judgeHost);
+    if (host === 'custom')
         return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
     const m = secondModel();
-    // A host this model is not on, left picked from another model, falls back
-    // to OpenRouter, which is what the panel shows in its place.
-    const host = m.hosts[judgeHost] ? judgeHost : 'openrouter';
     return { url: m.hosts[host].url, model: m.model(host), kind: m.hosts[host].kind };
 }
-async function jevKey(userId) {
+// The key kept for one host. A key saved before there was one per host is
+// moved to the first host it is looked for on, which is the host picked at
+// the time: the panel asks for it on load, and a reply asks for it before the
+// call.
+async function jevKey(userId, host, url = judgeUrl) {
     try {
         if (!spindle.enclave || typeof spindle.enclave.get !== 'function')
             return '';
-        const got = await spindle.enclave.get(JEV_KEY, userId);
-        return got == null ? '' : String(got);
+        const name = keyName(host, url);
+        if (!name)
+            return '';
+        const got = await spindle.enclave.get(name, userId);
+        if (got != null && got !== '')
+            return String(got);
+        const old = await spindle.enclave.get(JEV_KEY, userId);
+        if (old == null || old === '')
+            return '';
+        await spindle.enclave.put(name, String(old), userId);
+        await spindle.enclave.delete(JEV_KEY, userId);
+        return String(old);
     }
     catch (_) {
         return '';
     }
+}
+// The hosts that have a key kept, for the panel to list. Read with has, so no
+// key is decrypted to answer.
+async function hostsWithKeys(userId, url = judgeUrl) {
+    const out = [];
+    try {
+        if (!spindle.enclave)
+            return out;
+        for (const h of keyHosts()) {
+            const name = keyName(h, url);
+            if (!name)
+                continue;
+            const there = typeof spindle.enclave.has === 'function'
+                ? await spindle.enclave.has(name, userId)
+                : (await spindle.enclave.get(name, userId)) != null;
+            if (there)
+                out.push(h);
+        }
+    }
+    catch (_) { }
+    return out;
 }
 // What the enclave will take: printable ASCII, and far less of it than its
 // limit. A key with a line break pasted onto its end is the usual way this
@@ -4018,11 +4142,19 @@ async function askJev(userId, state, questions) {
     const where = jevWhere();
     if (!where.url)
         return { error: 'no address is set for ' + who() };
+    if (!safeForKey(where.url))
+        return {
+            error: 'the key was not sent, because the address does not start with https://. Over http:// the key can be read on the way. To use an http:// address on your own machine or network, such as another Docker container, switch on Let the key go over http://',
+        };
     if (!where.model)
         return { error: 'no model name is set for ' + who() };
-    const key = await jevKey(userId);
+    const key = await jevKey(userId, hostFor(judgeWho, judgeHost));
     if (!key)
-        return { error: 'no ' + who() + ' key is saved' };
+        return { error: 'no key is saved for ' + hostLabel(hostFor(judgeWho, judgeHost)) };
+    // Some hosts repeat the key they were sent in their error message. What a
+    // host says goes to the Log, and the Log can go into a bug report, so the
+    // key is taken out of anything the host says before it is passed on.
+    const hideKey = (text) => (key.length >= 8 ? String(text).split(key).join('[your key]') : String(text));
     if (typeof spindle.cors !== 'function')
         return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
     // A chat API request carries the state as text. It goes as JSON, so the
@@ -4067,7 +4199,7 @@ async function askJev(userId, state, questions) {
         res = await send();
     }
     if (!res || res.error || !res.status)
-        return { error: who() + ' could not be reached: ' + ((res && res.error) || 'no answer') };
+        return { error: who() + ' could not be reached: ' + hideKey((res && res.error) || 'no answer') };
     let data = null;
     try {
         data = JSON.parse(String(res.body || ''));
@@ -4076,7 +4208,7 @@ async function askJev(userId, state, questions) {
         data = null;
     }
     const said = data && (data.error || data.detail || data.message);
-    const saidText = typeof said === 'string' ? said : said && said.message ? String(said.message) : '';
+    const saidText = hideKey(typeof said === 'string' ? said : said && said.message ? String(said.message) : '');
     // The status and the host's own words go with it. A refused call is not
     // always a wrong key: a key for another host, or a host that turns the
     // proxy away, look the same without them.
@@ -4431,6 +4563,7 @@ function applyRules(s) {
         : 'openrouter';
     judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
     judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
+    judgeHttpOk = s.judgeHttpOk === true;
     judgeVersion = ['preview', 'exact', 'own'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
     judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
     judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
@@ -4442,7 +4575,7 @@ function applyRules(s) {
         const n = Number(raw);
         return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
     };
-    judgeOver = judgeWho === 'span' ? lineOf(s.spanOver, 25) : lineOf(s.judgeOver, 50);
+    judgeOver = judgeWho === 'span' ? lineOf(s.spanOver, 15) : lineOf(s.judgeOver, 30);
     judgeWorn = s.judgeWorn !== false;
     judgeBefore = s.judgeBefore === true;
     judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;
@@ -5159,6 +5292,13 @@ async function onPanel(payload, userId) {
         // The key for the second model. It comes in once, goes into the enclave, and is never sent
         // back: the panel is only ever told whether there is one.
         if (payload.type === 'jev_key_set' || payload.type === 'jev_key_forget' || payload.type === 'jev_key_status') {
+            // The host the panel shows, checked against the ones there are. A host
+            // this build does not know, or none, is the one the settings pick.
+            const asked = String(payload.host == null ? '' : payload.host);
+            const host = keyHosts().indexOf(asked) >= 0 ? asked : hostFor(judgeWho, judgeHost);
+            // The address the panel shows, for another address. The settings can
+            // reach the backend a moment after the key does.
+            const url = payload.url == null ? judgeUrl : String(payload.url).trim().slice(0, 500);
             let said = '';
             try {
                 if (!spindle.enclave)
@@ -5167,20 +5307,32 @@ async function onPanel(payload, userId) {
                     const key = cleanJevKey(payload.key);
                     if (!key)
                         said = 'that does not look like a key: it has to be one line of plain characters';
+                    else if (!keyName(host, url))
+                        said = 'type the address first. A key for another address is kept for that address';
                     else {
-                        await spindle.enclave.put(JEV_KEY, key, userId);
+                        await spindle.enclave.put(keyName(host, url), key, userId);
                         said = 'saved';
                     }
                 }
                 else if (payload.type === 'jev_key_forget') {
-                    await spindle.enclave.delete(JEV_KEY, userId);
+                    if (keyName(host, url))
+                        await spindle.enclave.delete(keyName(host, url), userId);
                     said = 'forgotten';
                 }
             }
             catch (e) {
                 said = 'the key could not be stored: ' + ((e && e.message) || String(e));
             }
-            replyTo(userId, { type: 'jev_key', requestId: payload.requestId, has: !!(await jevKey(userId)), said: said });
+            const has = !!(await jevKey(userId, host, url));
+            replyTo(userId, {
+                type: 'jev_key',
+                requestId: payload.requestId,
+                host: host,
+                has: has,
+                hosts: await hostsWithKeys(userId, url),
+                for: payload.for == null ? '' : String(payload.for),
+                said: said,
+            });
             return;
         }
         // One small question with nothing from any chat in it, so a key can be

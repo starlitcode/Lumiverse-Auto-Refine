@@ -6,6 +6,37 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.25.0
+
+_2026-09-27_
+
+### Added
+
+- **A key is kept for each host.** Switching between Jev and Span, or between hosts, no longer means pasting a key again.
+  - Picking a host uses the key saved for it. The key box is named after the host, such as **Key for OpenRouter**.
+  - A key belongs to the host, not the model. An OpenRouter key is used for Jev and for Span on OpenRouter.
+  - **Keys are saved for**, under the box, lists the hosts that have a key.
+  - **Forget key** deletes the key for the host shown and keeps the others.
+  - **Another address** keeps a key for each address. A different address, such as one from imported settings, has no key until you save one for it.
+  - The key you already saved is kept. It is moved to the host you have picked the first time it is used.
+
+### Fixed
+
+- **A host that repeated your key in an error message could put it in the Log.** From there it could go into a bug report. The key is now taken out of anything a host says, and shows as [your key].
+- **Another address sent your key over plain http:// when the address used it.** Over http the key could be read on the way.
+  - The key is now only sent to an https:// address, or to an http:// address on the same computer: localhost, 127.0.0.1, [::1] or host.docker.internal.
+  - For another http:// address you run yourself, such as another Docker container, switch on **Let the key go over http://**, under the address. It is off by default.
+  - Any other address gets a line in the Log and under **Test** that says why.
+
+### Changed
+
+- **Refine when a check reaches is lower for both second models.** Both often give a low score to a check they find true in the reply, and the old lines left many of those replies alone. A check they find false scores close to 0. See [What the second model checks](docs/two-models.md#what-the-second-model-checks).
+  - **Jev: 30 by default, not 50.** Jev often scores a check it finds true at only 30 to 35 percent.
+  - **Span: 15 by default, not 25.** Span often scores a check it finds true at only 15 to 25 percent.
+  - With two models on, and your line still at the old default for the model you picked, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
+
+---
+
 ## 1.24.0
 
 _2026-09-27_

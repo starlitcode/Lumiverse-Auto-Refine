@@ -51,10 +51,11 @@ A refine you start yourself is only sent to it when **Let it check refines you s
 Your key:
 
 - is sent from the panel to the backend once, when you press **Save key**
-- is kept in Lumiverse's secure store, for your account only
+- is kept in Lumiverse's secure store, for your account only, with one key for each host, and for **Another address** one for each address
+- is only sent over `https://`, or over `http://` to the same computer, unless you switch on **Let the key go over http://**
 - is never in your settings, an export, or this browser's storage
 - is never shown again. The panel is only told whether a key is saved.
-- is deleted by **Forget key**
+- is deleted by **Forget key**, for the host shown
 
 ## The seven permissions
 
@@ -85,7 +86,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 - **Your settings**, in your browser and in Lumiverse's storage for your account, so they follow you to other devices.
 - **The chats you switched it off in**, in your browser. Only the chat ids are kept. Chat titles and text are not.
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
-- **Your key for the second model**, if you saved one, in Lumiverse's secure store for your account and nowhere else.
+- **Your keys for the second model**, one for each host you saved one for, in Lumiverse's secure store for your account and nowhere else.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.
 - **The text from before each refine**, in memory, so you can put a refine back. It is never written to disk and is gone when you reload.
 

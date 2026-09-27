@@ -21,12 +21,19 @@ Everything is on the Model tab, in **One model or two**.
 2. Pick **Which second model**: Jev or Span.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. See [Another address](#another-address).
 4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span).
-5. Paste a key from that host under the key box and press **Save key**. The box is called **Jev key** or **Span key**, after the model you picked. The key has to come from the host you picked.
+5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
 Two-model mode also needs the `cors_proxy` permission, since the second model is not a chat model and no connection profile can reach it. Without it the panel says so and every reply is refined, the same as with one model.
 
-There is one key box, whichever model you pick. If you change model or host, save a key from the new host.
+A key is kept for each host:
+
+- Save a key once for each host you use. Picking a host uses the key saved for it.
+- A key belongs to the host, not the model. An OpenRouter key is used for Jev and for Span on OpenRouter.
+- **Keys are saved for**, under the box, lists the hosts that have a key.
+- **Forget key** deletes the key for the host shown. The others are kept.
+- **Another address** keeps a key for each address. A different address, such as one set by importing somebody else's settings, has no key until you save one for it. The same host with a different path uses the same key.
+- A key saved before keys were kept per host is moved to the host you have picked the first time it is used.
 
 ## Which Jev
 
@@ -78,6 +85,9 @@ Span reads a conversation, not named fields. **On OpenRouter** it takes the same
 Pick **Another address** for any host not in the list. It works for Jev and for Span. Fill in two boxes:
 
 1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
+   - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.
+   - An address on the same computer as Lumiverse can use `http://`, since it never goes over a network. That is `localhost`, `127.0.0.1`, `[::1]` and, in Docker, `host.docker.internal`.
+   - For any other `http://` address on your own machine or network, such as another Docker container by its name, switch on **Let the key go over http://**. It is off by default. Only switch it on for an address you run yourself.
 2. **Model name**: what your host calls the model, spelled the way its docs spell it.
 
 Hosts take a scoring model in one of five ways, and the end of the address decides which:
@@ -143,10 +153,21 @@ Each second model has its own line, and the panel shows the one for the model yo
 
 | Model | Line by default |
 | --- | --- |
-| **Jev** | 50 percent |
-| **Span** | 25 percent |
+| **Jev** | 30 percent |
+| **Span** | 15 percent |
 
-Span's line is lower because Span gives lower scores than Jev on the same reply. On a reply with a problem, Span often scores the check between 20% and 30%, where Jev scores it higher. With a line of 50, Span would leave most of those replies alone.
+Each line sits between two groups of scores, which are different for each model:
+
+| Model | A check it finds false | A check it finds true in the reply |
+| --- | --- | --- |
+| **Jev** | close to 0%, often 1% to 7% | often only 30% to 35% |
+| **Span** | close to 0%, often 2% or 3% | often only 15% to 25% |
+
+On the same reply, the two models mostly agree on which checks are false. Where they find a check true, Span's score is often about half of Jev's. That is why Span's line is half of Jev's.
+
+At a higher line, both models left alone replies that had the problem. For Jev that was 40 or 50, and for Span 20 or 25.
+
+The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%, on either model. The line matters most for the other checks.
 
 Changing one line does not change the other. If you switch model, the line you set for the other one is kept for when you switch back.
 
@@ -270,7 +291,7 @@ The second model gives each check a chance, not a certain answer. It is a small 
 
 - It can score a check low on a reply that has the problem. The reply is left alone.
 - It can score a check high on a reply that is fine. The reply is refined when it did not need it.
-- A score close to your line is the least certain. With a line of 50, a reply at 45% was nearly refined, and one at 55% was nearly left alone.
+- A score close to your line is the least certain. With a line of 30, a reply at 27% was nearly refined, and one at 33% was nearly left alone.
 
 When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway.
 
