@@ -19,6 +19,10 @@ _2026-09-27_
   - **Forget key** deletes the key for the host shown and keeps the others.
   - The key you already saved is kept. It is moved to the host you have picked the first time it is used.
 
+### Fixed
+
+- **A host that repeated your key in an error message could put it in the Log.** From there it could go into a bug report. The key is now taken out of anything a host says, and shows as [your key].
+
 ### Changed
 
 - **Refine when a check reaches is lower for both second models.** Both often give a low score to a check they find true in the reply, and the old lines left many of those replies alone. A check they find false scores close to 0. See [What the second model checks](docs/two-models.md#what-the-second-model-checks).

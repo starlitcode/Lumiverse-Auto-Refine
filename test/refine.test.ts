@@ -1284,6 +1284,21 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.vault["u1:jev_api_key.no-such-host"]).toBeUndefined();
   });
 
+  // A host that repeats the key it was sent. What it says reaches the Log and
+  // can go into a bug report, so the key is taken out first.
+  test("a key a host repeats back is taken out of what it said", async () => {
+    const echo = () => ({ status: 401, body: '{"error":{"message":"Incorrect key given: sk-made-up-key. Check it and try again."}}' });
+    const h = await keyed({}, { jev: echo });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].why).toBe("the Jev key was refused (401: Incorrect key given: [your key]. Check it and try again.)");
+    await h.front({ type: "jev_test", requestId: "t" });
+    await wait(50);
+    const tested = h.sent.filter((m: any) => m.type === "jev_tested").pop();
+    expect(tested.why).toContain("[your key]");
+    expect(JSON.stringify(h.sent)).not.toContain("sk-made-up-key");
+  });
+
   test("a pasted key is trimmed, and one that cannot be a key is refused", async () => {
     const h = await armed([], TWO);
     await h.front({ type: "jev_key_set", requestId: "a", key: "  sk-trimmed\n" });

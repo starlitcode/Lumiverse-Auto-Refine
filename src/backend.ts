@@ -4289,6 +4289,10 @@ async function askJev(
   if (!where.model) return { error: 'no model name is set for ' + who() };
   const key = await jevKey(userId, hostFor(judgeWho, judgeHost));
   if (!key) return { error: 'no key is saved for ' + hostLabel(hostFor(judgeWho, judgeHost)) };
+  // Some hosts repeat the key they were sent in their error message. What a
+  // host says goes to the Log, and the Log can go into a bug report, so the
+  // key is taken out of anything the host says before it is passed on.
+  const hideKey = (text: string) => (key.length >= 8 ? String(text).split(key).join('[your key]') : String(text));
   if (typeof spindle.cors !== 'function')
     return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
   // A chat API request carries the state as text. It goes as JSON, so the
@@ -4335,7 +4339,7 @@ async function askJev(
     await new Promise<void>((r) => setTimeout(r, 1200));
     res = await send();
   }
-  if (!res || res.error || !res.status) return { error: who() + ' could not be reached: ' + ((res && res.error) || 'no answer') };
+  if (!res || res.error || !res.status) return { error: who() + ' could not be reached: ' + hideKey((res && res.error) || 'no answer') };
   let data: any = null;
   try {
     data = JSON.parse(String(res.body || ''));
@@ -4343,7 +4347,7 @@ async function askJev(
     data = null;
   }
   const said = data && (data.error || data.detail || data.message);
-  const saidText = typeof said === 'string' ? said : said && said.message ? String(said.message) : '';
+  const saidText = hideKey(typeof said === 'string' ? said : said && said.message ? String(said.message) : '');
   // The status and the host's own words go with it. A refused call is not
   // always a wrong key: a key for another host, or a host that turns the
   // proxy away, look the same without them.
