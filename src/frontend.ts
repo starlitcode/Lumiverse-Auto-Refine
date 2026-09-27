@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.23.0";
+const VERSION = "1.24.0";
 
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
@@ -163,7 +163,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "spanOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -574,7 +574,8 @@ const CONFIG = {
   // One statement a line. The second model gives the chance each is true of `reply`.
   judgeChecks: JUDGE_CHECKS,
   // A check at or above this percentage is a reply worth refining.
-  judgeOver: 40,
+  judgeOver: 50,
+  spanOver: 25,
   // With worn phrases on, the second model is also asked whether the reply uses one.
   judgeWorn: true,
   // The reply before this one goes to the second model too, and it is asked
@@ -1834,7 +1835,7 @@ function markText(text: string): string {
 // `needs` keeps the line from somebody the setting does nothing for. The checks
 // are only read with two models on, so a reader on one model is not told about
 // them. If they switch to two models later, the line comes up then.
-const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string; needs?: { key: string; is: any } }> = [
+const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string; needs?: { key: string; is: any }; also?: { key: string; is: any } }> = [
   {
     key: "judgeChecks",
     was: JUDGE_CHECKS_1_20,
@@ -1844,10 +1845,11 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
   },
   {
     key: "judgeOver",
-    was: 50,
+    was: 40,
     label: "Refine when a check reaches",
-    why: "At 50, a reply with a problem the second model was not sure of, such as a score of 44%, was left alone. At 40 it is refined. A clean reply still scores well under 40.",
+    why: "The line of 40 was set from Span's scores, which run lower than Jev's. Span has a line of its own now, so Jev's goes back to 50.",
     needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "jev" },
   },
 ];
 
@@ -2210,7 +2212,19 @@ const JUDGE_FIELDS: Field[] = [
     min: 1,
     max: 99,
     needs: { key: "judgeMode", is: "two" },
-    hint: "A percentage, 40 by default. Lower refines more replies, higher refines fewer.",
+    also: { key: "judgeWho", is: "jev" },
+    hint: "For Jev. A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "spanOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "span" },
+    hint: "For Span. A percentage, 25 by default, since Span scores lower than Jev on the same reply.",
   },
   {
     key: "judgeWorn",
@@ -2831,8 +2845,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       return {};
     }
   }
-  Object.assign(cfg, loadSaved(), overrides || {});
-  carryOldNames(cfg);
+  // Old names are carried on what was saved, before the defaults are under it,
+  // so a setting that was never saved still reads as missing.
+  Object.assign(cfg, carryOldNames(Object.assign({}, loadSaved(), overrides || {})));
 
   // Settings written under a name this version no longer uses. Read across once
   // and the old name dropped, so upgrading keeps what the old one was holding
@@ -2846,6 +2861,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       delete into.shippedSeen;
     } catch (_) {}
+    // Refine when a check reaches is kept per second model. A line somebody set
+    // themselves, rather than one of the defaults, was meant for whichever model
+    // they had, so it is given to Span too the first time Span's is looked for.
+    if (!("spanOver" in into) && "judgeOver" in into) {
+      const was = Number(into.judgeOver);
+      if (Number.isFinite(was) && was !== 40 && was !== 50) into.spanOver = was;
+    }
     // A list saved as the text of its box, which is how the box used to save
     // it. Read back as the list it always meant to be.
     for (const k of ["passNames", "wornFine"]) if (typeof into[k] === "string") into[k] = linesOf(into[k]);
@@ -3038,7 +3060,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   function movedForMe(): Array<{ key: string; was: any; label: string; why: string }> {
     if (String(cfg.movedSeen || "") === MOVED_MARK) return [];
     return MOVED_DEFAULTS.filter(
-      (m) => sameAsWas((cfg as any)[m.key], m.was) && (!m.needs || (cfg as any)[m.needs.key] === m.needs.is),
+      (m) =>
+        sameAsWas((cfg as any)[m.key], m.was) &&
+        (!m.needs || (cfg as any)[m.needs.key] === m.needs.is) &&
+        (!m.also || (cfg as any)[m.also.key] === m.also.is),
     );
   }
 
@@ -14330,7 +14355,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 check: String(x.check || "").replace(/`/g, "").slice(0, 300),
                 pct: Math.max(0, Math.min(100, Math.round(Number(x.pct) || 0))),
               })),
-              over: Number(msg.over) || 40,
+              over: Number(msg.over) || 50,
               model: String(msg.model || "").slice(0, 60),
               cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
               after: !!msg.after,
@@ -14389,7 +14414,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               scores: Number.isFinite(pct)
                 ? [{ check: String(msg.check || "").replace(/`/g, "").slice(0, 300), pct: Math.max(0, Math.min(100, Math.round(pct))) }]
                 : [],
-              over: Number(msg.over) || 40,
+              over: Number(msg.over) || 50,
               model: String(msg.model || "").slice(0, 60),
               cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
               test: {

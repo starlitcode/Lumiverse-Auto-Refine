@@ -137,9 +137,18 @@ Write each check so that:
 
 To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided** or **What Span decided**, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
 
-**Refine when a check reaches** is the line, 40 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
+**Refine when a check reaches** is the line. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
 
-The line is under 50 because the two mistakes do not cost the same. A reply with a problem that is left alone has to be found and fixed by hand. A clean reply that is refined costs one refine, and the built-in prompts hand a clean passage back almost unchanged.
+Each second model has its own line, and the panel shows the one for the model you picked:
+
+| Model | Line by default |
+| --- | --- |
+| **Jev** | 50 percent |
+| **Span** | 25 percent |
+
+Span's line is lower because Span gives lower scores than Jev on the same reply. On a reply with a problem, Span often scores the check between 20% and 30%, where Jev scores it higher. With a line of 50, Span would leave most of those replies alone.
+
+Changing one line does not change the other. If you switch model, the line you set for the other one is kept for when you switch back.
 
 It goes from 1 to 99. The two ends are left out because each one makes the second model a cost with no use:
 
@@ -261,7 +270,7 @@ The second model gives each check a chance, not a certain answer. It is a small 
 
 - It can score a check low on a reply that has the problem. The reply is left alone.
 - It can score a check high on a reply that is fine. The reply is refined when it did not need it.
-- A score close to your line is the least certain. A reply at 45% was nearly refined, and one at 55% was nearly left alone.
+- A score close to your line is the least certain. With a line of 50, a reply at 45% was nearly refined, and one at 55% was nearly left alone.
 
 When a reply is left alone, the decision card on the Log tab says the second model can be wrong, and how to refine that reply anyway.
 

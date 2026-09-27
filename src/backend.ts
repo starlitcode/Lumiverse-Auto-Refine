@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.23.0';
+const VERSION = '1.24.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4060,7 +4060,10 @@ let judgeModel = '';
 let judgeVersion: 'latest' | 'preview' | 'exact' | 'own' = 'latest';
 let judgeName = '';
 let judgeChecks: string[] = [];
-let judgeOver = 40;
+// The line in use, for the second model picked. Each model has its own,
+// because their scores do not run on the same scale: Span's run lower than
+// Jev's on the same replies.
+let judgeOver = 50;
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
 // `previous_reply`, with the checks in judgeBeforeChecks. A check in the main
@@ -4640,8 +4643,11 @@ function applyRules(s: any): void {
     .map((l: string) => l.trim().slice(0, 500))
     .filter(Boolean)
     .slice(0, JEV_CHECKS_MAX);
-  judgeOver = Number(s.judgeOver);
-  judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 40;
+  const lineOf = (raw: any, fallback: number): number => {
+    const n = Number(raw);
+    return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
+  };
+  judgeOver = judgeWho === 'span' ? lineOf(s.spanOver, 25) : lineOf(s.judgeOver, 50);
   judgeWorn = s.judgeWorn !== false;
   judgeBefore = s.judgeBefore === true;
   judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;
