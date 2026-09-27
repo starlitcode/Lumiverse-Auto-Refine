@@ -676,6 +676,27 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(0);
   });
 
+  test("Span has a line of its own, 25 by default", async () => {
+    const h = await keyed({ judgeWho: "span" }, { jev: says([30]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("and Jev's line is not used for Span", async () => {
+    const h = await keyed({ judgeWho: "span", judgeOver: 20, spanOver: 60 }, { jev: says([40]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("and Span's line is not used for Jev", async () => {
+    const h = await keyed({ spanOver: 20 }, { jev: says([40]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
   test("what goes to Jev is the reply, the checks and the key, to the host picked", async () => {
     const h = await keyed({}, { jev: says([10]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
@@ -960,7 +981,7 @@ describe("two models: Jev reads the reply first", () => {
     const text = sentText(h);
     expect(text).toContain("<found>");
     expect(text).toContain("Treat each one as a lead to check.");
-    expect(text).toContain("line of 40%");
+    expect(text).toContain("line of 50%");
     const first = text.indexOf("- reply uses stock phrases. (90%)");
     const second = text.indexOf("- reply repeats itself. (60%)");
     expect(first).toBeGreaterThan(-1);

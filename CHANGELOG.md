@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.24.0
+
+_2026-09-27_
+
+### Added
+
+- **Refine when a check reaches is kept for each second model.** Span has a line of its own, 25 by default, since Span gives lower scores than Jev on the same reply. The panel shows the line for the model you picked. A line you set yourself before this version is used for Span too, until you change it. See [What the second model checks](docs/two-models.md#what-the-second-model-checks).
+
+### Changed
+
+- **Jev's line is 50 by default again.** The line of 40 in 1.22.0 was set from Span's scores, which run lower than Jev's. With two models on, Jev picked, and Jev's line still at 40, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
+
+---
+
 ## 1.23.0
 
 _2026-09-27_
