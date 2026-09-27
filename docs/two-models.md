@@ -110,24 +110,32 @@ Every answer says which exact model gave it. The Log shows it next to each decis
 The ones it starts with:
 
 ```
-`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.
-`reply` uses a stock phrase, such as a held breath or a shiver down a spine.
-`reply` names a character's feeling when their actions already show it.
-`reply` piles up adjectives or strained comparisons.
-`reply` says what something was not before saying what it was, as in "it wasn't a request, it was a command".
-`reply` ends by turning to the user with a question, such as what they do next.
+`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.
+`reply` contains a stock phrase, such as "a breath she didn't know she was holding", "a shiver ran down his spine", "her heart hammered" or "a smile that didn't reach his eyes".
+`reply` says what someone did not do or what something was not, then what they did or what it was, as in "it wasn't a request, it was a command" or "she didn't move. She just stood there.".
+`reply` follows an action with a comment on how it came out, as in "she laughed, and it was thin" or "he smiled, slow and easy".
+`reply` has a character start an action, then take it back, as in "reached out, then pulled back" or "opened her mouth, then closed it".
+`reply` ends with a question to the user about what they do next, as in "What do you do?".
 ```
 
-Each one has to be false of a clean reply. A reply is refined when any one check reaches the line, so a check that is true of almost every reply sends every reply through. For example, "repeats a word" is true of any reply that uses a name twice. The last two match rules the built-in reply prompts carry, so a reply the second model sends through is one the refine has a rule for.
+Each one has to be false of a clean reply. A reply is refined when any one check reaches the line, so a check that is true of almost every reply sends every reply through. For example, "repeats a word" is true of any reply that uses a name twice.
 
-Write them to match what your prompt fixes. A check for something your prompt never touches refines replies for a reason the refine will not act on.
+All but the first match rules the built-in reply prompts carry, with the same examples. So a reply the second model sends through is one the refine has a rule for. Write your own to match what your prompt fixes. A check for something your prompt never touches refines replies for a reason the refine will not act on.
 
-The second model answers these best when each one:
+### How the second model reads a check
 
-- asks about one thing. A statement joined with "and" is two checks.
-- names something that shows on the page, rather than a judgement of the whole reply.
-- is plainly true or false of the text, so a reader could check it without guessing at intent.
-- is false of a reply with nothing wrong in it. Give an example or two, so a common phrase is not read as a stock one.
+The second model is not a chat model. It does not work out what you meant. It reads each check word for word, and scores how closely the reply matches those words. So a check that a chat model would understand can still miss.
+
+For example, a check that says "says what something was not before saying what it was, as in 'it wasn't a request, it was a command'" does not catch "He didn't walk. Just stayed there." That line is about an action, not a thing, and it has no second half that says what it was. The built-in check names both forms for this reason.
+
+Write each check so that:
+
+- **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgement, and the answer depends on how the model reads the words.
+- **It gives examples, one for each form.** The model matches examples closely. One example catches that shape and can miss the others.
+- **It asks about one thing.** A statement joined with "and" is two checks.
+- **It is false of a reply with nothing wrong in it.** A check that is true of most replies sends every reply to be refined.
+
+To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided** or **What Span decided**, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
 
 **Refine when a check reaches** is the line, 50 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
 

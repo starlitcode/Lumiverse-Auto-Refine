@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.21.2";
+const VERSION = "1.22.0";
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
@@ -229,37 +229,39 @@ const PERMS = [
     },
 ];
 // What the second model checks a reply for until somebody writes their own.
-// Each is a statement about `reply` that is plainly true or false of the text,
-// which is the question a scoring model answers best: one thing, visible on
-// the page.
+// A scoring model reads each check word for word and does not guess at what
+// was meant, so each one names something that can be seen on the page, with
+// examples of it. A check that asks for a judgement, such as whether a feeling
+// is already shown, gets an answer that depends on how the model reads the
+// word, and is left out.
 //
 // Each has to be false of a clean reply. A reply is refined when any check
 // reaches the line, so a check that is true of nearly every reply, such as one
-// about repeating a word, sends every reply through and saves nothing. The
-// examples in the stock phrase check are there for the same reason: without
-// them, "she smiled" is a phrase that turns up in many stories.
+// about repeating a word, sends every reply through and saves nothing.
 //
-// The last two match rules the reply prompts carry, the negation trick and The
-// Finish, so a reply the second model sends through is one the refine has a rule for. The
-// Finish keeps an ending that is a good hook, so the check asks only about a
-// question put to the user, which the refine always trims. A check that also
-// counted an ending pointing ahead would send hooks through for a refine that
-// then leaves them as they are.
+// All but the first match rules the reply prompts carry, with the same
+// examples, so a reply the second model sends through is one the refine has a
+// rule for. The negation check names both forms of it, a thing and an action,
+// because one example of the first form let the second through. The last one
+// asks only about a question put to the user, which the refine always trims,
+// and not about an ending that points ahead, which The Finish keeps as a hook.
 const JUDGE_CHECKS = [
+    "`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.",
+    "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
+    "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't move. She just stood there.\".",
+    "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
+    "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
+    "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
+].join("\n");
+// The checks as they were in 1.20.0 to 1.21.1, word for word. A reader still
+// holding exactly these never wrote their own, and is offered the ones above.
+const JUDGE_CHECKS_1_20 = [
     "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
     "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
     "`reply` names a character's feeling when their actions already show it.",
     "`reply` piles up adjectives or strained comparisons.",
     "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
     "`reply` ends by turning to the user with a question, such as what they do next.",
-].join("\n");
-// The checks as they were in 1.19.4 and before, word for word. A reader still
-// holding exactly these never wrote their own, and is offered the ones above.
-const JUDGE_CHECKS_1_19 = [
-    "`reply` repeats a word, a phrase or a sentence shape inside itself.",
-    "`reply` uses stock phrases that turn up in many stories.",
-    "`reply` states a character's feeling outright where the scene could show it.",
-    "`reply` piles up adjectives or strained comparisons.",
 ].join("\n");
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
@@ -1695,9 +1697,9 @@ function markText(text) {
 const MOVED_DEFAULTS = [
     {
         key: "judgeChecks",
-        was: JUDGE_CHECKS_1_19,
+        was: JUDGE_CHECKS_1_20,
         label: "What the second model checks",
-        why: "Some of the checks were true of almost any reply, so nearly every reply was sent to be refined. They are narrower now, and there are two more.",
+        why: "The second model reads each check word for word. The checks now name what to look for on the page, with examples. Two that asked for a judgement are gone, and two that match rules in the reply prompts are new.",
         needs: { key: "judgeMode", is: "two" },
     },
 ];

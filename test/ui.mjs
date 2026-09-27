@@ -8185,10 +8185,12 @@ console.log("\nwhen a default moves under somebody who was on it");
   // The checks as they came before, word for word. A reader still holding them
   // never wrote their own.
   const OLD_CHECKS = [
-    "`reply` repeats a word, a phrase or a sentence shape inside itself.",
-    "`reply` uses stock phrases that turn up in many stories.",
-    "`reply` states a character's feeling outright where the scene could show it.",
+    "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
+    "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
+    "`reply` names a character's feeling when their actions already show it.",
     "`reply` piles up adjectives or strained comparisons.",
+    "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
+    "`reply` ends by turning to the user with a question, such as what they do next.",
   ].join("\n");
   const stored = (page) =>
     page.evaluate(() => {
@@ -8209,7 +8211,7 @@ console.log("\nwhen a default moves under somebody who was on it");
       await new Promise((r) => setTimeout(r, 200));
     });
     const after = await stored(page);
-    ok("taking it moves them to the new one", /held breath/.test(String(after.now)), JSON.stringify(after));
+    ok("taking it moves them to the new one", /she didn't move/.test(String(after.now)), JSON.stringify(after));
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 
