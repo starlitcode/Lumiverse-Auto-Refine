@@ -17,6 +17,7 @@ _2026-09-27_
 
 ### Changed
 
+- **Refine when a check reaches is 40 by default, not 50.** At 50, a reply with a problem the second model was not sure of was left alone. A clean reply still scores well under 40. With two models on, and the line still at 50, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
 - **The built-in checks are rewritten for how the second model scores them.** Each one names what to look for on the page, with examples. The check for the negation trick now names both forms, so a line about an action, such as "she didn't just leave, she ran", is caught, not only "it wasn't a request, it was a command". The two checks that asked for a judgement, about feelings the actions already show and about strained comparisons, are gone. Two new ones match rules in the built-in reply prompts: an action followed by a comment on how it came out, and an action started then taken back. With two models on, and the checks you started with, a line above the tabs offers the new ones. Press **Take it**, or **Keep mine**.
 
 ### Fixed

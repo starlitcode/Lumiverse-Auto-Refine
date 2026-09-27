@@ -960,7 +960,7 @@ describe("two models: Jev reads the reply first", () => {
     const text = sentText(h);
     expect(text).toContain("<found>");
     expect(text).toContain("Treat each one as a lead to check.");
-    expect(text).toContain("line of 50%");
+    expect(text).toContain("line of 40%");
     const first = text.indexOf("- reply uses stock phrases. (90%)");
     const second = text.indexOf("- reply repeats itself. (60%)");
     expect(first).toBeGreaterThan(-1);

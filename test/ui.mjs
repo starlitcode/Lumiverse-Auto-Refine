@@ -8241,6 +8241,23 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
+  // The line at the old default of 50 is offered the new one, and taking it
+  // sets 40.
+  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 50 } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody still on a line of 50 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+    await page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
+    ok("and taking it sets the line to 40", line === 40, String(line));
+  });
+  // A line of their own choosing is left alone.
+  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 65 } }, async (page) => {
+    ok("somebody who set their own line is left alone", (await seen(page)) === null, "");
+  });
+
   // Keep mine puts it away without changing the setting.
   await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
     await page.evaluate(async () => {

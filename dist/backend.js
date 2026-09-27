@@ -3886,7 +3886,7 @@ let judgeModel = '';
 let judgeVersion = 'latest';
 let judgeName = '';
 let judgeChecks = [];
-let judgeOver = 50;
+let judgeOver = 40;
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
 // `previous_reply`, with the checks in BEFORE_CHECKS. A check of the reader's
@@ -4421,7 +4421,7 @@ function applyRules(s) {
         .filter(Boolean)
         .slice(0, JEV_CHECKS_MAX);
     judgeOver = Number(s.judgeOver);
-    judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 50;
+    judgeOver = Number.isFinite(judgeOver) ? Math.min(99, Math.max(1, judgeOver)) : 40;
     judgeWorn = s.judgeWorn !== false;
     judgeBefore = s.judgeBefore === true;
     judgeByHand = s.judgeByHand === true;

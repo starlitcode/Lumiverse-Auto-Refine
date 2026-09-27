@@ -137,7 +137,9 @@ Write each check so that:
 
 To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided** or **What Span decided**, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
 
-**Refine when a check reaches** is the line, 50 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
+**Refine when a check reaches** is the line, 40 percent by default. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
+
+The line is under 50 because the two mistakes do not cost the same. A reply with a problem that is left alone has to be found and fixed by hand. A clean reply that is refined costs one refine, and the built-in prompts hand a clean passage back almost unchanged.
 
 It goes from 1 to 99. The two ends are left out because each one makes the second model a cost with no use:
 

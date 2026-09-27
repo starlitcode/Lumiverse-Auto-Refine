@@ -540,7 +540,7 @@ const CONFIG = {
     // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
-    judgeOver: 50,
+    judgeOver: 40,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -1702,6 +1702,13 @@ const MOVED_DEFAULTS = [
         why: "The second model scores whether each check is true of the reply, so a check has to describe the pattern it means. The checks now name what to look for on the page, with examples. Two that asked for a judgement are gone, and two that match rules in the reply prompts are new.",
         needs: { key: "judgeMode", is: "two" },
     },
+    {
+        key: "judgeOver",
+        was: 50,
+        label: "Refine when a check reaches",
+        why: "At 50, a reply with a problem the second model was not sure of, such as a score of 44%, was left alone. At 40 it is refined. A clean reply still scores well under 40.",
+        needs: { key: "judgeMode", is: "two" },
+    },
 ];
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
 // The mark counts blocks that are switched off, which the shape does not. A
@@ -2017,7 +2024,7 @@ const JUDGE_FIELDS = [
         min: 1,
         max: 99,
         needs: { key: "judgeMode", is: "two" },
-        hint: "A percentage, 50 by default. Lower refines more replies, higher refines fewer.",
+        hint: "A percentage, 40 by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "judgeWorn",
@@ -13701,7 +13708,7 @@ export function setup(ctx, overrides) {
                                 check: String(x.check || "").replace(/`/g, "").slice(0, 300),
                                 pct: Math.max(0, Math.min(100, Math.round(Number(x.pct) || 0))),
                             })),
-                            over: Number(msg.over) || 50,
+                            over: Number(msg.over) || 40,
                             model: String(msg.model || "").slice(0, 60),
                             cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
                             after: !!msg.after,
@@ -13769,7 +13776,7 @@ export function setup(ctx, overrides) {
                             scores: Number.isFinite(pct)
                                 ? [{ check: String(msg.check || "").replace(/`/g, "").slice(0, 300), pct: Math.max(0, Math.min(100, Math.round(pct))) }]
                                 : [],
-                            over: Number(msg.over) || 50,
+                            over: Number(msg.over) || 40,
                             model: String(msg.model || "").slice(0, 60),
                             cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
                             test: {
