@@ -32,6 +32,7 @@ A key is kept for each host:
 - A key belongs to the host, not the model. An OpenRouter key is used for Jev and for Span on OpenRouter.
 - **Keys are saved for**, under the box, lists the hosts that have a key.
 - **Forget key** deletes the key for the host shown. The others are kept.
+- **Another address** keeps a key for each address. A different address, such as one set by importing somebody else's settings, has no key until you save one for it. The same host with a different path uses the same key.
 - A key saved before keys were kept per host is moved to the host you have picked the first time it is used.
 
 ## Which Jev
@@ -85,7 +86,8 @@ Pick **Another address** for any host not in the list. It works for Jev and for 
 
 1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
    - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.
-   - The one exception is an address on the same computer as Lumiverse, such as `http://localhost:8080/...` or `http://127.0.0.1/...`. That never goes over a network.
+   - An address on the same computer as Lumiverse can use `http://`, since it never goes over a network. That is `localhost`, `127.0.0.1`, `[::1]` and, in Docker, `host.docker.internal`.
+   - For any other `http://` address on your own machine or network, such as another Docker container by its name, switch on **Let the key go over http://**. It is off by default. Only switch it on for an address you run yourself.
 2. **Model name**: what your host calls the model, spelled the way its docs spell it.
 
 Hosts take a scoring model in one of five ways, and the end of the address decides which:

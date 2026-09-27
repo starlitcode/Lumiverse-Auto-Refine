@@ -4039,8 +4039,44 @@ function jevKindOf(url: string): JevKind {
 // model: an OpenRouter key reaches Jev and Span alike. Each is its own secret,
 // named after the host. The name with nothing after it is where the one key
 // was kept before there was one per host.
+//
+// Another address is kept per origin: the scheme, the host name and the port.
+// The address is a setting, and settings can be imported from somebody
+// else's file. Tied to the origin, a key saved for one address is never sent
+// to a different one, so an imported address has no key until one is saved
+// for it.
 const JEV_KEY = 'jev_api_key';
-const keyName = (host: string) => JEV_KEY + '.' + host;
+// Read with a pattern rather than URL, which the backend does not always
+// have. A user name or password in the address is left out, and each
+// scheme's own port is the same as no port.
+function originOf(url: string): string {
+  const m = /^(https?):\/\/([^\/?#]+)/i.exec(String(url || '').trim());
+  if (!m) return '';
+  const scheme = m[1].toLowerCase();
+  const place = m[2].replace(/^.*@/, '').toLowerCase();
+  if (!place) return '';
+  const port = scheme === 'https' ? ':443' : ':80';
+  return scheme + '://' + (place.slice(-port.length) === port ? place.slice(0, -port.length) : place);
+}
+// Two 32-bit FNV-1a hashes, so the name stays short and within the letters
+// the secure store takes, whatever the address is.
+function originMark(origin: string): string {
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let i = 0; i < origin.length; i++) {
+    const c = origin.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x811c9dc5) >>> 0;
+  }
+  return ('00000000' + a.toString(16)).slice(-8) + ('00000000' + b.toString(16)).slice(-8);
+}
+// The secret's name for a host. Empty for another address with no usable
+// address yet, which has nowhere to keep a key.
+function keyName(host: string, url: string = judgeUrl): string {
+  if (host !== 'custom') return JEV_KEY + '.' + host;
+  const origin = originOf(url);
+  return origin ? JEV_KEY + '.custom.' + originMark(origin) : '';
+}
 // A decision comes back in well under a second, so twenty is a host that is
 // down rather than one that is slow.
 const JEV_TIMEOUT_MS = 20000;
@@ -4061,6 +4097,9 @@ let judgeWho = 'jev';
 let spanTier: SpanTier = 'free';
 let judgeHost = 'openrouter';
 let judgeUrl = '';
+// Set by the reader for an http address they know is their own, such as
+// another Docker container. See safeForKey.
+let judgeHttpOk = false;
 let judgeModel = '';
 let judgeVersion: 'latest' | 'preview' | 'exact' | 'own' = 'latest';
 let judgeName = '';
@@ -4170,11 +4209,16 @@ const hostLabel = (host: string) => HOST_LABELS[host] || host;
 // Whether an address can be sent a key. Over plain http the key can be read
 // by anyone on the network between Lumiverse and the host, so http is only
 // taken for an address on the same computer, where it never goes over a
-// network. Every built-in host is https.
+// network. host.docker.internal is the machine Docker runs on. Any other http
+// address, such as another container's name, cannot be told apart from a
+// computer elsewhere, so it needs the reader's own switch. Every built-in
+// host is https.
 function safeForKey(url: string): boolean {
   const u = String(url || '').trim();
   if (/^https:\/\//i.test(u)) return true;
-  return /^http:\/\/(localhost|127(\.\d{1,3}){3}|\[::1\])(:\d+)?(\/|$)/i.test(u);
+  if (!/^http:\/\//i.test(u)) return false;
+  if (/^http:\/\/(localhost|127(\.\d{1,3}){3}|\[::1\]|host\.docker\.internal)(:\d+)?(\/|$)/i.test(u)) return true;
+  return judgeHttpOk;
 }
 
 // Every host a key can be kept for.
@@ -4196,14 +4240,16 @@ function jevWhere(): { url: string; model: string; kind: JevKind } {
 // moved to the first host it is looked for on, which is the host picked at
 // the time: the panel asks for it on load, and a reply asks for it before the
 // call.
-async function jevKey(userId: string | undefined, host: string): Promise<string> {
+async function jevKey(userId: string | undefined, host: string, url: string = judgeUrl): Promise<string> {
   try {
     if (!spindle.enclave || typeof spindle.enclave.get !== 'function') return '';
-    const got = await spindle.enclave.get(keyName(host), userId);
+    const name = keyName(host, url);
+    if (!name) return '';
+    const got = await spindle.enclave.get(name, userId);
     if (got != null && got !== '') return String(got);
     const old = await spindle.enclave.get(JEV_KEY, userId);
     if (old == null || old === '') return '';
-    await spindle.enclave.put(keyName(host), String(old), userId);
+    await spindle.enclave.put(name, String(old), userId);
     await spindle.enclave.delete(JEV_KEY, userId);
     return String(old);
   } catch (_) {
@@ -4213,15 +4259,17 @@ async function jevKey(userId: string | undefined, host: string): Promise<string>
 
 // The hosts that have a key kept, for the panel to list. Read with has, so no
 // key is decrypted to answer.
-async function hostsWithKeys(userId: string | undefined): Promise<string[]> {
+async function hostsWithKeys(userId: string | undefined, url: string = judgeUrl): Promise<string[]> {
   const out: string[] = [];
   try {
     if (!spindle.enclave) return out;
     for (const h of keyHosts()) {
+      const name = keyName(h, url);
+      if (!name) continue;
       const there =
         typeof spindle.enclave.has === 'function'
-          ? await spindle.enclave.has(keyName(h), userId)
-          : (await spindle.enclave.get(keyName(h), userId)) != null;
+          ? await spindle.enclave.has(name, userId)
+          : (await spindle.enclave.get(name, userId)) != null;
       if (there) out.push(h);
     }
   } catch (_) {}
@@ -4299,7 +4347,7 @@ async function askJev(
   if (!safeForKey(where.url))
     return {
       error:
-        'the key was not sent, because the address does not start with https://. Over http:// the key can be read on the way. Only an address on the same computer, such as http://localhost, can use http://',
+        'the key was not sent, because the address does not start with https://. Over http:// the key can be read on the way. To use an http:// address on your own machine or network, such as another Docker container, switch on Let the key go over http://',
     };
   if (!where.model) return { error: 'no model name is set for ' + who() };
   const key = await jevKey(userId, hostFor(judgeWho, judgeHost));
@@ -4710,6 +4758,7 @@ function applyRules(s: any): void {
     : 'openrouter';
   judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
   judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
+  judgeHttpOk = s.judgeHttpOk === true;
   judgeVersion = ['preview', 'exact', 'own'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
   judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
   judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
@@ -5447,30 +5496,35 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
       // this build does not know, or none, is the one the settings pick.
       const asked = String(payload.host == null ? '' : payload.host);
       const host = keyHosts().indexOf(asked) >= 0 ? asked : hostFor(judgeWho, judgeHost);
+      // The address the panel shows, for another address. The settings can
+      // reach the backend a moment after the key does.
+      const url = payload.url == null ? judgeUrl : String(payload.url).trim().slice(0, 500);
       let said = '';
       try {
         if (!spindle.enclave) said = 'this build of Lumiverse has no secure store to keep the key in';
         else if (payload.type === 'jev_key_set') {
           const key = cleanJevKey(payload.key);
           if (!key) said = 'that does not look like a key: it has to be one line of plain characters';
+          else if (!keyName(host, url)) said = 'type the address first. A key for another address is kept for that address';
           else {
-            await spindle.enclave.put(keyName(host), key, userId);
+            await spindle.enclave.put(keyName(host, url), key, userId);
             said = 'saved';
           }
         } else if (payload.type === 'jev_key_forget') {
-          await spindle.enclave.delete(keyName(host), userId);
+          if (keyName(host, url)) await spindle.enclave.delete(keyName(host, url), userId);
           said = 'forgotten';
         }
       } catch (e: any) {
         said = 'the key could not be stored: ' + ((e && e.message) || String(e));
       }
-      const has = !!(await jevKey(userId, host));
+      const has = !!(await jevKey(userId, host, url));
       replyTo(userId, {
         type: 'jev_key',
         requestId: payload.requestId,
         host: host,
         has: has,
-        hosts: await hostsWithKeys(userId),
+        hosts: await hostsWithKeys(userId, url),
+        for: payload.for == null ? '' : String(payload.for),
         said: said,
       });
       return;

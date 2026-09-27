@@ -163,7 +163,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeChecks", "judgeOver", "spanOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -569,6 +569,7 @@ const CONFIG = {
   judgeHost: "openrouter",
   judgeUrl: "",
   judgeModel: "",
+  judgeHttpOk: false,
   judgeVersion: "latest",
   judgeName: "",
   // One statement a line. The second model gives the chance each is true of `reply`.
@@ -2217,6 +2218,14 @@ const JUDGE_FIELDS: Field[] = [
     hint: "What that host calls the model, as its own docs spell it.",
   },
   {
+    key: "judgeHttpOk",
+    label: "Let the key go over http://",
+    type: "bool",
+    needs: { key: "judgeHost", is: "custom" },
+    under: true,
+    hint: "Off by default. Only for an address on your own machine or network, such as another Docker container. Over http the key is not encrypted.",
+  },
+  {
     key: "judgeChecks",
     label: "What the second model checks",
     type: "lines",
@@ -3106,6 +3115,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (!opt) return "openrouter";
     const needs = (opt as any).needs;
     return !needs || (cfg as any)[needs.key] === needs.is ? String(opt.value) : "openrouter";
+  }
+
+  // What a key answer is about: the host, and for another address the address
+  // too, since that key is kept for the address.
+  function keyFor(): string {
+    return keyHost() === "custom" ? "custom|" + String(cfg.judgeUrl || "").trim() : keyHost();
+  }
+  // What goes with every key message, so the backend keeps or reads the key for
+  // what the panel shows even before the settings reach it.
+  function keyWhere(): any {
+    return { host: keyHost(), url: String(cfg.judgeUrl || "").trim(), for: keyFor() };
   }
 
   // A host's name as the host list gives it.
@@ -7833,6 +7853,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.addEventListener("blur", () => {
         cfg[f.key] = box.value;
         persist(true);
+        // A key for another address is kept for the address, so a new one is
+        // asked about. The answer redraws the card.
+        if (f.key === "judgeUrl") askKeyStatus();
       });
       wrap.appendChild(box);
     } else if (f.type === "lines") {
@@ -9069,15 +9092,17 @@ export function setup(ctx: Ctx, overrides?: any) {
   // card is rebuilt on every paint, and asking on each one sent a question per
   // keystroke while the answer was on its way.
   let jevStatusFor = "";
+  function askKeyStatus(): void {
+    if (cfg.judgeMode !== "two" || jevStatusFor === keyFor()) return;
+    jevStatusFor = keyFor();
+    jevHas = null;
+    jevSaid = "";
+    send({ type: "jev_key_status", requestId: newId(), ...keyWhere() });
+  }
   function buildJudgeCard(): HTMLElement {
     // Asked only once two models are on, since nothing about the second model
     // shows before, and again whenever the host shown changes.
-    if (cfg.judgeMode === "two" && jevStatusFor !== keyHost()) {
-      jevStatusFor = keyHost();
-      jevHas = null;
-      jevSaid = "";
-      send({ type: "jev_key_status", requestId: newId(), host: jevStatusFor });
-    }
+    askKeyStatus();
     const wrap = card(
       "One model or two",
       "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.",
@@ -9126,7 +9151,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       jevSaid = "Saving.";
       jevAsk = newId();
-      send({ type: "jev_key_set", requestId: jevAsk, key: key, host: keyHost() });
+      send({ type: "jev_key_set", requestId: jevAsk, key: key, ...keyWhere() });
       paint();
     });
     const forget = button("Forget key", false);
@@ -9136,7 +9161,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     forget.addEventListener("click", () => {
       jevSaid = "Forgetting.";
       jevAsk = newId();
-      send({ type: "jev_key_forget", requestId: jevAsk, host: keyHost() });
+      send({ type: "jev_key_forget", requestId: jevAsk, ...keyWhere() });
       paint();
     });
     const test = button("Test", false);
@@ -14445,9 +14470,9 @@ export function setup(ctx: Ctx, overrides?: any) {
           // every one of these is taken.
           if (msg.type === "jev_key") {
             if (Array.isArray(msg.hosts)) jevHosts = msg.hosts.map((h: any) => String(h));
-            // An answer about a host no longer shown still updates the list,
-            // and leaves the rest alone.
-            if (msg.host && String(msg.host) !== keyHost()) {
+            // An answer about a host or address no longer shown still updates
+            // the list, and leaves the rest alone.
+            if (msg.for ? String(msg.for) !== keyFor() : msg.host && String(msg.host) !== keyHost()) {
               paint();
               return;
             }

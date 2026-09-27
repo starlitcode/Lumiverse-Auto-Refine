@@ -1322,6 +1322,64 @@ describe("two models: Jev reads the reply first", () => {
     }
   });
 
+  test("host.docker.internal is the same computer", async () => {
+    const url = "http://host.docker.internal:8080/v1/decide";
+    const h = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+  });
+
+  test("another container's http:// address needs the reader's own switch", async () => {
+    const url = "http://jev-proxy:8080/v1/decide";
+    const off = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
+    await off.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(off.jevCalls.length).toBe(0);
+    expect(said(off)[0].why).toMatch(/switch on Let the key go over http:\/\/$/);
+    const on = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom", judgeHttpOk: true }, { jev: says([90]) });
+    await on.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(on.jevCalls.length).toBe(1);
+    expect(on.jevCalls[0].url).toBe(url);
+  });
+
+  // Another address is a setting, and settings can come from somebody else's
+  // file. The key saved for one address is never sent to another.
+  test("a key for another address is only sent to that address", async () => {
+    const mine = { judgeHost: "custom", judgeUrl: "https://mine.example.test/v1/decide", judgeModel: "jev-custom" };
+    const h = await keyed(mine, { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.jevCalls[0].init.headers.Authorization).toBe("Bearer sk-made-up-key");
+    const status = async (url: string) => {
+      await h.front({ type: "jev_key_status", requestId: "s", host: "custom", url: url });
+      return h.sent.filter((m: any) => m.type === "jev_key").pop().has;
+    };
+    // The same host with another path, case or its own port is the same address.
+    expect(await status("https://MINE.example.test:443/v2/other")).toBe(true);
+    expect(await status("https://theirs.example.test/v1/decide")).toBe(false);
+    expect(await status("http://mine.example.test/v1/decide")).toBe(false);
+    // A different host, the way an imported file could set it, with the same
+    // saved keys.
+    const theirs = await armed(["She stepped through and the cold hit her."], { ...TWO, ...mine, judgeUrl: "https://theirs.example.test/v1/decide" }, chat(), { jev: says([90]) });
+    Object.assign(theirs.vault, h.vault);
+    await theirs.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(theirs.jevCalls.length).toBe(0);
+    expect(said(theirs)[0].why).toBe("no key is saved for the address you gave");
+  });
+
+  test("a key for another address needs the address first", async () => {
+    const h = await armed([], { ...TWO, judgeHost: "custom", judgeUrl: "" });
+    await h.front({ type: "jev_key_set", requestId: "a", key: "sk-made-up-key", host: "custom", url: "" });
+    const back = h.sent.filter((m: any) => m.type === "jev_key").pop();
+    expect(back.said).toMatch(/^type the address first/);
+    expect(back.has).toBe(false);
+    expect(Object.keys(h.vault).filter((k) => k.indexOf("jev_api_key") >= 0)).toEqual([]);
+  });
+
   test("a pasted key is trimmed, and one that cannot be a key is refused", async () => {
     const h = await armed([], TWO);
     await h.front({ type: "jev_key_set", requestId: "a", key: "  sk-trimmed\n" });

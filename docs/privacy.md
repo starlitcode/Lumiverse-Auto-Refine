@@ -51,7 +51,8 @@ A refine you start yourself is only sent to it when **Let it check refines you s
 Your key:
 
 - is sent from the panel to the backend once, when you press **Save key**
-- is kept in Lumiverse's secure store, for your account only, with one key for each host
+- is kept in Lumiverse's secure store, for your account only, with one key for each host, and for **Another address** one for each address
+- is only sent over `https://`, or over `http://` to the same computer, unless you switch on **Let the key go over http://**
 - is never in your settings, an export, or this browser's storage
 - is never shown again. The panel is only told whether a key is saved.
 - is deleted by **Forget key**, for the host shown

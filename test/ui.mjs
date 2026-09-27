@@ -1766,6 +1766,10 @@ console.log("\nSpan, the other second model");
     const respan = await read();
     ok("on Respan, the paid Lite is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
     ok("and the key is Respan's", respan.key === "Key for Respan", String(respan.key));
+    ok("the http switch is only for another address", !(await page.evaluate(() => {
+      const n = document.querySelector('#drawer [data-arf-row="judgeHttpOk"]');
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    })), "");
     const keys = await page.evaluate(async () => {
       const asked = window.__sent.filter((m) => m.type === "jev_key_status").map((m) => m.host);
       window.__fromBackend({ type: "jev_key", host: "respan", has: true, hosts: ["openrouter", "respan"], said: "" });
@@ -1789,6 +1793,22 @@ console.log("\nSpan, the other second model");
     await closed(page);
     const custom = await read();
     ok("Another address is offered for Span, and Which Span waits for a host", !custom.tierShown, JSON.stringify(custom));
+    const addr = await page.evaluate(async () => {
+      const vis = (sel) => {
+        const n = document.querySelector(sel);
+        return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+      };
+      const box = document.querySelector('#drawer [data-arf-field="judgeUrl"]');
+      box.focus();
+      box.value = "https://mine.example.test/v1/decide";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.blur();
+      await new Promise((r) => setTimeout(r, 150));
+      const last = window.__sent.filter((m) => m.type === "jev_key_status").pop();
+      return { httpOk: vis('#drawer [data-arf-row="judgeHttpOk"]'), last };
+    });
+    ok("the http switch shows for another address", addr.httpOk, JSON.stringify(addr));
+    ok("and leaving the address box asks about that address's key", !!addr.last && addr.last.host === "custom" && addr.last.url === "https://mine.example.test/v1/decide", JSON.stringify(addr.last));
 
     const sent = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
     ok("the choice is saved", sent.judgeWho === "span" && sent.judgeHost === "custom", JSON.stringify({ who: sent.judgeWho, host: sent.judgeHost }));
