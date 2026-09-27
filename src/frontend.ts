@@ -2205,7 +2205,7 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeHost", is: "custom" },
     under: true,
     placeholder: "https://jev.example.com/v1/decisions",
-    hint: "Any host that serves the model. Paste its full address, not only the base. It ends in something like /decisions, /scores, /chat/completions or /messages.",
+    hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
   },
   {
     key: "judgeModel",

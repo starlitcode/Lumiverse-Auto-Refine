@@ -84,6 +84,8 @@ Span reads a conversation, not named fields. **On OpenRouter** it takes the same
 Pick **Another address** for any host not in the list. It works for Jev and for Span. Fill in two boxes:
 
 1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
+   - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.
+   - The one exception is an address on the same computer as Lumiverse, such as `http://localhost:8080/...` or `http://127.0.0.1/...`. That never goes over a network.
 2. **Model name**: what your host calls the model, spelled the way its docs spell it.
 
 Hosts take a scoring model in one of five ways, and the end of the address decides which:

@@ -1299,6 +1299,29 @@ describe("two models: Jev reads the reply first", () => {
     expect(JSON.stringify(h.sent)).not.toContain("sk-made-up-key");
   });
 
+  // Over plain http the key can be read on the way, so it is only sent over
+  // https, or over http to the same computer.
+  test("a key is not sent to an http:// address on another computer", async () => {
+    for (const url of ["http://jev.example.test/v1/decide", "http://192.168.1.20:8080/v1/decide", "http://localhost.example.test/v1/decide"]) {
+      const h = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls.length).toBe(0);
+      expect(said(h)[0].failed).toBe(true);
+      expect(said(h)[0].why).toMatch(/^the key was not sent, because the address does not start with https:\/\//);
+    }
+  });
+
+  test("and is sent over http:// to the same computer", async () => {
+    for (const url of ["http://localhost:8080/v1/decide", "http://127.0.0.1/v1/decide", "http://[::1]:9000/v1/decide"]) {
+      const h = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls.length).toBe(1);
+      expect(h.jevCalls[0].url).toBe(url);
+    }
+  });
+
   test("a pasted key is trimmed, and one that cannot be a key is refused", async () => {
     const h = await armed([], TWO);
     await h.front({ type: "jev_key_set", requestId: "a", key: "  sk-trimmed\n" });

@@ -22,6 +22,7 @@ _2026-09-27_
 ### Fixed
 
 - **A host that repeated your key in an error message could put it in the Log.** From there it could go into a bug report. The key is now taken out of anything a host says, and shows as [your key].
+- **Another address sent your key over plain http:// when the address used it.** Over http the key could be read on the way. The key is now only sent to an https:// address, or to an http:// address on the same computer, such as http://localhost. Any other address gets a line in the Log and under **Test** that says why.
 
 ### Changed
 

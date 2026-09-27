@@ -4167,6 +4167,16 @@ const HOST_LABELS: Record<string, string> = {
 };
 const hostLabel = (host: string) => HOST_LABELS[host] || host;
 
+// Whether an address can be sent a key. Over plain http the key can be read
+// by anyone on the network between Lumiverse and the host, so http is only
+// taken for an address on the same computer, where it never goes over a
+// network. Every built-in host is https.
+function safeForKey(url: string): boolean {
+  const u = String(url || '').trim();
+  if (/^https:\/\//i.test(u)) return true;
+  return /^http:\/\/(localhost|127(\.\d{1,3}){3}|\[::1\])(:\d+)?(\/|$)/i.test(u);
+}
+
 // Every host a key can be kept for.
 function keyHosts(): string[] {
   const all = ['custom'];
@@ -4286,6 +4296,11 @@ async function askJev(
 ): Promise<{ answers?: any; cost?: number; model?: string; error?: string }> {
   const where = jevWhere();
   if (!where.url) return { error: 'no address is set for ' + who() };
+  if (!safeForKey(where.url))
+    return {
+      error:
+        'the key was not sent, because the address does not start with https://. Over http:// the key can be read on the way. Only an address on the same computer, such as http://localhost, can use http://',
+    };
   if (!where.model) return { error: 'no model name is set for ' + who() };
   const key = await jevKey(userId, hostFor(judgeWho, judgeHost));
   if (!key) return { error: 'no key is saved for ' + hostLabel(hostFor(judgeWho, judgeHost)) };
