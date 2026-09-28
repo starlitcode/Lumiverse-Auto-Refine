@@ -13,8 +13,8 @@ It works alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Re
 
 - **Refines replies.** Press a button to refine the latest reply, or go through every reply in a chat. Automatic refining of each new reply is off until you turn it on.
 - **Refines part of a reply.** Select some text and refine only that, or take it out.
-- **Refines your own messages.** Only when you ask, never automatically. They get their own prompt, which fixes mistakes and leaves your style alone.
-- **Refines your draft.** An optional button rewrites what you are typing in the input box.
+- **Refines messages you have already sent.** Press the refine button on one of your own messages in the chat. This is never done automatically. Your messages get their own prompt, which fixes mistakes and leaves your style alone.
+- **Refines what you are still typing.** An optional button rewrites the draft in the input box, before you send it.
 - **Shows what changed.** After a refine, the tab shows the before and after, either mixed in one text or side by side.
 
 It lives in a tab in the sidebar drawer, so you can keep it open while you write.
