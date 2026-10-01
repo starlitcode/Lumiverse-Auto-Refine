@@ -25,6 +25,7 @@ _2026-10-01_
 
 ### Changed
 
+- **The row of tabs stays at the top.** When you scroll down a tab, the row of tabs (Prompt, Context, Model, Limits, Log, Setup) stays at the top of the drawer, so you can switch tabs without scrolling back up. It goes back to its own place when you scroll back to the top.
 - **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
 - **The buttons above the tabs are in two groups**, **Replies** and **Your messages**, in two even columns. The automatic switch is now in the **Replies** group and reads **Refine every new reply automatically**.
 - **Refine what I am typing is greyed out with the other buttons** while the panel waits to be told which chat you are in. It used to stay lit, so the buttons above the tabs were not all in the same state.

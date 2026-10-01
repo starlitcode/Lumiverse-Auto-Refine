@@ -11003,7 +11003,7 @@ for (const [name, viewport, touch] of [["phone", { width: 360, height: 800 }, tr
       }).map((b) => b.textContent);
       const clipped = buttons.filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent);
       const short = buttons.filter((b) => b.getBoundingClientRect().height < 32).map((b) => b.textContent);
-      return { count: buttons.length, outside, clipped, short, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
+      return { count: buttons.length, outside, clipped, short, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
     });
     ok(name + ": every button stays inside the card", got.count >= 5 && !got.outside.length, JSON.stringify(got));
     ok(name + ": no label is cut off", !got.clipped.length, JSON.stringify(got.clipped));
@@ -11054,6 +11054,49 @@ console.log("\nevery tab on a phone and under a mouse");
       ok("under a mouse, " + name + " answers the pointer", before !== after, before + " / " + after);
     }
   });
+}
+
+console.log("\nthe tabs stay at the top");
+{
+  // The drawer scrolls on its own, as it does in Lumiverse. The tab strip has
+  // to stay at the top of it while the tab scrolls, cover what goes under it,
+  // and be back in its own place once the tab is scrolled back up. The search
+  // box scrolls away with the rest.
+  const SCROLLS = "#drawer{height:520px;overflow-y:auto}";
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 760 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Prompt");
+      const got = await page.evaluate(async () => {
+        const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const drawer = document.getElementById("drawer");
+        const bar = () => drawer.querySelector("[data-arf-stick]");
+        const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
+        const rest = where();
+        const room = drawer.scrollHeight - drawer.clientHeight;
+        drawer.scrollTop = drawer.scrollHeight;
+        await frame();
+        const r = bar().getBoundingClientRect();
+        const atTop = where();
+        const hasTabs = !!bar().querySelector(".arf-tab") && !bar().querySelector('input[type="search"]');
+        // What is under the middle of the bar's left edge, past the tabs, is the
+        // bar itself and not a card that scrolled beneath it.
+        const hit = document.elementFromPoint(r.left + 4, r.top + 3);
+        const covers = !!hit && bar().contains(hit);
+        const bg = getComputedStyle(bar()).backgroundColor;
+        const opaque = /^rgb\(/.test(bg);
+        drawer.scrollTop = 0;
+        await frame();
+        const back = where();
+        return { rest, room, atTop, hasTabs, covers, opaque, bg, back, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
+      });
+      ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
+      ok(label + ": scrolled down, the bar sits at the top of the drawer", Math.abs(got.atTop) <= 1, JSON.stringify(got));
+      ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
+      ok(label + ": and it is solid, so nothing shows through it", got.opaque && got.covers, JSON.stringify(got));
+      ok(label + ": scrolled back up, it is in its own place again", got.back === got.rest && got.rest > 0, JSON.stringify(got));
+      ok(label + ": nothing scrolls sideways", !got.sideways, "");
+    });
+  }
 }
 
 await browser.close();

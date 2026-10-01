@@ -21,6 +21,10 @@ It is a tab so you can keep it open while you write, and see what the last refin
 - Refines take turns between accounts. If another account's refine is running, yours waits for it to finish, and the panel says "Waiting for another account's refine to finish".
 - Your own refines never wait for each other.
 
+## The row of tabs
+
+When you scroll down a tab, the row of tabs stays at the top of the drawer. You can switch tabs without scrolling back up. Scroll back to the top and the row is in its own place again. While you search, the row is hidden, because the results come from every tab.
+
 ## Finding a setting
 
 The search box above the tabs searches every tab, not only the one you are on.
