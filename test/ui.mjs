@@ -11013,6 +11013,50 @@ for (const [name, viewport, touch] of [["phone", { width: 360, height: 800 }, tr
   });
 }
 
+console.log("\nevery tab on a phone and under a mouse");
+// On a phone: nothing scrolls sideways and everything that can be pressed is
+// at least 32 pixels, with the switches answering a tap just around them. Under
+// a mouse: each kind of control answers the pointer.
+{
+  const SAVED = { inputRefine: true, judgeMode: "two", refineAtOnce: true, widgetOn: true };
+  await inTab(browser, { viewport: { width: 375, height: 812 }, touch: true, saved: SAVED }, async (page) => {
+    await page.evaluate(() => (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" })));
+    for (const tab of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+      await goTab(page, tab);
+      await page.waitForTimeout(200);
+      const got = await page.evaluate(() => {
+        const root = document.querySelector("#drawer");
+        const pressable = [...root.querySelectorAll('button, [role="button"], input[type=checkbox], select, a[href]')].filter((n) => {
+          if (n.closest("[hidden]") || n.disabled) return false;
+          const r = n.getBoundingClientRect();
+          return r.width > 1 && r.height > 1 && getComputedStyle(n).visibility !== "hidden";
+        });
+        const small = pressable.filter((n) => !n.matches(".arf-box")).filter((n) => { const r = n.getBoundingClientRect(); return r.width < 32 || r.height < 32; }).map((n) => (n.getAttribute("aria-label") || n.textContent || "").trim().slice(0, 40));
+        const box = root.querySelector(".arf-box");
+        let around = true;
+        if (box) { const r = box.getBoundingClientRect(); around = document.elementFromPoint(r.left + r.width / 2, r.top - 3) === box; }
+        return { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small, around };
+      });
+      ok("phone, " + tab + ": nothing scrolls sideways", !got.sideways, "");
+      ok("phone, " + tab + ": everything pressable is at least 32 pixels", !got.small.length, JSON.stringify(got.small.slice(0, 5)));
+      ok("phone, " + tab + ": a switch answers a tap just above it", got.around, "");
+    }
+  });
+  await inTab(browser, { viewport: { width: 1280, height: 900 }, saved: SAVED }, async (page) => {
+    await goTab(page, "Limits");
+    const look = (sel) => page.evaluate((sel) => { const n = document.querySelector(sel); const cs = getComputedStyle(n); return [cs.backgroundColor, cs.borderColor, cs.boxShadow, cs.filter].join("|"); }, sel);
+    for (const [name, sel] of [["a switch", '#drawer [data-arf-row="protectOn"] .arf-box'], ["a list", "#drawer select.arf-field"], ['a "?"', "#drawer .arf-q"]]) {
+      await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: "center" }), sel);
+      const before = await look(sel);
+      await page.hover(sel);
+      await page.waitForTimeout(250);
+      const after = await look(sel);
+      await page.mouse.move(2, 2);
+      ok("under a mouse, " + name + " answers the pointer", before !== after, before + " / " + after);
+    }
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

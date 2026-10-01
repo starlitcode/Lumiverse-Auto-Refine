@@ -60,6 +60,7 @@ function linkTo(url, text) {
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     a.textContent = text;
+    a.className = "arf-link";
     a.style.cssText = "color:var(--lumiverse-primary,rgba(147,112,219,.9));text-decoration:underline";
     return a;
 }
@@ -4735,6 +4736,27 @@ export function setup(ctx, overrides) {
         ".arf-segbtn:focus-visible{outline:none;" +
         "box-shadow:inset 0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
         "@media (pointer: coarse){.arf-segbtn{min-height:40px}}" +
+        // A highlight under the mouse, for the two-way choices and the switches,
+        // the same as every other button here has. Only where the device can
+        // hover: a phone has none, and a tap does the work either way.
+        // A ring rather than a new border colour for the switches, since a switch
+        // that is on already wears the accent border. The text boxes and lists
+        // take the accent edge; one with the keyboard in it already has its own
+        // mark and is left alone.
+        "@media (hover: hover){" +
+        ".arf-segbtn:not([aria-pressed=true]):hover{background:var(--lumiverse-fill-subtle,rgba(128,128,128,.08))}" +
+        ".arf-box:hover:not(:disabled){box-shadow:0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
+        ".arf-field:hover:not(:focus):not(:disabled){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        ".arf-link:hover{filter:brightness(1.25)}" +
+        "}" +
+        // A finger needs room. The switches keep their size and get a larger
+        // area that answers a tap around them; the small round buttons and the
+        // links grow to at least 32 pixels.
+        "@media (pointer: coarse){" +
+        ".arf-box::before{content:\"\";position:absolute;inset:-4px -2px}" +
+        ".arf-x.arf-blockfold{min-width:32px;min-height:32px}" +
+        ".arf-link{display:inline-block;padding:9px 0}" +
+        "}" +
         // The floating button. Squared against the host's container rather than
         // trusting it, so it is a circle whatever shape the container turns out to
         // be: it was coming out as a squashed oval.
@@ -4856,7 +4878,7 @@ export function setup(ctx, overrides) {
         "color:var(--lumiverse-primary-text,rgba(186,135,255,.95))}" +
         // A finger needs a bigger target than a cursor does, and this is the
         // smallest control on the panel.
-        "@media (pointer: coarse){.arf-q{width:28px;height:28px;font-size:14px}}" +
+        "@media (pointer: coarse){.arf-q{width:32px;height:32px;font-size:14px}}" +
         // The description itself, parented to the page rather than to the row: the
         // panel is a scroll box and anything inside it would be clipped at the edge.
         // Opaque, since it sits directly over the rows below the one it belongs to:
