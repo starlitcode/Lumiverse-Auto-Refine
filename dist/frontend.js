@@ -6866,8 +6866,13 @@ export function setup(ctx, overrides) {
         // Why the button is greyed out, said once rather than left to a tooltip
         // nobody sees on a phone. The master switch being off is not written out:
         // the switch is right there saying it.
-        if (stop && cfg.enabled)
-            wrap.appendChild(warn(stop));
+        // The draft button is not held up by everything that holds up the rest:
+        // it reads the input box, not the chat. When it is showing and usable, the
+        // line says so, or a lit button under a warning reads as a mistake.
+        if (stop && cfg.enabled) {
+            const draftWorks = !!cfg.inputRefine && refinesMine() && !whyNotDraft() && !inputWaiting;
+            wrap.appendChild(warn(draftWorks ? stop + " Refine what I am typing works without it." : stop));
+        }
         if (outsideAnyChat())
             wrap.appendChild(note("Refining runs inside a chat. On the home screen or a character page there is nothing to refine yet, so the panel waits here."));
         return wrap;

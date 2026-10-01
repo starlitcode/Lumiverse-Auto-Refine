@@ -246,7 +246,7 @@ It rewrites only what you selected. It works in your own messages too, with thei
 - It will not delete the whole message.
 - **Put it back** undoes it.
 
-**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, since there is no input box to read. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
+**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, since there is no input box to read. While the panel is still waiting to be told which chat you are in, it works, because it only reads the input box, and the warning above the tabs says so. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
 
 While the floating button is on screen, its menu holds these extra actions. With the button off, they are in the chat input's Extras menu instead, which is how you reach them on a phone.
 

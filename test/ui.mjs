@@ -10961,6 +10961,24 @@ console.log("\nwhat to refine");
   });
 }
 
+console.log("\nwaiting to be told the chat");
+// Every button but the draft one waits for the chat. The draft reads the input
+// box, so it stays usable, and the warning under the buttons says so rather
+// than leaving a lit button under a line that reads as everything being held.
+await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+  const got = await page.evaluate(() => ({
+    draft: !document.querySelector("#drawer [data-arf-draft]").disabled,
+    now: document.querySelector("#drawer [data-arf-now]").disabled,
+    said: [...document.querySelectorAll("#drawer .arf-warn")].map((n) => n.textContent).join(" "),
+  }));
+  ok("the draft button works before the chat is known", got.draft && got.now, JSON.stringify(got));
+  ok("and the warning says it does", /Waiting to be told which chat you are in\. Refine what I am typing works without it\./.test(got.said), got.said);
+});
+await inTab(browser, {}, async (page) => {
+  const said = await page.evaluate(() => [...document.querySelectorAll("#drawer .arf-warn")].map((n) => n.textContent).join(" "));
+  ok("without the draft button, the warning does not mention it", /Waiting to be told/.test(said) && !/typing/.test(said), said);
+});
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
