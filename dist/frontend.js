@@ -1828,13 +1828,13 @@ const GUARD_FIELDS = [
         key: "guardPreamble",
         label: "Refuse an answer that talks about the edit",
         type: "bool",
-        hint: "On by default. Catches an answer opening with something like \u201cHere is the rewritten message\u201d. With the tags doing their job this rarely fires, because a preamble outside them is never saved.",
+        hint: "On by default. Throws away an answer that opens with something like “Here is the rewritten message”.",
     },
     {
         key: "guardSoften",
         label: "Refuse a rewrite that sanitised the reply",
         type: "bool",
-        hint: "On by default, and the only check that reads the original as well as the rewrite. It counts the strong words in each, the explicit and violent ones, and refuses a rewrite that dropped most of them.",
+        hint: "On by default. Refuses a rewrite that took out most of the reply's explicit or violent words.",
     },
     {
         key: "softenPct",
@@ -1896,7 +1896,7 @@ const GUARD_FIELDS = [
         type: "num",
         min: 0,
         max: 5,
-        hint: "How many times to wait and ask again when the provider answers \"too many requests\" or is loading a model, and 2 by default. A refused call costs nothing, so this buys the refine you asked for rather than a second one. Where the provider says how long to wait, that is what it waits.",
+        hint: "How many times to wait and ask again when the provider is busy or loading a model. 2 by default. A refused call costs nothing.",
     },
     {
         key: "refineGap",
@@ -2011,7 +2011,7 @@ const JUDGE_FIELDS = [
             { value: "one", label: "One: every reply is refined" },
             { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
         ],
-        hint: "With two, a second model reads each finished reply first, and only the replies it picks out are refined. It can be wrong in either direction. It is a separate service with its own key.",
+        hint: "With two, a second model reads each reply first, and only the ones it picks are refined. It is a separate service with its own key.",
     },
     {
         key: "judgeWho",
@@ -2135,7 +2135,7 @@ const JUDGE_FIELDS = [
         label: "Also check for worn-out phrases",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Asks the second model whether the reply uses a phrase this chat has worn out. Only while Find phrases this chat has worn out is on, on the Prompt tab.",
+        hint: "Asks the second model whether the reply uses a phrase this chat has worn out. Needs Find phrases this chat has worn out, on the Limits tab.",
     },
     {
         key: "judgeWornCheck",
@@ -2167,14 +2167,14 @@ const JUDGE_FIELDS = [
         label: "Let it check refines you start yourself",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Off by default, so a refine you start, on one reply or on every reply, goes straight to the refine model. On, the second model reads each reply first and may leave it alone. A selection is never sent to it.",
+        hint: "Off by default, so a refine you start goes straight to the refine model. On, the second model reads the reply first and may skip it.",
     },
     {
         key: "judgeAfter",
         label: "Have it check the rewrite",
         type: "bool",
         needs: { key: "judgeMode", is: "two" },
-        hint: "Off by default. On, the second model reads the rewrite too, and if a check still reaches your line the reply is refined once more. One more call to it per refine.",
+        hint: "Off by default. The second model also reads the rewrite. If a check still reaches your line, the reply is refined once more.",
     },
     {
         key: "judgeFoundLead",
@@ -2194,7 +2194,7 @@ const COST_FIELDS = [
         label: "Refine using",
         type: "pick",
         options: [{ value: "", label: "The model I am chatting with" }],
-        hint: "A rewrite does not need the model you roleplay with. Pointing this at a cheaper or faster connection is the biggest saving there is here.",
+        hint: "A rewrite does not need your roleplay model. A cheaper or faster connection here saves the most.",
     },
     {
         key: "thinkingMode",
@@ -2205,7 +2205,7 @@ const COST_FIELDS = [
             { value: "inherit", label: "Whatever my connection is set to" },
             { value: "custom", label: "Yes, and I will say how much" },
         ],
-        hint: "Off by default. Rewriting a paragraph rarely needs thinking, and thinking on every reply costs more. Whatever my connection is set to leaves it to your own reasoning settings.",
+        hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. The connection option uses your own reasoning settings.",
     },
     {
         key: "thinkingEffort",
@@ -2232,7 +2232,7 @@ const COST_FIELDS = [
         type: "num",
         min: 0,
         max: 3600,
-        hint: "A refine that has not come back by then is cancelled and the reply is left alone. Up to an hour, and 0 means never give up, past which the panel stops waiting at an hour so it cannot sit spinning on a refine nothing is going to answer.",
+        hint: "A refine that takes longer is cancelled, and the reply is left as it was. Up to an hour. 0 means no limit.",
     },
     // Prices, so a token count can be shown as the number people actually want.
     // Nothing here knows what a model costs and no two providers agree, so the
@@ -2277,7 +2277,7 @@ const LIMIT_FIELDS = [
         key: "refineAgain",
         label: "Refine something that has been refined before",
         type: "bool",
-        hint: "Off by default, so the same words are refined once. On, pressing refine on a reply that was already refined sends it again. A swipe, regenerate or edit is always refined.",
+        hint: "Off by default, so the same words are only refined once. A swipe, regenerate or edit always counts as new words.",
     },
     {
         key: "asSwipe",
@@ -2293,7 +2293,7 @@ const LIMIT_FIELDS = [
             { value: "one", label: "One pass" },
             { value: "many", label: "Several passes, one after another" },
         ],
-        hint: "One by default, which is one model call per refine. Several runs your saved presets in order, each pass given what the one before it wrote, at one call per pass.",
+        hint: "One by default. Several runs your saved presets in order, one model call each.",
     },
     {
         key: "passNames",
@@ -2307,7 +2307,7 @@ const LIMIT_FIELDS = [
         key: "wornOn",
         label: "Find phrases this chat has worn out",
         type: "bool",
-        hint: "Off by default. On, {{overused}} lists phrases the narration in this chat keeps repeating, so your prompt can ask for something else. Speech is not counted. No extra call is made.",
+        hint: "Off by default. On, {{overused}} lists phrases the narration in this chat keeps repeating. No extra call is made.",
     },
     {
         key: "wornBack",
@@ -8672,7 +8672,7 @@ export function setup(ctx, overrides) {
             label: "Name the speakers in the run-up",
             type: "bool",
             under: true,
-            hint: "On by default. Puts a name before each earlier message, so the model can tell who said what. Switch it off if your messages already start with a name.",
+            hint: "On by default. Puts the speaker's name before each earlier message. Turn it off if your messages already start with a name.",
         }));
         wrap.appendChild(fieldRow({
             key: "maxHistoryTokens",
@@ -8681,7 +8681,7 @@ export function setup(ctx, overrides) {
             type: "num",
             min: 0,
             max: 200000,
-            hint: "A ceiling on the same thing, in tokens. Whichever runs out first decides. Whole messages are kept or dropped, oldest first, so the turn just before the one being refined is always the one that survives.",
+            hint: "The same limit in tokens. Whole messages are dropped, oldest first, so the latest one is always kept.",
         }));
         wrap.appendChild(fieldRow({
             key: "maxLoreTokens",
@@ -9389,14 +9389,14 @@ export function setup(ctx, overrides) {
             key: "protectOn",
             label: "Hide markup from the model",
             type: "bool",
-            hint: "On by default. Tags, code and image links are lifted out and stood in for while the model works, then put back exactly as they were. A rewrite that lost one is dropped.",
+            hint: "On by default. Tags, code and image links are swapped out while the model works, then put back. A rewrite that loses one is dropped.",
         }));
         wrap.appendChild(fieldRow({
             key: "protectInline",
             label: "Hide plain italic and bold too",
             type: "bool",
             needs: { key: "protectOn" },
-            hint: "Off by default. Tags like <i> and <b> wrap words in the middle of a sentence, and hiding them hands the model a sentence with holes in it. Anything carrying an attribute is hidden either way.",
+            hint: "Off by default. Also hides plain tags like <i> and <b>. This leaves gaps in the sentences the model reads.",
         }));
         wrap.appendChild(fieldRow({
             key: "protectNote",
@@ -9411,13 +9411,13 @@ export function setup(ctx, overrides) {
             key: "protectThinking",
             label: "Keep the reply's own reasoning out of the refine",
             type: "bool",
-            hint: "On by default. Reasoning the model left in the reply is not part of the writing, so it is cut out before the refine and put back after rather than being rewritten.",
+            hint: "On by default. Thinking left in the reply is taken out before the refine and put back after, so it is not rewritten.",
         }));
         wrap.appendChild(fieldRow({
             key: "stripAnswerThinking",
             label: "Keep the refiner's own reasoning out of your chat",
             type: "bool",
-            hint: "On by default, and the other direction from the row above. A refining model that thinks out loud can have that working saved into your chat as part of the rewrite, which this stops.",
+            hint: "On by default. Stops the refining model's own thinking from being saved into your chat with the rewrite.",
         }));
         // Folded. Three lists of text that most readers never open, sitting in
         // front of the switches everybody does. A search still reaches inside,
@@ -9449,7 +9449,7 @@ export function setup(ctx, overrides) {
             key: "wrapOutput",
             label: "Take the answer from between the tags",
             type: "bool",
-            hint: "On by default. When the answer carries <REFINED> and </REFINED>, only what is between them is saved. Asking for the tags is your prompt's job, and off, the whole answer is taken as the rewrite.",
+            hint: "On by default. When the answer has <REFINED> tags, only the text between them is saved. Off, the whole answer is saved.",
         }));
         wrap.appendChild(fieldRow({
             key: "streamProgress",
@@ -10065,19 +10065,19 @@ export function setup(ctx, overrides) {
             key: "popup",
             label: "Show the before and after on screen",
             type: "bool",
-            hint: "On by default. When a refine finishes, a card shows the reply before and after, with a button to put it back. Closing it loses nothing: the refine is in the Log.",
+            hint: "On by default. A card shows the reply before and after the refine, with a button to put it back.",
         }));
         wrap.appendChild(fieldRow({
             key: "toast",
             label: "Show a brief message",
             type: "bool",
-            hint: "On by default. The one-line note Lumiverse shows at the edge of the screen. Separate from the card above: this one says a refine happened, that one says what it did.",
+            hint: "On by default. A one-line note at the edge of the screen that says a refine happened.",
         }));
         wrap.appendChild(fieldRow({
             key: "soundOn",
             label: "Play a sound",
             type: "bool",
-            hint: "Off by default. With nothing else chosen it plays a short built-in blip, which is synthesised in the browser, with no file to include. Attach your own below if you would rather.",
+            hint: "Off by default. Plays a short built-in sound, or a sound file you add below.",
         }));
         // Built either way and hidden while the sound is off, so switching it on
         // brings these out where they stand rather than rebuilding the card around
@@ -10486,7 +10486,7 @@ export function setup(ctx, overrides) {
             key: "widgetOn",
             label: "A floating button",
             type: "bool",
-            hint: "A small round button over the chat that refines the latest reply in one tap, and can be dragged where you want it. Hold it, or right click it, for the menu. Needs the interface panels permission.",
+            hint: "A round button over the chat. Tap it to refine the latest reply. Hold it, or right-click it, for the menu.",
         }));
         if (cfg.widgetOn && widgetFailed)
             wrap.appendChild(bad("The floating button could not be created. Check that the interface panels permission is granted."));
@@ -10499,7 +10499,7 @@ export function setup(ctx, overrides) {
             key: "inputRefine",
             label: "Refining the draft in your input box",
             type: "bool",
-            hint: "Off by default, since it writes into the box you are typing in. On, a Refine what I am typing button is added above the tabs and to the Extras or floating button menu.",
+            hint: "Off by default. Adds Refine what I am typing above the tabs and to the menus. It writes into your input box.",
         }));
         wrap.appendChild(fieldRow({
             key: "barButton",
@@ -10511,7 +10511,7 @@ export function setup(ctx, overrides) {
             key: "messageButton",
             label: "A button on every message",
             type: "bool",
-            hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It goes in the place Lumiverse leaves for extensions inside each message.",
+            hint: "One tap refines that message, including an older one. It sits in the space Lumiverse leaves for extensions on each message.",
         }));
         wrap.appendChild(fieldRow({
             key: "eyeStill",
@@ -11704,7 +11704,7 @@ export function setup(ctx, overrides) {
         withSetup.setAttribute("data-arf-row", "presetSetup");
         withSetup.appendChild(labelRow({
             label: "Model setup to load with it",
-            hint: "Optional. Loading the preset then loads this setup as well, so a way of reading and the model that runs it arrive together. Left at none, loading a preset leaves the Model tab alone.",
+            hint: "Optional. Loading this preset also loads this model setup. None leaves the Model tab as it is.",
         }));
         const setupSel = document.createElement("select");
         setupSel.className = "arf-field";
@@ -13133,16 +13133,15 @@ export function setup(ctx, overrides) {
         //
         // In one place at a time. While the floating button is on screen its menu
         // holds these, and Extras holds them only when there is no button to. One
-        // way in at a time, so a menu opened for something else stays short. With the button off, or refused
-        // because ui_panels was not granted, Extras is the only way to reach them
-        // on a phone, so they come back.
+        // way in at a time keeps a menu opened for something else short. With the
+        // button off, or refused because ui_panels was not granted, Extras is the
+        // only way to reach them on a phone, so they come back.
         //
-        // Refining the latest reply rides along with the row rather than arriving
-        // on its own. The row on a message holds only the way back now, so somebody
-        // without the floating button needs this to be somewhere, and it is not
-        // worth a second switch: anybody who has asked for a row in Extras has
-        // asked for the row, not for one particular entry in it. Nothing appears on
-        // a fresh install either way.
+        // Refining the latest reply comes with the row and has no switch of its
+        // own. The row on a message holds only the way back, so somebody without
+        // the floating button needs this to be somewhere, and anybody who has asked
+        // for a row in Extras has asked for the whole row. Nothing appears on a
+        // fresh install either way.
         const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
         extra("auto-refine-now", "Refine the latest reply", inExtras && refinesReplies(), () => refineNow());
         extra("auto-refine-mine", "Refine my latest message", inExtras && refinesMine(), () => refineMineNow());

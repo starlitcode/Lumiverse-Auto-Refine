@@ -34,7 +34,7 @@ These stay in place whichever tab is open:
 
 - **The switch** turns everything on or off. Off, nothing is refined and no model is called.
 
-The buttons are in two groups.
+The buttons are in two groups. **What to refine**, on the Setup tab, can hide one of them.
 
 **Replies:**
 
@@ -105,7 +105,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Give up waiting after** stops a refine that has not come back.
   - The default is four minutes. The most is an hour. 0 means never give up.
   - Four minutes is long on purpose. A fast model answers in seconds. A reasoning model on a high setting, or a local model loading, can take minutes, and stopping it early throws that work away.
-  - With it off you are never stuck: **Stop this refine** is always there.
+  - At 0 you can still end a refine yourself: **Stop this refine** is always there.
   - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab. A reply that finished while the tab was asleep can miss the panel, so check the reply itself.
 - **Input price, per million tokens** and **Output price, per million tokens** are your provider's prices.
   - Input is what you send. Output is what the model writes back.
@@ -211,14 +211,8 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - Hold it, or right-click it, to open its menu: the tab, refining every reply, stopping a refine, putting one back, refining your draft, hiding the button, and the main switch.
 - Holding fills a ring around the edge. The menu opens when the ring closes. Let go early and nothing happens.
 - Its mark is an eye. It is shut when nothing is running, and reads while a refine runs. It blinks once when a refine finishes, and closes without a blink when you stop one.
-- If your device is set to reduce motion, the eye stays still and there is no ring.
-
-**Keep the eye still** stops every eye this extension draws from moving: on the drawer tab, the floating button, the chat buttons and the button on each message. It is off by default.
-
-- At rest, the eye is shut.
-- While a refine runs, the eye is open, with no pupil moving and no blink.
-- Pointing at a button does not open its eye.
 - Drag it where you want it. It stays there, in this browser.
+- If your device is set to reduce motion, the eye stays still and there is no ring.
 
 **A button in the chat's row of controls** adds a button to Lumiverse's own row of chat buttons. A tap refines the latest reply.
 
@@ -230,6 +224,12 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - While a message is open for editing, its button is hidden, like Lumiverse's own.
 
 Both chat buttons copy the look of the Lumiverse button next to them, so your theme and your own CSS apply to them. While a refine runs, each turns into **Stop this refine**.
+
+**Keep the eye still** stops every eye this extension draws from moving: on the drawer tab, the floating button, the chat buttons and the button on each message. It is off by default.
+
+- At rest, the eye is shut.
+- While a refine runs, the eye is open, with no pupil moving and no blink.
+- Pointing at a button does not open its eye.
 
 **Refining part of a reply** needs no setting. Select part of a reply and **Refine the part I selected** appears:
 
@@ -246,7 +246,7 @@ It rewrites only what you selected. It works in your own messages too, with thei
 - It will not delete the whole message.
 - **Put it back** undoes it.
 
-**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, since there is no input box to read., and while the panel is still waiting to be told which chat you are in, like every button above the tabs. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
+**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, because there is no input box to read. Like every button above the tabs, it is also greyed out while the panel is waiting to be told which chat you are in. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
 
 While the floating button is on screen, its menu holds these extra actions. With the button off, they are in the chat input's Extras menu instead, which is how you reach them on a phone.
 

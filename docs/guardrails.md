@@ -63,23 +63,23 @@ What it cannot catch:
 
 ## Several rewrites at once
 
-**Several rewrites at once** is off by default. On, each ask writes several rewrites at the same time instead of one.
+**Several rewrites at once** is off by default. When it is on, each try writes several rewrites at the same time instead of one.
 
 1. The same request goes to the model **How many at once** times, 2 by default and 5 at most.
 2. Each rewrite is checked the moment it arrives, with the same checks as a single rewrite.
 3. The first one that passes is used. The others still being written are stopped.
-4. If none pass, the refine is turned down, and the reason is the last check that failed.
+4. If none pass, nothing is saved and your reply is left as it was. The Log gives the last check that failed.
 
 What to know:
 
 - Every rewrite is a whole call on your bill, including the ones that are stopped. With 3 at once, one refine costs up to 3 calls.
 - The rewrites do not stream. The status line says how many are being written and how long it has been.
-- It works with **Ask again when a check fails**. Each ask is then several at once.
+- It works with **Ask again when a check fails**. Each new try is then several at once too.
 - Stop ends every rewrite still being written.
 
 ## The limit on one reply
 
-The automatic pass refines a reply again when its words are new. That is what lets it work alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry): every reply Auto Retry re-rolls is new, and each gets its refine.
+The automatic pass refines a reply again when its words are new. That is what lets it work alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry): every reply Auto Retry re-rolls is new, and each gets its refine. That includes a reroll Auto Retry adds with **Several tries at once**.
 
 But the same test cannot tell new writing from a loop, such as:
 

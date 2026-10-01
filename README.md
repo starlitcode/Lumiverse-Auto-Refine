@@ -38,6 +38,7 @@ A prompt comes with it, so switching it on is all the setup you need. Everything
 
 - **The switch at the top** stops everything. No refine runs and no model is called.
 - **Turn off here**, on the Setup tab, leaves one chat alone.
+- **What to refine**, on the Setup tab, picks replies, your own messages, or both. The buttons for the other side are hidden.
 - **Ask before saving a refine** shows you each rewrite before it is written.
 - **Put it back** undoes a refine.
 
@@ -94,6 +95,8 @@ A refine is a second model call on every reply it refines. To spend less:
 - **How much it is told** (Context tab): less chat history means a cheaper call.
 - **Two models** (Model tab, beta): a small second model, Jev or Span, checks each reply first, so only the ones that need it are refined. It can be wrong, so a reply that needs a refine is sometimes left alone. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
 
+**Several rewrites at once** (Limits tab) costs more, because each rewrite it writes is a whole call. It is off by default.
+
 Put your provider's prices on the Model tab to see costs in money instead of tokens. On a free tier or a local model, **Wait out a provider that will not take the call** (Limits tab) waits and tries again when the provider is busy.
 
 ## Your prompt
@@ -106,7 +109,7 @@ Four prompts come with it:
 - **A line judge**, for your own messages. It fixes mistakes and leaves your style alone.
 - Each has a smaller version **that thinks**, for a model that reasons.
 
-All four change only a line the model could quote as breaking a rule. The two for a model that thinks score each area and write the scores down. The two plain ones give the same limit as a plain rule, and never ask the model to check its work, because a model that does not reason writes its answer once. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
+All four change only a line the model could quote as breaking a rule. The two for a model that thinks score each area and write the scores down. The two plain ones give the same limit as a rule. They do not ask the model to check its work, because a model that does not think writes its answer in one go. All four work with one character or several, and in group chats. See [The scorecard](docs/prompt.md#the-scorecard).
 
 **Show me the request**, on the Context tab, shows the request a refine of that reply would send, without calling a model or costing anything. Two things only a real refine can fill in are named rather than shown: what the checks found, and the passes after the first.
 
