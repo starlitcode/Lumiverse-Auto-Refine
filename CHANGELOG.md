@@ -23,6 +23,7 @@ _2026-10-01_
 ### Changed
 
 - **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
+- **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practised ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
 
 ### Fixed
 

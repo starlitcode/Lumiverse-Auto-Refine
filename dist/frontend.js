@@ -982,14 +982,19 @@ const PHRASES =
     "- bodies on autopilot: a shiver down a spine, a hammering heart, a racing pulse, a dropping stomach, whitening knuckles, a tight jaw\n" +
     "- stock faces: pupils blown wide, darkening eyes, a smirk, an arched brow, a mouth corner that quirks, a smile that doesn't reach the eyes\n" +
     "- feelings in containers or blends: a jolt of, a wave of, a pang of, a flicker of, a mix of, warring with\n" +
+    "- feelings that flood, wash over, surge or bloom through somebody, or settle low in a chest\n" +
+    "- feelings stamped as real: a genuine laugh, real fear, a smile that was true for once\n" +
     "- acutely or painfully aware, and the weight of a look, a word or a silence\n" +
     "- voices given a texture or a volume knob: velvety, husky, gravelly, purring, growling, barely above a whisper, dropping an octave\n" +
     "- the air doing the mood's job: thick, charged, hanging, crackling between people\n" +
     "- rooms with a will of their own (the house watched, the room held its breath) and sounds from nowhere (somewhere, a door slammed)\n" +
+    "- weather on cue: rain that starts as someone cries, a sky that sulks along with them\n" +
+    "- movement graded instead of shown: deliberate, measured, unhurried, fluid, with practised ease\n" +
     "- pauses named instead of filled: a beat, a long moment, the silence stretched, time slowed, the world narrowed\n" +
     "- fancy stand-ins for plain words: orbs, ministrations, crimson beads, palpable, a testament to, a tapestry of\n" +
     "- office and maths talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten\n" +
-    "- negation tricks: it wasn't a request, it was a command; she didn't just leave, she ran; not unkind; less X than Y\n" +
+    "- negation tricks: it wasn't a request, it was a command; she didn't just leave, she ran; not unkind; less X than Y; more than cold, frozen\n" +
+    "- the narrator ruling on a line after it's said: the words landed, she meant every one of them, it was half an order\n" +
     "- an action, then a grade for it: she laughed, and it was thin; he smiled, slow and easy\n" +
     "- a laugh, a breath or a sound that escapes somebody\n" +
     "- do-then-undo: reached out, then pulled back; opened her mouth, then closed it\n" +
