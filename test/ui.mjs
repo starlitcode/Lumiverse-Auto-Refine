@@ -10987,6 +10987,32 @@ await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
   ok("the draft button is greyed out with the rest", got.draft && got.now, JSON.stringify(got));
 });
 
+console.log("\nthe buttons above the tabs on a phone and a laptop");
+// Two groups of buttons in two columns. On a phone and on a laptop, nothing
+// runs off the card, the labels wrap inside their buttons, and on a phone
+// every button is big enough to tap.
+for (const [name, viewport, touch] of [["phone", { width: 360, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
+  await inTab(browser, { viewport, touch, saved: { inputRefine: true } }, async (page) => {
+    const got = await page.evaluate(() => {
+      (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" }));
+      const card = document.querySelector("#drawer [data-arf-now]").closest(".arf-btngroup").parentElement;
+      const box = card.getBoundingClientRect();
+      const buttons = [...card.querySelectorAll(".arf-btngrid > button")].filter((b) => !b.hidden);
+      const outside = buttons.filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.left < box.left - 1 || r.right > box.right + 1;
+      }).map((b) => b.textContent);
+      const clipped = buttons.filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent);
+      const short = buttons.filter((b) => b.getBoundingClientRect().height < 32).map((b) => b.textContent);
+      return { count: buttons.length, outside, clipped, short, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    });
+    ok(name + ": every button stays inside the card", got.count >= 5 && !got.outside.length, JSON.stringify(got));
+    ok(name + ": no label is cut off", !got.clipped.length, JSON.stringify(got.clipped));
+    ok(name + ": every button is at least 32 pixels high", !got.short.length, JSON.stringify(got.short));
+    ok(name + ": the page does not scroll sideways", !got.sideways, JSON.stringify(got));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
