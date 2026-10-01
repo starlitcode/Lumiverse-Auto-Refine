@@ -7613,10 +7613,9 @@ console.log("\ndescriptions behind a ?");
       const up = () => document.querySelectorAll('[role="tooltip"]').length;
       const qs = [...document.querySelectorAll("#drawer .arf-q")];
       open(qs[0]);
-      // Straight after the press. It is there in full at once, with no fade.
+      // Straight after the press, before the fade has run.
       const early = document.querySelector('[role="tooltip"]');
-      const atOnce = !!early && Number(getComputedStyle(early).opacity) === 1 &&
-        /^0s$/.test(getComputedStyle(early).transitionDuration);
+      const faded = !!early && Number(getComputedStyle(early).opacity) < 1;
       await frame();
       await new Promise((r) => setTimeout(r, 200));
       const first = up();
@@ -7652,10 +7651,10 @@ console.log("\ndescriptions behind a ?");
       await frame();
       await new Promise((r) => setTimeout(r, 200));
       const escaped = up();
-      return { first, atOnce, opaque, outside, second, retap, elsewhere, scrolled, escaped };
+      return { first, faded, opaque, outside, second, retap, elsewhere, scrolled, escaped };
     });
     ok("a press opens the description", r.first === 1, r);
-    ok("and it appears at once, with no fade", r.atOnce, r);
+    ok("and it fades in rather than appearing", r.faded, r);
     ok("and it is opaque, since it sits over the rows below", r.opaque, r);
     ok("and hangs off the page, so the panel cannot clip it", r.outside, r);
     ok("only one is ever open", r.second === 1, r);

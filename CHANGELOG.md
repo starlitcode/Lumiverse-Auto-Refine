@@ -30,7 +30,7 @@ _2026-10-01_
 - **Refine what I am typing is greyed out with the other buttons** while the panel waits to be told which chat you are in. It used to stay lit, so the buttons above the tabs were not all in the same state.
 - **Easier to use on a phone and with a mouse.** On a phone, the **?** buttons, the fold arrows on prompt blocks and the links are at least 32 pixels, and a switch answers a tap just around it. With a mouse, the switches, lists, two-way choices and links light up when you point at them.
 - **Shorter descriptions.** About half of the descriptions under the **?** buttons are shorter and plainer. Some docs pages are reworded to be clearer.
-- **Pop-ups appear with no animation.** The before-and-after card, the dim behind it, the full-size editor and the description under each **?** used to rise, grow or fade in. They now appear at once.
+- **Pop-ups appear with no animation.** The before-and-after card, the dim behind it and the full-size editor used to rise, grow or fade in. They now appear at once. The description under each **?** still fades in and out.
 - **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practised ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
 
 ### Fixed

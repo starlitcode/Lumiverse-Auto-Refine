@@ -5118,8 +5118,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // vanishing between two frames. It arrives over the rows below the one it
     // belongs to, and something landing on top of what you were reading with no
     // travel at all reads as the page having flinched.
-    "opacity:0}" +
+    "opacity:0;transition:opacity 140ms ease-out}" +
     '.arf-hint[data-arf-open]{opacity:1}' +
+    "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none}}" +
     // The card that comes up on the page when a refine finishes, so the answer to
     // "what did it change" is in front of you rather than behind a tab you have
     // to know to open. Bottom right on a desktop, across the bottom on a phone,
@@ -5804,9 +5805,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
   }
 
-  // How long a closed description stays in the page before it is taken out.
-  // Nothing fades: it disappears the moment it is closed.
-  const HINT_FADE = 0;
+  // How long the description takes to arrive and to leave.
+  const HINT_FADE = 140;
   // The ones still fading out. Cleared in the same disposer that closes the open
   // one, straight after it, since teardown runs these in the order they were
   // added: emptying this first and closing after would put a box back in and
