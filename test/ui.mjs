@@ -6323,7 +6323,10 @@ console.log("\nrefining the draft from the panel");
         where("Refine what I am typing") === order.length - 1,
       JSON.stringify(order));
 
-    // It reads the real box, the same one every other way in reads.
+    // It reads the real box, the same one every other way in reads. A chat is
+    // open first, since the button waits for one like every button beside it.
+    await page.evaluate(() => (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" })));
+    await settle(page);
     await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
     await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
     await settle(page);
@@ -6408,6 +6411,9 @@ console.log("\nrefining the draft from the panel");
   const WORKING = "<REFINE_NOTES>\nThe simile is doing no work. Cutting it.\n</REFINE_NOTES>";
   const draftRun = async (page, answer) => {
     await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+    // The button waits for a chat, like every button beside it.
+    await page.evaluate(() => (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" })));
+    await settle(page);
     await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
     await settle(page);
     const id = await page.evaluate(
@@ -6545,6 +6551,9 @@ console.log("\nthe widget, while your draft is being refined");
       ok("the button is not turning before anything is asked",
         !(await face(page)).working);
 
+      // The button waits for a chat, like every button beside it.
+      await page.evaluate(() => (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" })));
+      await settle(page);
       await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
       await settle(page);
       const mid = await face(page);
@@ -6610,6 +6619,9 @@ console.log("\nthe widget, while your draft is being refined");
     { saved: { inputRefine: true, widgetOn: true } },
     async (page) => {
       await page.evaluate(() => window.__makeComposer("i walk through it, suddenly"));
+      // The button waits for a chat, like every button beside it.
+      await page.evaluate(() => (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" })));
+      await settle(page);
       await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
       await settle(page);
       const id = await page.evaluate(
@@ -6665,6 +6677,9 @@ console.log("\nthe live line, for a draft as for a reply");
     ok("the line is not claiming a refine before one is asked for",
       !/Refining|Thinking|Writing/.test(idle), idle);
 
+    // The button waits for a chat, like every button beside it.
+    await page.evaluate(() => (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" })));
+    await settle(page);
     await page.evaluate(() => document.querySelector('#drawer [data-arf-draft]').click());
     await settle(page);
     ok("it says a refine is running the moment the draft is sent",
@@ -10962,21 +10977,14 @@ console.log("\nwhat to refine");
 }
 
 console.log("\nwaiting to be told the chat");
-// Every button but the draft one waits for the chat. The draft reads the input
-// box, so it stays usable, and the warning under the buttons says so rather
-// than leaving a lit button under a line that reads as everything being held.
+// Every button above the tabs waits for the chat, the draft one included, so
+// they are all in the same state at once.
 await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
   const got = await page.evaluate(() => ({
-    draft: !document.querySelector("#drawer [data-arf-draft]").disabled,
+    draft: document.querySelector("#drawer [data-arf-draft]").disabled,
     now: document.querySelector("#drawer [data-arf-now]").disabled,
-    said: [...document.querySelectorAll("#drawer .arf-warn")].map((n) => n.textContent).join(" "),
   }));
-  ok("the draft button works before the chat is known", got.draft && got.now, JSON.stringify(got));
-  ok("and the warning says it does", /Waiting to be told which chat you are in\. Refine what I am typing works without it\./.test(got.said), got.said);
-});
-await inTab(browser, {}, async (page) => {
-  const said = await page.evaluate(() => [...document.querySelectorAll("#drawer .arf-warn")].map((n) => n.textContent).join(" "));
-  ok("without the draft button, the warning does not mention it", /Waiting to be told/.test(said) && !/typing/.test(said), said);
+  ok("the draft button is greyed out with the rest", got.draft && got.now, JSON.stringify(got));
 });
 
 await browser.close();

@@ -27,7 +27,7 @@ _2026-10-01_
 
 - **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
 - **The buttons above the tabs are in two groups**, **Replies** and **Your messages**, in two even columns. The automatic switch is now in the **Replies** group and reads **Refine every new reply automatically**.
-- **The warning above the tabs says when Refine what I am typing still works.** While the panel waits to be told which chat you are in, the other buttons are greyed out, but this one is not, since it only reads the input box. The warning now says so.
+- **Refine what I am typing is greyed out with the other buttons** while the panel waits to be told which chat you are in. It used to stay lit, so the buttons above the tabs were not all in the same state.
 - **Pop-ups appear with no animation.** The before-and-after card, the dim behind it, the full-size editor and the description under each **?** used to rise, grow or fade in. They now appear at once.
 - **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practised ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
 

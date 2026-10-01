@@ -5262,12 +5262,11 @@ export function setup(ctx, overrides) {
             return "No block in your prompt has {{message}} in it, so the model would never see the reply. Add it under Prompt.";
         return "";
     }
-    // The draft is not a reply, and what stops one does not all stop the other. A
-    // refine of the input box carries no chat id and asks the chat for nothing,
-    // so it works while the panel is still working out which chat you are in, and
-    // it is not held up by there being no chat at all. Being switched off, here
-    // or everywhere, still stops it, and so does a prompt with nowhere to put the
-    // text.
+    // The draft is not a reply, and not everything that stops one stops the
+    // other. Being switched off, here or everywhere, stops it, and so does a
+    // prompt with nowhere to put the text. While the panel waits to be told which
+    // chat you are in, it is greyed out with the rest, so every button above the
+    // tabs is in the same state at once.
     function whyNotDraft() {
         if (!cfg.enabled)
             return "Auto Refine is switched off.";
@@ -5276,6 +5275,8 @@ export function setup(ctx, overrides) {
         // there and this one stayed lit, which read as the one that still worked.
         if (outsideAnyChat())
             return "No chat is open, so there is no input box to read.";
+        if (lastChatId == null)
+            return "Waiting to be told which chat you are in.";
         if (lastChatId != null && chatIsOff(lastChatId))
             return "Auto Refine is switched off in this chat.";
         if (noTurn())
@@ -6866,13 +6867,8 @@ export function setup(ctx, overrides) {
         // Why the button is greyed out, said once rather than left to a tooltip
         // nobody sees on a phone. The master switch being off is not written out:
         // the switch is right there saying it.
-        // The draft button is not held up by everything that holds up the rest:
-        // it reads the input box, not the chat. When it is showing and usable, the
-        // line says so, or a lit button under a warning reads as a mistake.
-        if (stop && cfg.enabled) {
-            const draftWorks = !!cfg.inputRefine && refinesMine() && !whyNotDraft() && !inputWaiting;
-            wrap.appendChild(warn(draftWorks ? stop + " Refine what I am typing works without it." : stop));
-        }
+        if (stop && cfg.enabled)
+            wrap.appendChild(warn(stop));
         if (outsideAnyChat())
             wrap.appendChild(note("Refining runs inside a chat. On the home screen or a character page there is nothing to refine yet, so the panel waits here."));
         return wrap;
