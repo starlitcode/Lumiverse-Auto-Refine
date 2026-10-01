@@ -16,6 +16,9 @@
  * wants, hands it to the backend, and shows what came back.
  */
 const VERSION = "1.26.0";
+// The page event Auto Retry raises when it adds a reroll itself. Both
+// extensions spell it the same way.
+const REROLL_EVENT = "auto-retry:reroll-added";
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
@@ -127,6 +130,8 @@ const PARTS = [
             "softenWords",
             "softenSwaps",
             "retryRefine",
+            "refineAtOnce",
+            "refineAtOnceCount",
             "rateWaits",
             "refineGap",
             "wrapOutput",
@@ -143,7 +148,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The floating button, the buttons in the chat, and the input bar row.",
-        keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton", "eyeStill"],
+        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill"],
     },
     {
         id: "inputbox",
@@ -547,6 +552,13 @@ const CONFIG = {
     // Extra asks after a failed check. None by default: somebody who never opened
     // this has not agreed to pay for three refines where they asked for one.
     retryRefine: 0,
+    // Write several rewrites at the same time and use the first that passes every
+    // check. Off by default: each one is a whole call to pay for.
+    refineAtOnce: false,
+    refineAtOnceCount: 2,
+    // What the panel offers to refine: replies, your own messages, or both. The
+    // side you do not use is hidden everywhere, prompt included.
+    refineSide: "both",
     // How many times to wait out a provider that would not take the call. On,
     // unlike the retry above, because nothing was spent on a call that was
     // refused: a free tier meters per minute and a local server answers 503 while
@@ -1858,6 +1870,23 @@ const GUARD_FIELDS = [
         min: 0,
         max: 3,
         hint: "How many extra times to ask, and 0 by default. Only the failures a second try could fix are retried, and every retry is another call on your bill.",
+    },
+    {
+        key: "refineAtOnce",
+        label: "Several rewrites at once",
+        type: "bool",
+        hint: "Off by default. Writes several rewrites at the same time and keeps the first that passes every check. Each one costs a whole call.",
+    },
+    {
+        key: "refineAtOnceCount",
+        int: true,
+        needs: { key: "refineAtOnce" },
+        under: true,
+        label: "How many at once",
+        type: "num",
+        min: 2,
+        max: 5,
+        hint: "How many rewrites each ask writes at the same time, and 2 by default.",
     },
     {
         key: "rateWaits",
@@ -3816,6 +3845,8 @@ export function setup(ctx, overrides) {
     // started.
     let stage = "";
     let streamed = 0;
+    // How many rewrites are being written at the same time, or 0 when it is one.
+    let manyAtOnce = 0;
     // How long a refine is given, in seconds, or 0 for as long as it takes. One
     // reading of the setting, because the countdown on screen and the watchdog
     // behind it disagreeing about it is how a panel says "12s left" and then
@@ -3829,6 +3860,10 @@ export function setup(ctx, overrides) {
     function stageWords() {
         const secs = runStartedAt ? (Date.now() - runStartedAt) / 1000 : 0;
         const clockPart = secs >= 1 ? ", " + secs.toFixed(0) + "s" : "";
+        // Several at once do not stream, so the count is what says something is
+        // happening, with the clock beside it.
+        if (manyAtOnce && (stage === "thinking" || stage === "asking"))
+            return "Writing " + manyAtOnce + " rewrites at once" + clockPart;
         if (stage === "thinking")
             return "Thinking" + clockPart;
         if (stage === "writing")
@@ -4378,6 +4413,16 @@ export function setup(ctx, overrides) {
         // once, rather than at each of the places that hide something.
         ".arf [hidden]{display:none!important}" +
         ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
+        // The refine buttons above the tabs, in two groups with a heading each:
+        // replies, then your own messages. Two equal columns, so the buttons line
+        // up rather than wrapping at whatever width each label happens to be. A
+        // label too long for its column goes onto a second line inside its button.
+        ".arf-btngroup{display:flex;flex-direction:column;gap:6px}" +
+        ".arf-btngroup-h{font-size:12px;font-weight:600;" +
+        "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-btngrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}" +
+        ".arf-btngrid>.arf-btn{width:100%;min-width:0;white-space:normal;text-align:center;line-height:1.3}" +
+        ".arf-btngrid>.arf-wide{grid-column:1/-1}" +
         ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
         // Inputs sit on a fill rather than an invented black, and take a neutral
         // border so a theme with a strong accent does not tint every box.
@@ -4830,9 +4875,8 @@ export function setup(ctx, overrides) {
         // vanishing between two frames. It arrives over the rows below the one it
         // belongs to, and something landing on top of what you were reading with no
         // travel at all reads as the page having flinched.
-        "opacity:0;transition:opacity 140ms ease-out}" +
+        "opacity:0}" +
         '.arf-hint[data-arf-open]{opacity:1}' +
-        "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none}}" +
         // The card that comes up on the page when a refine finishes, so the answer to
         // "what did it change" is in front of you rather than behind a tab you have
         // to know to open. Bottom right on a desktop, across the bottom on a phone,
@@ -4847,27 +4891,18 @@ export function setup(ctx, overrides) {
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));" +
         "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5));" +
         "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
-        "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden;" +
-        "animation:arf-rise 320ms cubic-bezier(.2,.8,.28,1) both}" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden}" +
         // The card comes up from under the corner it sits in, overshoots by a
         // couple of pixels and settles. A straight slide of eight pixels in 180ms
         // arrives and stops dead, which reads as something being placed there; this
         // reads as something arriving. It grows very slightly on the way in as
         // well, so the corner it comes from is the corner it came from.
-        "@keyframes arf-rise{" +
-        "0%{opacity:0;transform:translateY(14px) scale(.965)}" +
-        "62%{opacity:1;transform:translateY(-3px) scale(1.006)}" +
-        "100%{opacity:1;transform:none}}" +
         // A dim behind it, so the eye goes to the card rather than hunting the page
         // under it for what changed. Light enough to read the chat through, since
         // the card is about a message sitting right there, and a tap anywhere on it
         // closes, which is what everybody expects of a dim.
         ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
-        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45));" +
-        "animation:arf-fade 320ms cubic-bezier(.2,.8,.28,1) both}" +
-        "@keyframes arf-fade{from{opacity:0}to{opacity:1}}" +
-        "@media (prefers-reduced-motion: reduce){.arf-shade{animation:none}}" +
-        "@media (prefers-reduced-motion: reduce){.arf-pop{animation:none}}" +
+        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45))}" +
         // A row switched on where somebody is already looking. It fades down into
         // place rather than appearing between two frames, which is the difference
         // between a row arriving and the page having flinched.
@@ -4897,18 +4932,11 @@ export function setup(ctx, overrides) {
         // Fixed at the width the two carets share, so the name beside it does not
         // shift when one turns.
         ".arf-blockfold{font-size:12px;padding:2px 4px;min-width:16px;text-align:center;flex:0 0 auto}" +
-        // The full-screen editor for one block of text. The dim fades in, and the
-        // box rises a little and grows to its size as it fades in, slowing as it
-        // lands and going slightly past its place before settling. The same
-        // entrance Auto Retry's dialogs make. With less motion asked for, it just
-        // appears.
+        // The full-screen editor for one block of text. It appears at once, with
+        // no animation, like every pop-up here.
         ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
         "justify-content:center;padding:16px;box-sizing:border-box;" +
-        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.6));" +
-        "animation:arf-fade 180ms ease-out both}" +
-        ".arf-over .arf-bigbox{animation:arf-grow 260ms cubic-bezier(.2,.9,.3,1.1) both}" +
-        "@keyframes arf-grow{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}" +
-        "@media (prefers-reduced-motion: reduce){.arf-over,.arf-over .arf-bigbox{animation:none}}" +
+        "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.6))}" +
         ".arf-bigbox{display:flex;flex-direction:column;gap:10px;width:min(760px,96vw);" +
         "height:min(82vh,700px);box-sizing:border-box;padding:14px;" +
         "border-radius:var(--lumiverse-radius-lg,12px);" +
@@ -5192,6 +5220,14 @@ export function setup(ctx, overrides) {
     // The same for what the checks found. Only the prompt for replies, since
     // the second model never reads your own messages.
     const noJevFoundBlock = () => !blockList("blocks").some((b) => b.on && String(b.text || "").indexOf("{{checks_found}}") >= 0);
+    // Which side of the chat this panel refines. Read at the moment it is needed,
+    // so changing the setting changes every place at once.
+    function refinesReplies() {
+        return cfg.refineSide !== "mine";
+    }
+    function refinesMine() {
+        return cfg.refineSide !== "replies";
+    }
     function statusLine() {
         if (!cfg.enabled)
             return { text: "Off", tone: "off" };
@@ -5207,7 +5243,7 @@ export function setup(ctx, overrides) {
             return { text: "The prompt is missing {{message}}", tone: "off" };
         if (lastChatId == null)
             return { text: "Waiting for a chat", tone: "off" };
-        if (cfg.refineOn)
+        if (cfg.refineOn && refinesReplies())
             return { text: "On, refining every reply", tone: "idle" };
         return { text: "On, waiting for you to press Refine", tone: "idle" };
     }
@@ -5534,8 +5570,9 @@ export function setup(ctx, overrides) {
             el2.style.top = Math.round(top + dy / scale) + "px";
         }
     }
-    // How long the description takes to arrive and to leave.
-    const HINT_FADE = 140;
+    // How long a closed description stays in the page before it is taken out.
+    // Nothing fades: it disappears the moment it is closed.
+    const HINT_FADE = 0;
     // The ones still fading out. Cleared in the same disposer that closes the open
     // one, straight after it, since teardown runs these in the order they were
     // added: emptying this first and closing after would put a box back in and
@@ -5544,9 +5581,9 @@ export function setup(ctx, overrides) {
     function hideHint() {
         const going = hintPop;
         const was = hintAnchor;
-        // Cleared before the fade, not after. What is on its way out is no longer
-        // the open description: a second press during the fade must open a new one
-        // rather than find this still standing and decide it is already open.
+        // Cleared first. What is on its way out is no longer the open description:
+        // a second press must open a new one rather than find this still standing
+        // and decide it is already open.
         hintPop = null;
         hintAnchor = null;
         if (was && was.setAttribute) {
@@ -5557,8 +5594,8 @@ export function setup(ctx, overrides) {
         }
         if (!going)
             return;
-        // And it stops being a tooltip to anything reading the page, which is what
-        // it is: a box finishing its fade is not something to announce.
+        // And it stops being a tooltip to anything reading the page: a closed box
+        // waiting to be taken out is not something to announce.
         try {
             going.removeAttribute("role");
             going.removeAttribute("data-arf-open");
@@ -5655,10 +5692,6 @@ export function setup(ctx, overrides) {
         if (room <= 0)
             box.style.display = "none";
         placeFixed(box, left, top);
-        // Reading the layout between building it and marking it open is what makes
-        // the browser treat this as a fade rather than as a value that was always
-        // one. The read is the placement above, which has already asked for the
-        // box's rect.
         try {
             box.setAttribute("data-arf-open", "1");
         }
@@ -6101,6 +6134,7 @@ export function setup(ctx, overrides) {
         }
         return [
             buildPermsCard(),
+            buildSideCard(),
             buildChatCard(),
             buildAlertCard(),
             buildReachCard(),
@@ -6702,6 +6736,21 @@ export function setup(ctx, overrides) {
             wrap.appendChild(row);
             return wrap;
         }
+        // Two groups, each with a heading: what the model wrote, then what you
+        // wrote. A button that only shows sometimes spans both columns, so it does
+        // not leave a gap beside it when it is hidden.
+        const group = (title) => {
+            const box = el("div", "arf-btngroup");
+            box.appendChild(el("div", "arf-btngroup-h", title));
+            const grid = el("div", "arf-btngrid");
+            box.appendChild(grid);
+            wrap.appendChild(box);
+            return grid;
+        };
+        // A group for a side you do not refine is built and left out, so the
+        // code below reads the same either way.
+        const spare = () => el("div", "arf-btngrid");
+        const replies = refinesReplies() ? group("Replies") : spare();
         const now = button("Refine the latest reply", true);
         now.setAttribute("data-arf-now", "1");
         now.disabled = !!stop;
@@ -6710,7 +6759,7 @@ export function setup(ctx, overrides) {
         if (stop)
             now.title = stop;
         now.addEventListener("click", () => refineNow());
-        row.appendChild(now);
+        replies.appendChild(now);
         // The part you selected. Here as well as in the button's menu and the Extras
         // row, because the panel is the one way in nobody can switch off: somebody
         // with the floating button off and no Extras row could otherwise select part
@@ -6726,7 +6775,7 @@ export function setup(ctx, overrides) {
         part.style.cursor = part.disabled ? "not-allowed" : "pointer";
         part.title = stop || "Rewrites what you highlighted and leaves the rest of the reply alone.";
         part.addEventListener("click", () => refinePicked());
-        row.appendChild(part);
+        part.className += " arf-wide";
         // The whole chat, next to the one reply, and the only place it appears. A
         // chat written before the extension was installed is the ordinary reason
         // somebody opens this panel at all, so the button belongs where they are
@@ -6739,9 +6788,11 @@ export function setup(ctx, overrides) {
         every.title =
             stop || "Goes through this chat oldest first, one model call per reply. It asks first.";
         every.addEventListener("click", () => askSweep());
-        row.appendChild(every);
-        // The same two for your own messages, beside the ones for replies, so each
-        // way of refining a reply has one for your messages in the same place.
+        replies.appendChild(every);
+        // The same two for your own messages, in a group of their own under the
+        // ones for replies, so each way of refining a reply has one for your
+        // messages in the same place.
+        const mine = refinesMine() ? group("Your messages") : spare();
         const mineNow = button("Refine my latest message", false);
         mineNow.setAttribute("data-arf-mine", "1");
         mineNow.disabled = !!stop || lastChatId == null;
@@ -6749,7 +6800,7 @@ export function setup(ctx, overrides) {
         mineNow.style.cursor = mineNow.disabled ? "not-allowed" : "pointer";
         mineNow.title = stop || "Refines the last message you sent in this chat, with the prompt for your messages.";
         mineNow.addEventListener("click", () => refineMineNow());
-        row.appendChild(mineNow);
+        mine.appendChild(mineNow);
         const mineAll = button("Refine all my messages here", false);
         mineAll.setAttribute("data-arf-mine-sweep", "1");
         mineAll.disabled = !!stop || lastChatId == null;
@@ -6758,8 +6809,11 @@ export function setup(ctx, overrides) {
         mineAll.title =
             stop || "Goes through your messages in this chat oldest first, one model call each. It asks first.";
         mineAll.addEventListener("click", () => askSweep(true));
-        row.appendChild(mineAll);
-        // The third thing a refine can be pointed at, next to the other two rather
+        mine.appendChild(mineAll);
+        // A selection can be in a reply or in one of your messages, so this one
+        // sits with whichever group is there, after the two that are always there.
+        (refinesReplies() ? replies : mine).appendChild(part);
+        // The third thing a refine can be pointed at, with your messages rather
         // than only in a menu over the chat or a row inside Extras. Both of those
         // take looking for. This one is already on screen while the panel is open.
         {
@@ -6776,7 +6830,8 @@ export function setup(ctx, overrides) {
             draft.addEventListener("click", () => refineInput());
             // Built either way and hidden while the switch is off, so switching it on
             // brings the button out where it stands.
-            row.appendChild(hangsOff(draft, "inputRefine"));
+            draft.className += " arf-wide";
+            mine.appendChild(hangsOff(draft, "inputRefine"));
         }
         // A row, not a label. Only the box switches the automatic pass. The words
         // and the space beside it do nothing when pressed, so a stray press on the
@@ -6785,7 +6840,7 @@ export function setup(ctx, overrides) {
         const auto = document.createElement("div");
         auto.className = "arf-row arf-note";
         auto.style.cssText = "display:inline-flex;align-self:flex-start;width:fit-content;max-width:100%";
-        const autoWords = el("span", "", "every reply, automatically");
+        const autoWords = el("span", "", "Refine every new reply automatically");
         autoWords.id = nextId() + "-name";
         const autoBox = document.createElement("input");
         autoBox.type = "checkbox";
@@ -6800,14 +6855,14 @@ export function setup(ctx, overrides) {
         });
         auto.appendChild(autoBox);
         auto.appendChild(autoWords);
-        wrap.appendChild(row);
-        // Its own line, under the buttons rather than flowing after them. As one
-        // more item in a row that wraps, where it landed depended on how much room
-        // the buttons before it had left, so anything that changed the width of the
-        // panel moved it: it sat beside a button at one width and dropped below at
-        // another. A switch that moves while you are reaching for it is one you
-        // press by accident.
-        wrap.appendChild(auto);
+        // Its own line at the end of the Replies group, since it is about replies,
+        // rather than flowing after the buttons. As one more item in a row that
+        // wraps, where it landed depended on how much room the buttons before it
+        // had left, so it moved with the width of the panel. A switch that moves
+        // while you are reaching for it is one you press by accident.
+        // Only with replies: your own messages are never refined automatically.
+        if (refinesReplies())
+            (replies.parentElement || wrap).appendChild(auto);
         // Why the button is greyed out, said once rather than left to a tooltip
         // nobody sees on a phone. The master switch being off is not written out:
         // the switch is right there saying it.
@@ -7524,10 +7579,9 @@ export function setup(ctx, overrides) {
             // both cards are pinned to the bottom of the screen at different heights:
             // the working one runs to about 370 pixels and this one to about 220.
             // Swapping the elements would make the tall one vanish and a shorter one
-            // fade up a hundred and fifty pixels lower, with the dim behind them
-            // restarting its fade, which reads as a second card coming out from under
-            // the first. Keeping the box and the dim makes it one card whose contents
-            // changed.
+            // appear a hundred and fifty pixels lower, which reads as a second card
+            // coming out from under the first. Keeping the box and the dim makes it
+            // one card whose contents changed.
             const held = popEl;
             if (!held)
                 dropPop();
@@ -7560,10 +7614,6 @@ export function setup(ctx, overrides) {
             top.appendChild(shut);
             box.appendChild(top);
             const body = el("div", "arf-pop-body");
-            // Filling a card that was already standing there is a change of contents
-            // rather than an arrival, so the contents are what fades.
-            if (held)
-                body.className += " arf-arrive";
             body.appendChild(changedHead("What changed"));
             body.appendChild(diffWell(spec.before, spec.after));
             // This card lands on top of the one that was showing the model's working,
@@ -7852,7 +7902,7 @@ export function setup(ctx, overrides) {
                 // The second model's name and its host are written into the rows
                 // around them, and the key row is for the host, so changing either
                 // redraws the card rather than only showing and hiding rows.
-                if (f.key === "judgeWho" || f.key === "judgeHost") {
+                if (f.key === "judgeWho" || f.key === "judgeHost" || f.key === "refineSide") {
                     paint();
                     return;
                 }
@@ -8138,8 +8188,16 @@ export function setup(ctx, overrides) {
         if (pillEl)
             pillEl.setAttribute("data-arf-blockcount", "1");
         // Two prompts, because refining a reply and tidying your own message are
-        // different jobs. One prompt hedged to do both does neither well.
+        // different jobs. One prompt hedged to do both does neither well. With
+        // only one side refined, only its prompt is shown, and there is nothing to
+        // switch between.
+        if (!refinesMine())
+            editing = "blocks";
+        if (!refinesReplies())
+            editing = "userBlocks";
         const pick = el("div", "arf-seg");
+        if (!refinesReplies() || !refinesMine())
+            pick.hidden = true;
         for (const one of [
             { id: "blocks", label: "For replies" },
             { id: "userBlocks", label: "For your messages" },
@@ -9783,6 +9841,7 @@ export function setup(ctx, overrides) {
                 (cfg.protectThinking ? "yes" : "no") +
                 ", answer in tags: " +
                 (cfg.wrapOutput ? "yes" : "no"));
+            lines.push("what to refine: " + String(cfg.refineSide || "both"));
             lines.push("your own messages: refined only when you ask, never automatically");
             lines.push("widget: " +
                 (cfg.widgetOn ? (widgetFailed ? "on but refused" : "on") : "off") +
@@ -10375,6 +10434,25 @@ export function setup(ctx, overrides) {
         }
         paintList();
         wrap.appendChild(list);
+        return wrap;
+    }
+    // Replies, your own messages, or both. Somebody who only ever tidies their
+    // own writing has no use for the reply buttons and the reply prompt, and the
+    // other way round, so the side not used is hidden rather than left to read
+    // past.
+    function buildSideCard() {
+        const wrap = card("What to refine", "The side you do not refine is hidden: its buttons, its menu entries and its prompt.");
+        wrap.appendChild(fieldRow({
+            key: "refineSide",
+            label: "Refine",
+            type: "pick",
+            options: [
+                { value: "both", label: "Replies and your messages" },
+                { value: "replies", label: "Replies only" },
+                { value: "mine", label: "Your messages only" },
+            ],
+            hint: "Both by default. With your messages only, nothing is refined automatically, since your messages never are.",
+        }));
         return wrap;
     }
     // Ways in other than the drawer. Both are off until asked for, so a fresh
@@ -12727,7 +12805,10 @@ export function setup(ctx, overrides) {
             toast("A refine is waiting for you in the Auto Refine tab.", true);
             return;
         }
-        refineNow();
+        if (refinesReplies())
+            refineNow();
+        else
+            refineMineNow();
     }
     // What the floating button shows, which is the same three states the message
     // button has: working, something to put back, or ready.
@@ -12835,7 +12916,9 @@ export function setup(ctx, overrides) {
                 ? "Refining. Tap to stop it."
                 : stuck
                     ? stuck + " Hold for more."
-                    : "Refine the latest reply. Hold for more.";
+                    : refinesReplies()
+                        ? "Refine the latest reply. Hold for more."
+                        : "Refine my latest message. Hold for more.";
             el2.setAttribute("aria-label", el2.title);
         }
         catch (_) { }
@@ -12881,9 +12964,14 @@ export function setup(ctx, overrides) {
         // button does, and a menu entry for the thing the button already does is
         // the same action twice with a hold in front of one of them.
         else {
-            doing.push({ key: "all", label: "Refine every reply in this chat" });
-            doing.push({ key: "mine", label: "Refine my latest message" });
-            doing.push({ key: "allmine", label: "Refine all my messages in this chat" });
+            if (refinesReplies())
+                doing.push({ key: "all", label: "Refine every reply in this chat" });
+            // With only your messages refined, a tap on the button already refines
+            // your latest message, so the menu does not offer it twice.
+            if (refinesMine() && refinesReplies())
+                doing.push({ key: "mine", label: "Refine my latest message" });
+            if (refinesMine())
+                doing.push({ key: "allmine", label: "Refine all my messages in this chat" });
         }
         const back = newestBack();
         if (back)
@@ -13033,9 +13121,9 @@ export function setup(ctx, overrides) {
         // asked for the row, not for one particular entry in it. Nothing appears on
         // a fresh install either way.
         const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
-        extra("auto-refine-now", "Refine the latest reply", inExtras, () => refineNow());
-        extra("auto-refine-mine", "Refine my latest message", inExtras, () => refineMineNow());
-        extra("auto-refine-input", "Refine what I am typing", inExtras, () => refineInput());
+        extra("auto-refine-now", "Refine the latest reply", inExtras && refinesReplies(), () => refineNow());
+        extra("auto-refine-mine", "Refine my latest message", inExtras && refinesMine(), () => refineMineNow());
+        extra("auto-refine-input", "Refine what I am typing", inExtras && refinesMine(), () => refineInput());
         // On the row's terms, not its own. Somebody who switched the row off wants an
         // empty Extras menu, and letting one entry back in would undo that for them.
         // Nobody is shut out by it either: the panel offers this whatever the row and
@@ -13277,7 +13365,9 @@ export function setup(ctx, overrides) {
     function fillSlots() {
         if (typeof document === "undefined")
             return;
-        const wantBar = !!cfg.enabled && !!cfg.barButton;
+        // The button in the chat's own row refines the latest reply, so it is only
+        // there while replies are refined.
+        const wantBar = !!cfg.enabled && !!cfg.barButton && refinesReplies();
         const wantMsg = !!cfg.enabled && !!cfg.messageButton;
         filling = true;
         try {
@@ -13899,6 +13989,35 @@ export function setup(ctx, overrides) {
         }
     }
     catch (_) { }
+    // A reroll Auto Retry added with Several tries at once. It is written to the
+    // chat directly, so Lumiverse raises no end event for it, and Auto Retry says
+    // so in the page instead. The automatic pass then treats it like any reply
+    // that ended.
+    try {
+        if (typeof window !== "undefined") {
+            const onReroll = (e) => {
+                try {
+                    const d = e && e.detail;
+                    if (!d || !d.chatId || !d.messageId)
+                        return;
+                    if (!cfg.enabled || !cfg.refineOn || !refinesReplies() || chatIsOff(d.chatId))
+                        return;
+                    markBusy(true);
+                    paint();
+                    send({ type: "reroll_added", chatId: d.chatId, messageId: d.messageId, swipe: d.swipe });
+                }
+                catch (_) { }
+            };
+            window.addEventListener(REROLL_EVENT, onReroll);
+            disposers.push(() => {
+                try {
+                    window.removeEventListener(REROLL_EVENT, onReroll);
+                }
+                catch (_) { }
+            });
+        }
+    }
+    catch (_) { }
     // ---- host events ----
     try {
         const offs = [
@@ -13939,7 +14058,7 @@ export function setup(ctx, overrides) {
                     return;
                 if (!elsewhere(p.chatId))
                     sawChat(p.chatId, p.messageId);
-                if (cfg.enabled && cfg.refineOn && !p.error && !chatIsOff(p.chatId)) {
+                if (cfg.enabled && cfg.refineOn && refinesReplies() && !p.error && !chatIsOff(p.chatId)) {
                     markBusy(true);
                     paint();
                 }
@@ -14134,6 +14253,8 @@ export function setup(ctx, overrides) {
                         clearAck();
                         if (msg.stage === "writing" && typeof msg.chars === "number")
                             streamed = msg.chars;
+                        if (msg.stage === "asking" || msg.stage === "thinking")
+                            manyAtOnce = Math.max(0, Number(msg.atOnce) || 0);
                         // Time spent waiting its turn is not time the backend has gone
                         // missing for, so each of these gives the give-up timer more room.
                         if (msg.stage === "queued")

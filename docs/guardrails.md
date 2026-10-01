@@ -61,6 +61,22 @@ What it cannot catch:
 - A call that errored, or one you stopped, is never repeated.
 - Every retry is another call on your bill, which is why it is off by default.
 
+## Several rewrites at once
+
+**Several rewrites at once** is off by default. On, each ask writes several rewrites at the same time instead of one.
+
+1. The same request goes to the model **How many at once** times, 2 by default and 5 at most.
+2. Each rewrite is checked the moment it arrives, with the same checks as a single rewrite.
+3. The first one that passes is used. The others still being written are stopped.
+4. If none pass, the refine is turned down, and the reason is the last check that failed.
+
+What to know:
+
+- Every rewrite is a whole call on your bill, including the ones that are stopped. With 3 at once, one refine costs up to 3 calls.
+- The rewrites do not stream. The status line says how many are being written and how long it has been.
+- It works with **Ask again when a check fails**. Each ask is then several at once.
+- Stop ends every rewrite still being written.
+
 ## The limit on one reply
 
 The automatic pass refines a reply again when its words are new. That is what lets it work alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry): every reply Auto Retry re-rolls is new, and each gets its refine.

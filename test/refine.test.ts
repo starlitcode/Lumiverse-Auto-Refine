@@ -73,6 +73,10 @@ function host(
   answers: string[],
   opts: {
     fail?: string;
+    // How long each call takes, by the order they were made, so several made
+    // at once can finish in an order the check chooses. A call still waiting
+    // ends when its signal is aborted, and is counted in stopped.
+    delays?: number[];
     // Fails the first n calls with this message and then answers normally,
     // which is what a rate limit looks like from here.
     failFirst?: { times: number; why: string };
@@ -127,6 +131,7 @@ function host(
   const sent: any[] = [];
   const writes: Array<{ id: string; content: string }> = [];
   const asked: any[] = [];
+  const stoppedCalls: number[] = [];
   const memoryAsked: Array<{ chatId: any; userId: any }> = [];
   // Every write as it was sent, so a check can read the swipe list rather than
   // only the text that ended up on screen.
@@ -187,6 +192,22 @@ function host(
       quiet: async (req: any) => {
         asked.push(req);
         needsUser(req);
+        if (opts.delays) {
+          const mine = turn;
+          turn++;
+          await new Promise((res, rej) => {
+            const t = setTimeout(res, opts.delays![Math.min(mine, opts.delays!.length - 1)]);
+            if (req.signal)
+              req.signal.addEventListener("abort", () => {
+                clearTimeout(t);
+                stoppedCalls.push(mine);
+                const e: any = new Error("aborted");
+                e.name = "AbortError";
+                rej(e);
+              });
+          });
+          return { content: answers[Math.min(mine, answers.length - 1)], finish_reason: "stop", usage: {} };
+        }
         if (opts.whileAsking) opts.whileAsking();
         if (opts.asking) await opts.asking();
         if (opts.fail) throw new Error(opts.fail);
@@ -383,6 +404,7 @@ function host(
     sent,
     writes,
     asked,
+    stoppedCalls,
     memoryAsked,
     patches,
     lastPatch: (id: string) => {
@@ -6535,3 +6557,88 @@ describe("what a snip refuses, matching the refine beside it", () => {
     expect(h.body("m1")).toBe("i go");
   });
 });
+
+// Several rewrites written at the same time. The first that passes every check
+// is saved and the rest are stopped, so nothing is paid for past the answer.
+describe("several rewrites at once", () => {
+  const GOOD = "<REFINED>She stepped through and the cold hit her.</REFINED>";
+  const REFUSED = "I'm sorry, but I can't help with that.";
+
+  test("off by default, so one ask is one call", async () => {
+    const h = await armed([GOOD]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("on, one ask writes that many at the same time", async () => {
+    const h = await armed([REFUSED, GOOD, GOOD], { refineAtOnce: true, refineAtOnceCount: 3 }, chat(), { delays: [5, 10, 200] });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(3);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("the first that passes is used, and the slower ones are stopped", async () => {
+    const h = await armed([REFUSED, GOOD, GOOD], { refineAtOnce: true, refineAtOnceCount: 3 }, chat(), { delays: [5, 10, 300] });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.stoppedCalls).toEqual([2]);
+    expect(h.writes.length).toBe(1);
+  });
+
+  test("with none passing, nothing is saved and the reason is given", async () => {
+    const h = await armed([REFUSED], { refineAtOnce: true, refineAtOnceCount: 2 }, chat(), { delays: [5, 10] });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/declined to rewrite/i);
+  });
+
+  test("a hand-edited count cannot go past five", async () => {
+    const h = await armed([GOOD], { refineAtOnce: true, refineAtOnceCount: 40 }, chat(), { delays: [5] });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(5);
+  });
+});
+
+// A reroll Auto Retry adds with Several tries at once is written straight into
+// the chat, so no end event announces it. The panel hands it over instead, and
+// it goes through the automatic pass like a reply that ended.
+describe("a reroll Auto Retry added", () => {
+  test("is refined by the automatic pass", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("not with the automatic pass off", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], { refineOn: false });
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.stood().join(" ")).toMatch(/automatic pass is switched off/);
+  });
+
+  test("not with only your own messages refined", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], { refineSide: "mine" });
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g9" });
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.stood().join(" ")).toMatch(/only your own messages are refined/);
+  });
+
+  test("the same reroll handed over twice is refined once", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+});
+

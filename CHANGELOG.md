@@ -19,10 +19,15 @@ _2026-10-01_
 - **Every way to refine**, a table in the settings docs, lists each thing you can refine, every place its button is, and what setting it needs. See [Every way to refine](docs/settings.md#every-way-to-refine).
 - **Keep the eye still**, on the Setup tab. Every eye this extension draws stays shut at rest, and opens without moving while a refine runs. It is off by default.
 - **Show in this list**, under **What it has been doing** on the Log tab. Untick a kind of line to hide it: what the second model decided, replies left alone, or settings and presets. Hidden lines are still kept for a problem report.
+- **What to refine**, on the Setup tab: replies and your messages, replies only, or your messages only. The side you do not refine is hidden, including its buttons, its menu entries and its prompt. See [Setup](docs/settings.md#setup).
+- **Several rewrites at once**, on the Limits tab, off by default. Each ask writes 2 to 5 rewrites at the same time and keeps the first that passes every check. The rest are stopped. Each rewrite costs a call. See [Several rewrites at once](docs/guardrails.md#several-rewrites-at-once).
+- **Rerolls added by Auto Retry are refined.** Auto Retry 5.11.0 can add a reroll itself with **Several tries at once**. Lumiverse does not announce that reroll as a finished reply, so Auto Retry tells Auto Refine, and the automatic pass refines it like any new reply.
 
 ### Changed
 
 - **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
+- **The buttons above the tabs are in two groups**, **Replies** and **Your messages**, in two even columns. The automatic switch is now in the **Replies** group and reads **Refine every new reply automatically**.
+- **Pop-ups appear with no animation.** The before-and-after card, the dim behind it, the full-size editor and the description under each **?** used to rise, grow or fade in. They now appear at once.
 - **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practised ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
 
 ### Fixed

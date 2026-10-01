@@ -33,11 +33,24 @@ The search box above the tabs searches every tab, not only the one you are on.
 These stay in place whichever tab is open:
 
 - **The switch** turns everything on or off. Off, nothing is refined and no model is called.
+
+The buttons are in two groups.
+
+**Replies:**
+
 - **Refine the latest reply** refines one reply now. While it runs, the buttons change to **Stop this refine**.
 - **Refine every reply here** goes through the chat you are in, oldest first, one model call each. It asks before it starts.
+- **Refine the part I selected** shows while part of a reply is selected.
+- **Refine every new reply automatically** is the automatic pass. It is off by default.
+
+**Your messages:**
+
 - **Refine my latest message** refines the last message you sent in this chat, with the prompt for your messages.
 - **Refine all my messages here** goes through every message you sent in this chat, oldest first, one model call each. It asks before it starts. Replies are left alone.
-- **every reply, automatically** is the automatic pass. It is off by default.
+- **Refine what I am typing** shows when **Refining the draft in your input box** is switched on.
+
+Below them:
+
 - **Refines you can put back** lists every refine in this chat, newest first, each with **Put it back**. The tab shows a badge with the count.
 
 The greeting is never refined. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
@@ -53,8 +66,11 @@ Each row is one thing you can refine, and every place its button is.
 | **Your latest message**, the last one you sent | Above the tabs. The floating button's menu. The Extras menu. | No, apart from the Extras note below |
 | **All your messages in this chat** | Above the tabs. The floating button's menu. | No |
 | **One message**, a reply or one of yours | The refine button on that message. | **A button on every message**, on the Setup tab |
+| **A reroll Auto Retry adds** with **Several tries at once** | Nothing to press. The automatic pass refines it like any new reply. | The automatic pass, and [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) 5.11.0 or later |
 | **Part of a message**, a reply or one of yours | Select the text, then press **Refine the part I selected**: above the tabs, in the floating button's menu, in the Extras menu, or on the chat buttons. | No |
 | **What you are typing**, before you send it | Above the tabs. The floating button's menu, or the Extras menu. | **Refining the draft in your input box**, on the Setup tab |
+
+**What to refine**, on the Setup tab, hides the rows for the side you do not refine.
 
 What each kind uses:
 
@@ -134,6 +150,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Wait out a provider that will not take the call** waits and tries again, twice by default, when the provider is busy or a local model is loading. See [Waiting out a provider that will not take the call](guardrails.md#waiting-out-a-provider-that-will-not-take-the-call).
 - **Seconds between automatic refines** puts a gap between automatic refines, for a provider that limits calls per minute. A reply that arrives too soon waits, with a countdown, and is then refined. It is 0, no gap, by default. Refines you start yourself never wait.
 - **Ask again when a check fails** retries a refine that failed a check a second try could fix. It is 0 by default.
+- **Several rewrites at once** writes several rewrites at the same time and keeps the first that passes every check. It is off by default, and each rewrite costs a call. See [Several rewrites at once](guardrails.md#several-rewrites-at-once).
 - **Add the refine as a swipe instead of writing over the reply** is off by default.
   - On, the rewrite is added as a new swipe, and the original stays one swipe back.
   - This is the only way back that survives a reload.
@@ -166,6 +183,13 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - The first two lines always name the panel's version and the backend's version. They differ if you updated without reloading.
 
 ## Setup
+
+**What to refine** chooses which side of the chat Auto Refine works on.
+
+- **Replies and your messages** is the default.
+- **Replies only** hides everything for your own messages: their buttons, their menu entries, **Refine what I am typing**, and the prompt under **For your messages**.
+- **Your messages only** hides everything for replies: their buttons, their menu entries, the automatic switch, the button in the chat's row of controls, and the prompt for replies. Nothing is refined automatically, since your own messages never are. A tap on the floating button refines your latest message.
+- Nothing is deleted. Switch back and everything returns as it was.
 
 **This chat** switches Auto Refine off in the chat you are in, and leaves other chats alone.
 
