@@ -151,7 +151,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The floating button, the buttons in the chat, and the input bar row.",
-    keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton"],
+    keys: ["widgetOn", "widgetSize", "inputRefine", "barButton", "messageButton", "eyeStill"],
   },
   {
     id: "inputbox",
@@ -509,6 +509,7 @@ const CONFIG = {
   // The floating button: one tap to refine the latest reply without opening the
   // drawer. Needs the ui_panels permission, and says so if it is missing.
   widgetOn: false,
+  eyeStill: false,
   // The card that comes up on the page when a refine finishes, with the before,
   // the after and the way back on it. On by default, because a refine changes
   // writing somebody was reading, and the change should be visible without
@@ -644,6 +645,7 @@ const CONFIG = {
   importParts: {} as Record<string, boolean>,
   resetParts: {} as Record<string, boolean>,
   debugParts: {} as Record<string, boolean>,
+  logShow: {} as Record<string, boolean>,
   // The prompt layout. Empty means the default order below, so a fresh install
   // does not carry a copy of it around and a later change to the default
   // reaches anybody who never edited theirs.
@@ -3201,7 +3203,25 @@ export function setup(ctx: Ctx, overrides?: any) {
     persist(true);
   }
 
+  // Keep the eye still, put on the page's root so every eye drawn anywhere
+  // reads it. Taken off again in teardown.
+  function stillEyes(): void {
+    try {
+      if (typeof document === "undefined") return;
+      const root = document.documentElement;
+      if (cfg.eyeStill) root.setAttribute("data-arf-still-eyes", "1");
+      else root.removeAttribute("data-arf-still-eyes");
+    } catch (_) {}
+  }
+  stillEyes();
+  disposers.push(() => {
+    try {
+      document.documentElement.removeAttribute("data-arf-still-eyes");
+    } catch (_) {}
+  });
+
   function persist(now?: boolean) {
+    stillEyes();
     const write = () => {
       saveTimer = null;
       try {
@@ -3340,7 +3360,24 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // ---- state the tab shows ----
   const LOG_MAX = 20;
-  const activity: Array<{ at: number; text: string; good: boolean }> = [];
+  const activity: Array<{ at: number; text: string; good: boolean; kind: string }> = [];
+
+  // The kinds of Log line that can be hidden, for a Log that is busy with one
+  // of them. Hidden lines are still kept, so a problem report has them all.
+  const LOG_KINDS: Array<{ id: string; label: string; what: string }> = [
+    { id: "judge", label: "What the second model decided", what: "One line for each reply the second model reads." },
+    { id: "left", label: "Replies left alone", what: "A reply or draft that was not changed, and why." },
+    { id: "setup", label: "Settings and presets", what: "Settings or presets loaded, saved or moved to your account." },
+  ];
+  // Which kind a line is, from what it says. Everything not named here is
+  // always shown.
+  function logKind(text: string): string {
+    for (const m of SECOND_MODELS) if (text.indexOf(m.name + " ") === 0) return "judge";
+    if (/^(left a reply (alone|as it was)|left your draft as it was|did not touch your draft)/.test(text)) return "left";
+    if (/^(settings (loaded|moved)|brought \d+ presets? down|sent \d+ presets? up|ready v|the backend is running)/.test(text))
+      return "setup";
+    return "";
+  }
   // A line for the Log tab. The panel is rebuilt from nothing on every repaint,
   // so a line each was one full rebuild each, and a run through a long chat
   // writes a line per reply: forty rebuilds of every box on the tab, back to
@@ -3350,7 +3387,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let logPaintedAt = 0;
   let logPaintSoon: any = null;
   function log(text: string, good?: boolean) {
-    activity.unshift({ at: Date.now(), text: String(text), good: !!good });
+    activity.unshift({ at: Date.now(), text: String(text), good: !!good, kind: logKind(String(text)) });
     while (activity.length > LOG_MAX) activity.pop();
     const now = Date.now();
     if (now - logPaintedAt >= LOG_PAINT_MS) {
@@ -5195,6 +5232,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-eye.arf-eye-done .arf-eye-ball,.arf-eye.arf-eye-done .arf-eye-lid," +
     ".arf-eye.arf-eye-stop .arf-eye-ball,.arf-eye.arf-eye-stop .arf-eye-lid{" +
     "animation:none}}" +
+    // Keep the eye still. Shut at rest and open while a refine runs, with
+    // nothing in between: no pupil crossing, no blink, no opening to a pointer.
+    // Keyed on the page's root so it reaches every eye wherever it is drawn,
+    // and written after the reduced-motion rules so it wins over them too.
+    "html[data-arf-still-eyes] .arf-eye .arf-eye-ball,html[data-arf-still-eyes] .arf-eye .arf-eye-lid," +
+    "html[data-arf-still-eyes] .arf-eye .arf-eye-pupil{animation:none!important;transition:none!important}" +
+    "html[data-arf-still-eyes] .arf-eye .arf-eye-ball," +
+    "html[data-arf-still-eyes] button:hover .arf-eye.arf-opens .arf-eye-ball," +
+    "html[data-arf-still-eyes] [role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-ball," +
+    "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens .arf-eye-ball{transform:scaleY(.1);opacity:0}" +
+    "html[data-arf-still-eyes] .arf-eye .arf-eye-lid," +
+    "html[data-arf-still-eyes] button:hover .arf-eye.arf-opens .arf-eye-lid," +
+    "html[data-arf-still-eyes] [role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-lid," +
+    "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens .arf-eye-lid{opacity:1}" +
+    "html[data-arf-still-eyes] .arf-eye.arf-eye-read .arf-eye-ball{transform:none;opacity:1}" +
+    "html[data-arf-still-eyes] .arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
     // ---- saying something is wrong, in the theme's own colours ----
     // Lumiverse has a danger colour and a success colour, and a warning drawn
     // in neither reads as one more muted paragraph. Tinted background, matching
@@ -9136,7 +9189,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (i) about.appendChild(document.createTextNode(" "));
       about.appendChild(linkTo(m.about, "What is " + m.name + "?"));
     });
-    wrap.appendChild(about);
+    // Only with two models picked. With one there is no second model to read
+    // about, and the links are one more line to read past.
+    wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));
     // Everything above the checks sits above the key: the mode, the host, and
     // how that host is reached. Split by key rather than by count, so a row
     // added to the list lands on the right side of the key.
@@ -10049,17 +10104,25 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function buildActivityCard(): HTMLElement {
-    const wrap = card("What it has been doing", undefined, activity.length ? String(activity.length) : undefined);
-    if (!activity.length) {
-      wrap.appendChild(note("Nothing yet."));
-      return wrap;
-    }
-    for (const a of activity) {
+    const shown = activity.filter((a) => !a.kind || partOn("logShow", a.kind));
+    const hidden = activity.length - shown.length;
+    const wrap = card(
+      "What it has been doing",
+      undefined,
+      activity.length ? String(shown.length) + (hidden ? " shown, " + hidden + " hidden" : "") : undefined,
+    );
+    if (!shown.length) wrap.appendChild(note(hidden ? "Every line here is of a kind you hid." : "Nothing yet."));
+    for (const a of shown) {
       const row = el("div", "arf-row arf-note arf-mono");
+      row.setAttribute("data-arf-logline", a.kind || "other");
       row.appendChild(el("span", "arf-when", new Date(a.at).toTimeString().slice(0, 8)));
       row.appendChild(el("span", "arf-said arf-grow" + (a.good ? "" : " arf-dim"), a.text));
       wrap.appendChild(row);
     }
+    // What to show. Lines of a hidden kind are still kept, and a problem report
+    // still carries them.
+    wrap.appendChild(heading("Show in this list"));
+    wrap.appendChild(partsPicker("logShow", LOG_KINDS, true));
     return wrap;
   }
 
@@ -10898,6 +10961,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         label: "A button on every message",
         type: "bool",
         hint: "One tap refines that message, which is the only way to refine one that is not the latest without selecting all of it first. It goes in the place Lumiverse leaves for extensions inside each message.",
+      }),
+    );
+    wrap.appendChild(
+      fieldRow({
+        key: "eyeStill",
+        label: "Keep the eye still",
+        type: "bool",
+        hint: "The eye on every button stays shut, and opens without moving while a refine runs.",
       }),
     );
     return wrap;

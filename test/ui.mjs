@@ -1949,16 +1949,13 @@ console.log("\none model or two");
 
     const one = await shown();
     ok("the mode is on the Model tab", one.mode, JSON.stringify(one));
-    const about = await page.evaluate(() => {
-      const a = document.querySelector("#drawer [data-arf-jevabout] a");
-      return a ? { text: a.textContent, href: a.href, target: a.target, rel: a.rel, shown: a.getClientRects().length > 0 } : null;
-    });
-    ok(
-      "a What is Jev? link opens TypeSafe's introduction in a new tab",
-      !!about && about.shown && about.text === "What is Jev?" && /typesafe\.ai\/blog\//.test(about.href) &&
-        about.target === "_blank" && /noopener/.test(about.rel),
-      JSON.stringify(about),
-    );
+    const aboutLink = () =>
+      page.evaluate(() => {
+        const a = document.querySelector("#drawer [data-arf-jevabout] a");
+        return a ? { text: a.textContent, href: a.href, target: a.target, rel: a.rel, shown: a.getClientRects().length > 0 && !a.closest("[hidden]") } : null;
+      });
+    const aboutOne = await aboutLink();
+    ok("with one model the links about the second models are hidden", !aboutOne || !aboutOne.shown, JSON.stringify(aboutOne));
     ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand && !one.after && !one.before && !one.found, JSON.stringify(one));
     const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
     ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
@@ -1969,6 +1966,13 @@ console.log("\none model or two");
     ok("with two it asks whether a key is saved", asked >= 1, String(asked));
     const two = await shown();
     ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
+    const about = await aboutLink();
+    ok(
+      "and a What is Jev? link opens TypeSafe's introduction in a new tab",
+      !!about && about.shown && about.text === "What is Jev?" && /typesafe\.ai\/blog\//.test(about.href) &&
+        about.target === "_blank" && /noopener/.test(about.rel),
+      JSON.stringify(about),
+    );
     ok("and so does the switch for refines you start yourself", two.byHand, JSON.stringify(two));
     ok("and the switch for Jev checking the rewrite", two.after, JSON.stringify(two));
     ok("and the switch for sending the reply before it", two.before, JSON.stringify(two));
@@ -10816,6 +10820,65 @@ await inTab(browser, { saved: { enabled: true } }, async (page) => {
   } else {
     ok("a name in the reset list does not tick its part", out.now === out.was && out.rowTag !== "LABEL", JSON.stringify(out));
   }
+});
+
+console.log("\nkeeping the eye still");
+await inTab(browser, { saved: { eyeStill: true } }, async (page) => {
+  const got = await page.evaluate(async () => {
+    const box = document.createElement("div");
+    box.innerHTML =
+      '<svg class="arf-eye arf-opens" viewBox="0 0 24 24"><g class="arf-eye-ball"><path d="M3 12h18"/><circle class="arf-eye-pupil" cx="12" cy="12" r="2"/></g><path class="arf-eye-lid" d="M3 12h18"/></svg>' +
+      '<svg class="arf-eye arf-eye-read" viewBox="0 0 24 24"><g class="arf-eye-ball"><path d="M3 12h18"/><circle class="arf-eye-pupil" cx="12" cy="12" r="2"/></g><path class="arf-eye-lid" d="M3 12h18"/></svg>';
+    document.body.appendChild(box);
+    await new Promise((r) => setTimeout(r, 50));
+    const [rest, read] = box.querySelectorAll(".arf-eye");
+    const cs = (n) => getComputedStyle(n);
+    const out = {
+      marked: document.documentElement.hasAttribute("data-arf-still-eyes"),
+      restBall: cs(rest.querySelector(".arf-eye-ball")).opacity,
+      restLid: cs(rest.querySelector(".arf-eye-lid")).opacity,
+      readBall: cs(read.querySelector(".arf-eye-ball")).opacity,
+      readPupil: cs(read.querySelector(".arf-eye-pupil")).animationName,
+      readBallAnim: cs(read.querySelector(".arf-eye-ball")).animationName,
+    };
+    box.remove();
+    return out;
+  });
+  ok("the switch marks the page", got.marked, JSON.stringify(got));
+  ok("an eye at rest is shut", got.restBall === "0" && got.restLid === "1", JSON.stringify(got));
+  ok("an eye reading is open", got.readBall === "1", JSON.stringify(got));
+  ok("and its pupil and lid do not move", got.readPupil === "none" && got.readBallAnim === "none", JSON.stringify(got));
+  await goTab(page, "Setup");
+  await settle(page);
+  const off = await page.evaluate(async () => {
+    const box = document.querySelector('#drawer [data-arf-field="eyeStill"]');
+    if (!box) return "no switch";
+    box.click();
+    await new Promise((r) => setTimeout(r, 200));
+    return document.documentElement.hasAttribute("data-arf-still-eyes") ? "still marked" : "clear";
+  });
+  ok("switching it off takes the mark away", off === "clear", off);
+});
+
+console.log("\nhiding kinds of line in the Log");
+await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+  await goTab(page, "Log");
+  await settle(page);
+  const got = await page.evaluate(async () => {
+    window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m2", refine: false, scores: [{ check: "reply repeats itself.", pct: 3 }], cost: 0, model: "jev-1.13.0", over: 30 });
+    await new Promise((r) => setTimeout(r, 400));
+    const lines = () => [...document.querySelectorAll('#drawer [data-arf-logline="judge"]')].length;
+    const before = lines();
+    const box = document.querySelector('#drawer [data-arf-part="logShow:judge"]');
+    if (!box) return { before, missing: true };
+    box.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const card = [...document.querySelectorAll("#drawer .arf-card")].find((c) => /What it has been doing/.test(c.textContent));
+    return { before, after: lines(), count: card ? card.textContent : "" };
+  });
+  ok("a line from the second model shows", got.before >= 1, JSON.stringify(got));
+  ok("unticking its kind hides it", got.after === 0, JSON.stringify(got));
+  ok("and the count says how many are hidden", /hidden/.test(got.count || ""), JSON.stringify(got).slice(0, 300));
 });
 
 await browser.close();

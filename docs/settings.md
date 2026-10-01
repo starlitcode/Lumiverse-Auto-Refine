@@ -153,6 +153,12 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Below, it shows what the last refine used, in input and output tokens, and what it cost if you set prices. This includes dropped rewrites and retries, because those were paid for too.
 - **What the model worked out** keeps the model's notes from the last refine that finished. It has **Copy**, **Expand** and **Clear**. Stopping a refine leaves the last notes alone.
 - **What it has been doing** lists what it did, newest first.
+  - **Show in this list**, under it, chooses which kinds of line are shown. Untick one to hide it:
+    - **What the second model decided**: one line for each reply the second model reads.
+    - **Replies left alone**: a reply or draft that was not changed, and why.
+    - **Settings and presets**: settings or presets loaded, saved or moved to your account.
+  - Every other line is always shown. The count at the top says how many lines are hidden.
+  - Hidden lines are still kept. **Reporting a problem** still includes them.
 - **Reporting a problem** copies everything needed for a bug report.
   - **What it carries** chooses what goes in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser.
   - What your blocks say is never included, only their names, roles and macros.
@@ -182,6 +188,12 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - Holding fills a ring around the edge. The menu opens when the ring closes. Let go early and nothing happens.
 - Its mark is an eye. It is shut when nothing is running, and reads while a refine runs. It blinks once when a refine finishes, and closes without a blink when you stop one.
 - If your device is set to reduce motion, the eye stays still and there is no ring.
+
+**Keep the eye still** stops every eye this extension draws from moving: on the drawer tab, the floating button, the chat buttons and the button on each message. It is off by default.
+
+- At rest, the eye is shut.
+- While a refine runs, the eye is open, with no pupil moving and no blink.
+- Pointing at a button does not open its eye.
 - Drag it where you want it. It stays there, in this browser.
 
 **A button in the chat's row of controls** adds a button to Lumiverse's own row of chat buttons. A tap refines the latest reply.

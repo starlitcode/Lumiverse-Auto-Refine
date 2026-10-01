@@ -17,6 +17,12 @@ _2026-10-01_
   - **Refine all my messages here** goes through every message you sent in this chat, one model call each. It asks before it starts. It is above the tabs and in the floating button's menu.
   - Both use the prompt under **For your messages**. Neither is ever done automatically.
 - **Every way to refine**, a table in the settings docs, lists each thing you can refine, every place its button is, and what setting it needs. See [Every way to refine](docs/settings.md#every-way-to-refine).
+- **Keep the eye still**, on the Setup tab. Every eye this extension draws stays shut at rest, and opens without moving while a refine runs. It is off by default.
+- **Show in this list**, under **What it has been doing** on the Log tab. Untick a kind of line to hide it: what the second model decided, replies left alone, or settings and presets. Hidden lines are still kept for a problem report.
+
+### Changed
+
+- **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
 
 ### Fixed
 
