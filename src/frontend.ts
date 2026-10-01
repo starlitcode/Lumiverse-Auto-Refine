@@ -2125,8 +2125,10 @@ type Field = {
   also?: { key: string; is?: any };
   // How far in it sits under the row it depends on.
   under?: boolean;
-  // Shown inside an empty text box, as an example of what goes there.
-  placeholder?: string;
+  // Shown inside an empty text box, as an example of what goes there. A
+  // function when the example depends on another setting, such as which
+  // second model is picked.
+  placeholder?: string | ((c: any) => string);
   // How many lines deep a "lines" box opens. Three unless a field's usual
   // content needs more to be read without scrolling.
   rows?: number;
@@ -2212,7 +2214,8 @@ const JUDGE_FIELDS: Field[] = [
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    placeholder: "https://jev.example.com/v1/decisions",
+    placeholder: (c: any) =>
+      c.judgeWho === "span" ? "https://span.example.com/api/v1/scores" : "https://jev.example.com/v1/decisions",
     hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
   },
   {
@@ -2221,7 +2224,7 @@ const JUDGE_FIELDS: Field[] = [
     type: "text",
     needs: { key: "judgeHost", is: "custom" },
     under: true,
-    placeholder: "typesafe/jev-latest",
+    placeholder: (c: any) => (c.judgeWho === "span" ? "span-01-pro" : "typesafe/jev-latest"),
     hint: "What that host calls the model, as its own docs spell it.",
   },
   {
@@ -7924,7 +7927,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       box.setAttribute("autocorrect", "off");
       box.setAttribute("autocomplete", "off");
       box.setAttribute("spellcheck", "false");
-      if (f.placeholder) box.placeholder = f.placeholder;
+      const example = typeof f.placeholder === "function" ? f.placeholder(cfg) : f.placeholder;
+      if (example) box.placeholder = example;
       box.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
       box.addEventListener("input", () => {
         cfg[f.key] = box.value;

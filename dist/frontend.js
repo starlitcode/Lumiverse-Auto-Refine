@@ -2050,7 +2050,7 @@ const JUDGE_FIELDS = [
         type: "text",
         needs: { key: "judgeHost", is: "custom" },
         under: true,
-        placeholder: "https://jev.example.com/v1/decisions",
+        placeholder: (c) => c.judgeWho === "span" ? "https://span.example.com/api/v1/scores" : "https://jev.example.com/v1/decisions",
         hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
     },
     {
@@ -2059,7 +2059,7 @@ const JUDGE_FIELDS = [
         type: "text",
         needs: { key: "judgeHost", is: "custom" },
         under: true,
-        placeholder: "typesafe/jev-latest",
+        placeholder: (c) => (c.judgeWho === "span" ? "span-01-pro" : "typesafe/jev-latest"),
         hint: "What that host calls the model, as its own docs spell it.",
     },
     {
@@ -7728,8 +7728,9 @@ export function setup(ctx, overrides) {
             box.setAttribute("autocorrect", "off");
             box.setAttribute("autocomplete", "off");
             box.setAttribute("spellcheck", "false");
-            if (f.placeholder)
-                box.placeholder = f.placeholder;
+            const example = typeof f.placeholder === "function" ? f.placeholder(cfg) : f.placeholder;
+            if (example)
+                box.placeholder = example;
             box.value = String(cfg[f.key] == null ? "" : cfg[f.key]);
             box.addEventListener("input", () => {
                 cfg[f.key] = box.value;

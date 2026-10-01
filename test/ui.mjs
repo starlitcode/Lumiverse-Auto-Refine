@@ -1793,6 +1793,13 @@ console.log("\nSpan, the other second model");
     await closed(page);
     const custom = await read();
     ok("Another address is offered for Span, and Which Span waits for a host", !custom.tierShown, JSON.stringify(custom));
+    // The examples in the empty boxes are for the model picked, so a Span
+    // user is not shown a Jev address to copy.
+    const spanEx = await page.evaluate(() => ({
+      url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
+      model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
+    }));
+    ok("with Span, the empty boxes show a Span example", /span/.test(spanEx.url) && spanEx.model === "span-01-pro" && !/jev/.test(spanEx.url + spanEx.model), JSON.stringify(spanEx));
     const addr = await page.evaluate(async () => {
       const vis = (sel) => {
         const n = document.querySelector(sel);
@@ -1812,6 +1819,12 @@ console.log("\nSpan, the other second model");
 
     const sent = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
     ok("the choice is saved", sent.judgeWho === "span" && sent.judgeHost === "custom", JSON.stringify({ who: sent.judgeWho, host: sent.judgeHost }));
+    await pick("judgeWho", "jev");
+    const jevEx = await page.evaluate(() => ({
+      url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
+      model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
+    }));
+    ok("with Jev, they show a Jev example", /jev/.test(jevEx.url) && /jev/.test(jevEx.model), JSON.stringify(jevEx));
   });
   ok("no console errors", !errors || !errors.length, JSON.stringify(errors));
 }

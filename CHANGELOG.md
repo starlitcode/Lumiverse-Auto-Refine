@@ -28,6 +28,7 @@ _2026-10-01_
 ### Fixed
 
 - **Refine every reply in this chat, in the floating button's menu, started without asking.** The button above the tabs always asks first, since the run costs a model call per reply. The menu now asks the same question. It also says so when a refine is already running or no chat is open, instead of starting anyway.
+- **The examples in the empty Address and Model name boxes were for Jev even with Span picked.** With **Another address** chosen, they now show an example for the second model you picked.
 
 ---
 
