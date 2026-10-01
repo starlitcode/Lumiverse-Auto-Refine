@@ -11059,9 +11059,10 @@ console.log("\nevery tab on a phone and under a mouse");
 console.log("\nthe tabs stay at the top");
 {
   // The drawer scrolls on its own, as it does in Lumiverse. The tab strip has
-  // to stay at the top of it while the tab scrolls, cover what goes under it,
-  // and be back in its own place once the tab is scrolled back up. The search
-  // box scrolls away with the rest.
+  // to stay at the top of it while the tab scrolls, and be back in its own
+  // place once the tab is scrolled back up. The search box scrolls away with
+  // the rest. At rest nothing is drawn behind the strip. Held at the top, the
+  // strip itself is solid, so the rows going under it do not show through.
   const SCROLLS = "#drawer{height:520px;overflow-y:auto}";
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 760 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true } }, async (page) => {
@@ -11070,30 +11071,38 @@ console.log("\nthe tabs stay at the top");
         const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
         const drawer = document.getElementById("drawer");
         const bar = () => drawer.querySelector("[data-arf-stick]");
+        const strip = () => bar().querySelector(".arf-tabs");
         const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
+        const pad = Math.round(parseFloat(getComputedStyle(drawer).paddingTop) || 0);
+        const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
+        const solid = (c) => /^rgb\(/.test(c);
         const rest = where();
+        const restHolder = getComputedStyle(bar()).backgroundColor;
+        const restStuck = bar().classList.contains("arf-stuck");
+        const restStrip = getComputedStyle(strip()).backgroundColor;
         const room = drawer.scrollHeight - drawer.clientHeight;
         drawer.scrollTop = drawer.scrollHeight;
         await frame();
-        const r = bar().getBoundingClientRect();
         const atTop = where();
         const hasTabs = !!bar().querySelector(".arf-tab") && !bar().querySelector('input[type="search"]');
-        // What is under the middle of the bar's left edge, past the tabs, is the
-        // bar itself and not a card that scrolled beneath it.
-        const hit = document.elementFromPoint(r.left + 4, r.top + 3);
-        const covers = !!hit && bar().contains(hit);
-        const bg = getComputedStyle(bar()).backgroundColor;
-        const opaque = /^rgb\(/.test(bg);
+        const r = strip().getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 2);
+        const covers = !!hit && strip().contains(hit);
+        const heldStrip = getComputedStyle(strip()).backgroundColor;
+        const heldStuck = bar().classList.contains("arf-stuck");
         drawer.scrollTop = 0;
         await frame();
         const back = where();
-        return { rest, room, atTop, hasTabs, covers, opaque, bg, back, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
+        const backStuck = bar().classList.contains("arf-stuck");
+        const backStrip = getComputedStyle(strip()).backgroundColor;
+        return { pad, rest, restHolder: clear(restHolder), restStuck, restStrip, room, atTop, hasTabs, covers, heldSolid: solid(heldStrip), heldStrip, heldStuck, back, backStuck, backSame: backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
       });
       ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
-      ok(label + ": scrolled down, the bar sits at the top of the drawer", Math.abs(got.atTop) <= 1, JSON.stringify(got));
+      ok(label + ": at rest nothing is drawn behind the strip", got.restHolder && !got.restStuck, JSON.stringify(got));
+      ok(label + ": scrolled down, the strip sits at the top of the drawer", got.atTop === got.pad, JSON.stringify(got));
       ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
-      ok(label + ": and it is solid, so nothing shows through it", got.opaque && got.covers, JSON.stringify(got));
-      ok(label + ": scrolled back up, it is in its own place again", got.back === got.rest && got.rest > 0, JSON.stringify(got));
+      ok(label + ": held there, the strip is solid, so nothing shows through it", got.heldStuck && got.heldSolid && got.covers, JSON.stringify(got));
+      ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
     });
   }

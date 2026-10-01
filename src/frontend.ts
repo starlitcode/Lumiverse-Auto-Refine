@@ -4619,10 +4619,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
     "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf *{box-sizing:border-box}" +
-    // The tab strip's holder. How far it reaches over the panel's padding at
-    // the sides is set when it is painted, from the padding the panel really
-    // has.
-    ".arf-stick{position:sticky;top:0;z-index:4;margin:-8px 0;padding:8px 0}" +
+    // The tab strip's holder. At rest it adds nothing to how the strip looks.
+    // Once it is held at the top, the strip takes the same solid colour as a
+    // description box, so the rows scrolling under it do not show through.
+    ".arf-stick{position:sticky;top:0;z-index:4}" +
+    ".arf-stick.arf-stuck .arf-tabs{background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+    "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
+    "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));" +
+    "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))}" +
     ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     ".arf-note{font-size:12px;line-height:1.45;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -5641,49 +5645,44 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
-  // The tab strip's holder takes the drawer's colour and reaches to its edges.
-  // Run on every paint and again when the theme changes, so the colour is never
-  // the one from a theme that has gone.
-  function fitStick(root: HTMLElement, stick: HTMLElement) {
+  // Whether the strip is being held at the top. At rest it sits one card gap
+  // below the search box. Held, the search box has scrolled away above it and
+  // the gap is larger. Read from the page rather than from the box that
+  // scrolls, which differs from one host build to another.
+  function markStuck() {
     try {
-      const back = backdropOf(root);
-      stick.style.backgroundColor =
-        "rgb(" + Math.round(back.r) + "," + Math.round(back.g) + "," + Math.round(back.b) + ")";
-    } catch (_) {}
-    // A sticky box stops inside the padding of the box that scrolls, and what
-    // scrolls past shows in that gap. Raised by that padding, so it sits
-    // against the top edge whatever padding the host gives the drawer. The
-    // panel itself can be the box that scrolls, so the search starts there.
-    try {
-      let up: any = root;
-      let pad = 0;
-      for (let hops = 0; up && hops < 12; hops++, up = up.parentElement) {
-        const cs = getComputedStyle(up);
-        if (/(auto|scroll|overlay)/.test(cs.overflowY)) {
-          pad = parseFloat(cs.paddingTop) || 0;
-          break;
-        }
-      }
-      stick.style.top = pad ? -pad + "px" : "";
-      // Out to the panel's own edges and no further. A fixed reach wider than
-      // the padding the host gives would make the drawer scroll sideways.
-      const own = getComputedStyle(root);
-      const left = parseFloat(own.paddingLeft) || 0;
-      const right = parseFloat(own.paddingRight) || 0;
-      stick.style.marginLeft = -left + "px";
-      stick.style.marginRight = -right + "px";
-      stick.style.paddingLeft = left + "px";
-      stick.style.paddingRight = right + "px";
+      const root = tab && (tab.root as HTMLElement);
+      const stick = root && (root.querySelector("[data-arf-stick]") as HTMLElement | null);
+      if (!root || !stick) return;
+      const above = stick.previousElementSibling as HTMLElement | null;
+      const gap = parseFloat(getComputedStyle(root).rowGap) || 0;
+      const held = !!above && stick.getBoundingClientRect().top - above.getBoundingClientRect().bottom > gap + 1;
+      stick.classList.toggle("arf-stuck", held);
     } catch (_) {}
   }
+  let stuckSoon = 0;
+  // Scroll does not bubble, so it is caught on the way down, from whichever
+  // box the host scrolls the drawer with. One check per frame at most.
+  const onAnyScroll = () => {
+    if (stuckSoon) return;
+    stuckSoon = requestAnimationFrame(() => {
+      stuckSoon = 0;
+      markStuck();
+    });
+  };
+  try {
+    document.addEventListener("scroll", onAnyScroll, true);
+    disposers.push(() => {
+      document.removeEventListener("scroll", onAnyScroll, true);
+      if (stuckSoon) cancelAnimationFrame(stuckSoon);
+    });
+  } catch (_) {}
 
   function reInk() {
     if (tab && tab.root) {
       const root = tab.root as HTMLElement;
       clearInk(root);
       setScheme(root);
-      const stick = root.querySelector("[data-arf-stick]") as HTMLElement | null;
-      if (stick) fitStick(root, stick);
       sweepReadable(root);
     }
     // A description open at the moment the theme changes. It hangs off the page
@@ -6793,9 +6792,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // the wrong idea of where you are.
     //
     // It stays at the top of the drawer while the tab below it scrolls, and
-    // goes back to its own place when the tab is scrolled back up. Painted with
-    // the drawer's own colour once it is in the page, so what scrolls under it
-    // is hidden and the strip matches the theme.
+    // goes back to its own place when the tab is scrolled back up.
     let stick: HTMLElement | null = null;
     if (!hunt.trim()) {
       stick = el("div", "arf-stick");
@@ -6831,7 +6828,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // the panel once in the theme's own colours and once in the repaired ones,
     // which reads as a flicker on every press, and the tabs carry a colour
     // transition so theirs faded across it.
-    if (stick) fitStick(root, stick);
+    if (stick) onAnyScroll();
     root.classList.add("arf-settling");
     sweepReadable(root);
     // Put back before the frame is painted, or the panel visibly jumps to the
