@@ -11099,6 +11099,35 @@ console.log("\nthe tabs stay at the top");
   }
 }
 
+console.log("\nhow many at once shows under its switch");
+{
+  // The count waits on its switch. Once the switch is on it has to be on
+  // screen straight under it, not in a fold somewhere else on the card.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Limits");
+      const shown = () =>
+        page.evaluate(() => {
+          const row = document.querySelector('#drawer [data-arf-row="refineAtOnceCount"]');
+          if (!row) return { there: false, seen: false };
+          const r = row.getBoundingClientRect();
+          return { there: true, seen: !!row.offsetParent && r.height > 0 };
+        });
+      const before = await shown();
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="refineAtOnce"] .arf-box').click());
+      await page.waitForTimeout(300);
+      const after = await shown();
+      const order = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll("#drawer [data-arf-row]")].filter((n) => n.offsetParent).map((n) => n.getAttribute("data-arf-row"));
+        return rows.indexOf("refineAtOnceCount") - rows.indexOf("refineAtOnce");
+      });
+      ok(label + ": with the switch off, How many at once is not on screen", !before.seen, JSON.stringify(before));
+      ok(label + ": switched on, How many at once is on screen", after.seen, JSON.stringify(after));
+      ok(label + ": and it is the row straight under the switch", order === 1, String(order));
+    });
+  }
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

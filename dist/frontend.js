@@ -1887,7 +1887,7 @@ const GUARD_FIELDS = [
         type: "num",
         min: 2,
         max: 5,
-        hint: "How many rewrites each ask writes at the same time, and 2 by default.",
+        hint: "How many rewrites each try writes at the same time. 2 by default.",
     },
     {
         key: "rateWaits",
@@ -9521,14 +9521,23 @@ export function setup(ctx, overrides) {
             wrap.appendChild(fieldRow(f));
         // The switches stay in front. What each one measures by is a number and a
         // word list, which belong behind a fold with the rest of the tuning.
-        for (const f of GUARD_FIELDS)
-            if (!f.under)
-                wrap.appendChild(fieldRow(f));
+        // Only the sanitising check's tuning goes in the fold. Any other row that
+        // waits on a switch, such as How many at once, sits straight under that
+        // switch, where it shows as soon as the switch is on.
+        const softens = (f) => !!f.under && !!f.needs && f.needs.key === "guardSoften";
+        for (const f of GUARD_FIELDS) {
+            if (f.under)
+                continue;
+            wrap.appendChild(fieldRow(f));
+            for (const c of GUARD_FIELDS)
+                if (c.under && !softens(c) && c.needs && c.needs.key === f.key)
+                    wrap.appendChild(fieldRow(c));
+        }
         // Built whole and hidden as one, rather than built from whichever checks
         // happen to be on. Filtering here meant switching a check rebuilt the card
         // around its tuning, so the rows arrived and left between two frames with
         // nothing to watch, and the fold itself came and went the same way.
-        const tuning = GUARD_FIELDS.filter((f) => f.under);
+        const tuning = GUARD_FIELDS.filter(softens);
         if (tuning.length)
             wrap.appendChild(hangsOff(fold("What counts as sanitising", (body) => {
                 // Each keeps the switch it waits on, so one going off takes its own
