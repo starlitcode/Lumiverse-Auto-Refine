@@ -35,10 +35,38 @@ These stay in place whichever tab is open:
 - **The switch** turns everything on or off. Off, nothing is refined and no model is called.
 - **Refine the latest reply** refines one reply now. While it runs, the buttons change to **Stop this refine**.
 - **Refine every reply here** goes through the chat you are in, oldest first, one model call each. It asks before it starts.
+- **Refine my latest message** refines the last message you sent in this chat, with the prompt for your messages.
+- **Refine all my messages here** goes through every message you sent in this chat, oldest first, one model call each. It asks before it starts. Replies are left alone.
 - **every reply, automatically** is the automatic pass. It is off by default.
 - **Refines you can put back** lists every refine in this chat, newest first, each with **Put it back**. The tab shows a badge with the count.
 
-The greeting is never refined. Your own messages are only refined when you press the button on one.
+The greeting is never refined. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
+
+## Every way to refine
+
+Each row is one thing you can refine, and every place its button is.
+
+| What it refines | Where to press | Needs a setting |
+| --- | --- | --- |
+| **The latest reply** | Above the tabs. A tap on the floating button. The button in the chat's row of controls. The Extras menu. | Only for the floating button, the chat-row button and Extras. See the notes below. |
+| **Every reply in this chat** | Above the tabs. The floating button's menu. | No |
+| **Your latest message**, the last one you sent | Above the tabs. The floating button's menu. The Extras menu. | No, apart from the Extras note below |
+| **All your messages in this chat** | Above the tabs. The floating button's menu. | No |
+| **One message**, a reply or one of yours | The refine button on that message. | **A button on every message**, on the Setup tab |
+| **Part of a message**, a reply or one of yours | Select the text, then press **Refine the part I selected**: above the tabs, in the floating button's menu, in the Extras menu, or on the chat buttons. | No |
+| **What you are typing**, before you send it | Above the tabs. The floating button's menu, or the Extras menu. | **Refining the draft in your input box**, on the Setup tab |
+
+What each kind uses:
+
+- A reply is refined with the prompt on the Prompt tab.
+- Your own message is refined with the prompt under **For your messages**, on the Prompt tab. It fixes mistakes and leaves your style alone.
+- Refining a message you already sent changes the saved message. The reply the model already wrote stays as it is. Every later reply reads the fixed version.
+- What you are typing is rewritten in the input box. Nothing is written to the chat until you send it.
+
+Where the buttons come from:
+
+- **The floating button** and **the button in the chat's row of controls** each have their own switch on the Setup tab.
+- **The Extras menu** is the menu in the chat's input bar. Auto Refine only adds entries to it while **Refining the draft in your input box** is on. While the floating button is on screen, its menu holds these entries instead, and Extras holds none. With the floating button off, they come back to Extras, which is how you reach them on a phone.
 
 ## Prompt
 

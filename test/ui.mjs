@@ -3179,6 +3179,8 @@ console.log("\nasking for a refine from the button's menu");
     }));
 
     await page.evaluate(() => {
+      // A chat to go through. Without one, the menu now says so instead.
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
       window.__menuPick = "all";
       document.querySelector("#float .arf-float").dispatchEvent(
         new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
@@ -3186,9 +3188,33 @@ console.log("\nasking for a refine from the button's menu");
     });
     await settle(page);
     ok(
-      "picking every reply asks the backend for exactly that",
-      await page.evaluate(() => window.__sent.some((m) => m.type === "refine_all")),
+      "picking every reply asks first, the same as the panel's button",
+      await page.evaluate(() => !!document.querySelector("[data-arf-sweep-yes]") && !window.__sent.some((m) => m.type === "refine_all")),
     );
+    await page.evaluate(() => document.querySelector("[data-arf-sweep-yes]").click());
+    await settle(page);
+    ok(
+      "and once you say yes, asks the backend for exactly that",
+      await page.evaluate(() => window.__sent.some((m) => m.type === "refine_all" && !m.mine)),
+    );
+    // The same two for your own messages, offered beside it.
+    const mineKeys = await page.evaluate(() => ((window.__menu || {}).items || []).map((i) => i.key));
+    ok("the menu offers your latest message and all of yours", mineKeys.indexOf("mine") >= 0 && mineKeys.indexOf("allmine") >= 0, mineKeys.join(","));
+    await page.evaluate(() => window.__fromBackend({ type: "refine_all_done", saved: 0, skipped: 0 }));
+    await settle(page);
+    await page.evaluate(() => {
+      window.__menuPick = "mine";
+      document.querySelector("#float .arf-float").dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    });
+    await settle(page);
+    ok(
+      "picking your latest message asks for your message, not a reply",
+      await page.evaluate(() => window.__sent.some((m) => m.type === "refine_now" && m.mine === true)),
+    );
+    await page.evaluate(() => window.__fromBackend({ type: "refine_result", ok: false, why: "test" }));
+    await settle(page);
 
     // While one is running, stopping it is what the menu is opened for, and
     // starting another is not offered.

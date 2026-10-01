@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.25.0";
+const VERSION = "1.26.0";
 
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
@@ -6769,7 +6769,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (sweep) {
       wrap.appendChild(
         note(
-          "Going through the chat: reply " + sweep.at + " of " + sweep.of + ", " +
+          (sweepMine ? "Going through your messages: message " : "Going through the chat: reply ") +
+            sweep.at + " of " + sweep.of + ", " +
             sweep.saved + " refined, " + sweep.skipped + " left alone.",
         ),
       );
@@ -6838,6 +6839,27 @@ export function setup(ctx: Ctx, overrides?: any) {
       stop || "Goes through this chat oldest first, one model call per reply. It asks first.";
     every.addEventListener("click", () => askSweep());
     row.appendChild(every);
+
+    // The same two for your own messages, beside the ones for replies, so each
+    // way of refining a reply has one for your messages in the same place.
+    const mineNow = button("Refine my latest message", false);
+    mineNow.setAttribute("data-arf-mine", "1");
+    mineNow.disabled = !!stop || lastChatId == null;
+    mineNow.style.opacity = mineNow.disabled ? "0.5" : "1";
+    mineNow.style.cursor = mineNow.disabled ? "not-allowed" : "pointer";
+    mineNow.title = stop || "Refines the last message you sent in this chat, with the prompt for your messages.";
+    mineNow.addEventListener("click", () => refineMineNow());
+    row.appendChild(mineNow);
+
+    const mineAll = button("Refine all my messages here", false);
+    mineAll.setAttribute("data-arf-mine-sweep", "1");
+    mineAll.disabled = !!stop || lastChatId == null;
+    mineAll.style.opacity = mineAll.disabled ? "0.5" : "1";
+    mineAll.style.cursor = mineAll.disabled ? "not-allowed" : "pointer";
+    mineAll.title =
+      stop || "Goes through your messages in this chat oldest first, one model call each. It asks first.";
+    mineAll.addEventListener("click", () => askSweep(true));
+    row.appendChild(mineAll);
 
     // The third thing a refine can be pointed at, next to the other two rather
     // than only in a menu over the chat or a row inside Extras. Both of those
@@ -13341,7 +13363,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Refining the latest reply is not in here: that is what a tap on the
     // button does, and a menu entry for the thing the button already does is
     // the same action twice with a hold in front of one of them.
-    else doing.push({ key: "all", label: "Refine every reply in this chat" });
+    else {
+      doing.push({ key: "all", label: "Refine every reply in this chat" });
+      doing.push({ key: "mine", label: "Refine my latest message" });
+      doing.push({ key: "allmine", label: "Refine all my messages in this chat" });
+    }
     const back = newestBack();
     if (back)
       doing.push({
@@ -13407,7 +13433,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (picked === "accept") takePending(true);
     else if (picked === "decline") takePending(false);
     else if (picked === "stop") cancelRefine();
-    else if (picked === "all") startSweep();
+    // Through askSweep, the same as the panel's button, so the menu asks first
+    // too and says so when a refine is running or no chat is open.
+    else if (picked === "all") askSweep();
+    else if (picked === "mine") refineMineNow();
+    else if (picked === "allmine") askSweep(true);
     else if (picked === "undo") {
       const back = newestBack();
       if (back && back.kind === "draft") putDraftBack();
@@ -13471,6 +13501,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // a fresh install either way.
     const inExtras = !!cfg.enabled && !!cfg.inputRefine && !widgetCarriesEntries();
     extra("auto-refine-now", "Refine the latest reply", inExtras, () => refineNow());
+    extra("auto-refine-mine", "Refine my latest message", inExtras, () => refineMineNow());
     extra("auto-refine-input", "Refine what I am typing", inExtras, () => refineInput());
     // On the row's terms, not its own. Somebody who switched the row off wants an
     // empty Extras menu, and letting one entry back in would undo that for them.
@@ -14067,8 +14098,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // progress has to survive that.
   let sweep: { at: number; of: number; saved: number; skipped: number } | null = null;
   let sweepAsk: string | null = null;
+  // Whether the run is over your own messages rather than the replies, for
+  // what the card and the ending say.
+  let sweepMine = false;
 
-  function askSweep() {
+  function askSweep(mine = false) {
     const why = whyNot();
     if (why) {
       toast(why, true);
@@ -14086,18 +14120,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     // over a whole chat, and it costs a model call per reply. A button that did
     // that on one press would be a button somebody presses once by accident and
     // then has to undo forty times.
-    confirmSweep();
+    confirmSweep(mine);
   }
 
-  function startSweep() {
+  function startSweep(mine = false) {
     sweep = { at: 0, of: 0, saved: 0, skipped: 0 };
+    sweepMine = mine;
     sweepAsk = newId();
     // The same five-second watchdog every other request gets. A backend that is
     // not running answers nothing at all, and without this the card would sit
     // there counting nothing for the rest of the session.
     armAck();
-    log("going through every reply in this chat");
-    send({ type: "refine_all", requestId: sweepAsk, chatId: lastChatId });
+    log(mine ? "going through your messages in this chat" : "going through every reply in this chat");
+    send({ type: "refine_all", requestId: sweepAsk, chatId: lastChatId, mine: mine });
     paint();
   }
 
@@ -14295,7 +14330,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // One message, by id. No id means the latest reply, which is what the backend
   // works out: it holds the messages and the panel only knows what it happened
   // to watch arrive.
-  function refineOne(messageId: any) {
+  function refineOne(messageId: any, mine = false) {
     // One at a time. Two against the same reply means whichever finishes last
     // wins, and which one that is cannot be predicted.
     if (busy) {
@@ -14317,7 +14352,14 @@ export function setup(ctx: Ctx, overrides?: any) {
       requestId: newId(),
       chatId: lastChatId,
       messageId: messageId,
+      mine: mine,
     });
+  }
+
+  // Your latest message. The backend finds it, the same way it finds the
+  // latest reply, since it holds the messages.
+  function refineMineNow() {
+    refineOne(null, true);
   }
 
   // Both, because neither covers the other. A drag ends with pointerup and never
@@ -15090,11 +15132,15 @@ export function setup(ctx: Ctx, overrides?: any) {
             // Every ending says what happened to the chat, including the ones
             // where nothing happened. A sweep that finds nothing to do and says
             // nothing reads exactly like a button that did not work.
+            const mine = sweepMine;
+            sweepMine = false;
             const count =
               saved + left === 0
-                ? "There was no reply here to refine."
+                ? mine
+                  ? "There was no message of yours here to refine."
+                  : "There was no reply here to refine."
                 : saved +
-                  (saved === 1 ? " reply refined" : " replies refined") +
+                  (mine ? " of your messages refined" : saved === 1 ? " reply refined" : " replies refined") +
                   (left ? ", " + left + " left alone" : "") +
                   (msg.stopped ? ", stopped partway" : "") +
                   ".";
@@ -15128,12 +15174,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // A host with no modal is not a reason to skip the question. It falls back to
   // the browser's own confirm, and if there is not one of those either the
   // sweep does not run: going ahead unasked is the one answer that is wrong.
-  function confirmSweep() {
-    const many = "This rewrites every reply in this chat, one model call each.";
-    const back = "The greeting and your own messages are left alone, and each rewrite can be put back from the Log.";
+  function confirmSweep(mine = false) {
+    const many = mine
+      ? "This rewrites every message of yours in this chat, one model call each, with the prompt for your messages."
+      : "This rewrites every reply in this chat, one model call each.";
+    const back = mine
+      ? "The replies and the greeting are left alone, and each rewrite can be put back from the Log."
+      : "The greeting and your own messages are left alone, and each rewrite can be put back from the Log.";
     try {
       if (ctx.ui && typeof (ctx.ui as any).showModal === "function") {
-        const modal = (ctx.ui as any).showModal({ title: "Refine every reply here?" });
+        const modal = (ctx.ui as any).showModal({ title: mine ? "Refine all your messages here?" : "Refine every reply here?" });
         const root = modal.root as HTMLElement;
         root.innerHTML = "";
         root.className = "arf";
@@ -15149,7 +15199,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         };
         yes.addEventListener("click", () => {
           shut();
-          startSweep();
+          startSweep(mine);
         });
         no.addEventListener("click", shut);
         bar.appendChild(yes);
@@ -15160,7 +15210,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
     try {
       if (typeof (globalThis as any).confirm === "function") {
-        if ((globalThis as any).confirm(many + "\n\n" + back)) startSweep();
+        if ((globalThis as any).confirm(many + "\n\n" + back)) startSweep(mine);
         return;
       }
     } catch (_) {}

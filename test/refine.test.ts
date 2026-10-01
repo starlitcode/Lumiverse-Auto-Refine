@@ -4534,6 +4534,37 @@ describe("going through every reply in a chat", () => {
     expect(h.body("m1")).toBe("i walk through it");
   });
 
+  // The same two actions for your own messages, with the prompt for them.
+  test("with mine set, every message of yours is refined and no reply is", async () => {
+    const h = await armed(["<REFINED>I keep walking.</REFINED>"], { userBlocks: PROMPT }, longChat());
+    await h.front({ type: "refine_all", requestId: "a9", chatId: "c1", mine: true });
+    await wait(120);
+    const done = h.sent.find((m: any) => m.type === "refine_all_done" && m.requestId === "a9");
+    expect(done.saved).toBe(2);
+    expect(h.writes.map((w: any) => w.id).sort()).toEqual(["m1", "m3"]);
+    expect(h.body("m0")).toBe("The gate stands open, and the road past it is dark.");
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+  });
+
+  test("refining your latest message picks the last one you sent", async () => {
+    const h = await armed(["<REFINED>I keep walking.</REFINED>"], { userBlocks: PROMPT }, longChat());
+    await h.front({ type: "refine_now", requestId: "n1", chatId: "c1", mine: true });
+    await wait(120);
+    const done = h.sent.find((m: any) => m.type === "refine_result" && m.requestId === "n1");
+    expect(done.messageId).toBe("m3");
+    expect(h.writes.map((w: any) => w.id)).toEqual(["m3"]);
+  });
+
+  test("and says so when you have sent nothing yet", async () => {
+    const h = await armed(["<REFINED>x</REFINED>"], { userBlocks: PROMPT }, [longChat()[0]]);
+    await h.front({ type: "refine_now", requestId: "n2", chatId: "c1", mine: true });
+    await wait(60);
+    const done = h.sent.find((m: any) => m.type === "refine_result" && m.requestId === "n2");
+    expect(done.ok).toBe(false);
+    expect(done.why).toBe("you have no message in this chat to refine yet");
+    expect(h.writes.length).toBe(0);
+  });
+
   test("it says which one it is on as it goes", async () => {
     const h = await armed(["<REFINED>The cold met her as she stepped through the gate.</REFINED>"], {}, longChat());
     await h.front({ type: "refine_all", requestId: "a2", chatId: "c1" });

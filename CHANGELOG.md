@@ -6,6 +6,24 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.26.0
+
+_2026-10-01_
+
+### Added
+
+- **Your own messages can be refined the same ways as replies.**
+  - **Refine my latest message** refines the last message you sent in this chat. It is above the tabs, in the floating button's menu and in the Extras menu.
+  - **Refine all my messages here** goes through every message you sent in this chat, one model call each. It asks before it starts. It is above the tabs and in the floating button's menu.
+  - Both use the prompt under **For your messages**. Neither is ever done automatically.
+- **Every way to refine**, a table in the settings docs, lists each thing you can refine, every place its button is, and what setting it needs. See [Every way to refine](docs/settings.md#every-way-to-refine).
+
+### Fixed
+
+- **Refine every reply in this chat, in the floating button's menu, started without asking.** The button above the tabs always asks first, since the run costs a model call per reply. The menu now asks the same question. It also says so when a refine is already running or no chat is open, instead of starting anyway.
+
+---
+
 ## 1.25.0
 
 _2026-09-27_

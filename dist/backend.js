@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.25.0';
+const VERSION = '1.26.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3005,14 +3005,14 @@ async function askModel(text, isUser, scene, userId, use, drop) {
 function greetingIdOf(msgs) {
     return msgs && msgs.length && msgs[0] && msgs[0].role === 'assistant' ? msgs[0].id : null;
 }
-// The last thing the character said, which is what "the latest reply" means.
-// The greeting is skipped because it is never refined, so a chat holding only a
-// greeting answers no rather than offering the one message that will always be
-// refused.
-function latestReply(msgs, greetingId) {
+// The last thing the character said, which is what "the latest reply" means,
+// or with role 'user' the last message of yours. The greeting is skipped
+// because it is never refined, so a chat holding only a greeting answers no
+// rather than offering the one message that will always be refused.
+function latestReply(msgs, greetingId, role = 'assistant') {
     for (let i = msgs.length - 1; i >= 0; i--) {
         const m = msgs[i];
-        if (!m || m.role !== 'assistant')
+        if (!m || m.role !== role)
             continue;
         if (greetingId != null && m.id === greetingId)
             continue;
@@ -3025,12 +3025,12 @@ function latestReply(msgs, greetingId) {
 // The id of the latest reply in a chat, or nothing when the chat cannot be
 // read or has no reply. Nothing is passed on as it is, and refineMessage then
 // says why there was nothing to refine.
-async function latestReplyId(chatId) {
+async function latestReplyId(chatId, role = 'assistant') {
     try {
         const msgs = await spindle.chat.getMessages(chatId);
         if (!Array.isArray(msgs))
             return null;
-        const m = latestReply(msgs, greetingIdOf(msgs));
+        const m = latestReply(msgs, greetingIdOf(msgs), role);
         return m ? m.id : null;
     }
     catch (_) {
@@ -4890,10 +4890,12 @@ async function onPanel(payload, userId) {
                 return;
             }
             const greetingId = greetingIdOf(msgs);
-            // Replies only, and never the greeting. Your own messages are refined
-            // when you ask for that one, not swept up in a pass over the chat.
+            // Replies, or with mine set your own messages, and never the greeting.
+            // One kind at a time, since each has its own prompt and the reader asked
+            // for one of them.
+            const role = payload.mine === true ? 'user' : 'assistant';
             const todo = (Array.isArray(msgs) ? msgs : []).filter((x) => x &&
-                x.role === 'assistant' &&
+                x.role === role &&
                 x.id !== greetingId &&
                 String(x.content == null ? '' : x.content).trim());
             let saved = 0;
@@ -4961,9 +4963,23 @@ async function onPanel(payload, userId) {
             // The latest reply is named here when the panel sent no id, so the
             // result carries the same id as every other message about this refine.
             // The panel matches them by id, and an empty one matches nothing.
+            // With mine set and no id, it is your latest message rather than the
+            // latest reply.
+            const mine = payload.mine === true;
             const id = payload.messageId == null || payload.messageId === ''
-                ? await latestReplyId(payload.chatId)
+                ? await latestReplyId(payload.chatId, mine ? 'user' : 'assistant')
                 : payload.messageId;
+            if (mine && id == null) {
+                replyTo(userId, {
+                    type: 'refine_result',
+                    requestId: payload.requestId,
+                    chatId: payload.chatId,
+                    messageId: null,
+                    ok: false,
+                    why: 'you have no message in this chat to refine yet',
+                });
+                return;
+            }
             const done = await refineMessage(payload.chatId, id, userId, true);
             replyTo(userId, {
                 type: 'refine_result',
