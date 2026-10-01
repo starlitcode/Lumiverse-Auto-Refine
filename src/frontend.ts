@@ -2372,7 +2372,7 @@ const COST_FIELDS: Field[] = [
       { value: "inherit", label: "Whatever my connection is set to" },
       { value: "custom", label: "Yes, and I will say how much" },
     ],
-    hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. The connection option uses your own reasoning settings.",
+    hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. Whatever my connection is set to uses your own reasoning settings.",
   },
   {
     key: "thinkingEffort",
@@ -2399,7 +2399,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 3600,
-    hint: "A refine that takes longer is cancelled, and the reply is left as it was. Up to an hour. 0 means no limit.",
+    hint: "A refine that takes longer is cancelled, and the reply is left as it was. Up to an hour. At 0, it waits the full hour.",
   },
   // Prices, so a token count can be shown as the number people actually want.
   // Nothing here knows what a model costs and no two providers agree, so the
