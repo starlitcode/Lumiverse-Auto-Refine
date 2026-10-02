@@ -11280,6 +11280,67 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
   }
 }
 
+console.log("\nfolding a block with one side refined");
+{
+  // What to refine is changed while the panel is open, and the Prompt tab is
+  // opened after. The list has to be that side's prompt from the first draw,
+  // or a fold arrow folds a block of the other prompt and takes a second press
+  // to do anything.
+  const firstBlock = (page) =>
+    page.evaluate(() => {
+      const block = document.querySelector("#drawer .arf-block");
+      const btn = block.querySelector(".arf-blockfold");
+      return { name: (block.querySelector("input:not([type=checkbox])") || {}).value || "", expanded: btn.getAttribute("aria-expanded") };
+    });
+  const pressList = (page, label) =>
+    page.evaluate((label) => {
+      const b = [...document.querySelectorAll("#drawer .arf-segbtn")].find((x) => x.textContent.trim() === label);
+      if (b) b.click();
+    }, label);
+  const setSide = (page, value) =>
+    page.evaluate((value) => {
+      const sel = document.querySelector('#drawer select[data-arf-field="refineSide"]');
+      sel.value = value;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }, value);
+  for (const [side, from] of [["mine", "For replies"], ["replies", "For your messages"]]) {
+    await inTab(browser, { saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Prompt");
+      await settle(page);
+      await pressList(page, "For replies");
+      await settle(page);
+      const replyName = (await firstBlock(page)).name;
+      await pressList(page, "For your messages");
+      await settle(page);
+      const mineName = (await firstBlock(page)).name;
+      // Left on the list for the other side, as somebody would leave it.
+      await pressList(page, from);
+      await settle(page);
+      await goTab(page, "Setup");
+      await settle(page);
+      await setSide(page, side);
+      await settle(page);
+      await goTab(page, "Prompt");
+      await settle(page);
+      const shown = await firstBlock(page);
+      const pressed = await page.evaluate(async () => {
+        const btn = document.querySelector("#drawer .arf-block .arf-blockfold");
+        btn.click();
+        await new Promise((r) => setTimeout(r, 100));
+        return btn.getAttribute("aria-expanded");
+      });
+      await goTab(page, "Context");
+      await goTab(page, "Prompt");
+      await settle(page);
+      const again = await firstBlock(page);
+      const want = side === "mine" ? mineName : replyName;
+      ok(side + ": the Prompt tab shows that side's prompt from the first draw", !!want && shown.name === want && replyName !== mineName, JSON.stringify({ shown, replyName, mineName }));
+      ok(side + ": one press folds the first block", pressed === "false", String(pressed));
+      ok(side + ": and it is still folded after a repaint", again.name === want && again.expanded === "false", JSON.stringify(again));
+    });
+  }
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");

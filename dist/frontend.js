@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.26.1";
+const VERSION = "1.26.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -3014,6 +3014,15 @@ export function setup(ctx, overrides) {
     // below reads it, and a panel rebuilt early must not meet it undeclared.
     let editing = "blocks";
     const editingYours = () => editing === "userBlocks";
+    // With only one side refined, the prompt being edited is that side's. Set
+    // before anything is drawn, because the block list, its folds and the preset
+    // picker all read it, and one drawn before it was set shows the other prompt.
+    function holdSide() {
+        if (cfg.refineSide === "replies")
+            editing = "blocks";
+        else if (cfg.refineSide === "mine")
+            editing = "userBlocks";
+    }
     // The picker, written down rather than remembered. Every assignment goes
     // through here so none of them can be the one that forgets.
     //
@@ -6567,6 +6576,7 @@ export function setup(ctx, overrides) {
     let paints = 0;
     function paint() {
         paints++;
+        holdSide();
         // A rebuild from any other cause has already done what the pending log
         // repaint and the settle were waiting to do.
         if (logPaintSoon) {
@@ -8290,6 +8300,7 @@ export function setup(ctx, overrides) {
         catch (_) { }
     }
     function buildBlocksCard() {
+        holdSide();
         const list = blockList();
         const on = list.filter((b) => b.on).length;
         const wrap = card("Your prompt", "This is the whole request a refine sends. Blocks go top to bottom. Two blocks in a row with the same role become one message, and an empty block is left out.", on + " of " + list.length + " on");
@@ -8301,10 +8312,6 @@ export function setup(ctx, overrides) {
         // different jobs. One prompt hedged to do both does neither well. With
         // only one side refined, only its prompt is shown, and there is nothing to
         // switch between.
-        if (!refinesMine())
-            editing = "blocks";
-        if (!refinesReplies())
-            editing = "userBlocks";
         const pick = el("div", "arf-seg");
         if (!refinesReplies() || !refinesMine())
             pick.hidden = true;
