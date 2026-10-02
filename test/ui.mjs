@@ -11255,6 +11255,29 @@ console.log("\nthe tabs stay at the top");
         ok(label + ", " + which + ": a fast swipe to the top finds the strip already solid", got.jumpHeld && got.jumpSolid, JSON.stringify(got));
         ok(label + ", " + which + ": a repaint while it is held keeps it solid", got.fresh && got.repaintSolid, JSON.stringify(got));
       });
+      // On a panel of its own, so no repaint puts its own scroll back while
+      // this one runs.
+      await inTab(browser, { css, viewport, touch, saved: { enabled: true } }, async (page) => {
+        await goTab(page, "Prompt");
+        // Scrolled to just short of the top and left there. While it moves the
+        // fill is on; once it is still, a strip that is not held looks the way
+        // it does at rest.
+        const still = await page.evaluate(async () => {
+          const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const drawer = document.getElementById("drawer");
+          const bar = () => drawer.querySelector("[data-arf-stick]");
+          const solid = () => /^rgb\(/.test(getComputedStyle(bar().querySelector(".arf-tabs")).backgroundColor);
+          const where = () => bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top;
+          const pad = parseFloat(getComputedStyle(drawer).paddingTop) || 0;
+          drawer.scrollTop = where() - pad - bar().offsetHeight;
+          await frame();
+          const movingSolid = solid();
+          await new Promise((r) => setTimeout(r, 400));
+          return { gap: Math.round(where() - pad), movingSolid, stillSolid: solid() };
+        });
+        ok(label + ", " + which + ": scrolled to just short of the top, the strip is solid while it moves", still.gap > 0 && still.movingSolid, JSON.stringify(still));
+        ok(label + ", " + which + ": and once it is still there, it is not filled", still.gap > 0 && !still.stillSolid, JSON.stringify(still));
+      });
     }
     // The browser's own check alone, with the script's classes taken off the
     // moment they are put on. Without the check the strip goes see-through,

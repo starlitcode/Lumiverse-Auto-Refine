@@ -16,7 +16,7 @@ _2026-10-02_
 
 ### Fixed
 
-- **The row of tabs let the settings show through it on a fast scroll.** On a fast scroll, mostly on a phone, the row of tabs reached the top before its solid background went on. For that moment the settings under it showed through, and the row looked choppy. It also lost its background for a moment each time the panel was redrawn while you were scrolled down. The background now goes on just before the row reaches the top, and it stays on when the panel is redrawn. In Chrome and Edge, the browser itself keeps the background on while the row is at the top.
+- **The row of tabs let the settings show through it on a fast scroll.** On a fast scroll, mostly on a phone, the row of tabs reached the top before its solid background went on. For that moment the settings under it showed through, and the row looked choppy. It also lost its background for a moment each time the panel was redrawn while you were scrolled down. While you scroll, the background now goes on just before the row reaches the top. When you stop with the row short of the top, it has no background, the same as at rest. It stays on when the panel is redrawn. In Chrome and Edge, the browser itself keeps the background on while the row is at the top.
 - **Span-01 Lite, paid was not paid.** On OpenRouter it costs nothing at the moment, the same as the free one. What sets it apart is that OpenRouter's limits for free models do not apply to it. It is now called **Span-01 Lite, without the free limits**. The model it sends is the same.
 
 ---

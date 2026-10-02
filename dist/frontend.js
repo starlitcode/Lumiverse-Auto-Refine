@@ -5489,15 +5489,24 @@ export function setup(ctx, overrides) {
         }
         return 0;
     }
+    // When the drawer last scrolled, and how long after that it counts as still.
+    // A swipe on a phone keeps sending scroll events while the page coasts, a
+    // few dozen milliseconds apart, so a gap of this length means it has stopped.
+    // Declared above markStuck, which a repaint can call before the listeners
+    // below are set up.
+    let scrolledAt = 0;
+    const STILL_MS = 200;
     // Whether the strip is being held at the top. At rest it sits one card gap
     // below the search box. Held, the search box has scrolled away above it and
     // the gap is larger.
     //
-    // The fill goes on while the strip is still two of its own heights short of
-    // the top. On a phone the scroll runs ahead of this script, by a frame or
-    // more on a fast swipe, and a fill that waited for the strip to arrive would
-    // let the rows show through it for those frames. The shadow waits until it
-    // is held.
+    // While the drawer is scrolling, the fill goes on when the strip is still two
+    // of its own heights short of the top. On a phone the scroll runs ahead of
+    // this script, by a frame or more on a fast swipe, and a fill that waited for
+    // the strip to arrive would let the rows show through it for those frames.
+    // Once the scrolling stops, the fill stays only on a strip that is held, so
+    // a strip resting just short of the top looks as it does at rest. The shadow
+    // waits until it is held.
     // Where the browser can tell on its own that the strip is held, the
     // stylesheet does both with no script at all, and this is the fallback.
     function markStuck() {
@@ -5512,15 +5521,16 @@ export function setup(ctx, overrides) {
             const above = stick.previousElementSibling;
             const gap = parseFloat(getComputedStyle(root).rowGap) || 0;
             const held = !!above && top - above.getBoundingClientRect().bottom > gap + 1;
-            const near = held || top - dockTop(stick) <= stick.offsetHeight * 2;
+            const moving = Date.now() - scrolledAt < STILL_MS;
+            const near = held || (moving && top - dockTop(stick) <= stick.offsetHeight * 2);
             stick.classList.toggle("arf-stuck", held);
             stick.classList.toggle("arf-near", near);
         }
         catch (_) { }
     }
     let stuckSoon = 0;
-    // Scroll does not bubble, so it is caught on the way down, from whichever
-    // box the host scrolls the drawer with. One check per frame at most.
+    let stillTimer = null;
+    // One check per frame at most.
     const onAnyScroll = () => {
         if (stuckSoon)
             return;
@@ -5529,12 +5539,27 @@ export function setup(ctx, overrides) {
             markStuck();
         });
     };
+    // Scroll does not bubble, so it is caught on the way down, from whichever
+    // box the host scrolls the drawer with. A last check once it has been still
+    // takes the early fill off a strip that stopped short of the top.
+    const onScrolled = () => {
+        scrolledAt = Date.now();
+        if (stillTimer)
+            clearTimeout(stillTimer);
+        stillTimer = setTimeout(() => {
+            stillTimer = null;
+            markStuck();
+        }, STILL_MS + 20);
+        onAnyScroll();
+    };
     try {
-        document.addEventListener("scroll", onAnyScroll, true);
+        document.addEventListener("scroll", onScrolled, true);
         disposers.push(() => {
-            document.removeEventListener("scroll", onAnyScroll, true);
+            document.removeEventListener("scroll", onScrolled, true);
             if (stuckSoon)
                 cancelAnimationFrame(stuckSoon);
+            if (stillTimer)
+                clearTimeout(stillTimer);
         });
     }
     catch (_) { }
