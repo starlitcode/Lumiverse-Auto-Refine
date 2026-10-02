@@ -11,7 +11,7 @@ There are two to pick from:
 | **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
 | **Span** | Respan | Span-01 Lite is free. Span-01 is paid. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1) |
 
-Both answer the same checks, and everything on this page works the same for both, unless a section says it is for one of them. The same links are on the Model tab, as **What is Jev?** and **What is Span?**.
+Both answer the same checks, and everything on this page works the same for both, unless a section says it is for one of them. The same links are on the Model tab, as **What is Jev?** and **What is Span?**, while **How many models** is set to two.
 
 ## Setting it up
 

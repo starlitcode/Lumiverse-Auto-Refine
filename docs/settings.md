@@ -21,6 +21,10 @@ It is a tab so you can keep it open while you write, and see what the last refin
 - Refines take turns between accounts. If another account's refine is running, yours waits for it to finish, and the panel says "Waiting for another account's refine to finish".
 - Your own refines never wait for each other.
 
+## The row of tabs
+
+When you scroll down a tab, the row of tabs stays at the top of the drawer. You can switch tabs without scrolling back up. Scroll back to the top and the row is in its own place again. While you search, the row is hidden, because the results come from every tab.
+
 ## Finding a setting
 
 The search box above the tabs searches every tab, not only the one you are on.
@@ -33,12 +37,56 @@ The search box above the tabs searches every tab, not only the one you are on.
 These stay in place whichever tab is open:
 
 - **The switch** turns everything on or off. Off, nothing is refined and no model is called.
+
+The buttons are in two groups. **What to refine**, on the Setup tab, can hide one of them.
+
+**Replies:**
+
 - **Refine the latest reply** refines one reply now. While it runs, the buttons change to **Stop this refine**.
 - **Refine every reply here** goes through the chat you are in, oldest first, one model call each. It asks before it starts.
-- **every reply, automatically** is the automatic pass. It is off by default.
+- **Refine the part I selected** shows while part of a reply is selected.
+- **Refine every new reply automatically** is the automatic pass. It is off by default.
+
+**Your messages:**
+
+- **Refine my latest message** refines the last message you sent in this chat, with the prompt for your messages.
+- **Refine all my messages here** goes through every message you sent in this chat, oldest first, one model call each. It asks before it starts. Replies are left alone.
+- **Refine what I am typing** shows when **Refining the draft in your input box** is switched on.
+
+Below them:
+
 - **Refines you can put back** lists every refine in this chat, newest first, each with **Put it back**. The tab shows a badge with the count.
 
-The greeting is never refined. Your own messages are only refined when you press the button on one.
+The greeting is never refined. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
+
+## Every way to refine
+
+Each row is one thing you can refine, and every place its button is.
+
+| What it refines | Where to press | Needs a setting |
+| --- | --- | --- |
+| **The latest reply** | Above the tabs. A tap on the floating button. The button in the chat's row of controls. The Extras menu. | Only for the floating button, the chat-row button and Extras. See the notes below. |
+| **Every reply in this chat** | Above the tabs. The floating button's menu. | No |
+| **Your latest message**, the last one you sent | Above the tabs. The floating button's menu. The Extras menu. | No, apart from the Extras note below |
+| **All your messages in this chat** | Above the tabs. The floating button's menu. | No |
+| **One message**, a reply or one of yours | The refine button on that message. | **A button on every message**, on the Setup tab |
+| **A reroll Auto Retry adds** with **Several tries at once** | Nothing to press. The automatic pass refines it like any new reply. | The automatic pass, and [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) 5.11.0 or later |
+| **Part of a message**, a reply or one of yours | Select the text, then press **Refine the part I selected**: above the tabs, in the floating button's menu, in the Extras menu, or on the chat buttons. | No |
+| **What you are typing**, before you send it | Above the tabs. The floating button's menu, or the Extras menu. | **Refining the draft in your input box**, on the Setup tab |
+
+**What to refine**, on the Setup tab, hides the rows for the side you do not refine.
+
+What each kind uses:
+
+- A reply is refined with the prompt on the Prompt tab.
+- Your own message is refined with the prompt under **For your messages**, on the Prompt tab. It fixes mistakes and leaves your style alone.
+- Refining a message you already sent changes the saved message. The reply the model already wrote stays as it is. Every later reply reads the fixed version.
+- What you are typing is rewritten in the input box. Nothing is written to the chat until you send it.
+
+Where the buttons come from:
+
+- **The floating button** and **the button in the chat's row of controls** each have their own switch on the Setup tab.
+- **The Extras menu** is the menu in the chat's input bar. Auto Refine only adds entries to it while **Refining the draft in your input box** is on. While the floating button is on screen, its menu holds these entries instead, and Extras holds none. With the floating button off, they come back to Extras, which is how you reach them on a phone.
 
 ## Prompt
 
@@ -59,9 +107,9 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Refine using** picks the model that refines, from your connection profiles. Leave it on the default to use the model you chat with.
 - **Let it think first** is off by default. You can leave it to your connection's setting, or pick an effort level. See [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** stops a refine that has not come back.
-  - The default is four minutes. The most is an hour. 0 means never give up.
+  - The default is four minutes. The most is an hour. At 0, it waits the full hour.
   - Four minutes is long on purpose. A fast model answers in seconds. A reasoning model on a high setting, or a local model loading, can take minutes, and stopping it early throws that work away.
-  - With it off you are never stuck: **Stop this refine** is always there.
+  - You can end a refine yourself at any time: **Stop this refine** is always there.
   - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab. A reply that finished while the tab was asleep can miss the panel, so check the reply itself.
 - **Input price, per million tokens** and **Output price, per million tokens** are your provider's prices.
   - Input is what you send. Output is what the model writes back.
@@ -106,6 +154,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Wait out a provider that will not take the call** waits and tries again, twice by default, when the provider is busy or a local model is loading. See [Waiting out a provider that will not take the call](guardrails.md#waiting-out-a-provider-that-will-not-take-the-call).
 - **Seconds between automatic refines** puts a gap between automatic refines, for a provider that limits calls per minute. A reply that arrives too soon waits, with a countdown, and is then refined. It is 0, no gap, by default. Refines you start yourself never wait.
 - **Ask again when a check fails** retries a refine that failed a check a second try could fix. It is 0 by default.
+- **Several rewrites at once** writes several rewrites at the same time and keeps the first that passes every check. It is off by default, and each rewrite costs a call. See [Several rewrites at once](guardrails.md#several-rewrites-at-once).
 - **Add the refine as a swipe instead of writing over the reply** is off by default.
   - On, the rewrite is added as a new swipe, and the original stays one swipe back.
   - This is the only way back that survives a reload.
@@ -125,6 +174,12 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Below, it shows what the last refine used, in input and output tokens, and what it cost if you set prices. This includes dropped rewrites and retries, because those were paid for too.
 - **What the model worked out** keeps the model's notes from the last refine that finished. It has **Copy**, **Expand** and **Clear**. Stopping a refine leaves the last notes alone.
 - **What it has been doing** lists what it did, newest first.
+  - **Show in this list**, under it, chooses which kinds of line are shown. Untick one to hide it:
+    - **What the second model decided**: one line for each reply the second model reads.
+    - **Replies left alone**: a reply or draft that was not changed, and why.
+    - **Settings and presets**: settings or presets loaded, saved or moved to your account.
+  - Every other line is always shown. The count at the top says how many lines are hidden.
+  - Hidden lines are still kept. **Reporting a problem** still includes them.
 - **Reporting a problem** copies everything needed for a bug report.
   - **What it carries** chooses what goes in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser.
   - What your blocks say is never included, only their names, roles and macros.
@@ -132,6 +187,13 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - The first two lines always name the panel's version and the backend's version. They differ if you updated without reloading.
 
 ## Setup
+
+**What to refine** chooses which side of the chat Auto Refine works on.
+
+- **Replies and your messages** is the default.
+- **Replies only** hides everything for your own messages: their buttons, their menu entries, **Refine what I am typing**, and the prompt under **For your messages**.
+- **Your messages only** hides everything for replies: their buttons, their menu entries, the automatic switch, the button in the chat's row of controls, and the prompt for replies. Nothing is refined automatically, since your own messages never are. A tap on the floating button refines your latest message.
+- Nothing is deleted. Switch back and everything returns as it was.
 
 **This chat** switches Auto Refine off in the chat you are in, and leaves other chats alone.
 
@@ -153,8 +215,8 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - Hold it, or right-click it, to open its menu: the tab, refining every reply, stopping a refine, putting one back, refining your draft, hiding the button, and the main switch.
 - Holding fills a ring around the edge. The menu opens when the ring closes. Let go early and nothing happens.
 - Its mark is an eye. It is shut when nothing is running, and reads while a refine runs. It blinks once when a refine finishes, and closes without a blink when you stop one.
-- If your device is set to reduce motion, the eye stays still and there is no ring.
 - Drag it where you want it. It stays there, in this browser.
+- If your device is set to reduce motion, the eye stays still and there is no ring.
 
 **A button in the chat's row of controls** adds a button to Lumiverse's own row of chat buttons. A tap refines the latest reply.
 
@@ -166,6 +228,12 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - While a message is open for editing, its button is hidden, like Lumiverse's own.
 
 Both chat buttons copy the look of the Lumiverse button next to them, so your theme and your own CSS apply to them. While a refine runs, each turns into **Stop this refine**.
+
+**Keep the eye still** stops every eye this extension draws from moving: on the drawer tab, the floating button, the chat buttons and the button on each message. It is off by default.
+
+- At rest, the eye is shut.
+- While a refine runs, the eye is open, with no pupil moving and no blink.
+- Pointing at a button does not open its eye.
 
 **Refining part of a reply** needs no setting. Select part of a reply and **Refine the part I selected** appears:
 
@@ -182,7 +250,7 @@ It rewrites only what you selected. It works in your own messages too, with thei
 - It will not delete the whole message.
 - **Put it back** undoes it.
 
-**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, since there is no input box to read. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
+**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, because there is no input box to read. Like every button above the tabs, it is also greyed out while the panel is waiting to be told which chat you are in. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
 
 While the floating button is on screen, its menu holds these extra actions. With the button off, they are in the chat input's Extras menu instead, which is how you reach them on a phone.
 

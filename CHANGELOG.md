@@ -6,6 +6,41 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.26.0
+
+_2026-10-01_
+
+### Added
+
+- **Your own messages can be refined the same ways as replies.**
+  - **Refine my latest message** refines the last message you sent in this chat. It is above the tabs, in the floating button's menu and in the Extras menu.
+  - **Refine all my messages here** goes through every message you sent in this chat, one model call each. It asks before it starts. It is above the tabs and in the floating button's menu.
+  - Both use the prompt under **For your messages**. Neither is ever done automatically.
+- **Every way to refine**, a table in the settings docs, lists each thing you can refine, every place its button is, and what setting it needs. See [Every way to refine](docs/settings.md#every-way-to-refine).
+- **Keep the eye still**, on the Setup tab. Every eye this extension draws stays shut at rest, and opens without moving while a refine runs. It is off by default.
+- **Show in this list**, under **What it has been doing** on the Log tab. Untick a kind of line to hide it: what the second model decided, replies left alone, or settings and presets. Hidden lines are still kept for a problem report.
+- **What to refine**, on the Setup tab: replies and your messages, replies only, or your messages only. The side you do not refine is hidden, including its buttons, its menu entries and its prompt. See [Setup](docs/settings.md#setup).
+- **Several rewrites at once**, on the Limits tab, off by default. Each try writes 2 to 5 rewrites at the same time and keeps the first that passes every check. The rest are stopped. Each rewrite costs a call. See [Several rewrites at once](docs/guardrails.md#several-rewrites-at-once).
+- **Rerolls added by Auto Retry are refined.** Auto Retry 5.11.0 can add a reroll itself with **Several tries at once**. Lumiverse does not announce that reroll as a finished reply, so Auto Retry tells Auto Refine, and the automatic pass refines it like any new reply.
+
+### Changed
+
+- **The row of tabs stays at the top.** When you scroll down a tab, the row of tabs (Prompt, Context, Model, Limits, Log, Setup) stays at the top of the drawer, so you can switch tabs without scrolling back up. It goes back to its own place when you scroll back to the top.
+- **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
+- **The buttons above the tabs are in two groups**, **Replies** and **Your messages**, in two even columns. The automatic switch is now in the **Replies** group and reads **Refine every new reply automatically**.
+- **Refine what I am typing is greyed out with the other buttons** while the panel waits to be told which chat you are in. It used to stay lit, so the buttons above the tabs were not all in the same state.
+- **Easier to use on a phone and with a mouse.** On a phone, the **?** buttons, the fold arrows on prompt blocks and the links are at least 32 pixels, and a switch answers a tap just around it. With a mouse, the switches, lists, two-way choices and links light up when you point at them.
+- **Shorter descriptions.** About half of the descriptions under the **?** buttons are shorter and plainer. Some docs pages are reworded to be clearer.
+- **Pop-ups appear with no animation.** The before-and-after card, the dim behind it and the full-size editor used to rise, grow or fade in. They now appear at once. The description under each **?** still fades in and out.
+- **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practised ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
+
+### Fixed
+
+- **Refine every reply in this chat, in the floating button's menu, started without asking.** The button above the tabs always asks first, since the run costs a model call per reply. The menu now asks the same question. It also says so when a refine is already running or no chat is open, instead of starting anyway.
+- **The examples in the empty Address and Model name boxes were for Jev even with Span picked.** With **Another address** chosen, they now show an example for the second model you picked.
+
+---
+
 ## 1.25.0
 
 _2026-09-27_

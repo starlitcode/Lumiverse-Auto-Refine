@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.25.0';
+const VERSION = '1.26.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -37,6 +37,9 @@ const VERSION = '1.25.0';
 // user is known and comes back empty.
 let masterOn = true;
 let refineOn = false;          // the automatic pass, off until asked for
+// Replies, your own messages, or both. With your messages only, the automatic
+// pass on replies does not run, whatever its switch says.
+let repliesOn = true;
 let refineAgain = false;       // whether the pass returns to a reply it refined
 let connectionId = '';         // empty means the reader's active connection
 let thinkingMode = 'off';      // off | inherit | custom
@@ -2084,6 +2087,11 @@ let guardPreamble = true;
 // another call, and somebody who never opened this setting has not agreed to
 // pay for three refines where they asked for one.
 let retryRefine = 0;
+// How many rewrites one ask writes at the same time, and 1 when Several
+// rewrites at once is off. The first that passes every check is used and the
+// rest are stopped. Each one is a whole call to pay for, so it is off by default.
+let refineAtOnce = 1;
+const REFINE_AT_ONCE_MAX = 5;
 // How many times a refine will wait out a provider that would not take the
 // call. On by default, unlike the retry above, because a refused call costs
 // nothing: the model never read anything, so waiting and asking again buys the
@@ -2943,6 +2951,10 @@ async function askModel(
   userId?: string,
   use?: Block[],
   drop?: string[],
+  // Set when this is one of several rewrites written at once. Its call is
+  // added to the group so the rest can be stopped once one passes, and it does
+  // not stream, since several streams would report one count over another.
+  group?: { controllers: Set<any> },
 ): Promise<{ content: string; error: string }> {
   const controller: any = typeof (globalThis as any).AbortController === 'function'
     ? new (globalThis as any).AbortController()
@@ -2962,6 +2974,7 @@ async function askModel(
     // Held whether or not there is a timer, because Stop uses this too, and
     // with the timeout off it is the only way to end a run.
     holdRun(userId, controller);
+    if (group) group.controllers.add(controller);
     if (ms)
       timer = setTimeout(() => {
         try {
@@ -3034,6 +3047,7 @@ async function askModel(
     // between slow and broken.
     const canStream =
       streamProgress &&
+      !group &&
       spindle.generate &&
       typeof spindle.generate.quietStream === 'function';
     if (canStream) {
@@ -3092,6 +3106,7 @@ async function askModel(
       // want it after all, which is not a fault and should not read as one.
       const why = controller && controller.__arfWhy;
       if (why === 'stopped') return { content: '', error: 'you stopped it' };
+      if (why === 'not needed') return { content: '', error: 'another rewrite written at the same time was used' };
       return { content: '', error: 'the model did not answer within ' + Math.round(ms / 1000) + 's' };
     }
     // The provider turned the request down over a field it does not take. Ask
@@ -3106,7 +3121,7 @@ async function askModel(
         say('warn', 'the connection refused ' + bad.join(', ') + ', asking again without');
         if (timer != null) clearTimeout(timer);
         dropRun(userId, controller);
-        return askModel(text, isUser, scene, userId, use, bad);
+        return askModel(text, isUser, scene, userId, use, bad, group);
       }
     }
     if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
@@ -3122,6 +3137,9 @@ async function askModel(
   } finally {
     if (timer != null) clearTimeout(timer);
     dropRun(userId, controller);
+    // Out of the group once it has an answer, so only calls still waiting
+    // are stopped when another rewrite is used.
+    if (group) group.controllers.delete(controller);
   }
 }
 
@@ -3132,14 +3150,14 @@ function greetingIdOf(msgs: any[]): any {
   return msgs && msgs.length && msgs[0] && msgs[0].role === 'assistant' ? msgs[0].id : null;
 }
 
-// The last thing the character said, which is what "the latest reply" means.
-// The greeting is skipped because it is never refined, so a chat holding only a
-// greeting answers no rather than offering the one message that will always be
-// refused.
-function latestReply(msgs: any[], greetingId: any): any {
+// The last thing the character said, which is what "the latest reply" means,
+// or with role 'user' the last message of yours. The greeting is skipped
+// because it is never refined, so a chat holding only a greeting answers no
+// rather than offering the one message that will always be refused.
+function latestReply(msgs: any[], greetingId: any, role: string = 'assistant'): any {
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
-    if (!m || m.role !== 'assistant') continue;
+    if (!m || m.role !== role) continue;
     if (greetingId != null && m.id === greetingId) continue;
     if (!String(m.content == null ? '' : m.content).trim()) continue;
     return m;
@@ -3150,15 +3168,71 @@ function latestReply(msgs: any[], greetingId: any): any {
 // The id of the latest reply in a chat, or nothing when the chat cannot be
 // read or has no reply. Nothing is passed on as it is, and refineMessage then
 // says why there was nothing to refine.
-async function latestReplyId(chatId: string): Promise<any> {
+async function latestReplyId(chatId: string, role: string = 'assistant'): Promise<any> {
   try {
     const msgs = await spindle.chat.getMessages(chatId);
     if (!Array.isArray(msgs)) return null;
-    const m = latestReply(msgs, greetingIdOf(msgs));
+    const m = latestReply(msgs, greetingIdOf(msgs), role);
     return m ? m.id : null;
   } catch (_) {
     return null;
   }
+}
+
+// Several rewrites of the same text, asked for at the same time. Each is
+// judged the moment it arrives, and the first that passes every check is the
+// answer: the rest are stopped, since nothing would use them. With none
+// passing, the last check that failed is the answer, so the refusal says what
+// went wrong. With every call failing, the last error is, so a rate limit is
+// waited out the same way as for one rewrite.
+async function askAtOnce(
+  count: number,
+  input: string,
+  isUser: boolean,
+  scene: Scene,
+  userId: string | undefined,
+  use: Block[] | undefined,
+): Promise<{ error: string; verdict: Verdict | null }> {
+  const group = { controllers: new Set<any>() };
+  say('info', 'writing ' + count + ' rewrites at once');
+  return new Promise((resolve) => {
+    let left = count;
+    let over = false;
+    let failed: Verdict | null = null;
+    let error = '';
+    const finish = (out: { error: string; verdict: Verdict | null }) => {
+      if (over) return;
+      over = true;
+      for (const c of group.controllers) {
+        try {
+          if (!c.__arfWhy) c.__arfWhy = 'not needed';
+          c.abort();
+        } catch (_) {}
+      }
+      resolve(out);
+    };
+    for (let i = 0; i < count; i++) {
+      askModel(input, isUser, scene, userId, use, undefined, group)
+        .then((a) => {
+          if (over) return;
+          if (a.error) {
+            error = a.error;
+            return;
+          }
+          const v = judge(a.content, input);
+          if (v.ok) finish({ error: '', verdict: v });
+          else failed = v;
+        })
+        .catch((e: any) => {
+          error = (e && e.message) || String(e);
+        })
+        .then(() => {
+          left -= 1;
+          if (left > 0 || over) return;
+          finish(failed ? { error: '', verdict: failed } : { error: error || 'no rewrite came back', verdict: null });
+        });
+    }
+  });
 }
 
 async function refineMessage(
@@ -3610,8 +3684,20 @@ async function refineMessage(
       tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: asks + 1, of: tries });
       say('info', 'asking again after: ' + verdict.why);
     }
-    tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
-    const answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks);
+    tell(userId, {
+      type: 'refine_progress',
+      stage: thinkingMode === 'off' ? 'asking' : 'thinking',
+      atOnce: refineAtOnce > 1 ? refineAtOnce : 0,
+    });
+    // With Several rewrites at once on, the ask is several at the same time,
+    // already judged. A verdict from there goes straight to the checks below.
+    let answer: { content: string; error: string };
+    let ready: Verdict | null = null;
+    if (refineAtOnce > 1) {
+      const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks);
+      answer = { content: '', error: got.verdict ? '' : got.error };
+      ready = got.verdict;
+    } else answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks);
     if (answer.error) {
       // The provider would not take the call. Waiting is what fixes that, and
       // nothing has been spent, so it is worth waiting for: a free tier meters
@@ -3648,7 +3734,7 @@ async function refineMessage(
     // markup is not called "too short" for the tokens standing in for it.
     // Judged against what this pass was given rather than against the reply, so
     // a chain is not measured as though every pass started from the original.
-    verdict = judge(answer.content, input);
+    verdict = ready || judge(answer.content, input);
     // Whatever the model wrote around the tags travels with every answer from
     // here on, refused ones included. A prompt that asked for a report on what
     // was cut wants that report most on the pass that was turned down.
@@ -4675,6 +4761,7 @@ async function ownerOf(p: any): Promise<string | undefined> {
 function applyRules(s: any): void {
   masterOn = s.enabled !== false;
   refineOn = !!s.refineOn;
+  repliesOn = s.refineSide !== 'mine';
   refineAgain = !!s.refineAgain;
   connectionId = String(s.connectionId == null ? '' : s.connectionId);
   thinkingMode =
@@ -4746,6 +4833,10 @@ function applyRules(s: any): void {
   setPairs(s.softenSwaps);
   retryRefine = Number(s.retryRefine);
   retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
+  const many = Math.round(Number(s.refineAtOnceCount));
+  refineAtOnce = s.refineAtOnce === true
+    ? Math.min(REFINE_AT_ONCE_MAX, Math.max(2, Number.isFinite(many) ? many : 2))
+    : 1;
   rateWaits = Number(s.rateWaits);
   rateWaits = Number.isFinite(rateWaits) ? Math.min(5, Math.max(0, rateWaits)) : 2;
   refineGap = Number(s.refineGap);
@@ -4825,6 +4916,96 @@ function applyRules(s: any): void {
   streamProgress = s.streamProgress !== false;
 }
 
+// The automatic pass on one reply: every check that decides whether it runs,
+// the gap between refines, the refine, and what the panel is told. Used for a
+// reply that ends in the chat and for a reroll Auto Retry adds itself, which
+// raises no event of its own.
+async function autoPass(p: any, who: any): Promise<void> {
+  // Every way out of this function says so. The panel turns its
+  // spinner on the moment a reply lands, when the automatic pass is on, and
+  // waits for this answer to turn it off. A path that returned without one
+  // would leave the spinner running until the panel's watchdog gave up and
+  // wrongly reported that the backend is not running.
+  const stand = (why: string, messageId?: any) => {
+    replyTo(who, {
+      type: 'refine_stood_down',
+      chatId: p.chatId,
+      messageId: messageId == null ? null : messageId,
+      why: why,
+    });
+  };
+
+  if (p.error) return stand('the reply itself failed, so there was nothing to refine');
+  if (!masterOn) return stand('Auto Refine is switched off');
+  if (!refineOn) return stand('the automatic pass is switched off');
+  if (!repliesOn) return stand('only your own messages are refined, as set in What to refine');
+  if (chatsOff.has(String(p.chatId))) return stand('Auto Refine is switched off in this chat');
+
+  let messageId = p.messageId;
+  if (!messageId) {
+    // Not every build puts the id on the end event, so the newest reply
+    // stands in. The greeting is ruled out inside refineMessage either way.
+    try {
+      const msgs = await spindle.chat.getMessages(p.chatId);
+      if (Array.isArray(msgs))
+        for (let i = msgs.length - 1; i >= 0; i--)
+          if (msgs[i] && msgs[i].role === 'assistant') { messageId = msgs[i].id; break; }
+    } catch (_) {}
+  }
+  if (!messageId) return stand('this build named no reply on the event and the chat had none to find');
+  // One generation is one reply, however many times it is announced. Where
+  // a build names no generation the message id stands in, which is the
+  // older guard and the only one available there.
+  const run = p.runKey ? String(p.runKey) : p.generationId ? 'g:' + String(p.generationId) : 'm:' + String(messageId);
+  if (answered.has(run)) return stand('this reply was announced twice, and it was taken the first time', messageId);
+  note(answered, run, ANSWERED_MAX);
+
+  // The gap between automatic refines. Waited out rather than skipped: the
+  // reply still gets its refine, a few seconds later.
+  const gapMs = refineGap * 1000;
+  if (gapMs > 0) {
+    const slot = Math.max(Date.now(), nextAutoAt.get(who || '') || 0);
+    nextAutoAt.set(who || '', slot + gapMs);
+    const ms = slot - Date.now();
+    if (ms > 0) {
+      say('info', 'waiting ' + Math.round(ms / 1000) + 's for the gap between refines');
+      tell(who, { type: 'refine_progress', stage: 'waiting', waitMs: ms, gap: true });
+      if (!(await pause(ms, who))) return stand('stopped while waiting for the gap between refines', messageId);
+    }
+  }
+
+  let done: RefineOutcome;
+  try {
+    done = await refineMessage(p.chatId, messageId, who, false);
+  } catch (e: any) {
+    // Caught here, because a throw that escapes ends the whole handler and
+    // leaves the panel sitting busy until the page is reloaded.
+    done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
+    say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
+  }
+  // Nothing reached a model, so nothing is reported as refused. The reply
+  // may well come back round: Auto Retry swipes a refusal and the next one
+  // arrives as its own generation, with its own text, which this pass has
+  // never seen and does not skip.
+  if (done.stood) {
+    stand(done.why, messageId);
+  } else if (!done.ok && done.why) {
+    replyTo(who, {
+      type: 'refine_skipped',
+      chatId: p.chatId,
+      messageId: messageId,
+      why: done.why,
+      same: !!done.same,
+      notes: done.notes || '',
+    });
+  }
+  // A refine that worked still has a report to hand over when the prompt
+  // asked for one, and the automatic pass has no other way to show it.
+  else if (done.ok && done.notes) {
+    replyTo(who, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
+  }
+}
+
 // ---- the events ----
 try {
   spindle.on('GENERATION_STARTED', (p: any) => {
@@ -4842,91 +5023,7 @@ try {
       // Read once, so the refine and anything it has to say afterwards go to
       // the same place.
       const who = await ownerOf(p);
-      await asAccount(who, async () => {
-
-        // Every way out of this handler from here on says so. The panel turns its
-        // spinner on the moment a reply lands, when the automatic pass is on, and
-        // waits for this answer to turn it off. A path that returned without one
-        // would leave the spinner running until the panel's watchdog gave up and
-        // wrongly reported that the backend is not running.
-        const stand = (why: string, messageId?: any) => {
-          replyTo(who, {
-            type: 'refine_stood_down',
-            chatId: p.chatId,
-            messageId: messageId == null ? null : messageId,
-            why: why,
-          });
-        };
-
-        if (p.error) return stand('the reply itself failed, so there was nothing to refine');
-        if (!masterOn) return stand('Auto Refine is switched off');
-        if (!refineOn) return stand('the automatic pass is switched off');
-        if (chatsOff.has(String(p.chatId))) return stand('Auto Refine is switched off in this chat');
-
-        let messageId = p.messageId;
-        if (!messageId) {
-          // Not every build puts the id on the end event, so the newest reply
-          // stands in. The greeting is ruled out inside refineMessage either way.
-          try {
-            const msgs = await spindle.chat.getMessages(p.chatId);
-            if (Array.isArray(msgs))
-              for (let i = msgs.length - 1; i >= 0; i--)
-                if (msgs[i] && msgs[i].role === 'assistant') { messageId = msgs[i].id; break; }
-          } catch (_) {}
-        }
-        if (!messageId) return stand('this build named no reply on the event and the chat had none to find');
-        // One generation is one reply, however many times it is announced. Where
-        // a build names no generation the message id stands in, which is the
-        // older guard and the only one available there.
-        const run = p.generationId ? 'g:' + String(p.generationId) : 'm:' + String(messageId);
-        if (answered.has(run)) return stand('this reply was announced twice, and it was taken the first time', messageId);
-        note(answered, run, ANSWERED_MAX);
-
-        // The gap between automatic refines. Waited out rather than skipped: the
-        // reply still gets its refine, a few seconds later.
-        const gapMs = refineGap * 1000;
-        if (gapMs > 0) {
-          const slot = Math.max(Date.now(), nextAutoAt.get(who || '') || 0);
-          nextAutoAt.set(who || '', slot + gapMs);
-          const ms = slot - Date.now();
-          if (ms > 0) {
-            say('info', 'waiting ' + Math.round(ms / 1000) + 's for the gap between refines');
-            tell(who, { type: 'refine_progress', stage: 'waiting', waitMs: ms, gap: true });
-            if (!(await pause(ms, who))) return stand('stopped while waiting for the gap between refines', messageId);
-          }
-        }
-
-        let done: RefineOutcome;
-        try {
-          done = await refineMessage(p.chatId, messageId, who, false);
-        } catch (e: any) {
-          // Caught here, because a throw that escapes ends the whole handler and
-          // leaves the panel sitting busy until the page is reloaded.
-          done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
-          say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
-        }
-        // Nothing reached a model, so nothing is reported as refused. The reply
-        // may well come back round: Auto Retry swipes a refusal and the next one
-        // arrives as its own generation, with its own text, which this pass has
-        // never seen and does not skip.
-        if (done.stood) {
-          stand(done.why, messageId);
-        } else if (!done.ok && done.why) {
-          replyTo(who, {
-            type: 'refine_skipped',
-            chatId: p.chatId,
-            messageId: messageId,
-            why: done.why,
-            same: !!done.same,
-            notes: done.notes || '',
-          });
-        }
-        // A refine that worked still has a report to hand over when the prompt
-        // asked for one, and the automatic pass has no other way to show it.
-        else if (done.ok && done.notes) {
-          replyTo(who, { type: 'refine_notes', chatId: p.chatId, messageId: messageId, notes: done.notes });
-        }
-      }, sayQueued(who));
+      await asAccount(who, () => autoPass(p, who), sayQueued(who));
     } catch (e: any) {
       say('warn', 'a reply could not be refined: ' + ((e && e.message) || String(e)));
     }
@@ -4939,7 +5036,7 @@ try {
 // The messages that do work with the account's settings. Each runs in its
 // account's turn. The rest, such as saving settings or Stop, never wait.
 const WORK = new Set([
-  'refine_now', 'refine_all', 'refine_selection', 'snip_selection', 'try_refine',
+  'reroll_added', 'refine_now', 'refine_all', 'refine_selection', 'snip_selection', 'try_refine',
   'preview_prompt', 'apply_refine', 'undo_refine', 'jev_test',
 ]);
 spindle.onFrontendMessage((payload: any, userId?: string) =>
@@ -4950,6 +5047,23 @@ spindle.onFrontendMessage((payload: any, userId?: string) =>
 async function onPanel(payload: any, userId?: string): Promise<void> {
   try {
     if (!payload) return;
+
+    // Auto Retry added a reroll to a reply without a generation, so no end
+    // event announces it. The panel hears about it in the page and hands it
+    // here, and it goes through the automatic pass like any reply that ended.
+    // Keyed by the reroll, so the same one is never taken twice.
+    if (payload.type === 'reroll_added') {
+      if (!payload.chatId || !payload.messageId) return;
+      await autoPass(
+        {
+          chatId: String(payload.chatId),
+          messageId: String(payload.messageId),
+          runKey: 'r:' + String(payload.messageId) + ':' + String(Number(payload.swipe) || 0),
+        },
+        userId,
+      );
+      return;
+    }
 
     // The panel handing over what it has. Held here either way. Written to the
     // account only when it is a change somebody made: a panel starting up, or
@@ -5073,12 +5187,14 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         return;
       }
       const greetingId = greetingIdOf(msgs);
-      // Replies only, and never the greeting. Your own messages are refined
-      // when you ask for that one, not swept up in a pass over the chat.
+      // Replies, or with mine set your own messages, and never the greeting.
+      // One kind at a time, since each has its own prompt and the reader asked
+      // for one of them.
+      const role = payload.mine === true ? 'user' : 'assistant';
       const todo = (Array.isArray(msgs) ? msgs : []).filter(
         (x: any) =>
           x &&
-          x.role === 'assistant' &&
+          x.role === role &&
           x.id !== greetingId &&
           String(x.content == null ? '' : x.content).trim(),
       );
@@ -5146,9 +5262,23 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
       // The latest reply is named here when the panel sent no id, so the
       // result carries the same id as every other message about this refine.
       // The panel matches them by id, and an empty one matches nothing.
+      // With mine set and no id, it is your latest message rather than the
+      // latest reply.
+      const mine = payload.mine === true;
       const id = payload.messageId == null || payload.messageId === ''
-        ? await latestReplyId(payload.chatId)
+        ? await latestReplyId(payload.chatId, mine ? 'user' : 'assistant')
         : payload.messageId;
+      if (mine && id == null) {
+        replyTo(userId, {
+          type: 'refine_result',
+          requestId: payload.requestId,
+          chatId: payload.chatId,
+          messageId: null,
+          ok: false,
+          why: 'you have no message in this chat to refine yet',
+        });
+        return;
+      }
       const done = await refineMessage(payload.chatId, id, userId, true);
       replyTo(userId, {
         type: 'refine_result',

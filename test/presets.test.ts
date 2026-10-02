@@ -477,6 +477,7 @@ describe("every setting can leave the panel", () => {
     importParts: "what to tick on the import card",
     resetParts: "what to tick on the reset card",
     debugParts: "what to tick on the problem report card",
+    logShow: "which kinds of line the Log shows",
     hunt: "what is typed in the search box",
     tab: "which tab of the panel was last open",
     builtInSeen: "the built-in prompts as they were when you last took one",

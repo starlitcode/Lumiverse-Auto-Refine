@@ -36,7 +36,7 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 
 | Macro | What it becomes |
 | --- | --- |
-| `{{message}}` | The turn being refined. |
+| `{{message}}` | The message being refined. |
 | `{{history}}` | The messages before it, as many as the **Context** tab says. |
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. Empty when memory is off for the chat, or when the `chats` permission is not granted. |
@@ -79,9 +79,9 @@ When nothing was hidden, it becomes nothing and the block is not sent. If you em
 
 There is no macro for whether the passage is a reply or your own message. Instead, your own messages have their own prompt, under **For your messages**. There is also no macro for the model's working. See [Asking it what it changed](#asking-it-what-it-changed).
 
-## Order matters more than it looks
+## The order of the blocks
 
-Keep the turn near the bottom. Anything after the message reads as an instruction about it, so a rule placed below it is followed more closely. A new block goes above the turn unless you move it.
+Keep the block with `{{message}}` in it near the bottom. The model reads anything after the message as an instruction about that message, so it follows a rule placed below the message more closely. **Add a block** puts a new block just above the message. You can move it after.
 
 The built-in prompts are ordered from what never changes to what changes every time:
 
