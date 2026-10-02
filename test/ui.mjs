@@ -11128,6 +11128,36 @@ console.log("\nthe tabs stay at the top");
       ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
     });
+    // Away to another drawer tab and back. The host hides the panel and shows
+    // it again with the scroll where it was, and no scroll event comes. A
+    // repaint while it was hidden measured nothing, which is what leaves the
+    // strip held at the top with nothing behind it.
+    await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Log");
+      const got = await page.evaluate(async () => {
+        const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const drawer = document.getElementById("drawer");
+        const bar = () => drawer.querySelector("[data-arf-stick]");
+        drawer.scrollTop = drawer.scrollHeight;
+        await frame();
+        const before = bar().classList.contains("arf-stuck");
+        const top = drawer.scrollTop;
+        // From here on no scroll event reaches the panel, as when the host
+        // puts the scroll back itself.
+        const swallow = (e) => e.stopImmediatePropagation();
+        window.addEventListener("scroll", swallow, true);
+        drawer.style.display = "none";
+        await frame();
+        bar().classList.remove("arf-stuck");
+        drawer.style.display = "";
+        drawer.scrollTop = top;
+        await frame();
+        await new Promise((r) => setTimeout(r, 100));
+        window.removeEventListener("scroll", swallow, true);
+        return { before, after: bar().classList.contains("arf-stuck"), scrolled: drawer.scrollTop > 0 };
+      });
+      ok(label + ": back from another tab, the strip held at the top is solid again", got.before && got.scrolled && got.after, JSON.stringify(got));
+    });
   }
 }
 

@@ -5471,6 +5471,31 @@ export function setup(ctx, overrides) {
         });
     }
     catch (_) { }
+    // Scrolling is not the only way the strip comes to be held at the top.
+    // Coming back from another drawer tab puts the scroll back with no scroll
+    // event, and a repaint while the tab was hidden measured nothing. Watching
+    // the strip and the box above it come into and out of view covers both.
+    let stuckEye = null;
+    function watchStuck(stick) {
+        try {
+            if (typeof IntersectionObserver !== "function")
+                return;
+            if (!stuckEye) {
+                stuckEye = new IntersectionObserver(() => onAnyScroll(), { threshold: [0, 1] });
+                disposers.push(() => {
+                    if (stuckEye)
+                        stuckEye.disconnect();
+                    stuckEye = null;
+                });
+            }
+            stuckEye.disconnect();
+            stuckEye.observe(stick);
+            const above = stick.previousElementSibling;
+            if (above)
+                stuckEye.observe(above);
+        }
+        catch (_) { }
+    }
     function reInk() {
         if (tab && tab.root) {
             const root = tab.root;
@@ -6684,8 +6709,10 @@ export function setup(ctx, overrides) {
         // the panel once in the theme's own colours and once in the repaired ones,
         // which reads as a flicker on every press, and the tabs carry a colour
         // transition so theirs faded across it.
-        if (stick)
+        if (stick) {
+            watchStuck(stick);
             onAnyScroll();
+        }
         root.classList.add("arf-settling");
         sweepReadable(root);
         // Put back before the frame is painted, or the panel visibly jumps to the

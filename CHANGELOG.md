@@ -16,6 +16,7 @@ _2026-10-01_
 
 ### Fixed
 
+- **The row of tabs lost its background after coming back from another drawer tab.** Scrolled down, away to another extension's tab and back, the row stayed at the top with the settings showing through it. It now gets its solid background back as soon as it is on screen again.
 - **Hiding settings and presets in the Log left some lines showing.** Loading a preset or a model setup, built-in ones included, putting back what one replaced, putting the prompt back to the default, a reset, and model setups moving to or from your account all still wrote a line. These are now hidden with the rest, and the choice under **Show in this list** is called **Settings, presets and model setups**.
 - **What to refine left the button on every message alone.** With **Replies only**, the button still showed on your own messages and refined them. With **Your messages only**, it still showed on replies. The button now shows only on the messages that are refined.
 - **What to refine left Refine what I am typing in the floating button's menu.** With **Replies only**, the panel and the Extras menu hid it, and the floating button's menu still offered it. It is hidden there too now.
