@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.26.0";
+const VERSION = "1.26.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -3405,14 +3405,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   const LOG_KINDS: Array<{ id: string; label: string; what: string }> = [
     { id: "judge", label: "What the second model decided", what: "One line for each reply the second model reads." },
     { id: "left", label: "Replies left alone", what: "A reply or draft that was not changed, and why." },
-    { id: "setup", label: "Settings and presets", what: "Settings or presets loaded, saved or moved to your account." },
+    { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, saved or moved to your account." },
   ];
   // Which kind a line is, from what it says. Everything not named here is
   // always shown.
   function logKind(text: string): string {
     for (const m of SECOND_MODELS) if (text.indexOf(m.name + " ") === 0) return "judge";
     if (/^(left a reply (alone|as it was)|left your draft as it was|did not touch your draft)/.test(text)) return "left";
-    if (/^(settings (loaded|moved)|brought \d+ presets? down|sent \d+ presets? up|ready v|the backend is running)/.test(text))
+    if (/^(settings (loaded|moved)|brought \d+ (presets?|model setups?) down|sent \d+ (presets?|model setups?) up|ready v|the backend is running)/.test(text))
       return "setup";
     return "";
   }
@@ -13633,7 +13633,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // On the same terms as the panel button beside it: no chat means no input
     // box, and an entry that is always there and sometimes does nothing is one
     // people press once and stop trusting.
-    if (cfg.inputRefine && !outsideAnyChat())
+    // Your draft is one of your messages, so it follows What to refine.
+    if (cfg.inputRefine && refinesMine() && !outsideAnyChat())
       doing.push({ key: "draft", label: "Refine what I am typing" });
     groups.push(doing);
 
@@ -13986,6 +13987,58 @@ export function setup(ctx: Ctx, overrides?: any) {
     return parts.length > 1 && parts[1] ? String(parts[1]) : "";
   }
 
+  // Whose each message is, for the chat on screen, so the button on a message
+  // can follow What to refine. The page does not say, so the backend reads it
+  // from the chat. Asked again when a message turns up that it has not seen.
+  let roleChat = "";
+  let roleById: Record<string, string> = {};
+  let roleAsk = "";
+  let roleSoon: any = null;
+  // Ids the latest answer did not hold. Asked about once, so a message the page
+  // shows and the chat does not have cannot keep the asking going.
+  let roleAsked = new Set<string>();
+  function askRoles() {
+    if (roleSoon || roleAsk || lastChatId == null) return;
+    roleSoon = setTimeout(() => {
+      roleSoon = null;
+      if (lastChatId == null) return;
+      roleAsk = newId();
+      send({ type: "message_roles", requestId: roleAsk, chatId: lastChatId });
+    }, 150);
+  }
+  function takeRoles(msg: any) {
+    if (!msg || msg.requestId !== roleAsk) return;
+    roleAsk = "";
+    if (!msg.ok) {
+      log("could not tell whose each message is, so the button stays off the messages What to refine leaves out");
+      return;
+    }
+    const chat = String(msg.chatId == null ? "" : msg.chatId);
+    if (chat !== roleChat) roleAsked = new Set<string>();
+    roleChat = chat;
+    roleById = msg.roles && typeof msg.roles === "object" ? msg.roles : {};
+    fillSlots();
+  }
+  disposers.push(() => {
+    if (roleSoon) clearTimeout(roleSoon);
+    roleSoon = null;
+  });
+  // Whether the button belongs on this message. With both sides refined it is
+  // on every message. With one side off it waits until the backend has said
+  // whose the message is, so it never shows on a message it would refuse.
+  function buttonFor(id: string): boolean {
+    if (refinesReplies() && refinesMine()) return true;
+    if (roleChat !== String(lastChatId) || !roleById[id]) {
+      const fresh = roleChat !== String(lastChatId) || !roleAsked.has(id);
+      if (fresh) {
+        roleAsked.add(id);
+        askRoles();
+      }
+      return false;
+    }
+    return roleById[id] === "user" ? refinesMine() : refinesReplies();
+  }
+
   // Both buttons, brought into line with the settings and with whatever the
   // host has just redrawn. Cheap to call: it is two queries and a walk over
   // what is already there.
@@ -14104,6 +14157,18 @@ export function setup(ctx: Ctx, overrides?: any) {
               const gone = msg.querySelectorAll(".arf-slot-row");
               for (let k = 0; k < gone.length; k++) (gone[k] as HTMLElement).remove();
             } catch (_) {}
+            continue;
+          }
+          // A message on the side What to refine has off carries none of this
+          // extension's buttons, and anything left from before comes off.
+          if (!buttonFor(id)) {
+            if (msg)
+              try {
+                const on = msg.querySelectorAll("[data-arf-slot]");
+                for (let k = 0; k < on.length; k++) (on[k] as HTMLElement).remove();
+                const gone = msg.querySelectorAll(".arf-slot-row");
+                for (let k = 0; k < gone.length; k++) (gone[k] as HTMLElement).remove();
+              } catch (_) {}
             continue;
           }
           const bar = msg ? actionBar(msg) : null;
@@ -14695,6 +14760,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       const off = ctx.onBackendMessage((msg: any) => {
         try {
           if (!msg) return;
+          if (msg.type === "message_roles") {
+            takeRoles(msg);
+            return;
+          }
           if (msg.type === "backend_ready") {
             armBackend();
             // An ask sent before the backend was listening is never answered.

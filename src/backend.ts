@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.26.0';
+const VERSION = '1.26.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -40,6 +40,7 @@ let refineOn = false;          // the automatic pass, off until asked for
 // Replies, your own messages, or both. With your messages only, the automatic
 // pass on replies does not run, whatever its switch says.
 let repliesOn = true;
+let mineOn = true;
 let refineAgain = false;       // whether the pass returns to a reply it refined
 let connectionId = '';         // empty means the reader's active connection
 let thinkingMode = 'off';      // off | inherit | custom
@@ -3291,6 +3292,13 @@ async function refineMessage(
   // your own message is already you asking for exactly this.
   if (m.role === 'user' && !byHand)
     return { ok: false, why: 'your own messages are only refined when you ask for one' };
+  // What to refine holds for a refine asked for by hand too. The panel hides
+  // the buttons for the side that is off, and this is the same rule for any
+  // way in it does not cover, such as a selection.
+  if (m.role === 'assistant' && !repliesOn)
+    return { ok: false, why: 'only your own messages are refined, as set in What to refine' };
+  if (m.role === 'user' && !mineOn)
+    return { ok: false, why: 'only replies are refined, as set in What to refine' };
 
   // Checked here rather than at the top, because which prompt is used depends
   // on whose message this is and the two can be in different states.
@@ -4762,6 +4770,7 @@ function applyRules(s: any): void {
   masterOn = s.enabled !== false;
   refineOn = !!s.refineOn;
   repliesOn = s.refineSide !== 'mine';
+  mineOn = s.refineSide !== 'replies';
   refineAgain = !!s.refineAgain;
   connectionId = String(s.connectionId == null ? '' : s.connectionId);
   thinkingMode =
@@ -5047,6 +5056,28 @@ spindle.onFrontendMessage((payload: any, userId?: string) =>
 async function onPanel(payload: any, userId?: string): Promise<void> {
   try {
     if (!payload) return;
+
+    // Who wrote each message in a chat, so the panel can leave the button off
+    // the messages on the side What to refine has off. The page does not say
+    // whose a message is, and the chat does. Nothing is changed.
+    if (payload.type === 'message_roles') {
+      const chatId = String(payload.chatId == null ? '' : payload.chatId);
+      let roles: Record<string, string> = {};
+      let ok = false;
+      try {
+        const msgs = chatId ? await spindle.chat.getMessages(chatId) : null;
+        if (Array.isArray(msgs)) {
+          ok = true;
+          for (const m of msgs)
+            if (m && m.id != null && (m.role === 'user' || m.role === 'assistant')) roles[String(m.id)] = m.role;
+        }
+      } catch (e: any) {
+        roles = {};
+        say('warn', 'could not read the chat to tell whose each message is: ' + ((e && e.message) || 'no reason given'));
+      }
+      replyTo(userId, { type: 'message_roles', requestId: payload.requestId, chatId: chatId, ok: ok, roles: roles });
+      return;
+    }
 
     // Auto Retry added a reroll to a reply without a generation, so no end
     // event announces it. The panel hears about it in the page and hands it

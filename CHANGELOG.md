@@ -6,6 +6,19 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.26.1
+
+_2026-10-01_
+
+### Fixed
+
+- **Hiding settings and presets in the Log left the model setup lines showing.** A line such as "brought 2 model setups down from your account" was not hidden with the rest. It is now, and the choice under **Show in this list** is called **Settings, presets and model setups**.
+- **What to refine left the button on every message alone.** With **Replies only**, the button still showed on your own messages and refined them. With **Your messages only**, it still showed on replies. The button now shows only on the messages that are refined.
+- **What to refine left Refine what I am typing in the floating button's menu.** With **Replies only**, the panel and the Extras menu hid it, and the floating button's menu still offered it. It is hidden there too now.
+- **A refine on the side that is off is refused however it is asked for.** Refining part of a message on that side, for example, now says that only replies, or only your own messages, are refined, as set in **What to refine**.
+
+---
+
 ## 1.26.0
 
 _2026-10-01_
