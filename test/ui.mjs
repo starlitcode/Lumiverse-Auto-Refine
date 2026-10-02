@@ -11158,6 +11158,78 @@ console.log("\nthe tabs stay at the top");
       });
       ok(label + ": back from another tab, the strip held at the top is solid again", got.before && got.scrolled && got.after, JSON.stringify(got));
     });
+    // A fast swipe on a phone. The scroll runs ahead of the panel's script, so
+    // the strip can be at the top before the script has seen it move. Two
+    // browsers: one that can tell by itself that the strip is held, and one
+    // that cannot, which is Safari and Firefox and is made here by taking the
+    // stylesheet's check away.
+    const NO_CHECK = "#drawer .arf-stick{container-type:normal!important}";
+    for (const [which, css] of [["with the browser's own check", SCROLLS], ["without it", SCROLLS + NO_CHECK]]) {
+      await inTab(browser, { css, viewport, touch, saved: { enabled: true } }, async (page) => {
+        await goTab(page, "Prompt");
+        const got = await page.evaluate(async () => {
+          const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const drawer = document.getElementById("drawer");
+          const bar = () => drawer.querySelector("[data-arf-stick]");
+          const strip = () => bar().querySelector(".arf-tabs");
+          const solid = () => /^rgb\(/.test(getComputedStyle(strip()).backgroundColor);
+          const where = () => bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top;
+          const pad = parseFloat(getComputedStyle(drawer).paddingTop) || 0;
+          const restSolid = solid();
+          // One strip height short of the top, and seen there by the script.
+          drawer.scrollTop = where() - pad - bar().offsetHeight;
+          await frame();
+          const nearGap = Math.round(where() - pad);
+          // Then the rest of the way in one jump, read before the script has run.
+          drawer.scrollTop = drawer.scrollHeight;
+          const jumpHeld = Math.round(where() - pad) === 0;
+          const jumpSolid = solid();
+          await frame();
+          // A repaint while held. The strip is a new element, read before the
+          // next frame.
+          const old = bar();
+          const on = drawer.querySelector(".arf-tab[aria-selected='true']");
+          on.click();
+          const fresh = bar() !== old;
+          const repaintSolid = solid();
+          return { restSolid, nearGap, jumpHeld, jumpSolid, fresh, repaintSolid };
+        });
+        ok(label + ", " + which + ": at rest the strip is not filled", !got.restSolid, JSON.stringify(got));
+        ok(label + ", " + which + ": the check stood one strip height short of the top", got.nearGap > 0, JSON.stringify(got));
+        ok(label + ", " + which + ": a fast swipe to the top finds the strip already solid", got.jumpHeld && got.jumpSolid, JSON.stringify(got));
+        ok(label + ", " + which + ": a repaint while it is held keeps it solid", got.fresh && got.repaintSolid, JSON.stringify(got));
+      });
+    }
+    // The browser's own check alone, with the script's classes taken off the
+    // moment they are put on. Without the check the strip goes see-through,
+    // which shows the classes really were kept off.
+    for (const [which, css, want] of [["the browser's own check", SCROLLS, true], ["no check and no script", SCROLLS + NO_CHECK, false]]) {
+      await inTab(browser, { css, viewport, touch, saved: { enabled: true } }, async (page) => {
+        await goTab(page, "Prompt");
+        const got = await page.evaluate(async () => {
+          const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const drawer = document.getElementById("drawer");
+          const bar = drawer.querySelector("[data-arf-stick]");
+          const strip = bar.querySelector(".arf-tabs");
+          // Only when one is there: remove() writes the attribute even when it
+          // changes nothing, and the observer would then call itself forever.
+          const strike = () => {
+            if (bar.classList.contains("arf-near") || bar.classList.contains("arf-stuck")) bar.classList.remove("arf-near", "arf-stuck");
+          };
+          const mo = new MutationObserver(strike);
+          mo.observe(bar, { attributes: true, attributeFilter: ["class"] });
+          drawer.scrollTop = drawer.scrollHeight;
+          await frame();
+          await frame();
+          strike();
+          const solid = /^rgb\(/.test(getComputedStyle(strip).backgroundColor);
+          const classes = bar.className;
+          mo.disconnect();
+          return { solid, classes, scrolled: drawer.scrollTop > 0 };
+        });
+        ok(label + ", " + which + ": held at the top, " + (want ? "the strip is solid" : "the strip is see-through"), got.scrolled && got.solid === want && !/arf-(near|stuck)/.test(got.classes), JSON.stringify(got));
+      });
+    }
   }
 }
 

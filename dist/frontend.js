@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.26.2";
+const VERSION = "1.26.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -4411,17 +4411,27 @@ export function setup(ctx, overrides) {
     const FOCUS_RING = "0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
         "0 0 8px 0 var(--lumiverse-primary-020,rgba(147,112,219,.2))";
     const SEARCH_X = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'/%3E%3C/svg%3E\")";
+    // The strip held at the top: a solid fill, so the rows under it do not show
+    // through, and a shadow along its lower edge.
+    const STRIP_FILL = "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+        "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
+        "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));";
+    const STRIP_SHADOW = "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));";
     const CSS = ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf *{box-sizing:border-box}" +
         // The tab strip's holder. At rest it adds nothing to how the strip looks.
         // Once it is held at the top, the strip takes the same solid colour as a
         // description box, so the rows scrolling under it do not show through.
-        ".arf-stick{position:sticky;top:0;z-index:4}" +
-        ".arf-stick.arf-stuck .arf-tabs{background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
-        "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
-        "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));" +
-        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))}" +
+        //
+        // A browser that can tell by itself that the strip is held does it here,
+        // in the same frame as the scroll. The classes are the script's fallback
+        // for the rest: arf-near puts the fill on just before the strip reaches
+        // the top, and arf-stuck adds the shadow once it is there.
+        ".arf-stick{position:sticky;top:0;z-index:4;container-type:scroll-state}" +
+        ".arf-stick.arf-near .arf-tabs{" + STRIP_FILL + "}" +
+        ".arf-stick.arf-stuck .arf-tabs{" + STRIP_FILL + STRIP_SHADOW + "}" +
+        "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_FILL + STRIP_SHADOW + "}}" +
         ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-note{font-size:12px;line-height:1.45;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -4678,7 +4688,9 @@ export function setup(ctx, overrides) {
         "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
         "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
-        "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
+        "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
+        "transition:box-shadow var(--lumiverse-transition-fast,150ms ease)}" +
+        "@media (prefers-reduced-motion: reduce){.arf-tabs{transition:none}}" +
         ".arf-tabs::-webkit-scrollbar{display:none}" +
         // The panel is built from nothing on every repaint, and the readability
         // sweep then writes colours onto it. Reading a computed colour resolves the
@@ -5443,20 +5455,47 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // The top edge the strip is held against: the inside of the nearest box that
+    // scrolls, below its border and padding, or the top of the window. Found from
+    // the page each time, because the box the host scrolls the drawer with
+    // differs from one host build to another.
+    function dockTop(stick) {
+        let box = stick.parentElement;
+        while (box && box !== document.body && box !== document.documentElement) {
+            const cs = getComputedStyle(box);
+            if (cs.overflowY !== "visible" && cs.overflowY !== "clip") {
+                return box.getBoundingClientRect().top + box.clientTop + (parseFloat(cs.paddingTop) || 0);
+            }
+            box = box.parentElement;
+        }
+        return 0;
+    }
     // Whether the strip is being held at the top. At rest it sits one card gap
     // below the search box. Held, the search box has scrolled away above it and
-    // the gap is larger. Read from the page rather than from the box that
-    // scrolls, which differs from one host build to another.
+    // the gap is larger.
+    //
+    // The fill goes on while the strip is still two of its own heights short of
+    // the top. On a phone the scroll runs ahead of this script, by a frame or
+    // more on a fast swipe, and a fill that waited for the strip to arrive would
+    // let the rows show through it for those frames. The shadow waits until it
+    // is held.
+    // Where the browser can tell on its own that the strip is held, the
+    // stylesheet does both with no script at all, and this is the fallback.
     function markStuck() {
         try {
             const root = tab && tab.root;
             const stick = root && root.querySelector("[data-arf-stick]");
-            if (!root || !stick)
+            // A strip that is not drawn, while another drawer tab is open, measures
+            // as nothing at the top of nothing. It is marked once it is shown again.
+            if (!root || !stick || !stick.isConnected || !stick.offsetHeight)
                 return;
+            const top = stick.getBoundingClientRect().top;
             const above = stick.previousElementSibling;
             const gap = parseFloat(getComputedStyle(root).rowGap) || 0;
-            const held = !!above && stick.getBoundingClientRect().top - above.getBoundingClientRect().bottom > gap + 1;
+            const held = !!above && top - above.getBoundingClientRect().bottom > gap + 1;
+            const near = held || top - dockTop(stick) <= stick.offsetHeight * 2;
             stick.classList.toggle("arf-stuck", held);
+            stick.classList.toggle("arf-near", near);
         }
         catch (_) { }
     }
@@ -6729,6 +6768,11 @@ export function setup(ctx, overrides) {
         // top and back down.
         putBack(held);
         reAnchor(root, held2, held);
+        // The strip is new and carries no fill yet. Given one on the next frame
+        // instead, it would be see-through for a frame on every repaint made while
+        // it is held at the top.
+        if (stick)
+            markStuck();
         // A second pass a frame later, for anything whose colour only settles once
         // the panel has been through a real layout. The scroll is set again there
         // and once more after: a panel that grows taller between the frames clamps

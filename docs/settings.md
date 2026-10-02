@@ -23,7 +23,7 @@ It is a tab so you can keep it open while you write, and see what the last refin
 
 ## The row of tabs
 
-When you scroll down a tab, the row of tabs stays at the top of the drawer. You can switch tabs without scrolling back up. Scroll back to the top and the row is in its own place again. While you search, the row is hidden, because the results come from every tab.
+When you scroll down a tab, the row of tabs stays at the top of the drawer. You can switch tabs without scrolling back up. While it is at the top, the row has a solid background, so the settings under it do not show through. Scroll back to the top and the row is in its own place again. While you search, the row is hidden, because the results come from every tab.
 
 ## Finding a setting
 

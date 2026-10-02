@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.26.3
+
+_2026-10-02_
+
+### Fixed
+
+- **The row of tabs let the settings show through it on a fast scroll.** On a fast scroll, mostly on a phone, the row of tabs reached the top before its solid background went on. For that moment the settings under it showed through, and the row looked choppy. It also lost its background for a moment each time the panel was redrawn while you were scrolled down. The background now goes on just before the row reaches the top, and it stays on when the panel is redrawn. In Chrome and Edge, the browser itself keeps the background on while the row is at the top.
+
+---
+
 ## 1.26.2
 
 _2026-10-01_
