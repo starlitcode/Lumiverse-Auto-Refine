@@ -177,7 +177,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - **Show in this list**, under it, chooses which kinds of line are shown. Untick one to hide it:
     - **What the second model decided**: one line for each reply the second model reads.
     - **Replies left alone**: a reply or draft that was not changed, and why.
-    - **Settings and presets**: settings or presets loaded, saved or moved to your account.
+    - **Settings, presets and model setups**: settings, presets or model setups loaded, saved or moved to your account.
   - Every other line is always shown. The count at the top says how many lines are hidden.
   - Hidden lines are still kept. **Reporting a problem** still includes them.
 - **Reporting a problem** copies everything needed for a bug report.
@@ -191,8 +191,10 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 **What to refine** chooses which side of the chat Auto Refine works on.
 
 - **Replies and your messages** is the default.
-- **Replies only** hides everything for your own messages: their buttons, their menu entries, **Refine what I am typing**, and the prompt under **For your messages**.
-- **Your messages only** hides everything for replies: their buttons, their menu entries, the automatic switch, the button in the chat's row of controls, and the prompt for replies. Nothing is refined automatically, since your own messages never are. A tap on the floating button refines your latest message.
+- **Replies only** hides everything for your own messages: their buttons, their menu entries, **Refine what I am typing**, the button on each of your messages, and the prompt under **For your messages**.
+- **Your messages only** hides everything for replies: their buttons, their menu entries, the automatic switch, the button in the chat's row of controls, the button on each reply, and the prompt for replies. Nothing is refined automatically, since your own messages never are. A tap on the floating button refines your latest message.
+- The page does not say whose a message is, so the panel asks the backend. Until it has the answer, a new message shows no button.
+- A refine on the side that is off is refused, however it is asked for, such as with a selection. The Log says why.
 - Nothing is deleted. Switch back and everything returns as it was.
 
 **This chat** switches Auto Refine off in the chat you are in, and leaves other chats alone.

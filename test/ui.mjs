@@ -10915,6 +10915,29 @@ await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
   ok("unticking its kind hides it", got.after === 0, JSON.stringify(got));
   ok("and the count says how many are hidden", /hidden/.test(got.count || ""), JSON.stringify(got).slice(0, 300));
 });
+// Model setups arriving from the account are hidden with settings and presets,
+// under the same choice.
+await inTab(browser, {}, async (page) => {
+  await goTab(page, "Log");
+  await settle(page);
+  const got = await page.evaluate(async () => {
+    const ask = window.__sent.filter((m) => m.type === "load_setups").pop();
+    if (!ask) return { noAsk: true };
+    window.__fromBackend({ type: "loaded_setups", requestId: ask.requestId, setups: [{ name: "Quick and cheap", at: 1, settings: {} }, { name: "Careful", at: 2, settings: {} }] });
+    await new Promise((r) => setTimeout(r, 400));
+    const seen = () => [...document.querySelectorAll("#drawer [data-arf-logline]")].some((n) => /model setups down/.test(n.textContent));
+    const before = seen();
+    const box = document.querySelector('#drawer [data-arf-part="logShow:setup"]');
+    if (!box) return { before, missing: true };
+    const label = (box.closest("label") || box.parentElement).textContent;
+    box.click();
+    await new Promise((r) => setTimeout(r, 300));
+    return { before, after: seen(), label };
+  });
+  ok("a model setup line shows", got.before === true, JSON.stringify(got));
+  ok("unticking settings, presets and model setups hides it", got.after === false, JSON.stringify(got));
+  ok("and the choice names model setups", /model setups/i.test(got.label || ""), JSON.stringify(got));
+});
 
 console.log("\na reroll Auto Retry adds");
 // Several tries at once writes its reroll into the chat directly, so no end
@@ -11133,6 +11156,63 @@ console.log("\nhow many at once shows under its switch");
       ok(label + ": with the switch off, How many at once is not on screen", !before.seen, JSON.stringify(before));
       ok(label + ": switched on, How many at once is on screen", after.seen, JSON.stringify(after));
       ok(label + ": and it is the row straight under the switch", order === 1, String(order));
+    });
+  }
+}
+
+console.log("\nwhat to refine reaches the message buttons and the floating menu");
+{
+  // Two messages, one of yours and one reply, each with the mount the host
+  // leaves for extensions. The page does not say whose a message is, so the
+  // panel asks the backend, and the answer is given here the way it would be.
+  const TWO = `
+  <div data-message-id="msg-mine"><p>i open the shutters</p>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-mine:minimal:footer" style="display:contents"></span></div>
+  <div data-message-id="msg-reply"><p>Grey light came into the room and found the empty chair.</p>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-reply:minimal:footer" style="display:contents"></span></div>`;
+  for (const [side, wantMine, wantReply] of [["replies", false, true], ["mine", true, false], ["both", true, true]]) {
+    await inTab(browser, { saved: { enabled: true, messageButton: true, widgetOn: true, inputRefine: true, refineSide: side } }, async (page) => {
+      const out = await page.evaluate(async (html) => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+        const wrap = document.createElement("div");
+        wrap.innerHTML = html;
+        document.body.appendChild(wrap);
+        await wait(400);
+        const asks = window.__sent.filter((m) => m && m.type === "message_roles");
+        const ask = asks[asks.length - 1];
+        const before = {
+          mine: !!document.querySelector('[data-message-id="msg-mine"] [data-arf-slot="message"]'),
+          reply: !!document.querySelector('[data-message-id="msg-reply"] [data-arf-slot="message"]'),
+        };
+        if (ask) window.__fromBackend({ type: "message_roles", requestId: ask.requestId, chatId: "c1", ok: true, roles: { "msg-mine": "user", "msg-reply": "assistant" } });
+        await wait(100);
+        const after = {
+          mine: !!document.querySelector('[data-message-id="msg-mine"] [data-arf-slot="message"]'),
+          reply: !!document.querySelector('[data-message-id="msg-reply"] [data-arf-slot="message"]'),
+        };
+        window.__menu = null;
+        const b = document.querySelector("#float button") || document.querySelector(".arf-float");
+        let menu = null;
+        if (b) {
+          b.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 20, clientY: 20 }));
+          await wait(620);
+          b.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+          await wait(40);
+          menu = window.__menu ? window.__menu.items.filter((i) => i.type !== "divider").map((i) => i.label) : null;
+        }
+        return { asked: asks.length, before, after, menu };
+      }, TWO);
+      if (side === "both") {
+        ok(side + ": every message has its button, with nothing to ask", out.after.mine && out.after.reply && out.asked === 0, JSON.stringify(out));
+      } else {
+        ok(side + ": the panel asks whose each message is", out.asked >= 1, JSON.stringify(out));
+        ok(side + ": no button shows before the answer", !out.before.mine && !out.before.reply, JSON.stringify(out));
+        ok(side + ": your message has the button only if your messages are refined", out.after.mine === wantMine, JSON.stringify(out));
+        ok(side + ": a reply has the button only if replies are refined", out.after.reply === wantReply, JSON.stringify(out));
+      }
+      const draft = !!out.menu && out.menu.some((t) => /what I am typing/i.test(t));
+      ok(side + ": the floating menu offers Refine what I am typing only if your messages are refined", !!out.menu && draft === wantMine, JSON.stringify(out.menu));
     });
   }
 }

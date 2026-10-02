@@ -6607,6 +6607,55 @@ describe("several rewrites at once", () => {
 // A reroll Auto Retry adds with Several tries at once is written straight into
 // the chat, so no end event announces it. The panel hands it over instead, and
 // it goes through the automatic pass like a reply that ended.
+// What to refine holds for a refine asked for by hand too. The panel hides the
+// buttons for the side that is off, and the backend refuses that side for any
+// way in the panel does not cover.
+describe("what to refine, asked for by hand", () => {
+  const result = (h: any) => h.sent.filter((m: any) => m.type === "refine_result").pop();
+
+  test("with replies only, your own message is refused and left as it was", async () => {
+    const h = await armed(["<refined>I walk through it.</refined>"], { refineSide: "replies" });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m1")).toBe("i walk through it");
+    expect(result(h).why).toMatch(/only replies are refined, as set in What to refine/);
+  });
+
+  test("with your messages only, a reply is refused and left as it was", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], { refineSide: "mine" });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+    expect(result(h).why).toMatch(/only your own messages are refined, as set in What to refine/);
+  });
+
+  test("a selection in a message on the side that is off is refused too", async () => {
+    const h = await armed(["<refined>stride</refined>"], { refineSide: "replies" });
+    await h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m1", picked: "walk", ahead: "i " });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m1")).toBe("i walk through it");
+  });
+
+  test("with both, each side is refined", async () => {
+    const h = await armed(["<refined>I walk through it.</refined>"], { refineSide: "both" });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(50);
+    expect(h.body("m1")).toBe("I walk through it.");
+  });
+
+  test("the panel can ask whose each message is", async () => {
+    const h = await armed([]);
+    await h.front({ type: "message_roles", requestId: "q", chatId: "c1" });
+    await wait(20);
+    const got = h.sent.filter((m: any) => m.type === "message_roles").pop();
+    expect(got.ok).toBe(true);
+    expect(got.roles).toEqual({ m0: "assistant", m1: "user", m2: "assistant" });
+  });
+});
+
 describe("a reroll Auto Retry added", () => {
   test("is refined by the automatic pass", async () => {
     const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
