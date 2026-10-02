@@ -36,7 +36,7 @@ With thinking on, **Low** is enough for a refine. A higher level takes longer an
 
 ## Samplers
 
-**Leave them all blank to start.** Blank means your connection's own preset decides.
+**Leave them all blank to start.** A blank sampler is not sent, so Lumiverse uses the value from your preset.
 
 **Temperature is the one worth changing.** It sets how loose the wording is.
 

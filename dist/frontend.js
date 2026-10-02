@@ -2205,7 +2205,7 @@ const COST_FIELDS = [
             { value: "inherit", label: "Whatever my connection is set to" },
             { value: "custom", label: "Yes, and I will say how much" },
         ],
-        hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. Whatever my connection is set to uses your own reasoning settings.",
+        hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. Whatever my connection is set to uses the connection's thinking setting, or your own.",
     },
     {
         key: "thinkingEffort",
@@ -9347,7 +9347,7 @@ export function setup(ctx, overrides) {
     }
     function buildSamplerCard() {
         const set = SAMPLER_FIELDS.filter((s) => cfg.samplers && cfg.samplers[s.id] != null && cfg.samplers[s.id] !== "").length;
-        const wrap = card("Samplers", "Leave these blank to use your connection's own preset. A value you fill in is sent with the refine only, never with your chat.", set ? set + " set" : "all default");
+        const wrap = card("Samplers", "Leave these blank to use the values from your preset. A value you fill in is sent with the refine only, never with your chat.", set ? set + " set" : "all default");
         wrap.appendChild(fold("Sampler values", (body) => {
             for (const s of SAMPLER_FIELDS)
                 body.appendChild(samplerRow(s));

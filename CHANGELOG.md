@@ -10,6 +10,10 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-10-01_
 
+### Changed
+
+- **Clearer wording on blank samplers and on Whatever my connection is set to.** A blank sampler is not sent, so Lumiverse uses the value from your preset. With a different connection picked under **Refine using**, Lumiverse decides which preset that is. **Whatever my connection is set to** uses the thinking setting saved on the connection, or your own thinking settings if the connection has none. Nothing about how a refine is sent has changed.
+
 ### Fixed
 
 - **Hiding settings and presets in the Log left the model setup lines showing.** A line such as "brought 2 model setups down from your account" was not hidden with the rest. It is now, and the choice under **Show in this list** is called **Settings, presets and model setups**.
