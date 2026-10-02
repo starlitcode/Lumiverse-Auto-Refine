@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.26.2
+
+_2026-10-01_
+
+### Fixed
+
+- **With one side picked in What to refine, the Prompt tab first showed the other side's prompt.** After changing **What to refine** with the panel open, the Prompt tab drew the blocks of the prompt that was hidden. A block's fold arrow then needed a second press before it folded. The tab now shows the right prompt from the start, and one press folds a block.
+
+---
+
 ## 1.26.1
 
 _2026-10-01_

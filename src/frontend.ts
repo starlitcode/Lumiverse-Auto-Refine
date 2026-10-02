@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.26.1";
+const VERSION = "1.26.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -3227,6 +3227,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // below reads it, and a panel rebuilt early must not meet it undeclared.
   let editing: "blocks" | "userBlocks" = "blocks";
   const editingYours = () => editing === "userBlocks";
+  // With only one side refined, the prompt being edited is that side's. Set
+  // before anything is drawn, because the block list, its folds and the preset
+  // picker all read it, and one drawn before it was set shows the other prompt.
+  function holdSide() {
+    if (cfg.refineSide === "replies") editing = "blocks";
+    else if (cfg.refineSide === "mine") editing = "userBlocks";
+  }
   // The picker, written down rather than remembered. Every assignment goes
   // through here so none of them can be the one that forgets.
   //
@@ -6715,6 +6722,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function paint() {
     paints++;
+    holdSide();
     // A rebuild from any other cause has already done what the pending log
     // repaint and the settle were waiting to do.
     if (logPaintSoon) {
@@ -8474,6 +8482,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function buildBlocksCard(): HTMLElement {
+    holdSide();
     const list = blockList();
     const on = list.filter((b) => b.on).length;
     const wrap = card(
@@ -8489,8 +8498,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     // different jobs. One prompt hedged to do both does neither well. With
     // only one side refined, only its prompt is shown, and there is nothing to
     // switch between.
-    if (!refinesMine()) editing = "blocks";
-    if (!refinesReplies()) editing = "userBlocks";
     const pick = el("div", "arf-seg");
     if (!refinesReplies() || !refinesMine()) pick.hidden = true;
     for (const one of [
