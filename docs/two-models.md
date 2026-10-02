@@ -4,23 +4,26 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are two to pick from:
+There are three to pick from:
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
 | **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
 | **Span** | Respan | Span-01 Lite is free. Span-01 is paid. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1) |
+| **Mercury Decide** | Inception | Free on OpenRouter, for now | [Mercury Decide on OpenRouter](https://openrouter.ai/inception/mercury-decide:free) |
 
-Both answer the same checks, and everything on this page works the same for both, unless a section says it is for one of them. The same links are on the Model tab, as **What is Jev?** and **What is Span?**, while **How many models** is set to two.
+All three answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The same links are on the Model tab, as **What is Jev?**, **What is Span?** and **What is Mercury Decide?**, while **How many models** is set to two.
+
+Inception has no page of its own about Mercury Decide yet, so its link goes to OpenRouter, which serves it.
 
 ## Setting it up
 
 Everything is on the Model tab, in **One model or two**.
 
 1. Set **How many models** to two.
-2. Pick **Which second model**: Jev or Span.
+2. Pick **Which second model**: Jev, Span or Mercury Decide.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). Mercury Decide has one version, so there is nothing to pick. See [Mercury Decide](#mercury-decide).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -59,17 +62,17 @@ OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in th
 **Which Span** shows when Span is picked. It has these choices:
 
 - **Span-01 Lite, free**, the default. It costs nothing.
-- **Span-01 Lite, paid**, only on OpenRouter. The same model as the free one, on OpenRouter's paid tier.
+- **Span-01 Lite, without the free limits**, only on OpenRouter. The same model as the free one. OpenRouter limits free models to 20 calls a minute, and to 50 or 1000 calls a day, depending on the credit on your account. This one has no such limit. OpenRouter sets its price, and it costs nothing at the moment.
 - **Span-01**, the full model. It is paid.
 
 The name each host is sent:
 
-| Host | Span-01 Lite, free | Span-01 Lite, paid | Span-01 |
+| Host | Span-01 Lite, free | Span-01 Lite, without the free limits | Span-01 |
 | --- | --- | --- | --- |
 | OpenRouter | `respan/span-01-lite:free` | `respan/span-01-lite` | `respan/span-01` |
 | Respan | `span-01-free` | not offered | `span-01-pro` |
 
-Respan has no paid Lite, so it is not in the list for Respan. If you picked it on OpenRouter and then change to Respan, the free one is sent.
+Respan has no Lite without the free limits, so it is not in the list for Respan. If you picked it on OpenRouter and then change to Respan, the free one is sent.
 
 Span reads a conversation, not named fields. **On OpenRouter** it takes the same kind of request as Jev, with the reply sent as a conversation. **On Respan's own API** the request is a scores request. The panel does this for you on both:
 
@@ -79,6 +82,17 @@ Span reads a conversation, not named fields. **On OpenRouter** it takes the same
 - A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
 - Respan's own API only scores once Respan has switched Span-01 on for your account. Until then, **Test** says "Span turned the call down (403: Span-01 scoring is not enabled for your organization...)". Ask Respan for access, or pick OpenRouter as the host, which needs no access request.
 - Respan answers each behavior with three chances: present, absent, and not enough to judge. The chance it is present is the score.
+
+## Mercury Decide
+
+Mercury Decide is reached on OpenRouter, where it is free for now. It takes the same request as Jev, so nothing about the checks changes.
+
+| Host | Model name |
+| --- | --- |
+| OpenRouter | `inception/mercury-decide:free` |
+
+- OpenRouter limits free models to 20 calls a minute. It also limits them to 50 calls a day, or 1000 a day once you have bought 10 credits or more.
+- It costs nothing at the moment. If that changes, its page on OpenRouter shows the price.
 
 ## Another address
 
@@ -102,7 +116,7 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite` or `respan/span-01` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01` or `inception/mercury-decide:free` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13` or `typesafe/jev-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
@@ -145,7 +159,7 @@ Write each check so that:
 - **It asks about one thing.** A statement joined with "and" is two checks.
 - **It is false of a reply with nothing wrong in it.** A check that is true of most replies sends every reply to be refined.
 
-To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided** or **What Span decided**, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
+To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided**, **What Span decided** or **What Mercury Decide decided**, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
 
 **Refine when a check reaches** is the line. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
 
@@ -155,6 +169,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | --- | --- |
 | **Jev** | 30 percent |
 | **Span** | 15 percent |
+| **Mercury Decide** | 40 percent |
 
 Each line sits between two groups of scores, which are different for each model:
 
@@ -162,14 +177,23 @@ Each line sits between two groups of scores, which are different for each model:
 | --- | --- | --- |
 | **Jev** | close to 0%, often 1% to 7% | often only 30% to 35% |
 | **Span** | close to 0%, often 2% or 3% | often only 15% to 25% |
+| **Mercury Decide** | close to 0%, often under 10%, now and then up to about 30% | usually 95% or more, and about 50% for repeated phrases |
 
-On the same reply, the two models mostly agree on which checks are false. Where they find a check true, Span's score is often about half of Jev's. That is why Span's line is half of Jev's.
+On the same reply, Jev and Span mostly agree on which checks are false. Where they find a check true, Span's score is often about half of Jev's. That is why Span's line is half of Jev's.
 
-At a higher line, both models left alone replies that had the problem. For Jev that was 40 or 50, and for Span 20 or 25.
+At a higher line, Jev and Span left alone replies that had the problem. For Jev that was 40 or 50, and for Span 20 or 25.
 
-The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%, on either model. The line matters most for the other checks.
+Mercury Decide scores differently from both:
 
-Changing one line does not change the other. If you switch model, the line you set for the other one is kept for when you switch back.
+- It scores most checks close to 0 or close to 100, with little between.
+- Its scores for a check that is false go higher than the other two models' scores, now and then to about 30%.
+- So its line is above 30, where a false check rarely reaches, and below 50, where the repeated-phrase check lands when it is true.
+- It was tried on 29 made-up replies. At 40, every problem it scored above 10% reached the line, and 2 of about 150 checks that were false reached it too.
+- It also missed some problems that were written in a very quiet way, scoring them under 10%. No line catches those, so a lower line does not help.
+
+The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%, on any of the three. The line matters most for the other checks.
+
+Changing one line does not change the others. If you switch model, the line you set for each of the others is kept for when you switch back.
 
 It goes from 1 to 99. The two ends are left out because each one makes the second model a cost with no use:
 
@@ -309,7 +333,7 @@ The reply is refined, the same as with one model. This happens when the key is m
 
 ## Reading what it decided
 
-The decision card, on the Log tab, shows the last reply the second model read. It is called **What Jev decided** or **What Span decided**, after the model you picked. It is there while two models are on.
+The decision card, on the Log tab, shows the last reply the second model read. It is called **What Jev decided**, **What Span decided** or **What Mercury Decide decided**, after the model you picked. It is there while two models are on.
 
 - Whether the reply was refined or left alone, or why the model could not decide.
 - Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
@@ -341,7 +365,7 @@ The key is never shown.
 
 ## What it costs
 
-The second model is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call, and so is each press of **Test**. **Also compare with the reply before it** makes each call longer, which costs more on a host that charges for what is sent. Span-01 Lite, free costs nothing.
+The second model is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call, and so is each press of **Test**. **Also compare with the reply before it** makes each call longer, which costs more on a host that charges for what is sent. Span-01 Lite, free, and Mercury Decide cost nothing at the moment.
 
 With **Have it check the rewrite** on, each refine costs one more call. A reply refined once more also costs a second refine from your refine provider, one call per pass. Where the host reports the cost of a call, the Log and the card show it.
 

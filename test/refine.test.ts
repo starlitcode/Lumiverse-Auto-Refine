@@ -719,6 +719,33 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(0);
   });
 
+  test("Mercury Decide has a line of its own, 40 by default", async () => {
+    const over = await keyed({ judgeWho: "mercury" }, { jev: says([41]) });
+    await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(over.asked.length).toBe(1);
+    const under = await keyed({ judgeWho: "mercury" }, { jev: says([39]) });
+    await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(under.asked.length).toBe(0);
+  });
+
+  test("and neither Jev's line nor Span's is used for Mercury Decide", async () => {
+    const h = await keyed({ judgeWho: "mercury", judgeOver: 10, spanOver: 10 }, { jev: says([30]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("and Mercury Decide's line is not used for Jev or Span", async () => {
+    for (const who of ["jev", "span"]) {
+      const h = await keyed({ judgeWho: who, mercuryOver: 5 }, { jev: says([8]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.asked.length).toBe(0);
+    }
+  });
+
   test("what goes to Jev is the reply, the checks and the key, to the host picked", async () => {
     const h = await keyed({}, { jev: says([10]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
@@ -1544,6 +1571,37 @@ describe("two models: Jev reads the reply first", () => {
       expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "The reply repeats itself." });
     });
   }
+
+  // ---- Mercury Decide ----
+  // Free on OpenRouter, and it takes the same decisions request as Jev: named
+  // fields in the state, and the checks as they were written.
+  test("Mercury Decide on OpenRouter: inception/mercury-decide:free, asked the way Jev is", async () => {
+    const h = await keyed({ judgeWho: "mercury", judgeBefore: true }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(h.jevCalls[0].body.model).toBe("inception/mercury-decide:free");
+    expect(Object.keys(h.jevCalls[0].body.state)).toEqual(["reply", "previous_reply"]);
+    expect(h.jevCalls[0].body.state.reply).toBe(REPLY);
+    expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
+  });
+
+  test("a host that does not serve Mercury Decide, left picked, sends it to OpenRouter", async () => {
+    for (const host of ["nanogpt", "typesafe", "respan"]) {
+      const h = await keyed({ judgeWho: "mercury", judgeHost: host }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+      expect(h.jevCalls[0].body.model).toBe("inception/mercury-decide:free");
+    }
+  });
+
+  test("Mercury Decide is named in what is said about it", async () => {
+    const h = await keyed({ judgeWho: "mercury" }, { jev: () => ({ status: 401, body: "{}" }) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(String(said(h)[0].why)).toContain("Mercury Decide");
+  });
 
   test("Span on OpenRouter gets the reply before it as the turn ahead", async () => {
     const h = await keyed({ judgeWho: "span", judgeBefore: true }, { jev: says([10]) });

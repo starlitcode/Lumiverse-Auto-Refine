@@ -6,13 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.26.3
+## 1.27.0
 
 _2026-10-02_
+
+### Added
+
+- **Mercury Decide, a third second model.** It is made by Inception and is free on OpenRouter for now. Pick it under **Which second model** on the Model tab, with two models on. It answers the same checks as Jev and Span, and an OpenRouter key works for it. It has its own **Refine when a check reaches**, 40 by default, because it scores most checks close to 0 or close to 100. See [Mercury Decide](docs/two-models.md#mercury-decide).
 
 ### Fixed
 
 - **The row of tabs let the settings show through it on a fast scroll.** On a fast scroll, mostly on a phone, the row of tabs reached the top before its solid background went on. For that moment the settings under it showed through, and the row looked choppy. It also lost its background for a moment each time the panel was redrawn while you were scrolled down. The background now goes on just before the row reaches the top, and it stays on when the panel is redrawn. In Chrome and Edge, the browser itself keeps the background on while the row is at the top.
+- **Span-01 Lite, paid was not paid.** On OpenRouter it costs nothing at the moment, the same as the free one. What sets it apart is that OpenRouter's limits for free models do not apply to it. It is now called **Span-01 Lite, without the free limits**. The model it sends is the same.
 
 ---
 

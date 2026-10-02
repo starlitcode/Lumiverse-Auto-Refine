@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.26.3';
+const VERSION = '1.27.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4057,7 +4057,7 @@ async function saveRefined(
   }
 }
 
-// ---- the second model, Jev or Span ----
+// ---- the second model, Jev, Span or Mercury Decide ----
 // In two-model mode a second, much smaller model reads a finished reply first
 // and says whether it needs a refine. It answers each check with the chance,
 // from 0 to 1, that a statement about the reply is true, and nothing else: it
@@ -4108,6 +4108,12 @@ const SPAN_HOSTS: Record<string, { url: string; models: Partial<Record<SpanTier,
   },
 };
 
+// Mercury Decide, from Inception. OpenRouter serves it free, and it takes the
+// same decisions request as Jev.
+const MERCURY_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'inception/mercury-decide:free', kind: 'decisions' },
+};
+
 // The text of a responses API reply when it has no `output_text` of its own:
 // the first output_text part of the first message in `output`.
 function jevOutputText(output: any): string | undefined {
@@ -4130,7 +4136,7 @@ function jevKindOf(url: string): JevKind {
   return 'decisions';
 }
 // One key is kept for each host, since a key belongs to the host and not the
-// model: an OpenRouter key reaches Jev and Span alike. Each is its own secret,
+// model: an OpenRouter key reaches every second model OpenRouter serves. Each is its own secret,
 // named after the host. The name with nothing after it is where the one key
 // was kept before there was one per host.
 //
@@ -4200,7 +4206,8 @@ let judgeName = '';
 let judgeChecks: string[] = [];
 // The line in use, for the second model picked. Each model has its own,
 // because their scores do not run on the same scale: Span's run lower than
-// Jev's on the same replies.
+// Jev's on the same replies, and Mercury Decide's sit close to 0 or close to
+// 100 with little between.
 let judgeOver = 50;
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4269,6 +4276,11 @@ const SECOND_MODELS: Record<string, SecondModel> = {
     turns: true,
     hosts: SPAN_HOSTS,
     model: (host) => SPAN_HOSTS[host].models[spanTier] || SPAN_HOSTS[host].models.free || '',
+  },
+  mercury: {
+    name: 'Mercury Decide',
+    hosts: MERCURY_HOSTS,
+    model: (host) => MERCURY_HOSTS[host].model,
   },
 };
 
@@ -4870,7 +4882,12 @@ function applyRules(s: any): void {
     const n = Number(raw);
     return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
   };
-  judgeOver = judgeWho === 'span' ? lineOf(s.spanOver, 15) : lineOf(s.judgeOver, 30);
+  judgeOver =
+    judgeWho === 'span'
+      ? lineOf(s.spanOver, 15)
+      : judgeWho === 'mercury'
+        ? lineOf(s.mercuryOver, 40)
+        : lineOf(s.judgeOver, 30);
   judgeWorn = s.judgeWorn !== false;
   judgeBefore = s.judgeBefore === true;
   judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;

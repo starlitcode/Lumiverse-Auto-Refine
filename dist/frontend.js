@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.26.3";
+const VERSION = "1.27.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -51,6 +51,9 @@ function blockText(raw) {
 const SECOND_MODELS = [
     { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
     { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
+    // Inception has no page of its own for it, so the link is OpenRouter's,
+    // which serves it.
+    { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide:free" },
 ];
 // A link in the panel's own colours. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
@@ -161,7 +164,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -231,7 +234,7 @@ const PERMS = [
     {
         id: "cors_proxy",
         label: "CORS proxy",
-        why: "Reaches the second model in two-model mode, Jev or Span, which is not a chat model and so has no connection profile.",
+        why: "Reaches the second model in two-model mode, Jev, Span or Mercury Decide, which is not a chat model and so has no connection profile.",
         without: "Two-model mode cannot ask the second model, so every reply is refined as it is with one model. Nothing else changes.",
     },
 ];
@@ -589,6 +592,7 @@ const CONFIG = {
     // A check at or above this percentage is a reply worth refining.
     judgeOver: 30,
     spanOver: 15,
+    mercuryOver: 40,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -2024,7 +2028,7 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: SECOND_MODELS.map((m) => ({ value: m.value, label: m.name + ", from " + m.from })),
         needs: { key: "judgeMode", is: "two" },
-        hint: "Both answer the same checks. Span-01 Lite is free on OpenRouter and on Respan's own API.",
+        hint: "All of them answer the same checks. Span-01 Lite and Mercury Decide are free on OpenRouter.",
     },
     {
         key: "judgeHost",
@@ -2046,7 +2050,7 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "free", label: "Span-01 Lite, free" },
-            { value: "lite", label: "Span-01 Lite, paid", needs: { key: "judgeHost", is: "openrouter" } },
+            { value: "lite", label: "Span-01 Lite, without the free limits", needs: { key: "judgeHost", is: "openrouter" } },
             { value: "full", label: "Span-01" },
         ],
         needs: { key: "judgeWho", is: "span" },
@@ -2085,7 +2089,11 @@ const JUDGE_FIELDS = [
         type: "text",
         needs: { key: "judgeHost", is: "custom" },
         under: true,
-        placeholder: (c) => c.judgeWho === "span" ? "https://span.example.com/api/v1/scores" : "https://jev.example.com/v1/decisions",
+        placeholder: (c) => c.judgeWho === "span"
+            ? "https://span.example.com/api/v1/scores"
+            : c.judgeWho === "mercury"
+                ? "https://decide.example.com/v1/decisions"
+                : "https://jev.example.com/v1/decisions",
         hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
     },
     {
@@ -2094,7 +2102,7 @@ const JUDGE_FIELDS = [
         type: "text",
         needs: { key: "judgeHost", is: "custom" },
         under: true,
-        placeholder: (c) => (c.judgeWho === "span" ? "span-01-pro" : "typesafe/jev-latest"),
+        placeholder: (c) => c.judgeWho === "span" ? "span-01-pro" : c.judgeWho === "mercury" ? "inception/mercury-decide:free" : "typesafe/jev-latest",
         hint: "What that host calls the model, as its own docs spell it.",
     },
     {
@@ -2134,6 +2142,17 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "span" },
         hint: "For Span. A percentage, 15 by default, since Span scores lower than Jev on the same reply.",
+    },
+    {
+        key: "mercuryOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "mercury" },
+        hint: "For Mercury Decide. A percentage, 40 by default, since it scores most checks close to 0 or close to 100.",
     },
     {
         key: "judgeWorn",

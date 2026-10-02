@@ -1704,6 +1704,62 @@ console.log("\neach list keeps its own lock");
 // The Jev card on the Model tab. Everything under the mode waits on two, the
 // address waits on the host being your own, and the key goes to the backend
 // once and is never kept by the panel.
+console.log("\nMercury Decide, the third second model");
+{
+  // Picking Mercury Decide: OpenRouter and another address are the only hosts,
+  // neither version picker shows, and only its own line shows, at 40. At a
+  // phone width and a laptop width, nothing runs off the side.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "mercury" } }, async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const got = await page.evaluate(() => {
+        const vis = (sel) => {
+          const n = document.querySelector(sel);
+          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+        };
+        const opts = (key) =>
+          [...(document.querySelector('#drawer [data-arf-field="' + key + '"]') || { options: [] }).options].map((o) => o.value);
+        const who = document.querySelector('#drawer [data-arf-field="judgeWho"]');
+        return {
+          picked: who && who.value,
+          label: who && who.selectedOptions[0] && who.selectedOptions[0].textContent,
+          hosts: opts("judgeHost"),
+          tierShown: vis('#drawer [data-arf-row="spanTier"]'),
+          versionShown: vis('#drawer [data-arf-row="judgeVersion"]'),
+          jevLine: vis('#drawer [data-arf-row="judgeOver"]'),
+          spanLine: vis('#drawer [data-arf-row="spanOver"]'),
+          ownLine: vis('#drawer [data-arf-row="mercuryOver"]'),
+          ownLineValue: (document.querySelector('#drawer [data-arf-field="mercuryOver"]') || {}).value,
+          key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
+          link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).pop(),
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+      ok(label + ": Mercury Decide is picked, from Inception", got.picked === "mercury" && got.label === "Mercury Decide, from Inception", JSON.stringify(got));
+      ok(label + ": only OpenRouter and another address are offered", got.hosts.join() === "openrouter,custom", JSON.stringify(got.hosts));
+      ok(label + ": neither Which Jev nor Which Span shows", !got.versionShown && !got.tierShown, JSON.stringify(got));
+      ok(label + ": only its own line shows, at 40", got.ownLine && !got.jevLine && !got.spanLine && got.ownLineValue === "40", JSON.stringify(got));
+      ok(label + ": the key is OpenRouter's", got.key === "Key for OpenRouter", String(got.key));
+      ok(label + ": its link is OpenRouter's page for it", got.link === "What is Mercury Decide? https://openrouter.ai/inception/mercury-decide:free", String(got.link));
+      ok(label + ": nothing scrolls sideways", !got.sideways, "");
+      await page.evaluate(() => {
+        const sel = document.querySelector('#drawer [data-arf-field="judgeHost"]');
+        sel.value = "custom";
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await settle(page);
+      await settle(page);
+      const ex = await page.evaluate(() => ({
+        url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
+        model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
+      }));
+      ok(label + ": with another address, the empty boxes show a Mercury Decide example", ex.model === "inception/mercury-decide:free" && !/jev|span/.test(ex.url + ex.model), JSON.stringify(ex));
+    });
+    ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+  }
+}
+
 console.log("\nSpan, the other second model");
 {
   // Picking Span changes the rows to Span's: its hosts, which Span, and the
@@ -1746,12 +1802,12 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("both second models are offered", jev.who.join() === "jev,span", JSON.stringify(jev.who));
+    ok("all three second models are offered", jev.who.join() === "jev,span,mercury", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
     ok("and only Jev's line shows", jev.jevLine && !jev.spanLine, JSON.stringify(jev));
-    ok("there is a link for each model", jev.links.length === 2 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
+    ok("there is a link for each model", jev.links.length === 3 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
 
     await pick("judgeWho", "span");
     await closed(page);
@@ -1764,7 +1820,7 @@ console.log("\nSpan, the other second model");
 
     await pick("judgeHost", "respan");
     const respan = await read();
-    ok("on Respan, the paid Lite is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
+    ok("on Respan, the Lite without the free limits is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
     ok("and the key is Respan's", respan.key === "Key for Respan", String(respan.key));
     ok("the http switch is only for another address", !(await page.evaluate(() => {
       const n = document.querySelector('#drawer [data-arf-row="judgeHttpOk"]');
