@@ -61,6 +61,8 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   // Inception has no page of its own for it, so the link is OpenRouter's,
   // which serves it.
   { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide:free" },
+  { value: "d1", name: "D1", from: "Liquid AI", about: "https://docs.liquid.ai/lfm/models/decision-models" },
+  { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
 ];
 
 // A link in the panel's own colours. Names are linked rather than printed as
@@ -172,7 +174,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -247,7 +249,7 @@ const PERMS: Array<{ id: string; label: string; why: string; without: string; fa
   {
     id: "cors_proxy",
     label: "CORS proxy",
-    why: "Reaches the second model in two-model mode, Jev, Span or Mercury Decide, which is not a chat model and so has no connection profile.",
+    why: "Reaches the second model in two-model mode, which is not a chat model and so has no connection profile.",
     without: "Two-model mode cannot ask the second model, so every reply is refined as it is with one model. Nothing else changes.",
   },
 ];
@@ -595,6 +597,8 @@ const CONFIG = {
   judgeOver: 30,
   spanOver: 15,
   mercuryOver: 40,
+  d1Over: 50,
+  solarOver: 50,
   // With worn phrases on, the second model is also asked whether the reply uses one.
   judgeWorn: true,
   // The reply before this one goes to the second model too, and it is asked
@@ -2204,6 +2208,7 @@ const JUDGE_FIELDS: Field[] = [
       { value: "nanogpt", label: "NanoGPT", needs: { key: "judgeWho", is: "jev" } },
       { value: "typesafe", label: "TypeSafe", needs: { key: "judgeWho", is: "jev" } },
       { value: "respan", label: "Respan", needs: { key: "judgeWho", is: "span" } },
+      { value: "liquid", label: "Liquid AI", needs: { key: "judgeWho", is: "d1" } },
       { value: "custom", label: "Another address" },
     ],
     needs: { key: "judgeMode", is: "two" },
@@ -2257,9 +2262,9 @@ const JUDGE_FIELDS: Field[] = [
     placeholder: (c: any) =>
       c.judgeWho === "span"
         ? "https://span.example.com/api/v1/scores"
-        : c.judgeWho === "mercury"
-          ? "https://decide.example.com/v1/decisions"
-          : "https://jev.example.com/v1/decisions",
+        : c.judgeWho === "jev"
+          ? "https://jev.example.com/v1/decisions"
+          : "https://decide.example.com/v1/decisions",
     hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
   },
   {
@@ -2269,7 +2274,14 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeHost", is: "custom" },
     under: true,
     placeholder: (c: any) =>
-      c.judgeWho === "span" ? "span-01-pro" : c.judgeWho === "mercury" ? "inception/mercury-decide:free" : "typesafe/jev-latest",
+      ((
+        {
+          span: "span-01-pro",
+          mercury: "inception/mercury-decide:free",
+          d1: "liquid/d1",
+          solar: "upstage/solar-decide",
+        } as Record<string, string>
+      )[c.judgeWho] || "typesafe/jev-latest"),
     hint: "What that host calls the model, as its own docs spell it.",
   },
   {
@@ -2320,6 +2332,28 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "mercury" },
     hint: "For Mercury Decide. A percentage, 40 by default, since it scores most checks close to 0 or close to 100.",
+  },
+  {
+    key: "d1Over",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "d1" },
+    hint: "For D1. A percentage, 50 by default. It has not been measured yet, so watch the scores on the Log tab and adjust it.",
+  },
+  {
+    key: "solarOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "solar" },
+    hint: "For Solar Decide. A percentage, 50 by default. It has not been measured yet, so watch the scores on the Log tab and adjust it.",
   },
   {
     key: "judgeWorn",

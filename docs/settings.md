@@ -123,7 +123,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
-- **One model or two** is a beta. With two, a small second model, Jev, Span or Mercury Decide, checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks, and every text it sends is in a box you can change. See [Two models](two-models.md).
+- **One model or two** is a beta. With two, a small second model, such as Jev or Span, checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks, and every text it sends is in a box you can change. See [Two models](two-models.md).
 
 ## Limits
 

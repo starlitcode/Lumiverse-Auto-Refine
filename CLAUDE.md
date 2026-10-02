@@ -76,6 +76,10 @@ Two skills are available. Load them before starting work.
 - A new second model gets its own line setting and its own default, set from
   how that model scores. It never reuses another model's line. Say in
   `docs/two-models.md` why its default is where it is.
+- A paid second model that cannot be measured, because there is no key with
+  credit to test it, can still be added if it answers yes-or-no checks and
+  suits Auto Refine. Its line starts at 50, and `docs/two-models.md` says it
+  has not been measured yet.
 
 ## Writing
 

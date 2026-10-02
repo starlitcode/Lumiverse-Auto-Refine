@@ -1596,6 +1596,56 @@ describe("two models: Jev reads the reply first", () => {
     }
   });
 
+  // ---- D1 and Solar Decide ----
+  // Both take Jev's decisions request. D1 is also on Liquid's own API.
+  for (const [who, host, url, model] of [
+    ["d1", "openrouter", "https://openrouter.ai/api/alpha/decisions", "liquid/d1"],
+    ["d1", "liquid", "https://api.liquid.ai/decisions/v1/systemone", "d1:free"],
+    ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide"],
+  ]) {
+    test(who + " on " + host + ": " + model + ", asked the way Jev is", async () => {
+      const h = await keyed({ judgeWho: who, judgeHost: host }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe(url);
+      expect(h.jevCalls[0].body.model).toBe(model);
+      expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+      expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
+    });
+  }
+
+  test("Liquid AI, left picked for Solar Decide, sends it to OpenRouter", async () => {
+    const h = await keyed({ judgeWho: "solar", judgeHost: "liquid" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(h.jevCalls[0].body.model).toBe("upstage/solar-decide");
+  });
+
+  for (const [who, key] of [["d1", "d1Over"], ["solar", "solarOver"]]) {
+    test(who + " has a line of its own, 50 by default", async () => {
+      const over = await keyed({ judgeWho: who }, { jev: says([51]) });
+      await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(over.asked.length).toBe(1);
+      const under = await keyed({ judgeWho: who, judgeOver: 10, spanOver: 10, mercuryOver: 10 }, { jev: says([49]) });
+      await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(under.asked.length).toBe(0);
+    });
+
+    test("and " + who + "'s line is its own setting, and not used for Jev", async () => {
+      const own = await keyed({ judgeWho: who, [key]: 20 }, { jev: says([25]) });
+      await own.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(own.asked.length).toBe(1);
+      const jev = await keyed({ judgeWho: "jev", [key]: 5 }, { jev: says([8]) });
+      await jev.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(jev.asked.length).toBe(0);
+    });
+  }
+
   test("Mercury Decide is named in what is said about it", async () => {
     const h = await keyed({ judgeWho: "mercury" }, { jev: () => ({ status: 401, body: "{}" }) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });

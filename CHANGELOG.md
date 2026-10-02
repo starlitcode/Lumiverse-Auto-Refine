@@ -13,6 +13,7 @@ _2026-10-02_
 ### Added
 
 - **Mercury Decide, a third second model.** It is made by Inception and is free on OpenRouter for now. Pick it under **Which second model** on the Model tab, with two models on. It answers the same checks as Jev and Span, and an OpenRouter key works for it. It has its own **Refine when a check reaches**, 40 by default, because it scores most checks close to 0 or close to 100. See [Mercury Decide](docs/two-models.md#mercury-decide).
+- **D1 and Solar Decide, two more second models.** D1 is made by Liquid AI. It is paid on OpenRouter, and it can also be reached on Liquid's own API, with a key from your Liquid account. Solar Decide is made by Upstage, and it is paid on OpenRouter. Each has its own **Refine when a check reaches**, 50 by default. Neither line has been measured yet, so the docs say how to adjust it. See [D1](docs/two-models.md#d1) and [Solar Decide](docs/two-models.md#solar-decide).
 
 ### Fixed
 

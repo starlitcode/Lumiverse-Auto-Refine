@@ -1732,7 +1732,7 @@ console.log("\nMercury Decide, the third second model");
           ownLine: vis('#drawer [data-arf-row="mercuryOver"]'),
           ownLineValue: (document.querySelector('#drawer [data-arf-field="mercuryOver"]') || {}).value,
           key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
-          link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).pop(),
+          link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => t.indexOf("What is Mercury Decide?") === 0),
           sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
         };
       });
@@ -1757,6 +1757,64 @@ console.log("\nMercury Decide, the third second model");
       ok(label + ": with another address, the empty boxes show a Mercury Decide example", ex.model === "inception/mercury-decide:free" && !/jev|span/.test(ex.url + ex.model), JSON.stringify(ex));
     });
     ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+  }
+}
+
+console.log("\nD1 and Solar Decide");
+{
+  // Each shows its own hosts and only its own line, at 50, with its link to
+  // its maker's page. D1 can be reached on Liquid AI, and the key box is named
+  // after it there. Checked at a phone width and a laptop width.
+  const MODELS = [
+    ["d1", "D1, from Liquid AI", "openrouter,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
+    ["solar", "Solar Decide, from Upstage", "openrouter,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
+  ];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver"];
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [who, name, hosts, line, link] of MODELS) {
+      const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
+        await goTab(page, "Model");
+        await settle(page);
+        const read = () =>
+          page.evaluate((LINES) => {
+            const vis = (sel) => {
+              const n = document.querySelector(sel);
+              return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+            };
+            const sel = document.querySelector('#drawer [data-arf-field="judgeWho"]');
+            const host = document.querySelector('#drawer [data-arf-field="judgeHost"]');
+            return {
+              label: sel && sel.selectedOptions[0] && sel.selectedOptions[0].textContent,
+              hosts: [...host.options].map((o) => o.value).join(),
+              lines: LINES.filter((k) => vis('#drawer [data-arf-row="' + k + '"]')),
+              values: Object.fromEntries(LINES.map((k) => [k, (document.querySelector('#drawer [data-arf-field="' + k + '"]') || {}).value])),
+              versions: vis('#drawer [data-arf-row="judgeVersion"]') || vis('#drawer [data-arf-row="spanTier"]'),
+              key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
+              link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => t.indexOf("What is " + (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(",")[0] : "") + "?") === 0),
+              sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+            };
+          }, LINES);
+        const got = await read();
+        ok(label + ", " + who + ": picked and named " + name, got.label === name, JSON.stringify(got));
+        ok(label + ", " + who + ": its hosts are " + hosts, got.hosts === hosts, JSON.stringify(got));
+        ok(label + ", " + who + ": only its own line shows, at 50", got.lines.join() === line && got.values[line] === "50", JSON.stringify(got));
+        ok(label + ", " + who + ": no version picker shows", !got.versions, JSON.stringify(got));
+        ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
+        ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
+        if (who === "d1") {
+          await page.evaluate(() => {
+            const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
+            s.value = "liquid";
+            s.dispatchEvent(new Event("change", { bubbles: true }));
+          });
+          await settle(page);
+          await settle(page);
+          const liquid = await read();
+          ok(label + ", d1 on Liquid AI: the key box is Liquid AI's", liquid.key === "Key for Liquid AI", JSON.stringify(liquid));
+        }
+      });
+      ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+    }
   }
 }
 
@@ -1802,12 +1860,12 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all three second models are offered", jev.who.join() === "jev,span,mercury", JSON.stringify(jev.who));
+    ok("all five second models are offered", jev.who.join() === "jev,span,mercury,d1,solar", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
     ok("and only Jev's line shows", jev.jevLine && !jev.spanLine, JSON.stringify(jev));
-    ok("there is a link for each model", jev.links.length === 3 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
+    ok("there is a link for each model", jev.links.length === 5 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
 
     await pick("judgeWho", "span");
     await closed(page);

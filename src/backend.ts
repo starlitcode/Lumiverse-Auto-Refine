@@ -4057,7 +4057,7 @@ async function saveRefined(
   }
 }
 
-// ---- the second model, Jev, Span or Mercury Decide ----
+// ---- the second model ----
 // In two-model mode a second, much smaller model reads a finished reply first
 // and says whether it needs a refine. It answers each check with the chance,
 // from 0 to 1, that a statement about the reply is true, and nothing else: it
@@ -4112,6 +4112,16 @@ const SPAN_HOSTS: Record<string, { url: string; models: Partial<Record<SpanTier,
 // same decisions request as Jev.
 const MERCURY_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'inception/mercury-decide:free', kind: 'decisions' },
+};
+
+// D1, from Liquid AI, and Solar Decide, from Upstage. Both take the same
+// decisions request as Jev. Liquid's own API names D1 `d1:free`.
+const D1_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'liquid/d1', kind: 'decisions' },
+  liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', model: 'd1:free', kind: 'decisions' },
+};
+const SOLAR_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'upstage/solar-decide', kind: 'decisions' },
 };
 
 // The text of a responses API reply when it has no `output_text` of its own:
@@ -4209,6 +4219,15 @@ let judgeChecks: string[] = [];
 // Jev's on the same replies, and Mercury Decide's sit close to 0 or close to
 // 100 with little between.
 let judgeOver = 50;
+// Each second model's line setting, and its default. D1's and Solar Decide's
+// were not measured, so they start in the middle.
+const LINES: Record<string, { key: string; fallback: number }> = {
+  jev: { key: 'judgeOver', fallback: 30 },
+  span: { key: 'spanOver', fallback: 15 },
+  mercury: { key: 'mercuryOver', fallback: 40 },
+  d1: { key: 'd1Over', fallback: 50 },
+  solar: { key: 'solarOver', fallback: 50 },
+};
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
 // `previous_reply`, with the checks in judgeBeforeChecks. A check in the main
@@ -4282,6 +4301,16 @@ const SECOND_MODELS: Record<string, SecondModel> = {
     hosts: MERCURY_HOSTS,
     model: (host) => MERCURY_HOSTS[host].model,
   },
+  d1: {
+    name: 'D1',
+    hosts: D1_HOSTS,
+    model: (host) => D1_HOSTS[host].model,
+  },
+  solar: {
+    name: 'Solar Decide',
+    hosts: SOLAR_HOSTS,
+    model: (host) => SOLAR_HOSTS[host].model,
+  },
 };
 
 function secondModel(): SecondModel {
@@ -4308,6 +4337,7 @@ const HOST_LABELS: Record<string, string> = {
   nanogpt: 'NanoGPT',
   typesafe: 'TypeSafe',
   respan: 'Respan',
+  liquid: 'Liquid AI',
   custom: 'the address you gave',
 };
 const hostLabel = (host: string) => HOST_LABELS[host] || host;
@@ -4882,12 +4912,8 @@ function applyRules(s: any): void {
     const n = Number(raw);
     return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
   };
-  judgeOver =
-    judgeWho === 'span'
-      ? lineOf(s.spanOver, 15)
-      : judgeWho === 'mercury'
-        ? lineOf(s.mercuryOver, 40)
-        : lineOf(s.judgeOver, 30);
+  const line = LINES[judgeWho] || LINES.jev;
+  judgeOver = lineOf(s[line.key], line.fallback);
   judgeWorn = s.judgeWorn !== false;
   judgeBefore = s.judgeBefore === true;
   judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;
