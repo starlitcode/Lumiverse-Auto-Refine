@@ -116,7 +116,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Both start at 0, which hides all costs.
   - There is no currency. The number you type is the number you see.
   - See [What a refine costs](prompt.md#what-a-refine-costs).
-- **Samplers** start blank, which means your connection's preset decides. See [Sampler settings](prompt.md#sampler-settings).
+- **Samplers** start blank. A blank sampler is not sent, so Lumiverse uses the value from your preset. See [Sampler settings](prompt.md#sampler-settings).
 - **Saved model setups** keep everything on this tab under a name: the connection, thinking, timeout, samplers and prices.
   - Save one for a cheap model and one for a careful one, and switch between them.
   - A setup never contains your prompt, so loading one only changes what runs the refine.
@@ -177,7 +177,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - **Show in this list**, under it, chooses which kinds of line are shown. Untick one to hide it:
     - **What the second model decided**: one line for each reply the second model reads.
     - **Replies left alone**: a reply or draft that was not changed, and why.
-    - **Settings, presets and model setups**: settings, presets or model setups loaded, saved or moved to your account.
+    - **Settings, presets and model setups**: settings, presets or model setups loaded, put back, or moved to and from your account.
   - Every other line is always shown. The count at the top says how many lines are hidden.
   - Hidden lines are still kept. **Reporting a problem** still includes them.
 - **Reporting a problem** copies everything needed for a bug report.

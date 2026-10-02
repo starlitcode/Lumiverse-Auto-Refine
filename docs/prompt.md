@@ -395,7 +395,10 @@ The biggest saving of all: point **Refine using** at a smaller, cheaper model.
 
 ## Sampler settings
 
-On the **Model** tab, every sampler starts blank. Blank means your connection's own preset decides, so a preset you tuned is never overridden.
+On the **Model** tab, every sampler starts blank. A blank sampler is not sent, so Lumiverse uses the value from your preset, and a preset you tuned is never overridden.
+
+- With **Refine using** on the model you chat with, that is the preset you chat with.
+- With a different connection picked, Lumiverse decides which preset the value comes from.
 
 - A value you fill in is sent with the refine only. Your chat and your preset are not changed.
 - **Context size** and **Longest answer** start blank too, which is almost always right, because a refine is a small request.
@@ -413,7 +416,7 @@ On the **Model** tab, every sampler starts blank. Blank means your connection's 
 On the **Model** tab, **Let it think first** has three choices:
 
 - **No, keep it quick.** The default. Rewriting a paragraph does not need reasoning, and reasoning on every reply adds up.
-- **Whatever my connection is set to.** Sends nothing about reasoning, so your connection's settings decide.
+- **Whatever my connection is set to.** Sends nothing about reasoning. Lumiverse uses the thinking setting saved on the connection, or your own thinking settings if the connection has none.
 - **Yes, and I will say how much.** Adds an effort level: auto, none, minimal, low, medium, high, extra high or max. Each provider decides what these mean. A rewrite rarely needs more than low.
 
 ## Seeing what gets sent

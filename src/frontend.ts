@@ -771,6 +771,12 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
 type Block = { id: string; name: string; on: boolean; role: string; text: string };
 
 const TURN_MACRO = "{{message}}";
+// A Log line about settings, presets or model setups: loaded, put back, set
+// back to the default, or moved between this browser and your account. A
+// built-in preset writes the same line as one of yours. These are the lines Show in
+// this list hides together.
+const SETUP_LINE =
+  /^(settings (loaded|moved)|brought \d+ (presets?|model setups?) down|sent \d+ (presets?|model setups?) up|loaded the (preset|model setup) |put back what the (preset|model setup) replaced|put the prompt back to the default|reset \d+ parts?$|ready v|the backend is running)/;
 // The tag a prompt puts the model's working in. What is inside it is streamed
 // back to the panel while the refine runs and never reaches the story, so a
 // prompt that does not ask for it has nothing to show while it writes.
@@ -2372,7 +2378,7 @@ const COST_FIELDS: Field[] = [
       { value: "inherit", label: "Whatever my connection is set to" },
       { value: "custom", label: "Yes, and I will say how much" },
     ],
-    hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. Whatever my connection is set to uses your own reasoning settings.",
+    hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. Whatever my connection is set to uses the connection's thinking setting, or your own.",
   },
   {
     key: "thinkingEffort",
@@ -3405,15 +3411,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   const LOG_KINDS: Array<{ id: string; label: string; what: string }> = [
     { id: "judge", label: "What the second model decided", what: "One line for each reply the second model reads." },
     { id: "left", label: "Replies left alone", what: "A reply or draft that was not changed, and why." },
-    { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, saved or moved to your account." },
+    { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, put back, or moved to and from your account." },
   ];
   // Which kind a line is, from what it says. Everything not named here is
   // always shown.
   function logKind(text: string): string {
     for (const m of SECOND_MODELS) if (text.indexOf(m.name + " ") === 0) return "judge";
     if (/^(left a reply (alone|as it was)|left your draft as it was|did not touch your draft)/.test(text)) return "left";
-    if (/^(settings (loaded|moved)|brought \d+ (presets?|model setups?) down|sent \d+ (presets?|model setups?) up|ready v|the backend is running)/.test(text))
-      return "setup";
+    if (SETUP_LINE.test(text)) return "setup";
     return "";
   }
   // A line for the Log tab. The panel is rebuilt from nothing on every repaint,
@@ -5677,6 +5682,27 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (stuckSoon) cancelAnimationFrame(stuckSoon);
     });
   } catch (_) {}
+  // Scrolling is not the only way the strip comes to be held at the top.
+  // Coming back from another drawer tab puts the scroll back with no scroll
+  // event, and a repaint while the tab was hidden measured nothing. Watching
+  // the strip and the box above it come into and out of view covers both.
+  let stuckEye: IntersectionObserver | null = null;
+  function watchStuck(stick: HTMLElement) {
+    try {
+      if (typeof IntersectionObserver !== "function") return;
+      if (!stuckEye) {
+        stuckEye = new IntersectionObserver(() => onAnyScroll(), { threshold: [0, 1] });
+        disposers.push(() => {
+          if (stuckEye) stuckEye.disconnect();
+          stuckEye = null;
+        });
+      }
+      stuckEye.disconnect();
+      stuckEye.observe(stick);
+      const above = stick.previousElementSibling;
+      if (above) stuckEye.observe(above);
+    } catch (_) {}
+  }
 
   function reInk() {
     if (tab && tab.root) {
@@ -6828,7 +6854,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // the panel once in the theme's own colours and once in the repaired ones,
     // which reads as a flicker on every press, and the tabs carry a colour
     // transition so theirs faded across it.
-    if (stick) onAnyScroll();
+    if (stick) {
+      watchStuck(stick);
+      onAnyScroll();
+    }
     root.classList.add("arf-settling");
     sweepReadable(root);
     // Put back before the frame is painted, or the panel visibly jumps to the
@@ -9680,7 +9709,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ).length;
     const wrap = card(
       "Samplers",
-      "Leave these blank to use your connection's own preset. A value you fill in is sent with the refine only, never with your chat.",
+      "Leave these blank to use the values from your preset. A value you fill in is sent with the refine only, never with your chat.",
       set ? set + " set" : "all default",
     );
     wrap.appendChild(
@@ -13997,18 +14026,42 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Ids the latest answer did not hold. Asked about once, so a message the page
   // shows and the chat does not have cannot keep the asking going.
   let roleAsked = new Set<string>();
+  // An ask the backend never answers, because it was sent before the backend
+  // was listening, is given up after a few seconds, so the next look at the
+  // messages can ask again. The backend saying it is ready asks again at once.
+  const ROLE_WAIT_MS = 5000;
+  let roleGiveUp: any = null;
   function askRoles() {
     if (roleSoon || roleAsk || lastChatId == null) return;
     roleSoon = setTimeout(() => {
       roleSoon = null;
       if (lastChatId == null) return;
-      roleAsk = newId();
-      send({ type: "message_roles", requestId: roleAsk, chatId: lastChatId });
+      const id = newId();
+      roleAsk = id;
+      send({ type: "message_roles", requestId: id, chatId: lastChatId });
+      if (roleGiveUp) clearTimeout(roleGiveUp);
+      roleGiveUp = setTimeout(() => {
+        roleGiveUp = null;
+        if (roleAsk !== id) return;
+        roleAsk = "";
+        roleAsked = new Set<string>();
+        log("no answer about whose each message is yet, so it will be asked again");
+        fillSlots();
+      }, ROLE_WAIT_MS);
     }, 150);
+  }
+  function reaskRoles() {
+    roleAsk = "";
+    roleAsked = new Set<string>();
+    if (roleGiveUp) clearTimeout(roleGiveUp);
+    roleGiveUp = null;
+    fillSlots();
   }
   function takeRoles(msg: any) {
     if (!msg || msg.requestId !== roleAsk) return;
     roleAsk = "";
+    if (roleGiveUp) clearTimeout(roleGiveUp);
+    roleGiveUp = null;
     if (!msg.ok) {
       log("could not tell whose each message is, so the button stays off the messages What to refine leaves out");
       return;
@@ -14022,6 +14075,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   disposers.push(() => {
     if (roleSoon) clearTimeout(roleSoon);
     roleSoon = null;
+    if (roleGiveUp) clearTimeout(roleGiveUp);
+    roleGiveUp = null;
   });
   // Whether the button belongs on this message. With both sides refined it is
   // on every message. With one side off it waits until the backend has said
@@ -14775,6 +14830,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (setupAsk) loadSetupsFromAccount();
             askPermissions();
             askBackendVersion();
+            reaskRoles();
             send({ type: "list_connections", requestId: newId() });
             return;
           }
@@ -15674,6 +15730,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 // against each other. A setting in one and not the other looks fine and
 // never loads.
 export const __testing = {
+  SETUP_LINE,
   splitSelectorList,
   blockText,
   sameSettings,

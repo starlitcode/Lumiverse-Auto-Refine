@@ -11128,6 +11128,36 @@ console.log("\nthe tabs stay at the top");
       ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
     });
+    // Away to another drawer tab and back. The host hides the panel and shows
+    // it again with the scroll where it was, and no scroll event comes. A
+    // repaint while it was hidden measured nothing, which is what leaves the
+    // strip held at the top with nothing behind it.
+    await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Log");
+      const got = await page.evaluate(async () => {
+        const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const drawer = document.getElementById("drawer");
+        const bar = () => drawer.querySelector("[data-arf-stick]");
+        drawer.scrollTop = drawer.scrollHeight;
+        await frame();
+        const before = bar().classList.contains("arf-stuck");
+        const top = drawer.scrollTop;
+        // From here on no scroll event reaches the panel, as when the host
+        // puts the scroll back itself.
+        const swallow = (e) => e.stopImmediatePropagation();
+        window.addEventListener("scroll", swallow, true);
+        drawer.style.display = "none";
+        await frame();
+        bar().classList.remove("arf-stuck");
+        drawer.style.display = "";
+        drawer.scrollTop = top;
+        await frame();
+        await new Promise((r) => setTimeout(r, 100));
+        window.removeEventListener("scroll", swallow, true);
+        return { before, after: bar().classList.contains("arf-stuck"), scrolled: drawer.scrollTop > 0 };
+      });
+      ok(label + ": back from another tab, the strip held at the top is solid again", got.before && got.scrolled && got.after, JSON.stringify(got));
+    });
   }
 }
 
@@ -11213,6 +11243,39 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
       }
       const draft = !!out.menu && out.menu.some((t) => /what I am typing/i.test(t));
       ok(side + ": the floating menu offers Refine what I am typing only if your messages are refined", !!out.menu && draft === wantMine, JSON.stringify(out.menu));
+    });
+  }
+  // The first ask can go out before the backend is listening, and then nothing
+  // answers it. The backend saying it is ready asks again, and so does a wait
+  // that ran out, so the buttons still arrive.
+  for (const how of ["ready", "wait"]) {
+    await inTab(browser, { saved: { enabled: true, messageButton: true, refineSide: "replies" } }, async (page) => {
+      const out = await page.evaluate(async ([html, how]) => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+        const wrap = document.createElement("div");
+        wrap.innerHTML = html;
+        document.body.appendChild(wrap);
+        await wait(400);
+        const asks = () => window.__sent.filter((m) => m && m.type === "message_roles");
+        const first = asks().length;
+        if (how === "ready") window.__fromBackend({ type: "backend_ready" });
+        else await wait(5400);
+        await wait(400);
+        const again = asks();
+        const last = again[again.length - 1];
+        if (last) window.__fromBackend({ type: "message_roles", requestId: last.requestId, chatId: "c1", ok: true, roles: { "msg-mine": "user", "msg-reply": "assistant" } });
+        await wait(150);
+        return {
+          first,
+          asked: again.length,
+          reply: !!document.querySelector('[data-message-id="msg-reply"] [data-arf-slot="message"]'),
+          mine: !!document.querySelector('[data-message-id="msg-mine"] [data-arf-slot="message"]'),
+        };
+      }, [TWO, how]);
+      const why = how === "ready" ? "the backend says it is ready" : "the first ask goes unanswered";
+      ok("when " + why + ", the panel asks again", out.first >= 1 && out.asked > out.first, JSON.stringify(out));
+      ok("and the answer puts the buttons where they belong", out.reply && !out.mine, JSON.stringify(out));
     });
   }
 }

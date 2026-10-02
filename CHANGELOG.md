@@ -10,9 +10,14 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-10-01_
 
+### Changed
+
+- **Clearer wording on blank samplers and on Whatever my connection is set to.** A blank sampler is not sent, so Lumiverse uses the value from your preset. With a different connection picked under **Refine using**, Lumiverse decides which preset that is. **Whatever my connection is set to** uses the thinking setting saved on the connection, or your own thinking settings if the connection has none. Nothing about how a refine is sent has changed.
+
 ### Fixed
 
-- **Hiding settings and presets in the Log left the model setup lines showing.** A line such as "brought 2 model setups down from your account" was not hidden with the rest. It is now, and the choice under **Show in this list** is called **Settings, presets and model setups**.
+- **The row of tabs lost its background after coming back from another drawer tab.** Scrolled down, away to another extension's tab and back, the row stayed at the top with the settings showing through it. It now gets its solid background back as soon as it is on screen again.
+- **Hiding settings and presets in the Log left some lines showing.** Loading a preset or a model setup, built-in ones included, putting back what one replaced, putting the prompt back to the default, a reset, and model setups moving to or from your account all still wrote a line. These are now hidden with the rest, and the choice under **Show in this list** is called **Settings, presets and model setups**.
 - **What to refine left the button on every message alone.** With **Replies only**, the button still showed on your own messages and refined them. With **Your messages only**, it still showed on replies. The button now shows only on the messages that are refined.
 - **What to refine left Refine what I am typing in the floating button's menu.** With **Replies only**, the panel and the Extras menu hid it, and the floating button's menu still offered it. It is hidden there too now.
 - **A refine on the side that is off is refused however it is asked for.** Refining part of a message on that side, for example, now says that only replies, or only your own messages, are refined, as set in **What to refine**.
