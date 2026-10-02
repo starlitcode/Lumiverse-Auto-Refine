@@ -13488,6 +13488,11 @@ export function setup(ctx, overrides) {
     // Ids the latest answer did not hold. Asked about once, so a message the page
     // shows and the chat does not have cannot keep the asking going.
     let roleAsked = new Set();
+    // An ask the backend never answers, because it was sent before the backend
+    // was listening, is given up after a few seconds, so the next look at the
+    // messages can ask again. The backend saying it is ready asks again at once.
+    const ROLE_WAIT_MS = 5000;
+    let roleGiveUp = null;
     function askRoles() {
         if (roleSoon || roleAsk || lastChatId == null)
             return;
@@ -13495,14 +13500,37 @@ export function setup(ctx, overrides) {
             roleSoon = null;
             if (lastChatId == null)
                 return;
-            roleAsk = newId();
-            send({ type: "message_roles", requestId: roleAsk, chatId: lastChatId });
+            const id = newId();
+            roleAsk = id;
+            send({ type: "message_roles", requestId: id, chatId: lastChatId });
+            if (roleGiveUp)
+                clearTimeout(roleGiveUp);
+            roleGiveUp = setTimeout(() => {
+                roleGiveUp = null;
+                if (roleAsk !== id)
+                    return;
+                roleAsk = "";
+                roleAsked = new Set();
+                log("no answer about whose each message is yet, so it will be asked again");
+                fillSlots();
+            }, ROLE_WAIT_MS);
         }, 150);
+    }
+    function reaskRoles() {
+        roleAsk = "";
+        roleAsked = new Set();
+        if (roleGiveUp)
+            clearTimeout(roleGiveUp);
+        roleGiveUp = null;
+        fillSlots();
     }
     function takeRoles(msg) {
         if (!msg || msg.requestId !== roleAsk)
             return;
         roleAsk = "";
+        if (roleGiveUp)
+            clearTimeout(roleGiveUp);
+        roleGiveUp = null;
         if (!msg.ok) {
             log("could not tell whose each message is, so the button stays off the messages What to refine leaves out");
             return;
@@ -13518,6 +13546,9 @@ export function setup(ctx, overrides) {
         if (roleSoon)
             clearTimeout(roleSoon);
         roleSoon = null;
+        if (roleGiveUp)
+            clearTimeout(roleGiveUp);
+        roleGiveUp = null;
     });
     // Whether the button belongs on this message. With both sides refined it is
     // on every message. With one side off it waits until the backend has said
@@ -14287,6 +14318,7 @@ export function setup(ctx, overrides) {
                             loadSetupsFromAccount();
                         askPermissions();
                         askBackendVersion();
+                        reaskRoles();
                         send({ type: "list_connections", requestId: newId() });
                         return;
                     }

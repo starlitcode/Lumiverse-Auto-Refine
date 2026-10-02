@@ -11245,6 +11245,39 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
       ok(side + ": the floating menu offers Refine what I am typing only if your messages are refined", !!out.menu && draft === wantMine, JSON.stringify(out.menu));
     });
   }
+  // The first ask can go out before the backend is listening, and then nothing
+  // answers it. The backend saying it is ready asks again, and so does a wait
+  // that ran out, so the buttons still arrive.
+  for (const how of ["ready", "wait"]) {
+    await inTab(browser, { saved: { enabled: true, messageButton: true, refineSide: "replies" } }, async (page) => {
+      const out = await page.evaluate(async ([html, how]) => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+        const wrap = document.createElement("div");
+        wrap.innerHTML = html;
+        document.body.appendChild(wrap);
+        await wait(400);
+        const asks = () => window.__sent.filter((m) => m && m.type === "message_roles");
+        const first = asks().length;
+        if (how === "ready") window.__fromBackend({ type: "backend_ready" });
+        else await wait(5400);
+        await wait(400);
+        const again = asks();
+        const last = again[again.length - 1];
+        if (last) window.__fromBackend({ type: "message_roles", requestId: last.requestId, chatId: "c1", ok: true, roles: { "msg-mine": "user", "msg-reply": "assistant" } });
+        await wait(150);
+        return {
+          first,
+          asked: again.length,
+          reply: !!document.querySelector('[data-message-id="msg-reply"] [data-arf-slot="message"]'),
+          mine: !!document.querySelector('[data-message-id="msg-mine"] [data-arf-slot="message"]'),
+        };
+      }, [TWO, how]);
+      const why = how === "ready" ? "the backend says it is ready" : "the first ask goes unanswered";
+      ok("when " + why + ", the panel asks again", out.first >= 1 && out.asked > out.first, JSON.stringify(out));
+      ok("and the answer puts the buttons where they belong", out.reply && !out.mine, JSON.stringify(out));
+    });
+  }
 }
 
 await browser.close();
