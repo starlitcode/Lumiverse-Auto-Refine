@@ -761,6 +761,11 @@ const MACROS = [
     { tag: "{{user}}", what: "Your name.", ours: false },
 ];
 const TURN_MACRO = "{{message}}";
+// A Log line about settings, presets or model setups: loaded, put back, set
+// back to the default, or moved between this browser and your account. A
+// built-in preset writes the same line as one of yours. These are the lines Show in
+// this list hides together.
+const SETUP_LINE = /^(settings (loaded|moved)|brought \d+ (presets?|model setups?) down|sent \d+ (presets?|model setups?) up|loaded the (preset|model setup) |put back what the (preset|model setup) replaced|put the prompt back to the default|reset \d+ parts?$|ready v|the backend is running)/;
 // The tag a prompt puts the model's working in. What is inside it is streamed
 // back to the panel while the refine runs and never reaches the story, so a
 // prompt that does not ask for it has nothing to show while it writes.
@@ -3205,7 +3210,7 @@ export function setup(ctx, overrides) {
     const LOG_KINDS = [
         { id: "judge", label: "What the second model decided", what: "One line for each reply the second model reads." },
         { id: "left", label: "Replies left alone", what: "A reply or draft that was not changed, and why." },
-        { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, saved or moved to your account." },
+        { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, put back, or moved to and from your account." },
     ];
     // Which kind a line is, from what it says. Everything not named here is
     // always shown.
@@ -3215,7 +3220,7 @@ export function setup(ctx, overrides) {
                 return "judge";
         if (/^(left a reply (alone|as it was)|left your draft as it was|did not touch your draft)/.test(text))
             return "left";
-        if (/^(settings (loaded|moved)|brought \d+ (presets?|model setups?) down|sent \d+ (presets?|model setups?) up|ready v|the backend is running)/.test(text))
+        if (SETUP_LINE.test(text))
             return "setup";
         return "";
     }
@@ -15192,6 +15197,7 @@ export function setup(ctx, overrides) {
 // against each other. A setting in one and not the other looks fine and
 // never loads.
 export const __testing = {
+    SETUP_LINE,
     splitSelectorList,
     blockText,
     sameSettings,
