@@ -13,6 +13,7 @@ _2026-10-03_
 ### Fixed
 
 - **Some rows appeared and disappeared with no movement.** Picking **Which second model**, **Where it is reached**, or **Refine** under **What to refine** redrew the panel at once. Rows that depend on these picks, such as **Address** and **Model name** for **Another address**, popped in and out. They now fade in and fold away like every other row.
+- **Refine the part I selected could show for the side you do not refine.** With **Refine** set to replies only, selecting text in one of your own messages still showed **Refine the part I selected** and **Take out what I selected**. The same happened the other way round. Tapping the panel's tab cleared the selection, so the button showed for a moment and then went away. These buttons now show only for a selection in a message on a side you refine.
 
 ---
 

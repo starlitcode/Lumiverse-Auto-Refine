@@ -10204,6 +10204,46 @@ console.log("\nreaching a selection refine without the floating button");
       !out.gone.panel && !out.gone.extras && !out.gone.cut, JSON.stringify(out.gone));
   });
 
+  // With only one side refined, a selection in a message on the other side
+  // gets no way in: not on the panel and not in the chat input's menu. The
+  // message's side comes from the backend, so the check answers that question
+  // the way the backend would. Checked at a phone width and a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [side, role, wanted] of [["replies", "user", false], ["replies", "assistant", true], ["mine", "assistant", false], ["mine", "user", true]]) {
+      await inTab(browser, { viewport, touch, saved: { widgetOn: false, inputRefine: true, enabled: true, refineSide: side } }, async (page) => {
+        const out = await page.evaluate(async ({ html, role }) => {
+          const wrap = document.createElement("div");
+          wrap.innerHTML = html;
+          document.body.appendChild(wrap);
+          for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+          await new Promise((r) => setTimeout(r, 40));
+          const node = document.getElementById("pp").firstChild;
+          const at = node.nodeValue.indexOf("wiped both hands");
+          const r = document.createRange();
+          r.setStart(node, at);
+          r.setEnd(node, at + "wiped both hands".length);
+          getSelection().removeAllRanges();
+          getSelection().addRange(r);
+          document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+          await new Promise((r2) => setTimeout(r2, 300));
+          const ask = window.__sent.filter((m) => m && m.type === "message_roles").pop();
+          if (ask) window.__fromBackend({ type: "message_roles", requestId: ask.requestId, chatId: "c1", ok: true, roles: { "msg-two": role } });
+          await new Promise((r2) => setTimeout(r2, 420));
+          const b = document.querySelector("#drawer [data-arf-part]");
+          return {
+            asked: !!ask,
+            onPanel: !!b && !b.hidden && getComputedStyle(b).display !== "none",
+            inExtras: Object.keys(window.__inputActions || {}).includes("auto-refine-part"),
+            cutInExtras: Object.keys(window.__inputActions || {}).includes("auto-refine-snip"),
+          };
+        }, { html: BUBBLE, role });
+        const what = label + ", refining " + side + ", a selection in " + (role === "user" ? "your message" : "a reply");
+        ok(what + (wanted ? ": the panel offers it" : ": the panel does not offer it"), out.onPanel === wanted, JSON.stringify(out));
+        ok(what + (wanted ? ": so does the chat input's menu" : ": nor does the chat input's menu"), out.inExtras === wanted && out.cutInExtras === wanted, JSON.stringify(out));
+      });
+    }
+  }
+
   // With the Extras row switched off as well, the panel is the only way left and
   // it still works. Somebody who turned off both should not be locked out of a
   // feature they never said anything about.

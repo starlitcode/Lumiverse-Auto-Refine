@@ -13699,6 +13699,12 @@ export function setup(ctx, overrides) {
         roleChat = chat;
         roleById = msg.roles && typeof msg.roles === "object" ? msg.roles : {};
         fillSlots();
+        // A selection made before this answer waited on it to know whose message
+        // it is in, so the ways to refine it are brought into line now.
+        if (pickedRun) {
+            reveal();
+            syncExtrasSoon();
+        }
     }
     disposers.push(() => {
         if (roleSoon)
@@ -14222,6 +14228,11 @@ export function setup(ctx, overrides) {
         if (!pickedRun)
             return null;
         if (lastChatId != null && pickedRun.chatId != null && pickedRun.chatId !== lastChatId)
+            return null;
+        // Only in a message on a side this panel refines. With only replies
+        // refined, a selection in one of your own messages has nothing that would
+        // act on it, so no way in is offered for it.
+        if (!buttonFor(String(pickedRun.messageId)))
             return null;
         return pickedRun;
     }
