@@ -5513,6 +5513,50 @@ console.log("\na switch and the rows that hang off it");
   });
 }
 
+console.log("\na pick that rebuilds the card still moves its rows");
+{
+  // Picking the host, the second model or what to refine rebuilds the card,
+  // since names in the rows around it change. The rows that come or go with
+  // the pick still have to fade in and fold away like every other row, and not
+  // appear or vanish in one frame. Checked at a phone width and a laptop width.
+  const pickHost = (page, host) =>
+    page.evaluate((h) => {
+      const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
+      s.value = h;
+      s.dispatchEvent(new Event("change", { bubbles: true }));
+    }, host);
+  const urlRow = (page) =>
+    page.evaluate(() => {
+      const row = document.querySelector('#drawer [data-arf-row="judgeUrl"]');
+      return {
+        there: !!row,
+        hidden: !!row && row.hidden,
+        arriving: !!row && row.classList.contains("arf-arrive"),
+        folding: !!row && !row.hidden && !!row.style.height,
+      };
+    });
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeHost: "openrouter" } }, async (page) => {
+      await goTab(page, "Model");
+      ok(label + ": the address row starts hidden", (await urlRow(page)).hidden, JSON.stringify(await urlRow(page)));
+      await pickHost(page, "custom");
+      await settle(page);
+      await settle(page);
+      const shown = await urlRow(page);
+      ok(label + ": picking another address fades the address row in", shown.there && !shown.hidden && shown.arriving, JSON.stringify(shown));
+      await pickHost(page, "openrouter");
+      await settle(page);
+      await settle(page);
+      const going = await urlRow(page);
+      ok(label + ": picking a listed host folds the address row away", going.folding, JSON.stringify(going));
+      await closed(page);
+      const gone = await urlRow(page);
+      ok(label + ": and then it is hidden", gone.hidden, JSON.stringify(gone));
+    });
+    ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+  }
+}
+
 console.log("\nopening a fold");
 {
   // The rows inside are already worked out, so opening one shows them without

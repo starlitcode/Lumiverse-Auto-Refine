@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.28.1";
+const VERSION = "1.28.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -6641,6 +6641,44 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // Which rows are showing, or on their way to showing, keyed by what each row
+    // is. A change that rebuilds the card hands this to paint(), which builds
+    // each row the way it was and then lets reveal() open or close it, so those
+    // rows move the same way as rows shown and hidden without a rebuild. A key
+    // held by more than one row is left out, since it cannot say which is which.
+    function rowKey(row) {
+        const r = row && row.getAttribute ? row.getAttribute("data-arf-row") : null;
+        if (r)
+            return "row:" + r;
+        const h = row && row.getAttribute ? row.getAttribute("data-arf-hangs") : null;
+        return h ? "hangs:" + h : "";
+    }
+    function rowsByKey(root) {
+        const out = new Map();
+        const twice = new Set();
+        const rows = root.querySelectorAll("[data-arf-row],[data-arf-hangs]");
+        for (let i = 0; i < rows.length; i++) {
+            const k = rowKey(rows[i]);
+            if (!k)
+                continue;
+            if (out.has(k))
+                twice.add(k);
+            out.set(k, rows[i]);
+        }
+        for (const k of twice)
+            out.delete(k);
+        return out;
+    }
+    function rowsShowing() {
+        if (!tab || !tab.root)
+            return undefined;
+        const out = new Map();
+        for (const [k, row] of rowsByKey(tab.root)) {
+            const going = row._arfGoing === undefined ? row.hidden : row._arfGoing;
+            out.set(k, !going);
+        }
+        return out;
+    }
     // A row that has just been switched on, fading down into place. Reading the
     // layout between taking the class off and putting it back is what makes the
     // browser treat it as a new animation rather than one already finished.
@@ -6655,8 +6693,12 @@ export function setup(ctx, overrides) {
     // How many times the panel has been rebuilt. Anything holding a measurement
     // from before a rebuild has nothing to say about the panel after one.
     let paints = 0;
-    function paint() {
+    // `was` is what rowsShowing() said before the change that called for this
+    // rebuild. Without it every row is built as it should now be, with no
+    // movement.
+    function paint(was) {
         paints++;
+        const from = was instanceof Map ? was : null;
         holdSide();
         // A rebuild from any other cause has already done what the pending log
         // repaint and the settle were waiting to do.
@@ -6793,6 +6835,13 @@ export function setup(ctx, overrides) {
                 body.appendChild(c);
         }
         root.appendChild(body);
+        // Each row as it was before the change, for reveal() to move it from once
+        // the panel has settled. Before the scroll is put back, so the scroll is
+        // measured against the panel the reader was looking at.
+        if (from)
+            for (const [k, row] of rowsByKey(root))
+                if (from.has(k))
+                    row.hidden = !from.get(k);
         setScheme(root);
         // Before the frame is painted. The tree is already in the page, so asking
         // for a computed colour lays it out there and then and the repair lands on
@@ -6828,6 +6877,10 @@ export function setup(ctx, overrides) {
                     root.classList.remove("arf-settling");
                     putBack(held, true);
                     reAnchor(root, held2, held);
+                    // After the settle, because it turns transitions off and a row
+                    // folding away is a transition.
+                    if (from)
+                        reveal();
                 });
             });
         }
@@ -6836,6 +6889,8 @@ export function setup(ctx, overrides) {
             root.classList.remove("arf-settling");
             putBack(held);
             reAnchor(root, held2, held);
+            if (from)
+                reveal();
         }
         if (focusKey) {
             const back = root.querySelector('[data-arf-field="' + focusKey + '"]');
@@ -8107,9 +8162,11 @@ export function setup(ctx, overrides) {
                 persist(true);
                 // The second model's name and its host are written into the rows
                 // around them, and the key row is for the host, so changing either
-                // redraws the card rather than only showing and hiding rows.
+                // redraws the card rather than only showing and hiding rows. The rows
+                // start the rebuild as they were, so the ones that come or go still
+                // fade in and fold away like every other row.
                 if (f.key === "judgeWho" || f.key === "judgeHost" || f.key === "refineSide") {
-                    paint();
+                    paint(rowsShowing());
                     return;
                 }
                 reveal();

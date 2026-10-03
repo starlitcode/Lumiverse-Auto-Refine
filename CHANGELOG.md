@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.28.2
+
+_2026-10-03_
+
+### Fixed
+
+- **Some rows appeared and disappeared with no movement.** Picking **Which second model**, **Where it is reached**, or **Refine** under **What to refine** redrew the panel at once. Rows that depend on these picks, such as **Address** and **Model name** for **Another address**, popped in and out. They now fade in and fold away like every other row.
+
+---
+
 ## 1.28.1
 
 _2026-10-02_
