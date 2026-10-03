@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.28.0';
+const VERSION = '1.28.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -3280,7 +3280,7 @@ async function refineMessage(
           : 'that message is not in this chat any more',
     };
   if (m.id === greetingId)
-    return { ok: false, why: 'the greeting is written by a person, so it is never refined' };
+    return { ok: false, why: 'the greeting is written by a person, so it is never refined. To change it, edit it on the character card' };
   if (m.role !== 'assistant' && m.role !== 'user')
     return { ok: false, why: 'only replies and your own messages can be refined' };
   // Never on the automatic pass. That pass fires off a reply arriving, and
@@ -3877,7 +3877,7 @@ async function snipMessage(
   // not something anybody could predict. Lumiverse's own edit is still there
   // for a greeting somebody does want to change.
   if (m.id === greetingId)
-    return { ok: false, why: 'the greeting is written by a person, so it is never edited from here' };
+    return { ok: false, why: 'the greeting is written by a person, so it is never edited from here. To change it, edit it on the character card' };
   if (m.role !== 'assistant' && m.role !== 'user')
     return { ok: false, why: 'only replies and your own messages can be edited from here' };
 

@@ -8,6 +8,8 @@ Every check below leaves the reply exactly as it was, and writes a line in the p
 
 The opening message is written by a person, so it is never refined. The automatic pass skips it, the buttons skip it, and no setting changes that. Asking for it by name is refused too.
 
+To change a greeting, edit it on the character card.
+
 This is the only rule in the extension with no switch.
 
 ## The model answered the wrong question

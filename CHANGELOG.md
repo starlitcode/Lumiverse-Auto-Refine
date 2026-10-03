@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.28.1
+
+_2026-10-02_
+
+### Changed
+
+- **Where to change a greeting.** Pressing refine on the greeting now also says to edit it on the character card. The greeting is still never refined. See [The greeting, always](docs/guardrails.md#the-greeting-always).
+
+---
+
 ## 1.28.0
 
 _2026-10-02_

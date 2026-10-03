@@ -2055,6 +2055,8 @@ describe("refining a reply", () => {
     const done = h.sent.find((m) => m.type === "refine_result");
     expect(done.ok).toBe(false);
     expect(done.why).toMatch(/greeting/i);
+    // And says where a greeting can be changed instead.
+    expect(done.why).toMatch(/edit it on the character card/);
   });
 
   test("your own message is left alone by the automatic pass", async () => {
