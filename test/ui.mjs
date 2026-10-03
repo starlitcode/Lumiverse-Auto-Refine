@@ -1794,6 +1794,15 @@ console.log("\nD1, Solar Decide and Kev 4B");
               link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => t.indexOf("What is " + (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(",")[0] : "") + "?") === 0),
               sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
               about: (document.querySelector("#drawer [data-arf-jevabout]") || {}).textContent || "",
+              warn: (() => {
+                const n = document.querySelector("#drawer [data-arf-kevwarn]");
+                return n && !n.closest("[hidden]") && n.getClientRects().length > 0 ? n.textContent : "";
+              })(),
+              // The warning is a line of its own: no text after the link.
+              linkAlone: (() => {
+                const n = document.querySelector("#drawer [data-arf-jevabout]");
+                return !!n && n.textContent === (n.querySelector("a") || {}).textContent;
+              })(),
               links: document.querySelectorAll("#drawer [data-arf-jevabout] a").length,
             };
           }, LINES);
@@ -1805,7 +1814,8 @@ console.log("\nD1, Solar Decide and Kev 4B");
         ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
         ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
         ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
-        ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.about) === (who === "kev"), got.about);
+        ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
+        ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
         if (who === "d1") {
           await page.evaluate(() => {
             const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');

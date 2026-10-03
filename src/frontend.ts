@@ -9453,13 +9453,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     about.setAttribute("data-arf-jevabout", "1");
     const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
     about.appendChild(linkTo(picked.about, "What is " + picked.name + "?"));
-    if (picked.value === "kev")
-      about.appendChild(
-        document.createTextNode(" Kev 4B is a small model. It can miss more problems than the others, and a very long reply can be too much for it."),
-      );
     // Only with two models picked. With one there is no second model to read
     // about, and the links are one more line to read past.
     wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));
+    // A line of its own under the link. On a phone the link is padded out to
+    // a tap target, and text run on after it inside the same line sat further
+    // from its second line than the lines below did.
+    if (picked.value === "kev") {
+      const small = note("Kev 4B is a small model. It can miss more problems than the others, and a very long reply can be too much for it.");
+      small.setAttribute("data-arf-kevwarn", "1");
+      wrap.appendChild(hangsOff(small, () => cfg.judgeMode === "two", "small model warning"));
+    }
     // Everything above the checks sits above the key: the mode, the host, and
     // how that host is reached. Split by key rather than by count, so a row
     // added to the list lands on the right side of the key.
