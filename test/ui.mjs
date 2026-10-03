@@ -1760,7 +1760,7 @@ console.log("\nMercury Decide, the third second model");
   }
 }
 
-console.log("\nD1 and Solar Decide");
+console.log("\nD1, Solar Decide and Kev 4B");
 {
   // Each shows its own hosts and only its own line, at 50, with its link to
   // its maker's page. D1 can be reached on Liquid AI, and the key box is named
@@ -1768,8 +1768,9 @@ console.log("\nD1 and Solar Decide");
   const MODELS = [
     ["d1", "D1, from Liquid AI", "openrouter,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
     ["solar", "Solar Decide, from Upstage", "openrouter,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
+    ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -1792,6 +1793,8 @@ console.log("\nD1 and Solar Decide");
               key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
               link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => t.indexOf("What is " + (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(",")[0] : "") + "?") === 0),
               sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+              about: (document.querySelector("#drawer [data-arf-jevabout]") || {}).textContent || "",
+              links: document.querySelectorAll("#drawer [data-arf-jevabout] a").length,
             };
           }, LINES);
         const got = await read();
@@ -1801,6 +1804,8 @@ console.log("\nD1 and Solar Decide");
         ok(label + ", " + who + ": no version picker shows", !got.versions, JSON.stringify(got));
         ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
         ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
+        ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
+        ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.about) === (who === "kev"), got.about);
         if (who === "d1") {
           await page.evaluate(() => {
             const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
@@ -1860,12 +1865,12 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all five second models are offered", jev.who.join() === "jev,span,mercury,d1,solar", JSON.stringify(jev.who));
+    ok("all six second models are offered", jev.who.join() === "jev,span,mercury,d1,solar,kev", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
     ok("and only Jev's line shows", jev.jevLine && !jev.spanLine, JSON.stringify(jev));
-    ok("there is a link for each model", jev.links.length === 5 && /What is Span\? https:\/\/www\.respan\.ai\/blog\/introducing-span-1/.test(jev.links[1]), JSON.stringify(jev.links));
+    ok("only the picked model's link shows", jev.links.length === 1 && jev.links[0] === "What is Jev? https://typesafe.ai/blog/introducing-system-one-models-and-jev", JSON.stringify(jev.links));
 
     await pick("judgeWho", "span");
     await closed(page);
@@ -1875,6 +1880,7 @@ console.log("\nSpan, the other second model");
     ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
     ok("and the same key is used for Span on the same host", span.key === "Key for OpenRouter", String(span.key));
     ok("and only Span's line shows, at 15", span.spanLine && !span.jevLine && span.spanLineValue === "15", JSON.stringify(span));
+    ok("and the link is Span's alone", span.links.length === 1 && span.links[0] === "What is Span? https://www.respan.ai/blog/introducing-span-1", JSON.stringify(span.links));
 
     await pick("judgeHost", "respan");
     const respan = await read();
@@ -11272,9 +11278,10 @@ console.log("\nthe tabs stay at the top");
       });
       ok(label + ": back from another tab, the strip held at the top is solid again", got.before && got.scrolled && got.after, JSON.stringify(got));
     });
-    // A fast swipe on a phone. The scroll runs ahead of the panel's script, so
-    // the strip can be at the top before the script has seen it move. Two
-    // browsers: one that can tell by itself that the strip is held, and one
+    // The fill starts once the search box has scrolled away and the strip is
+    // held, and not before: at rest, one strip height short of the top, and two
+    // pixels short, it is not filled, whether the drawer is moving or still.
+    // Two browsers: one that can tell by itself that the strip is held, and one
     // that cannot, which is Safari and Firefox and is made here by taking the
     // stylesheet's check away.
     const NO_CHECK = "#drawer .arf-stick{container-type:normal!important}";
@@ -11289,52 +11296,37 @@ console.log("\nthe tabs stay at the top");
           const solid = () => /^rgb\(/.test(getComputedStyle(strip()).backgroundColor);
           const where = () => bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top;
           const pad = parseFloat(getComputedStyle(drawer).paddingTop) || 0;
+          const rest = where();
           const restSolid = solid();
-          // One strip height short of the top, and seen there by the script.
-          drawer.scrollTop = where() - pad - bar().offsetHeight;
+          const at = (gap) => {
+            drawer.scrollTop = rest - pad - gap;
+          };
+          at(bar().offsetHeight);
           await frame();
-          const nearGap = Math.round(where() - pad);
-          // Then the rest of the way in one jump, read before the script has run.
+          const near = { gap: Math.round(where() - pad), moving: solid() };
+          await new Promise((r) => setTimeout(r, 400));
+          near.still = solid();
+          at(2);
+          await frame();
+          const edge = { gap: Math.round(where() - pad), moving: solid() };
+          await new Promise((r) => setTimeout(r, 400));
+          edge.still = solid();
           drawer.scrollTop = drawer.scrollHeight;
-          const jumpHeld = Math.round(where() - pad) === 0;
-          const jumpSolid = solid();
           await frame();
+          const held = { gap: Math.round(where() - pad), solid: solid() };
           // A repaint while held. The strip is a new element, read before the
           // next frame.
           const old = bar();
-          const on = drawer.querySelector(".arf-tab[aria-selected='true']");
-          on.click();
+          drawer.querySelector(".arf-tab[aria-selected='true']").click();
           const fresh = bar() !== old;
           const repaintSolid = solid();
-          return { restSolid, nearGap, jumpHeld, jumpSolid, fresh, repaintSolid };
+          return { restSolid, near, edge, held, fresh, repaintSolid };
         });
         ok(label + ", " + which + ": at rest the strip is not filled", !got.restSolid, JSON.stringify(got));
-        ok(label + ", " + which + ": the check stood one strip height short of the top", got.nearGap > 0, JSON.stringify(got));
-        ok(label + ", " + which + ": a fast swipe to the top finds the strip already solid", got.jumpHeld && got.jumpSolid, JSON.stringify(got));
+        ok(label + ", " + which + ": one strip height short of the top, it is not filled, moving or still", got.near.gap > 20 && !got.near.moving && !got.near.still, JSON.stringify(got.near));
+        ok(label + ", " + which + ": two pixels short of the top, it is not filled either", got.edge.gap > 0 && got.edge.gap <= 3 && !got.edge.moving && !got.edge.still, JSON.stringify(got.edge));
+        ok(label + ", " + which + ": held at the top, it is filled", got.held.gap === 0 && got.held.solid, JSON.stringify(got.held));
         ok(label + ", " + which + ": a repaint while it is held keeps it solid", got.fresh && got.repaintSolid, JSON.stringify(got));
-      });
-      // On a panel of its own, so no repaint puts its own scroll back while
-      // this one runs.
-      await inTab(browser, { css, viewport, touch, saved: { enabled: true } }, async (page) => {
-        await goTab(page, "Prompt");
-        // Scrolled to just short of the top and left there. While it moves the
-        // fill is on; once it is still, a strip that is not held looks the way
-        // it does at rest.
-        const still = await page.evaluate(async () => {
-          const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-          const drawer = document.getElementById("drawer");
-          const bar = () => drawer.querySelector("[data-arf-stick]");
-          const solid = () => /^rgb\(/.test(getComputedStyle(bar().querySelector(".arf-tabs")).backgroundColor);
-          const where = () => bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top;
-          const pad = parseFloat(getComputedStyle(drawer).paddingTop) || 0;
-          drawer.scrollTop = where() - pad - bar().offsetHeight;
-          await frame();
-          const movingSolid = solid();
-          await new Promise((r) => setTimeout(r, 400));
-          return { gap: Math.round(where() - pad), movingSolid, stillSolid: solid() };
-        });
-        ok(label + ", " + which + ": scrolled to just short of the top, the strip is solid while it moves", still.gap > 0 && still.movingSolid, JSON.stringify(still));
-        ok(label + ", " + which + ": and once it is still there, it is not filled", still.gap > 0 && !still.stillSolid, JSON.stringify(still));
       });
     }
     // The browser's own check alone, with the script's classes taken off the
@@ -11351,7 +11343,7 @@ console.log("\nthe tabs stay at the top");
           // Only when one is there: remove() writes the attribute even when it
           // changes nothing, and the observer would then call itself forever.
           const strike = () => {
-            if (bar.classList.contains("arf-near") || bar.classList.contains("arf-stuck")) bar.classList.remove("arf-near", "arf-stuck");
+            if (bar.classList.contains("arf-stuck")) bar.classList.remove("arf-stuck");
           };
           const mo = new MutationObserver(strike);
           mo.observe(bar, { attributes: true, attributeFilter: ["class"] });
@@ -11364,7 +11356,7 @@ console.log("\nthe tabs stay at the top");
           mo.disconnect();
           return { solid, classes, scrolled: drawer.scrollTop > 0 };
         });
-        ok(label + ", " + which + ": held at the top, " + (want ? "the strip is solid" : "the strip is see-through"), got.scrolled && got.solid === want && !/arf-(near|stuck)/.test(got.classes), JSON.stringify(got));
+        ok(label + ", " + which + ": held at the top, " + (want ? "the strip is solid" : "the strip is see-through"), got.scrolled && got.solid === want && !/arf-stuck/.test(got.classes), JSON.stringify(got));
       });
     }
   }

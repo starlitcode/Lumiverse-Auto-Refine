@@ -14,10 +14,15 @@ _2026-10-02_
 
 - **Mercury Decide, a third second model.** It is made by Inception and is free on OpenRouter for now. Pick it under **Which second model** on the Model tab, with two models on. It answers the same checks as Jev and Span, and an OpenRouter key works for it. It has its own **Refine when a check reaches**, 40 by default, because it scores most checks close to 0 or close to 100. See [Mercury Decide](docs/two-models.md#mercury-decide).
 - **D1 and Solar Decide, two more second models.** D1 is made by Liquid AI. It is paid on OpenRouter, and it can also be reached on Liquid's own API, with a key from your Liquid account. Solar Decide is made by Upstage, and it is paid on OpenRouter. Each has its own **Refine when a check reaches**, 50 by default. Neither line has been measured yet, so the docs say how to adjust it. See [D1](docs/two-models.md#d1) and [Solar Decide](docs/two-models.md#solar-decide).
+- **Kev 4B, a small second model.** It is an open model made by Jared Palmer, and it is paid on OpenRouter. It is small, so it can miss more than the larger models, and a very long reply can be too much for it. It has its own **Refine when a check reaches**, 50 by default, not measured yet. See [Kev 4B](docs/two-models.md#kev-4b).
+
+### Changed
+
+- **One link on the Model tab.** With two models on, the Model tab shows only the link for the second model you picked, such as **What is Jev?**, instead of a link for every model.
 
 ### Fixed
 
-- **The row of tabs let the settings show through it on a fast scroll.** On a fast scroll, mostly on a phone, the row of tabs reached the top before its solid background went on. For that moment the settings under it showed through, and the row looked choppy. It also lost its background for a moment each time the panel was redrawn while you were scrolled down. While you scroll, the background now goes on just before the row reaches the top. When you stop with the row short of the top, it has no background, the same as at rest. It stays on when the panel is redrawn. In Chrome and Edge, the browser itself keeps the background on while the row is at the top.
+- **The row of tabs let the settings show through it on a fast scroll.** On a fast scroll, mostly on a phone, the row of tabs reached the top before its solid background went on. For that moment the settings under it showed through, and the row looked choppy. It also lost its background for a moment each time the panel was redrawn while you were scrolled down. The background now goes on as soon as the search box has scrolled away and the row is held at the top, and not before. In Chrome and Edge the browser does this in the same moment as the scroll. It stays on when the panel is redrawn.
 - **Span-01 Lite, paid was not paid.** On OpenRouter it costs nothing at the moment, the same as the free one. What sets it apart is that OpenRouter's limits for free models do not apply to it. It is now called **Span-01 Lite, without the free limits**. The model it sends is the same.
 
 ---

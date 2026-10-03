@@ -56,6 +56,7 @@ const SECOND_MODELS = [
     { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide:free" },
     { value: "d1", name: "D1", from: "Liquid AI", about: "https://docs.liquid.ai/lfm/models/decision-models" },
     { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
+    { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
 ];
 // A link in the panel's own colours. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
@@ -166,7 +167,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -597,6 +598,7 @@ const CONFIG = {
     mercuryOver: 40,
     d1Over: 50,
     solarOver: 50,
+    kevOver: 50,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -2112,6 +2114,7 @@ const JUDGE_FIELDS = [
             mercury: "inception/mercury-decide:free",
             d1: "liquid/d1",
             solar: "upstage/solar-decide",
+            kev: "jaredpalmer/kev-4b",
         }[c.judgeWho] || "typesafe/jev-latest"),
         hint: "What that host calls the model, as its own docs spell it.",
     },
@@ -2185,6 +2188,17 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "solar" },
         hint: "For Solar Decide. A percentage, 50 by default. It has not been measured yet, so watch the scores on the Log tab and adjust it.",
+    },
+    {
+        key: "kevOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "kev" },
+        hint: "For Kev 4B. A percentage, 50 by default, not measured yet. Kev 4B is a small model, so it can miss more than the others.",
     },
     {
         key: "judgeWorn",
@@ -4476,11 +4490,9 @@ export function setup(ctx, overrides) {
         // description box, so the rows scrolling under it do not show through.
         //
         // A browser that can tell by itself that the strip is held does it here,
-        // in the same frame as the scroll. The classes are the script's fallback
-        // for the rest: arf-near puts the fill on just before the strip reaches
-        // the top, and arf-stuck adds the shadow once it is there.
+        // in the same frame as the scroll. arf-stuck is the script's fallback for
+        // the rest. Both switch at once, with no fade, so nothing is drawn halfway.
         ".arf-stick{position:sticky;top:0;z-index:4;container-type:scroll-state}" +
-        ".arf-stick.arf-near .arf-tabs{" + STRIP_FILL + "}" +
         ".arf-stick.arf-stuck .arf-tabs{" + STRIP_FILL + STRIP_SHADOW + "}" +
         "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_FILL + STRIP_SHADOW + "}}" +
         ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
@@ -4739,9 +4751,7 @@ export function setup(ctx, overrides) {
         "overscroll-behavior-x:none;touch-action:pan-y;scrollbar-width:none;-ms-overflow-style:none;" +
         "padding:3px;border-radius:var(--lumiverse-radius-md,10px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
-        "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1));" +
-        "transition:box-shadow var(--lumiverse-transition-fast,150ms ease)}" +
-        "@media (prefers-reduced-motion: reduce){.arf-tabs{transition:none}}" +
+        "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
         ".arf-tabs::-webkit-scrollbar{display:none}" +
         // The panel is built from nothing on every repaint, and the readability
         // sweep then writes colours onto it. Reading a computed colour resolves the
@@ -5506,41 +5516,14 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
-    // The top edge the strip is held against: the inside of the nearest box that
-    // scrolls, below its border and padding, or the top of the window. Found from
-    // the page each time, because the box the host scrolls the drawer with
-    // differs from one host build to another.
-    function dockTop(stick) {
-        let box = stick.parentElement;
-        while (box && box !== document.body && box !== document.documentElement) {
-            const cs = getComputedStyle(box);
-            if (cs.overflowY !== "visible" && cs.overflowY !== "clip") {
-                return box.getBoundingClientRect().top + box.clientTop + (parseFloat(cs.paddingTop) || 0);
-            }
-            box = box.parentElement;
-        }
-        return 0;
-    }
-    // When the drawer last scrolled, and how long after that it counts as still.
-    // A swipe on a phone keeps sending scroll events while the page coasts, a
-    // few dozen milliseconds apart, so a gap of this length means it has stopped.
-    // Declared above markStuck, which a repaint can call before the listeners
-    // below are set up.
-    let scrolledAt = 0;
-    const STILL_MS = 200;
     // Whether the strip is being held at the top. At rest it sits one card gap
     // below the search box. Held, the search box has scrolled away above it and
     // the gap is larger.
     //
-    // While the drawer is scrolling, the fill goes on when the strip is still two
-    // of its own heights short of the top. On a phone the scroll runs ahead of
-    // this script, by a frame or more on a fast swipe, and a fill that waited for
-    // the strip to arrive would let the rows show through it for those frames.
-    // Once the scrolling stops, the fill stays only on a strip that is held, so
-    // a strip resting just short of the top looks as it does at rest. The shadow
-    // waits until it is held.
-    // Where the browser can tell on its own that the strip is held, the
-    // stylesheet does both with no script at all, and this is the fallback.
+    // The fill and the shadow go on together, once the search box has scrolled
+    // away and the strip is held, and not before. Where the browser can tell on
+    // its own that the strip is held, the stylesheet does this in the same frame
+    // as the scroll, and this is the fallback.
     function markStuck() {
         try {
             const root = tab && tab.root;
@@ -5553,16 +5536,13 @@ export function setup(ctx, overrides) {
             const above = stick.previousElementSibling;
             const gap = parseFloat(getComputedStyle(root).rowGap) || 0;
             const held = !!above && top - above.getBoundingClientRect().bottom > gap + 1;
-            const moving = Date.now() - scrolledAt < STILL_MS;
-            const near = held || (moving && top - dockTop(stick) <= stick.offsetHeight * 2);
             stick.classList.toggle("arf-stuck", held);
-            stick.classList.toggle("arf-near", near);
         }
         catch (_) { }
     }
     let stuckSoon = 0;
-    let stillTimer = null;
-    // One check per frame at most.
+    // Scroll does not bubble, so it is caught on the way down, from whichever
+    // box the host scrolls the drawer with. One check per frame at most.
     const onAnyScroll = () => {
         if (stuckSoon)
             return;
@@ -5571,27 +5551,12 @@ export function setup(ctx, overrides) {
             markStuck();
         });
     };
-    // Scroll does not bubble, so it is caught on the way down, from whichever
-    // box the host scrolls the drawer with. A last check once it has been still
-    // takes the early fill off a strip that stopped short of the top.
-    const onScrolled = () => {
-        scrolledAt = Date.now();
-        if (stillTimer)
-            clearTimeout(stillTimer);
-        stillTimer = setTimeout(() => {
-            stillTimer = null;
-            markStuck();
-        }, STILL_MS + 20);
-        onAnyScroll();
-    };
     try {
-        document.addEventListener("scroll", onScrolled, true);
+        document.addEventListener("scroll", onAnyScroll, true);
         disposers.push(() => {
-            document.removeEventListener("scroll", onScrolled, true);
+            document.removeEventListener("scroll", onAnyScroll, true);
             if (stuckSoon)
                 cancelAnimationFrame(stuckSoon);
-            if (stillTimer)
-                clearTimeout(stillTimer);
         });
     }
     catch (_) { }
@@ -9185,13 +9150,15 @@ export function setup(ctx, overrides) {
         // shows before, and again whenever the host shown changes.
         askKeyStatus();
         const wrap = card("One model or two", "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
+        // The link for the model picked, and no others. A row of every model's
+        // link wrapped onto several lines and was hard to read. Picking another
+        // model repaints the card, so the link follows the pick.
         const about = note("");
         about.setAttribute("data-arf-jevabout", "1");
-        SECOND_MODELS.forEach((m, i) => {
-            if (i)
-                about.appendChild(document.createTextNode(" "));
-            about.appendChild(linkTo(m.about, "What is " + m.name + "?"));
-        });
+        const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
+        about.appendChild(linkTo(picked.about, "What is " + picked.name + "?"));
+        if (picked.value === "kev")
+            about.appendChild(document.createTextNode(" Kev 4B is a small model. It can miss more problems than the others, and a very long reply can be too much for it."));
         // Only with two models picked. With one there is no second model to read
         // about, and the links are one more line to read past.
         wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));

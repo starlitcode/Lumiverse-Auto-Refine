@@ -3948,6 +3948,13 @@ const D1_HOSTS = {
 const SOLAR_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'upstage/solar-decide', kind: 'decisions' },
 };
+// Kev 4B, an open model from Jared Palmer that takes Jev's request too. It is
+// small, and OpenRouter gives it 8,192 tokens, so a long reply with the one
+// before it can be too much for it. The host then refuses the call, and the
+// reply is refined the same as when any second model cannot answer.
+const KEV_HOSTS = {
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'jaredpalmer/kev-4b', kind: 'decisions' },
+};
 // The text of a responses API reply when it has no `output_text` of its own:
 // the first output_text part of the first message in `output`.
 function jevOutputText(output) {
@@ -4052,14 +4059,15 @@ let judgeChecks = [];
 // Jev's on the same replies, and Mercury Decide's sit close to 0 or close to
 // 100 with little between.
 let judgeOver = 50;
-// Each second model's line setting, and its default. D1's and Solar Decide's
-// were not measured, so they start in the middle.
+// Each second model's line setting, and its default. D1's, Solar Decide's and
+// Kev 4B's were not measured, so they start in the middle.
 const LINES = {
     jev: { key: 'judgeOver', fallback: 30 },
     span: { key: 'spanOver', fallback: 15 },
     mercury: { key: 'mercuryOver', fallback: 40 },
     d1: { key: 'd1Over', fallback: 50 },
     solar: { key: 'solarOver', fallback: 50 },
+    kev: { key: 'kevOver', fallback: 50 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4114,6 +4122,11 @@ const SECOND_MODELS = {
         name: 'Solar Decide',
         hosts: SOLAR_HOSTS,
         model: (host) => SOLAR_HOSTS[host].model,
+    },
+    kev: {
+        name: 'Kev 4B',
+        hosts: KEV_HOSTS,
+        model: (host) => KEV_HOSTS[host].model,
     },
 };
 function secondModel() {

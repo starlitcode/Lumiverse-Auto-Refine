@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are five to pick from:
+There are six to pick from:
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -13,8 +13,9 @@ There are five to pick from:
 | **Mercury Decide** | Inception | Free on OpenRouter, for now | [Mercury Decide on OpenRouter](https://openrouter.ai/inception/mercury-decide:free) |
 | **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Liquid AI: Decision Models](https://docs.liquid.ai/lfm/models/decision-models) |
 | **Solar Decide** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide) |
+| **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
 
-All five answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The same links are on the Model tab, as **What is Jev?**, **What is Span?** and so on, while **How many models** is set to two.
+All six answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. With Kev 4B picked, a warning that it is a small model shows next to its link.
 
 Inception has no page of its own about Mercury Decide yet, so its link goes to OpenRouter, which serves it.
 
@@ -23,9 +24,9 @@ Inception has no page of its own about Mercury Decide yet, so its link goes to O
 Everything is on the Model tab, in **One model or two**.
 
 1. Set **How many models** to two.
-2. Pick **Which second model**: Jev, Span, Mercury Decide, D1 or Solar Decide.
+2. Pick **Which second model**: Jev, Span, Mercury Decide, D1, Solar Decide or Kev 4B.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). Mercury Decide, D1 and Solar Decide have one version each, so there is nothing to pick. See [Mercury Decide](#mercury-decide), [D1](#d1) and [Solar Decide](#solar-decide).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). The others have one version each, so there is nothing to pick. See [Mercury Decide](#mercury-decide), [D1](#d1), [Solar Decide](#solar-decide) and [Kev 4B](#kev-4b).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -121,6 +122,23 @@ Solar Decide is Upstage's decision model. It takes the same request as Jev. Upst
 - Upstage marks it as a beta.
 - Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
 
+## Kev 4B
+
+Kev 4B is an open model made by Jared Palmer. It takes the same request as Jev. Its weights are on [Hugging Face](https://huggingface.co/jaredpalmer/kev-4b).
+
+| Host | Model name |
+| --- | --- |
+| OpenRouter | `jaredpalmer/kev-4b` |
+
+It is a small model, so keep these in mind:
+
+- It can miss more problems than the larger models, and score more checks wrongly.
+- OpenRouter gives it 8,192 tokens. That covers the reply, the checks, and the reply before it when **Also compare with the reply before it** is on.
+- Its maker trained it on texts up to about 7,500 tokens. A very long reply can be more than it handles well.
+- When a call is too long for it, OpenRouter refuses the call. The reply is then refined, the same as when any second model cannot answer.
+- It is paid, per call. OpenRouter's page for it shows the price.
+- Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
+
 ## Another address
 
 Pick **Another address** for any host not in the list. It works for Jev and for Span. Fill in two boxes:
@@ -143,7 +161,7 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1` or `upstage/solar-decide` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide` or `jaredpalmer/kev-4b` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13` or `typesafe/jev-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
@@ -200,6 +218,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Mercury Decide** | 40 percent |
 | **D1** | 50 percent, not measured yet |
 | **Solar Decide** | 50 percent, not measured yet |
+| **Kev 4B** | 50 percent, not measured yet |
 
 Each line sits between two groups of scores, which are different for each model:
 
@@ -221,9 +240,9 @@ Mercury Decide scores differently from both:
 - It was tried on 29 made-up replies. At 40, every problem it scored above 10% reached the line, and 2 of about 150 checks that were false reached it too.
 - It also missed some problems that were written in a very quiet way, scoring them under 10%. No line catches those, so a lower line does not help.
 
-D1 and Solar Decide are paid, and their lines have not been measured yet:
+D1, Solar Decide and Kev 4B are paid, and their lines have not been measured yet:
 
-- Both start at 50, the middle of the scale.
+- All three start at 50, the middle of the scale.
 - Their makers say they give calibrated chances. That means a check scored at 70% should be true about 70% of the time, which puts the useful line near the middle.
 - Until the line is measured, watch the scores on the Log tab for a few replies. If a reply you know has a problem scores under 50, lower the line. If replies that were fine keep reaching it, raise it.
 
