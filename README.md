@@ -1,4 +1,6 @@
-![Auto Refine: a woman writes at a desk on a balcony at night, with messy pages beside her and clean pages floating away into the sky.](docs/auto-refine-banner.png)
+<p align="center">
+  <img src="docs/auto-refine-banner.png" width="100%" alt="Auto Refine: a woman writes at a desk on a balcony at night, by the light of a lantern. Crossed-out pages lie beside her, and clean pages float up into the starry sky.">
+</p>
 
 # Auto Refine
 
