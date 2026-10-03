@@ -3294,6 +3294,42 @@ console.log("\naccepting or turning one down");
   });
 }
 
+console.log("\nthe floating button after an update made while the page stays open");
+{
+  // An update made while the page stays open can take the stylesheet away, or
+  // leave an old button on the page after its copy of the extension was shut
+  // down. The button puts the stylesheet back, and a left-over button takes
+  // itself away instead of starting anything. Checked at a phone width.
+  await inTab(browser, { viewport: { width: 390, height: 900 }, touch: true, saved: { widgetOn: true, enabled: true } }, async (page) => {
+    const out = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      history.pushState({}, "", "/chat/c1");
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      await wait(200);
+      const sheet = () => !!document.querySelector("style[data-arf-style]");
+      document.querySelector("style[data-arf-style]").remove();
+      const goneFirst = !sheet();
+      const b = document.querySelector("#float .arf-float");
+      b.click();
+      await wait(120);
+      const back = sheet();
+      window.__fromBackend({ type: "refine_result", ok: false, why: "test" });
+      await wait(60);
+      const old = document.querySelector("#float .arf-float");
+      window.__teardown();
+      document.body.appendChild(old);
+      window.__sent.length = 0;
+      old.click();
+      await wait(60);
+      return { goneFirst, back, leftOver: { stillThere: old.isConnected, sent: window.__sent.map((m) => m.type) } };
+    });
+    ok("the stylesheet was gone before the tap", out.goneFirst, JSON.stringify(out));
+    ok("the button puts the stylesheet back", out.back, JSON.stringify(out));
+    ok("a button left after shutdown takes itself away when tapped", out.leftOver.stillThere === false, JSON.stringify(out.leftOver));
+    ok("and starts nothing", out.leftOver.sent.length === 0, JSON.stringify(out.leftOver));
+  });
+}
+
 console.log("\nasking for a refine from the button's menu");
 {
   // A tap on the button refines the latest reply, so this menu carries what a

@@ -2978,6 +2978,9 @@ function refineIcon(): string {
 
 export function setup(ctx: Ctx, overrides?: any) {
   const disposers: Array<() => void> = [];
+  // Set once this copy has been shut down. An update made while the page stays
+  // open can leave a button of this copy on the page after that.
+  let tornDown = false;
   const cfg: any = Object.assign({}, CONFIG);
 
   function loadSaved(): any {
@@ -13569,6 +13572,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
 
       b.addEventListener("click", (e: any) => {
+        // A button left on the page after this copy was shut down. It has
+        // nothing behind it any more, so it takes itself away instead of
+        // starting a refine the running copy does not know about.
+        if (tornDown) {
+          try {
+            b.remove();
+          } catch (_) {}
+          return;
+        }
         disarm();
         // Only suppressed when the menu actually opened, rather than by a flag
         // that could be left set.
@@ -13657,6 +13669,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   function paintFloat(b?: any) {
     const el2 = b || floatBtn;
     if (!el2) return;
+    // The stylesheet that draws the button's states lives in the page. An
+    // update made while the page stays open can leave the button without it,
+    // and the button then went on working while showing none of its states.
+    // It is put back here when it has gone.
+    if (styleEl && !styleEl.isConnected) styleEl = null;
+    injectStyle();
     try {
       const working = busy;
       // Why a tap would do nothing, when that is the answer. On the home screen
@@ -15917,6 +15935,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   paint();
 
   return () => {
+    tornDown = true;
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
