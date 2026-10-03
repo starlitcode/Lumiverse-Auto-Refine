@@ -3294,6 +3294,73 @@ console.log("\naccepting or turning one down");
   });
 }
 
+console.log("\nevery eye shows the same state, with Keep the eye still on");
+{
+  // While a refine runs, every eye is open, the drawer tab's included. A phone
+  // keeps a button hovered after a tap, and a mouse can rest on one, so the
+  // tab's eye is read after a tap and under a pointer as well as at rest.
+  // The tab strip is drawn the way Lumiverse draws it: a button per tab, with
+  // the extension's icon written in as HTML.
+  const strip = (page) =>
+    page.evaluate(() => {
+      const bar = document.createElement("div");
+      bar.style.cssText = "display:flex;gap:8px;padding:8px";
+      for (const id of ["chars", "lore", "arf"]) {
+        const b = document.createElement("button");
+        b.id = "tab-" + id;
+        b.style.cssText = "width:48px;height:48px";
+        b.innerHTML = id === "arf" ? "<span>" + window.__tabSpec.iconSvg + "</span>" : id;
+        bar.appendChild(b);
+      }
+      document.body.prepend(bar);
+      for (const f of window.__handlers.GENERATION_ENDED || []) f({ chatId: "c1", messageId: "m2" });
+    });
+  const open = (page) =>
+    page.evaluate(() => {
+      const ball = document.querySelector("#tab-arf .arf-eye-ball");
+      const eye = document.querySelector("#tab-arf .arf-eye");
+      return {
+        reading: /arf-eye-read/.test(eye.getAttribute("class") || ""),
+        opacity: getComputedStyle(ball).opacity,
+      };
+    });
+  await inTab(browser, { viewport: { width: 390, height: 900 }, touch: true, saved: { eyeStill: true, enabled: true, refineOn: true } }, async (page) => {
+    await strip(page);
+    await page.waitForTimeout(200);
+    const atRest = await open(page);
+    await page.tap("#tab-lore");
+    await page.waitForTimeout(200);
+    const other = await open(page);
+    await page.tap("#tab-arf");
+    await page.waitForTimeout(500);
+    const tapped = await open(page);
+    ok("phone: the tab's eye is open while a refine runs", atRest.reading && atRest.opacity === "1", JSON.stringify(atRest));
+    ok("phone: and after tapping another tab", other.reading && other.opacity === "1", JSON.stringify(other));
+    ok("phone: and after tapping its own tab", tapped.reading && tapped.opacity === "1", JSON.stringify(tapped));
+  });
+  await inTab(browser, { viewport: { width: 1280, height: 900 }, saved: { eyeStill: true, enabled: true, refineOn: true } }, async (page) => {
+    await strip(page);
+    await page.waitForTimeout(200);
+    await page.hover("#tab-arf");
+    await page.waitForTimeout(200);
+    const hovered = await open(page);
+    ok("laptop: the tab's eye stays open with the pointer on it", hovered.reading && hovered.opacity === "1", JSON.stringify(hovered));
+  });
+  // At rest it is shut, under a pointer too, since the eye is kept still.
+  await inTab(browser, { viewport: { width: 1280, height: 900 }, saved: { eyeStill: true, enabled: true, refineOn: false } }, async (page) => {
+    await page.evaluate(() => {
+      const b = document.createElement("button");
+      b.id = "tab-arf";
+      b.innerHTML = "<span>" + window.__tabSpec.iconSvg + "</span>";
+      document.body.prepend(b);
+    });
+    await page.hover("#tab-arf");
+    await page.waitForTimeout(200);
+    const rest = await open(page);
+    ok("and at rest it stays shut under the pointer", !rest.reading && rest.opacity === "0", JSON.stringify(rest));
+  });
+}
+
 console.log("\nthe floating button after an update made while the page stays open");
 {
   // An update made while the page stays open can take the stylesheet away, or

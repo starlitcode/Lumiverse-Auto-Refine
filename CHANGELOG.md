@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.30.1
+
+_2026-10-03_
+
+### Fixed
+
+- **The eye on the drawer tab could show shut during a refine.** With **Keep the eye still** on, every eye is open while a refine runs. On a phone, after you tapped the Auto Refine tab, its eye showed shut instead. Tapping between tabs made it switch between shut and open. On a laptop, the same happened with the pointer on the tab. The tab's eye now stays open for the whole refine, the same as every other eye.
+
+---
+
 ## 1.30.0
 
 _2026-10-03_

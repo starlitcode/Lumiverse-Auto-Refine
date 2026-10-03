@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.30.0";
+const VERSION = "1.30.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -5427,14 +5427,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     // and written after the reduced-motion rules so it wins over them too.
     "html[data-arf-still-eyes] .arf-eye .arf-eye-ball,html[data-arf-still-eyes] .arf-eye .arf-eye-lid," +
     "html[data-arf-still-eyes] .arf-eye .arf-eye-pupil{animation:none!important;transition:none!important}" +
+    //
+    // The pointer rules leave a reading eye alone, so every eye shows the same
+    // state while a refine runs. A phone keeps a button hovered after it is
+    // tapped, and these rules are more specific than the reading ones below,
+    // so without that a tapped drawer tab would show its eye shut.
     "html[data-arf-still-eyes] .arf-eye .arf-eye-ball," +
-    "html[data-arf-still-eyes] button:hover .arf-eye.arf-opens .arf-eye-ball," +
-    "html[data-arf-still-eyes] [role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-ball," +
-    "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens .arf-eye-ball{transform:scaleY(.1);opacity:0}" +
+    "html[data-arf-still-eyes] button:hover .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-ball," +
+    "html[data-arf-still-eyes] [role=\"button\"]:hover .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-ball," +
+    "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-ball{transform:scaleY(.1);opacity:0}" +
     "html[data-arf-still-eyes] .arf-eye .arf-eye-lid," +
-    "html[data-arf-still-eyes] button:hover .arf-eye.arf-opens .arf-eye-lid," +
-    "html[data-arf-still-eyes] [role=\"button\"]:hover .arf-eye.arf-opens .arf-eye-lid," +
-    "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens .arf-eye-lid{opacity:1}" +
+    "html[data-arf-still-eyes] button:hover .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-lid," +
+    "html[data-arf-still-eyes] [role=\"button\"]:hover .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-lid," +
+    "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-lid{opacity:1}" +
     "html[data-arf-still-eyes] .arf-eye.arf-eye-read .arf-eye-ball{transform:none;opacity:1}" +
     "html[data-arf-still-eyes] .arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
     // ---- saying something is wrong, in the theme's own colours ----
