@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.27.0";
+const VERSION = "1.28.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -2211,6 +2211,7 @@ const JUDGE_FIELDS: Field[] = [
       { value: "typesafe", label: "TypeSafe", needs: { key: "judgeWho", is: "jev" } },
       { value: "respan", label: "Respan", needs: { key: "judgeWho", is: "span" } },
       { value: "liquid", label: "Liquid AI", needs: { key: "judgeWho", is: "d1" } },
+      { value: "upstage", label: "Upstage", needs: { key: "judgeWho", is: "solar" } },
       { value: "custom", label: "Another address" },
     ],
     needs: { key: "judgeMode", is: "two" },

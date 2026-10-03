@@ -1763,11 +1763,11 @@ console.log("\nMercury Decide, the third second model");
 console.log("\nD1, Solar Decide and Kev 4B");
 {
   // Each shows its own hosts and only its own line, at 50, with its link to
-  // its maker's page. D1 can be reached on Liquid AI, and the key box is named
-  // after it there. Checked at a phone width and a laptop width.
+  // its maker's page. D1 can be reached on Liquid AI and Solar Decide on
+  // Upstage, and the key box is named after that host there. Checked at a phone width and a laptop width.
   const MODELS = [
     ["d1", "D1, from Liquid AI", "openrouter,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
-    ["solar", "Solar Decide, from Upstage", "openrouter,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
+    ["solar", "Solar Decide, from Upstage", "openrouter,upstage,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
     ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
   ];
   const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver"];
@@ -1816,16 +1816,18 @@ console.log("\nD1, Solar Decide and Kev 4B");
         ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
         ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
         ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
-        if (who === "d1") {
-          await page.evaluate(() => {
+        const own = { d1: ["liquid", "Liquid AI"], solar: ["upstage", "Upstage"] }[who];
+        if (own) {
+          await page.evaluate((host) => {
             const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
-            s.value = "liquid";
+            s.value = host;
             s.dispatchEvent(new Event("change", { bubbles: true }));
-          });
+          }, own[0]);
           await settle(page);
           await settle(page);
-          const liquid = await read();
-          ok(label + ", d1 on Liquid AI: the key box is Liquid AI's", liquid.key === "Key for Liquid AI", JSON.stringify(liquid));
+          const there = await read();
+          ok(label + ", " + who + " on " + own[1] + ": the key box is " + own[1] + "'s", there.key === "Key for " + own[1], JSON.stringify(there));
+          ok(label + ", " + who + " on " + own[1] + ": nothing scrolls sideways", !there.sideways, "");
         }
       });
       ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));

@@ -25,7 +25,7 @@ Everything is on the Model tab, in **One model or two**.
 
 1. Set **How many models** to two.
 2. Pick **Which second model**: Jev, Span, Mercury Decide, D1, Solar Decide or Kev 4B.
-3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. See [Another address](#another-address).
+3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
 4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). The others have one version each, so there is nothing to pick. See [Mercury Decide](#mercury-decide), [D1](#d1), [Solar Decide](#solar-decide) and [Kev 4B](#kev-4b).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
@@ -117,8 +117,10 @@ Solar Decide is Upstage's decision model. It takes the same request as Jev. Upst
 | Host | Model name |
 | --- | --- |
 | OpenRouter | `upstage/solar-decide` |
+| Upstage | `solar-decide` |
 
-- It is paid, per call. OpenRouter's page for it shows the price.
+- On OpenRouter it is paid, per call. OpenRouter's page for it shows the price.
+- On Upstage's own API, the key comes from your Upstage account, at [console.upstage.ai](https://console.upstage.ai/api-keys), under **API Keys**.
 - Upstage marks it as a beta.
 - Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
 
@@ -166,6 +168,7 @@ Addresses known to work:
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
 | Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` |
+| Upstage | `https://api.upstage.ai/v1/systemone` | `solar-decide` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 

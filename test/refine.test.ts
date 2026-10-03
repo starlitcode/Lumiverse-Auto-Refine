@@ -1597,11 +1597,13 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   // ---- D1 and Solar Decide ----
-  // Both take Jev's decisions request. D1 is also on Liquid's own API.
+  // Both take Jev's decisions request. D1 is also on Liquid's own API, and
+  // Solar Decide on Upstage's.
   for (const [who, host, url, model] of [
     ["d1", "openrouter", "https://openrouter.ai/api/alpha/decisions", "liquid/d1"],
     ["d1", "liquid", "https://api.liquid.ai/decisions/v1/systemone", "d1:free"],
     ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide"],
+    ["solar", "upstage", "https://api.upstage.ai/v1/systemone", "solar-decide"],
     ["kev", "openrouter", "https://openrouter.ai/api/alpha/decisions", "jaredpalmer/kev-4b"],
   ]) {
     test(who + " on " + host + ": " + model + ", asked the way Jev is", async () => {
@@ -1621,6 +1623,14 @@ describe("two models: Jev reads the reply first", () => {
     await wait(50);
     expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
     expect(h.jevCalls[0].body.model).toBe("upstage/solar-decide");
+  });
+
+  test("Upstage, left picked for D1, sends it to OpenRouter", async () => {
+    const h = await keyed({ judgeWho: "d1", judgeHost: "upstage" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(h.jevCalls[0].body.model).toBe("liquid/d1");
   });
 
   for (const [who, key] of [["d1", "d1Over"], ["solar", "solarOver"], ["kev", "kevOver"]]) {

@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.28.0
+
+_2026-10-02_
+
+### Added
+
+- **Solar Decide on Upstage's own API.** With Solar Decide picked, **Where it is reached** now has **Upstage**. It takes a key from your Upstage account. See [Solar Decide](docs/two-models.md#solar-decide).
+
+---
+
 ## 1.27.0
 
 _2026-10-02_

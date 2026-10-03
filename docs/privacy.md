@@ -36,7 +36,7 @@ There are two links on the Model tab, **What is Jev?** and **What is Span?**. Th
 
 ## The second model
 
-With **How many models** set to two, each finished reply is sent to the second model you picked before it is refined. It is reached through the host you picked under **Where it is reached**: OpenRouter, NanoGPT, TypeSafe, Respan, Liquid AI, or an address you typed. That host is a separate service with its own terms. It receives:
+With **How many models** set to two, each finished reply is sent to the second model you picked before it is refined. It is reached through the host you picked under **Where it is reached**: OpenRouter, NanoGPT, TypeSafe, Respan, Liquid AI, Upstage, or an address you typed. That host is a separate service with its own terms. It receives:
 
 - the reply, with its thinking taken out
 - the checks you wrote under **What the second model checks**

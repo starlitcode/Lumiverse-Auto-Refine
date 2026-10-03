@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.27.0';
+const VERSION = '1.28.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3940,13 +3940,15 @@ const MERCURY_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'inception/mercury-decide:free', kind: 'decisions' },
 };
 // D1, from Liquid AI, and Solar Decide, from Upstage. Both take the same
-// decisions request as Jev. Liquid's own API names D1 `d1:free`.
+// decisions request as Jev, on OpenRouter and on their maker's own API.
+// Liquid's own API names D1 `d1:free`.
 const D1_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'liquid/d1', kind: 'decisions' },
     liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', model: 'd1:free', kind: 'decisions' },
 };
 const SOLAR_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'upstage/solar-decide', kind: 'decisions' },
+    upstage: { url: 'https://api.upstage.ai/v1/systemone', model: 'solar-decide', kind: 'decisions' },
 };
 // Kev 4B, an open model from Jared Palmer that takes Jev's request too. It is
 // small, and OpenRouter gives it 8,192 tokens, so a long reply with the one
@@ -4152,6 +4154,7 @@ const HOST_LABELS = {
     typesafe: 'TypeSafe',
     respan: 'Respan',
     liquid: 'Liquid AI',
+    upstage: 'Upstage',
     custom: 'the address you gave',
 };
 const hostLabel = (host) => HOST_LABELS[host] || host;
