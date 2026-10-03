@@ -6,9 +6,13 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.28.3
+## 1.29.0
 
 _2026-10-03_
+
+### Added
+
+- **Test says how it went in a notification.** Pressing **Test** under **One model or two** now also shows a Lumiverse notification. When the key works, it is green and names the model that answered and how long it took. When it does not, it is red and says why. The panel and the Log show the test as before.
 
 ### Fixed
 

@@ -2477,6 +2477,14 @@ console.log("\nwhat Jev decided");
     ok("it says where the test went, in which format, and the name sent", !!test && /jev\.example\.com\/v1\/chat\/completions/.test(test.sent) && /OpenAI chat request/.test(test.sent) && /typesafe\/jev-latest/.test(test.sent), JSON.stringify(test));
     ok("it says when the host reported no cost", !!test && /reported no cost/.test(test.text), JSON.stringify(test));
     ok("a test is not counted as a reply", !!test && !test.tally, JSON.stringify(test));
+    const lastNote = () =>
+      page.evaluate(() => {
+        const n = window.__sent.filter((m) => m && m.type === "notify").pop();
+        return n ? { kind: n.kind, text: n.text } : null;
+      });
+    const okNote = await lastNote();
+    ok("a test that worked says so in a green notification, with the model",
+      !!okNote && okNote.kind === "success" && /answered/.test(okNote.text) && /jev-1\.13\.0/.test(okNote.text) && /The key works/.test(okNote.text), JSON.stringify(okNote));
     await page.evaluate(() => {
       window.__fromBackend({ type: "jev_tested", ok: false, why: "the host said the key is not valid", model: "", check: "", pct: null, over: 50, cost: 0, url: "https://jev.example.com/v1/decisions", sent: "jev-1.13.0", kind: "decisions" });
     });
@@ -2486,6 +2494,8 @@ console.log("\nwhat Jev decided");
       return { mark: c.getAttribute("data-arf-jevtest"), text: c.textContent, bars: c.querySelectorAll(".arf-jevbar").length };
     });
     ok("a failed test says why and where it went", failed.mark === "failed" && /key is not valid/.test(failed.text) && /jev\.example\.com\/v1\/decisions/.test(failed.text) && failed.bars === 0, JSON.stringify(failed));
+    const badNote = await lastNote();
+    ok("and says why in a red notification", !!badNote && badNote.kind === "error" && /did not answer: the host said the key is not valid/.test(badNote.text), JSON.stringify(badNote));
   });
   ok("no errors on the Jev card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
 }

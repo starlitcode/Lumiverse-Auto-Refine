@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.28.3";
+const VERSION = "1.29.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -9498,6 +9498,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   let jevHosts: string[] = [];
   let jevSaid = "";
   let jevAsk = "";
+  // When Test was pressed, so its notification can say how long the answer
+  // took. 0 when no test is waiting.
+  let jevTestAt = 0;
   // The host last asked about. Asked once per host rather than per paint: the
   // card is rebuilt on every paint, and asking on each one sent a question per
   // keystroke while the answer was on its way.
@@ -9592,6 +9595,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     test.addEventListener("click", () => {
       jevSaid = "Asking " + whoName() + " one small question.";
       jevAsk = newId();
+      jevTestAt = Date.now();
       send({ type: "jev_test", requestId: jevAsk });
       paint();
     });
@@ -15145,6 +15149,19 @@ export function setup(ctx: Ctx, overrides?: any) {
                 " answered. The key works. The Log tab shows the test under What " + whoName() + " decided."
               : whoName() + " did not answer: " + String(msg.why || "no reason given") + ". The Log tab shows where the test was sent.";
             log(msg.ok ? whoName() + " answered a test question" : whoName() + " test failed: " + String(msg.why || ""), true);
+            // A notification as well, so the answer is seen without looking
+            // for it on the panel: green with the model and the time when the
+            // key works, red with the reason when it does not.
+            const took = jevTestAt ? Date.now() - jevTestAt : 0;
+            jevTestAt = 0;
+            toast(
+              msg.ok
+                ? whoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
+                    " answered" + (took ? " in " + took + " ms" : "") + ". The key works."
+                : whoName() + " did not answer: " + String(msg.why || "no reason given") + ".",
+              true,
+              msg.ok ? "success" : "error",
+            );
             paint();
             return;
           }
