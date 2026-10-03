@@ -600,7 +600,7 @@ const CONFIG = {
   judgeChecks: JUDGE_CHECKS,
   // A check at or above this percentage is a reply worth refining.
   judgeOver: 30,
-  spanOver: 15,
+  spanOver: 30,
   mercuryOver: 30,
   d1Over: 30,
   solarOver: 30,
@@ -1889,6 +1889,14 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
     needs: { key: "judgeMode", is: "two" },
   },
   {
+    key: "spanOver",
+    was: 15,
+    label: "Refine when a check reaches",
+    why: LINE_WHY,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "span" },
+  },
+  {
     key: "mercuryOver",
     was: 40,
     label: "Refine when a check reaches",
@@ -2336,7 +2344,7 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "span" },
-    hint: "For Span. A percentage, " + CONFIG.spanOver + " by default, since Span gives lower scores than the other models.",
+    hint: "For Span. A percentage, " + CONFIG.spanOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "mercuryOver",

@@ -12,9 +12,14 @@ _2026-10-03_
 
 ### Changed
 
-- **Refine when a check reaches is 30 by default for more second models.** Mercury Decide moves from 40 to 30. D1, Solar Decide and Kev 4B move from 50 to 30. Jev stays at 30 and Span stays at 15. If you were on an old default, the panel offers the new one, and yours stays the same until you take it.
+- **Refine when a check reaches is 30 by default for every second model.** Span moves from 15 to 30. Mercury Decide moves from 40 to 30. D1, Solar Decide and Kev 4B move from 50 to 30. Jev stays at 30. If you were on an old default, the panel offers the new one, and yours stays the same until you take it.
 - **The first built-in check is now two checks.** It asked about a repeated phrase and about sentences that start with the same word, both in one statement. Each is now its own check, so a reply with only one of the two is scored on that one. If you were on the built-in checks, the panel offers the new ones.
 - **The defaults are described as a starting point.** [Two models](docs/two-models.md#where-the-defaults-come-from) now says the defaults come from testing during the beta and can change. It also gives the steps to find the line that suits you.
+
+### Fixed
+
+- **A content filter that stopped a rewrite was not asked again.** With **Ask again when a check fails** on, a refusal written out was asked again, but a provider's filter error, such as "content_filter", was treated as a failed call and never asked again. It now counts as a refusal and is asked again. See [Asking again](docs/guardrails.md#asking-again).
+- **A rewrite that was only a filter code was not counted as a refusal.** A refine model that answered with only "content_filter" or "content_filtered" is now caught by **Refuse an answer that declines the job**, the same as a refusal written out.
 
 ---
 

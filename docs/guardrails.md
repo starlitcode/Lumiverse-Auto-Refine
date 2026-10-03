@@ -60,7 +60,8 @@ What it cannot catch:
 
 - Only failures that a second try could fix are retried.
 - A rewrite refused for its length is not retried, because the model meant it and would give the same answer.
-- A call that errored, or one you stopped, is never repeated.
+- A call that errored is not repeated. The exception is an error from the provider's filter, such as "content_filter". That is a refusal sent as an error, so it is asked again like a refusal.
+- A call you stopped is never repeated.
 - Every retry is another call on your bill, which is why it is off by default.
 
 ## Several rewrites at once

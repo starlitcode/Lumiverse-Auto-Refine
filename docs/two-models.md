@@ -218,7 +218,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | Model | Line by default |
 | --- | --- |
 | **Jev** | 30 percent |
-| **Span** | 15 percent |
+| **Span** | 30 percent |
 | **Mercury Decide** | 30 percent |
 | **D1** | 30 percent |
 | **Solar Decide** | 30 percent |
@@ -231,7 +231,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 - So the defaults can change in a later version, if testing finds one that works better or a model changes.
 - None of the makers gives one line that suits every use. TypeSafe, Respan and Jared Palmer each say to pick the line by testing on your own replies.
 
-Span's default is lower than the others. Span splits each answer three ways: the problem is there, it is not there, or it cannot be told from the reply. The three add up to 100 percent, and Auto Refine reads the first. Some of each answer goes to the other two, so Span's scores run lower than the other models' scores on the same reply.
+Span splits each answer three ways: the problem is there, it is not there, or it cannot be told from the reply. The three add up to 100 percent, and Auto Refine reads the first. Some of each answer goes to the other two, so Span's scores can run lower than the other models' scores on the same reply. If Span leaves alone replies you know have a problem, lower its line.
 
 To find the line that suits you:
 

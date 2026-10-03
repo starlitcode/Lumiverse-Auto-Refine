@@ -705,11 +705,15 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(0);
   });
 
-  test("Span has a line of its own, 15 by default", async () => {
-    const h = await keyed({ judgeWho: "span" }, { jev: says([16]) });
+  test("Span has a line of its own, 30 by default", async () => {
+    const h = await keyed({ judgeWho: "span" }, { jev: says([31]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(h.asked.length).toBe(1);
+    const under = await keyed({ judgeWho: "span" }, { jev: says([29]) });
+    await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(under.asked.length).toBe(0);
   });
 
   test("and Jev's line is not used for Span", async () => {
@@ -4471,6 +4475,59 @@ describe("asking again when a check fails", () => {
         "I'm sorry, but I can't help with that.",
         "<REFINED>She stepped through and the cold hit her.</REFINED>",
       ],
+      { retryRefine: 2 },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  // A provider's filter stopping the rewrite is a refusal sent as an error,
+  // and asking again can get past it the same way.
+  test("a content filter error is asked again like a refusal", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { retryRefine: 2 },
+      chat(),
+      { failFirst: { times: 1, why: "OpenRouter generation failed: The provider stopped the response because of a content filter (content_filter)." } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and with asking again off, it is named as a refusal and not repeated", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      chat(),
+      { failFirst: { times: 1, why: "content_filtered" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/declined to rewrite it, through the provider's filter/);
+  });
+
+  test("an error that is not a filter is still not repeated", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { retryRefine: 2 },
+      chat(),
+      { failFirst: { times: 1, why: "OpenRouter generation failed: The provider did not complete the response (incomplete)." } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("a rewrite that is only a filter code is a refusal", async () => {
+    const h = await armed(
+      ["content_filtered", "<REFINED>She stepped through and the cold hit her.</REFINED>"],
       { retryRefine: 2 },
     );
     await h.ended({ chatId: "c1", messageId: "m2" });

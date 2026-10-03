@@ -1849,7 +1849,19 @@ const REFUSAL_PHRASES = [
   "that's something i can't help with",
   "i'm not able to provide information or help with that",
   "i can't provide information that could facilitate harm",
+  // A provider's own code for an answer its filter stopped, written as the
+  // answer instead of sent as an error. Matched with the underscore only, so a
+  // rewrite that mentions a content filter in words is left alone. It also
+  // covers "content_filtered". Auto Retry's list has the same entry.
+  "content_filter",
 ];
+
+// A refusal sent as an error instead of as text: a provider's filter, or
+// Lumiverse's words for a reply a provider stopped. Narrow to content wording,
+// so a network error or a timeout never matches. The same pattern as Auto
+// Retry's, so the two extensions agree on what a refusal is.
+const REFUSAL_ERROR =
+  /\b(?:prohibited[_ ]?content|content[_ ]?polic(?:y|ies)|safety[_ ]?(?:polic(?:y|ies)|filter|settings?)|response was blocked|blocked (?:by|for) (?:safety|content|moderation)|declined the response|blocked the prompt|reproduce protected material|content[_ ]?filter(?:ed|ing|s)?|moderation|flagged as|violat\w* (?:content|safety|polic)|finish[_ ]?reason["'\s:=]*(?:safety|prohibited|blocklist|recitation)|blocklist)\b/i;
 
 // Every phrase written out, so a check is one pass over three lists rather than
 // three passes and a concat on every answer.
@@ -3749,6 +3761,15 @@ async function refineMessage(
           };
         continue;
       }
+      // A provider's filter stopping the rewrite is a refusal sent as an error.
+      // Asking again can get past it, the same as a refusal written out, so it
+      // is judged as one and counts against the same tries.
+      if (REFUSAL_ERROR.test(String(answer.error))) {
+        asks++;
+        verdict = { ok: false, text: '', why: 'the model declined to rewrite it, through the provider\'s filter: ' + answer.error };
+        if (asks >= tries) return { ok: false, out: { ok: false, why: verdict.why, notes: notes } };
+        continue;
+      }
       // Anything else is the call failing rather than the answer being wrong,
       // and asking again would fail the same way. A stop especially: asking
       // again is the opposite of what was asked for.
@@ -4245,15 +4266,14 @@ let judgeVersion: 'latest' | 'preview' | 'exact' | 'own' = 'latest';
 let judgeName = '';
 let judgeChecks: string[] = [];
 // The line in use, for the second model picked. Each model has its own,
-// because their scores do not run on the same scale. Span's scores run lower
-// than the others, because Span splits each answer between present, absent
-// and not observable.
+// because their scores do not run on the same scale, so each can be tuned
+// apart from the others.
 let judgeOver = 30;
 // Each second model's line setting, and its default. The defaults come from
 // testing during the beta.
 const LINES: Record<string, { key: string; fallback: number }> = {
   jev: { key: 'judgeOver', fallback: 30 },
-  span: { key: 'spanOver', fallback: 15 },
+  span: { key: 'spanOver', fallback: 30 },
   mercury: { key: 'mercuryOver', fallback: 30 },
   d1: { key: 'd1Over', fallback: 30 },
   solar: { key: 'solarOver', fallback: 30 },

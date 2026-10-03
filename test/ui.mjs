@@ -1894,7 +1894,7 @@ console.log("\nSpan, the other second model");
     ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
     ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
     ok("and the same key is used for Span on the same host", span.key === "Key for OpenRouter", String(span.key));
-    ok("and only Span's line shows, at 15", span.spanLine && !span.jevLine && span.spanLineValue === "15", JSON.stringify(span));
+    ok("and only Span's line shows, at 30", span.spanLine && !span.jevLine && span.spanLineValue === "30", JSON.stringify(span));
     ok("and the link is Span's alone", span.links.length === 1 && span.links[0] === "What is Span? https://www.respan.ai/blog/introducing-span-1", JSON.stringify(span.links));
 
     await pick("judgeHost", "respan");
@@ -8756,7 +8756,7 @@ console.log("\nwhen a default moves under somebody who was on it");
   });
 
   // Each model's line at its old default is offered 30, and taking it sets 30.
-  for (const [who, key, was] of [["mercury", "mercuryOver", 40], ["d1", "d1Over", 50], ["solar", "solarOver", 50], ["kev", "kevOver", 50]]) {
+  for (const [who, key, was] of [["span", "spanOver", 15], ["mercury", "mercuryOver", 40], ["d1", "d1Over", 50], ["solar", "solarOver", 50], ["kev", "kevOver", 50]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: who, [key]: was } }, async (page) => {
       const said = await seen(page);
       ok("somebody on " + who + " still on a line of " + was + " is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
@@ -8767,7 +8767,7 @@ console.log("\nwhen a default moves under somebody who was on it");
   }
   // Each line is its own setting, so an old line for one model is not offered
   // to somebody on another.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", mercuryOver: 40, d1Over: 50 } }, async (page) => {
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", spanOver: 15, mercuryOver: 40, d1Over: 50 } }, async (page) => {
     ok("somebody on Jev is not told about the other models' lines", (await seen(page)) === null, "");
   });
   // A line of their own choosing is left alone.
@@ -8775,7 +8775,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok("somebody who set their own line is left alone", (await seen(page)) === null, "");
   });
   // A line somebody set themselves for Jev is given to Span too. A default is not.
-  for (const [was, want] of [[35, "35"], [40, "15"], [50, "15"]]) {
+  for (const [was, want] of [[35, "35"], [40, "30"], [50, "30"]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: was } }, async (page) => {
       await goTab(page, "Model");
       await settle(page);
@@ -8783,9 +8783,9 @@ console.log("\nwhen a default moves under somebody who was on it");
       ok("a Jev line of " + was + " gives Span a line of " + want, got === want, String(got));
     });
   }
-  // Span and Jev keep their lines.
-  ok("Jev's line stays 30", STOCK_DEFAULTS.judgeOver === 30, String(STOCK_DEFAULTS.judgeOver));
-  ok("Span's line stays 15", STOCK_DEFAULTS.spanOver === 15, String(STOCK_DEFAULTS.spanOver));
+  // Every model's line is 30 by default.
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver"])
+    ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.
   await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {

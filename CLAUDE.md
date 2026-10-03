@@ -77,9 +77,8 @@ Two skills are available. Load them before starting work.
   its own default. Scoring models do not score on the same scale, so a user
   can tune each one apart from the others.
 - The defaults come from the owner's testing during the beta. Every model's
-  default is 30, except Span's, which is 15 because Span's scores run lower.
-  The owner may change a default if testing finds a better one or a model
-  changes.
+  default is 30. The owner may change a default if testing finds a better one
+  or a model changes.
 - A new second model gets its own line setting. Its default is 30 unless the
   owner's testing shows another number works better.
 - A paid second model that cannot be tested, because there is no key with
