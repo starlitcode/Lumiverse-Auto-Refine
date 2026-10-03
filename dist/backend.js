@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.28.2';
+const VERSION = '1.28.3';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -281,6 +281,27 @@ function say(level, text) {
         spindle.log[level]('auto-refine: ' + text);
     }
     catch (_) { }
+}
+// One of Lumiverse's own notifications. Lumiverse takes them only from an
+// extension's server side, so the panel sends its words here to be shown. The
+// kind sets the colour. It is sent to the account that asked: on a shared
+// server, a notification with no account named goes to everybody. Lumiverse
+// shows the extension's name as the title, so none is added. It also shows at
+// most five in ten seconds from one extension and drops the rest.
+const NOTIFY_KINDS = ['success', 'info', 'warning', 'error'];
+function notify(kind, text, userId) {
+    const k = NOTIFY_KINDS.indexOf(String(kind)) >= 0 ? String(kind) : 'info';
+    const words = String(text == null ? '' : text).trim().slice(0, 500);
+    if (!words)
+        return;
+    try {
+        if (!spindle.toast || typeof spindle.toast[k] !== 'function')
+            return;
+        spindle.toast[k](words, userId ? { userId: userId } : undefined);
+    }
+    catch (e) {
+        say('warn', 'could not show a notification: ' + String((e && e.message) || e));
+    }
 }
 // ---- putting the request together ----
 // The whole prompt is a list of blocks the reader wrote. Not a fixed prompt
@@ -4936,6 +4957,10 @@ async function onPanel(payload, userId) {
     try {
         if (!payload)
             return;
+        if (payload.type === 'notify') {
+            notify(payload.kind, payload.text, userId);
+            return;
+        }
         // Who wrote each message in a chat, so the panel can leave the button off
         // the messages on the side What to refine has off. The page does not say
         // whose a message is, and the chat does. Nothing is changed.

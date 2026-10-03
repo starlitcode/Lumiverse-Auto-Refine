@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.28.2";
+const VERSION = "1.28.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -3759,7 +3759,7 @@ export function setup(ctx, overrides) {
             toast("Your draft is back as it was.");
         }
         else
-            toast("Could not write to the input box.", true);
+            toast("Could not write to the input box.", true, "error");
         paintFloat();
         paint();
     }
@@ -4023,7 +4023,7 @@ export function setup(ctx, overrides) {
             countDrop(why);
             lastRun = { ms: lastRunMs, ok: false, why: why };
             log("no answer from the backend. Check that Auto Refine is fully installed.");
-            toast("Auto Refine's backend is not answering. Nothing was refined.", true);
+            toast("Auto Refine's backend is not answering. Nothing was refined.", true, "error");
             paint();
         }, ACK_MS);
     }
@@ -4053,7 +4053,7 @@ export function setup(ctx, overrides) {
             sweep = null;
             sweepAsk = null;
             log("the run through the chat stopped answering after reply " + got.at + " of " + got.of);
-            toast("The run through the chat stopped answering. What it had already saved is kept.", true);
+            toast("The run through the chat stopped answering. What it had already saved is kept.", true, "warning");
             paint();
         }, (cap + 30) * 1000);
     }
@@ -4150,7 +4150,7 @@ export function setup(ctx, overrides) {
         log("gave up waiting: " + why);
         toast(away
             ? "The refine did not come back while this tab was in the background. Check the reply to see whether it changed."
-            : "The refine never came back. Nothing was changed.", true);
+            : "The refine never came back. Nothing was changed.", true, "warning");
         paint();
     }
     // Checked on the clock rather than left to the timer alone. See deadAt.
@@ -4456,15 +4456,22 @@ export function setup(ctx, overrides) {
         saveChatsOff();
         paint();
     }
-    function toast(text, force) {
+    // One of Lumiverse's own notifications. Lumiverse takes them only from an
+    // extension's server side, so the words are sent there to be shown. `force`
+    // shows it even with Show a brief message off, for anything that is not a
+    // routine "it worked". `kind` sets the colour: success is green, info blue,
+    // warning yellow and error red. Left out, a forced one is info and a routine
+    // one is success.
+    //
+    // A backend that is not answering cannot show one, so anything about that is
+    // also said in the Log and on the status line.
+    function toast(text, force, kind) {
         if (!cfg.toast && !force)
             return;
-        try {
-            if (ctx.ui && typeof ctx.ui.toast === "function") {
-                ctx.ui.toast(text);
-            }
-        }
-        catch (_) { }
+        const words = String(text == null ? "" : text).trim();
+        if (!words)
+            return;
+        send({ type: "notify", kind: kind || (force ? "info" : "success"), text: words });
     }
     // ---- one stylesheet, not a style attribute per element ----
     // Kept in one place so the coarse-pointer rule is a second rule rather than a
@@ -5332,6 +5339,9 @@ export function setup(ctx, overrides) {
     // The reply prompt, which is the one the automatic pass and the refine button
     // use. The own-messages prompt is checked where it is edited.
     const noTurn = () => !holdsTurn(blockList("blocks"));
+    // The same for the prompt your own messages and your draft are refined
+    // with, which is a separate list with its own blocks.
+    const noTurnMine = () => !holdsTurn(blockList("userBlocks"));
     // Whether the prompt has anywhere to put the worn phrases. A prompt saved
     // before that block existed does not carry it, so switching the setting on
     // would otherwise fill nothing and say nothing about why.
@@ -5358,7 +5368,7 @@ export function setup(ctx, overrides) {
             return { text: "No chat open", tone: "off" };
         if (chatIsOff(lastChatId))
             return { text: "Off in this chat", tone: "off" };
-        if (noTurn())
+        if (refinesReplies() ? noTurn() : noTurnMine())
             return { text: "The prompt is missing {{message}}", tone: "off" };
         if (lastChatId == null)
             return { text: "Waiting for a chat", tone: "off" };
@@ -5368,7 +5378,10 @@ export function setup(ctx, overrides) {
     }
     // Why the refine button cannot be pressed, or empty when it can. One answer
     // in one place, so the button, its tooltip and the line under it agree.
-    function whyNot() {
+    //
+    // `mine` is for one of your own messages, which is refined with the prompt
+    // for your messages rather than the one for replies.
+    function whyNot(mine = false) {
         if (!cfg.enabled)
             return "Auto Refine is switched off.";
         if (outsideAnyChat())
@@ -5377,7 +5390,9 @@ export function setup(ctx, overrides) {
             return "Waiting to be told which chat you are in.";
         if (chatIsOff(lastChatId))
             return "Auto Refine is switched off in this chat.";
-        if (noTurn())
+        if (mine && noTurnMine())
+            return "No block in the prompt for your messages has {{message}} in it, so the model would never see your message. Add it under Prompt.";
+        if (!mine && noTurn())
             return "No block in your prompt has {{message}} in it, so the model would never see the reply. Add it under Prompt.";
         return "";
     }
@@ -5398,8 +5413,8 @@ export function setup(ctx, overrides) {
             return "Waiting to be told which chat you are in.";
         if (lastChatId != null && chatIsOff(lastChatId))
             return "Auto Refine is switched off in this chat.";
-        if (noTurn())
-            return "No block in your prompt has {{message}} in it, so there is nothing to rewrite. Add it under Prompt.";
+        if (noTurnMine())
+            return "No block in the prompt for your messages has {{message}} in it, so there is nothing to rewrite. Add it under Prompt.";
         return "";
     }
     // Browser-drawn controls are painted from the page's colour scheme, and with
@@ -6966,6 +6981,9 @@ export function setup(ctx, overrides) {
         liveEls = { dot: dot, text: words };
         const row = el("div", "arf-row");
         const stop = whyNot();
+        // Your own messages are refined with their own prompt, so their buttons
+        // can be held up by something that does not hold up the ones for replies.
+        const stopMine = whyNot(true);
         // A run through the chat takes the place of the two buttons while it is
         // going, rather than being reported somewhere else: what it is doing and
         // the way to end it belong where the button that started it was.
@@ -7031,10 +7049,12 @@ export function setup(ctx, overrides) {
         const part = button("Refine the part I selected", false);
         part.setAttribute("data-arf-part", "1");
         hangsOff(part, () => !!pickedHere(), "a selection");
-        part.disabled = !!stop;
+        // Held up by the prompt for whichever side the selection is on.
+        const stopPart = whyNot(pickedIsMine());
+        part.disabled = !!stopPart;
         part.style.opacity = part.disabled ? "0.5" : "1";
         part.style.cursor = part.disabled ? "not-allowed" : "pointer";
-        part.title = stop || "Rewrites what you highlighted and leaves the rest of the reply alone.";
+        part.title = stopPart || "Rewrites what you highlighted and leaves the rest of the reply alone.";
         part.addEventListener("click", () => refinePicked());
         part.className += " arf-wide";
         // The whole chat, next to the one reply, and the only place it appears. A
@@ -7056,19 +7076,19 @@ export function setup(ctx, overrides) {
         const mine = refinesMine() ? group("Your messages") : spare();
         const mineNow = button("Refine my latest message", false);
         mineNow.setAttribute("data-arf-mine", "1");
-        mineNow.disabled = !!stop || lastChatId == null;
+        mineNow.disabled = !!stopMine || lastChatId == null;
         mineNow.style.opacity = mineNow.disabled ? "0.5" : "1";
         mineNow.style.cursor = mineNow.disabled ? "not-allowed" : "pointer";
-        mineNow.title = stop || "Refines the last message you sent in this chat, with the prompt for your messages.";
+        mineNow.title = stopMine || "Refines the last message you sent in this chat, with the prompt for your messages.";
         mineNow.addEventListener("click", () => refineMineNow());
         mine.appendChild(mineNow);
         const mineAll = button("Refine all my messages here", false);
         mineAll.setAttribute("data-arf-mine-sweep", "1");
-        mineAll.disabled = !!stop || lastChatId == null;
+        mineAll.disabled = !!stopMine || lastChatId == null;
         mineAll.style.opacity = mineAll.disabled ? "0.5" : "1";
         mineAll.style.cursor = mineAll.disabled ? "not-allowed" : "pointer";
         mineAll.title =
-            stop || "Goes through your messages in this chat oldest first, one model call each. It asks first.";
+            stopMine || "Goes through your messages in this chat oldest first, one model call each. It asks first.";
         mineAll.addEventListener("click", () => askSweep(true));
         mine.appendChild(mineAll);
         // A selection can be in a reply or in one of your messages, so this one
@@ -7127,8 +7147,9 @@ export function setup(ctx, overrides) {
         // Why the button is greyed out, said once rather than left to a tooltip
         // nobody sees on a phone. The master switch being off is not written out:
         // the switch is right there saying it.
-        if (stop && cfg.enabled)
-            wrap.appendChild(warn(stop));
+        const said = (refinesReplies() && stop) || (refinesMine() && stopMine) || "";
+        if (said && cfg.enabled)
+            wrap.appendChild(warn(said));
         if (outsideAnyChat())
             wrap.appendChild(note("Refining runs inside a chat. On the home screen or a character page there is nothing to refine yet, so the panel waits here."));
         return wrap;
@@ -8016,7 +8037,7 @@ export function setup(ctx, overrides) {
                 if (f.key === "wornOn" && box.checked && noWornBlock()) {
                     const why = "No block in your prompt has {{overused}} in it, so there is nowhere to put " +
                         "the worn phrases. Add one under Prompt, or load one of the built-in prompts.";
-                    toast(why, true);
+                    toast(why, true, "warning");
                     log("worn phrases are on, but " + why.charAt(0).toLowerCase() + why.slice(1));
                 }
                 reveal();
@@ -8869,7 +8890,7 @@ export function setup(ctx, overrides) {
                 tag.setAttribute("aria-label", "Copy " + m.tag);
                 tag.addEventListener("click", () => {
                     copyText(m.tag);
-                    toast("Copied " + m.tag, true);
+                    toast("Copied " + m.tag, true, "success");
                 });
                 row.appendChild(tag);
                 if (!m.ours)
@@ -8976,7 +8997,7 @@ export function setup(ctx, overrides) {
             copy.addEventListener("click", () => {
                 // Takes what is on screen, so the raw view copies the raw thing.
                 copyText(previewRaw ? previewAsRaw(preview) : previewAsText(preview));
-                toast("Copied.", true);
+                toast("Copied.", true, "success");
             });
             row.appendChild(copy);
             // A request is longer than a drawer is wide. This is the same text at the
@@ -9620,7 +9641,7 @@ export function setup(ctx, overrides) {
                 cfg[key] = list;
                 persist(true);
                 paint();
-                toast(what === "checks" ? "The built-in checks are back." : "The built-in text is back.", true);
+                toast(what === "checks" ? "The built-in checks are back." : "The built-in text is back.", true, "success");
             });
         });
         row.appendChild(builtIn);
@@ -10020,7 +10041,7 @@ export function setup(ctx, overrides) {
         const copy = button("Copy it", true);
         copy.addEventListener("click", () => {
             copyText(debugText());
-            toast("Copied.", true);
+            toast("Copied.", true, "success");
             log("copied debug info", true);
         });
         const read = button("Read and edit it first", false);
@@ -10030,7 +10051,7 @@ export function setup(ctx, overrides) {
             // and take out anything they would rather not post.
             openBig("Debug info", debugText(), (text) => {
                 copyText(text);
-                toast("Copied.", true);
+                toast("Copied.", true, "success");
                 log("copied debug info", true);
             });
         });
@@ -10325,7 +10346,7 @@ export function setup(ctx, overrides) {
             key: "toast",
             label: "Show a brief message",
             type: "bool",
-            hint: "On by default. A one-line note at the edge of the screen that says a refine happened.",
+            hint: "On by default. A Lumiverse notification that says a refine happened.",
         }));
         wrap.appendChild(fieldRow({
             key: "soundOn",
@@ -11362,7 +11383,7 @@ export function setup(ctx, overrides) {
         const copy = button("Copy", false);
         copy.addEventListener("click", () => {
             copyText(ta.value);
-            toast("Copied.", true);
+            toast("Copied.", true, "success");
         });
         row.appendChild(copy);
         const cancel = button(done ? "Cancel" : "Close", false);
@@ -12724,17 +12745,17 @@ export function setup(ctx, overrides) {
     function refineInput() {
         const node = composer();
         if (!node) {
-            toast("Could not find the input box on this page.", true);
+            toast("Could not find the input box on this page.", true, "warning");
             log("could not find the input box");
             return;
         }
         const text = String(node.value || "").trim();
         if (!text) {
-            toast("There is nothing in the input box to refine.", true);
+            toast("There is nothing in the input box to refine.", true, "warning");
             return;
         }
-        if (noTurn()) {
-            toast("Your prompt has no {{message}} block, so there is nothing to rewrite.", true);
+        if (noTurnMine()) {
+            toast("The prompt for your messages has no {{message}} block, so there is nothing to rewrite.", true, "warning");
             return;
         }
         // One at a time, the same rule the reply button follows. Two model calls at
@@ -12743,7 +12764,7 @@ export function setup(ctx, overrides) {
         // ending would clear it out from under the first while that one was still
         // going, taking the live line, the countdown and both watchdogs with it.
         if (busy) {
-            toast("A refine is already running. Wait for it, or stop it first.", true);
+            toast("A refine is already running. Wait for it, or stop it first.", true, "warning");
             return;
         }
         if (inputWaiting)
@@ -13099,7 +13120,7 @@ export function setup(ctx, overrides) {
             // there is no chat to refine, and the button was still drawn ready for
             // one: the tap explained itself in a toast, but only after you had
             // pressed a button that looked willing.
-            const stuck = working ? "" : whyNot();
+            const stuck = working ? "" : whyNot(!refinesReplies());
             // The icons are written at a fixed 20px, which is most of a 28px button
             // and lost inside a 96px one. Just over half the button leaves the ring
             // around it looking even at either end of the range.
@@ -14097,17 +14118,17 @@ export function setup(ctx, overrides) {
     // what the card and the ending say.
     let sweepMine = false;
     function askSweep(mine = false) {
-        const why = whyNot();
+        const why = whyNot(mine);
         if (why) {
-            toast(why, true);
+            toast(why, true, "warning");
             return;
         }
         if (busy) {
-            toast("A refine is already running. Let it finish first.", true);
+            toast("A refine is already running. Let it finish first.", true, "warning");
             return;
         }
         if (lastChatId == null) {
-            toast("No chat is open, so there is nothing to go through.", true);
+            toast("No chat is open, so there is nothing to go through.", true, "warning");
             return;
         }
         // Asked first, always. This is the one action in the extension that writes
@@ -14224,6 +14245,15 @@ export function setup(ctx, overrides) {
     }
     // What is on screen to refine, if anything. A selection made in another chat
     // is not offered: the reply it was made in is not the one in front of you.
+    // Whether the selection is in one of your own messages, as far as the
+    // backend has said. Unknown counts as a reply, and the backend checks again
+    // with the message itself.
+    function pickedIsMine() {
+        const one = pickedHere();
+        if (!one || roleChat !== String(lastChatId))
+            return false;
+        return roleById[String(one.messageId)] === "user";
+    }
     function pickedHere() {
         if (!pickedRun)
             return null;
@@ -14255,18 +14285,18 @@ export function setup(ctx, overrides) {
     function snipPicked() {
         const one = pickedHere();
         if (!one) {
-            toast("Select part of a reply first.", true);
+            toast("Select part of a reply first.", true, "warning");
             return;
         }
         if (snipping)
             return;
         if (busy) {
-            toast("A refine is running. Let it finish, or stop it first.", true);
+            toast("A refine is running. Let it finish, or stop it first.", true, "warning");
             return;
         }
         const why = whyNot();
         if (why) {
-            toast(why, true);
+            toast(why, true, "warning");
             log("nothing taken out: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
@@ -14279,7 +14309,7 @@ export function setup(ctx, overrides) {
                 return;
             snipping = false;
             log("no answer from the backend. Nothing was taken out.");
-            toast("Auto Refine's backend is not answering. Nothing was taken out.", true);
+            toast("Auto Refine's backend is not answering. Nothing was taken out.", true, "error");
             paint();
             fillSlotsSoon();
         }, ACK_MS);
@@ -14297,16 +14327,16 @@ export function setup(ctx, overrides) {
     function refinePicked() {
         const one = pickedHere();
         if (!one) {
-            toast("Select part of a reply first, then open this again.", true);
+            toast("Select part of a reply first, then open this again.", true, "warning");
             return;
         }
         if (busy) {
-            toast("A refine is already running. Stop it first, or wait for it to finish.", true);
+            toast("A refine is already running. Stop it first, or wait for it to finish.", true, "warning");
             return;
         }
-        const why = whyNot();
+        const why = whyNot(pickedIsMine());
         if (why) {
-            toast(why, true);
+            toast(why, true, "warning");
             log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
@@ -14335,12 +14365,12 @@ export function setup(ctx, overrides) {
         // One at a time. Two against the same reply means whichever finishes last
         // wins, and which one that is cannot be predicted.
         if (busy) {
-            toast("A refine is already running. Stop it first, or wait for it to finish.", true);
+            toast("A refine is already running. Stop it first, or wait for it to finish.", true, "warning");
             return;
         }
-        const why = whyNot();
+        const why = whyNot(mine);
         if (why) {
-            toast(why, true);
+            toast(why, true, "warning");
             log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
@@ -14874,7 +14904,7 @@ export function setup(ctx, overrides) {
                         // take, so it is said plainly rather than only logged.
                         const what = String(msg.what || "settings");
                         log("your " + what + " could not be saved to your account. They are still saved in this browser.");
-                        toast("Could not save your " + what + " to your account. They are saved in this browser only.", true);
+                        toast("Could not save your " + what + " to your account. They are saved in this browser only.", true, "error");
                         paint();
                         return;
                     }
@@ -14891,7 +14921,7 @@ export function setup(ctx, overrides) {
                         if (!msg.ok) {
                             const why = String(msg.why || "it could not be taken out");
                             log("nothing taken out: " + why);
-                            toast(why.charAt(0).toUpperCase() + why.slice(1), true);
+                            toast(why.charAt(0).toUpperCase() + why.slice(1), true, "warning");
                         }
                         paint();
                         return;
@@ -15019,10 +15049,10 @@ export function setup(ctx, overrides) {
                             const key = String(msg.chatId) + ":" + String(msg.messageId);
                             if (!(announced && announced.key === key && Date.now() - announced.at < 10000)) {
                                 log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
-                                toast("Reply refined.", true);
+                                toast("Reply refined.", true, "success");
                             }
                             else if (!cfg.toast)
-                                toast("Reply refined.", true);
+                                toast("Reply refined.", true, "success");
                         }
                         else {
                             const why = String(msg.why || "no reason given");
@@ -15035,7 +15065,7 @@ export function setup(ctx, overrides) {
                             }
                             lastRun = { ms: lastRunMs, ok: false, why: why };
                             log(msg.same ? "left a reply as it was: " + why : "could not refine: " + why);
-                            toast(msg.same ? "Left as it was: " + why : "Not refined: " + why, true);
+                            toast(msg.same ? "Left as it was: " + why : "Not refined: " + why, true, msg.same ? "info" : "warning");
                         }
                         paint();
                         return;
@@ -15070,11 +15100,11 @@ export function setup(ctx, overrides) {
                                 if (!msg.same)
                                     countDrop(why);
                                 log(msg.same ? "left your draft as it was: " + why : "did not touch your draft: " + why);
-                                toast(msg.same ? "Left your draft as it was: " + why : "Left your draft alone: " + why, true);
+                                toast(msg.same ? "Left your draft as it was: " + why : "Left your draft alone: " + why, true, msg.same ? "info" : "warning");
                             }
                             else if (!node) {
                                 log("the input box went away before the refine came back");
-                                toast("The input box went away before it came back.", true);
+                                toast("The input box went away before it came back.", true, "warning");
                             }
                             else if (setComposer(node, String(msg.after || ""))) {
                                 log("refined what you were typing", true);
@@ -15091,7 +15121,7 @@ export function setup(ctx, overrides) {
                             }
                             else {
                                 log("could not write to the input box");
-                                toast("Could not write to the input box.", true);
+                                toast("Could not write to the input box.", true, "error");
                             }
                             paint();
                             return;
@@ -15119,7 +15149,7 @@ export function setup(ctx, overrides) {
                                 setBadge(null);
                             tally.undone++;
                             log("put a reply back the way it was", true);
-                            toast("Put back.", true);
+                            toast("Put back.", true, "success");
                         }
                         else {
                             const why = String(msg.why || "no reason given");
@@ -15134,7 +15164,7 @@ export function setup(ctx, overrides) {
                                     dropPop();
                                 if (!undoHere().length)
                                     setBadge(null);
-                                toast("That reply has moved on, so there is nothing to put back.", true);
+                                toast("That reply has moved on, so there is nothing to put back.", true, "warning");
                             }
                         }
                         paint();
@@ -15228,7 +15258,7 @@ export function setup(ctx, overrides) {
                         log(count.toLowerCase().replace(/\.$/, ""), saved > 0);
                         if (why)
                             log("what stopped the rest: " + why);
-                        toast(count + (why ? " " + why + "." : ""), !saved);
+                        toast(count + (why ? " " + why + "." : ""), !saved, saved ? "success" : "warning");
                         paint();
                         return;
                     }
@@ -15302,7 +15332,7 @@ export function setup(ctx, overrides) {
             }
         }
         catch (_) { }
-        toast("This build cannot ask you first, and this is not something to start unasked.", true);
+        toast("This build cannot ask you first, and this is not something to start unasked.", true, "warning");
     }
     // The one modal in the extension, and it earns it: this is a question that
     // has to be answered before anything is written, which is exactly the moment

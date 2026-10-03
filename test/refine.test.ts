@@ -150,7 +150,13 @@ function host(
   // The secure store, per account, and every call that went out to Jev.
   const vault: Record<string, string> = {};
   const jevCalls: Array<{ url: string; init: any; body: any }> = [];
+  // Lumiverse's own notifications, as the backend asked for them.
+  const notes: Array<{ kind: string; text: string; opts: any }> = [];
+  const note = (kind: string) => (text: string, opts?: any) => {
+    notes.push({ kind: kind, text: text, opts: opts });
+  };
   const spindle = {
+    toast: { success: note("success"), info: note("info"), warning: note("warning"), error: note("error") },
     cors: async (url: string, init: any) => {
       let body: any = null;
       try {
@@ -430,6 +436,7 @@ function host(
     perUser,
     vault,
     jevCalls,
+    notes,
     shared,
     breakStorage: () => {
       storageBroken = true;
@@ -6813,3 +6820,23 @@ describe("a reroll Auto Retry added", () => {
   });
 });
 
+
+// The panel's pop-ups are Lumiverse's own notifications. Lumiverse takes them
+// only from the server side, so the panel sends its words to the backend.
+describe("notifications the panel asks for", () => {
+  test("are shown as Lumiverse's own, in the colour asked for, to the account that asked", async () => {
+    const h = await armed([]);
+    await h.front({ type: "notify", kind: "warning", text: "A refine is already running." }, "u7");
+    expect(h.notes).toEqual([{ kind: "warning", text: "A refine is already running.", opts: { userId: "u7" } }]);
+  });
+  test("an unknown colour is shown as information", async () => {
+    const h = await armed([]);
+    await h.front({ type: "notify", kind: "shout", text: "Copied." });
+    expect(h.notes.map((n: any) => n.kind)).toEqual(["info"]);
+  });
+  test("empty words show nothing", async () => {
+    const h = await armed([]);
+    await h.front({ type: "notify", kind: "success", text: "   " });
+    expect(h.notes).toEqual([]);
+  });
+});

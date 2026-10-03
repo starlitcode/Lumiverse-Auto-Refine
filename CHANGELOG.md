@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.28.3
+
+_2026-10-03_
+
+### Fixed
+
+- **Pop-up messages never showed.** Messages such as "Reply refined." or "A refine is already running." were meant to show as a pop-up, and Lumiverse never showed them. They now show as Lumiverse's own notifications: green for success, blue for information, yellow for a problem and red for an error. Each one goes only to the account that caused it. **Show a brief message** turns off the ones that only say a refine worked. See [Settings](docs/settings.md).
+- **Your own messages were held up by the prompt for replies.** Before refining one of your messages or your draft, the panel and the floating button checked that the prompt for replies has `{{message}}`. Your messages are refined with the prompt for your messages. So with only your messages refined, the buttons could be greyed out when that prompt was fine, or look ready when it was missing `{{message}}`. They now check the prompt that will be used.
+
+---
+
 ## 1.28.2
 
 _2026-10-03_

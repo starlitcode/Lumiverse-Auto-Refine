@@ -208,9 +208,6 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
             destroy: () => {},
           };
         },
-        toast: (t) => {
-          (window.__toasts = window.__toasts || []).push(t);
-        },
         // The host's own modal. It is a second thing on the screen, and a check
         // that wants to know whether two ever show at once has to be able to
         // see it.
@@ -309,7 +306,13 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
           };
         },
       },
-      sendToBackend: (m) => window.__sent.push(m),
+      // Lumiverse's notifications come from an extension's server side, and the
+      // page has no way to show one itself, so the stub has none either. What
+      // the panel asks the backend to show is kept as __toasts.
+      sendToBackend: (m) => {
+        window.__sent.push(m);
+        if (m && m.type === "notify") (window.__toasts = window.__toasts || []).push(m.text);
+      },
       onBackendMessage: (fn) => {
         window.__fromBackend = fn;
         return () => {};
@@ -2812,27 +2815,29 @@ console.log("\nthe extras, which are off until asked for");
     },
   );
 
-  // With no rules there is nothing to apply, and the draft is left alone
-  // rather than sent to a model to be rewritten by nothing.
-  await inTab(
-    browser,
-    {
-      saved: {
-        inputRefine: true,
-        blocks: [{ id: "a", name: "No turn", on: true, role: "system", text: "cut filler" }],
-      },
-    },
-    async (page) => {
-    await page.evaluate(() => {
-      window.__makeComposer("i walk through it");
-      window.__inputClick();
+  // The draft is refined with the prompt for your messages. With no
+  // {{message}} in that prompt there is nowhere to put the draft, so it is left
+  // alone rather than sent to a model to be rewritten by nothing. The prompt
+  // for replies is not the one that decides it.
+  for (const [which, saved, sends] of [
+    ["the prompt for your messages", { userBlocks: [{ id: "a", name: "No turn", on: true, role: "system", text: "cut filler" }] }, false],
+    ["only the prompt for replies", { blocks: [{ id: "a", name: "No turn", on: true, role: "system", text: "cut filler" }] }, true],
+  ]) {
+    await inTab(browser, { saved: { inputRefine: true, ...saved } }, async (page) => {
+      await page.evaluate(() => {
+        window.__makeComposer("i walk through it");
+        window.__inputClick();
+      });
+      const asked = await page.evaluate(
+        () => window.__sent.filter((m) => m.type === "try_refine").length,
+      );
+      ok(
+        "with no {{message}} in " + which + ", " + (sends ? "the draft is still sent" : "nothing is sent and the draft is untouched"),
+        sends ? asked === 1 : asked === 0,
+        String(asked),
+      );
     });
-    const asked = await page.evaluate(
-      () => window.__sent.filter((m) => m.type === "try_refine").length,
-    );
-    ok("with no {{message}} in the prompt, nothing is sent and the draft is untouched", asked === 0);
-    },
-  );
+  }
 }
 
 console.log("\nin one place at a time");
@@ -5557,6 +5562,52 @@ console.log("\na pick that rebuilds the card still moves its rows");
   }
 }
 
+console.log("\nyour own messages are held up by their own prompt");
+{
+  // Your messages and your draft are refined with the prompt for your
+  // messages. Whether the floating button is ready, with only your messages
+  // refined, depends on that prompt having {{message}}, not on the one for
+  // replies. Checked both ways round, at a phone width and a laptop width.
+  const NO_TURN = [{ id: "a", name: "No turn", on: true, role: "system", text: "cut filler" }];
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [which, saved, ready] of [
+      ["only the replies prompt is missing it", { blocks: NO_TURN }, true],
+      ["only the prompt for your messages is missing it", { userBlocks: NO_TURN }, false],
+    ]) {
+      await inTab(browser, { viewport, touch, saved: { widgetOn: true, enabled: true, refineSide: "mine", ...saved } }, async (page) => {
+        const out = await page.evaluate(async () => {
+          history.pushState({}, "", "/chat/c1");
+          for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+          await new Promise((r) => setTimeout(r, 400));
+          const b = document.querySelector("#float .arf-float");
+          const idle = b.classList.contains("arf-idle");
+          const title = b.getAttribute("title");
+          const mineBtn = document.querySelector("#drawer [data-arf-mine]");
+          window.__sent.length = 0;
+          b.click();
+          await new Promise((r) => setTimeout(r, 100));
+          return {
+            idle,
+            title,
+            panelButtonOff: !!mineBtn && mineBtn.disabled,
+            sent: window.__sent.filter((m) => m && m.type === "refine_now" && m.mine === true).length,
+          };
+        });
+        const what = label + ", only your messages refined, " + which;
+        if (ready) {
+          ok(what + ": the floating button is ready", !out.idle, JSON.stringify(out));
+          ok(what + ": the panel button is not greyed out", !out.panelButtonOff, JSON.stringify(out));
+          ok(what + ": a tap refines your latest message", out.sent === 1, JSON.stringify(out));
+        } else {
+          ok(what + ": the floating button says why it is not ready", out.idle && /prompt for your messages/.test(out.title), JSON.stringify(out));
+          ok(what + ": the panel button is greyed out", out.panelButtonOff, JSON.stringify(out));
+          ok(what + ": a tap sends nothing", out.sent === 0, JSON.stringify(out));
+        }
+      });
+    }
+  }
+}
+
 console.log("\nopening a fold");
 {
   // The rows inside are already worked out, so opening one shows them without
@@ -6234,7 +6285,6 @@ console.log("\nwalking back into a chat");
             setBadge: () => {}, activate: () => {}, destroy: () => {},
           }),
           registerInputBarAction: () => ({ onClick: () => () => {}, destroy: () => {} }),
-          toast: () => {},
         },
         dom: { addStyle: () => () => {}, inject: () => {}, cleanup: () => {} },
         storage: { get: async () => null, set: async () => {} },
