@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.30.1";
+const VERSION = "1.31.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -58,6 +58,41 @@ const SECOND_MODELS = [
     { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
     { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
 ];
+// The name each host gives each second model, other than Jev, which has its
+// own picker. Shown in the Model name box as the name used when the box is
+// empty. The backend holds the same names, and a test checks the two agree.
+// Span's are per kind of Span; Respan's own API has no paid Lite, so asking it
+// for one gets the free one.
+const BUILT_IN_MODEL_NAMES = {
+    span: {
+        openrouter: { free: "respan/span-01-lite:free", lite: "respan/span-01-lite", full: "respan/span-01" },
+        respan: { free: "span-01-free", lite: "span-01-free", full: "span-01-pro" },
+    },
+    mercury: { openrouter: "inception/mercury-decide:free" },
+    d1: { openrouter: "liquid/d1", nanogpt: "liquid/d1", liquid: "d1:free" },
+    solar: { openrouter: "upstage/solar-decide", upstage: "solar-decide" },
+    kev: { openrouter: "jaredpalmer/kev-4b" },
+};
+// The built-in name for the model and host picked. A host the model is not on
+// is reached on OpenRouter, the same as the backend does.
+function builtInModelName(c) {
+    const hosts = BUILT_IN_MODEL_NAMES[c && c.judgeWho];
+    if (!hosts)
+        return "";
+    const at = hosts[c.judgeHost] || hosts.openrouter;
+    if (typeof at === "string")
+        return at;
+    return (at && (at[c.spanTier] || at.free)) || "";
+}
+// One Model name box for each second model but Jev. Empty uses the built-in
+// name, so a host that renames a model needs no update to the extension.
+const OWN_NAME_KEYS = {
+    span: "spanName",
+    mercury: "mercuryName",
+    d1: "d1Name",
+    solar: "solarName",
+    kev: "kevName",
+};
 // A link in the panel's own colours. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
 function linkTo(url, text) {
@@ -167,7 +202,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -594,6 +629,13 @@ const CONFIG = {
     judgeHttpOk: false,
     judgeVersion: "latest",
     judgeName: "",
+    // A model name typed in for each second model but Jev. Empty uses the
+    // built-in one.
+    spanName: "",
+    mercuryName: "",
+    d1Name: "",
+    solarName: "",
+    kevName: "",
     // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
@@ -2112,6 +2154,16 @@ const JUDGE_FIELDS = [
         placeholder: "typesafe/jev-1.13",
         hint: "What your host calls Jev now, as its own docs spell it. Left empty, 1.13 is used.",
     },
+    ...Object.keys(OWN_NAME_KEYS).map((who) => ({
+        key: OWN_NAME_KEYS[who],
+        label: "Model name",
+        type: "text",
+        needs: { key: "judgeWho", is: who },
+        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage"] },
+        under: true,
+        placeholder: (c) => builtInModelName(c),
+        hint: "Empty uses the name shown. If the host renames the model, type its new name here.",
+    })),
     {
         key: "judgeUrl",
         label: "Address",
@@ -15526,6 +15578,9 @@ export function setup(ctx, overrides) {
 // never loads.
 export const __testing = {
     SETUP_LINE,
+    BUILT_IN_MODEL_NAMES,
+    builtInModelName,
+    OWN_NAME_KEYS,
     splitSelectorList,
     blockText,
     sameSettings,

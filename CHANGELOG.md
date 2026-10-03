@@ -6,9 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.30.1
+## 1.31.0
 
 _2026-10-03_
+
+### Added
+
+- **A Model name box for every second model.** Span, Mercury Decide, D1, Solar Decide and Kev 4B each have a **Model name** box under **Where it is reached**. It shows the built-in name for that host. Left empty, the built-in name is used. If a host renames a model or adds a new version, type its new name there. Jev keeps **Which Jev**, with **A name I type**. See [When a model is renamed, or a new one comes out](docs/two-models.md#when-a-model-is-renamed-or-a-new-one-comes-out).
+
+### Changed
+
+- **Another address works for every second model.** It always did, and [Two models](docs/two-models.md#another-address) said it was only for Jev and Span. It now says so, with the steps for adding a new model that is not in the list.
 
 ### Fixed
 

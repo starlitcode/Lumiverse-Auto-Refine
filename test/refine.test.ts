@@ -1629,6 +1629,47 @@ describe("two models: Jev reads the reply first", () => {
     });
   }
 
+  // The panel shows the built-in name in each Model name box, so it has to be
+  // the name the backend sends. Every model, every host and every kind of Span.
+  {
+    const { BUILT_IN_MODEL_NAMES, builtInModelName } = __testing as any;
+    for (const who of Object.keys(BUILT_IN_MODEL_NAMES))
+      for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who]))
+        for (const tier of who === "span" ? ["free", "lite", "full"] : ["free"])
+          test("the panel's name for " + who + " on " + host + (who === "span" ? " (" + tier + ")" : "") + " is the one sent", async () => {
+            const over = { judgeWho: who, judgeHost: host, spanTier: tier };
+            const h = await keyed(over, { jev: says([10]) });
+            await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+            await wait(50);
+            expect(h.jevCalls[0].body.model).toBe(builtInModelName(over));
+          });
+  }
+
+  // A name typed in is sent instead, for every second model, so a host that
+  // renames one needs no update to the extension.
+  for (const [who, key, host] of [
+    ["span", "spanName", "openrouter"],
+    ["span", "spanName", "respan"],
+    ["mercury", "mercuryName", "openrouter"],
+    ["d1", "d1Name", "liquid"],
+    ["solar", "solarName", "upstage"],
+    ["kev", "kevName", "openrouter"],
+  ]) {
+    test("a model name typed for " + who + " on " + host + " is the one sent", async () => {
+      const h = await keyed({ judgeWho: who, judgeHost: host, [key]: "  maker/renamed-model-2  " }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].body.model).toBe("maker/renamed-model-2");
+    });
+  }
+
+  test("a name typed for one model is not sent for another", async () => {
+    const h = await keyed({ judgeWho: "d1", judgeHost: "openrouter", solarName: "maker/other-model" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.model).toBe("liquid/d1");
+  });
+
   test("Liquid AI, left picked for Solar Decide, sends it to OpenRouter", async () => {
     const h = await keyed({ judgeWho: "solar", judgeHost: "liquid" }, { jev: says([10]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });

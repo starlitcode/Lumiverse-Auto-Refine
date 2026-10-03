@@ -140,9 +140,30 @@ It is a small model, so keep these in mind:
 - When a call is too long for it, OpenRouter refuses the call. The reply is then refined, the same as when any second model cannot answer.
 - It is paid, per call. OpenRouter's page for it shows the price.
 
+## When a model is renamed, or a new one comes out
+
+The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
+
+**A model in the list was renamed, or has a new version on the same host:**
+
+1. Pick the model under **Which second model**, and its host under **Where it is reached**.
+2. Type the new name in **Model name**, under the host. The box shows the built-in name as an example, and an empty box uses it.
+3. Press **Test**. It says whether the model answered, and which one.
+
+Jev has **Which Jev** instead. Pick **A name I type**, then type the name.
+
+**A new model that is not in the list:**
+
+1. Pick the model under **Which second model** that is most like it. Its **Refine when a check reaches** line is the one used.
+2. Pick **Another address** under **Where it is reached**.
+3. Fill in **Address** and **Model name** with what the new model's host gives. For a model on OpenRouter, the address is `https://openrouter.ai/api/alpha/decisions`.
+4. Save the key for that host, and press **Test**.
+
+The new model has to answer the same kind of request as the models in the list: a list of yes-or-no checks, each answered with a chance from 0 to 100 percent. See [Another address](#another-address) for the kinds of request it can take.
+
 ## Another address
 
-Pick **Another address** for any host not in the list. It works for Jev and for Span. Fill in two boxes:
+Pick **Another address** for any host not in the list. It works for every second model. Fill in two boxes:
 
 1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
    - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.

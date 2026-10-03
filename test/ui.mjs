@@ -1763,6 +1763,77 @@ console.log("\nMercury Decide, the third second model");
   }
 }
 
+console.log("\na model name of your own for every second model");
+{
+  // Each second model has a Model name box on its own hosts, showing the name
+  // used when it is empty. Jev keeps its own picker, and Another address has
+  // its own box, so neither shows this one. Checked at a phone width and a
+  // laptop width.
+  const { OWN_NAME_KEYS, builtInModelName } = __testing;
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [who, host] of [["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"]]) {
+      await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
+        await goTab(page, "Model");
+        await settle(page);
+        const got = await page.evaluate(({ key, keys }) => {
+          const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+          const row = document.querySelector('#drawer [data-arf-row="' + key + '"]');
+          const shown = !!row && !row.closest("[hidden]") && row.getClientRects().length > 0;
+          const others = keys.filter((k) => {
+            const n = document.querySelector('#drawer [data-arf-field="' + k + '"]');
+            return !!n && n.getClientRects().length > 0 && !n.closest("[hidden]");
+          });
+          return {
+            shown,
+            placeholder: box && box.placeholder,
+            height: box ? Math.round(box.getBoundingClientRect().height) : 0,
+            others,
+            sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+          };
+        }, { key: OWN_NAME_KEYS[who], keys: Object.values(OWN_NAME_KEYS) });
+        const want = builtInModelName({ judgeWho: who, judgeHost: host, spanTier: "free" });
+        ok(label + ", " + who + " on " + host + ": its Model name box shows", got.shown, JSON.stringify(got));
+        ok(label + ", " + who + ": with the built-in name as the example", got.placeholder === want, JSON.stringify({ got: got.placeholder, want }));
+        ok(label + ", " + who + ": and no other model's box", got.others.join() === OWN_NAME_KEYS[who], JSON.stringify(got.others));
+        ok(label + ", " + who + ": nothing runs off the side", !got.sideways, "");
+        if (touch) ok(label + ", " + who + ": the box is tall enough to tap", got.height >= 32, String(got.height));
+      });
+    }
+  }
+  // Typing a name is kept, and the backend is told.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "d1", judgeHost: "openrouter" } }, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    await page.evaluate(() => {
+      const box = document.querySelector('#drawer [data-arf-field="d1Name"]');
+      box.value = "liquid/d1-renamed";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      box.dispatchEvent(new Event("blur"));
+    });
+    await new Promise((r) => setTimeout(r, 700));
+    await settle(page);
+    const kept = await page.evaluate(() => ({
+      saved: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").d1Name,
+      sent: (window.__sent.filter((m) => m.type === "set_settings").pop() || { settings: {} }).settings.d1Name,
+    }));
+    ok("a typed name is saved", kept.saved === "liquid/d1-renamed", JSON.stringify(kept));
+    ok("and handed to the backend", kept.sent === "liquid/d1-renamed", JSON.stringify(kept));
+  });
+  // Jev and Another address have their own boxes, so this one stays away.
+  for (const [who, host] of [["jev", "openrouter"], ["d1", "custom"]]) {
+    await inTab(browser, { saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const any = await page.evaluate((keys) => keys.some((k) => {
+        const n = document.querySelector('#drawer [data-arf-field="' + k + '"]');
+        return !!n && n.getClientRects().length > 0 && !n.closest("[hidden]");
+      }), Object.values(OWN_NAME_KEYS));
+      ok(who + " on " + host + ": no model name box of this kind", !any, "");
+    });
+  }
+}
+
 console.log("\nD1, Solar Decide and Kev 4B");
 {
   // Each shows its own hosts and only its own line, at 30, with its link to

@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.30.1';
+const VERSION = '1.31.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4098,6 +4098,9 @@ let judgeHttpOk = false;
 let judgeModel = '';
 let judgeVersion = 'latest';
 let judgeName = '';
+// A model name typed in for each second model but Jev, which has its own. Empty
+// uses the built-in name, so a host that renames a model needs no update here.
+const ownNames = { span: '', mercury: '', d1: '', solar: '', kev: '' };
 let judgeChecks = [];
 // The line in use, for the second model picked. Each model has its own,
 // because their scores do not run on the same scale, so each can be tuned
@@ -4150,27 +4153,27 @@ const SECOND_MODELS = {
         name: 'Span',
         turns: true,
         hosts: SPAN_HOSTS,
-        model: (host) => SPAN_HOSTS[host].models[spanTier] || SPAN_HOSTS[host].models.free || '',
+        model: (host) => ownNames.span || SPAN_HOSTS[host].models[spanTier] || SPAN_HOSTS[host].models.free || '',
     },
     mercury: {
         name: 'Mercury Decide',
         hosts: MERCURY_HOSTS,
-        model: (host) => MERCURY_HOSTS[host].model,
+        model: (host) => ownNames.mercury || MERCURY_HOSTS[host].model,
     },
     d1: {
         name: 'D1',
         hosts: D1_HOSTS,
-        model: (host) => D1_HOSTS[host].model,
+        model: (host) => ownNames.d1 || D1_HOSTS[host].model,
     },
     solar: {
         name: 'Solar Decide',
         hosts: SOLAR_HOSTS,
-        model: (host) => SOLAR_HOSTS[host].model,
+        model: (host) => ownNames.solar || SOLAR_HOSTS[host].model,
     },
     kev: {
         name: 'Kev 4B',
         hosts: KEV_HOSTS,
-        model: (host) => KEV_HOSTS[host].model,
+        model: (host) => ownNames.kev || KEV_HOSTS[host].model,
     },
 };
 function secondModel() {
@@ -4768,6 +4771,10 @@ function applyRules(s) {
     judgeHttpOk = s.judgeHttpOk === true;
     judgeVersion = ['preview', 'exact', 'own'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
     judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
+    for (const who of Object.keys(ownNames)) {
+        const raw = s[who + 'Name'];
+        ownNames[who] = String(raw == null ? '' : raw).trim().slice(0, 200);
+    }
     judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
         .split('\n')
         .map((l) => l.trim().slice(0, 500))
