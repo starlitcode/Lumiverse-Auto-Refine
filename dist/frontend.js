@@ -13013,6 +13013,10 @@ export function setup(ctx, overrides) {
             }
             catch (_) { }
             b.addEventListener("pointerdown", (e) => {
+                // A button left after shutdown starts no hold, so it opens no menu. A
+                // tap on it takes it away, below.
+                if (tornDown)
+                    return;
                 menuOpened = false;
                 downAt = { x: (e && e.clientX) || 0, y: (e && e.clientY) || 0 };
                 if (held)
@@ -13030,7 +13034,7 @@ export function setup(ctx, overrides) {
             });
             b.addEventListener("click", (e) => {
                 // A button left on the page after this copy was shut down. It has
-                // nothing behind it any more, so it takes itself away instead of
+                // nothing behind it, so it takes itself away instead of
                 // starting a refine the running copy does not know about.
                 if (tornDown) {
                     try {
@@ -13132,9 +13136,9 @@ export function setup(ctx, overrides) {
         if (!el2)
             return;
         // The stylesheet that draws the button's states lives in the page. An
-        // update made while the page stays open can leave the button without it,
-        // and the button then went on working while showing none of its states.
-        // It is put back here when it has gone.
+        // update made while the page stays open can leave the button without it.
+        // The button then still works, but shows none of its states. It is put
+        // back here when it has gone.
         if (styleEl && !styleEl.isConnected)
             styleEl = null;
         injectStyle();
@@ -13255,6 +13259,8 @@ export function setup(ctx, overrides) {
     // a second menu style on the same screen, and would have to guess at what a
     // pointer meant on a phone.
     async function widgetMenu() {
+        if (tornDown)
+            return;
         const menu = ctx && ctx.ui && ctx.ui.showContextMenu;
         if (typeof menu !== "function") {
             // A Lumiverse without the API. Say where everything is rather than
@@ -14910,7 +14916,11 @@ export function setup(ctx, overrides) {
                         }
                         else {
                             log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
-                            toast("Reply refined.");
+                            // Not for each reply of a run through the chat, which says how it
+                            // went once when it ends. One per reply would be a notification
+                            // for every reply, and Lumiverse drops all but five in ten seconds.
+                            if (!sweep)
+                                toast("Reply refined.");
                         }
                         // The write went in beside the reply rather than over it, so the
                         // reply on screen may still be the one it was written beside.

@@ -3319,10 +3319,21 @@ console.log("\nthe floating button after an update made while the page stays ope
       window.__teardown();
       document.body.appendChild(old);
       window.__sent.length = 0;
+      // A press held on it starts no ring and opens no menu, by hold or by the
+      // menu event a phone raises on a long press.
+      window.__menu = null;
+      old.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: 10, clientY: 10 }));
+      await wait(100);
+      const ring = old.hasAttribute("data-arf-holding");
+      await wait(600);
+      old.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      await wait(60);
+      const held = { ring, menu: !!window.__menu };
       old.click();
       await wait(60);
-      return { goneFirst, back, leftOver: { stillThere: old.isConnected, sent: window.__sent.map((m) => m.type) } };
+      return { goneFirst, back, held, leftOver: { stillThere: old.isConnected, sent: window.__sent.map((m) => m.type) } };
     });
+    ok("a press held on a left-over button starts no ring and opens no menu", !out.held.menu && !out.held.ring, JSON.stringify(out.held));
     ok("the stylesheet was gone before the tap", out.goneFirst, JSON.stringify(out));
     ok("the button puts the stylesheet back", out.back, JSON.stringify(out));
     ok("a button left after shutdown takes itself away when tapped", out.leftOver.stillThere === false, JSON.stringify(out.leftOver));
@@ -4864,6 +4875,26 @@ console.log("\nthe run through the chat");
       });
     });
     await settle(page);
+
+    // Each reply refined on the way through raises no notification of its
+    // own. The run says how it went once, at the end.
+    const told = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      window.__toasts = [];
+      const m = window.__sent.filter((x) => x.type === "refine_all").pop();
+      const id = m ? m.requestId : "x";
+      for (let i = 0; i < 3; i++) {
+        window.__fromBackend({ type: "refine_all_progress", requestId: id, chatId: "c1", at: 4 + i, of: 8, saved: 2 + i, skipped: 0 });
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m" + (4 + i), before: "a", after: "b" });
+        await wait(30);
+      }
+      const during = window.__toasts.slice();
+      window.__fromBackend({ type: "refine_all_done", requestId: id, saved: 5, skipped: 0 });
+      await wait(60);
+      return { during, after: window.__toasts.slice() };
+    });
+    ok("a reply refined during the run raises no notification of its own", told.during.length === 0, told.during.join(" | "));
+    ok("and the run raises one when it ends", told.after.length === 1 && /5 replies refined/.test(told.after[0]), told.after.join(" | "));
   });
 }
 
