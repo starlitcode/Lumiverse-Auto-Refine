@@ -73,17 +73,20 @@ Two skills are available. Load them before starting work.
 
 ## Second models
 
-- Each second model has its own **Refine when a check reaches** line, with its
-  own default. Scoring models do not score on the same scale. Some give low
-  scores even on a reply with a problem, and some give high ones. Span's line
-  is 15 and Jev's is 30 for this reason.
-- A new second model gets its own line setting and its own default, set from
-  how that model scores. It never reuses another model's line. Say in
-  `docs/two-models.md` why its default is where it is.
-- A paid second model that cannot be measured, because there is no key with
-  credit to test it, can still be added if it answers yes-or-no checks and
-  suits Auto Refine. Its line starts at 50, and `docs/two-models.md` says it
-  has not been measured yet.
+- Each second model has its own **Refine when a check reaches** setting, with
+  its own default. Scoring models do not score on the same scale, so a user
+  can tune each one apart from the others.
+- The defaults come from the owner's testing during the beta. Every model's
+  default is 30, except Span's, which is 15 because Span's scores run lower.
+  The owner may change a default if testing finds a better one or a model
+  changes.
+- A new second model gets its own line setting. Its default is 30 unless the
+  owner's testing shows another number works better.
+- A paid second model that cannot be tested, because there is no key with
+  credit, can still be added if it answers yes-or-no checks and suits Auto
+  Refine.
+- `docs/two-models.md` never claims a default is measured or correct. It says
+  the defaults come from testing during the beta and can change.
 
 ## Writing
 

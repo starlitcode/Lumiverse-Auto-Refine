@@ -726,19 +726,19 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.asked.length).toBe(0);
   });
 
-  test("Mercury Decide has a line of its own, 40 by default", async () => {
-    const over = await keyed({ judgeWho: "mercury" }, { jev: says([41]) });
+  test("Mercury Decide has a line of its own, 30 by default", async () => {
+    const over = await keyed({ judgeWho: "mercury" }, { jev: says([31]) });
     await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(over.asked.length).toBe(1);
-    const under = await keyed({ judgeWho: "mercury" }, { jev: says([39]) });
+    const under = await keyed({ judgeWho: "mercury" }, { jev: says([29]) });
     await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(under.asked.length).toBe(0);
   });
 
   test("and neither Jev's line nor Span's is used for Mercury Decide", async () => {
-    const h = await keyed({ judgeWho: "mercury", judgeOver: 10, spanOver: 10 }, { jev: says([30]) });
+    const h = await keyed({ judgeWho: "mercury", judgeOver: 10, spanOver: 10 }, { jev: says([25]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(h.asked.length).toBe(0);
@@ -1642,12 +1642,12 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   for (const [who, key] of [["d1", "d1Over"], ["solar", "solarOver"], ["kev", "kevOver"]]) {
-    test(who + " has a line of its own, 50 by default", async () => {
-      const over = await keyed({ judgeWho: who }, { jev: says([51]) });
+    test(who + " has a line of its own, 30 by default", async () => {
+      const over = await keyed({ judgeWho: who }, { jev: says([31]) });
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const under = await keyed({ judgeWho: who, judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, [key]: undefined }, { jev: says([49]) });
+      const under = await keyed({ judgeWho: who, judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(under.asked.length).toBe(0);

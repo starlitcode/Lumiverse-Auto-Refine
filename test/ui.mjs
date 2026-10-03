@@ -1710,7 +1710,7 @@ console.log("\neach list keeps its own lock");
 console.log("\nMercury Decide, the third second model");
 {
   // Picking Mercury Decide: OpenRouter and another address are the only hosts,
-  // neither version picker shows, and only its own line shows, at 40. At a
+  // neither version picker shows, and only its own line shows, at 30. At a
   // phone width and a laptop width, nothing runs off the side.
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "mercury" } }, async (page) => {
@@ -1742,7 +1742,7 @@ console.log("\nMercury Decide, the third second model");
       ok(label + ": Mercury Decide is picked, from Inception", got.picked === "mercury" && got.label === "Mercury Decide, from Inception", JSON.stringify(got));
       ok(label + ": only OpenRouter and another address are offered", got.hosts.join() === "openrouter,custom", JSON.stringify(got.hosts));
       ok(label + ": neither Which Jev nor Which Span shows", !got.versionShown && !got.tierShown, JSON.stringify(got));
-      ok(label + ": only its own line shows, at 40", got.ownLine && !got.jevLine && !got.spanLine && got.ownLineValue === "40", JSON.stringify(got));
+      ok(label + ": only its own line shows, at 30", got.ownLine && !got.jevLine && !got.spanLine && got.ownLineValue === "30", JSON.stringify(got));
       ok(label + ": the key is OpenRouter's", got.key === "Key for OpenRouter", String(got.key));
       ok(label + ": its link is OpenRouter's page for it", got.link === "What is Mercury Decide? https://openrouter.ai/inception/mercury-decide:free", String(got.link));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
@@ -1765,7 +1765,7 @@ console.log("\nMercury Decide, the third second model");
 
 console.log("\nD1, Solar Decide and Kev 4B");
 {
-  // Each shows its own hosts and only its own line, at 50, with its link to
+  // Each shows its own hosts and only its own line, at 30, with its link to
   // its maker's page. D1 can be reached on NanoGPT and Liquid AI, and Solar
   // Decide on Upstage, and the key box is named after that host there. Checked at a phone width and a laptop width.
   const MODELS = [
@@ -1812,7 +1812,7 @@ console.log("\nD1, Solar Decide and Kev 4B");
         const got = await read();
         ok(label + ", " + who + ": picked and named " + name, got.label === name, JSON.stringify(got));
         ok(label + ", " + who + ": its hosts are " + hosts, got.hosts === hosts, JSON.stringify(got));
-        ok(label + ", " + who + ": only its own line shows, at 50", got.lines.join() === line && got.values[line] === "50", JSON.stringify(got));
+        ok(label + ", " + who + ": only its own line shows, at 30", got.lines.join() === line && got.values[line] === "30", JSON.stringify(got));
         ok(label + ", " + who + ": no version picker shows", !got.versions, JSON.stringify(got));
         ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
         ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
@@ -8701,14 +8701,7 @@ console.log("\nwhen a default moves under somebody who was on it");
 
   // The checks as they came before, word for word. A reader still holding them
   // never wrote their own.
-  const OLD_CHECKS = [
-    "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
-    "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
-    "`reply` names a character's feeling when their actions already show it.",
-    "`reply` piles up adjectives or strained comparisons.",
-    "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
-    "`reply` ends by turning to the user with a question, such as what they do next.",
-  ].join("\n");
+  const OLD_CHECKS = __testing.MOVED_DEFAULTS.find((m) => m.key === "judgeChecks").was;
   const stored = (page) =>
     page.evaluate(() => {
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
@@ -8717,18 +8710,22 @@ console.log("\nwhen a default moves under somebody who was on it");
         line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
       };
     });
+  const take = (page) =>
+    page.evaluate(async () => {
+      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+      await new Promise((r) => setTimeout(r, 200));
+    });
+
+  ok("the old checks are not the built-in ones", OLD_CHECKS !== STOCK_DEFAULTS.judgeChecks, "");
 
   // Two models on and still on the old checks, so this one is told.
   await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
     const said = await seen(page);
     ok("somebody on the old default is told", !!said, JSON.stringify(said));
     ok("and the line names the setting", !!said && /What the second model checks/.test(said), JSON.stringify(said));
-    await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
-      await new Promise((r) => setTimeout(r, 200));
-    });
+    await take(page);
     const after = await stored(page);
-    ok("taking it moves them to the new one", /she didn't just leave, she ran/.test(String(after.now)), JSON.stringify(after));
+    ok("taking it moves them to the new one", after.now === STOCK_DEFAULTS.judgeChecks, JSON.stringify(after));
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 
@@ -8758,25 +8755,26 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
-  // Jev's line at either old default, 40 or 50, is offered 30, and taking it
-  // sets 30.
-  for (const was of [40, 50]) {
-    await inTab(browser, { saved: { judgeMode: "two", judgeOver: was } }, async (page) => {
+  // Each model's line at its old default is offered 30, and taking it sets 30.
+  for (const [who, key, was] of [["mercury", "mercuryOver", 40], ["d1", "d1Over", 50], ["solar", "solarOver", 50], ["kev", "kevOver", 50]]) {
+    await inTab(browser, { saved: { judgeMode: "two", judgeWho: who, [key]: was } }, async (page) => {
       const said = await seen(page);
-      ok("somebody on Jev still on a line of " + was + " is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
-      await page.evaluate(async () => {
-        document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
-        await new Promise((r) => setTimeout(r, 200));
-      });
-      const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").judgeOver);
-      ok("and taking it sets the line to 30", line === 30, String(line));
+      ok("somebody on " + who + " still on a line of " + was + " is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
+      await take(page);
+      const line = await page.evaluate((key) => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}")[key], key);
+      ok("and taking it sets " + who + "'s line to 30", line === 30, String(line));
     });
   }
-  // Span has its own line, so a Jev line of 40 is not offered to somebody on Span.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: 40 } }, async (page) => {
-    ok("somebody on Span is not told about Jev's line", (await seen(page)) === null, "");
+  // Each line is its own setting, so an old line for one model is not offered
+  // to somebody on another.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", mercuryOver: 40, d1Over: 50 } }, async (page) => {
+    ok("somebody on Jev is not told about the other models' lines", (await seen(page)) === null, "");
   });
-  // A line somebody set themselves is given to Span too. A default is not.
+  // A line of their own choosing is left alone.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "mercury", mercuryOver: 65 } }, async (page) => {
+    ok("somebody who set their own line is left alone", (await seen(page)) === null, "");
+  });
+  // A line somebody set themselves for Jev is given to Span too. A default is not.
   for (const [was, want] of [[35, "35"], [40, "15"], [50, "15"]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: was } }, async (page) => {
       await goTab(page, "Model");
@@ -8785,25 +8783,9 @@ console.log("\nwhen a default moves under somebody who was on it");
       ok("a Jev line of " + was + " gives Span a line of " + want, got === want, String(got));
     });
   }
-  // Span's line at the old default of 25 is offered 15, and taking it sets 15.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", spanOver: 25 } }, async (page) => {
-    const said = await seen(page);
-    ok("somebody on Span still on a line of 25 is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
-    await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
-      await new Promise((r) => setTimeout(r, 200));
-    });
-    const line = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").spanOver);
-    ok("and taking it sets Span's line to 15", line === 15, String(line));
-  });
-  // Somebody on Jev is not told about Span's line.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", spanOver: 25 } }, async (page) => {
-    ok("somebody on Jev is not told about Span's line", (await seen(page)) === null, "");
-  });
-  // A line of their own choosing is left alone.
-  await inTab(browser, { saved: { judgeMode: "two", judgeOver: 65 } }, async (page) => {
-    ok("somebody who set their own line is left alone", (await seen(page)) === null, "");
-  });
+  // Span and Jev keep their lines.
+  ok("Jev's line stays 30", STOCK_DEFAULTS.judgeOver === 30, String(STOCK_DEFAULTS.judgeOver));
+  ok("Span's line stays 15", STOCK_DEFAULTS.spanOver === 15, String(STOCK_DEFAULTS.spanOver));
 
   // Keep mine puts it away without changing the setting.
   await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.29.0";
+const VERSION = "1.30.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -252,14 +252,18 @@ const PERMS = [
 // reaches the line, so a check that is true of nearly every reply, such as one
 // about repeating a word, sends every reply through and saves nothing.
 //
-// All but the first match rules the reply prompts carry, with the same
+// Each check asks about one pattern. A check that joins two patterns with "or"
+// is scored as one statement, so a reply with only one of them can score low.
+//
+// All but the first two match rules the reply prompts carry, with the same
 // examples, so a reply the second model sends through is one the refine has a
 // rule for. The negation check names both forms of it, a thing and an action,
 // because one example of the first form let the second through. The last one
 // asks only about a question put to the user, which the refine always trims,
 // and not about an ending that points ahead, which The Finish keeps as a hook.
 const JUDGE_CHECKS = [
-    "`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.",
+    "`reply` uses the same phrase of three or more words twice within a few sentences.",
+    "`reply` starts three or more sentences in a row with the same word.",
     "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
     "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
     "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
@@ -297,15 +301,15 @@ const PROTECT_NOTE = "Parts of this passage have been replaced with tokens shape
     "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
     "edit exactly as it is. Copy every one into your answer unchanged and in the " +
     "same place, treating each as a single character you cannot spell.";
-// The checks as they were in 1.20.0 to 1.21.1, word for word. A reader still
-// holding exactly these never wrote their own, and is offered the ones above.
-const JUDGE_CHECKS_1_20 = [
-    "`reply` repeats the same phrase close together, or starts three or more sentences in a row the same way.",
-    "`reply` uses a stock phrase, such as a held breath or a shiver down a spine.",
-    "`reply` names a character's feeling when their actions already show it.",
-    "`reply` piles up adjectives or strained comparisons.",
-    "`reply` says what something was not before saying what it was, as in \"it wasn't a request, it was a command\".",
-    "`reply` ends by turning to the user with a question, such as what they do next.",
+// The checks as they were up to 1.29.0, word for word. A reader still holding
+// exactly these never wrote their own, and is offered the ones above.
+const JUDGE_CHECKS_1_29 = [
+    "`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.",
+    "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
+    "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
+    "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
+    "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
+    "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
 ].join("\n");
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
@@ -595,10 +599,10 @@ const CONFIG = {
     // A check at or above this percentage is a reply worth refining.
     judgeOver: 30,
     spanOver: 15,
-    mercuryOver: 40,
-    d1Over: 50,
-    solarOver: 50,
-    kevOver: 50,
+    mercuryOver: 30,
+    d1Over: 30,
+    solarOver: 30,
+    kevOver: 30,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -1757,39 +1761,48 @@ function markText(text) {
 // `needs` keeps the line from somebody the setting does nothing for. The checks
 // are only read with two models on, so a reader on one model is not told about
 // them. If they switch to two models later, the line comes up then.
-// Why Jev's line moved. Said to a reader on either of its earlier defaults.
-const JEV_LINE_WHY = "Jev often scores a check it finds in the reply at only 30 to 35 percent. A higher line left many of those replies alone.";
+// Why the lines moved. Said to a reader still on the old line for the model
+// they have picked.
+const LINE_WHY = "The default is now 30, from testing during the beta.";
 const MOVED_DEFAULTS = [
     {
         key: "judgeChecks",
-        was: JUDGE_CHECKS_1_20,
+        was: JUDGE_CHECKS_1_29,
         label: "What the second model checks",
-        why: "The second model scores whether each check is true of the reply, so a check has to describe the pattern it means. The checks now name what to look for on the page, with examples. Two that asked for a judgement are gone, and two that match rules in the reply prompts are new.",
+        why: "The first check asked about two patterns at once. It is now two checks: one for a repeated phrase, and one for sentences that start with the same word.",
         needs: { key: "judgeMode", is: "two" },
     },
     {
-        key: "judgeOver",
-        was: 50,
-        label: "Refine when a check reaches",
-        why: JEV_LINE_WHY,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "jev" },
-    },
-    {
-        key: "judgeOver",
+        key: "mercuryOver",
         was: 40,
         label: "Refine when a check reaches",
-        why: JEV_LINE_WHY,
+        why: LINE_WHY,
         needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "jev" },
+        also: { key: "judgeWho", is: "mercury" },
     },
     {
-        key: "spanOver",
-        was: 25,
+        key: "d1Over",
+        was: 50,
         label: "Refine when a check reaches",
-        why: "Span often scores a check it finds in the reply at only 15 to 25 percent. A line of 25 left many of those replies alone.",
+        why: LINE_WHY,
         needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "span" },
+        also: { key: "judgeWho", is: "d1" },
+    },
+    {
+        key: "solarOver",
+        was: 50,
+        label: "Refine when a check reaches",
+        why: LINE_WHY,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "solar" },
+    },
+    {
+        key: "kevOver",
+        was: 50,
+        label: "Refine when a check reaches",
+        why: LINE_WHY,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "kev" },
     },
 ];
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
@@ -2144,7 +2157,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "jev" },
-        hint: "For Jev. A percentage, 30 by default. Lower refines more replies, higher refines fewer.",
+        hint: "For Jev. A percentage, " + CONFIG.judgeOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "spanOver",
@@ -2155,7 +2168,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "span" },
-        hint: "For Span. A percentage, 15 by default, since Span scores lower than Jev on the same reply.",
+        hint: "For Span. A percentage, " + CONFIG.spanOver + " by default, since Span gives lower scores than the other models.",
     },
     {
         key: "mercuryOver",
@@ -2166,7 +2179,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "mercury" },
-        hint: "For Mercury Decide. A percentage, 40 by default, since it scores most checks close to 0 or close to 100.",
+        hint: "For Mercury Decide. A percentage, " + CONFIG.mercuryOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "d1Over",
@@ -2177,7 +2190,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "d1" },
-        hint: "For D1. A percentage, 50 by default. It has not been measured yet, so watch the scores on the Log tab and adjust it.",
+        hint: "For D1. A percentage, " + CONFIG.d1Over + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "solarOver",
@@ -2188,7 +2201,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "solar" },
-        hint: "For Solar Decide. A percentage, 50 by default. It has not been measured yet, so watch the scores on the Log tab and adjust it.",
+        hint: "For Solar Decide. A percentage, " + CONFIG.solarOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "kevOver",
@@ -2199,7 +2212,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "kev" },
-        hint: "For Kev 4B. A percentage, 50 by default, not measured yet. Kev 4B is a small model, so it can miss more than the others.",
+        hint: "For Kev 4B. A percentage, " + CONFIG.kevOver + " by default. Kev 4B is a small model, so it can miss more than the others.",
     },
     {
         key: "judgeWorn",

@@ -110,7 +110,6 @@ D1 is Liquid AI's decision model. It takes the same request as Jev. It reads up 
 - On OpenRouter and NanoGPT it is paid, per call. Each host's own page shows the price.
 - NanoGPT lists D1, but its docs for the decisions route only name Jev so far. If **Test** fails on NanoGPT, use OpenRouter or Liquid AI.
 - On Liquid's own API, the key comes from your Liquid account, at [console.liquid.ai](https://console.liquid.ai), under **API Keys**. Liquid's keys start with `liquid_`.
-- Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
 
 ## Solar Decide
 
@@ -124,7 +123,6 @@ Solar Decide is Upstage's decision model. It takes the same request as Jev. Upst
 - On OpenRouter it is paid, per call. OpenRouter's page for it shows the price.
 - On Upstage's own API, the key comes from your Upstage account, at [console.upstage.ai](https://console.upstage.ai/api-keys), under **API Keys**.
 - Upstage marks it as a beta.
-- Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
 
 ## Kev 4B
 
@@ -141,7 +139,6 @@ It is a small model, so keep these in mind:
 - Its maker trained it on texts up to about 7,500 tokens. A very long reply can be more than it handles well.
 - When a call is too long for it, OpenRouter refuses the call. The reply is then refined, the same as when any second model cannot answer.
 - It is paid, per call. OpenRouter's page for it shows the price.
-- Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
 
 ## Another address
 
@@ -185,7 +182,8 @@ Every answer says which exact model gave it. The Log shows it next to each decis
 The ones it starts with:
 
 ```
-`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.
+`reply` uses the same phrase of three or more words twice within a few sentences.
+`reply` starts three or more sentences in a row with the same word.
 `reply` contains a stock phrase, such as "a breath she didn't know she was holding", "a shiver ran down his spine", "her heart hammered" or "a smile that didn't reach his eyes".
 `reply` says what someone did not do or what something was not, then what they did or what it was, as in "it wasn't a request, it was a command" or "she didn't just leave, she ran".
 `reply` follows an action with a comment on how it came out, as in "she laughed, and it was thin" or "he smiled, slow and easy".
@@ -195,7 +193,7 @@ The ones it starts with:
 
 Each one has to be false of a clean reply. A reply is refined when any one check reaches the line, so a check that is true of almost every reply sends every reply through. For example, "repeats a word" is true of any reply that uses a name twice.
 
-All but the first match rules the built-in reply prompts carry, with the same examples. So a reply the second model sends through is one the refine has a rule for. Write your own to match what your prompt fixes. A check for something your prompt never touches refines replies for a reason the refine will not act on.
+All but the first two match rules the built-in reply prompts carry, with the same examples. So a reply the second model sends through is one the refine has a rule for. Write your own to match what your prompt fixes. A check for something your prompt never touches refines replies for a reason the refine will not act on.
 
 ### How the second model reads a check
 
@@ -207,7 +205,8 @@ Write each check so that:
 
 - **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgement. Scores for a judgement change more from one reply to the next.
 - **It gives examples, one for each form.** Examples show which pattern you mean. With one example, another form of the same habit can score low.
-- **It asks about one thing.** A statement joined with "and" is two checks.
+- **It asks about one thing.** A statement that joins two patterns with "and" or "or" is two checks. The second model scores the whole statement, so a reply with only one of the two can score low.
+- **A high score means there is a problem.** Write each check so that "true" means the reply needs a refine. A check can be written as a statement or as a question. TypeSafe, who make Jev, say both work as well. The built-in checks are statements.
 - **It is false of a reply with nothing wrong in it.** A check that is true of most replies sends every reply to be refined.
 
 To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided**, **What Span decided** and so on, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
@@ -220,38 +219,29 @@ Each second model has its own line, and the panel shows the one for the model yo
 | --- | --- |
 | **Jev** | 30 percent |
 | **Span** | 15 percent |
-| **Mercury Decide** | 40 percent |
-| **D1** | 50 percent, not measured yet |
-| **Solar Decide** | 50 percent, not measured yet |
-| **Kev 4B** | 50 percent, not measured yet |
+| **Mercury Decide** | 30 percent |
+| **D1** | 30 percent |
+| **Solar Decide** | 30 percent |
+| **Kev 4B** | 30 percent |
 
-Each line sits between two groups of scores, which are different for each model:
+### Where the defaults come from
 
-| Model | A check it finds false | A check it finds true in the reply |
-| --- | --- | --- |
-| **Jev** | close to 0%, often 1% to 7% | often only 30% to 35% |
-| **Span** | close to 0%, often 2% or 3% | often only 15% to 25% |
-| **Mercury Decide** | close to 0%, often under 10%, now and then up to about 30% | usually 95% or more, and about 50% for repeated phrases |
+- These defaults come from testing during the beta. They are a starting point, not a measured or correct value.
+- The second models are new, and their makers can change them. A model that changes can score differently.
+- So the defaults can change in a later version, if testing finds one that works better or a model changes.
+- None of the makers gives one line that suits every use. TypeSafe, Respan and Jared Palmer each say to pick the line by testing on your own replies.
 
-On the same reply, Jev and Span mostly agree on which checks are false. Where they find a check true, Span's score is often about half of Jev's. That is why Span's line is half of Jev's.
+Span's default is lower than the others. Span splits each answer three ways: the problem is there, it is not there, or it cannot be told from the reply. The three add up to 100 percent, and Auto Refine reads the first. Some of each answer goes to the other two, so Span's scores run lower than the other models' scores on the same reply.
 
-At a higher line, Jev and Span left alone replies that had the problem. For Jev that was 40 or 50, and for Span 20 or 25.
+To find the line that suits you:
 
-Mercury Decide scores differently from both:
+1. Turn on **Let it check refines you start yourself**.
+2. Refine a few replies. Include some you know have a problem and some you know are fine.
+3. Read the scores under **What Jev decided**, **What Span decided** and so on, on the Log tab.
+4. If a reply you know has a problem scores under your line, lower the line.
+5. If replies that were fine keep reaching your line, raise it.
 
-- It scores most checks close to 0 or close to 100, with little between.
-- Its scores for a check that is false go higher than the other two models' scores, now and then to about 30%.
-- So its line is above 30, where a false check rarely reaches, and below 50, where the repeated-phrase check lands when it is true.
-- It was tried on 29 made-up replies. At 40, every problem it scored above 10% reached the line, and 2 of about 150 checks that were false reached it too.
-- It also missed some problems that were written in a very quiet way, scoring them under 10%. No line catches those, so a lower line does not help.
-
-D1, Solar Decide and Kev 4B are paid, and their lines have not been measured yet:
-
-- All three start at 50, the middle of the scale.
-- Their makers say they give calibrated chances. That means a check scored at 70% should be true about 70% of the time, which puts the useful line near the middle.
-- Until the line is measured, watch the scores on the Log tab for a few replies. If a reply you know has a problem scores under 50, lower the line. If replies that were fine keep reaching it, raise it.
-
-The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%, on any of the models measured so far. The line matters most for the other checks.
+The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%. The line matters most for the other checks.
 
 Changing one line does not change the others. If you switch model, the line you set for each of the others is kept for when you switch back.
 
@@ -405,7 +395,7 @@ The decision card, on the Log tab, shows the last reply the second model read. I
 Every answer also goes in the Log as one line:
 
 ```
-Jev (jev-1.13.0) says leave it: reply repeats the same phrase close together, or starts three or more sentences in a row the same way 12%; ...
+Jev (jev-1.13.0) says leave it: reply uses the same phrase of three or more words twice within a few sentences. 12%; ...
 Span (span-01-free) says refine: ... uses a stock phrase, such as a held breath or a shiver down a spine 71%; ...
 ```
 

@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.29.0';
+const VERSION = '1.30.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4080,19 +4080,19 @@ let judgeVersion = 'latest';
 let judgeName = '';
 let judgeChecks = [];
 // The line in use, for the second model picked. Each model has its own,
-// because their scores do not run on the same scale: Span's run lower than
-// Jev's on the same replies, and Mercury Decide's sit close to 0 or close to
-// 100 with little between.
-let judgeOver = 50;
-// Each second model's line setting, and its default. D1's, Solar Decide's and
-// Kev 4B's were not measured, so they start in the middle.
+// because their scores do not run on the same scale. Span's scores run lower
+// than the others, because Span splits each answer between present, absent
+// and not observable.
+let judgeOver = 30;
+// Each second model's line setting, and its default. The defaults come from
+// testing during the beta.
 const LINES = {
     jev: { key: 'judgeOver', fallback: 30 },
     span: { key: 'spanOver', fallback: 15 },
-    mercury: { key: 'mercuryOver', fallback: 40 },
-    d1: { key: 'd1Over', fallback: 50 },
-    solar: { key: 'solarOver', fallback: 50 },
-    kev: { key: 'kevOver', fallback: 50 },
+    mercury: { key: 'mercuryOver', fallback: 30 },
+    d1: { key: 'd1Over', fallback: 30 },
+    solar: { key: 'solarOver', fallback: 30 },
+    kev: { key: 'kevOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as

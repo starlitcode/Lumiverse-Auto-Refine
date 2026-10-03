@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.30.0
+
+_2026-10-03_
+
+### Changed
+
+- **Refine when a check reaches is 30 by default for more second models.** Mercury Decide moves from 40 to 30. D1, Solar Decide and Kev 4B move from 50 to 30. Jev stays at 30 and Span stays at 15. If you were on an old default, the panel offers the new one, and yours stays the same until you take it.
+- **The first built-in check is now two checks.** It asked about a repeated phrase and about sentences that start with the same word, both in one statement. Each is now its own check, so a reply with only one of the two is scored on that one. If you were on the built-in checks, the panel offers the new ones.
+- **The defaults are described as a starting point.** [Two models](docs/two-models.md#where-the-defaults-come-from) now says the defaults come from testing during the beta and can change. It also gives the steps to find the line that suits you.
+
+---
+
 ## 1.29.0
 
 _2026-10-03_
