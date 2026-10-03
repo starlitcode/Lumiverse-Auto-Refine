@@ -1766,12 +1766,11 @@ console.log("\nMercury Decide, the third second model");
 console.log("\na model name of your own for every second model");
 {
   // Each second model has a Model name box on its own hosts, showing the name
-  // used when it is empty. Jev keeps its own picker, and Another address has
-  // its own box, so neither shows this one. Checked at a phone width and a
-  // laptop width.
+  // used when it is empty. Another address has its own box, so it shows none
+  // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1791,7 +1790,7 @@ console.log("\na model name of your own for every second model");
             sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
           };
         }, { key: OWN_NAME_KEYS[who], keys: Object.values(OWN_NAME_KEYS) });
-        const want = builtInModelName({ judgeWho: who, judgeHost: host, spanTier: "free" });
+        const want = builtInModelName({ judgeWho: who, judgeHost: host, spanTier: "free", judgeVersion: "latest" });
         ok(label + ", " + who + " on " + host + ": its Model name box shows", got.shown, JSON.stringify(got));
         ok(label + ", " + who + ": with the built-in name as the example", got.placeholder === want, JSON.stringify({ got: got.placeholder, want }));
         ok(label + ", " + who + ": and no other model's box", got.others.join() === OWN_NAME_KEYS[who], JSON.stringify(got.others));
@@ -1820,8 +1819,26 @@ console.log("\na model name of your own for every second model");
     ok("a typed name is saved", kept.saved === "liquid/d1-renamed", JSON.stringify(kept));
     ok("and handed to the backend", kept.sent === "liquid/d1-renamed", JSON.stringify(kept));
   });
-  // Jev and Another address have their own boxes, so this one stays away.
-  for (const [who, host] of [["jev", "openrouter"], ["d1", "custom"]]) {
+  // A Jev name saved with "A name I type" picked moves into Jev's box, and the
+  // choice becomes Jev 1.13, which is what an empty box under it sent. A name
+  // saved under another choice was never sent, and is not picked up.
+  for (const [saved, want] of [
+    [{ judgeVersion: "own", judgeName: "typesafe/jev-renamed" }, { name: "typesafe/jev-renamed", version: "exact" }],
+    [{ judgeVersion: "own", judgeName: "" }, { name: "", version: "exact" }],
+    [{ judgeVersion: "latest", judgeName: "typesafe/jev-left-over" }, { name: "", version: "latest" }],
+  ]) {
+    await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", ...saved } }, async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const got = await page.evaluate(() => ({
+        name: (document.querySelector('#drawer [data-arf-field="jevName"]') || {}).value,
+        version: (document.querySelector('#drawer [data-arf-field="judgeVersion"]') || {}).value,
+      }));
+      ok("a Jev name saved as " + JSON.stringify(saved) + " reads " + JSON.stringify(want), got.name === want.name && got.version === want.version, JSON.stringify(got));
+    });
+  }
+  // Another address has its own box, so these stay away.
+  for (const [who, host] of [["jev", "custom"], ["d1", "custom"]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
       await goTab(page, "Model");
       await settle(page);
@@ -2149,7 +2166,7 @@ console.log("\none model or two");
           key: vis("#drawer [data-arf-jevkey]"),
           builtIn: vis("#drawer [data-arf-jevchecks]"),
           version: vis('#drawer [data-arf-row="judgeVersion"]'),
-          name: vis('#drawer [data-arf-row="judgeName"]'),
+          name: vis('#drawer [data-arf-row="jevName"]'),
           byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
           after: vis('#drawer [data-arf-row="judgeAfter"]'),
           before: vis('#drawer [data-arf-row="judgeBefore"]'),
@@ -2198,10 +2215,10 @@ console.log("\none model or two");
     ok("and, with no block taking what Jev finds, a line saying where to switch one on", two.found, JSON.stringify(two));
     ok("and the address waits for another address", !two.url, JSON.stringify(two));
     ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
-    ok("and the typed name waits for A name I type", !two.name, JSON.stringify(two));
-    await pick("judgeVersion", "own");
-    await settle(page);
-    ok("A name I type shows the name box", (await shown()).name, JSON.stringify(await shown()));
+    ok("and the Model name box shows under it", two.name, JSON.stringify(two));
+    const choices = await page.evaluate(() =>
+      [...document.querySelector('#drawer [data-arf-field="judgeVersion"]').options].map((o) => o.value).join());
+    ok("which Jev has no choice for typing a name, since the box is always there", choices.indexOf("own") < 0, choices);
     await pick("judgeHost", "nanogpt");
     await settle(page);
     const nano = await shown();
@@ -2216,11 +2233,11 @@ console.log("\none model or two");
         return { values: Array.from(sel.options).map((o) => o.value), chosen: sel.value };
       });
     const onNano = await versions();
-    ok("NanoGPT offers no preview", onNano.values.indexOf("preview") < 0 && onNano.values.length === 3, JSON.stringify(onNano));
+    ok("NanoGPT offers no preview", onNano.values.indexOf("preview") < 0 && onNano.values.length === 2, JSON.stringify(onNano));
     await pick("judgeHost", "typesafe");
     await settle(page);
     const onTs = await versions();
-    ok("TypeSafe offers the preview", onTs.values.indexOf("preview") >= 0 && onTs.chosen === "own", JSON.stringify(onTs));
+    ok("TypeSafe offers the preview", onTs.values.indexOf("preview") >= 0 && onTs.chosen === "latest", JSON.stringify(onTs));
     await pick("judgeVersion", "preview");
     await pick("judgeHost", "openrouter");
     await settle(page);

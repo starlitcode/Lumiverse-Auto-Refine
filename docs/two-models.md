@@ -48,7 +48,6 @@ A key is kept for each host:
 - **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
 - **The preview Jev**, only when the host is TypeSafe. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest.
 - **Jev 1.13 exactly**. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
-- **A name I type** opens a **Model name** box. Type what your host calls Jev. Use this when a host renames Jev, or has a Jev this list does not know. Left empty, Jev 1.13 is used.
 
 The name each host is sent:
 
@@ -59,6 +58,8 @@ The name each host is sent:
 | NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
 
 OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them. If you picked it on TypeSafe and then change host, the list shows **The latest Jev**, and the latest is what is sent. Change back to TypeSafe and the preview is picked again.
+
+**Model name**, under **Which Jev**, is the same box every second model has. It shows the name your choice above sends. Type a different name and that name is sent instead, whatever **Which Jev** says. See [When a model is renamed, or a new one comes out](#when-a-model-is-renamed-or-a-new-one-comes-out).
 
 ## Which Span
 
@@ -149,8 +150,6 @@ The model names are built in, and a host can change them. You do not have to wai
 1. Pick the model under **Which second model**, and its host under **Where it is reached**.
 2. Type the new name in **Model name**, under the host. The box shows the built-in name as an example, and an empty box uses it.
 3. Press **Test**. It says whether the model answered, and which one.
-
-Jev has **Which Jev** instead. Pick **A name I type**, then type the name.
 
 **A new model that is not in the list:**
 

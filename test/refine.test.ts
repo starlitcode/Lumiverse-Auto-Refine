@@ -775,8 +775,9 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   // Which Jev answers, per host. The latest is each host's own alias where it
-  // has published one, the exact version is pinned, and a typed name is sent
-  // as typed, so a host that renames Jev needs no update.
+  // has published one, and the exact version is pinned. Settings saved with
+  // "A name I type" picked send the name typed under it, and Jev 1.13 when it
+  // was empty.
   for (const [host, version, name, url, model] of [
     ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
     ["typesafe", "latest", "", "https://api.typesafe.ai/v1/systemone", "jev-latest"],
@@ -1635,9 +1636,9 @@ describe("two models: Jev reads the reply first", () => {
     const { BUILT_IN_MODEL_NAMES, builtInModelName } = __testing as any;
     for (const who of Object.keys(BUILT_IN_MODEL_NAMES))
       for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who]))
-        for (const tier of who === "span" ? ["free", "lite", "full"] : ["free"])
-          test("the panel's name for " + who + " on " + host + (who === "span" ? " (" + tier + ")" : "") + " is the one sent", async () => {
-            const over = { judgeWho: who, judgeHost: host, spanTier: tier };
+        for (const tier of who === "span" ? ["free", "lite", "full"] : who === "jev" ? ["latest", "preview", "exact"] : ["free"])
+          test("the panel's name for " + who + " on " + host + (who === "span" || who === "jev" ? " (" + tier + ")" : "") + " is the one sent", async () => {
+            const over = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier };
             const h = await keyed(over, { jev: says([10]) });
             await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
             await wait(50);
@@ -1645,23 +1646,27 @@ describe("two models: Jev reads the reply first", () => {
           });
   }
 
-  // A name typed in is sent instead, for every second model, so a host that
-  // renames one needs no update to the extension.
-  for (const [who, key, host] of [
-    ["span", "spanName", "openrouter"],
-    ["span", "spanName", "respan"],
-    ["mercury", "mercuryName", "openrouter"],
-    ["d1", "d1Name", "liquid"],
-    ["solar", "solarName", "upstage"],
-    ["kev", "kevName", "openrouter"],
-  ]) {
-    test("a model name typed for " + who + " on " + host + " is the one sent", async () => {
-      const h = await keyed({ judgeWho: who, judgeHost: host, [key]: "  maker/renamed-model-2  " }, { jev: says([10]) });
-      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
-      await wait(50);
-      expect(h.jevCalls[0].body.model).toBe("maker/renamed-model-2");
-    });
+  // A name typed in is sent instead, for every second model on every host it
+  // has, so a host that renames one needs no update to the extension. Read from
+  // the panel's own lists, so a model or host added there is checked here too.
+  {
+    const { OWN_NAME_KEYS, BUILT_IN_MODEL_NAMES } = __testing as any;
+    for (const who of Object.keys(OWN_NAME_KEYS))
+      for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who] || {}))
+        test("a model name typed for " + who + " on " + host + " is the one sent", async () => {
+          const h = await keyed({ judgeWho: who, judgeHost: host, [OWN_NAME_KEYS[who]]: "  maker/renamed-model-2  " }, { jev: says([10]) });
+          await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+          await wait(50);
+          expect(h.jevCalls[0].body.model).toBe("maker/renamed-model-2");
+        });
   }
+
+  test("a Jev name saved under a choice other than A name I type is not sent", async () => {
+    const h = await keyed({ judgeHost: "openrouter", judgeVersion: "latest", judgeName: "typesafe/jev-left-over" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.model).toBe("~typesafe/jev-latest");
+  });
 
   test("a name typed for one model is not sent for another", async () => {
     const h = await keyed({ judgeWho: "d1", judgeHost: "openrouter", solarName: "maker/other-model" }, { jev: says([10]) });

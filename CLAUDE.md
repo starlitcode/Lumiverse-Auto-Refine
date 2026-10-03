@@ -76,16 +76,30 @@ Two skills are available. Load them before starting work.
 - Each second model has its own **Refine when a check reaches** setting, with
   its own default. Scoring models do not score on the same scale, so a user
   can tune each one apart from the others.
-- The defaults come from the owner's testing during the beta. Every model's
-  default is 30. The owner may change a default if testing finds a better one
-  or a model changes.
-- A new second model gets its own line setting. Its default is 30 unless the
-  owner's testing shows another number works better.
+- The defaults come from the owner's testing during the beta. Every second
+  model's default is 30, which the owner chose as the safest line.
+- A new second model gets its own line setting, and its default is 30. The
+  owner changes a default only if the owner's testing finds a better one or a model
+  changes. `test/model-names.test.ts` checks that every line starts at 30.
 - A paid second model that cannot be tested, because there is no key with
   credit, can still be added if it answers yes-or-no checks and suits Auto
   Refine.
 - `docs/two-models.md` never claims a default is measured or correct. It says
   the defaults come from testing during the beta and can change.
+- Every second model has a **Model name** box, Jev included, so a user can
+  type a new name when a host renames a model or releases a new version. When
+  a second model or a host for one is added or changed, keep all of its parts:
+  the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
+  the Model tab, its place in `PARTS`, and its built-in name for every host in
+  `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove a box.
+  `test/model-names.test.ts` fails when a part is missing.
+- Every second model has a **Model name** box, Jev included, so a user can
+  type a new name when a host renames a model or releases a new version. When
+  a second model or a host for one is added or changed, keep all of its parts:
+  the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
+  the Model tab, its place in `PARTS`, and its built-in name for every host in
+  `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove a box.
+  `test/model-names.test.ts` fails when a part is missing.
 
 ## Writing
 

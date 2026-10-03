@@ -12,10 +12,11 @@ _2026-10-03_
 
 ### Added
 
-- **A Model name box for every second model.** Span, Mercury Decide, D1, Solar Decide and Kev 4B each have a **Model name** box under **Where it is reached**. It shows the built-in name for that host. Left empty, the built-in name is used. If a host renames a model or adds a new version, type its new name there. Jev keeps **Which Jev**, with **A name I type**. See [When a model is renamed, or a new one comes out](docs/two-models.md#when-a-model-is-renamed-or-a-new-one-comes-out).
+- **A Model name box for every second model.** Span, Mercury Decide, D1, Solar Decide and Kev 4B each have a **Model name** box under **Where it is reached**. It shows the built-in name for that host. Left empty, the built-in name is used. If a host renames a model or adds a new version, type its new name there. See [When a model is renamed, or a new one comes out](docs/two-models.md#when-a-model-is-renamed-or-a-new-one-comes-out).
 
 ### Changed
 
+- **Jev's Model name box looks like every other model's.** **Which Jev** no longer has **A name I type**. Jev has a **Model name** box under **Which Jev** at all times, the same as the other models, showing the name your choice sends. A name you typed under **A name I type** is kept in the new box, and **Which Jev** is set to **Jev 1.13 exactly**, which is what an empty box sent before.
 - **Another address works for every second model.** It always did, and [Two models](docs/two-models.md#another-address) said it was only for Jev and Span. It now says so, with the steps for adding a new model that is not in the list.
 
 ### Fixed

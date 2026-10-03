@@ -58,12 +58,17 @@ const SECOND_MODELS = [
     { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
     { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
 ];
-// The name each host gives each second model, other than Jev, which has its
-// own picker. Shown in the Model name box as the name used when the box is
-// empty. The backend holds the same names, and a test checks the two agree.
-// Span's are per kind of Span; Respan's own API has no paid Lite, so asking it
-// for one gets the free one.
+// The name each host gives each second model. Shown in the Model name box as
+// the name used when the box is empty. The backend holds the same names, and a
+// test checks the two agree. Jev's are per choice under Which Jev, and a host
+// with no preview of its own is sent its latest. Span's are per kind of Span;
+// Respan's own API has no paid Lite, so asking it for one gets the free one.
 const BUILT_IN_MODEL_NAMES = {
+    jev: {
+        openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "typesafe/jev-1.13" },
+        nanogpt: { latest: "typesafe/jev-latest", preview: "typesafe/jev-latest", exact: "typesafe/jev-1.13" },
+        typesafe: { latest: "jev-latest", preview: "jev-preview", exact: "jev-1.13.0" },
+    },
     span: {
         openrouter: { free: "respan/span-01-lite:free", lite: "respan/span-01-lite", full: "respan/span-01" },
         respan: { free: "span-01-free", lite: "span-01-free", full: "span-01-pro" },
@@ -82,11 +87,16 @@ function builtInModelName(c) {
     const at = hosts[c.judgeHost] || hosts.openrouter;
     if (typeof at === "string")
         return at;
-    return (at && (at[c.spanTier] || at.free)) || "";
+    if (!at)
+        return "";
+    if (c.judgeWho === "jev")
+        return at[c.judgeVersion] || at.latest;
+    return at[c.spanTier] || at.free || "";
 }
-// One Model name box for each second model but Jev. Empty uses the built-in
-// name, so a host that renames a model needs no update to the extension.
+// One Model name box for each second model. Empty uses the built-in name, so a
+// host that renames a model needs no update to the extension.
 const OWN_NAME_KEYS = {
+    jev: "jevName",
     span: "spanName",
     mercury: "mercuryName",
     d1: "d1Name",
@@ -202,7 +212,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "judgeName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -628,9 +638,8 @@ const CONFIG = {
     judgeModel: "",
     judgeHttpOk: false,
     judgeVersion: "latest",
-    judgeName: "",
-    // A model name typed in for each second model but Jev. Empty uses the
-    // built-in one.
+    // A model name typed in for each second model. Empty uses the built-in one.
+    jevName: "",
     spanName: "",
     mercuryName: "",
     d1Name: "",
@@ -2137,22 +2146,11 @@ const JUDGE_FIELDS = [
             { value: "latest", label: "The latest Jev" },
             { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
             { value: "exact", label: "Jev 1.13 exactly" },
-            { value: "own", label: "A name I type" },
         ],
         needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
         also: { key: "judgeWho", is: "jev" },
         under: true,
         hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.13 to keep them steady.",
-    },
-    {
-        key: "judgeName",
-        label: "Model name",
-        type: "text",
-        needs: { key: "judgeVersion", is: "own" },
-        also: { key: "judgeWho", is: "jev" },
-        under: true,
-        placeholder: "typesafe/jev-1.13",
-        hint: "What your host calls Jev now, as its own docs spell it. Left empty, 1.13 is used.",
     },
     ...Object.keys(OWN_NAME_KEYS).map((who) => ({
         key: OWN_NAME_KEYS[who],
@@ -2869,6 +2867,21 @@ export function setup(ctx, overrides) {
             into.builtInSeen = into.shippedSeen;
         try {
             delete into.shippedSeen;
+        }
+        catch (_) { }
+        // Settings saved with "A name I type" picked under Which Jev. That choice
+        // sent the name typed under it, and Jev 1.13 when it was empty. Jev's name
+        // is a Model name box like every other model's, sent whenever it holds a
+        // name, so a name moves across only from a reader who had that choice
+        // picked, with Jev 1.13 under it. A name saved under another choice was
+        // never sent, and is dropped rather than starting to be.
+        if (into.judgeVersion === "own") {
+            if (!into.jevName && typeof into.judgeName === "string" && into.judgeName.trim())
+                into.jevName = into.judgeName.trim();
+            into.judgeVersion = "exact";
+        }
+        try {
+            delete into.judgeName;
         }
         catch (_) { }
         // Refine when a check reaches is kept per second model. A line somebody set
@@ -15581,6 +15594,7 @@ export const __testing = {
     BUILT_IN_MODEL_NAMES,
     builtInModelName,
     OWN_NAME_KEYS,
+    SECOND_MODELS,
     splitSelectorList,
     blockText,
     sameSettings,

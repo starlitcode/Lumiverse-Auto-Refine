@@ -4097,10 +4097,9 @@ let judgeUrl = '';
 let judgeHttpOk = false;
 let judgeModel = '';
 let judgeVersion = 'latest';
-let judgeName = '';
-// A model name typed in for each second model but Jev, which has its own. Empty
-// uses the built-in name, so a host that renames a model needs no update here.
-const ownNames = { span: '', mercury: '', d1: '', solar: '', kev: '' };
+// A model name typed in for each second model. Empty uses the built-in name,
+// so a host that renames a model needs no update here.
+const ownNames = { jev: '', span: '', mercury: '', d1: '', solar: '', kev: '' };
 let judgeChecks = [];
 // The line in use, for the second model picked. Each model has its own,
 // because their scores do not run on the same scale, so each can be tuned
@@ -4143,8 +4142,8 @@ const SECOND_MODELS = {
         model: (host) => {
             const h = JEV_HOSTS[host];
             // A name typed in wins, so a host that renames Jev needs no update here.
-            if (judgeVersion === 'own' && judgeName)
-                return judgeName;
+            if (ownNames.jev)
+                return ownNames.jev;
             const moving = judgeVersion === 'preview' ? h.preview || h.latest : judgeVersion === 'latest' ? h.latest : '';
             return moving || h.model;
         },
@@ -4769,11 +4768,19 @@ function applyRules(s) {
     judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
     judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
     judgeHttpOk = s.judgeHttpOk === true;
-    judgeVersion = ['preview', 'exact', 'own'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
-    judgeName = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
+    judgeVersion = ['preview', 'exact'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
     for (const who of Object.keys(ownNames)) {
         const raw = s[who + 'Name'];
         ownNames[who] = String(raw == null ? '' : raw).trim().slice(0, 200);
+    }
+    // Settings saved before Jev had a Model name box of its own: a typed name was
+    // a choice under Which Jev, sent only with that choice picked, and Jev 1.13
+    // when it was empty. The panel moves these across when it loads; this covers
+    // a backend reading them before it does.
+    if (s.judgeVersion === 'own') {
+        judgeVersion = 'exact';
+        if (!ownNames.jev)
+            ownNames.jev = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
     }
     judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
         .split('\n')
