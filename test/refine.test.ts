@@ -1597,10 +1597,11 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   // ---- D1 and Solar Decide ----
-  // Both take Jev's decisions request. D1 is also on Liquid's own API, and
-  // Solar Decide on Upstage's.
+  // Both take Jev's decisions request. D1 is also on NanoGPT and on Liquid's
+  // own API, and Solar Decide on Upstage's.
   for (const [who, host, url, model] of [
     ["d1", "openrouter", "https://openrouter.ai/api/alpha/decisions", "liquid/d1"],
+    ["d1", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "liquid/d1"],
     ["d1", "liquid", "https://api.liquid.ai/decisions/v1/systemone", "d1:free"],
     ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide"],
     ["solar", "upstage", "https://api.upstage.ai/v1/systemone", "solar-decide"],

@@ -3941,9 +3941,11 @@ const MERCURY_HOSTS = {
 };
 // D1, from Liquid AI, and Solar Decide, from Upstage. Both take the same
 // decisions request as Jev, on OpenRouter and on their maker's own API.
-// Liquid's own API names D1 `d1:free`.
+// Liquid's own API names D1 `d1:free`. NanoGPT serves D1 too, on the same
+// decisions route it uses for Jev.
 const D1_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'liquid/d1', kind: 'decisions' },
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'liquid/d1', kind: 'decisions' },
     liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', model: 'd1:free', kind: 'decisions' },
 };
 const SOLAR_HOSTS = {

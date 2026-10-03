@@ -104,9 +104,11 @@ D1 is Liquid AI's decision model. It takes the same request as Jev. It reads up 
 | Host | Model name |
 | --- | --- |
 | OpenRouter | `liquid/d1` |
+| NanoGPT | `liquid/d1` |
 | Liquid AI | `d1:free` |
 
-- On OpenRouter it is paid, per call. OpenRouter's page for it shows the price.
+- On OpenRouter and NanoGPT it is paid, per call. Each host's own page shows the price.
+- NanoGPT lists D1, but its docs for the decisions route only name Jev so far. If **Test** fails on NanoGPT, use OpenRouter or Liquid AI.
 - On Liquid's own API, the key comes from your Liquid account, at [console.liquid.ai](https://console.liquid.ai), under **API Keys**. Liquid's keys start with `liquid_`.
 - Its line has not been measured yet. See [Refine when a check reaches](#what-the-second-model-checks).
 
@@ -164,7 +166,7 @@ Addresses known to work:
 | Host | Address | Model name |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide` or `jaredpalmer/kev-4b` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13` or `typesafe/jev-latest` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13`, `typesafe/jev-latest` or `liquid/d1` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
 | Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` |

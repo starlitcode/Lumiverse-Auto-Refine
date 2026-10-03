@@ -1763,10 +1763,10 @@ console.log("\nMercury Decide, the third second model");
 console.log("\nD1, Solar Decide and Kev 4B");
 {
   // Each shows its own hosts and only its own line, at 50, with its link to
-  // its maker's page. D1 can be reached on Liquid AI and Solar Decide on
-  // Upstage, and the key box is named after that host there. Checked at a phone width and a laptop width.
+  // its maker's page. D1 can be reached on NanoGPT and Liquid AI, and Solar
+  // Decide on Upstage, and the key box is named after that host there. Checked at a phone width and a laptop width.
   const MODELS = [
-    ["d1", "D1, from Liquid AI", "openrouter,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
+    ["d1", "D1, from Liquid AI", "openrouter,nanogpt,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
     ["solar", "Solar Decide, from Upstage", "openrouter,upstage,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
     ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
   ];
@@ -1816,8 +1816,8 @@ console.log("\nD1, Solar Decide and Kev 4B");
         ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
         ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
         ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
-        const own = { d1: ["liquid", "Liquid AI"], solar: ["upstage", "Upstage"] }[who];
-        if (own) {
+        const owns = { d1: [["nanogpt", "NanoGPT"], ["liquid", "Liquid AI"]], solar: [["upstage", "Upstage"]] }[who] || [];
+        for (const own of owns) {
           await page.evaluate((host) => {
             const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
             s.value = host;

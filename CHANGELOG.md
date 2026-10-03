@@ -13,6 +13,7 @@ _2026-10-02_
 ### Added
 
 - **Solar Decide on Upstage's own API.** With Solar Decide picked, **Where it is reached** now has **Upstage**. It takes a key from your Upstage account. See [Solar Decide](docs/two-models.md#solar-decide).
+- **D1 on NanoGPT.** With D1 picked, **Where it is reached** now has **NanoGPT**. A NanoGPT key saved for Jev is used for D1 too. See [D1](docs/two-models.md#d1).
 
 ---
 

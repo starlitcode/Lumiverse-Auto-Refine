@@ -2042,7 +2042,7 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "openrouter", label: "OpenRouter" },
-            { value: "nanogpt", label: "NanoGPT", needs: { key: "judgeWho", is: "jev" } },
+            { value: "nanogpt", label: "NanoGPT", needs: { key: "judgeWho", is: ["jev", "d1"] } },
             { value: "typesafe", label: "TypeSafe", needs: { key: "judgeWho", is: "jev" } },
             { value: "respan", label: "Respan", needs: { key: "judgeWho", is: "span" } },
             { value: "liquid", label: "Liquid AI", needs: { key: "judgeWho", is: "d1" } },
@@ -3020,7 +3020,7 @@ export function setup(ctx, overrides) {
         if (!opt)
             return "openrouter";
         const needs = opt.needs;
-        return !needs || cfg[needs.key] === needs.is ? String(opt.value) : "openrouter";
+        return !needs || optionShows(needs) ? String(opt.value) : "openrouter";
     }
     // What a key answer is about: the host, and for another address the address
     // too, since that key is kept for the address.
