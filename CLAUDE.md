@@ -93,13 +93,6 @@ Two skills are available. Load them before starting work.
   the Model tab, its place in `PARTS`, and its built-in name for every host in
   `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove a box.
   `test/model-names.test.ts` fails when a part is missing.
-- Every second model has a **Model name** box, Jev included, so a user can
-  type a new name when a host renames a model or releases a new version. When
-  a second model or a host for one is added or changed, keep all of its parts:
-  the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
-  the Model tab, its place in `PARTS`, and its built-in name for every host in
-  `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove a box.
-  `test/model-names.test.ts` fails when a part is missing.
 
 ## Writing
 
