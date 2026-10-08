@@ -12,6 +12,26 @@ To change a greeting, edit it on the character card.
 
 This is the only rule in the extension with no switch.
 
+## A reply that is a refusal
+
+Sometimes the reply itself is the model refusing to write the scene. Rewriting it costs a call, and the best it can give back is another refusal.
+
+- With **Leave a refusal as it is** on, the automatic pass does not refine a short reply that reads as a refusal. It is on by default.
+- The panel says why the reply was left as it was.
+- The refine button still works on it, if you want to refine it anyway.
+- [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) can retry the reply instead. The reply it gets back is refined as usual.
+
+## The \* marks around actions
+
+Many replies use \* marks around an action or a stressed word, such as \*she turns away\*. A model can drop these marks while it rewrites. With **Refuse a rewrite that loses \* marks** on, the rewrite is thrown away when:
+
+- it has fewer \* marks than the reply, or
+- the reply had every \* in a pair and the rewrite leaves one without its pair.
+
+It is off by default. Cutting a sentence that held an \*action\* also takes its marks, so this check also refuses some good edits.
+
+Another way to keep them is to add `\*+` to **Patterns of your own to hide**. Each run of \* marks is then hidden behind a token the model has to copy back. Only 60 pieces are hidden in one reply, so a reply with many \*actions\* is only partly covered.
+
 ## The model answered the wrong question
 
 A rewrite is dropped when it is:

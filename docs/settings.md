@@ -55,7 +55,11 @@ The buttons are in two groups. **What to refine**, on the Setup tab, can hide on
 
 Below them:
 
-- **Refines you can put back** lists every refine in this chat, newest first, each with **Put it back**. The tab shows a badge with the count.
+- **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
+  - The newest is open.
+  - The others are in one fold, **Older refines**. Each is named by its time and its first words.
+  - When a sixth refine comes in, the oldest one goes.
+  - **Dismiss them all** clears the list. It does not change any reply.
 
 The greeting is never refined. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
 
@@ -116,7 +120,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Both start at 0, which hides all costs.
   - There is no currency. The number you type is the number you see.
   - See [What a refine costs](prompt.md#what-a-refine-costs).
-- **Samplers** start blank. A blank sampler is not sent, so Lumiverse uses the value from your preset. See [Sampler settings](prompt.md#sampler-settings).
+- **Samplers** start blank. A blank sampler is not sent, so Lumiverse uses the value from the preset linked to the connection. See [Sampler settings](prompt.md#sampler-settings).
 - **Saved model setups** keep everything on this tab under a name: the connection, thinking, timeout, samplers and prices.
   - Save one for a cheap model and one for a careful one, and switch between them.
   - A setup never contains your prompt, so loading one only changes what runs the refine.
@@ -138,12 +142,15 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 **Reading the answer.**
 
 - **Take the answer from between the tags** takes only the rewrite from the model's answer, so a preamble is ignored. See [The answer it asks for](prompt.md#the-answer-it-asks-for).
+- **Drop an answer with no tags** is folded under it. When your prompt asks for the tags and the answer has none, the rewrite is thrown away.
 - **Say how much has come back** shows the answer arriving, so the status line counts characters. It does not change what is saved.
 
 **What it refuses to save.** See [What it refuses to save](guardrails.md).
 
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits.
 - **Refuse an answer that declines the job**, **Refuse an answer that talks about the edit** and **Refuse a rewrite that sanitised the reply** each have a switch. If all three are off, the panel warns you.
+- **Refuse a rewrite that loses \* marks** is off by default. On, a rewrite with fewer \* marks than the reply, or with one left unpaired, is thrown away. See [The \* marks around actions](guardrails.md#the--marks-around-actions).
+- **Leave a refusal as it is** is on by default. A short reply where the model refused is not refined by the automatic pass. See [A reply that is a refusal](guardrails.md#a-reply-that-is-a-refusal).
 
 **Before it writes.**
 
@@ -236,6 +243,13 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 - At rest, the eye is shut.
 - While a refine runs, the eye is open, with no pupil moving and no blink.
 - Pointing at a button does not open its eye.
+
+**Reduce motion** stops everything in Auto Refine from moving or fading. It is off by default.
+
+- On, the panel, the card, the floating button and every eye change at once, with no fade or slide.
+- The eye works as it does with **Keep the eye still**: shut at rest and open while a refine runs.
+- A device set to reduce motion gets the same, with the switch off.
+- No part of Auto Refine grows or shrinks to show a change, so nothing zooms with the switch off either.
 
 **Refining part of a reply** needs no setting. Select part of a reply and **Refine the part I selected** appears:
 

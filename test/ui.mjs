@@ -5298,6 +5298,55 @@ console.log("\nwatching it work");
   });
 }
 
+console.log("\na long reply is still marked");
+{
+  // A long reply is marked word by word like a short one. The words the two
+  // share are kept plain, so the plain and taken-out words read back as the
+  // reply before, and the plain and put-in words as the reply after.
+  const make = (paras, words) => {
+    const pick = ["lamp", "harbour", "rope", "ledger", "gull", "tide", "keeper", "salt", "window", "stair"];
+    const out = [];
+    for (let p = 0; p < paras; p++) {
+      const line = [];
+      for (let w = 0; w < words; w++) line.push(pick[(p * 7 + w * 3) % pick.length] + (w % 9 === 8 ? "." : ""));
+      out.push(line.join(" ") + ".");
+    }
+    return out;
+  };
+  for (const [label, paras, words] of [["about 900 words", 9, 100], ["about 9000 words", 60, 150]]) {
+    await inTab(browser, {}, async (page) => {
+      const got = await page.evaluate(([paras, words, make]) => {
+        const build = new Function("return " + make)();
+        const before = build(paras, words);
+        const after = before.map((p, i) => (i % 3 === 1 ? p.replace(/ledger/g, "logbook") : p));
+        after.splice(2, 0, "A new line about the boats came in here.");
+        const b = before.join("\n\n");
+        const a = after.join("\n\n");
+        const t0 = performance.now();
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: b, after: a });
+        const took = performance.now() - t0;
+        const w = document.querySelector("[data-arf-pop] [data-arf-diff]");
+        const spans = Array.from(w.querySelectorAll("span"));
+        const read = (skip) => spans.filter((n) => !n.classList.contains(skip)).map((n) => n.textContent).join("");
+        return {
+          tooLong: /Too long to mark up/.test(w.textContent),
+          cuts: w.querySelectorAll(".arf-cut").length,
+          adds: w.querySelectorAll(".arf-add").length,
+          beforeBack: read("arf-add") === b,
+          afterBack: read("arf-cut") === a,
+          newLineMarked: Array.from(w.querySelectorAll(".arf-add")).some((n) => /new line about the boats/.test(n.textContent)),
+          took: Math.round(took),
+        };
+      }, [paras, words, make.toString()]);
+      ok(label + ": the changes are marked", !got.tooLong && got.cuts > 0 && got.adds > 0, JSON.stringify(got));
+      ok(label + ": the plain and taken-out words read as the reply before", got.beforeBack, JSON.stringify(got));
+      ok(label + ": the plain and put-in words read as the reply after", got.afterBack, JSON.stringify(got));
+      ok(label + ": a paragraph put in is marked as put in", got.newLineMarked, JSON.stringify(got));
+      ok(label + ": the card is drawn without a long pause", got.took < 1500, JSON.stringify(got));
+    });
+  }
+}
+
 console.log("\nthe card that comes up on the page");
 {
   // A refine changes writing somebody was reading. The panel is behind a tab
@@ -11479,6 +11528,105 @@ await inTab(browser, { saved: { eyeStill: true } }, async (page) => {
   ok("switching it off takes the mark away", off === "clear", off);
 });
 
+console.log("\nrefines you can put back stay short");
+{
+  // Every refine in a chat used to stack up above the tabs. A chat keeps its
+  // last five. The newest is open, and the others are in one fold.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, popup: false } }, async (page) => {
+      await page.evaluate(async () => {
+        for (let i = 1; i <= 8; i++) {
+          window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m" + i, canUndo: true,
+            before: "Lamp " + i + " was lit late, and the keeper said nothing about it.",
+            after: "Lamp " + i + " was lit late. The keeper said nothing." });
+          await new Promise((r) => setTimeout(r, 15));
+        }
+      });
+      await goTab(page, "Log");
+      await settle(page);
+      const got = await page.evaluate(() => {
+        const card = document.querySelector("[data-arf-last]");
+        if (!card) return null;
+        const heads = Array.from(card.querySelectorAll(".arf-fold .arf-grow")).map((h) => h.textContent.trim());
+        const wells = Array.from(card.querySelectorAll("[data-arf-diff]")).filter((w) => w.offsetParent !== null).length;
+        const r = card.getBoundingClientRect();
+        return {
+          says: card.textContent,
+          heads,
+          shownDiffs: wells,
+          tall: Math.round(r.height),
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+      ok(label + ": the newest refine is open", !!got && /Lamp 8/.test(got.says) && got.shownDiffs === 1, JSON.stringify(got && got.heads));
+      ok(label + ": the older ones are in one fold", !!got && got.heads[0] === "Older refines", JSON.stringify(got && got.heads));
+      ok(label + ": only the last five of the chat are kept", !!got && got.heads.length === 5 && !/Lamp 3\b/.test(got.heads.join("|")), JSON.stringify(got && got.heads));
+      ok(label + ": each older one is named by its time and first words", !!got && /^\d\d:\d\d: Lamp 7 was lit late/.test(got.heads[1] || ""), JSON.stringify(got && got.heads));
+      ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
+      const tapped = await page.evaluate(async () => {
+        const card = document.querySelector("[data-arf-last]");
+        const outer = Array.from(card.querySelectorAll(".arf-fold")).find((h) => h.querySelector(".arf-grow").textContent.trim() === "Older refines");
+        outer.click();
+        await new Promise((r) => setTimeout(r, 300));
+        const again = document.querySelector("[data-arf-last]");
+        const heads = Array.from(again.querySelectorAll(".arf-fold")).filter((h) => h.offsetParent !== null);
+        const h = heads[1].getBoundingClientRect();
+        return { seen: heads.length, rowTall: Math.round(h.height) };
+      });
+      ok(label + ": tapping the fold shows the four older ones", tapped.seen === 5, JSON.stringify(tapped));
+      if (touch) ok(label + ": each is at least 32 pixels tall to tap", tapped.rowTall >= 32, JSON.stringify(tapped));
+    });
+  }
+}
+
+console.log("\nreduce motion");
+{
+  // With Reduce motion on, or the device set to reduce motion, nothing of
+  // ours moves or fades. Off, the panel's own transitions run as before.
+  const read = (page) =>
+    page.evaluate(async () => {
+      window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line of the reply.", after: "The new line of the reply." });
+      await new Promise((r) => setTimeout(r, 60));
+      const moving = [];
+      const look = (n, pseudo) => {
+        const cs = getComputedStyle(n, pseudo || null);
+        const t = cs.transitionDuration.split(",").some((d) => parseFloat(d) > 0);
+        const a = cs.animationName !== "none" && cs.animationName !== "";
+        return t || a;
+      };
+      const all = Array.from(document.querySelectorAll('[class*="arf-"]'));
+      for (const n of all) {
+        if (look(n)) moving.push(String(n.className.baseVal != null ? n.className.baseVal : n.className).slice(0, 30));
+        if (look(n, "::before")) moving.push(String(n.className).slice(0, 30) + "::before");
+      }
+      return { count: all.length, moving: moving, marked: document.documentElement.hasAttribute("data-arf-still") };
+    });
+  await inTab(browser, { saved: { enabled: true, popup: true } }, async (page) => {
+    const got = await read(page);
+    ok("off, the panel's own transitions run", got.moving.length > 0, JSON.stringify(got).slice(0, 200));
+  });
+  await inTab(browser, { saved: { enabled: true, popup: true, reduceMotion: true } }, async (page) => {
+    const got = await read(page);
+    ok("with Reduce motion on, the page is marked", got.marked, JSON.stringify(got).slice(0, 200));
+    ok("and nothing of ours moves or fades", got.count > 20 && got.moving.length === 0, JSON.stringify(got.moving.slice(0, 8)));
+    await goTab(page, "Setup");
+    await settle(page);
+    const off = await page.evaluate(async () => {
+      const box = document.querySelector('#drawer [data-arf-field="reduceMotion"]');
+      if (!box) return "no switch";
+      box.click();
+      await new Promise((r) => setTimeout(r, 200));
+      return document.documentElement.hasAttribute("data-arf-still") ? "still marked" : "clear";
+    });
+    ok("switching it off takes the mark away", off === "clear", off);
+  });
+  await inTab(browser, { saved: { enabled: true, popup: true } }, async (page) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const got = await read(page);
+    ok("with the device set to reduce motion, nothing of ours moves either", got.count > 20 && got.moving.length === 0, JSON.stringify(got.moving.slice(0, 8)));
+  });
+}
+
 console.log("\nhiding kinds of line in the Log");
 await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
   await goTab(page, "Log");
@@ -11682,7 +11830,9 @@ console.log("\nthe tabs stay at the top");
         const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
         const pad = Math.round(parseFloat(getComputedStyle(drawer).paddingTop) || 0);
         const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
-        const solid = (c) => /^rgb\(/.test(c);
+        // The solid colour is a layer under the tabs, shown when it is fully on.
+        const layer = () => getComputedStyle(strip(), "::before");
+        const filled = () => /^rgb\(/.test(layer().backgroundColor) && layer().opacity === "1";
         const rest = where();
         const restHolder = getComputedStyle(bar()).backgroundColor;
         const restStuck = bar().classList.contains("arf-stuck");
@@ -11695,21 +11845,26 @@ console.log("\nthe tabs stay at the top");
         const r = strip().getBoundingClientRect();
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 2);
         const covers = !!hit && strip().contains(hit);
-        const heldStrip = getComputedStyle(strip()).backgroundColor;
+        const heldSolid = filled();
         const heldStuck = bar().classList.contains("arf-stuck");
         drawer.scrollTop = 0;
         await frame();
         const back = where();
         const backStuck = bar().classList.contains("arf-stuck");
+        // Back in its place, the colour fades out rather than going in one frame.
+        const fading = Number(layer().opacity);
+        await new Promise((r) => setTimeout(r, 400));
+        const faded = Number(layer().opacity);
         const backStrip = getComputedStyle(strip()).backgroundColor;
-        return { pad, rest, restHolder: clear(restHolder), restStuck, restStrip, room, atTop, hasTabs, covers, heldSolid: solid(heldStrip), heldStrip, heldStuck, back, backStuck, backSame: backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
+        return { pad, rest, restHolder: clear(restHolder), restStuck, restStrip, room, atTop, hasTabs, covers, heldSolid, heldStuck, back, backStuck, fading, faded, backSame: backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
       });
       ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
       ok(label + ": at rest nothing is drawn behind the strip", got.restHolder && !got.restStuck, JSON.stringify(got));
       ok(label + ": scrolled down, the strip sits at the top of the drawer", got.atTop === got.pad, JSON.stringify(got));
       ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
       ok(label + ": held there, the strip is solid, so nothing shows through it", got.heldStuck && got.heldSolid && got.covers, JSON.stringify(got));
-      ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame, JSON.stringify(got));
+      ok(label + ": scrolled back up, the solid colour fades out instead of going in one frame", got.fading > 0 && got.fading < 1, JSON.stringify(got));
+      ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame && got.faded === 0, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
     });
     // Away to another drawer tab and back. The host hides the panel and shows
@@ -11757,7 +11912,10 @@ console.log("\nthe tabs stay at the top");
           const drawer = document.getElementById("drawer");
           const bar = () => drawer.querySelector("[data-arf-stick]");
           const strip = () => bar().querySelector(".arf-tabs");
-          const solid = () => /^rgb\(/.test(getComputedStyle(strip()).backgroundColor);
+          const solid = () => {
+            const layer = getComputedStyle(strip(), "::before");
+            return /^rgb\(/.test(layer.backgroundColor) && Number(layer.opacity) > 0;
+          };
           const where = () => bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top;
           const pad = parseFloat(getComputedStyle(drawer).paddingTop) || 0;
           const rest = where();
@@ -11815,7 +11973,8 @@ console.log("\nthe tabs stay at the top");
           await frame();
           await frame();
           strike();
-          const solid = /^rgb\(/.test(getComputedStyle(strip).backgroundColor);
+          const layer = getComputedStyle(strip, "::before");
+          const solid = /^rgb\(/.test(layer.backgroundColor) && layer.opacity === "1";
           const classes = bar.className;
           mo.disconnect();
           return { solid, classes, scrolled: drawer.scrollTop > 0 };

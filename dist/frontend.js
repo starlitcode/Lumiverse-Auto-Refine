@@ -176,8 +176,10 @@ const PARTS = [
             "shieldKeep",
             "protectNote",
             "guardRefusal",
+            "skipRefusals",
             "guardPreamble",
             "guardSoften",
+            "guardStars",
             "softenPct",
             "softenWords",
             "softenSwaps",
@@ -187,6 +189,7 @@ const PARTS = [
             "rateWaits",
             "refineGap",
             "wrapOutput",
+            "requireTags",
             "streamProgress",
         ],
     },
@@ -200,7 +203,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The floating button, the buttons in the chat, and the input bar row.",
-        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill"],
+        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill", "reduceMotion"],
     },
     {
         id: "inputbox",
@@ -570,6 +573,9 @@ const CONFIG = {
     // drawer. Needs the ui_panels permission, and says so if it is missing.
     widgetOn: false,
     eyeStill: false,
+    // Nothing of Auto Refine's moves or fades. A device set to reduce motion
+    // gets the same without this.
+    reduceMotion: false,
     // The card that comes up on the page when a refine finishes, with the before,
     // the after and the way back on it. On by default, because a refine changes
     // writing somebody was reading, and the change should be visible without
@@ -601,8 +607,13 @@ const CONFIG = {
     // The checks on what an answer says. All on, because each is a shape that was
     // going to be written into somebody's chat.
     guardRefusal: true,
+    // A reply that is the model refusing is left for a retry rather than paid
+    // for. On by default.
+    skipRefusals: true,
     guardPreamble: true,
     guardSoften: true,
+    // Off by default: cutting a sentence that held an *action* also trips it.
+    guardStars: false,
     softenPct: 60,
     softenWords: "",
     softenSwaps: "",
@@ -677,6 +688,9 @@ const CONFIG = {
     // model that cannot help adding a sentence of its own still puts the rewrite
     // between the tags, and taking what is between them is exact.
     wrapOutput: true,
+    // An answer with no tags, when the prompt asks for them, is thrown away
+    // rather than saved whole.
+    requireTags: true,
     // Streaming the refine so the panel can show it arriving. The answer is the
     // same either way; this only decides whether you can watch it.
     streamProgress: true,
@@ -1874,6 +1888,12 @@ const GUARD_FIELDS = [
         hint: "On by default. A short answer where the model says it will not do this is thrown away, so a refusal is never saved over your reply.",
     },
     {
+        key: "skipRefusals",
+        label: "Leave a refusal as it is",
+        type: "bool",
+        hint: "On by default. A short reply where the model refused is not refined, so no call is spent on it. The refine button still works on it.",
+    },
+    {
         key: "guardPreamble",
         label: "Refuse an answer that talks about the edit",
         type: "bool",
@@ -1911,6 +1931,12 @@ const GUARD_FIELDS = [
         needs: { key: "guardSoften" },
         under: true,
         hint: "Optional, one per line as soft => blunt, added to the built-in list. A refine is refused when it puts the soft word in and takes the blunt one out, so both halves have to happen before it counts.",
+    },
+    {
+        key: "guardStars",
+        label: "Refuse a rewrite that loses * marks",
+        type: "bool",
+        hint: "Off by default. Refuses a rewrite with fewer * marks than the reply, so an action or a stressed word written between two * marks keeps them.",
     },
     {
         key: "retryRefine",
@@ -3170,17 +3196,23 @@ export function setup(ctx, overrides) {
                 cfg[k] = to;
         persist(true);
     }
-    // Keep the eye still, put on the page's root so every eye drawn anywhere
-    // reads it. Taken off again in teardown.
+    // Keep the eye still, and Reduce motion, put on the page's root so every
+    // part drawn anywhere reads them. Reduce motion keeps the eye still as well,
+    // so the eye still shows shut at rest and open while a refine runs. Taken
+    // off again in teardown.
     function stillEyes() {
         try {
             if (typeof document === "undefined")
                 return;
             const root = document.documentElement;
-            if (cfg.eyeStill)
+            if (cfg.eyeStill || cfg.reduceMotion)
                 root.setAttribute("data-arf-still-eyes", "1");
             else
                 root.removeAttribute("data-arf-still-eyes");
+            if (cfg.reduceMotion)
+                root.setAttribute("data-arf-still", "1");
+            else
+                root.removeAttribute("data-arf-still");
         }
         catch (_) { }
     }
@@ -3188,9 +3220,22 @@ export function setup(ctx, overrides) {
     disposers.push(() => {
         try {
             document.documentElement.removeAttribute("data-arf-still-eyes");
+            document.documentElement.removeAttribute("data-arf-still");
         }
         catch (_) { }
     });
+    // Whether anything may move: off with Reduce motion on, or with the device
+    // set to reduce motion.
+    function noMotion() {
+        if (cfg.reduceMotion)
+            return true;
+        try {
+            return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+        }
+        catch (_) {
+            return false;
+        }
+    }
     function persist(now) {
         stillEyes();
         const write = () => {
@@ -3746,6 +3791,10 @@ export function setup(ctx, overrides) {
     // keeps the text for thirty of them, so the panel keeps the same number.
     const undoable = new Map();
     const UNDO_MAX = 30;
+    // How many a chat keeps. A chat that refines every reply would otherwise
+    // fill the card above the tabs with every refine of the session. The oldest
+    // goes first.
+    const UNDO_PER_CHAT = 5;
     const undoKey = (c, m) => String(c) + ":" + String(m);
     // The ones in the chat you are looking at, newest first.
     function undoHere() {
@@ -4576,6 +4625,14 @@ export function setup(ctx, overrides) {
         "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));";
     const STRIP_SHADOW = "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));";
+    const STILL_RULES = (root) => [
+        '[class*="arf-"]',
+        '[class*="arf-"]::before',
+        '[class*="arf-"]::after',
+        '[class*="arf-"] *',
+    ]
+        .map((one) => root + one)
+        .join(",") + "{animation:none!important;transition:none!important}";
     const CSS = ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf *{box-sizing:border-box}" +
@@ -4585,10 +4642,22 @@ export function setup(ctx, overrides) {
         //
         // A browser that can tell by itself that the strip is held does it here,
         // in the same frame as the scroll. arf-stuck is the script's fallback for
-        // the rest. Both switch at once, with no fade, so nothing is drawn halfway.
+        // the rest.
+        //
+        // The solid colour is a layer under the tabs, so it can fade. It comes on
+        // at once when the strip is held, so the rows never show through it. It
+        // fades out when the strip goes back to its place, because switching it
+        // off in one frame makes the strip flash see-through.
         ".arf-stick{position:sticky;top:0;z-index:4;container-type:scroll-state}" +
-        ".arf-stick.arf-stuck .arf-tabs{" + STRIP_FILL + STRIP_SHADOW + "}" +
-        "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_FILL + STRIP_SHADOW + "}}" +
+        ".arf-stick .arf-tabs{position:relative;isolation:isolate;transition:box-shadow .22s ease}" +
+        ".arf-stick .arf-tabs::before{content:\"\";position:absolute;inset:0;z-index:-1;pointer-events:none;" +
+        "border-radius:calc(var(--lumiverse-radius-md,10px) - 1px);" + STRIP_FILL +
+        "opacity:0;transition:opacity .22s ease}" +
+        ".arf-stick.arf-stuck .arf-tabs{" + STRIP_SHADOW + "transition:none}" +
+        ".arf-stick.arf-stuck .arf-tabs::before{opacity:1;transition:none}" +
+        "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_SHADOW + "transition:none}" +
+        ".arf-stick .arf-tabs::before{opacity:1;transition:none}}" +
+        "@media (prefers-reduced-motion: reduce){.arf-stick .arf-tabs,.arf-stick .arf-tabs::before{transition:none}}" +
         ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
         ".arf-note{font-size:12px;line-height:1.45;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -5007,15 +5076,16 @@ export function setup(ctx, overrides) {
         "0 0 0 10px rgba(0,0,0,0)}" +
         "100%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
         "0 0 0 0 rgba(0,0,0,0)}}" +
-        // A press dips the whole button a little, so a tap answers whether or not it
-        // changed anything. A press is also how the menu is opened, and the ring
-        // below is what tells the two apart: a dip on its own is a tap, a dip with
-        // the ring running is a hold.
+        // A press lightens the whole button, so a tap answers whether or not it
+        // changed anything. It does not change size: a button that shrinks and
+        // grows back costs a repaint of everything under it. A press is also how
+        // the menu is opened, and the ring below is what tells the two apart: a
+        // lighter button on its own is a tap, with the ring running it is a hold.
         //
         // The ring shows a hold and nothing else. The eye already shows that a
         // refine is running, so a second ring for that would say the same thing
         // twice.
-        ".arf-float:active{transform:scale(.94)}" +
+        ".arf-float:active{filter:brightness(1.15)}" +
         ".arf-float{transition:color 260ms cubic-bezier(.2,.7,.3,1)," +
         "border-color 260ms cubic-bezier(.2,.7,.3,1)," +
         "background-image 260ms cubic-bezier(.2,.7,.3,1)," +
@@ -5039,7 +5109,6 @@ export function setup(ctx, overrides) {
         "transition:stroke-dashoffset " + HOLD_RING_MS + "ms linear}" +
         "@media (prefers-reduced-motion: reduce){" +
         ".arf-float{transition:none}" +
-        ".arf-float:active{transform:none}" +
         // The ring that grows is movement and nothing else. What it says, that a
         // refine is running, is said by the fill, the edge and the tooltip too.
         ".arf-float.arf-working{animation:none}" +
@@ -5273,6 +5342,16 @@ export function setup(ctx, overrides) {
         "html[data-arf-still-eyes] button:focus-visible .arf-eye.arf-opens:not(.arf-eye-read) .arf-eye-lid{opacity:1}" +
         "html[data-arf-still-eyes] .arf-eye.arf-eye-read .arf-eye-ball{transform:none;opacity:1}" +
         "html[data-arf-still-eyes] .arf-eye.arf-eye-read .arf-eye-lid{opacity:0}" +
+        // ---- reduce motion ----
+        // Nothing of ours moves or fades: not a fade, not a slide, not the eye, not
+        // a pulse. With Reduce motion on, the page's root carries the mark. A
+        // device set to reduce motion gets the same through the media query.
+        // Every part of the panel and the page has a class starting arf-, so one
+        // rule reaches all of it. Code that waits for a transition to end also
+        // has a timer, so nothing waits on one that never runs.
+        STILL_RULES("html[data-arf-still] ") +
+        "html[data-arf-still] .arf-float .arf-hold{display:none}" +
+        "@media (prefers-reduced-motion: reduce){" + STILL_RULES("") + "}" +
         // ---- saying something is wrong, in the theme's own colours ----
         // Lumiverse has a danger colour and a success colour, and a warning drawn
         // in neither reads as one more muted paragraph. Tinted background, matching
@@ -7301,17 +7380,22 @@ export function setup(ctx, overrides) {
     function buildLastRefine(list) {
         const wrap = card(list.length === 1 ? "The last refine" : "Refines you can put back", undefined, list.length > 1 ? String(list.length) : undefined);
         wrap.setAttribute("data-arf-last", "1");
-        for (let i = 0; i < list.length; i++) {
-            const one = list[i];
-            // The newest is open; the rest are folded, or a busy chat buries the panel
-            // under its own history.
-            if (i === 0)
-                wrap.appendChild(buildUndoRow(one));
-            else
-                wrap.appendChild(fold(new Date(one.at).toTimeString().slice(0, 5) + " refine", (body) => {
-                    body.appendChild(buildUndoRow(one));
-                }));
-        }
+        // The newest is open. The rest go in one fold, each in a fold of its own
+        // named by its time and first words, so the card stays one refine tall
+        // until you ask for more.
+        wrap.appendChild(buildUndoRow(list[0]));
+        if (list.length > 1)
+            wrap.appendChild(fold("Older refines", (outer) => {
+                outer.appendChild(note("The last " + UNDO_PER_CHAT + " refines in a chat are kept here. The oldest goes when a new one comes in."));
+                for (let i = 1; i < list.length; i++) {
+                    const one = list[i];
+                    const first = one.after.replace(/\s+/g, " ").trim();
+                    const words = first.length > 48 ? first.slice(0, 48).trim() + "..." : first;
+                    outer.appendChild(fold(new Date(one.at).toTimeString().slice(0, 5) + ": " + words, (body) => {
+                        body.appendChild(buildUndoRow(one));
+                    }));
+                }
+            }));
         if (list.length > 1) {
             const all = el("div", "arf-row");
             const clear = button("Dismiss them all", false);
@@ -7343,24 +7427,36 @@ export function setup(ctx, overrides) {
         return String(t == null ? "" : t).match(/\s*\S+\s*|\s+/g) || [];
     }
     // The longest run of words the two have in common, which is what tells a
-    // rewrite from a replacement. Bounded: the table is one row per word pair, so
-    // a pair of very long messages would be a big table and a slow frame. Past
-    // the cap it says so rather than freezing the panel, and the two texts are
-    // shown whole instead.
-    const DIFF_MAX = 1200;
+    // rewrite from a replacement.
+    //
+    // The table holds one cell per pair of words, so its size is what decides
+    // the cost. Words are turned into numbers first, the start and end the two
+    // share are taken off before the table is built, and the table is one block
+    // of 16-bit cells. A long reply then marks in a few milliseconds. Past
+    // DIFF_CELLS the two are split into paragraphs, the paragraphs are matched,
+    // and only the paragraphs that changed are marked word by word.
+    //
+    // DIFF_MAX is the last guard, for text far longer than any reply. Past it
+    // both are shown whole.
+    const DIFF_MAX = 40000;
+    const DIFF_CELLS = 4000000;
     function diffWords(a, b) {
-        const n = a.length;
-        const m = b.length;
-        // A table of common-run lengths, built from the end back.
-        const len = [];
-        for (let i = 0; i <= n; i++)
-            len.push(new Array(m + 1).fill(0));
-        for (let i = n - 1; i >= 0; i--)
-            for (let j = m - 1; j >= 0; j--)
-                len[i][j] =
-                    a[i].trim() === b[j].trim() && a[i].trim()
-                        ? len[i + 1][j + 1] + 1
-                        : Math.max(len[i + 1][j], len[i][j + 1]);
+        // Each word as a number. A run of spaces alone is never a match, so each
+        // side gives those its own number, which the other side never has.
+        const seen = new Map();
+        const ids = (list, blank) => list.map((w) => {
+            const k = w.trim();
+            if (!k)
+                return blank;
+            let v = seen.get(k);
+            if (v == null) {
+                v = seen.size;
+                seen.set(k, v);
+            }
+            return v;
+        });
+        const x = ids(a, -1);
+        const y = ids(b, -2);
         const out = [];
         const add = (how, text) => {
             const last = out[out.length - 1];
@@ -7371,27 +7467,120 @@ export function setup(ctx, overrides) {
             else
                 out.push({ how: how, text: text });
         };
-        let i = 0;
-        let j = 0;
-        while (i < n && j < m) {
-            if (a[i].trim() === b[j].trim() && a[i].trim()) {
-                add(0, b[j]);
-                i++;
-                j++;
-            }
-            else if (len[i + 1][j] >= len[i][j + 1]) {
+        const whole = (i0, i1, j0, j1) => {
+            for (let i = i0; i < i1; i++)
                 add(-1, a[i]);
-                i++;
-            }
-            else {
+            for (let j = j0; j < j1; j++)
                 add(1, b[j]);
-                j++;
+        };
+        // Word by word over a[i0..i1) and b[j0..j1), with a table built from the
+        // end back.
+        const table = (i0, i1, j0, j1) => {
+            const n = i1 - i0;
+            const m = j1 - j0;
+            const w = m + 1;
+            const len = new Uint16Array((n + 1) * w);
+            for (let i = n - 1; i >= 0; i--)
+                for (let j = m - 1; j >= 0; j--)
+                    len[i * w + j] =
+                        x[i0 + i] === y[j0 + j]
+                            ? len[(i + 1) * w + j + 1] + 1
+                            : Math.max(len[(i + 1) * w + j], len[i * w + j + 1]);
+            let i = 0;
+            let j = 0;
+            while (i < n && j < m) {
+                if (x[i0 + i] === y[j0 + j]) {
+                    add(0, b[j0 + j]);
+                    i++;
+                    j++;
+                }
+                else if (len[(i + 1) * w + j] >= len[i * w + j + 1]) {
+                    add(-1, a[i0 + i]);
+                    i++;
+                }
+                else {
+                    add(1, b[j0 + j]);
+                    j++;
+                }
             }
-        }
-        while (i < n)
-            add(-1, a[i++]);
-        while (j < m)
-            add(1, b[j++]);
+            while (i < n)
+                add(-1, a[i0 + i++]);
+            while (j < m)
+                add(1, b[j0 + j++]);
+        };
+        // Where each paragraph starts in a[i0..i1): a word that ends in a blank
+        // line closes one.
+        const paraStarts = (list, i0, i1) => {
+            const at = [i0];
+            for (let i = i0; i < i1 - 1; i++)
+                if (/\n\s*\n/.test(list[i]))
+                    at.push(i + 1);
+            return at;
+        };
+        const range = (i0, i1, j0, j1, split) => {
+            while (i0 < i1 && j0 < j1 && x[i0] === y[j0]) {
+                add(0, b[j0]);
+                i0++;
+                j0++;
+            }
+            let e = i1;
+            let f = j1;
+            while (e > i0 && f > j0 && x[e - 1] === y[f - 1]) {
+                e--;
+                f--;
+            }
+            const n = e - i0;
+            const m = f - j0;
+            if (!n || !m)
+                whole(i0, e, j0, f);
+            else if (n * m <= DIFF_CELLS)
+                table(i0, e, j0, f);
+            else if (split)
+                paragraphs(i0, e, j0, f);
+            else
+                whole(i0, e, j0, f);
+            for (let k = 0; k < i1 - e; k++)
+                add(0, b[f + k]);
+        };
+        // Paragraphs matched as whole units, then each stretch between two
+        // matches marked word by word.
+        const paragraphs = (i0, i1, j0, j1) => {
+            const pa = paraStarts(a, i0, i1);
+            const pb = paraStarts(b, j0, j1);
+            const keyOf = (list, at, k, end) => list.slice(at[k], k + 1 < at.length ? at[k + 1] : end).filter((v) => v >= 0).join(",");
+            const ka = pa.map((_, k) => keyOf(x, pa, k, i1));
+            const kb = pb.map((_, k) => keyOf(y, pb, k, j1));
+            const P = ka.length;
+            const Q = kb.length;
+            const w = Q + 1;
+            const len = new Uint16Array((P + 1) * w);
+            for (let p = P - 1; p >= 0; p--)
+                for (let q = Q - 1; q >= 0; q--)
+                    len[p * w + q] =
+                        ka[p] === kb[q] ? len[(p + 1) * w + q + 1] + 1 : Math.max(len[(p + 1) * w + q], len[p * w + q + 1]);
+            const startA = (p) => (p < P ? pa[p] : i1);
+            const startB = (q) => (q < Q ? pb[q] : j1);
+            let p = 0;
+            let q = 0;
+            let fromA = i0;
+            let fromB = j0;
+            while (p < P && q < Q) {
+                if (ka[p] === kb[q]) {
+                    range(fromA, startA(p), fromB, startB(q), false);
+                    range(startA(p), startA(p + 1), startB(q), startB(q + 1), false);
+                    p++;
+                    q++;
+                    fromA = startA(p);
+                    fromB = startB(q);
+                }
+                else if (len[(p + 1) * w + q] >= len[p * w + q + 1])
+                    p++;
+                else
+                    q++;
+            }
+            range(fromA, i1, fromB, j1, false);
+        };
+        range(0, x.length, 0, y.length, true);
         return out;
     }
     // Every before-and-after currently on the screen, so pressing the switch on
@@ -7605,7 +7794,7 @@ export function setup(ctx, overrides) {
     let settleTick = 0;
     function settleHeight(box, was) {
         try {
-            if (!(was > 0) || !box || !box.style)
+            if (!(was > 0) || !box || !box.style || noMotion())
                 return;
             const now = box.getBoundingClientRect().height;
             if (!(now > 0) || Math.abs(now - was) < 2)
@@ -7650,9 +7839,7 @@ export function setup(ctx, overrides) {
         try {
             if (!node || !node.style || typeof node.getBoundingClientRect !== "function")
                 return;
-            const still = typeof matchMedia === "function" &&
-                matchMedia("(prefers-reduced-motion: reduce)").matches;
-            if (still)
+            if (noMotion())
                 return;
             const tall = node.getBoundingClientRect().height;
             if (!(tall > 0))
@@ -7714,13 +7901,7 @@ export function setup(ctx, overrides) {
             done();
         };
         try {
-            let still = false;
-            try {
-                still =
-                    typeof matchMedia === "function" &&
-                        matchMedia("(prefers-reduced-motion: reduce)").matches;
-            }
-            catch (_) { }
+            const still = noMotion();
             const tall = node && node.getBoundingClientRect ? node.getBoundingClientRect().height : 0;
             if (still || !(tall > 0) || !node.style) {
                 finish();
@@ -9659,7 +9840,7 @@ export function setup(ctx, overrides) {
     }
     function buildSamplerCard() {
         const set = SAMPLER_FIELDS.filter((s) => cfg.samplers && cfg.samplers[s.id] != null && cfg.samplers[s.id] !== "").length;
-        const wrap = card("Samplers", "Leave these blank to use the values from your preset. A value you fill in is sent with the refine only, never with your chat.", set ? set + " set" : "all default");
+        const wrap = card("Samplers", "Leave these blank to use the values from the preset linked to the connection. A value you fill in is sent with the refine only, never with your chat.", set ? set + " set" : "all default");
         wrap.appendChild(fold("Sampler values", (body) => {
             for (const s of SAMPLER_FIELDS)
                 body.appendChild(samplerRow(s));
@@ -9817,6 +9998,14 @@ export function setup(ctx, overrides) {
             label: "Take the answer from between the tags",
             type: "bool",
             hint: "On by default. When the answer has <REFINED> tags, only the text between them is saved. Off, the whole answer is saved.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "requireTags",
+            label: "Drop an answer with no tags",
+            type: "bool",
+            needs: { key: "wrapOutput" },
+            under: true,
+            hint: "On by default. When your prompt asks for <REFINED> tags and the answer has none, the rewrite is thrown away.",
         }));
         wrap.appendChild(fieldRow({
             key: "streamProgress",
@@ -10900,6 +11089,12 @@ export function setup(ctx, overrides) {
             label: "Keep the eye still",
             type: "bool",
             hint: "The eye on every button stays shut, and opens without moving while a refine runs.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "reduceMotion",
+            label: "Reduce motion",
+            type: "bool",
+            hint: "Off by default. On, nothing in Auto Refine moves or fades. Your device's own reduce motion setting does the same.",
         }));
         return wrap;
     }
@@ -15002,6 +15197,15 @@ export function setup(ctx, overrides) {
                             });
                             while (undoable.size > UNDO_MAX)
                                 undoable.delete(undoable.keys().next().value);
+                            // Newest last in the map, so the first ones met for this chat
+                            // are its oldest.
+                            const here = [];
+                            undoable.forEach((v, key) => {
+                                if (String(v.chatId) === String(msg.chatId))
+                                    here.push(key);
+                            });
+                            for (let i = 0; i < here.length - UNDO_PER_CHAT; i++)
+                                undoable.delete(here[i]);
                             showPop(undoable.get(k));
                         }
                         // The badge is the point of the tab being closable: something

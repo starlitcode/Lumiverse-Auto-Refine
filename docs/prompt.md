@@ -118,11 +118,14 @@ The rewrite comes back between `<REFINED>` and `</REFINED>`, and only what is be
 
 - If the model opens with "Sure! Here is the rewritten message:", that line is ignored and the rewrite is still saved.
 - If there is an opening tag with no closing tag, the answer was cut off. Nothing is saved, and your reply stays as it was.
+- If there are no tags at all, the model did not follow the format. Nothing is saved, and your reply stays as it was. This only applies when your prompt asks for the tags.
 - The tags are read without caring about capitals, so a prompt written in lower case still works.
 
 **Asking for the tags is your prompt's job.** The built-in prompts ask in the **Hand It In** block, in plain words you can reword, move or delete. No hidden macro adds the instruction.
 
 **Take the answer from between the tags**, on the Limits tab, is on by default. Off, the whole answer is taken as the rewrite, and the other checks catch a preamble instead.
+
+**Drop an answer with no tags** is folded under it, and is on by default. Off, an answer with no tags is taken whole as the rewrite. Turn it off for a model that never uses the tags.
 
 ## The scorecard
 
@@ -395,10 +398,12 @@ The biggest saving of all: point **Refine using** at a smaller, cheaper model.
 
 ## Sampler settings
 
-On the **Model** tab, every sampler starts blank. A blank sampler is not sent, so Lumiverse uses the value from your preset, and a preset you tuned is never overridden.
+On the **Model** tab, every sampler starts blank. A blank sampler is not sent. Lumiverse then fills it in.
 
-- With **Refine using** on the model you chat with, that is the preset you chat with.
-- With a different connection picked, Lumiverse decides which preset the value comes from.
+- The value comes from the preset linked to the connection in **Refine using**. You link a preset to a connection in Lumiverse's connection settings.
+- This is not always the preset you chat with. A chat reply uses the preset you picked for chat. A refine uses only the preset linked to the connection.
+- With no preset linked, the provider's own default is used.
+- **Let it think first** set to **Whatever my connection is set to** works the same way: the connection's own thinking setting is used.
 
 - A value you fill in is sent with the refine only. Your chat and your preset are not changed.
 - **Context size** and **Longest answer** start blank too, which is almost always right, because a refine is a small request.

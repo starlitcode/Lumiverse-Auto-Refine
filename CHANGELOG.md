@@ -13,9 +13,15 @@ _2026-10-08_
 ### Added
 
 - **It needs no key, for a model you run yourself.** Under **Another address** there is a new switch, off by default. Switched on, no key is sent, **Test** works with no key saved, and `http://` works at any address. See [A model you run yourself](docs/two-models.md#a-model-you-run-yourself).
+- **Leave a refusal as it is.** A new switch, on by default. A short reply where the model refused is not refined by the automatic pass, so no call is spent on it. The refine button still works on it. See [A reply that is a refusal](docs/guardrails.md#a-reply-that-is-a-refusal).
+- **Drop an answer with no tags.** A new switch under **Take the answer from between the tags**, on by default. When your prompt asks for `<REFINED>` tags and the answer has none, the model did not follow the format, and the rewrite is thrown away. Before, the whole answer was saved. See [The answer it asks for](docs/prompt.md#the-answer-it-asks-for).
+- **Refuse a rewrite that loses \* marks.** A new check, off by default. On, a rewrite with fewer \* marks than the reply, or with one left unpaired, is thrown away. See [The \* marks around actions](docs/guardrails.md#the--marks-around-actions).
+- **Reduce motion.** A new switch under **Buttons and the widget**, off by default. On, nothing in Auto Refine moves or fades. A device set to reduce motion gets the same. See [Settings](docs/settings.md).
 
 ### Changed
 
+- **Refines you can put back keeps the last 5 in a chat.** The card above the tabs held every refine of the session and grew with each one. It now keeps the last 5 refines in a chat. The newest is open, and the others are in one fold, **Older refines**, each named by its time and first words. See [Settings](docs/settings.md).
+- **The floating button does not shrink when pressed.** It gets lighter instead. A button that shrinks and grows back is a zoom, and it costs more to draw on a phone.
 - **One built-in check in What it compares is replaced.** It asked whether the characters speak in the same order as the reply before. With two characters, that is true of most good replies, so they were refined for nothing. It now asks whether a character says something again that they already said in the reply before. If you were on the built-in checks, the panel offers the new ones.
 
 ### Fixed
@@ -23,6 +29,10 @@ _2026-10-08_
 - **Stop could say nothing was running while a refine was.** Stop only reached a refine while a model was being asked or during a wait. Pressed while Auto Refine was reading the chat, gathering lore and memory, building the prompt or saving, it said "there was nothing running to stop", and the refine went on. Stop now reaches a refine at every step, and the refine ends at the next one.
 - **The Refined card could come up late with the panel open.** When a refine finished, the whole panel was drawn again before the card could show, sometimes twice. With the drawer open on the Auto Refine tab, that held the card back long enough to see. The card now comes up first, and the panel catches up a moment later.
 - **Why rewrites were dropped cut each reason short.** A reason was cut to its first 80 characters, which often lost the part that says what went wrong. The whole reason now shows, wrapped to fit the screen. The same failure with a different detail at the end is still counted once.
+- **A refusal written another way was saved as the rewrite.** An answer that opens by declining to write, such as "I won't produce the next part", and then names the content or the request, was not caught. It is now caught as a refusal, both in a rewrite and in a reply. Auto Retry catches it too.
+- **What changed said "Too long to mark up" for an ordinary reply.** Past about 600 words in each version, the changes were not marked. A reply of any normal length is now marked word by word. A very long one is matched paragraph by paragraph first.
+- **The tab strip flashed see-through when it went back in place.** Scrolling back up, its solid colour went off in one frame. It now fades out. It still comes on at once when the strip is held at the top.
+- **The Samplers card named the wrong preset.** It said a blank sampler uses "the values from your preset". Lumiverse fills it from the preset linked to the connection, which is not always the one you chat with. The card and the docs now say so. See [Sampler settings](docs/prompt.md#sampler-settings).
 - **The switches were too small to tap on a phone.** Each switch on the panel took a tap only on its drawn shape, 26 pixels high. On a phone, the switches are now 32 pixels high, and the whole switch takes the tap. Nothing changes with a mouse.
 
 ---

@@ -45,6 +45,9 @@ const RULES = {
   minShrinkPct: 40,
   keepOriginal: true,
   confirmBeforeSave: false,
+  // Most answers below are written without the tags, to test what is inside
+  // them. The check on the tags has its own tests.
+  requireTags: false,
 };
 
 // The card the stub host hands back. first_mes is in here on purpose: it is a
@@ -4105,6 +4108,125 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     await wait(50);
     expect(h.body("m2")).toContain(WORKING);
     expect(h.asked.length).toBe(0);
+  });
+});
+
+// The * marks around an action or a stressed word. With the check on, a
+// rewrite that has fewer of them, or one left without its pair, is refused.
+describe("the * marks in a reply", () => {
+  const starred = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content: "*She steps through.* The cold, suddenly, just *hits* her." },
+  ];
+
+  test("a rewrite that drops them is refused with the check on", async () => {
+    const h = await armed(["<REFINED>She steps through. The cold hits her.</REFINED>"], { guardStars: true }, starred());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("*She steps through.* The cold, suddenly, just *hits* her.");
+    expect(h.skipped().some((w: string) => /lost 4 of the reply's 4 \* marks/.test(w))).toBe(true);
+  });
+
+  test("a rewrite that leaves one unpaired is refused", async () => {
+    const h = await armed(["<REFINED>*She steps through.* The cold *hits her. Then* the *wind.</REFINED>"], { guardStars: true }, starred());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.skipped().some((w: string) => /without its pair/.test(w))).toBe(true);
+  });
+
+  test("a rewrite that keeps them is saved", async () => {
+    const h = await armed(["<REFINED>*She steps through.* The cold *hits* her.</REFINED>"], { guardStars: true }, starred());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("*She steps through.* The cold *hits* her.");
+  });
+
+  test("with the check off, which is the default, a rewrite without them is saved", async () => {
+    const h = await armed(["<REFINED>She steps through. The cold hits her.</REFINED>"], {}, starred());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She steps through. The cold hits her.");
+  });
+});
+
+// An answer with no tags, when the prompt asks for them, did not follow the
+// format. It is dropped rather than saved whole.
+describe("an answer with no tags", () => {
+  test("is dropped, and the reply stays as it was", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { requireTags: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+    expect(h.skipped().some((w: string) => /REFINED> tags/.test(w))).toBe(true);
+  });
+
+  test("an answer with the tags is saved", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], { requireTags: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("is saved with Drop an answer with no tags off", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { requireTags: false });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a prompt that never asks for the tags is not held to them", async () => {
+    const plain = PROMPT.map((b: any) => ({ ...b, text: String(b.text).replace(/<\/?REFINED>/gi, "") }));
+    const h = await armed(["She stepped through and the cold hit her."], { requireTags: true, blocks: plain });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+});
+
+// A reply where the model refused is not refined by the automatic pass. It
+// would cost a call and give back another refusal.
+describe("a reply that is a refusal", () => {
+  const refusing = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    {
+      id: "m2",
+      role: "assistant",
+      content: "I won't produce the next part. It is graphic, and it goes past what I will make, so I am declining.",
+    },
+  ];
+
+  test("is left as it is, and nothing is asked", async () => {
+    const h = await armed(["<REFINED>Something else.</REFINED>"], {}, refusing());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+    expect(h.body("m2")).toContain("I won't produce the next part");
+    expect(h.stood().some((w: string) => /refusing/.test(w))).toBe(true);
+  });
+
+  test("is refined with Leave a refusal as it is off", async () => {
+    const h = await armed(["<REFINED>Something else.</REFINED>"], { skipRefusals: false }, refusing());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("is refined when you press the button", async () => {
+    const h = await armed(["<REFINED>Something else.</REFINED>"], {}, refusing());
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a scene that starts the same way is still refined", async () => {
+    const scene = refusing();
+    scene[2].content = "I can't continue up the ridge tonight. My knees have given out, and the camp is still two miles off.";
+    const h = await armed(["<REFINED>Something else.</REFINED>"], {}, scene);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(1);
   });
 });
 

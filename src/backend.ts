@@ -393,6 +393,10 @@ interface Block {
 // puts the rewrite between the tags, and taking what is between them is exact
 // where reading around a preamble is guesswork.
 let wrapOutput = true;
+// An answer with no tags at all, when the prompt asks for them, is a model
+// that did not follow the format. Without this it is saved whole, notes and
+// all, as if it were the rewrite.
+let requireTags = true;
 // The working so far, out of a half-written answer, without the tags around
 // it. Only what is inside REFINE_NOTES, so a prompt that does not ask for
 // working sends nothing at all and costs nothing.
@@ -482,6 +486,15 @@ function activeBlocks(isUser?: boolean): Block[] {
 // refused rather than paid for.
 function promptHasTurn(isUser?: boolean): boolean {
   return promptWants(TURN_MACRO, isUser);
+}
+
+// Whether any prompt that can be sent asks for the answer between the tags.
+// A prompt of your own that never mentions them is not held to them.
+const OUT_ASK = new RegExp('<\\s*' + OUT_TAG + '\\b', 'i');
+function promptAsksForTags(): boolean {
+  const all = activeBlocks(false).concat(activeBlocks(true), manyPasses ? passList.flatMap((p) => p.blocks || []) : []);
+  for (const b of all) if (b && b.on !== false && OUT_ASK.test(String(b.text || ''))) return true;
+  return false;
 }
 
 // Whether a prompt takes what the checks found.
@@ -1578,6 +1591,12 @@ const REFUSAL_STRONG: RegExp[] = [
   // a concrete thing in the scene. Without this, a servant or aide saying "I
   // can't assist you with the horses today" reads as the model refusing.
   /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:be able to )?(?:assist|comply|fulfil|fulfill)\b(?:[^.?!\n]{0,30}?\b(?:that|this|it|your request|this request|the request|your prompt)\b|(?:\s+you)?\s*[.!?,"'\u201d\u2019]|(?:\s+you)?\s*$)/i,
+  // A reply that opens by declining to write, and names the content or the
+  // request in the next few sentences: "I won't produce the next part. It is
+  // explicit...". Both halves are needed. The opening alone is a line a
+  // first-person narrator can write, and the content words alone are a scene.
+  // Auto Retry has the same pattern.
+  /^\s*(?:(?:I'm |I am )?sorry[,.!]?\s*(?:but\s+)?)?I(?: (?:can(?:no|')?t|can not|will not|won'?t|am (?:not able|unable|not going|not willing) to|must decline to|have to decline to)|'m (?:not able|unable|not going|not willing) to)\s+(?:write|continue|create|produce|generate|depict|portray|go on with|carry on with|take part in|help with|assist with)\b(?=[\s\S]{0,400}?\b(?:explicit|graphic|sexual(?:ly)?|non-?consensual|consent|polic(?:y|ies)|guidelines?|declin(?:e|ing)|not comfortable|(?:this|the|your) (?:request|prompt)|step(?:ping)? back)\b)/i,
   // Out-of-character comfort hedge, only in the assistant-action sense.
   /\bI don'?t feel comfortable (?:continuing|writing|creating|generating|producing|proceeding|providing|helping|assisting)\b/i,
   // Common modern refusal openers and bodies: "I'm sorry, but I can't create/generate...",
@@ -1878,6 +1897,16 @@ function looksLikeRefusal(text: string): boolean {
   return false;
 }
 
+// A reply that is the model refusing, as opposed to a scene. The same lists
+// as above, on the reply with its thinking taken out. Only a short reply
+// counts: a long one that holds the words is a scene, which is the same call
+// Auto Retry makes with its own length limit.
+const REFUSAL_REPLY_MAX = 1500;
+function replyRefused(text: string): boolean {
+  const shown = stripThinkingFrom(String(text == null ? '' : text)).trim();
+  return !!shown && shown.length <= REFUSAL_REPLY_MAX && looksLikeRefusal(shown);
+}
+
 // ---- a rewrite that sanitised the reply ----
 // The failure the other checks cannot see. A softened reply is not a refusal,
 // is the right length, and keeps every protected token: it just came back with
@@ -1931,6 +1960,9 @@ function setStrong(raw: any): void {
 }
 
 let guardSoften = true;
+// Off by default. A rewrite with fewer * marks than the reply, or with a * left
+// unpaired, has lost or broken some of the reply's *actions* or emphasis.
+let guardStars = false;
 // How many of the strong words may go before it counts as softening. A
 // refine legitimately cuts a word or two, so this is a fraction rather than a
 // count, and it is the reader's to set.
@@ -2114,6 +2146,7 @@ function swappedIn(original: string, rewrite: string): string[] {
 }
 
 let guardRefusal = true;
+let skipRefusals = true;
 let guardPreamble = true;
 // How many extra asks a failed check is worth. Zero by default: every retry is
 // another call, and somebody who never opened this setting has not agreed to
@@ -2324,10 +2357,18 @@ interface RefineOutcome {
 // model that wrapped its rewrite correctly is never failed for the sentence it
 // wrote around the tags, and one cut off mid-rewrite is caught by the opening
 // tag with nothing closing it rather than saved half-written.
-function judge(answer: any, original: string): Verdict {
+// tags is false for text that was already taken out of its tags, such as the
+// end of a chain of passes.
+function judge(answer: any, original: string, tags: boolean = true): Verdict {
   const got = unwrapOutput(String(answer == null ? '' : answer));
   if (wrapOutput && got.tagged && !got.text)
     return { ok: false, text: '', why: 'the rewrite was cut off before it finished', notes: got.outside };
+  if (tags && wrapOutput && requireTags && !got.tagged && promptAsksForTags() && String(answer == null ? '' : answer).trim())
+    return {
+      ok: false,
+      text: '',
+      why: 'the model did not put the rewrite between <' + OUT_TAG + '> tags, as the prompt asks',
+    };
   const out = judgeInner(got.text, original);
   if (got.outside) out.notes = got.outside;
   // Handed back unchanged with something said outside the tags is the model
@@ -2381,6 +2422,15 @@ function judgeInner(answer: any, original: string): Verdict {
         swapped.slice(0, 3).join(', ') +
         (swapped.length > 3 ? ' and ' + (swapped.length - 3) + ' more' : ''),
     };
+  if (guardStars) {
+    const stars = (t: string) => (t.match(/\*/g) || []).length;
+    const had = stars(orig);
+    const has = stars(text);
+    if (has < had)
+      return { ok: false, text: '', why: 'the rewrite lost ' + (had - has) + ' of the reply\'s ' + had + ' * marks' };
+    if (had % 2 === 0 && has % 2 === 1)
+      return { ok: false, text: '', why: 'the rewrite left a * mark without its pair' };
+  }
 
   // Length. A refine that doubles a reply has written new scene, and one that
   // halves it has thrown writing away. Both are judged against what the reader
@@ -3407,6 +3457,15 @@ async function refineRun(
         ' times already, so the automatic pass has stopped on it. Press the button if you want another',
     };
 
+  // A reply where the model refused is not writing to improve. Rewriting it
+  // costs a call and gives back another refusal. Only the automatic pass skips
+  // it: pressing the button is somebody asking for this one.
+  if (!byHand && m.role === 'assistant' && skipRefusals && replyRefused(original))
+    return {
+      ok: false,
+      stood: true,
+      why: 'the reply is the model refusing, so it was not refined. Turn off Leave a refusal as it is to refine it anyway',
+    };
 
   // Who this is and what led up to it. Both are best-effort: a chat with no
   // card, or a reader who has not granted the two read permissions, refines
@@ -3669,7 +3728,7 @@ async function refineRun(
   // the reply itself on a second run too, so two runs cannot drift further than
   // one.
   if (chain.length > 1) {
-    const whole = judge(carried, armed.text);
+    const whole = judge(carried, armed.text, false);
     if (!whole.ok)
       return {
         ok: false,
@@ -4977,8 +5036,10 @@ function applyRules(s: any): void {
     shieldKeep = keep.list;
   }
   guardRefusal = s.guardRefusal !== false;
+  skipRefusals = s.skipRefusals !== false;
   guardPreamble = s.guardPreamble !== false;
   guardSoften = s.guardSoften !== false;
+  guardStars = s.guardStars === true;
   softenPct = Number(s.softenPct);
   softenPct = Number.isFinite(softenPct) ? softenPct : 60;
   setStrong(s.softenWords);
@@ -5078,6 +5139,7 @@ function applyRules(s: any): void {
     : [];
   protectInline = !!s.protectInline;
   wrapOutput = s.wrapOutput !== false;
+  requireTags = s.requireTags !== false;
   streamProgress = s.streamProgress !== false;
 }
 
