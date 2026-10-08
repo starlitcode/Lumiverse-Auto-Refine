@@ -5402,6 +5402,9 @@ export function setup(ctx, overrides) {
         ".arf-box{width:52px;height:32px;border-radius:17px}" +
         ".arf-box::after{width:24px;height:24px;left:4px}" +
         ".arf-box:checked::after{left:24px}" +
+        // A little room around it takes the tap too, so a finger that lands just
+        // off the edge still flips it. Auto Retry's tick boxes have the same.
+        ".arf-box::before{content:\"\";position:absolute;inset:-6px -4px}" +
         ".arf-field{padding:10px 12px}}" +
         // The buttons that sit in Lumiverse's own slots. Drawn from theme
         // variables rather than copied off the host's buttons, whose class names
