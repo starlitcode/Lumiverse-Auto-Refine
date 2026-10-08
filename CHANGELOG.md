@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.33.1
+
+_2026-10-08_
+
+### Fixed
+
+- **The tab names could be hard to read on a light theme.** In 1.33.0 the tab strip and the cards over a pattern were drawn on the theme's deepest background colour. A custom light theme that does not set that colour left it dark, so the tab names were coloured for a dark strip that was drawn light. They are now drawn in the theme's raised colour, the one Lumiverse uses for its own panels, which is light on a light theme and dark on a dark one.
+
+---
+
 ## 1.33.0
 
 _2026-10-08_
