@@ -4737,7 +4737,7 @@ async function askJev(
 ): Promise<{ answers?: any; cost?: number; model?: string; error?: string }> {
   const where = jevWhere();
   if (!where.url && hostFor(judgeWho, judgeHost) === 'cloudflare')
-    return { error: 'no Cloudflare account ID is saved. Paste it into Cloudflare account ID on the Model tab' };
+    return { error: 'no usable Cloudflare account ID is saved. Paste its 32 letters and numbers into Cloudflare account ID on the Model tab' };
   if (!where.url) return { error: 'no address is set for ' + who() };
   // A model run without a key, such as one on the user's own machine, is sent
   // no key at all. With nothing secret in the call, http:// is allowed at any
@@ -4852,8 +4852,8 @@ async function askJev(
     let refused = 0;
     for (const a of data.answers) {
       if (a && a.type === 'refusal') refused++;
-      const p = a && Number(a.probability);
-      if (a && typeof a.name === 'string' && Number.isFinite(p)) answers[a.name] = { noul: p };
+      const p = a && a.probability;
+      if (a && typeof a.name === 'string' && typeof p === 'number' && Number.isFinite(p)) answers[a.name] = { noul: p };
     }
     if (refused && !Object.keys(answers).length) return { error: who() + ' declined to answer the checks' };
     data = { ...data, answers: answers };

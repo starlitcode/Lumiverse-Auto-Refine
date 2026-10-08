@@ -1819,7 +1819,7 @@ describe("two models: Jev reads the reply first", () => {
     const b = JSON.parse(init.body);
     const answers = b.questions.map((q: any, i: number) => {
       const p = pcts[i] === undefined ? pcts[pcts.length - 1] : pcts[i];
-      return p === null ? { type: "refusal", name: q.name } : { type: "predicate", name: q.name, probability: p / 100 };
+      return p === null ? { type: "refusal", name: q.name, probability: null } : { type: "predicate", name: q.name, probability: p / 100 };
     });
     return { status: 200, body: JSON.stringify({ model: b.model, answers: answers, usage: { input_tokens: 42, output_tokens: 0 } }) };
   };
