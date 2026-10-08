@@ -1405,6 +1405,43 @@ describe("two models: Jev reads the reply first", () => {
     expect(on.jevCalls[0].url).toBe(url);
   });
 
+  // A model run without a key, such as one on the reader's own machine. With
+  // It needs no key on, the call goes with no key saved and no key in it, and
+  // http:// works at any address, since nothing secret is sent.
+  test("It needs no key calls another address with no key, over http:// on the network", async () => {
+    const url = "http://192.168.1.20:8008/v1/systemone";
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeHost: "custom", judgeUrl: url, judgeModel: "made-up-local-model", judgeNoKey: true }, chat(), { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(h.jevCalls[0].url).toBe(url);
+    expect(h.jevCalls[0].init.headers.Authorization).toBeUndefined();
+    expect(h.jevCalls[0].init.headers["x-api-key"]).toBeUndefined();
+  });
+
+  test("with It needs no key off, another address still needs a key", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeHost: "custom", judgeUrl: "https://local.example.test/v1/systemone", judgeModel: "made-up-local-model" }, chat(), { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+    expect(said(h)[0].why).toMatch(/no key is saved/);
+  });
+
+  test("It needs no key does nothing for a host in the list", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeHost: "openrouter", judgeNoKey: true }, chat(), { jev: says([90]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(0);
+    expect(said(h)[0].why).toMatch(/no key is saved/);
+  });
+
+  test("an address that asks for a key says to switch It needs no key off", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeHost: "custom", judgeUrl: "http://localhost:8008/v1/systemone", judgeModel: "made-up-local-model", judgeNoKey: true }, chat(), { jev: () => ({ status: 401, body: '{"detail":"missing key"}' }) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].why).toMatch(/Switch off It needs no key/);
+  });
+
   // Another address is a setting, and settings can come from somebody else's
   // file. The key saved for one address is never sent to another.
   test("a key for another address is only sent to that address", async () => {
@@ -1730,7 +1767,7 @@ describe("two models: Jev reads the reply first", () => {
     expect(body.state.input).toEqual([{ role: "assistant", content: "The gate stands open, and the road past it is dark." }]);
     expect(body.state.reply).toBeUndefined();
     expect(body.questions.before_2.instructions).toBe(
-      "The reply has the characters speak in the same order as the previous reply, such as the same character speaking first in both.",
+      "The reply has a character say something they already said in the previous reply, in the same or other words, such as a threat or a promise made again.",
     );
   });
 
@@ -1947,7 +1984,7 @@ describe("two models: Jev reads the reply first", () => {
     expect(body.span.output).toEqual({ role: "assistant", content: REPLY });
     expect(body.behaviors[0]).toEqual({ id: "check_1", definition: "The reply follows the same order of events as the previous reply." });
     expect(body.behaviors.find((b: any) => b.id === "before_2").definition).toBe(
-      "The reply has the characters speak in the same order as the previous reply, such as the same character speaking first in both.",
+      "The reply has a character say something they already said in the previous reply, in the same or other words, such as a threat or a promise made again.",
     );
   });
 

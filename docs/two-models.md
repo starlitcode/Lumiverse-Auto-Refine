@@ -167,8 +167,26 @@ Pick **Another address** for any host not in the list. It works for every second
 1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
    - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.
    - An address on the same computer as Lumiverse can use `http://`, since it never goes over a network. That is `localhost`, `127.0.0.1`, `[::1]` and, in Docker, `host.docker.internal`.
-   - For any other `http://` address on your own machine or network, such as another Docker container by its name, switch on **Let the key go over http://**. It is off by default. Only switch it on for an address you run yourself.
+   - For any other `http://` address on your own machine or network, such as another Docker container by its name, switch on **Let the key go over http://**. It is off by default. Only switch it on for an address you run yourself. With **It needs no key** on, this is not needed.
 2. **Model name**: what your host calls the model, spelled the way its docs spell it.
+3. **It needs no key**: off by default, so the key box shows as it does for every host. Switch it on for a model you run yourself that takes no key. Then:
+   - No key is sent, and the key box, **Save key** and **Forget key** are hidden.
+   - **Test** works with no key saved.
+   - `http://` works at any address, because nothing secret is sent. **Let the key go over http://** is hidden.
+   - If the address answers that it wants a key, the Log says so. Switch it off and save the key.
+
+### A model you run yourself
+
+Kev 4B is an open model, so you can run it on your own computer with its maker's server. See [Kev 4B on Hugging Face](https://huggingface.co/jaredpalmer/kev-4b) for how to start it. Then:
+
+1. Pick **Kev 4B** under **Which second model**.
+2. Pick **Another address** under **Where it is reached**.
+3. Fill in **Address** with your server's address, such as `http://localhost:8008/v1/systemone`.
+4. Fill in **Model name** with `jaredpalmer/kev-4b`.
+5. Switch on **It needs no key**, unless you set a key on your server.
+6. Press **Test**.
+
+The address is reached from the machine Lumiverse runs on. `localhost` is that machine. If Lumiverse runs on your phone, it is your phone.
 
 Hosts take a scoring model in one of five ways, and the end of the address decides which:
 
@@ -294,7 +312,7 @@ The ones it compares with:
 
 ```
 `reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.
-`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.
+`reply` has a character say something they already said in `previous_reply`, in the same or other words, such as a threat or a promise made again.
 `reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.
 `reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.
 `reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.31.0";
+const VERSION = "1.32.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -212,7 +212,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "judgeUrl", "judgeModel", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -317,9 +317,20 @@ const JUDGE_CHECKS = [
 ].join("\n");
 // What the second model is asked about the reply before this one, with Also
 // compare with the reply before it on. Each is about repeating, with an
-// example, so a reply that carries the same scene on stays under the line. The
+// example, so a reply that carries the same scene on stays under the line.
+// None asks about something most good replies do, such as the same character
+// speaking first, which in a scene of two is true of nearly every reply. The
 // backend holds the same list for a reader whose settings do not carry it.
 const BEFORE_CHECKS = [
+    "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
+    "`reply` has a character say something they already said in `previous_reply`, in the same or other words, such as a threat or a promise made again.",
+    "`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.",
+    "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
+    "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
+].join("\n");
+// What it compares, as it was up to 1.31.0, word for word. A reader still
+// holding exactly these never wrote their own, and is offered the ones above.
+const BEFORE_CHECKS_1_31 = [
     "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
     "`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.",
     "`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.",
@@ -346,16 +357,6 @@ const PROTECT_NOTE = "Parts of this passage have been replaced with tokens shape
     "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
     "edit exactly as it is. Copy every one into your answer unchanged and in the " +
     "same place, treating each as a single character you cannot spell.";
-// The checks as they were up to 1.29.0, word for word. A reader still holding
-// exactly these never wrote their own, and is offered the ones above.
-const JUDGE_CHECKS_1_29 = [
-    "`reply` uses the same phrase of three or more words twice within a few sentences, or starts three or more sentences in a row with the same word.",
-    "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
-    "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
-    "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
-    "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
-    "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
-].join("\n");
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
@@ -637,6 +638,9 @@ const CONFIG = {
     judgeUrl: "",
     judgeModel: "",
     judgeHttpOk: false,
+    // Another address that takes no key, such as a model run on your own machine.
+    // Off, so the key box shows as it does for every host.
+    judgeNoKey: false,
     judgeVersion: "latest",
     // A model name typed in for each second model. Empty uses the built-in one.
     jevName: "",
@@ -1812,56 +1816,14 @@ function markText(text) {
 // `needs` keeps the line from somebody the setting does nothing for. The checks
 // are only read with two models on, so a reader on one model is not told about
 // them. If they switch to two models later, the line comes up then.
-// Why the lines moved. Said to a reader still on the old line for the model
-// they have picked.
-const LINE_WHY = "The default is now 30, from testing during the beta.";
 const MOVED_DEFAULTS = [
     {
-        key: "judgeChecks",
-        was: JUDGE_CHECKS_1_29,
-        label: "What the second model checks",
-        why: "The first check asked about two patterns at once. It is now two checks: one for a repeated phrase, and one for sentences that start with the same word.",
+        key: "judgeBeforeChecks",
+        was: BEFORE_CHECKS_1_31,
+        label: "What it compares",
+        why: "One check asked whether the characters speak in the same order as the reply before. With two characters, that is true of most good replies. It is now a check for a character saying the same thing again.",
         needs: { key: "judgeMode", is: "two" },
-    },
-    {
-        key: "spanOver",
-        was: 15,
-        label: "Refine when a check reaches",
-        why: LINE_WHY,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "span" },
-    },
-    {
-        key: "mercuryOver",
-        was: 40,
-        label: "Refine when a check reaches",
-        why: LINE_WHY,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mercury" },
-    },
-    {
-        key: "d1Over",
-        was: 50,
-        label: "Refine when a check reaches",
-        why: LINE_WHY,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "d1" },
-    },
-    {
-        key: "solarOver",
-        was: 50,
-        label: "Refine when a check reaches",
-        why: LINE_WHY,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "solar" },
-    },
-    {
-        key: "kevOver",
-        was: 50,
-        label: "Refine when a check reaches",
-        why: LINE_WHY,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "kev" },
+        also: { key: "judgeBefore", is: true },
     },
 ];
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
@@ -2191,10 +2153,19 @@ const JUDGE_FIELDS = [
         hint: "What that host calls the model, as its own docs spell it.",
     },
     {
+        key: "judgeNoKey",
+        label: "It needs no key",
+        type: "bool",
+        needs: { key: "judgeHost", is: "custom" },
+        under: true,
+        hint: "Off by default. For a model you run yourself. No key is sent, so http:// works at any address.",
+    },
+    {
         key: "judgeHttpOk",
         label: "Let the key go over http://",
         type: "bool",
         needs: { key: "judgeHost", is: "custom" },
+        also: { key: "judgeNoKey", is: false },
         under: true,
         hint: "Off by default. Only for an address on your own machine or network, such as another Docker container. Over http the key is not encrypted.",
     },
@@ -4941,11 +4912,11 @@ export function setup(ctx, overrides) {
         ".arf-field:hover:not(:focus):not(:disabled){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
         ".arf-link:hover{filter:brightness(1.25)}" +
         "}" +
-        // A finger needs room. The switches keep their size and get a larger
-        // area that answers a tap around them; the small round buttons and the
-        // links grow to at least 32 pixels.
+        // A finger needs room. The small round buttons and the links grow to at
+        // least 32 pixels. The switches grow below, with the other sizes for a
+        // finger: a pseudo-element around a checkbox is drawn but is not part of
+        // what a tap can hit, so it cannot stand in for the switch being bigger.
         "@media (pointer: coarse){" +
-        ".arf-box::before{content:\"\";position:absolute;inset:-4px -2px}" +
         ".arf-x.arf-blockfold{min-width:32px;min-height:32px}" +
         ".arf-link{display:inline-block;padding:9px 0}" +
         "}" +
@@ -5326,9 +5297,11 @@ export function setup(ctx, overrides) {
         ".arf-btn.arf-foldall{min-height:40px;padding:0 14px}" +
         ".arf-fold{min-height:44px}" +
         ".arf-tab{padding:12px 4px}" +
-        ".arf-box{width:46px;height:26px;border-radius:13px}" +
-        ".arf-box::after{width:18px;height:18px}" +
-        ".arf-box:checked::after{left:23px}" +
+        // 32 pixels high inside its border, so the whole switch is a tap target
+        // of at least that.
+        ".arf-box{width:52px;height:32px;border-radius:17px}" +
+        ".arf-box::after{width:24px;height:24px;left:4px}" +
+        ".arf-box:checked::after{left:24px}" +
         ".arf-field{padding:10px 12px}}" +
         // The buttons that sit in Lumiverse's own slots. Drawn from theme
         // variables rather than copied off the host's buttons, whose class names
@@ -9352,7 +9325,10 @@ export function setup(ctx, overrides) {
             wrap.appendChild(fieldRow(f));
         const keyRow = el("div", "arf-col");
         keyRow.setAttribute("data-arf-jevkey", "1");
-        const lab = el("span", "arf-lab", keyHost() === "custom" ? "Key for another address" : "Key for " + hostName(keyHost()));
+        // Another address with It needs no key on: there is no key to paste, save
+        // or forget, and Test runs without one.
+        const keyless = keyHost() === "custom" && !!cfg.judgeNoKey;
+        const lab = el("span", "arf-lab", keyless ? "Another address, with no key" : keyHost() === "custom" ? "Key for another address" : "Key for " + hostName(keyHost()));
         lab.id = "arf-jevkey-name";
         keyRow.appendChild(lab);
         const box = document.createElement("input");
@@ -9366,6 +9342,8 @@ export function setup(ctx, overrides) {
             : keyHost() === "custom"
                 ? "Paste the key for the address above"
                 : "Paste the key from " + hostName(keyHost());
+        if (keyless)
+            box.hidden = true;
         keyRow.appendChild(box);
         const acts = el("div", "arf-row");
         const save = button("Save key", false);
@@ -9395,7 +9373,7 @@ export function setup(ctx, overrides) {
         });
         const test = button("Test", false);
         test.setAttribute("data-arf-jev", "test");
-        test.disabled = !jevHas;
+        test.disabled = !jevHas && !keyless;
         test.style.opacity = test.disabled ? "0.45" : "1";
         test.addEventListener("click", () => {
             jevSaid = "Asking " + whoName() + " one small question.";
@@ -9404,16 +9382,20 @@ export function setup(ctx, overrides) {
             send({ type: "jev_test", requestId: jevAsk });
             paint();
         });
-        acts.appendChild(save);
-        acts.appendChild(forget);
+        if (!keyless) {
+            acts.appendChild(save);
+            acts.appendChild(forget);
+        }
         acts.appendChild(test);
         keyRow.appendChild(acts);
         const said = note(jevSaid ||
-            (jevHas == null
-                ? "Asking whether a key is saved."
-                : jevHas
-                    ? "A key is saved. It is kept in Lumiverse's secure store and never shown again."
-                    : "No key is saved yet."));
+            (keyless
+                ? "No key is sent to this address."
+                : jevHas == null
+                    ? "Asking whether a key is saved."
+                    : jevHas
+                        ? "A key is saved. It is kept in Lumiverse's secure store and never shown again."
+                        : "No key is saved yet."));
         said.setAttribute("data-arf-jevsaid", "1");
         keyRow.appendChild(said);
         if (jevHosts.length) {

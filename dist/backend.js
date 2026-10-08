@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.31.0';
+const VERSION = '1.32.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4095,6 +4095,8 @@ let judgeUrl = '';
 // Set by the reader for an http address they know is their own, such as
 // another Docker container. See safeForKey.
 let judgeHttpOk = false;
+// Another address that takes no key, such as a model the user runs themselves.
+let judgeNoKey = false;
 let judgeModel = '';
 let judgeVersion = 'latest';
 // A model name typed in for each second model. Empty uses the built-in name,
@@ -4340,14 +4342,18 @@ async function askJev(userId, state, questions) {
     const where = jevWhere();
     if (!where.url)
         return { error: 'no address is set for ' + who() };
-    if (!safeForKey(where.url))
+    // A model run without a key, such as one on the user's own machine, is sent
+    // no key at all. With nothing secret in the call, http:// is allowed at any
+    // address. Only for Another address: every host in the list needs its key.
+    const keyless = judgeNoKey && hostFor(judgeWho, judgeHost) === 'custom';
+    if (!keyless && !safeForKey(where.url))
         return {
             error: 'the key was not sent, because the address does not start with https://. Over http:// the key can be read on the way. To use an http:// address on your own machine or network, such as another Docker container, switch on Let the key go over http://',
         };
     if (!where.model)
         return { error: 'no model name is set for ' + who() };
-    const key = await jevKey(userId, hostFor(judgeWho, judgeHost));
-    if (!key)
+    const key = keyless ? '' : await jevKey(userId, hostFor(judgeWho, judgeHost));
+    if (!keyless && !key)
         return { error: 'no key is saved for ' + hostLabel(hostFor(judgeWho, judgeHost)) };
     // Some hosts repeat the key they were sent in their error message. What a
     // host says goes to the Log, and the Log can go into a bug report, so the
@@ -4373,9 +4379,12 @@ async function askJev(userId, state, questions) {
                         : { model: where.model, state: state, questions: questions });
     // Claude-style hosts read the key from x-api-key and want a version header.
     // Both go only to the address the user picked, the same as the bearer key.
-    const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key };
+    const headers = { 'Content-Type': 'application/json' };
+    if (key)
+        headers.Authorization = 'Bearer ' + key;
     if (where.kind === 'messages') {
-        headers['x-api-key'] = key;
+        if (key)
+            headers['x-api-key'] = key;
         headers['anthropic-version'] = '2023-06-01';
     }
     const send = async () => {
@@ -4414,7 +4423,9 @@ async function askJev(userId, state, questions) {
     // 401 is the key. 403 is the host saying no to this account, which a key
     // that works everywhere else can still get, so it is not called a bad key.
     if (res.status === 401)
-        return { error: 'the ' + who() + ' key was refused' + why };
+        return keyless
+            ? { error: 'the address asked for a key. Switch off It needs no key and save the key for it' + why }
+            : { error: 'the ' + who() + ' key was refused' + why };
     if (res.status === 403)
         return { error: who() + ' turned the call down' + why };
     if (res.status === 402)
@@ -4477,7 +4488,7 @@ const FOUND_LEAD = 'Another model, {{second_model}}, read this passage before yo
     'Everything else in these instructions still applies.';
 const BEFORE_CHECKS = [
     "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
-    "`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.",
+    "`reply` has a character say something they already said in `previous_reply`, in the same or other words, such as a threat or a promise made again.",
     "`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.",
     "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
     "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
@@ -4768,6 +4779,7 @@ function applyRules(s) {
     judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
     judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
     judgeHttpOk = s.judgeHttpOk === true;
+    judgeNoKey = s.judgeNoKey === true;
     judgeVersion = ['preview', 'exact'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
     for (const who of Object.keys(ownNames)) {
         const raw = s[who + 'Name'];

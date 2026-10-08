@@ -6,6 +6,24 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.32.0
+
+_2026-10-08_
+
+### Added
+
+- **It needs no key, for a model you run yourself.** Under **Another address** there is a new switch, off by default. Switched on, no key is sent, **Test** works with no key saved, and `http://` works at any address. See [A model you run yourself](docs/two-models.md#a-model-you-run-yourself).
+
+### Changed
+
+- **One built-in check in What it compares is replaced.** It asked whether the characters speak in the same order as the reply before. With two characters, that is true of most good replies, so they were refined for nothing. It now asks whether a character says something again that they already said in the reply before. If you were on the built-in checks, the panel offers the new ones.
+
+### Fixed
+
+- **The switches were too small to tap on a phone.** Each switch on the panel took a tap only on its drawn shape, 26 pixels high. On a phone, the switches are now 32 pixels high, and the whole switch takes the tap. Nothing changes with a mouse.
+
+---
+
 ## 1.31.0
 
 _2026-10-03_

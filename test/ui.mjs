@@ -1851,6 +1851,83 @@ console.log("\na model name of your own for every second model");
   }
 }
 
+console.log("\nanother address that needs no key");
+{
+  // A model run on your own machine often takes no key. It needs no key is off
+  // by default, so the key box shows as usual. Switched on, the box, Save key
+  // and Forget key go, Test works with no key saved, and the http:// switch
+  // goes, since no key is sent. Checked at a phone width and a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "kev", judgeHost: "custom", judgeUrl: "http://localhost:8008/v1/systemone", judgeModel: "made-up-local-model" } }, async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const look = () =>
+        page.evaluate(() => {
+          const vis = (sel) => {
+            const n = document.querySelector(sel);
+            return !!n && !n.closest("[hidden]") && !n.hidden && n.getClientRects().length > 0;
+          };
+          const test = document.querySelector('#drawer [data-arf-jev="test"]');
+          const sw = document.querySelector('#drawer [data-arf-field="judgeNoKey"]');
+          return {
+            switchShown: vis('#drawer [data-arf-row="judgeNoKey"]'),
+            switchOn: !!(sw && sw.checked),
+            // The switch answers a tap a little above and below what is drawn,
+            // so what a finger can hit is measured by asking what is under a
+            // point near each edge.
+            switchHeight: (() => {
+              if (!sw) return 0;
+              const r = sw.getBoundingClientRect();
+              const x = r.left + r.width / 2;
+              let top = r.top, bottom = r.bottom;
+              while (top > r.top - 12 && document.elementFromPoint(x, top - 1) === sw) top--;
+              while (bottom < r.bottom + 12 && document.elementFromPoint(x, bottom + 1) === sw) bottom++;
+              return Math.round(bottom - top);
+            })(),
+            box: vis("#drawer [data-arf-jevkey-box]"),
+            save: vis('#drawer [data-arf-jev="save"]'),
+            forget: vis('#drawer [data-arf-jev="forget"]'),
+            testOn: !!test && !test.disabled,
+            http: vis('#drawer [data-arf-row="judgeHttpOk"]'),
+            said: (document.querySelector("#drawer [data-arf-jevsaid]") || {}).textContent || "",
+            sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+          };
+        });
+      const before = await look();
+      ok(label + ": It needs no key shows for another address, off by default", before.switchShown && !before.switchOn, JSON.stringify(before));
+      ok(label + ": with it off, the key box shows as usual", before.box && before.save && before.http, JSON.stringify(before));
+      await page.evaluate(() => {
+        const sw = document.querySelector('#drawer [data-arf-field="judgeNoKey"]');
+        sw.click();
+      });
+      await settle(page);
+      await new Promise((r) => setTimeout(r, 400));
+      const after = await look();
+      ok(label + ": switched on, the key box, Save key and Forget key go", !after.box && !after.save && !after.forget, JSON.stringify(after));
+      ok(label + ": Test works with no key saved", after.testOn, JSON.stringify(after));
+      ok(label + ": the http:// switch goes, since no key is sent", !after.http, JSON.stringify(after));
+      ok(label + ": and the panel says no key is sent", /No key is sent/.test(after.said), after.said);
+      ok(label + ": nothing runs off the side", !after.sideways, "");
+      if (touch) ok(label + ": the switch is tall enough to tap", after.switchHeight >= 32, String(after.switchHeight));
+      await page.evaluate(() => {
+        window.__sent.length = 0;
+        document.querySelector('#drawer [data-arf-jev="test"]').click();
+      });
+      ok(label + ": Test asks the backend", await page.evaluate(() => window.__sent.some((m) => m.type === "jev_test")), "");
+    });
+  }
+  // A host in the list always needs its key, so the switch is not offered.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "kev", judgeHost: "openrouter", judgeNoKey: true } }, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    const got = await page.evaluate(() => ({
+      sw: !!document.querySelector('#drawer [data-arf-row="judgeNoKey"]') && document.querySelector('#drawer [data-arf-row="judgeNoKey"]').getClientRects().length > 0 && !document.querySelector('#drawer [data-arf-row="judgeNoKey"]').closest("[hidden]"),
+      box: !!document.querySelector("#drawer [data-arf-jevkey-box]") && !document.querySelector("#drawer [data-arf-jevkey-box]").hidden,
+    }));
+    ok("on a host in the list, the switch is not offered and the key box shows", !got.sw && got.box, JSON.stringify(got));
+  });
+}
+
 console.log("\nD1, Solar Decide and Kev 4B");
 {
   // Each shows its own hosts and only its own line, at 30, with its link to
@@ -8845,90 +8922,67 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
 console.log("\nwhen a default moves under somebody who was on it");
 {
   // The line only reaches a reader still holding the old value, because that is
-  // who was following the default. Anybody who set their own number is told
-  // nothing: their setup did not change, and a line about a default they are
-  // not on is a line to dismiss for no reason.
+  // who was following the default. Anybody who set their own is told nothing:
+  // their setup did not change, and a line about a default they are not on is
+  // a line to dismiss for no reason.
   const seen = (page) =>
     page.evaluate(() => {
       const n = document.querySelector("#drawer [data-arf-moveddefault]");
       return n ? n.textContent : null;
     });
-
-  // The checks as they came before, word for word. A reader still holding them
-  // never wrote their own.
-  const OLD_CHECKS = __testing.MOVED_DEFAULTS.find((m) => m.key === "judgeChecks").was;
+  const entry = __testing.MOVED_DEFAULTS.find((m) => m.key === "judgeBeforeChecks");
+  const OLD = entry.was;
   const stored = (page) =>
     page.evaluate(() => {
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
-        now: raw ? JSON.parse(raw).judgeChecks : null,
+        now: raw ? JSON.parse(raw).judgeBeforeChecks : null,
         line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
       };
     });
-  const take = (page) =>
-    page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="take"]').click();
+  const press = (page, which) =>
+    page.evaluate(async (which) => {
+      document.querySelector('#drawer [data-arf-moveddefault="' + which + '"]').click();
       await new Promise((r) => setTimeout(r, 200));
-    });
+    }, which);
 
-  ok("the old checks are not the built-in ones", OLD_CHECKS !== STOCK_DEFAULTS.judgeChecks, "");
+  ok("the old list is not the built-in one", OLD !== STOCK_DEFAULTS.judgeBeforeChecks, "");
 
-  // Two models on and still on the old checks, so this one is told.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
+  // Two models, comparing with the reply before, and still on the old list.
+  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: OLD } }, async (page) => {
     const said = await seen(page);
     ok("somebody on the old default is told", !!said, JSON.stringify(said));
-    ok("and the line names the setting", !!said && /What the second model checks/.test(said), JSON.stringify(said));
-    await take(page);
+    ok("and the line names the setting", !!said && /What it compares/.test(said), JSON.stringify(said));
+    await press(page, "take");
     const after = await stored(page);
-    ok("taking it moves them to the new one", after.now === STOCK_DEFAULTS.judgeChecks, JSON.stringify(after));
+    ok("taking it moves them to the new one", after.now === STOCK_DEFAULTS.judgeBeforeChecks, JSON.stringify(after));
     ok("and the line goes with it", !after.line, JSON.stringify(after));
   });
 
-  // The same checks with a space left at the end of a line and an empty line
-  // after them, which is what a box that was clicked into and typed in a
-  // little can hold. Still the checks they started with.
-  await inTab(
-    browser,
-    { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS.replace("\n", "  \n") + "\n\n" } },
-    async (page) => {
-      ok("spaces and empty lines do not hide the line", !!(await seen(page)), "");
-    },
-  );
-
-  // One model, so the checks are never read and nothing is said about them.
-  await inTab(browser, { saved: { judgeMode: "one", judgeChecks: OLD_CHECKS } }, async (page) => {
-    ok("somebody the setting does nothing for is left alone", (await seen(page)) === null, "");
+  // The same list with a space at the end of a line and an empty line after
+  // it, which a box that was clicked into can hold. Still the list they had.
+  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: OLD.replace("\n", "  \n") + "\n\n" } }, async (page) => {
+    ok("spaces and empty lines do not hide the line", !!(await seen(page)), "");
   });
 
-  // Wrote their own, so nothing of theirs moved and nothing is said.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: "`reply` is too long." } }, async (page) => {
+  // The list is only read while comparing, and only with two models.
+  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: false, judgeBeforeChecks: OLD } }, async (page) => {
+    ok("somebody not comparing with the reply before is left alone", (await seen(page)) === null, "");
+  });
+  await inTab(browser, { saved: { judgeMode: "one", judgeBefore: true, judgeBeforeChecks: OLD } }, async (page) => {
+    ok("somebody on one model is left alone", (await seen(page)) === null, "");
+  });
+
+  // Wrote their own, so nothing of theirs moved.
+  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: "`reply` repeats `previous_reply`." } }, async (page) => {
     ok("somebody who chose their own is left alone", (await seen(page)) === null, "");
   });
 
-  // Already on the new ones, which is everybody installing fresh.
-  await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+  // Already on the new one, which is everybody installing fresh.
+  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true } }, async (page) => {
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
-  // Each model's line at its old default is offered 30, and taking it sets 30.
-  for (const [who, key, was] of [["span", "spanOver", 15], ["mercury", "mercuryOver", 40], ["d1", "d1Over", 50], ["solar", "solarOver", 50], ["kev", "kevOver", 50]]) {
-    await inTab(browser, { saved: { judgeMode: "two", judgeWho: who, [key]: was } }, async (page) => {
-      const said = await seen(page);
-      ok("somebody on " + who + " still on a line of " + was + " is told", !!said && /Refine when a check reaches/.test(said), JSON.stringify(said));
-      await take(page);
-      const line = await page.evaluate((key) => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}")[key], key);
-      ok("and taking it sets " + who + "'s line to 30", line === 30, String(line));
-    });
-  }
-  // Each line is its own setting, so an old line for one model is not offered
-  // to somebody on another.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", spanOver: 15, mercuryOver: 40, d1Over: 50 } }, async (page) => {
-    ok("somebody on Jev is not told about the other models' lines", (await seen(page)) === null, "");
-  });
-  // A line of their own choosing is left alone.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "mercury", mercuryOver: 65 } }, async (page) => {
-    ok("somebody who set their own line is left alone", (await seen(page)) === null, "");
-  });
   // A line somebody set themselves for Jev is given to Span too. A default is not.
   for (const [was, want] of [[35, "35"], [40, "30"], [50, "30"]]) {
     await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: was } }, async (page) => {
@@ -8943,13 +8997,10 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD_CHECKS } }, async (page) => {
-    await page.evaluate(async () => {
-      document.querySelector('#drawer [data-arf-moveddefault="keep"]').click();
-      await new Promise((r) => setTimeout(r, 200));
-    });
+  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: OLD } }, async (page) => {
+    await press(page, "keep");
     const after = await stored(page);
-    ok("keeping yours leaves the setting alone", after.now === OLD_CHECKS, JSON.stringify(after));
+    ok("keeping yours leaves the setting alone", after.now === OLD, JSON.stringify(after));
     ok("and still takes the line away", !after.line, JSON.stringify(after));
   });
 }
