@@ -4853,10 +4853,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // lines.
   const PATTERNS = ["", "diamonds", "stripes", "dots"];
   const PAT_INK = "var(--lumiverse-primary-010,rgba(147,112,219,.12))";
+  // Solid, and in the theme's own colour: the theme's deepest background with
+  // its raised colour laid over it. Lumiverse's own "solid card" colour is a
+  // fixed grey that no theme changes, so it is not used here.
   const PAT_SOLID =
-    "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
-    "background-image:linear-gradient(var(--lumiverse-fill-subtle,rgba(0,0,0,.1))," +
-    "var(--lumiverse-fill-subtle,rgba(0,0,0,.1)));";
+    "background-color:var(--lumiverse-bg-deep,rgb(18,14,26));" +
+    "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
+    "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));";
   const PATTERN_CSS =
     ".arf[data-arf-pattern]{min-height:100%}" +
     '.arf[data-arf-pattern="diamonds"]{background-image:' +

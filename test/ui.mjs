@@ -11536,6 +11536,15 @@ console.log("\na pattern behind the panel");
     const plain = await page.evaluate(() => document.querySelector("#drawer").hasAttribute("data-arf-pattern"));
     ok("by default there is no pattern", plain === false);
   });
+  // The solid colour comes from the theme. Lumiverse's own "solid card"
+  // colour is a fixed grey, and a purple theme turned grey-black under it.
+  const THEMED = ":root{--lumiverse-bg-deep:rgb(40,0,60);--lumiverse-card-bg-solid:rgb(24,20,34)}";
+  await inTab(browser, { css: THEMED, saved: { enabled: true, panelPattern: "dots" } }, async (page) => {
+    await goTab(page, "Setup");
+    await settle(page);
+    const colour = await page.evaluate(() => getComputedStyle(document.querySelector("#drawer .arf-card")).backgroundColor);
+    ok("with a pattern, the cards take the theme's colour, not a fixed grey", colour === "rgb(40, 0, 60)", colour);
+  });
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
     for (const kind of ["diamonds", "stripes", "dots"]) {
       await inTab(browser, { viewport, touch, saved: { enabled: true, panelPattern: kind } }, async (page) => {
