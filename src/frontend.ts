@@ -4848,11 +4848,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // lines.
   const PATTERNS = ["", "diamonds", "stripes", "dots"];
   const PAT_INK = "var(--lumiverse-primary-010,rgba(147,112,219,.12))";
-  // Solid, and in the theme's own colour: the theme's deepest background with
-  // its raised colour laid over it. Lumiverse's own "solid card" colour is a
-  // fixed grey that no theme changes, so it is not used here.
+  // Solid, and in the theme's own colour: the theme's raised colour, laid
+  // twice. The raised colour is what Lumiverse draws its own panels in, so it
+  // is light on a light theme and dark on a dark one. A theme that makes it
+  // see-through is near solid once it is laid twice. Lumiverse's "solid card"
+  // colour is a fixed grey that no theme changes, and the theme's deepest
+  // background is not always set by a custom theme, so neither is used: a
+  // dark colour under a light strip makes the readability sweep darken the
+  // text on it.
   const PAT_SOLID =
-    "background-color:var(--lumiverse-bg-deep,rgb(18,14,26));" +
+    "background-color:var(--lumiverse-bg-elevated,rgba(35,30,48,.96));" +
     "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
     "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));";
   const PATTERN_CSS =

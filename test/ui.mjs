@@ -11538,7 +11538,7 @@ console.log("\na pattern behind the panel");
   });
   // The solid colour comes from the theme. Lumiverse's own "solid card"
   // colour is a fixed grey, and a purple theme turned grey-black under it.
-  const THEMED = ":root{--lumiverse-bg-deep:rgb(40,0,60);--lumiverse-card-bg-solid:rgb(24,20,34)}";
+  const THEMED = ":root{--lumiverse-bg-elevated:rgb(40,0,60);--lumiverse-card-bg-solid:rgb(24,20,34)}";
   await inTab(browser, { css: THEMED, saved: { enabled: true, panelPattern: "dots" } }, async (page) => {
     await goTab(page, "Setup");
     await settle(page);
@@ -11557,8 +11557,10 @@ console.log("\na pattern behind the panel");
           return {
             kind: root.getAttribute("data-arf-pattern"),
             drawn: /gradient/.test(getComputedStyle(root).backgroundImage),
-            cardSolid: /^rgb\(/.test(getComputedStyle(card).backgroundColor),
-            tabsSolid: /^rgb\(/.test(getComputedStyle(tabs).backgroundColor),
+            // Solid enough that nothing reads through: opaque, or a theme
+            // colour that is at most a little see-through.
+            cardSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(card).backgroundColor),
+            tabsSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(tabs).backgroundColor),
             sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
           };
         });
@@ -11896,7 +11898,9 @@ console.log("\nthe tabs stay at the top");
         const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
         const pad = Math.round(parseFloat(getComputedStyle(drawer).paddingTop) || 0);
         const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
-        const solid = () => /^rgb\(/.test(getComputedStyle(strip()).backgroundColor);
+        // Solid enough that nothing reads through: opaque, or a theme colour
+        // that is at most a little see-through.
+        const solid = () => ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(strip()).backgroundColor);
         const shadow = () => getComputedStyle(strip()).boxShadow !== "none";
         const rest = where();
         const restHolder = getComputedStyle(bar()).backgroundColor;
