@@ -5868,6 +5868,28 @@ console.log("\nlight and dark, after every change");
   }
 }
 
+console.log("\nthe theme engine's own colours, light and dark");
+{
+  // The colours Lumiverse's own theme engine writes for a purple accent, kept
+  // in lumiverse-themes.json. A hand-written test theme tends to set every
+  // colour to suit itself, which the engine does not do: it leaves a few at
+  // their stock dark values on a light theme. Every tab is read on both, with
+  // and without a pattern behind the panel.
+  const ENGINE = JSON.parse(readFileSync(join(root, "test", "lumiverse-themes.json"), "utf8"));
+  for (const mode of ["dark", "light"]) {
+    for (const pattern of ["", "diamonds", "dots"]) {
+      const css = ENGINE[mode] + "body{background:var(--lumiverse-bg-deep)}#drawer{background:var(--lumiverse-bg)}";
+      await inTab(browser, { css, saved: { enabled: true, panelPattern: pattern } }, async (page) => {
+        for (const label of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
+          await goTab(page, label);
+          const m = await worstText(page);
+          ok(mode + ", " + (pattern || "no pattern") + ": " + label + " is readable", m.ok, "worst " + m.worst.toFixed(2) + " on " + m.where);
+        }
+      });
+    }
+  }
+}
+
 console.log("\nhow much it is told");
 {
   await inTab(browser, {}, async (page) => {
