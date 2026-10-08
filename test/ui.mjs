@@ -11528,6 +11528,63 @@ await inTab(browser, { saved: { eyeStill: true } }, async (page) => {
   ok("switching it off takes the mark away", off === "clear", off);
 });
 
+console.log("\na pattern behind the panel");
+{
+  // None by default. A pattern chosen in Setup is drawn behind the panel, and
+  // the cards and the tab strip turn solid so nothing is read across it.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    const plain = await page.evaluate(() => document.querySelector("#drawer").hasAttribute("data-arf-pattern"));
+    ok("by default there is no pattern", plain === false);
+  });
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
+    for (const kind of ["diamonds", "stripes", "dots"]) {
+      await inTab(browser, { viewport, touch, saved: { enabled: true, panelPattern: kind } }, async (page) => {
+        await goTab(page, "Setup");
+        await settle(page);
+        const got = await page.evaluate(() => {
+          const root = document.querySelector("#drawer");
+          const card = root.querySelector(".arf-card");
+          const tabs = root.querySelector(".arf-tabs");
+          return {
+            kind: root.getAttribute("data-arf-pattern"),
+            drawn: /gradient/.test(getComputedStyle(root).backgroundImage),
+            cardSolid: /^rgb\(/.test(getComputedStyle(card).backgroundColor),
+            tabsSolid: /^rgb\(/.test(getComputedStyle(tabs).backgroundColor),
+            sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+          };
+        });
+        ok(label + ", " + kind + ": the pattern is drawn", got.kind === kind && got.drawn, JSON.stringify(got));
+        ok(label + ", " + kind + ": the cards and the tab strip are solid over it", got.cardSolid && got.tabsSolid, JSON.stringify(got));
+        ok(label + ", " + kind + ": nothing runs off the side", !got.sideways, "");
+      });
+    }
+  }
+}
+
+console.log("\nthe switch knob springs");
+{
+  // The knob slides a little past its end and springs back, and stretches
+  // while pressed. With Reduce motion on it does neither.
+  for (const reduceMotion of [false, true]) {
+    await inTab(browser, { saved: { enabled: true, reduceMotion } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      const got = await page.evaluate(() => {
+        const box = document.querySelector("#drawer .arf-box");
+        const cs = getComputedStyle(box, "::after");
+        const names = cs.transitionProperty.split(",").map((x) => x.trim());
+        const timing = cs.transitionTimingFunction.split(/,(?![^(]*\))/).map((x) => x.trim());
+        const curve = timing[names.indexOf("left")] || "";
+        const m = /cubic-bezier\(([^)]*)\)/.exec(curve);
+        const over = !!m && m[1].split(",").map(Number).some((v, i) => (i === 1 || i === 3) && v > 1);
+        return { names, curve, over, duration: cs.transitionDuration };
+      });
+      if (!reduceMotion) ok("the knob overshoots its end and springs back", got.over, JSON.stringify(got));
+      else ok("with Reduce motion on, the knob does not move", !/[1-9]/.test(got.duration.replace(/0s/g, "")), JSON.stringify(got));
+    });
+  }
+}
+
 console.log("\nrefines you can put back stay short");
 {
   // Every refine in a chat used to stack up above the tabs. A chat keeps its
@@ -11840,6 +11897,9 @@ console.log("\nthe tabs stay at the top");
         const room = drawer.scrollHeight - drawer.clientHeight;
         drawer.scrollTop = drawer.scrollHeight;
         await frame();
+        // Caught at the top, the colour fades in rather than switching on.
+        const fadingIn = Number(layer().opacity);
+        await new Promise((r) => setTimeout(r, 350));
         const atTop = where();
         const hasTabs = !!bar().querySelector(".arf-tab") && !bar().querySelector('input[type="search"]');
         const r = strip().getBoundingClientRect();
@@ -11856,12 +11916,13 @@ console.log("\nthe tabs stay at the top");
         await new Promise((r) => setTimeout(r, 400));
         const faded = Number(layer().opacity);
         const backStrip = getComputedStyle(strip()).backgroundColor;
-        return { pad, rest, restHolder: clear(restHolder), restStuck, restStrip, room, atTop, hasTabs, covers, heldSolid, heldStuck, back, backStuck, fading, faded, backSame: backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
+        return { pad, rest, restHolder: clear(restHolder), restStuck, restStrip, room, atTop, hasTabs, covers, heldSolid, heldStuck, fadingIn, back, backStuck, fading, faded, backSame: backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
       });
       ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
       ok(label + ": at rest nothing is drawn behind the strip", got.restHolder && !got.restStuck, JSON.stringify(got));
       ok(label + ": scrolled down, the strip sits at the top of the drawer", got.atTop === got.pad, JSON.stringify(got));
       ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
+      ok(label + ": caught at the top, the solid colour fades in instead of switching on in one frame", got.fadingIn < 1, JSON.stringify(got));
       ok(label + ": held there, the strip is solid, so nothing shows through it", got.heldStuck && got.heldSolid && got.covers, JSON.stringify(got));
       ok(label + ": scrolled back up, the solid colour fades out instead of going in one frame", got.fading > 0 && got.fading < 1, JSON.stringify(got));
       ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame && got.faded === 0, JSON.stringify(got));
@@ -11935,6 +11996,7 @@ console.log("\nthe tabs stay at the top");
           edge.still = solid();
           drawer.scrollTop = drawer.scrollHeight;
           await frame();
+          await new Promise((r) => setTimeout(r, 350));
           const held = { gap: Math.round(where() - pad), solid: solid() };
           // A repaint while held. The strip is a new element, read before the
           // next frame.
@@ -11972,6 +12034,7 @@ console.log("\nthe tabs stay at the top");
           drawer.scrollTop = drawer.scrollHeight;
           await frame();
           await frame();
+          await new Promise((r) => setTimeout(r, 350));
           strike();
           const layer = getComputedStyle(strip, "::before");
           const solid = /^rgb\(/.test(layer.backgroundColor) && layer.opacity === "1";

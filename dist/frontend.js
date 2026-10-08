@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.32.0";
+const VERSION = "1.33.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -203,7 +203,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The floating button, the buttons in the chat, and the input bar row.",
-        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill", "reduceMotion"],
+        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill", "reduceMotion", "panelPattern"],
     },
     {
         id: "inputbox",
@@ -576,6 +576,9 @@ const CONFIG = {
     // Nothing of Auto Refine's moves or fades. A device set to reduce motion
     // gets the same without this.
     reduceMotion: false,
+    // A faint pattern drawn behind the panel, in the theme's own colour. Empty
+    // is plain.
+    panelPattern: "",
     // The card that comes up on the page when a refine finishes, with the before,
     // the after and the way back on it. On by default, because a refine changes
     // writing somebody was reading, and the change should be visible without
@@ -4625,6 +4628,26 @@ export function setup(ctx, overrides) {
         "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));";
     const STRIP_SHADOW = "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));";
+    // The patterns behind the panel. Thin lines or dots in the theme's colour,
+    // drawn with gradients so there is no image to load. Marked important,
+    // since the host's own drawer can set a background of its own on the same
+    // element with a stronger selector. With one on, the
+    // cards and the tab strip get a solid colour, so nothing is read across the
+    // lines.
+    const PATTERNS = ["", "diamonds", "stripes", "dots"];
+    const PAT_INK = "var(--lumiverse-primary-010,rgba(147,112,219,.12))";
+    const PAT_SOLID = "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+        "background-image:linear-gradient(var(--lumiverse-fill-subtle,rgba(0,0,0,.1))," +
+        "var(--lumiverse-fill-subtle,rgba(0,0,0,.1)));";
+    const PATTERN_CSS = ".arf[data-arf-pattern]{min-height:100%}" +
+        '.arf[data-arf-pattern="diamonds"]{background-image:' +
+        "repeating-linear-gradient(45deg," + PAT_INK + " 0 1px,transparent 1px 16px)," +
+        "repeating-linear-gradient(-45deg," + PAT_INK + " 0 1px,transparent 1px 16px)!important}" +
+        '.arf[data-arf-pattern="stripes"]{background-image:' +
+        "repeating-linear-gradient(135deg," + PAT_INK + " 0 1px,transparent 1px 9px)!important}" +
+        '.arf[data-arf-pattern="dots"]{background-image:' +
+        "radial-gradient(" + PAT_INK + " 1.2px,transparent 1.6px)!important;background-size:14px 14px!important}" +
+        ".arf[data-arf-pattern] .arf-card,.arf[data-arf-pattern] .arf-tabs{" + PAT_SOLID + "}";
     const STILL_RULES = (root) => [
         '[class*="arf-"]',
         '[class*="arf-"]::before',
@@ -4633,7 +4656,8 @@ export function setup(ctx, overrides) {
     ]
         .map((one) => root + one)
         .join(",") + "{animation:none!important;transition:none!important}";
-    const CSS = ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
+    const CSS = PATTERN_CSS +
+        ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf *{box-sizing:border-box}" +
         // The tab strip's holder. At rest it adds nothing to how the strip looks.
@@ -4644,19 +4668,19 @@ export function setup(ctx, overrides) {
         // in the same frame as the scroll. arf-stuck is the script's fallback for
         // the rest.
         //
-        // The solid colour is a layer under the tabs, so it can fade. It comes on
-        // at once when the strip is held, so the rows never show through it. It
-        // fades out when the strip goes back to its place, because switching it
-        // off in one frame makes the strip flash see-through.
+        // The solid colour is a layer under the tabs, so it can fade. It fades in
+        // as the strip is caught at the top and out as it goes back to its place.
+        // Switching it in one frame makes the strip flash. The fade is short, so
+        // the rows under it are covered within a few frames.
         ".arf-stick{position:sticky;top:0;z-index:4;container-type:scroll-state}" +
-        ".arf-stick .arf-tabs{position:relative;isolation:isolate;transition:box-shadow .22s ease}" +
+        ".arf-stick .arf-tabs{position:relative;isolation:isolate;transition:box-shadow .18s ease}" +
         ".arf-stick .arf-tabs::before{content:\"\";position:absolute;inset:0;z-index:-1;pointer-events:none;" +
         "border-radius:calc(var(--lumiverse-radius-md,10px) - 1px);" + STRIP_FILL +
-        "opacity:0;transition:opacity .22s ease}" +
-        ".arf-stick.arf-stuck .arf-tabs{" + STRIP_SHADOW + "transition:none}" +
-        ".arf-stick.arf-stuck .arf-tabs::before{opacity:1;transition:none}" +
-        "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_SHADOW + "transition:none}" +
-        ".arf-stick .arf-tabs::before{opacity:1;transition:none}}" +
+        "opacity:0;transition:opacity .18s ease}" +
+        ".arf-stick.arf-stuck .arf-tabs{" + STRIP_SHADOW + "}" +
+        ".arf-stick.arf-stuck .arf-tabs::before{opacity:1}" +
+        "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_SHADOW + "}" +
+        ".arf-stick .arf-tabs::before{opacity:1}}" +
         "@media (prefers-reduced-motion: reduce){.arf-stick .arf-tabs,.arf-stick .arf-tabs::before{transition:none}}" +
         ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
         "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -4792,11 +4816,15 @@ export function setup(ctx, overrides) {
         ".arf-box::after{content:\"\";position:absolute;top:50%;left:3px;transform:translateY(-50%);" +
         "width:14px;height:14px;border-radius:50%;" +
         "background:var(--lumiverse-text-muted,rgba(255,255,255,.55));" +
-        "transition:left var(--lumiverse-transition-fast,150ms ease)," +
+        // The knob slides a little past its end and springs back, as if it hit
+        // the edge. Pressed, it stretches toward the way it is about to go.
+        "transition:left 320ms cubic-bezier(.34,1.56,.64,1),width 200ms ease," +
         "background-color var(--lumiverse-transition-fast,150ms ease)}" +
+        ".arf-box:active:not(:disabled)::after{width:18px}" +
         ".arf-box:checked{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
         "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
         ".arf-box:checked::after{left:19px;background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+        ".arf-box:checked:active:not(:disabled)::after{left:15px}" +
         ".arf-box:disabled{opacity:.45;cursor:not-allowed}" +
         "@media (prefers-reduced-motion: reduce){.arf-box,.arf-box::after{transition:none}}" +
         ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
@@ -4922,7 +4950,9 @@ export function setup(ctx, overrides) {
         // transitions above start running: a rebuild that should be invisible
         // instead fades. Held off until the rebuild has been on the screen for a
         // frame, after which the only changes left are ones somebody asked for.
-        ".arf-settling,.arf-settling *{transition:none!important}" +
+        // The strip's colour layer too: a repaint while the strip is held draws a
+        // new strip, and it must be solid at once rather than fade in again.
+        ".arf-settling,.arf-settling *,.arf-settling .arf-tabs::before{transition:none!important}" +
         // The weight never changes with the state. A label that goes bold on select
         // is a label that gets wider, and the whole row shifts under the finger that
         // just tapped it.
@@ -5402,6 +5432,8 @@ export function setup(ctx, overrides) {
         ".arf-box{width:52px;height:32px;border-radius:17px}" +
         ".arf-box::after{width:24px;height:24px;left:4px}" +
         ".arf-box:checked::after{left:24px}" +
+        ".arf-box:active:not(:disabled)::after{width:29px}" +
+        ".arf-box:checked:active:not(:disabled)::after{left:19px}" +
         // A little room around it takes the tap too, so a finger that lands just
         // off the edge still flips it. Auto Retry's tick boxes have the same.
         ".arf-box::before{content:\"\";position:absolute;inset:-6px -4px}" +
@@ -6923,6 +6955,10 @@ export function setup(ctx, overrides) {
         const caret = document.activeElement?.selectionStart;
         root.innerHTML = "";
         root.className = "arf";
+        if (PATTERNS.indexOf(String(cfg.panelPattern)) > 0)
+            root.setAttribute("data-arf-pattern", String(cfg.panelPattern));
+        else
+            root.removeAttribute("data-arf-pattern");
         liveEls = null;
         root.appendChild(buildHeader());
         // A refused permission that stops the whole thing is the answer to "why is
@@ -11098,6 +11134,18 @@ export function setup(ctx, overrides) {
             label: "Reduce motion",
             type: "bool",
             hint: "Off by default. On, nothing in Auto Refine moves or fades. Your device's own reduce motion setting does the same.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "panelPattern",
+            label: "Pattern behind the panel",
+            type: "pick",
+            options: [
+                { value: "", label: "None" },
+                { value: "diamonds", label: "Diamonds" },
+                { value: "stripes", label: "Stripes" },
+                { value: "dots", label: "Dots" },
+            ],
+            hint: "None by default. A faint pattern in your theme's colour, drawn behind the cards on this tab.",
         }));
         return wrap;
     }

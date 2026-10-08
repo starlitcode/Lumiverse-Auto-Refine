@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.33.0
+
+_2026-10-08_
+
+### Added
+
+- **A pattern behind the panel.** A new setting, **Pattern behind the panel**, under **Buttons and the widget**, with Diamonds, Stripes and Dots. It is drawn faintly in your theme's colour, and the cards and the tab strip turn solid over it. It is None by default. See [Settings](docs/settings.md).
+
+### Changed
+
+- **The tab strip fades in at the top too.** In 1.32.0 the strip's solid colour faded out when it went back in place, and came on in one frame when it reached the top. It now fades both ways.
+- **The switches spring.** The knob slides a little past its end and springs back. Pressed, it stretches toward the way it is about to go. Reduce motion turns this off.
+
+---
+
 ## 1.32.0
 
 _2026-10-08_
