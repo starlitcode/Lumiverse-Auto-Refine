@@ -247,7 +247,7 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 **Pattern behind the panel** draws a faint pattern behind this tab: Diamonds, Stripes or Dots. It is None by default.
 
 - The pattern is drawn in your theme's colour.
-- With a pattern on, the cards and the tab strip are solid, so no text is read across the lines.
+- With a pattern on, the cards are solid, so no text is read across the lines. The tab strip is solid with or without a pattern.
 
 **Reduce motion** stops everything in Auto Refine from moving or fading. It is off by default.
 

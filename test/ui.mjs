@@ -11882,8 +11882,8 @@ console.log("\nthe tabs stay at the top");
   // The drawer scrolls on its own, as it does in Lumiverse. The tab strip has
   // to stay at the top of it while the tab scrolls, and be back in its own
   // place once the tab is scrolled back up. The search box scrolls away with
-  // the rest. At rest nothing is drawn behind the strip. Held at the top, the
-  // strip itself is solid, so the rows going under it do not show through.
+  // the rest. The strip is solid at all times, so it never changes colour as
+  // you scroll. Held at the top it gains a shadow along its lower edge.
   const SCROLLS = "#drawer{height:520px;overflow-y:auto}";
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 760 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true } }, async (page) => {
@@ -11896,45 +11896,45 @@ console.log("\nthe tabs stay at the top");
         const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
         const pad = Math.round(parseFloat(getComputedStyle(drawer).paddingTop) || 0);
         const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
-        // The solid colour is a layer under the tabs, shown when it is fully on.
-        const layer = () => getComputedStyle(strip(), "::before");
-        const filled = () => /^rgb\(/.test(layer().backgroundColor) && layer().opacity === "1";
+        const solid = () => /^rgb\(/.test(getComputedStyle(strip()).backgroundColor);
+        const shadow = () => getComputedStyle(strip()).boxShadow !== "none";
         const rest = where();
         const restHolder = getComputedStyle(bar()).backgroundColor;
         const restStuck = bar().classList.contains("arf-stuck");
         const restStrip = getComputedStyle(strip()).backgroundColor;
         const room = drawer.scrollHeight - drawer.clientHeight;
+        const restSolid = solid();
+        const restShadow = shadow();
         drawer.scrollTop = drawer.scrollHeight;
         await frame();
-        // Caught at the top, the colour fades in rather than switching on.
-        const fadingIn = Number(layer().opacity);
         await new Promise((r) => setTimeout(r, 350));
         const atTop = where();
         const hasTabs = !!bar().querySelector(".arf-tab") && !bar().querySelector('input[type="search"]');
         const r = strip().getBoundingClientRect();
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 2);
         const covers = !!hit && strip().contains(hit);
-        const heldSolid = filled();
+        const heldSolid = solid();
+        const heldShadow = shadow();
         const heldStuck = bar().classList.contains("arf-stuck");
+        const heldStrip = getComputedStyle(strip()).backgroundColor;
         drawer.scrollTop = 0;
         await frame();
+        // While it scrolls back, the colour does not change at all.
+        const goingStrip = getComputedStyle(strip()).backgroundColor;
+        await new Promise((r) => setTimeout(r, 400));
         const back = where();
         const backStuck = bar().classList.contains("arf-stuck");
-        // Back in its place, the colour fades out rather than going in one frame.
-        const fading = Number(layer().opacity);
-        await new Promise((r) => setTimeout(r, 400));
-        const faded = Number(layer().opacity);
+        const backShadow = shadow();
         const backStrip = getComputedStyle(strip()).backgroundColor;
-        return { pad, rest, restHolder: clear(restHolder), restStuck, restStrip, room, atTop, hasTabs, covers, heldSolid, heldStuck, fadingIn, back, backStuck, fading, faded, backSame: backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
+        return { pad, rest, restHolder: clear(restHolder), restStuck, restSolid, restShadow, restStrip, room, atTop, hasTabs, covers, heldSolid, heldShadow, heldStuck, back, backStuck, backShadow, sameColour: heldStrip === restStrip && goingStrip === restStrip && backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
       });
       ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
-      ok(label + ": at rest nothing is drawn behind the strip", got.restHolder && !got.restStuck, JSON.stringify(got));
+      ok(label + ": at rest nothing is drawn behind the strip, and the strip is solid with no shadow", got.restHolder && !got.restStuck && got.restSolid && !got.restShadow, JSON.stringify(got));
       ok(label + ": scrolled down, the strip sits at the top of the drawer", got.atTop === got.pad, JSON.stringify(got));
       ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
-      ok(label + ": caught at the top, the solid colour fades in instead of switching on in one frame", got.fadingIn < 1, JSON.stringify(got));
-      ok(label + ": held there, the strip is solid, so nothing shows through it", got.heldStuck && got.heldSolid && got.covers, JSON.stringify(got));
-      ok(label + ": scrolled back up, the solid colour fades out instead of going in one frame", got.fading > 0 && got.fading < 1, JSON.stringify(got));
-      ok(label + ": scrolled back up, it is in its own place and looks as it did", got.back === got.rest && got.rest > 0 && !got.backStuck && got.backSame && got.faded === 0, JSON.stringify(got));
+      ok(label + ": held there, the strip is solid with a shadow, so nothing shows through it", got.heldStuck && got.heldSolid && got.heldShadow && got.covers, JSON.stringify(got));
+      ok(label + ": the strip keeps one colour the whole way, held, scrolling back and at rest", got.sameColour, JSON.stringify(got));
+      ok(label + ": scrolled back up, it is in its own place with no shadow", got.back === got.rest && got.rest > 0 && !got.backStuck && !got.backShadow, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
     });
     // Away to another drawer tab and back. The host hides the panel and shows
@@ -11965,11 +11965,11 @@ console.log("\nthe tabs stay at the top");
         window.removeEventListener("scroll", swallow, true);
         return { before, after: bar().classList.contains("arf-stuck"), scrolled: drawer.scrollTop > 0 };
       });
-      ok(label + ": back from another tab, the strip held at the top is solid again", got.before && got.scrolled && got.after, JSON.stringify(got));
+      ok(label + ": back from another tab, the strip held at the top is marked as held again", got.before && got.scrolled && got.after, JSON.stringify(got));
     });
-    // The fill starts once the search box has scrolled away and the strip is
+    // The shadow starts once the search box has scrolled away and the strip is
     // held, and not before: at rest, one strip height short of the top, and two
-    // pixels short, it is not filled, whether the drawer is moving or still.
+    // pixels short, it has none, whether the drawer is moving or still.
     // Two browsers: one that can tell by itself that the strip is held, and one
     // that cannot, which is Safari and Firefox and is made here by taking the
     // stylesheet's check away.
@@ -11982,10 +11982,9 @@ console.log("\nthe tabs stay at the top");
           const drawer = document.getElementById("drawer");
           const bar = () => drawer.querySelector("[data-arf-stick]");
           const strip = () => bar().querySelector(".arf-tabs");
-          const solid = () => {
-            const layer = getComputedStyle(strip(), "::before");
-            return /^rgb\(/.test(layer.backgroundColor) && Number(layer.opacity) > 0;
-          };
+          // The strip is solid at all times. What being held adds is the
+          // shadow, so that is what is read here.
+          const solid = () => getComputedStyle(strip()).boxShadow !== "none";
           const where = () => bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top;
           const pad = parseFloat(getComputedStyle(drawer).paddingTop) || 0;
           const rest = where();
@@ -12015,15 +12014,15 @@ console.log("\nthe tabs stay at the top");
           const repaintSolid = solid();
           return { restSolid, near, edge, held, fresh, repaintSolid };
         });
-        ok(label + ", " + which + ": at rest the strip is not filled", !got.restSolid, JSON.stringify(got));
-        ok(label + ", " + which + ": one strip height short of the top, it is not filled, moving or still", got.near.gap > 20 && !got.near.moving && !got.near.still, JSON.stringify(got.near));
-        ok(label + ", " + which + ": two pixels short of the top, it is not filled either", got.edge.gap > 0 && got.edge.gap <= 3 && !got.edge.moving && !got.edge.still, JSON.stringify(got.edge));
-        ok(label + ", " + which + ": held at the top, it is filled", got.held.gap === 0 && got.held.solid, JSON.stringify(got.held));
-        ok(label + ", " + which + ": a repaint while it is held keeps it solid", got.fresh && got.repaintSolid, JSON.stringify(got));
+        ok(label + ", " + which + ": at rest the strip has no shadow", !got.restSolid, JSON.stringify(got));
+        ok(label + ", " + which + ": one strip height short of the top, it has no shadow, moving or still", got.near.gap > 20 && !got.near.moving && !got.near.still, JSON.stringify(got.near));
+        ok(label + ", " + which + ": two pixels short of the top, it has no shadow either", got.edge.gap > 0 && got.edge.gap <= 3 && !got.edge.moving && !got.edge.still, JSON.stringify(got.edge));
+        ok(label + ", " + which + ": held at the top, it has its shadow", got.held.gap === 0 && got.held.solid, JSON.stringify(got.held));
+        ok(label + ", " + which + ": a repaint while it is held keeps the shadow at once", got.fresh && got.repaintSolid, JSON.stringify(got));
       });
     }
     // The browser's own check alone, with the script's classes taken off the
-    // moment they are put on. Without the check the strip goes see-through,
+    // moment they are put on. Without the check the strip has no shadow,
     // which shows the classes really were kept off.
     for (const [which, css, want] of [["the browser's own check", SCROLLS, true], ["no check and no script", SCROLLS + NO_CHECK, false]]) {
       await inTab(browser, { css, viewport, touch, saved: { enabled: true } }, async (page) => {
@@ -12045,13 +12044,12 @@ console.log("\nthe tabs stay at the top");
           await frame();
           await new Promise((r) => setTimeout(r, 350));
           strike();
-          const layer = getComputedStyle(strip, "::before");
-          const solid = /^rgb\(/.test(layer.backgroundColor) && layer.opacity === "1";
+          const solid = getComputedStyle(strip).boxShadow !== "none";
           const classes = bar.className;
           mo.disconnect();
           return { solid, classes, scrolled: drawer.scrollTop > 0 };
         });
-        ok(label + ", " + which + ": held at the top, " + (want ? "the strip is solid" : "the strip is see-through"), got.scrolled && got.solid === want && !/arf-stuck/.test(got.classes), JSON.stringify(got));
+        ok(label + ", " + which + ": held at the top, " + (want ? "the strip has its shadow" : "the strip has no shadow"), got.scrolled && got.solid === want && !/arf-stuck/.test(got.classes), JSON.stringify(got));
       });
     }
   }

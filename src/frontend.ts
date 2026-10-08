@@ -4837,12 +4837,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   const SEARCH_X =
     "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'/%3E%3C/svg%3E\")";
 
-  // The strip held at the top: a solid fill, so the rows under it do not show
-  // through, and a shadow along its lower edge.
-  const STRIP_FILL =
-    "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
-    "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.98))," +
-    "var(--lumiverse-bg-elevated,rgba(35,30,48,.98)));";
+  // The shadow along the tab strip's lower edge while it is held at the top.
   const STRIP_SHADOW = "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));";
 
   // The patterns behind the panel. Thin lines or dots in the theme's colour,
@@ -4886,28 +4881,19 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
     "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf *{box-sizing:border-box}" +
-    // The tab strip's holder. At rest it adds nothing to how the strip looks.
-    // Once it is held at the top, the strip takes the same solid colour as a
-    // description box, so the rows scrolling under it do not show through.
+    // The tab strip's holder. The strip is solid at all times, in the theme's
+    // own colour, so the rows scrolling under it never show through and
+    // nothing about it changes colour as you scroll. Held at the top, it gains
+    // a shadow along its lower edge, which fades in and out.
     //
     // A browser that can tell by itself that the strip is held does it here,
     // in the same frame as the scroll. arf-stuck is the script's fallback for
     // the rest.
-    //
-    // The solid colour is a layer under the tabs, so it can fade. It fades in
-    // as the strip is caught at the top and out as it goes back to its place.
-    // Switching it in one frame makes the strip flash. The fade is short, so
-    // the rows under it are covered within a few frames.
     ".arf-stick{position:sticky;top:0;z-index:4;container-type:scroll-state}" +
-    ".arf-stick .arf-tabs{position:relative;isolation:isolate;transition:box-shadow .18s ease}" +
-    ".arf-stick .arf-tabs::before{content:\"\";position:absolute;inset:0;z-index:-1;pointer-events:none;" +
-    "border-radius:calc(var(--lumiverse-radius-md,10px) - 1px);" + STRIP_FILL +
-    "opacity:0;transition:opacity .18s ease}" +
+    ".arf-stick .arf-tabs{" + PAT_SOLID + "transition:box-shadow .18s ease}" +
     ".arf-stick.arf-stuck .arf-tabs{" + STRIP_SHADOW + "}" +
-    ".arf-stick.arf-stuck .arf-tabs::before{opacity:1}" +
-    "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_SHADOW + "}" +
-    ".arf-stick .arf-tabs::before{opacity:1}}" +
-    "@media (prefers-reduced-motion: reduce){.arf-stick .arf-tabs,.arf-stick .arf-tabs::before{transition:none}}" +
+    "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_SHADOW + "}}" +
+    "@media (prefers-reduced-motion: reduce){.arf-stick .arf-tabs{transition:none}}" +
     ".arf-h{font-size:11px;letter-spacing:.05em;text-transform:uppercase;" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     ".arf-note{font-size:12px;line-height:1.45;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
@@ -5178,9 +5164,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // transitions above start running: a rebuild that should be invisible
     // instead fades. Held off until the rebuild has been on the screen for a
     // frame, after which the only changes left are ones somebody asked for.
-    // The strip's colour layer too: a repaint while the strip is held draws a
-    // new strip, and it must be solid at once rather than fade in again.
-    ".arf-settling,.arf-settling *,.arf-settling .arf-tabs::before{transition:none!important}" +
+    ".arf-settling,.arf-settling *{transition:none!important}" +
     // The weight never changes with the state. A label that goes bold on select
     // is a label that gets wider, and the whole row shifts under the finger that
     // just tapped it.
