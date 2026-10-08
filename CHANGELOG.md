@@ -12,13 +12,16 @@ _2026-10-08_
 
 ### Added
 
-- **Five more second models.** Under **Which second model** on the Model tab:
+- **More second models.** Under **Which second model** on the Model tab:
   - **GPT-6 Luna Decisions**, from OpenAI, on OpenRouter and on OpenAI's own API.
   - **Clef**, from Cloudflare, on OpenRouter, NanoGPT and Cloudflare's own API.
-  - **Clef Flash**, from Cloudflare, a smaller and faster Clef, on OpenRouter and Cloudflare's own API.
   - **Decider**, from Perplexity, on OpenRouter and Perplexity's own API.
-  - **Solar Decide Flash**, from Upstage, a faster Solar Decide, on OpenRouter.
 - Each has its own **Refine when a check reaches**, at 30 by default, its own **Model name** box, and a **What is** link to its maker's own page where there is one. See [Two models](docs/two-models.md).
+- **Flash models, picked under the model they come with.** A model and its faster Flash are one entry in the list:
+  - **Which Clef** picks Clef or **Clef Flash**, on OpenRouter and Cloudflare's own API.
+  - **Which Solar Decide** picks Solar Decide or **Solar Decide Flash**, on OpenRouter.
+  - Each Flash has its own **Refine when a check reaches**, at 30 by default, and its own **What is** link.
+  - On a host that does not serve the Flash, the Flash is not offered, and the larger model is used.
 - **Cloudflare account ID.** Cloudflare's own API needs your account ID in its address. The box shows when Cloudflare is the host.
 - With Clef or Clef Flash picked, a note says that Cloudflare reads only about the first 2,000 tokens it is sent.
 - **Another address** sends OpenAI's own decisions address the request OpenAI asks for.

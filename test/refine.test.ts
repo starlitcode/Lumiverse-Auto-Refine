@@ -1653,7 +1653,7 @@ describe("two models: Jev reads the reply first", () => {
   // ---- D1 and Solar Decide ----
   // Both take Jev's decisions request. D1 is also on NanoGPT and on Liquid's
   // own API, and Solar Decide on Upstage's.
-  for (const [who, host, url, model] of [
+  for (const [who, host, url, model, extra] of [
     ["d1", "openrouter", "https://openrouter.ai/api/alpha/decisions", "liquid/d1"],
     ["d1", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "liquid/d1"],
     ["d1", "liquid", "https://api.liquid.ai/decisions/v1/systemone", "d1:free"],
@@ -1664,14 +1664,18 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef"],
     ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef"],
     ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef", "clef"],
-    ["clefFlash", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef-flash"],
-    ["clefFlash", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-flash", "clef-flash"],
+    ["clef", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef-flash", { clefTier: "flash" }],
+    ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-flash", "clef-flash", { clefTier: "flash" }],
+    // NanoGPT serves Clef only, so Flash picked there sends Clef.
+    ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef", { clefTier: "flash" }],
     ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b"],
-    ["solarFlash", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide-flash"],
-  ]) {
+    ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide-flash", { solarTier: "flash" }],
+    // Upstage serves Solar Decide only, so Flash picked there sends Solar Decide.
+    ["solar", "upstage", "https://api.upstage.ai/v1/systemone", "solar-decide", { solarTier: "flash" }],
+  ] as Array<[string, string, string, string, any?]>) {
     test(who + " on " + host + ": " + model + ", asked the way Jev is", async () => {
-      const h = await keyed({ judgeWho: who, judgeHost: host, cloudflareAccount: ACCOUNT }, { jev: says([10]) });
+      const h = await keyed({ judgeWho: who, judgeHost: host, cloudflareAccount: ACCOUNT, ...(extra || {}) }, { jev: says([10]) });
       await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(h.jevCalls[0].url).toBe(url);
@@ -1687,9 +1691,9 @@ describe("two models: Jev reads the reply first", () => {
     const { BUILT_IN_MODEL_NAMES, builtInModelName } = __testing as any;
     for (const who of Object.keys(BUILT_IN_MODEL_NAMES))
       for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who]))
-        for (const tier of who === "span" ? ["free", "lite", "full"] : who === "jev" ? ["latest", "preview", "exact"] : ["free"])
-          test("the panel's name for " + who + " on " + host + (who === "span" || who === "jev" ? " (" + tier + ")" : "") + " is the one sent", async () => {
-            const over = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier, cloudflareAccount: ACCOUNT };
+        for (const tier of who === "span" ? ["free", "lite", "full"] : who === "jev" ? ["latest", "preview", "exact"] : who === "clef" || who === "solar" ? ["full", "flash"] : ["free"])
+          test("the panel's name for " + who + " on " + host + (tier !== "free" ? " (" + tier + ")" : "") + " is the one sent", async () => {
+            const over = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier, clefTier: tier, solarTier: tier, cloudflareAccount: ACCOUNT };
             const h = await keyed(over, { jev: says([10]) });
             await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
             await wait(50);
@@ -1742,30 +1746,30 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls[0].body.model).toBe("liquid/d1");
   });
 
-  for (const [who, key] of [
+  for (const [who, key, pick] of [
     ["d1", "d1Over"],
     ["solar", "solarOver"],
     ["kev", "kevOver"],
     ["luna", "lunaOver"],
     ["clef", "clefOver"],
-    ["clefFlash", "clefFlashOver"],
+    ["clef", "clefFlashOver", { clefTier: "flash" }],
     ["decider", "deciderOver"],
-    ["solarFlash", "solarFlashOver"],
-  ]) {
-    test(who + " has a line of its own, 30 by default", async () => {
-      const over = await keyed({ judgeWho: who }, { jev: says([31]) });
+    ["solar", "solarFlashOver", { solarTier: "flash" }],
+  ] as Array<[string, string, any?]>) {
+    test(key + " is a line of its own, 30 by default", async () => {
+      const over = await keyed({ judgeWho: who, ...(pick || {}) }, { jev: says([31]) });
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
       const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, deciderOver: 10, solarFlashOver: 10 };
-      const under = await keyed({ judgeWho: who, ...lows, [key]: undefined }, { jev: says([29]) });
+      const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(under.asked.length).toBe(0);
     });
 
-    test("and " + who + "'s line is its own setting, and not used for Jev", async () => {
-      const own = await keyed({ judgeWho: who, [key]: 20 }, { jev: says([25]) });
+    test("and " + key + " is its own setting, and not used for Jev", async () => {
+      const own = await keyed({ judgeWho: who, ...(pick || {}), [key]: 20 }, { jev: says([25]) });
       await own.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(own.asked.length).toBe(1);
@@ -1873,9 +1877,8 @@ describe("two models: Jev reads the reply first", () => {
   test("a host a new model is not on, left picked, sends it to OpenRouter", async () => {
     for (const [who, host, model] of [
       ["luna", "cloudflare", "openai/gpt-6-luna-decisions"],
-      ["clefFlash", "nanogpt", "cloudflare/clef-flash"],
       ["decider", "openai", "perplexity/pplx-decider-v1.1-27b"],
-      ["solarFlash", "upstage", "upstage/solar-decide-flash"],
+      ["clef", "perplexity", "cloudflare/clef"],
       ["d1", "perplexity", "liquid/d1"],
     ]) {
       const h = await keyed({ judgeWho: who, judgeHost: host, cloudflareAccount: ACCOUNT }, { jev: says([10]) });
@@ -1883,6 +1886,38 @@ describe("two models: Jev reads the reply first", () => {
       await wait(50);
       expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
       expect(h.jevCalls[0].body.model).toBe(model);
+    }
+  });
+
+  test("a Flash and the model it comes with each use their own line", async () => {
+    // Clef's line at 40 and Clef Flash's at 20, with every check at 25.
+    const flash = await keyed({ judgeWho: "clef", clefTier: "flash", clefOver: 40, clefFlashOver: 20 }, { jev: says([25]) });
+    await flash.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(flash.asked.length).toBe(1);
+    const full = await keyed({ judgeWho: "clef", clefTier: "full", clefOver: 40, clefFlashOver: 20 }, { jev: says([25]) });
+    await full.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(full.asked.length).toBe(0);
+  });
+
+  test("Flash picked on a host without it uses the larger model's line", async () => {
+    const h = await keyed({ judgeWho: "solar", solarTier: "flash", judgeHost: "upstage", solarOver: 40, solarFlashOver: 20 }, { jev: says([25]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("a Flash in use is named as the Flash in what is said about it", async () => {
+    for (const [over, name] of [
+      [{ judgeWho: "clef", clefTier: "flash" }, "Clef Flash"],
+      [{ judgeWho: "solar", solarTier: "flash" }, "Solar Decide Flash"],
+      [{ judgeWho: "solar", solarTier: "flash", judgeHost: "upstage" }, "Solar Decide"],
+    ] as Array<[any, string]>) {
+      const h = await keyed(over, { jev: () => ({ status: 401, body: "{}" }) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(String(said(h)[0].why)).toBe("the " + name + " key was refused (401)");
     }
   });
 

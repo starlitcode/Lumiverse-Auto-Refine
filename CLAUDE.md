@@ -92,13 +92,20 @@ Two skills are available. Load them before starting work.
 - A new second model gets its own line setting, and its default is 30. The
   owner changes a default only if the owner's testing finds a better one or a model
   changes. `test/model-names.test.ts` checks that every line starts at 30.
+- Models from the same maker that are sizes of one model, such as Clef and
+  Clef Flash, are one entry under **Which second model**, with a picker
+  under it, such as **Which Clef**. Each model in the pair still has its own
+  line setting at 30 and its own **What is** link. The pair shares one
+  **Model name** box, which shows the name for the one picked. They are kept
+  in `FLASH_PICKS`, with the hosts that serve only the larger model.
 - A paid second model that cannot be tested, because there is no key with
   credit, can still be added if it answers yes-or-no checks and suits Auto
   Refine.
 - `docs/two-models.md` never claims a default is measured or correct. It says
   the defaults come from testing during the beta and can change.
-- Every second model has a **Model name** box, Jev included, so a user can
-  type a new name when a host renames a model or releases a new version. When
+- Every entry under **Which second model** has a **Model name** box, Jev
+  included, so a user can type a new name when a host renames a model or
+  releases a new version. When
   a second model or a host for one is added or changed, keep all of its parts:
   the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
   the Model tab, its place in `PARTS`, and its built-in name for every host in

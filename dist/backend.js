@@ -4077,8 +4077,12 @@ const D1_HOSTS = {
     liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', model: 'd1:free', kind: 'decisions' },
 };
 const SOLAR_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'upstage/solar-decide', kind: 'decisions' },
-    upstage: { url: 'https://api.upstage.ai/v1/systemone', model: 'solar-decide', kind: 'decisions' },
+    openrouter: {
+        url: 'https://openrouter.ai/api/alpha/decisions',
+        models: { full: 'upstage/solar-decide', flash: 'upstage/solar-decide-flash' },
+        kind: 'decisions',
+    },
+    upstage: { url: 'https://api.upstage.ai/v1/systemone', models: { full: 'solar-decide' }, kind: 'decisions' },
 };
 // Kev 4B, an open model from Jared Palmer that takes Jev's request too. It is
 // small, and OpenRouter gives it 8,192 tokens, so a long reply with the one
@@ -4093,28 +4097,29 @@ const LUNA_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
     openai: { url: 'https://api.openai.com/v1/decisions', model: 'gpt-6-luna', kind: 'predicates' },
 };
-// Clef and Clef Flash, from Cloudflare. Both take Jev's request. Cloudflare's
-// own address holds the account ID, which is put in for {account} when the
-// call is made, and its answer comes back inside `result`. NanoGPT serves
-// Clef, on the same route it uses for Jev.
+// Clef, from Cloudflare, comes in two: Clef, and Clef Flash, which is smaller
+// and faster. Both take Jev's request. Cloudflare's own address holds the
+// account ID and the model name, which are put in for {account} and {model}
+// when the call is made, and its answer comes back inside `result`. NanoGPT
+// serves Clef only, so asking it for Flash gets Clef.
 const CLEF_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'cloudflare/clef', kind: 'decisions' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'cloudflare/clef', kind: 'decisions' },
-    cloudflare: { url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/clef', model: 'clef', kind: 'decisions' },
-};
-const CLEF_FLASH_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'cloudflare/clef-flash', kind: 'decisions' },
-    cloudflare: { url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/clef-flash', model: 'clef-flash', kind: 'decisions' },
+    openrouter: {
+        url: 'https://openrouter.ai/api/alpha/decisions',
+        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash' },
+        kind: 'decisions',
+    },
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { full: 'cloudflare/clef' }, kind: 'decisions' },
+    cloudflare: {
+        url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}',
+        models: { full: 'clef', flash: 'clef-flash' },
+        kind: 'decisions',
+    },
 };
 // Decider, from Perplexity. It takes Jev's request on OpenRouter and on
 // Perplexity's own API.
 const DECIDER_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
     perplexity: { url: 'https://api.perplexity.ai/v1/decisions', model: 'pplx-decider-v1.1-27b', kind: 'decisions' },
-};
-// Solar Decide Flash, from Upstage, a faster Solar Decide. On OpenRouter only.
-const SOLAR_FLASH_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'upstage/solar-decide-flash', kind: 'decisions' },
 };
 // The text of a responses API reply when it has no `output_text` of its own:
 // the first output_text part of the first message in `output`.
@@ -4232,10 +4237,11 @@ const ownNames = {
     kev: '',
     luna: '',
     clef: '',
-    clefFlash: '',
     decider: '',
-    solarFlash: '',
 };
+// Which of the two Clefs, and which of the two Solar Decides.
+let clefTier = 'full';
+let solarTier = 'full';
 // The reader's Cloudflare account ID, which Cloudflare's own address holds.
 // Only an ID of 32 letters and numbers is kept, so nothing else can be put
 // into the address.
@@ -4256,9 +4262,13 @@ const LINES = {
     kev: { key: 'kevOver', fallback: 30 },
     luna: { key: 'lunaOver', fallback: 30 },
     clef: { key: 'clefOver', fallback: 30 },
-    clefFlash: { key: 'clefFlashOver', fallback: 30 },
     decider: { key: 'deciderOver', fallback: 30 },
-    solarFlash: { key: 'solarFlashOver', fallback: 30 },
+};
+// The Flash of a model that has one is a model of its own, so it has a line
+// of its own too.
+const FLASH_LINES = {
+    clef: { key: 'clefFlashOver', fallback: 30 },
+    solar: { key: 'solarFlashOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4311,8 +4321,10 @@ const SECOND_MODELS = {
     },
     solar: {
         name: 'Solar Decide',
+        flashName: 'Solar Decide Flash',
+        tier: () => solarTier,
         hosts: SOLAR_HOSTS,
-        model: (host) => ownNames.solar || SOLAR_HOSTS[host].model,
+        model: (host) => ownNames.solar || SOLAR_HOSTS[host].models[flashTier()] || SOLAR_HOSTS[host].models.full || '',
     },
     kev: {
         name: 'Kev 4B',
@@ -4326,31 +4338,37 @@ const SECOND_MODELS = {
     },
     clef: {
         name: 'Clef',
+        flashName: 'Clef Flash',
+        tier: () => clefTier,
         hosts: CLEF_HOSTS,
-        model: (host) => ownNames.clef || CLEF_HOSTS[host].model,
-    },
-    clefFlash: {
-        name: 'Clef Flash',
-        hosts: CLEF_FLASH_HOSTS,
-        model: (host) => ownNames.clefFlash || CLEF_FLASH_HOSTS[host].model,
+        model: (host) => ownNames.clef || CLEF_HOSTS[host].models[flashTier()] || CLEF_HOSTS[host].models.full || '',
     },
     decider: {
         name: 'Decider',
         hosts: DECIDER_HOSTS,
         model: (host) => ownNames.decider || DECIDER_HOSTS[host].model,
     },
-    solarFlash: {
-        name: 'Solar Decide Flash',
-        hosts: SOLAR_FLASH_HOSTS,
-        model: (host) => ownNames.solarFlash || SOLAR_FLASH_HOSTS[host].model,
-    },
 };
 function secondModel() {
     return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
 }
+// Which of a model's two is used. Flash is used when it is picked and the host
+// serves it. Another address is sent whatever name is typed for it, so the
+// pick holds there.
+function flashTier() {
+    const m = secondModel();
+    if (!m.tier || m.tier() !== 'flash')
+        return 'full';
+    const host = hostFor(judgeWho, judgeHost);
+    if (host === 'custom')
+        return 'flash';
+    const h = m.hosts[host];
+    return h && h.models && h.models.flash ? 'flash' : 'full';
+}
 // The second model's name, for everything that is said about what it did.
 function who() {
-    return secondModel().name;
+    const m = secondModel();
+    return m.flashName && flashTier() === 'flash' ? m.flashName : m.name;
 }
 // The host a model is reached on. A host this model is not on, left picked
 // from another model, falls back to OpenRouter, which is what the panel shows
@@ -4406,10 +4424,12 @@ function jevWhere() {
     if (host === 'custom')
         return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
     const m = secondModel();
-    // An address that needs the account ID has none until one is saved.
-    const url = m.hosts[host].url;
+    // An address that needs the account ID has none until one is saved. An
+    // address that holds the model name is given the one sent.
+    const model = m.model(host);
+    const url = m.hosts[host].url.replace('{model}', encodeURIComponent(model));
     const placed = url.indexOf('{account}') < 0 ? url : cloudflareAccount ? url.replace('{account}', cloudflareAccount) : '';
-    return { url: placed, model: m.model(host), kind: m.hosts[host].kind };
+    return { url: placed, model: model, kind: m.hosts[host].kind };
 }
 // The key kept for one host. A key saved before there was one per host is
 // moved to the first host it is looked for on, which is the host picked at
@@ -4987,6 +5007,8 @@ function applyRules(s) {
     judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
     judgeWho = Object.prototype.hasOwnProperty.call(SECOND_MODELS, String(s.judgeWho)) ? String(s.judgeWho) : 'jev';
     spanTier = s.spanTier === 'lite' || s.spanTier === 'full' ? s.spanTier : 'free';
+    clefTier = s.clefTier === 'flash' ? 'flash' : 'full';
+    solarTier = s.solarTier === 'flash' ? 'flash' : 'full';
     judgeHost = String(s.judgeHost) === 'custom' || Object.keys(SECOND_MODELS).some((k) => !!SECOND_MODELS[k].hosts[String(s.judgeHost)])
         ? String(s.judgeHost)
         : 'openrouter';
@@ -5021,7 +5043,7 @@ function applyRules(s) {
         const n = Number(raw);
         return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
     };
-    const line = LINES[judgeWho] || LINES.jev;
+    const line = (flashTier() === 'flash' && FLASH_LINES[judgeWho]) || LINES[judgeWho] || LINES.jev;
     judgeOver = lineOf(s[line.key], line.fallback);
     judgeWorn = s.judgeWorn !== false;
     judgeBefore = s.judgeBefore === true;

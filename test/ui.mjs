@@ -1770,7 +1770,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["clefFlash", "cloudflare"], ["decider", "perplexity"], ["solarFlash", "openrouter"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1941,9 +1941,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
     ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
-    ["clefFlash", "Clef Flash, from Cloudflare", "openrouter,cloudflare,custom", "clefFlashOver", "What is Clef Flash? https://developers.cloudflare.com/workers-ai/models/clef-flash/"],
     ["decider", "Decider, from Perplexity", "openrouter,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
-    ["solarFlash", "Solar Decide Flash, from Upstage", "openrouter,custom", "solarFlashOver", "What is Solar Decide Flash? https://openrouter.ai/upstage/solar-decide-flash"],
   ];
   const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
@@ -1994,13 +1992,13 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
         ok(label + ", " + who + ": picked and named " + name, got.label === name, JSON.stringify(got));
         ok(label + ", " + who + ": its hosts are " + hosts, got.hosts === hosts, JSON.stringify(got));
         ok(label + ", " + who + ": only its own line shows, at 30", got.lines.join() === line && got.values[line] === "30", JSON.stringify(got));
-        ok(label + ", " + who + ": no version picker shows", !got.versions, JSON.stringify(got));
+        ok(label + ", " + who + ": " + (who === "clef" || who === "solar" ? "its own picker shows instead of Jev's or Span's" : "no version picker shows"), !got.versions, JSON.stringify(got));
         ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
         ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
         ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
         ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
         ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
-        const clefs = who === "clef" || who === "clefFlash";
+        const clefs = who === "clef";
         ok(label + ", " + who + ": " + (clefs ? "the card says how much Cloudflare reads" : "no note about Cloudflare"), /first 2,000 tokens/.test(got.clefNote) === clefs, JSON.stringify(got.clefNote));
         ok(label + ", " + who + ": on OpenRouter, no Cloudflare account ID box", !got.account, JSON.stringify(got));
         const owns = {
@@ -2008,7 +2006,6 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
           solar: [["upstage", "Upstage"]],
           luna: [["openai", "OpenAI"]],
           clef: [["nanogpt", "NanoGPT"], ["cloudflare", "Cloudflare"]],
-          clefFlash: [["cloudflare", "Cloudflare"]],
           decider: [["perplexity", "Perplexity"]],
         }[who] || [];
         for (const own of owns) {
@@ -2026,6 +2023,79 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
           ok(label + ", " + who + " on " + own[1] + ": " + (wantAccount ? "the Cloudflare account ID box shows" : "no Cloudflare account ID box"), there.account === wantAccount, JSON.stringify(there));
           if (wantAccount && touch) ok(label + ", " + who + " on Cloudflare: the account ID box is tall enough to tap", there.accountHeight >= 32, String(there.accountHeight));
         }
+      });
+      ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+    }
+  }
+}
+
+console.log("\na model that comes in two");
+{
+  // Clef and Solar Decide each come with a Flash. Each pair is one entry in
+  // Which second model, with its own picker under it. The Flash has its own
+  // line, link and built-in name. On a host that serves only the larger one,
+  // the Flash is not offered, and the larger one's line and name show.
+  const PAIRS = [
+    ["clef", "clefTier", "Which Clef", "clefOver", "clefFlashOver", "What is Clef Flash? https://developers.cloudflare.com/workers-ai/models/clef-flash/", "cloudflare/clef-flash", "nanogpt", "cloudflare/clef", "clefName"],
+    ["solar", "solarTier", "Which Solar Decide", "solarOver", "solarFlashOver", "What is Solar Decide Flash? https://openrouter.ai/upstage/solar-decide-flash", "upstage/solar-decide-flash", "upstage", "solar-decide", "solarName"],
+  ];
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [who, tierKey, title, line, flashLine, flashLink, flashName, onlyHost, onlyName, nameKey] of PAIRS) {
+      const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
+        await goTab(page, "Model");
+        await settle(page);
+        const read = () =>
+          page.evaluate(({ tierKey, line, flashLine, nameKey }) => {
+            const vis = (sel) => {
+              const n = document.querySelector(sel);
+              return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+            };
+            const tier = document.querySelector('#drawer [data-arf-field="' + tierKey + '"]');
+            const name = document.querySelector('#drawer [data-arf-field="' + nameKey + '"]');
+            return {
+              shown: vis('#drawer [data-arf-row="' + tierKey + '"]'),
+              title: ((document.querySelector('#drawer [data-arf-row="' + tierKey + '"] .arf-lab') || {}).textContent || "").trim(),
+              options: tier ? [...tier.options].map((o) => o.value).join() : "",
+              height: tier ? Math.round(tier.getBoundingClientRect().height) : 0,
+              line: vis('#drawer [data-arf-row="' + line + '"]'),
+              flashLine: vis('#drawer [data-arf-row="' + flashLine + '"]'),
+              link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).join("|"),
+              placeholder: name ? name.placeholder : "",
+              sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+            };
+          }, { tierKey, line, flashLine, nameKey });
+        const pick = async (key, value) => {
+          await page.evaluate(
+            ({ key, value }) => {
+              const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+              sel.value = value;
+              sel.dispatchEvent(new Event("change", { bubbles: true }));
+            },
+            { key, value },
+          );
+          await settle(page);
+          await settle(page);
+          // A row on its way out folds away first, so the check waits for it.
+          await closed(page);
+        };
+        const first = await read();
+        ok(label + ", " + who + ": " + title + " shows under it", first.shown && first.title === title, JSON.stringify(first));
+        ok(label + ", " + who + ": with both on OpenRouter", first.options === "full,flash", JSON.stringify(first));
+        ok(label + ", " + who + ": the larger one is picked, with its own line", first.line && !first.flashLine, JSON.stringify(first));
+        if (touch) ok(label + ", " + who + ": the picker is tall enough to tap", first.height >= 32, String(first.height));
+        await pick(tierKey, "flash");
+        const flash = await read();
+        ok(label + ", " + who + ": the Flash picked shows the Flash's own line only", flash.flashLine && !flash.line, JSON.stringify(flash));
+        ok(label + ", " + who + ": and the Flash's own link", flash.link === flashLink, JSON.stringify(flash.link));
+        ok(label + ", " + who + ": and the Flash's built-in name", flash.placeholder === flashName, JSON.stringify(flash.placeholder));
+        ok(label + ", " + who + ": nothing scrolls sideways", !flash.sideways, "");
+        await pick("judgeHost", onlyHost);
+        const only = await read();
+        ok(label + ", " + who + " on " + onlyHost + ": the Flash is not offered", only.options === "full", JSON.stringify(only));
+        ok(label + ", " + who + " on " + onlyHost + ": the larger one's line and name show", only.line && !only.flashLine && only.placeholder === onlyName, JSON.stringify(only));
+        await pick("judgeHost", "openrouter");
+        const back = await read();
+        ok(label + ", " + who + ": back on OpenRouter, the Flash is picked again", back.flashLine && back.placeholder === flashName, JSON.stringify(back));
       });
       ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
     }
@@ -2074,7 +2144,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all eleven second models are offered", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,clefFlash,decider,solarFlash", JSON.stringify(jev.who));
+    ok("all nine second models are offered, a model and its Flash as one", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));

@@ -48,6 +48,9 @@ function blockText(raw) {
 // line about what the model did, and the links under the card all come from
 // here, so a model added later is one more entry, beside its entry in the
 // backend.
+// A model that comes in two, a larger one and a faster Flash, is one entry
+// here, with the Flash's name and link beside its own. Which one is used is
+// its own setting, such as Which Clef.
 const SECOND_MODELS = [
     { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
     { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
@@ -55,18 +58,45 @@ const SECOND_MODELS = [
     // which serves it.
     { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide:free" },
     { value: "d1", name: "D1", from: "Liquid AI", about: "https://docs.liquid.ai/lfm/models/decision-models" },
-    { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
+    // Upstage has no page of its own for Solar Decide Flash yet, so its link is
+    // OpenRouter's, which serves it.
+    {
+        value: "solar",
+        name: "Solar Decide",
+        from: "Upstage",
+        about: "https://console.upstage.ai/docs/models/solar-decide",
+        flashName: "Solar Decide Flash",
+        flashAbout: "https://openrouter.ai/upstage/solar-decide-flash",
+    },
     { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
     // Each of these links to its maker's own page for the model, which is also
     // where its maker's own API is described.
     { value: "luna", name: "GPT-6 Luna Decisions", from: "OpenAI", about: "https://developers.openai.com/api/docs/guides/decisions" },
-    { value: "clef", name: "Clef", from: "Cloudflare", about: "https://developers.cloudflare.com/workers-ai/models/clef/" },
-    { value: "clefFlash", name: "Clef Flash", from: "Cloudflare", about: "https://developers.cloudflare.com/workers-ai/models/clef-flash/" },
+    {
+        value: "clef",
+        name: "Clef",
+        from: "Cloudflare",
+        about: "https://developers.cloudflare.com/workers-ai/models/clef/",
+        flashName: "Clef Flash",
+        flashAbout: "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
+    },
     { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
-    // Upstage has no page of its own for it yet, so the link is OpenRouter's,
-    // which serves it.
-    { value: "solarFlash", name: "Solar Decide Flash", from: "Upstage", about: "https://openrouter.ai/upstage/solar-decide-flash" },
 ];
+// The setting that picks between a model's two, and the hosts that serve only
+// the larger one. Flash picked on one of those hosts sends the larger one, the
+// same as the backend does, and the panel shows the larger one's line.
+const FLASH_PICKS = {
+    clef: { key: "clefTier", without: ["nanogpt"] },
+    solar: { key: "solarTier", without: ["upstage"] },
+};
+// Every host in the host list, for the Flash choice to name the ones it is
+// offered on.
+const ALL_HOSTS = ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "custom"];
+// Whether the Flash is the one used: picked, and on a host that serves it.
+function flashUsed(c) {
+    const pick = FLASH_PICKS[c && c.judgeWho];
+    return !!pick && c[pick.key] === "flash" && pick.without.indexOf(c.judgeHost) < 0;
+}
 // The name each host gives each second model. Shown in the Model name box as
 // the name used when the box is empty. The backend holds the same names, and a
 // test checks the two agree. Jev's are per choice under Which Jev, and a host
@@ -84,13 +114,18 @@ const BUILT_IN_MODEL_NAMES = {
     },
     mercury: { openrouter: "inception/mercury-decide:free" },
     d1: { openrouter: "liquid/d1", nanogpt: "liquid/d1", liquid: "d1:free" },
-    solar: { openrouter: "upstage/solar-decide", upstage: "solar-decide" },
+    solar: {
+        openrouter: { full: "upstage/solar-decide", flash: "upstage/solar-decide-flash" },
+        upstage: { full: "solar-decide" },
+    },
     kev: { openrouter: "jaredpalmer/kev-4b" },
     luna: { openrouter: "openai/gpt-6-luna-decisions", openai: "gpt-6-luna" },
-    clef: { openrouter: "cloudflare/clef", nanogpt: "cloudflare/clef", cloudflare: "clef" },
-    clefFlash: { openrouter: "cloudflare/clef-flash", cloudflare: "clef-flash" },
+    clef: {
+        openrouter: { full: "cloudflare/clef", flash: "cloudflare/clef-flash" },
+        nanogpt: { full: "cloudflare/clef" },
+        cloudflare: { full: "clef", flash: "clef-flash" },
+    },
     decider: { openrouter: "perplexity/pplx-decider-v1.1-27b", perplexity: "pplx-decider-v1.1-27b" },
-    solarFlash: { openrouter: "upstage/solar-decide-flash" },
 };
 // The built-in name for the model and host picked. A host the model is not on
 // is reached on OpenRouter, the same as the backend does.
@@ -105,6 +140,8 @@ function builtInModelName(c) {
         return "";
     if (c.judgeWho === "jev")
         return at[c.judgeVersion] || at.latest;
+    if (FLASH_PICKS[c.judgeWho])
+        return (flashUsed(c) && at.flash) || at.full || "";
     return at[c.spanTier] || at.free || "";
 }
 // One Model name box for each second model. Empty uses the built-in name, so a
@@ -118,9 +155,7 @@ const OWN_NAME_KEYS = {
     kev: "kevName",
     luna: "lunaName",
     clef: "clefName",
-    clefFlash: "clefFlashName",
     decider: "deciderName",
-    solarFlash: "solarFlashName",
 };
 // A link in the panel's own colours. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
@@ -234,7 +269,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "clefFlashName", "deciderName", "solarFlashName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "clefTier", "solarTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -666,6 +701,9 @@ const CONFIG = {
     judgeWho: "jev",
     // Which Span: Lite at no cost, Lite paid, or the full model.
     spanTier: "free",
+    // Which Clef and which Solar Decide: the larger one, or the Flash.
+    clefTier: "full",
+    solarTier: "full",
     // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
     judgeUrl: "",
@@ -684,9 +722,7 @@ const CONFIG = {
     kevName: "",
     lunaName: "",
     clefName: "",
-    clefFlashName: "",
     deciderName: "",
-    solarFlashName: "",
     // The account ID Cloudflare's own address holds. Empty until the reader
     // pastes theirs.
     cloudflareAccount: "",
@@ -2143,7 +2179,7 @@ const JUDGE_FIELDS = [
             { value: "liquid", label: "Liquid AI", needs: { key: "judgeWho", is: "d1" } },
             { value: "upstage", label: "Upstage", needs: { key: "judgeWho", is: "solar" } },
             { value: "openai", label: "OpenAI", needs: { key: "judgeWho", is: "luna" } },
-            { value: "cloudflare", label: "Cloudflare", needs: { key: "judgeWho", is: ["clef", "clefFlash"] } },
+            { value: "cloudflare", label: "Cloudflare", needs: { key: "judgeWho", is: "clef" } },
             { value: "perplexity", label: "Perplexity", needs: { key: "judgeWho", is: "decider" } },
             { value: "custom", label: "Another address" },
         ],
@@ -2165,6 +2201,30 @@ const JUDGE_FIELDS = [
         hint: "The free one costs nothing. Respan's own API calls the two span-01-free and span-01-pro.",
     },
     {
+        key: "clefTier",
+        label: "Which Clef",
+        type: "pick",
+        options: [
+            { value: "full", label: "Clef" },
+            { value: "flash", label: "Clef Flash, smaller and faster", needs: { key: "judgeHost", is: ALL_HOSTS.filter((h) => FLASH_PICKS.clef.without.indexOf(h) < 0) } },
+        ],
+        needs: { key: "judgeWho", is: "clef" },
+        under: true,
+        hint: "Each has its own line. NanoGPT serves Clef only.",
+    },
+    {
+        key: "solarTier",
+        label: "Which Solar Decide",
+        type: "pick",
+        options: [
+            { value: "full", label: "Solar Decide" },
+            { value: "flash", label: "Solar Decide Flash, faster", needs: { key: "judgeHost", is: ALL_HOSTS.filter((h) => FLASH_PICKS.solar.without.indexOf(h) < 0) } },
+        ],
+        needs: { key: "judgeWho", is: "solar" },
+        under: true,
+        hint: "Each has its own line. Upstage serves Solar Decide only.",
+    },
+    {
         key: "judgeVersion",
         label: "Which Jev",
         type: "pick",
@@ -2183,7 +2243,7 @@ const JUDGE_FIELDS = [
         label: "Cloudflare account ID",
         type: "text",
         needs: { key: "judgeHost", is: "cloudflare" },
-        also: { key: "judgeWho", is: ["clef", "clefFlash"] },
+        also: { key: "judgeWho", is: "clef" },
         under: true,
         placeholder: "32 letters and numbers",
         hint: "On the Workers AI page of your Cloudflare dashboard, under Use REST API.",
@@ -2225,9 +2285,7 @@ const JUDGE_FIELDS = [
             kev: "jaredpalmer/kev-4b",
             luna: "openai/gpt-6-luna-decisions",
             clef: "cloudflare/clef",
-            clefFlash: "cloudflare/clef-flash",
             decider: "perplexity/pplx-decider-v1.1-27b",
-            solarFlash: "upstage/solar-decide-flash",
         }[c.judgeWho] || "typesafe/jev-latest"),
         hint: "What that host calls the model, as its own docs spell it.",
     },
@@ -2309,6 +2367,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "solar" },
+        when: (c) => !flashUsed(c),
         hint: "For Solar Decide. A percentage, " + CONFIG.solarOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
@@ -2342,6 +2401,7 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "clef" },
+        when: (c) => !flashUsed(c),
         hint: "For Clef. A percentage, " + CONFIG.clefOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
@@ -2352,7 +2412,8 @@ const JUDGE_FIELDS = [
         min: 1,
         max: 99,
         needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "clefFlash" },
+        also: { key: "judgeWho", is: "clef" },
+        when: (c) => flashUsed(c),
         hint: "For Clef Flash. A percentage, " + CONFIG.clefFlashOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
@@ -2374,7 +2435,8 @@ const JUDGE_FIELDS = [
         min: 1,
         max: 99,
         needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "solarFlash" },
+        also: { key: "judgeWho", is: "solar" },
+        when: (c) => flashUsed(c),
         hint: "For Solar Decide Flash. A percentage, " + CONFIG.solarFlashOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
@@ -3203,7 +3265,7 @@ export function setup(ctx, overrides) {
     // The second model's name, for everything the panel says about what it did.
     function whoName() {
         const m = SECOND_MODELS.find((x) => x.value === cfg.judgeWho) || SECOND_MODELS[0];
-        return m.name;
+        return m.flashName && flashUsed(cfg) ? m.flashName : m.name;
     }
     // The host the second model is reached on, as the host list shows it. A
     // host the picked model is not on shows as OpenRouter, and the backend
@@ -8383,6 +8445,8 @@ export function setup(ctx, overrides) {
     function fieldShows(f, depth) {
         if (f.also && !optionShows(f.also))
             return false;
+        if (f.when && !f.when(cfg))
+            return false;
         if (!f.needs)
             return true;
         if (!optionShows(f.needs))
@@ -8602,7 +8666,7 @@ export function setup(ctx, overrides) {
                 // redraws the card rather than only showing and hiding rows. The rows
                 // start the rebuild as they were, so the ones that come or go still
                 // fade in and fold away like every other row.
-                if (f.key === "judgeWho" || f.key === "judgeHost" || f.key === "refineSide") {
+                if (f.key === "judgeWho" || f.key === "judgeHost" || f.key === "clefTier" || f.key === "solarTier" || f.key === "refineSide") {
                     paint(rowsShowing());
                     return;
                 }
@@ -9654,7 +9718,9 @@ export function setup(ctx, overrides) {
         const about = note("");
         about.setAttribute("data-arf-jevabout", "1");
         const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
-        about.appendChild(linkTo(picked.about, "What is " + picked.name + "?"));
+        // A Flash in use is linked by its own name, to its own page.
+        const flash = !!picked.flashAbout && flashUsed(cfg);
+        about.appendChild(linkTo(flash ? String(picked.flashAbout) : picked.about, "What is " + (flash ? picked.flashName : picked.name) + "?"));
         // Only with two models picked. With one there is no second model to read
         // about, and the links are one more line to read past.
         wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));
@@ -9666,8 +9732,8 @@ export function setup(ctx, overrides) {
             small.setAttribute("data-arf-kevwarn", "1");
             wrap.appendChild(hangsOff(small, () => cfg.judgeMode === "two", "small model warning"));
         }
-        if (picked.value === "clef" || picked.value === "clefFlash") {
-            const short = note("Cloudflare, which OpenRouter also uses for " + picked.name + ", reads only about the first 2,000 tokens it is sent. The end of a long reply may not be read.");
+        if (picked.value === "clef") {
+            const short = note("Cloudflare, which OpenRouter also uses for Clef, reads only about the first 2,000 tokens it is sent. The end of a long reply may not be read.");
             short.setAttribute("data-arf-clefwarn", "1");
             wrap.appendChild(hangsOff(short, () => cfg.judgeMode === "two", "Clef length note"));
         }
@@ -15974,6 +16040,8 @@ export const __testing = {
     BUILT_IN_MODEL_NAMES,
     builtInModelName,
     OWN_NAME_KEYS,
+    FLASH_PICKS,
+    flashUsed,
     SECOND_MODELS,
     splitSelectorList,
     blockText,

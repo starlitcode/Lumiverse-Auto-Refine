@@ -12,7 +12,7 @@
 import { expect, test, describe } from "bun:test";
 import { __testing } from "../src/frontend";
 
-const { CONFIG, PARTS, JUDGE_FIELDS, SECOND_MODELS, OWN_NAME_KEYS, BUILT_IN_MODEL_NAMES } = __testing as any;
+const { CONFIG, PARTS, JUDGE_FIELDS, SECOND_MODELS, OWN_NAME_KEYS, BUILT_IN_MODEL_NAMES, FLASH_PICKS, flashUsed } = __testing as any;
 
 // The hosts the Model tab offers a model, read from the host picker. Another
 // address has its own Model name box, so it is left out.
@@ -74,4 +74,46 @@ describe("every second model has a Model name box", () => {
     const models = SECOND_MODELS.map((m: any) => m.value);
     expect(Object.keys(OWN_NAME_KEYS).filter((w) => models.indexOf(w) < 0)).toEqual([]);
   });
+});
+
+// A model that comes in two is one entry with a picker, such as Which Clef.
+// Each of the two is its own model, so the Flash has its own line at 30 too.
+// The hosts the panel says serve only the larger one have to be the hosts
+// with no Flash name, or the panel and the backend pick different models.
+describe("a model that comes in two", () => {
+  test("there are some, or this proves nothing", () => {
+    expect(Object.keys(FLASH_PICKS).length).toBeGreaterThan(0);
+  });
+
+  for (const who of Object.keys(FLASH_PICKS)) {
+    const pick = FLASH_PICKS[who];
+    describe(who, () => {
+      test("is one entry, with the Flash named beside it", () => {
+        const m = SECOND_MODELS.find((x: any) => x.value === who);
+        expect(!!m && !!m.flashName && !!m.flashAbout).toBe(true);
+      });
+
+      test("has a picker, the larger one by default", () => {
+        const field = JUDGE_FIELDS.find((f: any) => f.key === pick.key);
+        expect(field && field.type).toBe("pick");
+        expect(CONFIG[pick.key]).toBe("full");
+        expect(PARTS.some((p: any) => p.keys.indexOf(pick.key) >= 0)).toBe(true);
+      });
+
+      test("the Flash has its own Refine when a check reaches, at 30 by default", () => {
+        const line = who + "FlashOver";
+        expect(CONFIG[line]).toBe(30);
+        const field = JUDGE_FIELDS.find((f: any) => f.key === line);
+        expect(!!field && field.when({ judgeWho: who, judgeHost: "openrouter", [pick.key]: "flash" })).toBe(true);
+        expect(field.when({ judgeWho: who, judgeHost: "openrouter", [pick.key]: "full" })).toBe(false);
+      });
+
+      test("the hosts without a Flash are the ones with no Flash name", () => {
+        const names = BUILT_IN_MODEL_NAMES[who];
+        const noFlash = Object.keys(names).filter((h) => !names[h].flash);
+        expect(noFlash.sort()).toEqual(pick.without.slice().sort());
+        for (const h of pick.without) expect(flashUsed({ judgeWho: who, judgeHost: h, [pick.key]: "flash" })).toBe(false);
+      });
+    });
+  }
 });
