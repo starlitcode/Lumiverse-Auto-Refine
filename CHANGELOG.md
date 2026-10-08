@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.33.2
+
+_2026-10-08_
+
+### Fixed
+
+- **With Reduce motion on, a switch looked like it was lagging.** In 1.33.0 Reduce motion stopped the knob sliding, but a pressed knob still grew wider and moved toward its other end. With no motion to smooth it, the knob jumped on each press and jumped back on release. With Reduce motion on, from the panel or from your device, a pressed knob now keeps its size and place.
+
+---
+
 ## 1.33.1
 
 _2026-10-08_

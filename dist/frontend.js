@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.33.1";
+const VERSION = "1.33.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -4652,6 +4652,9 @@ export function setup(ctx, overrides) {
         '.arf[data-arf-pattern="dots"]{background-image:' +
         "radial-gradient(" + PAT_INK + " 1.2px,transparent 1.6px)!important;background-size:14px 14px!important}" +
         ".arf[data-arf-pattern] .arf-card,.arf[data-arf-pattern] .arf-tabs{" + PAT_SOLID + "}";
+    // Put before a rule that changes a part's size or place while it is
+    // pressed. With Reduce motion on, the part keeps its size and place.
+    const PRESS = "html:not([data-arf-still]) ";
     const STILL_RULES = (root) => [
         '[class*="arf-"]',
         '[class*="arf-"]::before',
@@ -4815,11 +4818,15 @@ export function setup(ctx, overrides) {
         // the edge. Pressed, it stretches toward the way it is about to go.
         "transition:left 320ms cubic-bezier(.34,1.56,.64,1),width 200ms ease," +
         "background-color var(--lumiverse-transition-fast,150ms ease)}" +
-        ".arf-box:active:not(:disabled)::after{width:18px}" +
+        // The stretch is left out under Reduce motion. With no transition it
+        // would jump wider on a press and jump back on release, which reads as
+        // the switch catching.
+        "@media (prefers-reduced-motion: no-preference){" +
+        PRESS + ".arf-box:active:not(:disabled)::after{width:18px}" +
+        PRESS + ".arf-box:checked:active:not(:disabled)::after{left:15px}}" +
         ".arf-box:checked{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
         "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
         ".arf-box:checked::after{left:19px;background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
-        ".arf-box:checked:active:not(:disabled)::after{left:15px}" +
         ".arf-box:disabled{opacity:.45;cursor:not-allowed}" +
         "@media (prefers-reduced-motion: reduce){.arf-box,.arf-box::after{transition:none}}" +
         ".arf-well{white-space:pre-wrap;line-height:1.5;font-size:12.5px;padding:8px 10px;" +
@@ -5425,8 +5432,10 @@ export function setup(ctx, overrides) {
         ".arf-box{width:52px;height:32px;border-radius:17px}" +
         ".arf-box::after{width:24px;height:24px;left:4px}" +
         ".arf-box:checked::after{left:24px}" +
-        ".arf-box:active:not(:disabled)::after{width:29px}" +
-        ".arf-box:checked:active:not(:disabled)::after{left:19px}" +
+        "}@media (pointer: coarse) and (prefers-reduced-motion: no-preference){" +
+        PRESS + ".arf-box:active:not(:disabled)::after{width:29px}" +
+        PRESS + ".arf-box:checked:active:not(:disabled)::after{left:19px}}" +
+        "@media (pointer: coarse){" +
         // A little room around it takes the tap too, so a finger that lands just
         // off the edge still flips it. Auto Retry's tick boxes have the same.
         ".arf-box::before{content:\"\";position:absolute;inset:-6px -4px}" +
@@ -5731,10 +5740,10 @@ export function setup(ctx, overrides) {
     // below the search box. Held, the search box has scrolled away above it and
     // the gap is larger.
     //
-    // The fill and the shadow go on together, once the search box has scrolled
-    // away and the strip is held, and not before. Where the browser can tell on
-    // its own that the strip is held, the stylesheet does this in the same frame
-    // as the scroll, and this is the fallback.
+    // The shadow goes on once the search box has scrolled away and the strip is
+    // held, and not before. Where the browser can tell on its own that the strip
+    // is held, the stylesheet does this in the same frame as the scroll, and
+    // this is the fallback.
     function markStuck() {
         try {
             const root = tab && tab.root;
@@ -7073,9 +7082,10 @@ export function setup(ctx, overrides) {
         // top and back down.
         putBack(held);
         reAnchor(root, held2, held);
-        // The strip is new and carries no fill yet. Given one on the next frame
-        // instead, it would be see-through for a frame on every repaint made while
-        // it is held at the top.
+        // The strip is new and carries no shadow yet. Given one on the next frame
+        // instead, the shadow would fade in again on every repaint made while the
+        // strip is held at the top. Transitions are off while the panel settles,
+        // so it is there at once.
         if (stick)
             markStuck();
         // A second pass a frame later, for anything whose colour only settles once

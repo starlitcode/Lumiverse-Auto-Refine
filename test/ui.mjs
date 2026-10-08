@@ -11616,6 +11616,34 @@ console.log("\nthe switch knob springs");
       else ok("with Reduce motion on, the knob does not move", !/[1-9]/.test(got.duration.replace(/0s/g, "")), JSON.stringify(got));
     });
   }
+  // Pressed, the knob stretches. With Reduce motion on, from the panel or
+  // from the device, it keeps its size and place, so it does not jump on a
+  // press and jump back on release.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const how of ["off", "panel", "device"]) {
+      await inTab(browser, { viewport, touch, saved: { enabled: true, reduceMotion: how === "panel" } }, async (page) => {
+        if (how === "device") await page.emulateMedia({ reducedMotion: "reduce" });
+        await goTab(page, "Setup");
+        await settle(page);
+        const knob = () => page.evaluate(() => {
+          const cs = getComputedStyle(document.querySelector("#drawer .arf-box"), "::after");
+          return cs.width + " " + cs.left;
+        });
+        const box = page.locator("#drawer .arf-box").first();
+        await box.scrollIntoViewIfNeeded();
+        const r = await box.boundingBox();
+        const atRest = await knob();
+        await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+        await page.mouse.down();
+        await page.waitForTimeout(400);
+        const pressed = await knob();
+        await page.mouse.move(r.x - 40, r.y - 40);
+        await page.mouse.up();
+        if (how === "off") ok(label + ": pressed, the knob stretches", pressed !== atRest, atRest + " | " + pressed);
+        else ok(label + ": Reduce motion from the " + how + ", a pressed knob keeps its size and place", pressed === atRest, atRest + " | " + pressed);
+      });
+    }
+  }
 }
 
 console.log("\nrefines you can put back stay short");
@@ -12076,6 +12104,68 @@ console.log("\nthe tabs stay at the top");
           return { solid, classes, scrolled: drawer.scrollTop > 0 };
         });
         ok(label + ", " + which + ": held at the top, " + (want ? "the strip has its shadow" : "the strip has no shadow"), got.scrolled && got.solid === want && !/arf-stuck/.test(got.classes), JSON.stringify(got));
+      });
+    }
+  }
+}
+
+console.log("\nthe tabs stay at the top: the shadow fades");
+{
+  // The shadow fades in when the strip is held and out when it is let go.
+  // With Reduce motion on, from the panel or from the device, it comes and
+  // goes at once. A repaint while held never fades it in again, and a fast
+  // run of scrolls up and down ends with the shadow matching where the strip
+  // is.
+  const SCROLLS = "#drawer{height:520px;overflow-y:auto}";
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 760 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const how of ["off", "panel", "device"]) {
+      await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true, reduceMotion: how === "panel" } }, async (page) => {
+        if (how === "device") await page.emulateMedia({ reducedMotion: "reduce" });
+        await goTab(page, "Prompt");
+        const got = await page.evaluate(async () => {
+          const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+          const drawer = document.getElementById("drawer");
+          const bar = () => drawer.querySelector("[data-arf-stick]");
+          const strip = () => bar().querySelector(".arf-tabs");
+          const fading = () => strip().getAnimations().filter((a) => a.transitionProperty === "box-shadow").length;
+          const shadow = () => getComputedStyle(strip()).boxShadow;
+          const restShadow = shadow();
+          drawer.scrollTop = drawer.scrollHeight;
+          await frame();
+          const fadingIn = fading();
+          await wait(400);
+          const heldShadow = shadow();
+          drawer.querySelector(".arf-tab[aria-selected='true']").click();
+          const fadingAfterRepaint = fading();
+          const repaintShadow = shadow();
+          await frame();
+          const fadingLater = fading();
+          // Up and down, a frame or less apart, as a flick on a phone does.
+          for (let i = 0; i < 12; i++) {
+            drawer.scrollTop = i % 2 ? drawer.scrollHeight : 0;
+            await new Promise((r) => requestAnimationFrame(r));
+          }
+          drawer.scrollTop = 0;
+          await frame();
+          await wait(400);
+          const endTop = { shadow: shadow(), stuck: bar().classList.contains("arf-stuck") };
+          for (let i = 0; i < 12; i++) {
+            drawer.scrollTop = i % 2 ? 0 : drawer.scrollHeight;
+            await new Promise((r) => requestAnimationFrame(r));
+          }
+          drawer.scrollTop = drawer.scrollHeight;
+          await frame();
+          await wait(400);
+          const endHeld = { shadow: shadow(), stuck: bar().classList.contains("arf-stuck") };
+          return { restShadow, fadingIn, heldShadow, fadingAfterRepaint, fadingLater, repaintShadow, endTop, endHeld };
+        });
+        const name = label + (how === "off" ? "" : ", Reduce motion from the " + how);
+        if (how === "off") ok(name + ": held, the shadow fades in", got.fadingIn > 0, JSON.stringify(got));
+        else ok(name + ": held, the shadow is there at once with no fade", got.fadingIn === 0 && got.heldShadow !== "none", JSON.stringify(got));
+        ok(name + ": a repaint while held keeps the shadow and does not fade it in again", got.repaintShadow === got.heldShadow && got.fadingAfterRepaint === 0 && got.fadingLater === 0, JSON.stringify(got));
+        ok(name + ": after fast scrolling, back at the top there is no shadow", got.endTop.shadow === got.restShadow && got.restShadow === "none" && !got.endTop.stuck, JSON.stringify(got.endTop));
+        ok(name + ": after fast scrolling, held at the top there is the shadow", got.endHeld.shadow === got.heldShadow && got.endHeld.stuck, JSON.stringify(got.endHeld));
       });
     }
   }
