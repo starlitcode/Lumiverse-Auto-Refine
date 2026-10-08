@@ -1770,7 +1770,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["clefFlash", "cloudflare"], ["decider", "perplexity"], ["solarFlash", "openrouter"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1928,17 +1928,24 @@ console.log("\nanother address that needs no key");
   });
 }
 
-console.log("\nD1, Solar Decide and Kev 4B");
+console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
 {
   // Each shows its own hosts and only its own line, at 30, with its link to
-  // its maker's page. D1 can be reached on NanoGPT and Liquid AI, and Solar
-  // Decide on Upstage, and the key box is named after that host there. Checked at a phone width and a laptop width.
+  // its maker's page. On a host of its maker's own, the key box is named after
+  // that host. Cloudflare's own host asks for the account ID as well, and the
+  // two Clefs say how much Cloudflare reads. Checked at a phone width and a
+  // laptop width.
   const MODELS = [
     ["d1", "D1, from Liquid AI", "openrouter,nanogpt,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
     ["solar", "Solar Decide, from Upstage", "openrouter,upstage,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
     ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
+    ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
+    ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
+    ["clefFlash", "Clef Flash, from Cloudflare", "openrouter,cloudflare,custom", "clefFlashOver", "What is Clef Flash? https://developers.cloudflare.com/workers-ai/models/clef-flash/"],
+    ["decider", "Decider, from Perplexity", "openrouter,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
+    ["solarFlash", "Solar Decide Flash, from Upstage", "openrouter,custom", "solarFlashOver", "What is Solar Decide Flash? https://openrouter.ai/upstage/solar-decide-flash"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -1966,6 +1973,15 @@ console.log("\nD1, Solar Decide and Kev 4B");
                 const n = document.querySelector("#drawer [data-arf-kevwarn]");
                 return n && !n.closest("[hidden]") && n.getClientRects().length > 0 ? n.textContent : "";
               })(),
+              clefNote: (() => {
+                const n = document.querySelector("#drawer [data-arf-clefwarn]");
+                return n && !n.closest("[hidden]") && n.getClientRects().length > 0 ? n.textContent : "";
+              })(),
+              account: vis('#drawer [data-arf-row="cloudflareAccount"]'),
+              accountHeight: (() => {
+                const n = document.querySelector('#drawer [data-arf-field="cloudflareAccount"]');
+                return n ? Math.round(n.getBoundingClientRect().height) : 0;
+              })(),
               // The warning is a line of its own: no text after the link.
               linkAlone: (() => {
                 const n = document.querySelector("#drawer [data-arf-jevabout]");
@@ -1984,7 +2000,17 @@ console.log("\nD1, Solar Decide and Kev 4B");
         ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
         ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
         ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
-        const owns = { d1: [["nanogpt", "NanoGPT"], ["liquid", "Liquid AI"]], solar: [["upstage", "Upstage"]] }[who] || [];
+        const clefs = who === "clef" || who === "clefFlash";
+        ok(label + ", " + who + ": " + (clefs ? "the card says how much Cloudflare reads" : "no note about Cloudflare"), /first 2,000 tokens/.test(got.clefNote) === clefs, JSON.stringify(got.clefNote));
+        ok(label + ", " + who + ": on OpenRouter, no Cloudflare account ID box", !got.account, JSON.stringify(got));
+        const owns = {
+          d1: [["nanogpt", "NanoGPT"], ["liquid", "Liquid AI"]],
+          solar: [["upstage", "Upstage"]],
+          luna: [["openai", "OpenAI"]],
+          clef: [["nanogpt", "NanoGPT"], ["cloudflare", "Cloudflare"]],
+          clefFlash: [["cloudflare", "Cloudflare"]],
+          decider: [["perplexity", "Perplexity"]],
+        }[who] || [];
         for (const own of owns) {
           await page.evaluate((host) => {
             const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
@@ -1996,6 +2022,9 @@ console.log("\nD1, Solar Decide and Kev 4B");
           const there = await read();
           ok(label + ", " + who + " on " + own[1] + ": the key box is " + own[1] + "'s", there.key === "Key for " + own[1], JSON.stringify(there));
           ok(label + ", " + who + " on " + own[1] + ": nothing scrolls sideways", !there.sideways, "");
+          const wantAccount = own[0] === "cloudflare";
+          ok(label + ", " + who + " on " + own[1] + ": " + (wantAccount ? "the Cloudflare account ID box shows" : "no Cloudflare account ID box"), there.account === wantAccount, JSON.stringify(there));
+          if (wantAccount && touch) ok(label + ", " + who + " on Cloudflare: the account ID box is tall enough to tap", there.accountHeight >= 32, String(there.accountHeight));
         }
       });
       ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
@@ -2045,7 +2074,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all six second models are offered", jev.who.join() === "jev,span,mercury,d1,solar,kev", JSON.stringify(jev.who));
+    ok("all eleven second models are offered", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,clefFlash,decider,solarFlash", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -9117,7 +9146,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.

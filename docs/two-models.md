@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are six to pick from:
+There are eleven to pick from:
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -14,19 +14,24 @@ There are six to pick from:
 | **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Liquid AI: Decision Models](https://docs.liquid.ai/lfm/models/decision-models) |
 | **Solar Decide** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide) |
 | **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
+| **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
+| **Clef** | Cloudflare | Paid, per call | [Cloudflare: Clef](https://developers.cloudflare.com/workers-ai/models/clef/) |
+| **Clef Flash** | Cloudflare | Paid, per call | [Cloudflare: Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/) |
+| **Decider** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
+| **Solar Decide Flash** | Upstage | Paid, per call | [Solar Decide Flash on OpenRouter](https://openrouter.ai/upstage/solar-decide-flash) |
 
-All six answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. With Kev 4B picked, a warning that it is a small model shows next to its link.
+All eleven answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. Where a model's maker has its own API, the link goes to the maker's page about it. With Kev 4B picked, a warning that it is a small model shows next to its link. With Clef or Clef Flash picked, a note says how much of a reply Cloudflare reads.
 
-Inception has no page of its own about Mercury Decide yet, so its link goes to OpenRouter, which serves it.
+Inception has no page of its own about Mercury Decide yet, and Upstage has none about Solar Decide Flash, so their links go to OpenRouter, which serves them.
 
 ## Setting it up
 
 Everything is on the Model tab, in **One model or two**.
 
 1. Set **How many models** to two.
-2. Pick **Which second model**: Jev, Span, Mercury Decide, D1, Solar Decide or Kev 4B.
+2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). The others have one version each, so there is nothing to pick. See [Mercury Decide](#mercury-decide), [D1](#d1), [Solar Decide](#solar-decide) and [Kev 4B](#kev-4b).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef and Clef Flash](#clef-and-clef-flash).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -141,6 +146,65 @@ It is a small model, so keep these in mind:
 - When a call is too long for it, OpenRouter refuses the call. The reply is then refined, the same as when any second model cannot answer.
 - It is paid, per call. OpenRouter's page for it shows the price.
 
+## GPT-6 Luna Decisions
+
+GPT-6 Luna Decisions is GPT-6 Luna, from OpenAI, answering through OpenAI's decisions API. OpenRouter gives it 1,050,000 tokens of context, so a long reply fits easily.
+
+| Host | Model name |
+| --- | --- |
+| OpenRouter | `openai/gpt-6-luna-decisions` |
+| OpenAI | `gpt-6-luna` |
+
+- On OpenRouter it takes the same request as Jev.
+- On OpenAI's own API the request is laid out the way OpenAI asks. The panel does this for you:
+  - The reply, and the reply before it when that is sent, go as JSON text, so the checks can still call them `reply` and `previous_reply`.
+  - Each check goes as a named yes-or-no question.
+- OpenAI can decline to answer a check. That check then has no score, and the others are read as usual. If it declines every check, the Log says so and the reply is refined.
+- On OpenAI's own API, the key comes from your OpenAI account, at [platform.openai.com](https://platform.openai.com/api-keys).
+- It is paid, per call. OpenAI marks the decisions API as a beta.
+
+## Clef and Clef Flash
+
+Clef and Clef Flash are Cloudflare's decision models. Clef is the larger one. Clef Flash is smaller and answers faster. Both take the same request as Jev. Their weights are open.
+
+| Host | Clef | Clef Flash |
+| --- | --- | --- |
+| OpenRouter | `cloudflare/clef` | `cloudflare/clef-flash` |
+| NanoGPT | `cloudflare/clef` | not offered |
+| Cloudflare | `clef` | `clef-flash` |
+
+- **How much they read.** OpenRouter says that Cloudflare reads only about the first 2,000 tokens of the text it is sent. The end of a long reply may not be read. OpenRouter can send them to Cloudflare too. Turning off **Also compare with the reply before it** leaves more room for the reply.
+- **On Cloudflare's own API** you need two things, both from the Workers AI page of your Cloudflare dashboard, under **Use REST API**:
+  1. Your account ID. Paste it into **Cloudflare account ID**, which shows when Cloudflare is the host. It is 32 letters and numbers. Anything else is not used.
+  2. An API token made with the **Workers AI** template. Save it in the key box.
+- With no account ID saved, Cloudflare is not called, the Log says what is missing, and the reply is refined.
+- On NanoGPT, Clef is served on the same decisions route as Jev.
+- Both are paid, per call. Each host's own page shows the price.
+
+## Decider
+
+Decider is Perplexity's decision model. Auto Refine uses Decider V1.1 27B. It takes the same request as Jev, on OpenRouter and on Perplexity's own API. It reads up to 262,144 tokens.
+
+| Host | Model name |
+| --- | --- |
+| OpenRouter | `perplexity/pplx-decider-v1.1-27b` |
+| Perplexity | `pplx-decider-v1.1-27b` |
+
+- On Perplexity's own API, the key comes from your Perplexity account, under **API Keys**.
+- The older Decider V1 27B is `pplx-decider-v1-27b` on Perplexity and `perplexity/pplx-decider-v1-27b` on OpenRouter. Type it in **Model name** to use it.
+- It is paid, per call. Each host's own page shows the price.
+
+## Solar Decide Flash
+
+Solar Decide Flash is a faster Solar Decide, from Upstage. It takes the same request as Jev, and has the same 512K tokens of context.
+
+| Host | Model name |
+| --- | --- |
+| OpenRouter | `upstage/solar-decide-flash` |
+
+- It is on OpenRouter only for now. Upstage has not published its own name for it.
+- It is paid, per call. OpenRouter's page for it shows the price.
+
 ## When a model is renamed, or a new one comes out
 
 The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
@@ -188,24 +252,28 @@ Kev 4B is an open model, so you can run it on your own computer with its maker's
 
 The address is reached from the machine Lumiverse runs on. `localhost` is that machine. If Lumiverse runs on your phone, it is your phone.
 
-Hosts take a scoring model in one of five ways, and the end of the address decides which:
+Hosts take a scoring model in one of six ways, and the address decides which:
 
 - **Ending in `/chat/completions`**: the OpenAI chat format. The reply goes as the text of one user message, and the checks go with it.
 - **Ending in `/responses`**: the OpenAI responses format. The same, laid out the way that format expects.
 - **Ending in `/messages`**: the Claude format. The same again, with the key also sent in the header Claude-style hosts read.
 - **Ending in `/scores`**: the scores format that Respan's own API takes. See [Which Span](#which-span).
+- **OpenAI's own decisions address**, `https://api.openai.com/v1/decisions`: OpenAI's own decisions request. See [GPT-6 Luna Decisions](#gpt-6-luna-decisions).
 - **Any other ending**: a decisions request, the same kind OpenRouter, NanoGPT and TypeSafe take.
 
 Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide` or `jaredpalmer/kev-4b` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13`, `typesafe/jev-latest` or `liquid/d1` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `perplexity/pplx-decider-v1.1-27b` or `upstage/solar-decide-flash` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13`, `typesafe/jev-latest`, `liquid/d1` or `cloudflare/clef` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
 | Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` |
 | Upstage | `https://api.upstage.ai/v1/systemone` | `solar-decide` |
+| OpenAI | `https://api.openai.com/v1/decisions` | `gpt-6-luna` |
+| Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` with the address ending in `clef-flash` |
+| Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.1-27b` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 
@@ -261,6 +329,11 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **D1** | 30 percent |
 | **Solar Decide** | 30 percent |
 | **Kev 4B** | 30 percent |
+| **GPT-6 Luna Decisions** | 30 percent |
+| **Clef** | 30 percent |
+| **Clef Flash** | 30 percent |
+| **Decider** | 30 percent |
+| **Solar Decide Flash** | 30 percent |
 
 ### Where the defaults come from
 

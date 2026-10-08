@@ -36,13 +36,14 @@ There are two links on the Model tab, **What is Jev?** and **What is Span?**. Th
 
 ## The second model
 
-With **How many models** set to two, each finished reply is sent to the second model you picked before it is refined. It is reached through the host you picked under **Where it is reached**: OpenRouter, NanoGPT, TypeSafe, Respan, Liquid AI, Upstage, or an address you typed. That host is a separate service with its own terms. It receives:
+With **How many models** set to two, each finished reply is sent to the second model you picked before it is refined. It is reached through the host you picked under **Where it is reached**: OpenRouter, NanoGPT, TypeSafe, Respan, Liquid AI, Upstage, OpenAI, Cloudflare, Perplexity, or an address you typed. That host is a separate service with its own terms. It receives:
 
 - the reply, with its thinking taken out
 - the checks you wrote under **What the second model checks**
 - the list of phrases this chat has worn out, if **Also check for worn-out phrases** is on
 - the reply before it, with its thinking taken out, if **Also compare with the reply before it** is on
 - your key, which tells the host the call is yours
+- on Cloudflare's own API, your Cloudflare account ID, which is part of its address
 
 Nothing else goes to the second model. Your card, your own messages, the rest of the chat, lore, memories and settings stay out of it.
 

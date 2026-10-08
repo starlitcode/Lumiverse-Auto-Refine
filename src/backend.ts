@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.33.2';
+const VERSION = '1.34.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4216,7 +4216,12 @@ async function saveRefined(
 // as the assistant's turn of a span, each check goes in as a behavior with a
 // definition, and each answer comes back as the chance the behavior is
 // present, beside the chance it is absent and the chance it cannot be judged.
-type JevKind = 'decisions' | 'chat' | 'responses' | 'messages' | 'scores';
+//
+// OpenAI's own decisions API takes a predicates request: the state goes in as
+// text in `input`, and the checks go in as a list of `predicate` questions,
+// each named. The answers come back as a list in the same order, each with
+// its name and the chance it is true, or as a refusal with no chance.
+type JevKind = 'decisions' | 'chat' | 'responses' | 'messages' | 'scores' | 'predicates';
 const JEV_HOSTS: Record<string, { url: string; model: string; latest?: string; preview?: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
   nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', latest: 'typesafe/jev-latest', kind: 'decisions' },
@@ -4265,6 +4270,35 @@ const SOLAR_HOSTS: Record<string, { url: string; model: string; kind: JevKind }>
 const KEV_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'jaredpalmer/kev-4b', kind: 'decisions' },
 };
+// GPT-6 Luna Decisions, from OpenAI. OpenRouter takes Jev's request for it.
+// OpenAI's own API calls it gpt-6-luna and takes a predicates request.
+const LUNA_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
+  openai: { url: 'https://api.openai.com/v1/decisions', model: 'gpt-6-luna', kind: 'predicates' },
+};
+// Clef and Clef Flash, from Cloudflare. Both take Jev's request. Cloudflare's
+// own address holds the account ID, which is put in for {account} when the
+// call is made, and its answer comes back inside `result`. NanoGPT serves
+// Clef, on the same route it uses for Jev.
+const CLEF_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'cloudflare/clef', kind: 'decisions' },
+  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'cloudflare/clef', kind: 'decisions' },
+  cloudflare: { url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/clef', model: 'clef', kind: 'decisions' },
+};
+const CLEF_FLASH_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'cloudflare/clef-flash', kind: 'decisions' },
+  cloudflare: { url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/clef-flash', model: 'clef-flash', kind: 'decisions' },
+};
+// Decider, from Perplexity. It takes Jev's request on OpenRouter and on
+// Perplexity's own API.
+const DECIDER_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
+  perplexity: { url: 'https://api.perplexity.ai/v1/decisions', model: 'pplx-decider-v1.1-27b', kind: 'decisions' },
+};
+// Solar Decide Flash, from Upstage, a faster Solar Decide. On OpenRouter only.
+const SOLAR_FLASH_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'upstage/solar-decide-flash', kind: 'decisions' },
+};
 
 // The text of a responses API reply when it has no `output_text` of its own:
 // the first output_text part of the first message in `output`.
@@ -4285,6 +4319,9 @@ function jevKindOf(url: string): JevKind {
   if (/\/responses\/?(\?.*)?$/i.test(url)) return 'responses';
   if (/\/messages\/?(\?.*)?$/i.test(url)) return 'messages';
   if (/\/scores\/?(\?.*)?$/i.test(url)) return 'scores';
+  // OpenAI's decisions route ends the same as the others, but takes its own
+  // request.
+  if (/^https?:\/\/api\.openai\.com\/.*\/decisions\/?(\?.*)?$/i.test(url.trim())) return 'predicates';
   return 'decisions';
 }
 // One key is kept for each host, since a key belongs to the host and not the
@@ -4339,6 +4376,8 @@ const JEV_CHECKS_MAX = 20;
 // The one kind of question put to the second model: the chance, 0 to 1, that a statement is
 // true. Named so it does not read as one of the bridge's message types.
 const NOUL = 'noul';
+// OpenAI's name for the same kind of question. Named for the same reason.
+const PREDICATE = 'predicate';
 // The response format a chat request names to get decisions back rather than
 // prose. Named for the same reason as NOUL.
 const QUESTIONS_FORMAT = 'questions';
@@ -4358,7 +4397,23 @@ let judgeModel = '';
 let judgeVersion: 'latest' | 'preview' | 'exact' = 'latest';
 // A model name typed in for each second model. Empty uses the built-in name,
 // so a host that renames a model needs no update here.
-const ownNames: Record<string, string> = { jev: '', span: '', mercury: '', d1: '', solar: '', kev: '' };
+const ownNames: Record<string, string> = {
+  jev: '',
+  span: '',
+  mercury: '',
+  d1: '',
+  solar: '',
+  kev: '',
+  luna: '',
+  clef: '',
+  clefFlash: '',
+  decider: '',
+  solarFlash: '',
+};
+// The reader's Cloudflare account ID, which Cloudflare's own address holds.
+// Only an ID of 32 letters and numbers is kept, so nothing else can be put
+// into the address.
+let cloudflareAccount = '';
 let judgeChecks: string[] = [];
 // The line in use, for the second model picked. Each model has its own,
 // because their scores do not run on the same scale, so each can be tuned
@@ -4373,6 +4428,11 @@ const LINES: Record<string, { key: string; fallback: number }> = {
   d1: { key: 'd1Over', fallback: 30 },
   solar: { key: 'solarOver', fallback: 30 },
   kev: { key: 'kevOver', fallback: 30 },
+  luna: { key: 'lunaOver', fallback: 30 },
+  clef: { key: 'clefOver', fallback: 30 },
+  clefFlash: { key: 'clefFlashOver', fallback: 30 },
+  decider: { key: 'deciderOver', fallback: 30 },
+  solarFlash: { key: 'solarFlashOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4462,6 +4522,31 @@ const SECOND_MODELS: Record<string, SecondModel> = {
     hosts: KEV_HOSTS,
     model: (host) => ownNames.kev || KEV_HOSTS[host].model,
   },
+  luna: {
+    name: 'GPT-6 Luna Decisions',
+    hosts: LUNA_HOSTS,
+    model: (host) => ownNames.luna || LUNA_HOSTS[host].model,
+  },
+  clef: {
+    name: 'Clef',
+    hosts: CLEF_HOSTS,
+    model: (host) => ownNames.clef || CLEF_HOSTS[host].model,
+  },
+  clefFlash: {
+    name: 'Clef Flash',
+    hosts: CLEF_FLASH_HOSTS,
+    model: (host) => ownNames.clefFlash || CLEF_FLASH_HOSTS[host].model,
+  },
+  decider: {
+    name: 'Decider',
+    hosts: DECIDER_HOSTS,
+    model: (host) => ownNames.decider || DECIDER_HOSTS[host].model,
+  },
+  solarFlash: {
+    name: 'Solar Decide Flash',
+    hosts: SOLAR_FLASH_HOSTS,
+    model: (host) => ownNames.solarFlash || SOLAR_FLASH_HOSTS[host].model,
+  },
 };
 
 function secondModel(): SecondModel {
@@ -4490,6 +4575,9 @@ const HOST_LABELS: Record<string, string> = {
   respan: 'Respan',
   liquid: 'Liquid AI',
   upstage: 'Upstage',
+  openai: 'OpenAI',
+  cloudflare: 'Cloudflare',
+  perplexity: 'Perplexity',
   custom: 'the address you gave',
 };
 const hostLabel = (host: string) => HOST_LABELS[host] || host;
@@ -4521,7 +4609,10 @@ function jevWhere(): { url: string; model: string; kind: JevKind } {
   const host = hostFor(judgeWho, judgeHost);
   if (host === 'custom') return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
   const m = secondModel();
-  return { url: m.hosts[host].url, model: m.model(host), kind: m.hosts[host].kind };
+  // An address that needs the account ID has none until one is saved.
+  const url = m.hosts[host].url;
+  const placed = url.indexOf('{account}') < 0 ? url : cloudflareAccount ? url.replace('{account}', cloudflareAccount) : '';
+  return { url: placed, model: m.model(host), kind: m.hosts[host].kind };
 }
 
 // The key kept for one host. A key saved before there was one per host is
@@ -4614,6 +4705,20 @@ function scoresRequest(model: string, state: Record<string, string>, questions: 
   };
 }
 
+// A predicates request, for OpenAI's own decisions API. The state goes as
+// JSON text, so the names the checks use, such as `reply`, are still in it.
+function predicatesRequest(model: string, stateText: string, questions: Record<string, any>): any {
+  return {
+    model: model,
+    input: stateText,
+    questions: Object.keys(questions).map((id) => ({
+      type: PREDICATE,
+      name: id,
+      instructions: String((questions[id] && questions[id].instructions) || ''),
+    })),
+  };
+}
+
 // A decisions request for a model that reads a conversation, which is how
 // OpenRouter takes Span. It turns away any other state with a 400.
 function turnsRequest(model: string, state: Record<string, string>, questions: Record<string, any>): any {
@@ -4631,6 +4736,8 @@ async function askJev(
   questions: Record<string, any>,
 ): Promise<{ answers?: any; cost?: number; model?: string; error?: string }> {
   const where = jevWhere();
+  if (!where.url && hostFor(judgeWho, judgeHost) === 'cloudflare')
+    return { error: 'no Cloudflare account ID is saved. Paste it into Cloudflare account ID on the Model tab' };
   if (!where.url) return { error: 'no address is set for ' + who() };
   // A model run without a key, such as one on the user's own machine, is sent
   // no key at all. With nothing secret in the call, http:// is allowed at any
@@ -4664,7 +4771,9 @@ async function askJev(
           ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: asked }, stream: false }
           : where.kind === 'scores'
             ? scoresRequest(where.model, state, questions)
-            : secondModel().turns
+            : where.kind === 'predicates'
+              ? predicatesRequest(where.model, stateText, questions)
+              : secondModel().turns
               ? turnsRequest(where.model, state, questions)
               : { model: where.model, state: state, questions: questions },
   );
@@ -4702,7 +4811,12 @@ async function askJev(
   } catch (_) {
     data = null;
   }
-  const said = data && (data.error || data.detail || data.message);
+  // Cloudflare puts what it did in `result`, beside `success` and a list of
+  // `errors`. The rest is read the same as any other host's answer.
+  if (data && typeof data === 'object' && !data.answers && data.result && typeof data.result === 'object' && data.result.answers)
+    data = data.result;
+  const listed = data && Array.isArray(data.errors) && data.errors.length ? data.errors[0] : null;
+  const said = data && (data.error || data.detail || data.message || listed);
   const saidText = hideKey(typeof said === 'string' ? said : said && said.message ? String(said.message) : '');
   // The status and the host's own words go with it. A refused call is not
   // always a wrong key: a key for another host, or a host that turns the
@@ -4731,7 +4845,20 @@ async function askJev(
     }
     data = { ...data, answers: answers };
   }
-  if (where.kind !== 'decisions' && where.kind !== 'scores' && data && !data.answers) {
+  // A predicates answer is a list. Each one is put under its name, the same
+  // as Jev's. A refusal has no chance, so that check has no answer.
+  if (where.kind === 'predicates' && data && Array.isArray(data.answers)) {
+    const answers: Record<string, any> = {};
+    let refused = 0;
+    for (const a of data.answers) {
+      if (a && a.type === 'refusal') refused++;
+      const p = a && Number(a.probability);
+      if (a && typeof a.name === 'string' && Number.isFinite(p)) answers[a.name] = { noul: p };
+    }
+    if (refused && !Object.keys(answers).length) return { error: who() + ' declined to answer the checks' };
+    data = { ...data, answers: answers };
+  }
+  if (where.kind !== 'decisions' && where.kind !== 'scores' && where.kind !== 'predicates' && data && !data.answers) {
     const text =
       where.kind === 'chat'
         ? data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
@@ -5065,6 +5192,10 @@ function applyRules(s: any): void {
   judgeHttpOk = s.judgeHttpOk === true;
   judgeNoKey = s.judgeNoKey === true;
   judgeVersion = ['preview', 'exact'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
+  {
+    const id = String(s.cloudflareAccount == null ? '' : s.cloudflareAccount).trim();
+    cloudflareAccount = /^[0-9a-f]{32}$/i.test(id) ? id : '';
+  }
   for (const who of Object.keys(ownNames)) {
     const raw = s[who + 'Name'];
     ownNames[who] = String(raw == null ? '' : raw).trim().slice(0, 200);

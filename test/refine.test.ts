@@ -675,6 +675,8 @@ describe("two models: Jev reads the reply first", () => {
   };
   const TWO = { judgeMode: "two", judgeChecks: "`reply` repeats itself.\n`reply` uses stock phrases." };
   const REPLY = "She stepped through and, suddenly, the cold just hit her.";
+  // A made-up Cloudflare account ID, the 32 hex digits Cloudflare uses.
+  const ACCOUNT = "0123456789abcdef0123456789abcdef";
   async function keyed(over: any, opts: any, messages = chat()) {
     const h = await armed(["She stepped through and the cold hit her."], { ...TWO, ...over }, messages, opts);
     await h.front({ type: "jev_key_set", requestId: "k", key: "sk-made-up-key" });
@@ -1658,9 +1660,18 @@ describe("two models: Jev reads the reply first", () => {
     ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide"],
     ["solar", "upstage", "https://api.upstage.ai/v1/systemone", "solar-decide"],
     ["kev", "openrouter", "https://openrouter.ai/api/alpha/decisions", "jaredpalmer/kev-4b"],
+    ["luna", "openrouter", "https://openrouter.ai/api/alpha/decisions", "openai/gpt-6-luna-decisions"],
+    ["clef", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef"],
+    ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef"],
+    ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef", "clef"],
+    ["clefFlash", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef-flash"],
+    ["clefFlash", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-flash", "clef-flash"],
+    ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.1-27b"],
+    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b"],
+    ["solarFlash", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide-flash"],
   ]) {
     test(who + " on " + host + ": " + model + ", asked the way Jev is", async () => {
-      const h = await keyed({ judgeWho: who, judgeHost: host }, { jev: says([10]) });
+      const h = await keyed({ judgeWho: who, judgeHost: host, cloudflareAccount: ACCOUNT }, { jev: says([10]) });
       await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(h.jevCalls[0].url).toBe(url);
@@ -1678,7 +1689,7 @@ describe("two models: Jev reads the reply first", () => {
       for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who]))
         for (const tier of who === "span" ? ["free", "lite", "full"] : who === "jev" ? ["latest", "preview", "exact"] : ["free"])
           test("the panel's name for " + who + " on " + host + (who === "span" || who === "jev" ? " (" + tier + ")" : "") + " is the one sent", async () => {
-            const over = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier };
+            const over = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier, cloudflareAccount: ACCOUNT };
             const h = await keyed(over, { jev: says([10]) });
             await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
             await wait(50);
@@ -1694,7 +1705,7 @@ describe("two models: Jev reads the reply first", () => {
     for (const who of Object.keys(OWN_NAME_KEYS))
       for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who] || {}))
         test("a model name typed for " + who + " on " + host + " is the one sent", async () => {
-          const h = await keyed({ judgeWho: who, judgeHost: host, [OWN_NAME_KEYS[who]]: "  maker/renamed-model-2  " }, { jev: says([10]) });
+          const h = await keyed({ judgeWho: who, judgeHost: host, cloudflareAccount: ACCOUNT, [OWN_NAME_KEYS[who]]: "  maker/renamed-model-2  " }, { jev: says([10]) });
           await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
           await wait(50);
           expect(h.jevCalls[0].body.model).toBe("maker/renamed-model-2");
@@ -1731,13 +1742,23 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls[0].body.model).toBe("liquid/d1");
   });
 
-  for (const [who, key] of [["d1", "d1Over"], ["solar", "solarOver"], ["kev", "kevOver"]]) {
+  for (const [who, key] of [
+    ["d1", "d1Over"],
+    ["solar", "solarOver"],
+    ["kev", "kevOver"],
+    ["luna", "lunaOver"],
+    ["clef", "clefOver"],
+    ["clefFlash", "clefFlashOver"],
+    ["decider", "deciderOver"],
+    ["solarFlash", "solarFlashOver"],
+  ]) {
     test(who + " has a line of its own, 30 by default", async () => {
       const over = await keyed({ judgeWho: who }, { jev: says([31]) });
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const under = await keyed({ judgeWho: who, judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, [key]: undefined }, { jev: says([29]) });
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, deciderOver: 10, solarFlashOver: 10 };
+      const under = await keyed({ judgeWho: who, ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(under.asked.length).toBe(0);
@@ -1754,6 +1775,116 @@ describe("two models: Jev reads the reply first", () => {
       expect(jev.asked.length).toBe(0);
     });
   }
+
+  // ---- Cloudflare's own address ----
+  // It holds the account ID, and the answer comes back inside `result`, beside
+  // `success` and a list of `errors`.
+  const cloudflare = (pcts: number[]) => (url: string, init: any) => {
+    const inner = JSON.parse(says(pcts)(url, init).body);
+    return { status: 200, body: JSON.stringify({ result: inner, success: true, errors: [], messages: [] }) };
+  };
+
+  test("Clef on Cloudflare: the answer inside result is read", async () => {
+    const h = await keyed({ judgeWho: "clef", judgeHost: "cloudflare", cloudflareAccount: ACCOUNT }, { jev: cloudflare([10, 60]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 60]);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("with no account ID saved, Cloudflare is not called and the Log says what is missing", async () => {
+    for (const id of ["", "not-an-account/../../other", "0123456789abcdef"]) {
+      const h = await keyed({ judgeWho: "clef", judgeHost: "cloudflare", cloudflareAccount: id }, { jev: cloudflare([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls.length).toBe(0);
+      expect(String(said(h)[0].why)).toContain("Cloudflare account ID");
+    }
+  });
+
+  test("an error Cloudflare lists is passed on in its own words", async () => {
+    const h = await keyed(
+      { judgeWho: "clefFlash", judgeHost: "cloudflare", cloudflareAccount: ACCOUNT },
+      { jev: () => ({ status: 400, body: JSON.stringify({ result: null, success: false, errors: [{ code: 5006, message: "Model selector must be clef or clef-flash" }], messages: [] }) }) },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(String(said(h)[0].why)).toContain("Model selector must be clef or clef-flash");
+  });
+
+  // ---- OpenAI's own decisions API ----
+  // The state goes as JSON text in `input`, and each check as a named
+  // predicate. The answers come back as a list, and a refusal has no chance.
+  const predicates = (pcts: Array<number | null>) => (_url: string, init: any) => {
+    const b = JSON.parse(init.body);
+    const answers = b.questions.map((q: any, i: number) => {
+      const p = pcts[i] === undefined ? pcts[pcts.length - 1] : pcts[i];
+      return p === null ? { type: "refusal", name: q.name } : { type: "predicate", name: q.name, probability: p / 100 };
+    });
+    return { status: 200, body: JSON.stringify({ model: b.model, answers: answers, usage: { input_tokens: 42, output_tokens: 0 } }) };
+  };
+
+  test("GPT-6 Luna Decisions on OpenAI: gpt-6-luna, asked with named predicates", async () => {
+    const h = await keyed({ judgeWho: "luna", judgeHost: "openai", judgeBefore: true }, { jev: predicates([10, 70]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    const call = h.jevCalls[0];
+    expect(call.url).toBe("https://api.openai.com/v1/decisions");
+    expect(call.body.model).toBe("gpt-6-luna");
+    expect(JSON.parse(call.body.input)).toEqual({ reply: REPLY, previous_reply: "The gate stands open, and the road past it is dark." });
+    expect(call.body.state).toBeUndefined();
+    expect(call.body.questions[0]).toEqual({ type: "predicate", name: "check_1", instructions: "`reply` repeats itself." });
+    expect(call.body.questions.map((q: any) => q.name).slice(0, 3)).toEqual(["check_1", "check_2", "before_1"]);
+    expect(said(h)[0].scores.slice(0, 2).map((x: any) => x.pct)).toEqual([10, 70]);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a check OpenAI declines is left out, and the rest are read", async () => {
+    const h = await keyed({ judgeWho: "luna", judgeHost: "openai" }, { jev: predicates([null, 45]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(said(h)[0].scores.map((x: any) => x.id)).toEqual(["check_2"]);
+    expect(said(h)[0].refine).toBe(true);
+  });
+
+  test("when OpenAI declines every check, the Log says so and the reply is refined", async () => {
+    const h = await keyed({ judgeWho: "luna", judgeHost: "openai" }, { jev: predicates([null]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(String(said(h)[0].why)).toContain("GPT-6 Luna Decisions declined to answer the checks");
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("OpenAI's own address, pasted as another address, is sent named predicates", async () => {
+    const h = await keyed({ judgeWho: "luna", judgeHost: "custom", judgeUrl: "https://api.openai.com/v1/decisions", judgeModel: "gpt-6-luna" }, { jev: predicates([60]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.questions[0].type).toBe("predicate");
+    expect(said(h)[0].scores[0].pct).toBe(60);
+  });
+
+  test("another address ending in /decisions elsewhere is still sent Jev's request", async () => {
+    const h = await keyed({ judgeWho: "luna", judgeHost: "custom", judgeUrl: "https://decide.example.com/v1/decisions", judgeModel: "maker/model" }, { jev: says([60]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+  });
+
+  test("a host a new model is not on, left picked, sends it to OpenRouter", async () => {
+    for (const [who, host, model] of [
+      ["luna", "cloudflare", "openai/gpt-6-luna-decisions"],
+      ["clefFlash", "nanogpt", "cloudflare/clef-flash"],
+      ["decider", "openai", "perplexity/pplx-decider-v1.1-27b"],
+      ["solarFlash", "upstage", "upstage/solar-decide-flash"],
+      ["d1", "perplexity", "liquid/d1"],
+    ]) {
+      const h = await keyed({ judgeWho: who, judgeHost: host, cloudflareAccount: ACCOUNT }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+      expect(h.jevCalls[0].body.model).toBe(model);
+    }
+  });
 
   test("Mercury Decide is named in what is said about it", async () => {
     const h = await keyed({ judgeWho: "mercury" }, { jev: () => ({ status: 401, body: "{}" }) });
