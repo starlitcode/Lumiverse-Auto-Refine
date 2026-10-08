@@ -3145,11 +3145,33 @@ async function askAtOnce(count, input, isUser, scene, userId, use) {
         }
     });
 }
+// One refine, held from start to end so Stop always finds it. The calls to the
+// models are held on their own as well, so Stop cuts those short, but a refine
+// spends real time between them: reading the chat, gathering lore and memory,
+// building the prompt, saving. Held only around the calls, a Stop pressed in
+// one of those stretches found nothing, said nothing was running, and the
+// refine went on. Here a Stop marks the run, and the run stands down at the
+// next step.
 async function refineMessage(chatId, messageId, userId, byHand, 
 // Set when a refine was asked for on part of a reply rather than the whole of
 // it. text is what the selection read as on screen, ordinal says how many
 // identical runs came before it.
 pick) {
+    const run = {
+        stopped: false,
+        abort() {
+            run.stopped = true;
+        },
+    };
+    holdRun(userId, run);
+    try {
+        return await refineRun(run, chatId, messageId, userId, byHand, pick);
+    }
+    finally {
+        dropRun(userId, run);
+    }
+}
+async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     if (!masterOn)
         return { ok: false, why: 'Auto Refine is switched off' };
     if (chatsOff.has(String(chatId)))
@@ -3311,6 +3333,8 @@ pick) {
     // when the reader asked for that, since pressing it is already a decision the
     // reply needs one. Never on a selection, which is part of a reply and not what the checks
     // are about, and never on the reader's own message, which is not a reply.
+    if (run.stopped)
+        return { ok: false, stood: true, why: 'stopped before anything was asked' };
     const jevReads = judgeMode === 'two' && (!byHand || (judgeByHand && m.role !== 'user')) && !pick;
     const jevWorn = jevReads && judgeWorn ? scene.worn || gatherWorn(msgs, at, card.name, card.text + '\n' + lore) : '';
     const jevBefore = jevReads && judgeBefore ? replyBefore(msgs, at) : '';
@@ -3584,6 +3608,8 @@ pick) {
     // for the next pass, or the refusal to hand back as the whole refine's answer.
     async function walkPass(pass, input) {
         while (true) {
+            if (run.stopped)
+                return { ok: false, out: { ok: false, stood: true, notes: notes, why: 'stopped before the refine model was asked' } };
             if (asks > 0) {
                 tell(userId, { type: 'refine_progress', stage: 'retrying', attempt: asks + 1, of: tries });
                 say('info', 'asking again after: ' + verdict.why);
@@ -3668,6 +3694,8 @@ pick) {
             return { ok: false, out: { ok: false, why: verdict.why, notes: notes, same: !!verdict.same } };
         return { ok: true, text: verdict.text };
     }
+    if (run.stopped)
+        return { ok: false, stood: true, notes: notes, why: 'stopped before the rewrite was saved' };
     // Asked again now the model has finished. The call takes seconds, and in
     // those seconds Auto Retry can decide the reply was a refusal and swipe it,
     // or the reader can press regenerate. Either way the rewrite in hand is a

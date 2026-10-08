@@ -3565,6 +3565,26 @@ export function setup(ctx: Ctx, overrides?: any) {
   const LOG_PAINT_MS = 120;
   let logPaintedAt = 0;
   let logPaintSoon: any = null;
+  // A paint after the browser has drawn what was just put on the page. The card
+  // a refine raises is put up first and this paints the panel the frame after.
+  // Painted in the same task, the panel held the card back for as long as the
+  // panel took to build, which with the drawer open on this tab is long enough
+  // to see.
+  let paintFrameAsked = false;
+  function paintAfterFrame() {
+    if (paintFrameAsked) return;
+    paintFrameAsked = true;
+    const go = () => {
+      paintFrameAsked = false;
+      if (!tornDown) paint();
+    };
+    try {
+      requestAnimationFrame(() => setTimeout(go, 0));
+    } catch (_) {
+      setTimeout(go, 0);
+    }
+  }
+
   function log(text: string, good?: boolean) {
     activity.unshift({ at: Date.now(), text: String(text), good: !!good, kind: logKind(String(text)) });
     while (activity.length > LOG_MAX) activity.pop();
@@ -4015,7 +4035,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Counts for the Log tab. Session only: this answers "is it doing anything",
   // not "what did it do last week".
   const tally = { saved: 0, dropped: 0, undone: 0 };
-  const drops = new Map<string, number>();
+  // Grouped by the start of the reason, so the same failure with a different
+  // detail at the end is counted once. The whole of the latest reason is kept
+  // to show, since the detail is often the part that says what to do.
+  const drops = new Map<string, { n: number; why: string }>();
 
   // The model's working, in two places, because it is two different things.
   //
@@ -4130,8 +4153,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
   const DROPS_MAX = 20;
   function countDrop(why: string) {
-    const k = String(why || "no reason given").slice(0, 80);
-    drops.set(k, (drops.get(k) || 0) + 1);
+    const full = String(why || "no reason given").slice(0, 600);
+    const k = full.slice(0, 80);
+    drops.set(k, { n: ((drops.get(k) || { n: 0 }).n || 0) + 1, why: full });
     while (drops.size > DROPS_MAX) drops.delete(drops.keys().next().value as string);
   }
   let preview: any = null;
@@ -5303,11 +5327,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5));" +
     "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));overflow:hidden}" +
-    // The card comes up from under the corner it sits in, overshoots by a
-    // couple of pixels and settles. A straight slide of eight pixels in 180ms
-    // arrives and stops dead, which reads as something being placed there; this
-    // reads as something arriving. It grows very slightly on the way in as
-    // well, so the corner it comes from is the corner it came from.
     // A dim behind it, so the eye goes to the card rather than hunting the page
     // under it for what changed. Light enough to read the chat through, since
     // the card is about a message sitting right there, and a tap anywhere on it
@@ -10341,11 +10360,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (drops.size) {
       wrap.appendChild(el("div", "arf-rule"));
       wrap.appendChild(el("div", "arf-note", "Why rewrites were dropped"));
-      const seen = Array.from(drops.entries()).sort((a, b) => b[1] - a[1]);
-      for (const [why, n] of seen.slice(0, 6)) {
+      const seen = Array.from(drops.values()).sort((a, b) => b.n - a.n);
+      for (const one of seen.slice(0, 6)) {
         const r = el("div", "arf-between");
-        r.appendChild(el("span", "arf-note arf-grow", why));
-        r.appendChild(el("span", "arf-pill arf-mono", String(n)));
+        r.style.alignItems = "flex-start";
+        const why = el("span", "arf-note arf-grow", one.why);
+        // An error from a host can be one long unbroken run, such as an
+        // address, and has to wrap rather than run off a phone.
+        why.style.overflowWrap = "anywhere";
+        why.style.minWidth = "0";
+        r.appendChild(why);
+        r.appendChild(el("span", "arf-pill arf-mono", String(one.n)));
         wrap.appendChild(r);
       }
     }
@@ -10757,8 +10782,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         );
       if (drops.size) {
         lines.push("drops by reason:");
-        for (const [why, n] of Array.from(drops.entries()).sort((a, b) => b[1] - a[1]))
-          lines.push("  " + n + "x " + why);
+        for (const one of Array.from(drops.values()).sort((a, b) => b.n - a.n))
+          lines.push("  " + one.n + "x " + one.why);
       }
     }
 
@@ -15483,6 +15508,9 @@ export function setup(ctx: Ctx, overrides?: any) {
               log("took " + (gone > 0 ? gone : 0) + " characters out of a reply, with no model call", true);
               toast("Taken out. No model was asked, so it cost nothing. Put it back is on the card.");
             } else {
+              // The Log line would paint the panel at once. The paint after
+              // the frame, below, covers it, so the card is drawn first.
+              logPaintedAt = Date.now();
               log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
               // Not for each reply of a run through the chat, which says how it
               // went once when it ends. One per reply would be a notification
@@ -15494,7 +15522,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (!wasSnip && msg.swiped)
               showSwipe(msg.messageId, String(msg.before || ""), String(msg.after || ""));
             ping();
-            paint();
+            paintAfterFrame();
             return;
           }
           if (msg.type === "loaded_settings") {

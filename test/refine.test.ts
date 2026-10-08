@@ -4194,7 +4194,26 @@ describe("stopping a refine", () => {
     await wait(60);
     const said2 = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s1");
     expect(said2).toBeTruthy();
-    expect(said2.stopped).toBe(1);
+    expect(said2.stopped).toBeGreaterThan(0);
+  });
+
+  // A refine spends time between its calls to the models: reading the chat,
+  // the card and the lore, and building the prompt. A stop pressed then still
+  // finds the refine, says it stopped something, and no model is asked.
+  test("a stop pressed while the chat is still being read stops the refine", async () => {
+    const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
+      whileReading: () => {
+        h.front({ type: "cancel_refine", requestId: "s3" });
+      },
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    const got = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s3");
+    expect(got && got.stopped).toBeGreaterThan(0);
+    expect(h.asked.length).toBe(0);
+    expect(h.writes.length).toBe(0);
+    expect(h.stood().some((w: string) => /stopped/.test(w))).toBe(true);
   });
 
   test("stopping when nothing is running says so rather than claiming otherwise", async () => {
@@ -4219,7 +4238,7 @@ describe("stopping a refine", () => {
     await wait(60);
     const said = h.sent.find((m: any) => m.type === "refine_stopped" && m.requestId === "s2");
     expect(said).toBeTruthy();
-    expect(said.stopped).toBe(1);
+    expect(said.stopped).toBeGreaterThan(0);
   });
 
   // Zero is a setting, not a missing value, and it reaches the backend as one.

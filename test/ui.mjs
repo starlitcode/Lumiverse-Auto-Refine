@@ -3526,6 +3526,59 @@ console.log("\nevery eye shows the same state, with Keep the eye still on");
   });
 }
 
+console.log("\nthe card a refine raises comes before the panel catches up");
+{
+  // With the drawer open on this tab, painting the panel takes long enough to
+  // see. The card is put up first and the panel is painted a frame later, so
+  // the card is never held back by the panel. Checked at a phone width.
+  await inTab(browser, { viewport: { width: 390, height: 900 }, touch: true, saved: { popup: true } }, async (page) => {
+    await goTab(page, "Log");
+    await settle(page);
+    const order = await page.evaluate(async () => {
+      const logText = () => document.querySelector("#drawer").textContent;
+      window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line stood here.", after: "The new line stands here." });
+      const atOnce = { card: !!document.querySelector("[data-arf-pop]"), logged: /refined a reply/.test(logText()) };
+      await new Promise((r) => setTimeout(r, 300));
+      return { atOnce, later: { card: !!document.querySelector("[data-arf-pop]"), logged: /refined a reply/.test(logText()) } };
+    });
+    ok("the card is up straight away", order.atOnce.card, JSON.stringify(order));
+    ok("before the panel is painted again", !order.atOnce.logged, JSON.stringify(order));
+    ok("and the panel catches up a frame later", order.later.card && order.later.logged, JSON.stringify(order));
+  });
+}
+
+console.log("\nwhy rewrites were dropped, in full");
+{
+  // A host's error is often long, and the end of it is the part that says what
+  // to do. The whole reason shows, wrapped, and the same failure with a
+  // different detail is counted once. Checked at a phone width.
+  await inTab(browser, { viewport: { width: 360, height: 800 }, touch: true }, async (page) => {
+    await goTab(page, "Log");
+    await settle(page);
+    const tail = "check the model accepts these samplers and try again: https://example.test/docs/samplers#unsupported-parameter-reference";
+    const why = "Made-up host generate failed (400): the provider refused this request because " + tail;
+    await page.evaluate((why) => {
+      window.__fromBackend({ type: "refine_skipped", chatId: "c1", messageId: "m2", why: why });
+      window.__fromBackend({ type: "refine_skipped", chatId: "c1", messageId: "m3", why: why.replace("these samplers", "those samplers") });
+    }, why);
+    await new Promise((r) => setTimeout(r, 300));
+    await settle(page);
+    // Only the rows under the heading, since the Log list holds the reasons too.
+    const got = await page.evaluate(() => {
+      const head = [...document.querySelectorAll("#drawer .arf-note")].find((n) => n.textContent === "Why rewrites were dropped");
+      const rows = [];
+      for (let n = head && head.nextElementSibling; n; n = n.nextElementSibling) rows.push(n.textContent);
+      return {
+        rows,
+        sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+      };
+    });
+    ok("the whole reason shows, end included", got.rows.some((t) => t.indexOf("#unsupported-parameter-reference") >= 0), JSON.stringify(got.rows));
+    ok("the same failure is counted once, as two", got.rows.length === 1 && /2$/.test(got.rows[0]), JSON.stringify(got.rows));
+    ok("and nothing runs off the side", !got.sideways, "");
+  });
+}
+
 console.log("\nthe floating button after an update made while the page stays open");
 {
   // An update made while the page stays open can take the stylesheet away, or

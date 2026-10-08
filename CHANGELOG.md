@@ -20,6 +20,9 @@ _2026-10-08_
 
 ### Fixed
 
+- **Stop could say nothing was running while a refine was.** Stop only reached a refine while a model was being asked or during a wait. Pressed while Auto Refine was reading the chat, gathering lore and memory, building the prompt or saving, it said "there was nothing running to stop", and the refine went on. Stop now reaches a refine at every step, and the refine ends at the next one.
+- **The Refined card could come up late with the panel open.** When a refine finished, the whole panel was drawn again before the card could show, sometimes twice. With the drawer open on the Auto Refine tab, that held the card back long enough to see. The card now comes up first, and the panel catches up a moment later.
+- **Why rewrites were dropped cut each reason short.** A reason was cut to its first 80 characters, which often lost the part that says what went wrong. The whole reason now shows, wrapped to fit the screen. The same failure with a different detail at the end is still counted once.
 - **The switches were too small to tap on a phone.** Each switch on the panel took a tap only on its drawn shape, 26 pixels high. On a phone, the switches are now 32 pixels high, and the whole switch takes the tap. Nothing changes with a mouse.
 
 ---
