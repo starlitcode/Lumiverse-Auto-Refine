@@ -27,6 +27,8 @@ _2026-10-09_
 - **The lead-in to the checks says the user picked them.** It said the checks were written by the user. Most people use the built-in checks, so it now says "checks the user picked".
 - **The built-in note about the stand-ins is plainer.** It ended by telling the model to treat each stand-in "as a single character you cannot spell". It now says "Do not change, split, translate or remove any of them."
 - If you were on any of these three, the panel offers you the new one. If you wrote your own, nothing changes.
+- **Cut words are drawn at full strength.** They were drawn a little faded, so they looked duller than your theme's danger colour. They now use the colour as it is, and keep the line through them.
+- **A scroll bar's thumb is at least 28 pixels tall.** In a box holding a very long text, such as a long block in the raw view, the thumb shrank to a short dash. It now keeps a size you can see and grab.
 
 ---
 

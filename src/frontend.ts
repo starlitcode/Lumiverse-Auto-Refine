@@ -5444,8 +5444,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
     "border-radius:var(--lumiverse-radius,8px);background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
     "@media (pointer: coarse){.arf-colour{width:52px;height:36px}}" +
+    // Drawn at full strength, so it is the theme's colour exactly. The line
+    // through it is what sets it apart from added words.
     ".arf-cut{color:var(--arf-cut-ink,var(--lumiverse-danger,#ef4444));text-decoration:line-through;" +
-    "text-decoration-thickness:1px;opacity:.85}" +
+    "text-decoration-thickness:1px}" +
     ".arf-add{color:var(--arf-add-ink,var(--lumiverse-success,#22c55e))}" +
     ".arf-scroll{max-height:130px;overflow-y:auto}" +
     // The two versions in their own columns. They wrap to one on top of the
@@ -5549,6 +5551,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
     ".arf-tabs::-webkit-scrollbar{display:none}" +
+    // Lumiverse styles every scroll bar on the page, with no least size for the
+    // thumb, so a box holding a very long text gets a thumb a few pixels tall.
+    // Inside our boxes it is never shorter than this, and keeps the theme's
+    // colour and shape.
+    ".arf ::-webkit-scrollbar-thumb,.arf::-webkit-scrollbar-thumb{min-height:28px;min-width:28px}" +
     // The panel is built from nothing on every repaint, and the readability
     // sweep then writes colours onto it. Reading a computed colour resolves the
     // element's style, so the write that follows counts as a change and the
