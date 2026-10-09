@@ -2532,7 +2532,7 @@ const COST_FIELDS = [
             { value: "xhigh", label: "Extra high" },
             { value: "max", label: "Max" },
         ],
-        hint: "Only used when you picked the last option above. What each level means is the provider's business, and one that does not take an effort level ignores it. A rewrite rarely needs more than low.",
+        hint: "Only used when you picked the last option above. Each provider decides what each level means, and a model with no effort setting ignores it. A rewrite rarely needs more than low.",
     },
     {
         key: "timeoutSecs",
