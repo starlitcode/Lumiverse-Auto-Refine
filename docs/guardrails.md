@@ -4,13 +4,17 @@ This extension sends your writing to a model and saves what comes back. Most of 
 
 Every check below leaves the reply exactly as it was, and writes a line in the panel saying which check it was. Nothing fails without telling you.
 
-## The greeting, always
+## The greeting
 
-The opening message is written by a person, so it is never refined. The automatic pass skips it, the buttons skip it, and no setting changes that. Asking for it by name is refused too.
+The opening message is written by a person, so it is not refined. The automatic pass skips it, the buttons skip it, and asking for it by name is refused.
 
-To change a greeting, edit it on the character card.
+**Refine the greeting**, on the Limits tab, changes this. It is off by default.
 
-This is the only rule in the extension with no switch.
+- On, the greeting can be refined like any reply, by a button or by **Refine every reply here**.
+- The automatic pass still never refines it, because the greeting is not generated.
+- A refine can change its formatting or what it says. **Put it back** undoes it while **Keep what a refine replaced** is on.
+
+To change a greeting by hand, edit it on the character card.
 
 ## A reply that is a refusal
 

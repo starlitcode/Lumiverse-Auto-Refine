@@ -10,8 +10,8 @@
  *
  * What it will not touch, ever:
  *
- * - The opening greeting. A person wrote that. It is not generated, and no
- *   setting turns this off.
+ * - The opening greeting, unless Refine the greeting is on. A person wrote
+ *   it, and it often holds formatting a rewrite can break.
  * - A message in a chat the reader switched off.
  * - A reply while a generation is still running in that chat.
  *
@@ -37,6 +37,7 @@ let refineOn = false; // the automatic pass, off until asked for
 let repliesOn = true;
 let mineOn = true;
 let refineAgain = false; // whether the pass returns to a reply it refined
+let refineGreeting = false; // whether the greeting can be refined like a reply
 let connectionId = ''; // empty means the reader's active connection
 let thinkingMode = 'off'; // off | inherit | custom
 let thinkingEffort = 'medium'; // only read when thinkingMode is custom
@@ -877,6 +878,13 @@ const THINK_PAIRS = [
     // Kimi, which writes its tags with triangles in place of angle brackets.
     { needs: '\u25c1think\u25b7', open: '\u25c1think\u25b7', close: '\u25c1\\/think\u25b7' },
 ];
+// The thinking start and end saved on the reader's connections, under
+// Lumiverse's Reasoning settings. They can be any text, so they are matched as
+// written. Set for the account whose work is running, in asAccount.
+let boundPairs = [];
+function thinkPairs() {
+    return THINK_PAIRS.concat(boundPairs);
+}
 function thinkShapes() {
     const alt = thinkNames().join('|');
     return [
@@ -903,13 +911,13 @@ function thinkShapes() {
             needs: '<|channel|>',
             pattern: '<\\|channel\\|>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*?' + HARMONY_END,
         },
-    ].concat(THINK_PAIRS.map((p) => ({ needs: p.needs, pattern: p.open + '[\\s\\S]*?' + p.close })));
+    ].concat(thinkPairs().map((p) => ({ needs: p.needs, pattern: p.open + '[\\s\\S]*?' + p.close })));
 }
 // A message that opens on one of the fixed-token openers and has no closer
 // after it: working that ran to the end.
 function openPairRunsOut(text) {
     const low = text.toLowerCase();
-    for (const p of THINK_PAIRS) {
+    for (const p of thinkPairs()) {
         if (low.indexOf(p.needs) < 0)
             continue;
         const opened = new RegExp('^' + LEAD + p.open, 'i').exec(text);
@@ -3209,10 +3217,13 @@ group) {
             group.controllers.delete(controller);
     }
 }
-// The greeting is the first message when it is the assistant's, and it is never
-// refined. Read from the chat rather than assumed, because a chat that opens on
-// a user message has no greeting at all.
+// The greeting is the first message when it is the assistant's, and it is not
+// refined unless Refine the greeting is on. Read from the chat rather than
+// assumed, because a chat that opens on a user message has no greeting at all.
+// With the switch on there is no greeting to leave out, so this answers null.
 function greetingIdOf(msgs) {
+    if (refineGreeting)
+        return null;
     return msgs && msgs.length && msgs[0] && msgs[0].role === 'assistant' ? msgs[0].id : null;
 }
 // The last thing the character said, which is what "the latest reply" means,
@@ -3363,7 +3374,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                 : 'that message is not in this chat any more',
         };
     if (m.id === greetingId)
-        return { ok: false, why: 'the greeting is written by a person, so it is never refined. To change it, edit it on the character card' };
+        return { ok: false, why: 'the greeting is written by a person, so it is not refined. To refine it, turn on Refine the greeting on the Limits tab' };
     if (m.role !== 'assistant' && m.role !== 'user')
         return { ok: false, why: 'only replies and your own messages can be refined' };
     // Never on the automatic pass. That pass fires off a reply arriving, and
@@ -3979,7 +3990,7 @@ async function snipMessage(chatId, messageId, picked, ahead, userId) {
     // not something anybody could predict. Lumiverse's own edit is still there
     // for a greeting somebody does want to change.
     if (m.id === greetingId)
-        return { ok: false, why: 'the greeting is written by a person, so it is never edited from here. To change it, edit it on the character card' };
+        return { ok: false, why: 'the greeting is written by a person, so it is not edited from here. To allow it, turn on Refine the greeting on the Limits tab' };
     if (m.role !== 'assistant' && m.role !== 'user')
         return { ok: false, why: 'only replies and your own messages can be edited from here' };
     const ordinal = ordinalOf(ahead, picked);
@@ -5016,8 +5027,51 @@ function rememberRules(userId, s) {
 }
 // Runs work as one account. When another account has the turn, waits for it to
 // end, calling onWait every few seconds so the panel can say it is waiting.
+// Each account's connection markers, read at most once a minute.
+const BOUND_FRESH_MS = 60000;
+const boundBy = new Map();
+const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// The markers from every connection that has its own Reasoning settings saved.
+// Lumiverse trims line breaks off both ends of each, and so does this. A marker
+// under 3 characters is skipped, as it could be ordinary punctuation in a
+// reply. The global Reasoning settings cannot be read by an extension, so a
+// marker set only there is not found here.
+function pairsFrom(list) {
+    const out = [];
+    if (!Array.isArray(list))
+        return out;
+    for (const c of list) {
+        const set = c && c.reasoning_bindings && c.reasoning_bindings.settings;
+        if (!set)
+            continue;
+        const open = String(set.prefix == null ? '' : set.prefix).replace(/^\n+|\n+$/g, '');
+        const close = String(set.suffix == null ? '' : set.suffix).replace(/^\n+|\n+$/g, '');
+        if (open.trim().length < 3 || close.trim().length < 3 || open.length > 80 || close.length > 80)
+            continue;
+        if (out.some((p) => p.needs === open.toLowerCase() && p.close === escapeRe(close)))
+            continue;
+        out.push({ needs: open.toLowerCase(), open: escapeRe(open), close: escapeRe(close) });
+        if (out.length >= 10)
+            break;
+    }
+    return out;
+}
+async function loadBoundPairs(userId) {
+    const k = keyOf(userId);
+    const had = boundBy.get(k);
+    if (had && Date.now() - had.at < BOUND_FRESH_MS)
+        return;
+    let pairs = had ? had.pairs : [];
+    try {
+        if (spindle.connections && typeof spindle.connections.list === 'function')
+            pairs = pairsFrom(await spindle.connections.list(userId));
+    }
+    catch (_) { /* no generation permission: the built-in formats still apply */ }
+    boundBy.set(k, { at: Date.now(), pairs: pairs });
+}
 async function asAccount(userId, work, onWait) {
     const k = keyOf(userId);
+    await loadBoundPairs(userId);
     while (turnCount > 0 && turnKey !== k) {
         try {
             if (onWait)
@@ -5035,6 +5089,7 @@ async function asAccount(userId, work, onWait) {
     if (turnCount === 0) {
         turnKey = k;
         loadRules(k);
+        boundPairs = (boundBy.get(k) || { pairs: [] }).pairs;
     }
     turnCount++;
     try {
@@ -5086,6 +5141,7 @@ function applyRules(s) {
     repliesOn = s.refineSide !== 'mine';
     mineOn = s.refineSide !== 'replies';
     refineAgain = !!s.refineAgain;
+    refineGreeting = !!s.refineGreeting;
     connectionId = String(s.connectionId == null ? '' : s.connectionId);
     thinkingMode =
         s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';

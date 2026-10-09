@@ -6,7 +6,7 @@
 
 A Lumiverse extension. It sends a finished reply to a model with the rules you wrote, and saves the rewrite over the original.
 
-- **It never touches the greeting.** A person wrote that message, and no setting changes this.
+- **It leaves the greeting alone.** A person wrote that message. **Refine the greeting**, off by default, is the only way to change this.
 - **Nothing is written that you cannot undo.** **Put it back** restores the wording a refine replaced.
 
 It works alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry). Auto Retry decides whether a reply is worth keeping. Auto Refine improves the ones that are.

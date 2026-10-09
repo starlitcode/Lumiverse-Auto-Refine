@@ -372,7 +372,13 @@ Six more are recognised as formats of their own, because their closing token has
 - **Turn markers** that open and close a reply are always held back and put back around the rewrite, whatever the reasoning switches say.
 - **Thinking opened in the prompt:** if the reply has a closing tag with no opening tag, everything before it is treated as thinking.
 
-**Extra reasoning tag names** is for a model that uses a tag not listed above. Write only the name, with no brackets or pipes. It applies to the three tag-name forms.
+**Your own thinking markers** are recognised too. In Lumiverse's **Reasoning** settings, a **Prefix** and **Suffix** saved on a connection are read from that connection.
+
+- Each must be at least 3 characters, so ordinary punctuation is never taken for thinking.
+- They are read again at most once a minute.
+- A Prefix and Suffix set only in the global Reasoning settings, with nothing saved on a connection, cannot be read by an extension. For those, add the tag name to **Extra thinking tag names**.
+
+**Extra thinking tag names** is for a model that uses a tag not listed above. Write only the name, with no brackets or pipes. It applies to the three tag-name forms.
 
 Most cloud providers send reasoning separately, not inside the reply, so none of this is needed there. It matters for local backends.
 

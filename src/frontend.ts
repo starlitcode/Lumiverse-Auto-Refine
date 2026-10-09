@@ -365,7 +365,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "switches",
     label: "The on and off switches",
     what: "Whether it is running at all, whether the automatic pass is on, and what it goes back to.",
-    keys: ["enabled", "refineOn", "refineAgain"],
+    keys: ["enabled", "refineOn", "refineAgain", "refineGreeting"],
   },
 ];
 
@@ -672,6 +672,9 @@ const CONFIG = {
   // because they installed an extension.
   refineOn: false,
   refineAgain: false,
+  // The greeting is written by the card's author, so it is left alone unless
+  // the reader turns this on.
+  refineGreeting: false,
   connectionId: "",
   thinkingMode: "off",
   thinkingEffort: "medium",
@@ -2932,6 +2935,12 @@ const LIMIT_FIELDS: Field[] = [
     label: "Refine something that has been refined before",
     type: "bool",
     hint: "Off by default, so the same words are only refined once. A swipe, regenerate or edit always counts as new words.",
+  },
+  {
+    key: "refineGreeting",
+    label: "Refine the greeting",
+    type: "bool",
+    hint: "Off by default. On, the first message of a chat can be refined like any reply, by a button or by Refine every reply here.",
   },
   {
     key: "asSwipe",
@@ -11145,7 +11154,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           body.appendChild(
             fieldRow({
               key: "thinkTags",
-              label: "Extra reasoning tag names",
+              label: "Extra thinking tag names",
               type: "lines",
               hint: "Optional, one per line, just the name with no brackets or pipes. The common tag names and the channel formats are known already. Working that is not recognised is rewritten and saved over the reply.",
             }),
@@ -11268,6 +11277,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       // card. A selector box three settings away from the thing it answers for
       // is a box nobody connects to that thing.
       if (f.key === "asSwipe") wrap.appendChild(buildSwipeChild());
+      if (f.key === "refineGreeting")
+        wrap.appendChild(
+          hangsOff(
+            bad(
+              "The greeting is written by the card's author. A refine rewrites it, and can change its formatting or what it says. Put it back can undo it while Keep what a refine replaced is on.",
+            ),
+            "refineGreeting",
+            "greeting warning",
+          ),
+        );
     }
     return wrap;
   }
@@ -17230,7 +17249,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       : "This rewrites every reply in this chat, one model call each.";
     const back = mine
       ? "The replies and the greeting are left alone, and each rewrite can be put back from the Log."
-      : "The greeting and your own messages are left alone, and each rewrite can be put back from the Log.";
+      : cfg.refineGreeting
+        ? "The greeting is refined too, as Refine the greeting is on. Your own messages are left alone, and each rewrite can be put back from the Log."
+        : "The greeting and your own messages are left alone, and each rewrite can be put back from the Log.";
     try {
       if (ctx.ui && typeof (ctx.ui as any).showModal === "function") {
         const modal = (ctx.ui as any).showModal({ title: mine ? "Refine all your messages here?" : "Refine every reply here?" });

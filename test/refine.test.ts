@@ -260,6 +260,14 @@ function host(
       list: async () => [
         { id: "c-fast", name: "Cheap and quick", provider: "openai", model: "mini", is_default: false },
         { id: "c-main", name: "The good one", provider: "anthropic", model: "big", is_default: true },
+        ...((opts as any).bound || []).map((b: any, i: number) => ({
+          id: "c-bound-" + i,
+          name: "Bound " + i,
+          provider: "custom",
+          model: "local",
+          is_default: false,
+          reasoning_bindings: { settings: { prefix: b[0], suffix: b[1], autoParse: true } },
+        })),
       ],
     },
     macros: {
@@ -2354,7 +2362,7 @@ describe("refining a reply", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
-  test("the greeting is never refined, whatever the settings say", async () => {
+  test("the greeting is not refined with Refine the greeting off", async () => {
     // Asked for directly, which is the strongest way somebody could try.
     const h = await armed(["A polished greeting nobody asked for."]);
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m0" });
@@ -2363,8 +2371,15 @@ describe("refining a reply", () => {
     const done = h.sent.find((m) => m.type === "refine_result");
     expect(done.ok).toBe(false);
     expect(done.why).toMatch(/greeting/i);
-    // And says where a greeting can be changed instead.
-    expect(done.why).toMatch(/edit it on the character card/);
+    // And says which switch allows it.
+    expect(done.why).toMatch(/Refine the greeting/);
+  });
+
+  test("with Refine the greeting on, asking for it refines it", async () => {
+    const h = await armed(["<REFINED>The gate stands open. The road past it is dark.</REFINED>"], { refineGreeting: true });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m0" });
+    await wait(50);
+    expect(h.body("m0")).toBe("The gate stands open. The road past it is dark.");
   });
 
   test("your own message is left alone by the automatic pass", async () => {
@@ -4442,6 +4457,36 @@ describe("reasoning formats that are not a matched pair of tags", () => {
       expect(h.asked.length).toBe(0);
     });
   }
+
+  // The thinking start and end a reader saved on a connection, under
+  // Lumiverse's Reasoning settings, are a format of their own.
+  test("a connection's own thinking markers are held back too", async () => {
+    const raw = "@@plan@@\n" + WORKING + "\n@@done@@\n" + REPLY;
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw(raw),
+      { bound: [["@@plan@@\n", "\n@@done@@"]] },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain(WORKING);
+    expect(h.body("m2")).toContain("@@plan@@\n" + WORKING + "\n@@done@@");
+    expect(h.body("m2")).toContain("She stepped through and the cold hit her.");
+  });
+
+  test("and a marker too short to be safe is left alone", async () => {
+    const raw = "(" + WORKING + ")\n" + REPLY;
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw(raw),
+      { bound: [["(", ")"]] },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain(WORKING);
+  });
 
   // A local refining model whose template opens the thinking in the prompt
   // answers mid-thought, with only the closer. With the tags off the whole

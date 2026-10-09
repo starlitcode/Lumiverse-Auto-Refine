@@ -66,7 +66,7 @@ Below them:
   - When a sixth refine comes in, the oldest one goes.
   - **Dismiss them all** clears the list. It does not change any reply.
 
-The greeting is never refined. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
+The greeting is not refined unless **Refine the greeting** is on. Your own messages are never refined automatically, only when you press a button for them. See [Every way to refine](#every-way-to-refine).
 
 ## Every way to refine
 
@@ -142,7 +142,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Hide markup from the model** and **Hide plain italic and bold too** keep formatting out of the rewrite.
 - **What the model is told about the stand-ins** is the text `{{protect_notes}}` puts in. You can change it. **Use the built-in text** puts it back.
 - **Keep the reply's own reasoning out of the refine** keeps the model's thinking out.
-- **Extra reasoning tag names** is folded under it. Thinking in these tags is already recognised: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Only add a name if your model uses a different one. Thinking that is not recognised is rewritten like prose and saved over the reply.
+- **Extra thinking tag names** is folded under it. Thinking in these tags is already recognised: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Only add a name if your model uses a different one. Thinking that is not recognised is rewritten like prose and saved over the reply.
 - **Patterns of your own to hide** is folded under the markup switch.
 
 **Reading the answer.**
@@ -164,6 +164,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Off, a reply that still holds its refine is not refined again, by any button or by the automatic pass.
   - A reply you swiped, regenerated or edited holds different words, so it is refined either way. This is what lets it work alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry).
   - One reply announced twice is still only refined once.
+- **Refine the greeting** is off by default. On, the first message of a chat can be refined like any reply, by a button or by **Refine every reply here**. A warning under it says the greeting is written by the card's author. See [The greeting](guardrails.md#the-greeting).
 - **Wait out a provider that will not take the call** waits and tries again, twice by default, when the provider is busy or a local model is loading. See [Waiting out a provider that will not take the call](guardrails.md#waiting-out-a-provider-that-will-not-take-the-call).
 - **Seconds between automatic refines** puts a gap between automatic refines, for a provider that limits calls per minute. A reply that arrives too soon waits, with a countdown, and is then refined. It is 0, no gap, by default. Refines you start yourself never wait.
 - **Ask again when a check fails** retries a refine that failed a check a second try could fix. It is 0 by default.
@@ -242,7 +243,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 
 - It is the only way to refine an older message without selecting all of it.
 - It works on your own messages too.
-- On the greeting, it says the greeting is never refined.
+- On the greeting, it says the greeting is not refined, unless **Refine the greeting** is on.
 - While a message is open for editing, its button is hidden, like Lumiverse's own.
 
 Both chat buttons copy the look of the Lumiverse button next to them, so your theme and your own CSS apply to them. While a refine runs, each turns into **Stop this refine**.

@@ -96,7 +96,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 
 ## What it never does
 
-- It never refines the greeting.
+- It never refines the greeting, unless you turn on **Refine the greeting**.
 - It never sends anything the block list does not show.
 - It never keeps a copy of a reply after the refine finishes, apart from what **Put it back** needs.
 - It never writes to any message except the one it refined.

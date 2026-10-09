@@ -12665,6 +12665,51 @@ console.log("\nthe reload line follows the swipe setting");
   }
 }
 
+// The greeting is left alone unless the reader turns this on, and a warning
+// under the switch says what a refine of it can do.
+console.log("\nrefine the greeting");
+for (const size of [
+  { name: "phone", viewport: { width: 412, height: 860 }, touch: true },
+  { name: "laptop", viewport: { width: 1280, height: 860 }, touch: false },
+]) {
+  const errors = await inTab(browser, { viewport: size.viewport, touch: size.touch }, async (page) => {
+    await goTab(page, "Limits");
+    await settle(page);
+    const look = () =>
+      page.evaluate(() => {
+        const row = document.querySelector('#drawer [data-arf-row="refineGreeting"]');
+        const box = row && row.querySelector("input[type=checkbox]");
+        const warn = Array.from(document.querySelectorAll("#drawer *")).find(
+          (n) => n.children.length === 0 && /written by the card's author/.test(n.textContent || ""),
+        );
+        const holder = warn && (warn.closest("[data-arf-hangs]") || warn);
+        const shown = !!holder && !holder.closest("[hidden]") && holder.getBoundingClientRect().height > 0;
+        const r = row ? row.getBoundingClientRect() : null;
+        const wr = shown ? holder.getBoundingClientRect() : null;
+        return {
+          has: !!row,
+          on: !!box && box.checked,
+          shown,
+          fits: !!r && r.left >= 0 && r.right <= window.innerWidth && (!wr || wr.right <= window.innerWidth),
+          tap: box ? box.getBoundingClientRect().height : 0,
+          sideways: document.documentElement.scrollWidth > window.innerWidth,
+        };
+      });
+    const before = await look();
+    ok(size.name + ": Refine the greeting is on the Limits tab, and off", before.has && !before.on, JSON.stringify(before));
+    ok(size.name + ": with no warning while it is off", !before.shown, JSON.stringify(before));
+    await page.evaluate(() => document.querySelector('#drawer [data-arf-row="refineGreeting"] input[type=checkbox]').click());
+    await page.waitForTimeout(700);
+    const after = await look();
+    ok(size.name + ": turned on, the warning shows under it", after.on && after.shown, JSON.stringify(after));
+    ok(size.name + ": nothing runs off the side", after.fits && !after.sideways, JSON.stringify(after));
+    if (size.touch) ok(size.name + ": the switch is a 32px tap target", after.tap >= 32, JSON.stringify(after));
+    const sent = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop());
+    ok(size.name + ": and the backend is told", !!sent && sent.settings.refineGreeting === true, JSON.stringify(sent && sent.settings.refineGreeting));
+  });
+  ok(size.name + ": no errors on the greeting switch", errors.length === 0, errors.join("\n         "));
+}
+
 console.log("\nthe list comes back after a reload");
 {
   // The page asks the backend for what it still holds when it starts, and
