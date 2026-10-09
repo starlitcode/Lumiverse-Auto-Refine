@@ -56,6 +56,7 @@ The buttons are in two groups. **What to refine**, on the Setup tab, can hide on
 Below them:
 
 - **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
+  - Every before and after shows the words as they read in the chat. Markup tags, such as a colour tag, are left out of it. **Read it in full** shows the text exactly as written.
   - The list clears when you reload. The refined replies stay in your chat.
   - To always keep a way back to the original, turn on **Add the refine as a swipe instead of writing over the reply** on the Limits tab.
   - The newest is open.
@@ -172,8 +173,8 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - **Your next / swipe button** is under it. You only need it if a Lumiverse update renames the swipe arrows. It works like **Where the input box is**, below.
 - **Keep what a refine replaced** keeps the original, so you can put it back. It is kept in memory until you reload.
 - **Ask before saving a refine** holds every refine until you decide.
-  - It appears in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**.
-  - Where Lumiverse can show one, the question also opens as a window. Answering either one answers both.
+  - It appears in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**. The card shows what changed, marked the same way as every before and after.
+  - When the tab is not open, the question also comes up on screen as **Save this refine?**, on the same card a finished refine uses. It comes up even with **Show the before and after on screen** off. Answering either one answers both. Closing it without an answer leaves the question waiting in the tab.
   - The floating button's menu can answer it too. A tap on the button only opens the tab.
 - **Your own messages** are only refined when you press a button on one. They use their own prompt, under **For your messages** on the Prompt tab.
 

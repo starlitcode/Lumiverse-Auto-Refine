@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.35.2";
+const VERSION = "1.35.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -7887,6 +7887,9 @@ export function setup(ctx, overrides) {
     function takePending(yes) {
         const one = pending;
         pending = null;
+        // The question on screen is the same one, answered.
+        if (popEl && popKey.indexOf("ask:") === 0)
+            dropPop();
         if (!undoHere().length)
             setBadge(null);
         if (!one)
@@ -7913,10 +7916,10 @@ export function setup(ctx, overrides) {
     function buildPendingCard() {
         const one = pending;
         const wrap = card("Waiting for you", "This refine is written and nothing has been saved. Read both and say which one stands.", new Date(one.at).toTimeString().slice(0, 5));
-        wrap.appendChild(el("div", "arf-lab", "As it is now"));
-        wrap.appendChild(el("div", "arf-well arf-scroll", one.before));
-        wrap.appendChild(el("div", "arf-lab", "After the refine"));
-        wrap.appendChild(el("div", "arf-well arf-scroll", one.after));
+        // Marked the same way as every other before and after, with the switch
+        // between the two views.
+        wrap.appendChild(changedHead("What changed"));
+        wrap.appendChild(diffWell(one.before, one.after));
         const row = el("div", "arf-row");
         const yes = button("Accept it", true);
         yes.setAttribute("data-arf-pending", "accept");
@@ -8189,8 +8192,17 @@ export function setup(ctx, overrides) {
         col.appendChild(well);
         return col;
     }
-    function fillDiff(wrap, before, after) {
+    // The text as it reads in the chat, with markup tags such as <font> taken
+    // out and the words inside them kept. Only a tag shaped like one is taken,
+    // so a "<" in a sentence stays. Read it in full still shows the text as
+    // written.
+    function forReading(t) {
+        return String(t == null ? "" : t).replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/gi, "");
+    }
+    function fillDiff(wrap, rawBefore, rawAfter) {
         wrap.innerHTML = "";
+        const before = forReading(rawBefore);
+        const after = forReading(rawAfter);
         const side = !!cfg.sideBySide;
         wrap.setAttribute("data-arf-diff-mode", side ? "side" : "inline");
         const a = words(before);
@@ -8221,6 +8233,9 @@ export function setup(ctx, overrides) {
         // than showing an unmarked paragraph that looks like a failed diff.
         if (!parts.some((p) => p.how !== 0)) {
             well.appendChild(el("span", "", after));
+            // The words are the same, but the markup around them may not be.
+            if (rawBefore !== rawAfter)
+                wrap.appendChild(el("div", "arf-note", "The words are the same. Only the markup around them changed, such as a colour tag."));
             return;
         }
         for (const p of parts)
@@ -8807,7 +8822,7 @@ export function setup(ctx, overrides) {
         });
     }
     function showCard(spec) {
-        if (!cfg.popup)
+        if (!cfg.popup && !spec.always)
             return;
         try {
             if (typeof document === "undefined" || !document.body)
@@ -8867,17 +8882,20 @@ export function setup(ctx, overrides) {
                 body.appendChild(el("div", "arf-note", "Its working is on the Log tab, under What the model worked out."));
             box.appendChild(body);
             const row = el("div", "arf-row arf-pop-row");
-            const back = button("Put it back", false);
-            back.setAttribute("data-arf-pop-undo", "1");
-            back.addEventListener("click", () => {
-                spec.back();
+            // Keeping is not the same as forgetting: the refine stays in the Log,
+            // where it can still be put back later. Keep it only closes the card.
+            const first = spec.first || { label: "Keep it", mark: "data-arf-pop-keep", act: () => { } };
+            const second = spec.second || { label: "Put it back", mark: "data-arf-pop-undo", act: () => spec.back && spec.back() };
+            const keep = button(first.label, true);
+            keep.setAttribute(first.mark, "1");
+            keep.addEventListener("click", () => {
+                first.act();
                 dropPop();
             });
-            const keep = button("Keep it", true);
-            keep.setAttribute("data-arf-pop-keep", "1");
-            keep.addEventListener("click", () => {
-                // Keeping is not the same as forgetting: the refine stays in the Log,
-                // where it can still be put back later. This only closes the card.
+            const back = button(second.label, false);
+            back.setAttribute(second.mark, "1");
+            back.addEventListener("click", () => {
+                second.act();
                 dropPop();
             });
             row.appendChild(keep);
@@ -16661,49 +16679,40 @@ export function setup(ctx, overrides) {
         catch (_) { }
         toast("This build cannot ask you first, and this is not something to start unasked.", true, "warning");
     }
-    // The one modal in the extension, and it earns it: this is a question that
-    // has to be answered before anything is written, which is exactly the moment
-    // a modal is for. Everything else lives in the tab.
-    function askToSave(msg) {
+    // Whether the Auto Refine tab is on screen: drawn, in a page that is in
+    // front. A tab that is not drawn, while the drawer is shut or on another
+    // tab, has no boxes to measure.
+    function tabInView() {
         try {
-            if (!ctx.ui || typeof ctx.ui.showModal !== "function")
-                return;
-            const modal = ctx.ui.showModal({ title: "Save this refine?" });
-            const root = modal.root;
-            root.innerHTML = "";
-            root.className = "arf";
-            root.style.maxHeight = "70vh";
-            root.style.overflowY = "auto";
-            const pane = (title, text) => {
-                root.appendChild(heading(title));
-                root.appendChild(el("div", "arf-well", text));
-            };
-            pane("As it is now", String(msg.before || ""));
-            pane("After the refine", String(msg.after || ""));
-            const bar = el("div", "arf-row");
-            const yes = button("Save it", true);
-            const no = button("Leave it alone", false);
-            // Both buttons go through the same place the card's do, so answering
-            // either settles the other. Two surfaces, one decision.
-            const shut = () => {
-                try {
-                    modal.dismiss && modal.dismiss();
-                }
-                catch (_) { }
-            };
-            yes.addEventListener("click", () => {
-                takePending(true);
-                shut();
-            });
-            no.addEventListener("click", () => {
-                takePending(false);
-                shut();
-            });
-            bar.appendChild(yes);
-            bar.appendChild(no);
-            root.appendChild(bar);
+            const root = tab && tab.root;
+            if (!root || !root.isConnected || !root.getClientRects().length)
+                return false;
+            return typeof document === "undefined" || document.visibilityState !== "hidden";
         }
-        catch (_) { }
+        catch (_) {
+            return false;
+        }
+    }
+    // The question before a refine is saved, on the same card a finished refine
+    // comes up on: what changed, marked, in the reader's colours, with the
+    // switch between the two views. Its buttons are the Waiting for you card's,
+    // and both go through the same place, so answering either settles the
+    // other. Closing it without an answer leaves the question waiting in the
+    // tab.
+    function askToSave(msg) {
+        // With the tab open, the Waiting for you card at its top is already
+        // asking. A pop-up over it would ask the same thing twice.
+        if (tabInView())
+            return;
+        showCard({
+            key: "ask:" + undoKey(msg.chatId, msg.messageId),
+            title: "Save this refine?",
+            before: String(msg.before || ""),
+            after: String(msg.after || ""),
+            always: true,
+            first: { label: "Accept it", mark: "data-arf-ask-accept", act: () => takePending(true) },
+            second: { label: "Turn it down", mark: "data-arf-ask-decline", act: () => takePending(false) },
+        });
     }
     // ---- start ----
     try {

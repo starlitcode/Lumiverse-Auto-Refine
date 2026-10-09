@@ -3514,8 +3514,10 @@ console.log("\naccepting or turning one down");
       const body = document.querySelector("#drawer").textContent;
       return {
         card: /Waiting for you/.test(body),
-        before: /suddenly, the cold just hit her/.test(body),
-        after: /and the cold hit her/.test(body),
+        // Marked, as every before and after is: what was cut and what
+        // stayed, in one reading.
+        before: [...document.querySelectorAll("#drawer .arf-cut")].some((c) => /suddenly/.test(c.textContent)),
+        after: /She stepped through/.test(body) && /the cold/.test(body),
         accept: !!document.querySelector('#drawer [data-arf-pending="accept"]'),
         decline: !!document.querySelector('#drawer [data-arf-pending="decline"]'),
         badge: window.__badge,
@@ -3554,6 +3556,97 @@ console.log("\naccepting or turning one down");
     ok("turning it down saves nothing at all", left.saved === 0);
     ok("and clears the question", left.gone);
   });
+
+  // The question also comes up on the card a finished refine uses, marked the
+  // same way, while the tab is not on screen. With the tab open, the Waiting
+  // for you card is already asking, so nothing comes up over it. Lumiverse's
+  // own window is not used. Answering either one settles the other. The
+  // question comes up with Show the before and after on screen off as well,
+  // since it is a question.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { popup: false } }, async (page) => {
+      const shutDrawer = (shut) => page.evaluate((shut) => { document.getElementById("drawer").style.display = shut ? "none" : ""; }, shut);
+      const look = () => page.evaluate(() => {
+        const pop = document.querySelector(".arf-pop:not(.arf-leaving)");
+        return {
+          pop: !!pop,
+          title: pop ? pop.querySelector(".arf-h").textContent : "",
+          marked: !!pop && !!pop.querySelector(".arf-cut") && !!pop.querySelector(".arf-add"),
+          raw: !!pop && /<font/.test(pop.textContent),
+          accept: !!pop && !!pop.querySelector("[data-arf-ask-accept]") && pop.querySelector("[data-arf-ask-accept]").textContent === "Accept it",
+          decline: !!pop && !!pop.querySelector("[data-arf-ask-decline]") && pop.querySelector("[data-arf-ask-decline]").textContent === "Turn it down",
+          hostWindow: !!document.getElementById("hostmodal"),
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+      const ask = (id) => page.evaluate((id) => window.__fromBackend({
+        type: "confirm_refine", chatId: "c1", messageId: id,
+        before: "The lantern <font color=\"#88ccff\">\"Hold it higher,\"</font> she said, and it swung, slowly, in the wind.",
+        after: "The lantern <font color=\"#88ccff\">\"Hold it higher,\"</font> she said. It swung in the wind.",
+      }), id);
+
+      await shutDrawer(true);
+      await ask("m5");
+      await settle(page);
+      const away = await look();
+      ok(label + ": with the tab not on screen, the question comes up on the refine card", away.pop && away.title === "Save this refine?", JSON.stringify(away));
+      ok(label + ": marked the same way, with the reply's markup kept out of sight", away.marked && !away.raw, JSON.stringify(away));
+      ok(label + ": with Accept it and Turn it down, the same as the tab", away.accept && away.decline, JSON.stringify(away));
+      ok(label + ": and not in Lumiverse's own window", !away.hostWindow, JSON.stringify(away));
+      ok(label + ": nothing runs off the side", !away.sideways, "");
+      await page.evaluate(() => document.querySelector(".arf-pop [data-arf-ask-accept]").click());
+      await closed(page);
+      const took = await page.evaluate(() => ({
+        sent: (window.__sent.filter((m) => m.type === "apply_refine").pop() || {}).messageId,
+        pop: !!document.querySelector(".arf-pop"),
+      }));
+      ok(label + ": Accept it on the card saves it and closes the card", took.sent === "m5" && !took.pop, JSON.stringify(took));
+      await shutDrawer(false);
+      await settle(page);
+      ok(label + ": and the tab is no longer waiting", !(await page.evaluate(() => /Waiting for you/.test(document.querySelector("#drawer").textContent))), "");
+
+      // Answered in the tab, the card closes too.
+      await shutDrawer(true);
+      await ask("m6");
+      await settle(page);
+      await shutDrawer(false);
+      await settle(page);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
+      await closed(page);
+      ok(label + ": Turn it down in the tab closes the card as well", !(await page.evaluate(() => !!document.querySelector(".arf-pop"))), "");
+
+      // With the tab open, the card at the top of the tab asks, marked, and
+      // nothing comes up over it.
+      await goTab(page, "Log");
+      await ask("m7");
+      await settle(page);
+      const here = await look();
+      const card = await page.evaluate(() => {
+        const box = [...document.querySelectorAll("#drawer .arf-card")].find((c) => /Waiting for you/.test(c.textContent));
+        return { there: !!box, marked: !!box && !!box.querySelector(".arf-cut") && !!box.querySelector(".arf-add") };
+      });
+      ok(label + ": with the tab open, nothing comes up over it", !here.pop && !here.hostWindow, JSON.stringify(here));
+      ok(label + ": and the Waiting for you card shows what changed, marked", card.there && card.marked, JSON.stringify(card));
+
+      // Only the markup changed: the words read the same, and the card says
+      // the markup changed rather than showing nothing. A "<" in a sentence
+      // is not a tag and stays.
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
+      await settle(page);
+      await page.evaluate(() => window.__fromBackend({
+        type: "confirm_refine", chatId: "c1", messageId: "m8",
+        before: "He counted: 3 < 5. <b>Then he left.</b>",
+        after: "He counted: 3 < 5. <i>Then he left.</i>",
+      }));
+      await settle(page);
+      const tags = await page.evaluate(() => {
+        const box = [...document.querySelectorAll("#drawer .arf-card")].find((c) => /Waiting for you/.test(c.textContent));
+        return box ? box.textContent : "";
+      });
+      ok(label + ": a change to the markup alone is said, not shown as no change", /Only the markup around them changed/.test(tags), tags.slice(0, 200));
+      ok(label + ": and a < in a sentence stays", /3 < 5/.test(tags) && !/<b>|<i>/.test(tags), tags.slice(0, 200));
+    });
+  }
 
   // The floating button offers the same decision, and a stray tap cannot make
   // it: accepting a rewrite of somebody's writing by accident is the one thing
