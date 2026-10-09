@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.35.2
+
+_2026-10-09_
+
+### Changed
+
+- **The list of refines you can put back says what a reload does.** A line under it says the list clears when you reload, and that the refined replies stay in your chat. With **Add the refine as a swipe instead of writing over the reply** off, it says turning that on always keeps a way back to the original. With it on, it says the original stays one swipe back.
+
+---
+
 ## 1.35.1
 
 _2026-10-09_

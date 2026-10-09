@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.35.1";
+const VERSION = "1.35.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -7943,6 +7943,13 @@ export function setup(ctx, overrides) {
                     }));
                 }
             }));
+        // What a reload does to this list, so nobody finds it empty and thinks a
+        // refine was lost. The refined reply is in the chat either way.
+        const kept = note(cfg.asSwipe
+            ? "This list clears when you reload. The original reply stays one swipe back in the chat."
+            : "This list clears when you reload. To always keep the original, turn on Add the refine as a swipe on the Limits tab.");
+        kept.setAttribute("data-arf-reloadnote", "1");
+        wrap.appendChild(kept);
         if (list.length > 1) {
             const all = el("div", "arf-row");
             const clear = button("Dismiss them all", false);

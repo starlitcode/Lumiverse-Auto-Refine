@@ -56,6 +56,8 @@ The buttons are in two groups. **What to refine**, on the Setup tab, can hide on
 Below them:
 
 - **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
+  - The list clears when you reload. The refined replies stay in your chat.
+  - To always keep a way back to the original, turn on **Add the refine as a swipe instead of writing over the reply** on the Limits tab.
   - The newest is open.
   - The others are in one fold, **Older refines**. Each is named by its time and its first words.
   - When a sixth refine comes in, the oldest one goes.

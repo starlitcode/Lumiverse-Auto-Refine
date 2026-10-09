@@ -12429,6 +12429,9 @@ console.log("\nrefines you can put back stay short");
       ok(label + ": only the last five of the chat are kept", !!got && got.heads.length === 5 && !/Lamp 3\b/.test(got.heads.join("|")), JSON.stringify(got && got.heads));
       ok(label + ": each older one is named by its time and first words", !!got && /^\d\d:\d\d: Lamp 7 was lit late/.test(got.heads[1] || ""), JSON.stringify(got && got.heads));
       ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
+      const reload = await page.evaluate(() => (document.querySelector("[data-arf-last] [data-arf-reloadnote]") || {}).textContent || "");
+      ok(label + ": the card says the list clears when you reload, and how to keep the original",
+        /clears when you reload/.test(reload) && /Add the refine as a swipe/.test(reload), reload);
       const tapped = await page.evaluate(async () => {
         const card = document.querySelector("[data-arf-last]");
         const outer = Array.from(card.querySelectorAll(".arf-fold")).find((h) => h.querySelector(".arf-grow").textContent.trim() === "Older refines");
@@ -12441,6 +12444,29 @@ console.log("\nrefines you can put back stay short");
       });
       ok(label + ": tapping the fold shows the four older ones", tapped.seen === 5, JSON.stringify(tapped));
       if (touch) ok(label + ": each is at least 32 pixels tall to tap", tapped.rowTall >= 32, JSON.stringify(tapped));
+    });
+  }
+}
+
+console.log("\nthe reload line follows the swipe setting");
+{
+  // With Add the refine as a swipe on, the original is already one swipe
+  // back in the chat, so the line says that instead of pointing at the
+  // setting.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, popup: false, asSwipe: true } }, async (page) => {
+      await page.evaluate(() => {
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m1", canUndo: true,
+          before: "The ferry left late, and nobody on the dock said a word.", after: "The ferry left late. Nobody on the dock spoke." });
+      });
+      await goTab(page, "Log");
+      await settle(page);
+      const said = await page.evaluate(() => {
+        const n = document.querySelector("[data-arf-last] [data-arf-reloadnote]");
+        return { text: n ? n.textContent : "", sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
+      });
+      ok(label + ": with the swipe setting on, it says the original stays a swipe back", /clears when you reload/.test(said.text) && /one swipe back/.test(said.text), said.text);
+      ok(label + ": nothing runs off the side", !said.sideways, "");
     });
   }
 }
