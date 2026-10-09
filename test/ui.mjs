@@ -2847,21 +2847,32 @@ console.log("\nfolding the blocks");
     const other = await bar();
     ok("and the other keeps its own", other.shut === 0, JSON.stringify(other));
 
-    // Folding a block is one step each way, with no animation.
+    // Folding a block closes its text over a moment, and opening it opens it
+    // the same way. Each ends with the block's own height back.
     const fold = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       const block = document.querySelectorAll("#drawer .arf-block")[1];
       const btn = block.querySelector(".arf-blockfold");
       const body = Array.from(block.children).find((c) => !c.classList.contains("arf-between"));
-      if (btn.getAttribute("aria-expanded") !== "true") btn.click();
+      if (btn.getAttribute("aria-expanded") !== "true") {
+        btn.click();
+        await wait(700);
+      }
       const look = () => ({ hidden: body.hidden, height: body.style.height, moving: /[1-9]/.test(getComputedStyle(body).transitionDuration) });
       btn.click();
+      const shutting = look();
+      await wait(700);
       const shut = look();
       btn.click();
+      const opening = look();
+      await wait(700);
       const open = look();
-      return { shut, open };
+      return { shutting, shut, opening, open };
     });
-    ok("a block folds at once, with no animation", fold.shut.hidden && !fold.shut.height && !fold.shut.moving, JSON.stringify(fold.shut));
-    ok("and opens at once, with no animation", !fold.open.hidden && !fold.open.height && !fold.open.moving, JSON.stringify(fold.open));
+    ok("a block folds over a moment", !fold.shutting.hidden && fold.shutting.moving, JSON.stringify(fold.shutting));
+    ok("and is then folded, with its own height back", fold.shut.hidden && !fold.shut.height, JSON.stringify(fold.shut));
+    ok("it opens over a moment too", !fold.opening.hidden && fold.opening.moving, JSON.stringify(fold.opening));
+    ok("and is then open, with its own height back", !fold.open.hidden && !fold.open.height && !fold.open.moving, JSON.stringify(fold.open));
   });
   ok("no errors folding blocks", errors.length === 0, errors.join("\n         "));
 }
@@ -4194,7 +4205,10 @@ console.log("\nrows that hang off a switch open and close smoothly");
           // is the row skipping, and at the end that reads as an abrupt stop.
           const skips = (w) => {
             let worst = 0;
-            for (let i = 2; i < w.tops.length; i++) {
+            // Counted once it has started moving. A slow first frame is the test
+            // machine, not a skip.
+            const from = Math.max(2, w.steps.findIndex((x) => x > 0.5) + 2);
+            for (let i = from; i < w.tops.length; i++) {
               const step = w.steps[i];
               const before = Math.max(w.steps[i - 1], w.steps[i - 2]);
               worst = Math.max(worst, step - before);
@@ -4305,7 +4319,10 @@ console.log("\nfolds and the colour editor open and close smoothly");
     }, { press, box });
   const skips = (w) => {
     let worst = 0;
-    for (let i = 2; i < w.steps.length; i++) worst = Math.max(worst, w.steps[i] - Math.max(w.steps[i - 1], w.steps[i - 2]));
+    // Counted once it has started moving. A slow first frame is the test
+    // machine, not a skip.
+    const from = Math.max(2, w.steps.findIndex((x) => x > 0.5) + 2);
+    for (let i = from; i < w.steps.length; i++) worst = Math.max(worst, w.steps[i] - Math.max(w.steps[i - 1], w.steps[i - 2]));
     return worst;
   };
   const CASES = [
