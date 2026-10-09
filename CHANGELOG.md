@@ -13,7 +13,6 @@ _2026-10-09_
 ### Changed
 
 - **A colour you pick for cut or added words is shown exactly.** When a picked colour was hard to read on the card, Auto Refine made it lighter, so the card did not show the colour you chose. It now shows your colour as you picked it, everywhere. With no colour of your own, the theme's colour is still made lighter or darker when it is too faint to read.
-
 - **Folds and a block's text close smoothly.** A fold, such as **Sampler values** or **Older refines**, opened smoothly but shut in one step. It now closes smoothly too. The arrow that folds a block on the Prompt tab, and the warning that no block has {{message}}, now open and close smoothly as well. Pressing again while one moves turns it round. With Reduce motion on, they open and close at once.
 
 ### Fixed
