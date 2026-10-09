@@ -440,6 +440,18 @@ const JUDGE_CHECKS = [
     "`reply` starts three or more sentences in a row with the same word.",
     "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
     "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
+    "`reply` follows an action with a comment that judges how it came out, as in \"she laughed, and it came out thin\" or \"he said it, and it sounded wrong\".",
+    "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
+    "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
+].join("\n");
+// What the second model checks, as it was up to 1.34.0, word for word. A
+// reader still holding exactly these never wrote their own, and is offered
+// the ones above.
+const JUDGE_CHECKS_1_34 = [
+    "`reply` uses the same phrase of three or more words twice within a few sentences.",
+    "`reply` starts three or more sentences in a row with the same word.",
+    "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
+    "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
     "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
     "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
     "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
@@ -457,15 +469,6 @@ const BEFORE_CHECKS = [
     "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
     "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
 ].join("\n");
-// What it compares, as it was up to 1.31.0, word for word. A reader still
-// holding exactly these never wrote their own, and is offered the ones above.
-const BEFORE_CHECKS_1_31 = [
-    "`reply` has the same events happen in the same order as `previous_reply`, such as a character arriving, speaking, then turning away in both.",
-    "`reply` has the characters speak in the same order as `previous_reply`, such as the same character speaking first in both.",
-    "`reply` describes the surroundings with details `previous_reply` already gave, such as the same light, smell or sound.",
-    "`reply` opens the same way as `previous_reply`, such as both starting on a character's face or on the weather.",
-    "`reply` ends the same way as `previous_reply`, such as both ending on a character waiting for an answer.",
-].join("\n");
 // The check sent with the worn-out phrases, with Also check for worn-out
 // phrases on. The backend holds the same text for settings that do not carry it.
 const WORN_CHECK = "`reply` contains at least one phrase listed in `worn_phrases`.";
@@ -474,7 +477,13 @@ const WORN_CHECK = "`reply` contains at least one phrase listed in `worn_phrases
 // reader's line, filled in by the backend, which holds the same text. It calls
 // the checks leads, since the second model can be wrong, and a model told to
 // fix each one would change writing that was fine.
-const FOUND_LEAD = "Another model, {{second_model}}, read this passage before you and scored it against checks the user wrote. " +
+const FOUND_LEAD = "Another model, {{second_model}}, read this passage before you and scored it against checks the user picked. " +
+    "The checks below reached the user's line of {{checks_line}}%, strongest first. " +
+    "In them, \"reply\" means the passage you are rewriting. Look at these first. " +
+    "Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. " +
+    "Everything else in these instructions still applies.";
+// The lead-in as it was up to 1.34.0, word for word.
+const FOUND_LEAD_1_34 = "Another model, {{second_model}}, read this passage before you and scored it against checks the user wrote. " +
     "The checks below reached the user's line of {{checks_line}}%, strongest first. " +
     "In them, \"reply\" means the passage you are rewriting. Look at these first. " +
     "Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. " +
@@ -483,6 +492,11 @@ const FOUND_LEAD = "Another model, {{second_model}}, read this passage before yo
 // this extension's own, so nothing in a chat could describe them. The backend
 // holds the same text.
 const PROTECT_NOTE = "Parts of this passage have been replaced with tokens shaped like [[AR1]], " +
+    "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
+    "edit exactly as it is. Copy every one into your answer unchanged and in the " +
+    "same place. Do not change, split, translate or remove any of them.";
+// The note as it was up to 1.34.0, word for word.
+const PROTECT_NOTE_1_34 = "Parts of this passage have been replaced with tokens shaped like [[AR1]], " +
     "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
     "edit exactly as it is. Copy every one into your answer unchanged and in the " +
     "same place, treating each as a single character you cannot spell.";
@@ -1981,12 +1995,24 @@ function markText(text) {
 // them. If they switch to two models later, the line comes up then.
 const MOVED_DEFAULTS = [
     {
-        key: "judgeBeforeChecks",
-        was: BEFORE_CHECKS_1_31,
-        label: "What it compares",
-        why: "One check asked whether the characters speak in the same order as the reply before. With two characters, that is true of most good replies. It is now a check for a character saying the same thing again.",
+        key: "judgeChecks",
+        was: JUDGE_CHECKS_1_34,
+        label: "What the second model checks",
+        why: "One check caught an action followed by a comment on how it came out. Plain description has that shape too, so fine replies were refined. It now asks for a comment that judges the action.",
         needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeBefore", is: true },
+    },
+    {
+        key: "judgeFoundLead",
+        was: FOUND_LEAD_1_34,
+        label: "What the refine model is told about the checks",
+        why: "It said the checks were written by you. Most people use the built-in checks, so it now says they were picked by you.",
+        needs: { key: "judgeMode", is: "two" },
+    },
+    {
+        key: "protectNote",
+        was: PROTECT_NOTE_1_34,
+        label: "What the model is told about the stand-ins",
+        why: "It ended by telling the model to treat each stand-in as a character it cannot spell. It now says plainly not to change, split, translate or remove any of them.",
     },
 ];
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
@@ -2224,6 +2250,17 @@ const SAMPLER_FIELDS = [
         hint: "The same idea as the two above, under the name local models use. 1 is off. Raising it can fight your own rules.",
     },
 ];
+// The note about the stand-ins, on the Limits tab. Named here rather than
+// written inside its card, so the line about a moved default can be checked
+// against its label.
+const PROTECT_NOTE_FIELD = {
+    key: "protectNote",
+    label: "What the model is told about the stand-ins",
+    type: "lines",
+    rows: 4,
+    needs: { key: "protectOn" },
+    hint: "Goes in {{protect_notes}} when something was hidden. Name the stand-in shape, [[AR1]], so the model keeps each one.",
+};
 // Two-model mode. Everything under the first row waits on it, and the address
 // and model name wait on the host being your own.
 const JUDGE_FIELDS = [
@@ -10278,14 +10315,7 @@ export function setup(ctx, overrides) {
             needs: { key: "protectOn" },
             hint: "Off by default. Also hides plain tags like <i> and <b>. This leaves gaps in the sentences the model reads.",
         }));
-        wrap.appendChild(fieldRow({
-            key: "protectNote",
-            label: "What the model is told about the stand-ins",
-            type: "lines",
-            rows: 4,
-            needs: { key: "protectOn" },
-            hint: "Goes in {{protect_notes}} when something was hidden. Name the stand-in shape, [[AR1]], so the model keeps each one.",
-        }));
+        wrap.appendChild(fieldRow(PROTECT_NOTE_FIELD));
         wrap.appendChild(builtInRow("protectNote", PROTECT_NOTE, "What the model is told about the stand-ins", "protectnote", () => !!cfg.protectOn));
         wrap.appendChild(fieldRow({
             key: "protectThinking",
@@ -16166,6 +16196,7 @@ export const __testing = {
     CONFIG,
     PARTS,
     MOVED_DEFAULTS,
+    PROTECT_NOTE_FIELD,
     JUDGE_FIELDS,
     JUDGE_CHECKS,
     BEFORE_CHECKS,

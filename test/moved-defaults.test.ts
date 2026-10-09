@@ -8,7 +8,7 @@
 import { expect, test, describe } from "bun:test";
 import { __testing } from "../src/frontend";
 
-const { CONFIG, MOVED_DEFAULTS, LIMIT_FIELDS, COST_FIELDS, SAMPLER_FIELDS, JUDGE_FIELDS } = __testing as any;
+const { CONFIG, MOVED_DEFAULTS, LIMIT_FIELDS, COST_FIELDS, SAMPLER_FIELDS, JUDGE_FIELDS, PROTECT_NOTE_FIELD } = __testing as any;
 
 describe("the defaults said to have moved", () => {
   test("there is a table to check, or this proves nothing", () => {
@@ -30,7 +30,7 @@ describe("the defaults said to have moved", () => {
     // Sent to somebody hunting for the setting the line is about. A label
     // written out by hand drifts from the panel the first time the row is
     // renamed, and the reader is then looking for something that is not there.
-    const labels = [...LIMIT_FIELDS, ...COST_FIELDS, ...SAMPLER_FIELDS, ...JUDGE_FIELDS].map((f: any) =>
+    const labels = [...LIMIT_FIELDS, ...COST_FIELDS, ...SAMPLER_FIELDS, ...JUDGE_FIELDS, PROTECT_NOTE_FIELD].map((f: any) =>
       String(f.label || ""),
     );
     for (const m of MOVED_DEFAULTS)

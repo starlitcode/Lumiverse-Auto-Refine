@@ -9163,13 +9163,13 @@ console.log("\nwhen a default moves under somebody who was on it");
       const n = document.querySelector("#drawer [data-arf-moveddefault]");
       return n ? n.textContent : null;
     });
-  const entry = __testing.MOVED_DEFAULTS.find((m) => m.key === "judgeBeforeChecks");
+  const entry = __testing.MOVED_DEFAULTS.find((m) => m.key === "judgeChecks");
   const OLD = entry.was;
   const stored = (page) =>
     page.evaluate(() => {
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
-        now: raw ? JSON.parse(raw).judgeBeforeChecks : null,
+        now: raw ? JSON.parse(raw).judgeChecks : null,
         line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
       };
     });
@@ -9179,42 +9179,46 @@ console.log("\nwhen a default moves under somebody who was on it");
       await new Promise((r) => setTimeout(r, 200));
     }, which);
 
-  ok("the old list is not the built-in one", OLD !== STOCK_DEFAULTS.judgeBeforeChecks, "");
+  ok("the old list is not the built-in one", OLD !== STOCK_DEFAULTS.judgeChecks, "");
 
-  // Two models, comparing with the reply before, and still on the old list.
-  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: OLD } }, async (page) => {
+  // Two models, and still on the old list.
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
     const said = await seen(page);
     ok("somebody on the old default is told", !!said, JSON.stringify(said));
-    ok("and the line names the setting", !!said && /What it compares/.test(said), JSON.stringify(said));
+    ok("and the line names the setting", !!said && /What the second model checks/.test(said), JSON.stringify(said));
     await press(page, "take");
     const after = await stored(page);
-    ok("taking it moves them to the new one", after.now === STOCK_DEFAULTS.judgeBeforeChecks, JSON.stringify(after));
-    ok("and the line goes with it", !after.line, JSON.stringify(after));
+    ok("taking it moves them to the new one", after.now === STOCK_DEFAULTS.judgeChecks, JSON.stringify(after));
   });
 
   // The same list with a space at the end of a line and an empty line after
   // it, which a box that was clicked into can hold. Still the list they had.
-  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: OLD.replace("\n", "  \n") + "\n\n" } }, async (page) => {
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD.replace("\n", "  \n") + "\n\n" } }, async (page) => {
     ok("spaces and empty lines do not hide the line", !!(await seen(page)), "");
   });
 
-  // The list is only read while comparing, and only with two models.
-  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: false, judgeBeforeChecks: OLD } }, async (page) => {
-    ok("somebody not comparing with the reply before is left alone", (await seen(page)) === null, "");
-  });
-  await inTab(browser, { saved: { judgeMode: "one", judgeBefore: true, judgeBeforeChecks: OLD } }, async (page) => {
+  // The checks are only read with two models.
+  await inTab(browser, { saved: { judgeMode: "one", judgeChecks: OLD } }, async (page) => {
     ok("somebody on one model is left alone", (await seen(page)) === null, "");
   });
 
   // Wrote their own, so nothing of theirs moved.
-  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: "`reply` repeats `previous_reply`." } }, async (page) => {
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: "`reply` repeats itself." } }, async (page) => {
     ok("somebody who chose their own is left alone", (await seen(page)) === null, "");
   });
 
   // Already on the new one, which is everybody installing fresh.
-  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true } }, async (page) => {
+  await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
+
+  // Each of the other texts that moved names itself to somebody still on it.
+  for (const m of __testing.MOVED_DEFAULTS.filter((x) => x.key !== "judgeChecks")) {
+    await inTab(browser, { saved: { judgeMode: "two", [m.key]: m.was } }, async (page) => {
+      const said = await seen(page);
+      ok("somebody on the old " + m.key + " is told, by its name", !!said && said.indexOf(m.label) >= 0, JSON.stringify(said));
+    });
+  }
 
   // A line somebody set themselves for Jev is given to Span too. A default is not.
   for (const [was, want] of [[35, "35"], [40, "30"], [50, "30"]]) {
@@ -9230,7 +9234,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.
-  await inTab(browser, { saved: { judgeMode: "two", judgeBefore: true, judgeBeforeChecks: OLD } }, async (page) => {
+  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
     await press(page, "keep");
     const after = await stored(page);
     ok("keeping yours leaves the setting alone", after.now === OLD, JSON.stringify(after));

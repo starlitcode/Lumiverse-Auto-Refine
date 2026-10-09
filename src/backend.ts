@@ -714,7 +714,7 @@ const SHIELD_NOTE =
   'Parts of this passage have been replaced with tokens shaped like [[AR1]], ' +
   '[[AR2]] and so on. Each stands in for formatting that has to survive the ' +
   'edit exactly as it is. Copy every one into your answer unchanged and in the ' +
-  'same place, treating each as a single character you cannot spell.';
+  'same place. Do not change, split, translate or remove any of them.';
 
 // The model's own working, which is not prose and is not the reader's writing.
 // It is cut off before the refine and put back afterwards, so a rewrite can
@@ -4980,7 +4980,7 @@ const WORN_CHECK = '`reply` contains at least one phrase listed in `worn_phrases
 // the reader has not written their own. The same text as the panel's box.
 // {{second_model}} and {{checks_line}} are filled in here.
 const FOUND_LEAD =
-  'Another model, {{second_model}}, read this passage before you and scored it against checks the user wrote. ' +
+  'Another model, {{second_model}}, read this passage before you and scored it against checks the user picked. ' +
   "The checks below reached the user's line of {{checks_line}}%, strongest first. " +
   'In them, "reply" means the passage you are rewriting. Look at these first. ' +
   'Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. ' +

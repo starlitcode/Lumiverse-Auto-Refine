@@ -19,6 +19,10 @@ _2026-10-09_
 ### Changed
 
 - **The floating button shrinks a little when pressed.** In 1.32.0 it stopped shrinking and only got lighter. It now shrinks a little and gets lighter, and grows back when you let go. With Reduce motion on, it only gets lighter.
+- **One built-in check in What the second model checks is narrower.** It caught an action followed by a comment on how it came out, such as "he smiled, slow and easy". Plain description has that shape too, so fine replies were refined. It now asks for a comment that judges the action, such as "and it sounded wrong".
+- **The lead-in to the checks says the user picked them.** It said the checks were written by the user. Most people use the built-in checks, so it now says "checks the user picked".
+- **The built-in note about the stand-ins is plainer.** It ended by telling the model to treat each stand-in "as a single character you cannot spell". It now says "Do not change, split, translate or remove any of them."
+- If you were on any of these three, the panel offers you the new one. If you wrote your own, nothing changes.
 
 ---
 

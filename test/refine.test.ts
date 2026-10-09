@@ -3074,7 +3074,7 @@ describe("seeing what gets sent", () => {
   // A phrase from the token note and from nowhere else in a built-in prompt. The
   // obvious one, "tokens shaped like", is no good here: What to Copy Exactly
   // says it too, in every prompt, whether anything was protected or not.
-  const NOTE_ONLY = "a single character you cannot spell";
+  const NOTE_ONLY = "Do not change, split, translate or remove any of them.";
 
   // The note about the tokens is a block of its own in every built-in prompt, so
   // it can carry a tag like the other macros do. The two below are the pair that

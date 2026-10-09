@@ -73,7 +73,7 @@ then a chat with no memories still sends `Keep these in mind.`, which now refers
 
 **About `{{protect_notes}}`:** it has its own block, **Protected Formatting**. When protection has hidden something, it becomes the text in **What the model is told about the stand-ins**, on the Limits tab. You can change it there, and **Use the built-in text** puts it back. The built-in text is:
 
-> Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place, treating each as a single character you cannot spell.
+> Parts of this passage have been replaced with tokens shaped like `[[AR1]]`, `[[AR2]]` and so on. Each stands in for formatting that has to survive the edit exactly as it is. Copy every one into your answer unchanged and in the same place. Do not change, split, translate or remove any of them.
 
 When nothing was hidden, it becomes nothing and the block is not sent. If you empty the box, it becomes nothing as well. The stand-ins are then sent with no note, and a model is more likely to change or drop one, which makes the refine fail.
 

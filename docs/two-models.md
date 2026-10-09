@@ -338,7 +338,7 @@ The ones it starts with:
 `reply` starts three or more sentences in a row with the same word.
 `reply` contains a stock phrase, such as "a breath she didn't know she was holding", "a shiver ran down his spine", "her heart hammered" or "a smile that didn't reach his eyes".
 `reply` says what someone did not do or what something was not, then what they did or what it was, as in "it wasn't a request, it was a command" or "she didn't just leave, she ran".
-`reply` follows an action with a comment on how it came out, as in "she laughed, and it was thin" or "he smiled, slow and easy".
+`reply` follows an action with a comment that judges how it came out, as in "she laughed, and it came out thin" or "he said it, and it sounded wrong".
 `reply` has a character start an action, then take it back, as in "reached out, then pulled back" or "opened her mouth, then closed it".
 `reply` ends with a question to the user about what they do next, as in "What do you do?".
 ```
