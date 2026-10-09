@@ -8445,6 +8445,11 @@ export function setup(ctx, overrides) {
             catch (_) { }
             node.style.transition = "none";
             node.style.overflow = "hidden";
+            // Held at the height it is given. In a box that scrolls, a flex item
+            // with its overflow hidden may be shrunk to nothing, and it was: the
+            // height moved where it could not be seen, and the box opened in one
+            // step at the end.
+            node.style.flexShrink = "0";
             node.style.height = fromH + "px";
             node.style.opacity = String(fromO);
             if (fromHidden) {
@@ -8524,6 +8529,7 @@ export function setup(ctx, overrides) {
             node.style.borderTopWidth = "";
             node.style.borderBottomWidth = "";
             node.style.transform = "";
+            node.style.flexShrink = "";
         }
         catch (_) { }
     }
@@ -8559,7 +8565,15 @@ export function setup(ctx, overrides) {
             node._arfUnfold = null;
             const was = getComputedStyle(node).opacity;
             node.style.transition = "none";
-            node.style.height = tall + "px";
+            node.style.flexShrink = "0";
+            // Written as the box-sizing reads it. A content-box box counts its
+            // padding and edge outside its height, so they come off first, or it
+            // grew by them before it started to close.
+            const how = getComputedStyle(node);
+            const edges = how.boxSizing === "border-box"
+                ? 0
+                : ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"].reduce((sum, k) => sum + (parseFloat(how[k]) || 0), 0);
+            node.style.height = Math.max(0, tall - edges) + "px";
             node.style.overflow = "hidden";
             node.style.opacity = was;
             // Read the layout between the two, or the browser sees one value being set
