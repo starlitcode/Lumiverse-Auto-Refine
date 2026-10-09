@@ -1292,26 +1292,32 @@ const PHRASES =
   // pattern and catches the ones not listed; a list of every filling is longer
   // and catches nothing more.
   "- the held breath family: a breath they didn't know they were holding, a breath that hitches or catches\n" +
-  "- bodies on autopilot: a shiver down a spine, a hammering heart, a racing pulse, a dropping stomach, whitening knuckles, a tight jaw\n" +
-  "- stock faces: pupils blown wide, darkening eyes, a smirk, an arched brow, a mouth corner that quirks, a smile that doesn't reach the eyes\n" +
+  "- bodies on autopilot: a shiver down a spine, a hammering heart, a racing pulse, a dropping stomach, whitening knuckles, a tight jaw, a hard swallow, a bobbing throat\n" +
+  "- stock faces: pupils blown wide, darkening eyes, a smirk, an arched brow, a mouth corner that quirks, a smile that doesn't reach the eyes, the ghost of a smile, an unreadable expression\n" +
+  "- vague intensity: something primal, something dangerous in his eyes, a predatory grin\n" +
+  "- touch as electricity: a spark where skin meets, a current running up an arm\n" +
   "- feelings in containers or blends: a jolt of, a wave of, a pang of, a flicker of, a mix of, warring with\n" +
   "- feelings that flood, wash over, surge or bloom through somebody, or settle low in a chest\n" +
   "- feelings stamped as real: a genuine laugh, real fear, a smile that was true for once\n" +
   "- acutely or painfully aware, and the weight of a look, a word or a silence\n" +
-  "- voices given a texture or a volume knob: velvety, husky, gravelly, purring, growling, barely above a whisper, dropping an octave\n" +
-  "- the air doing the mood's job: thick, charged, hanging, crackling between people\n" +
+  "- voices given a texture or a volume knob: velvety, husky, gravelly, purring, growling, barely above a whisper, dropping an octave, or graded after the line (he said, voice low and even)\n" +
+  "- the air doing the mood's job: thick, charged, hanging, crackling between people, or something shifting between them\n" +
+  "- stock smells: ozone, and the vague completer (pine and something metallic)\n" +
   "- rooms with a will of their own (the house watched, the room held its breath) and sounds from nowhere (somewhere, a door slammed)\n" +
   "- weather on cue: rain that starts as someone cries, a sky that sulks along with them\n" +
   "- movement graded instead of shown: deliberate, measured, unhurried, fluid, with practised ease\n" +
   "- pauses named instead of filled: a beat, a long moment, the silence stretched, time slowed, the world narrowed\n" +
   "- fancy stand-ins for plain words: orbs, ministrations, crimson beads, palpable, a testament to, a tapestry of\n" +
-  "- office and maths talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten\n" +
+  "- office and maths talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten, load-bearing\n" +
+  "- borrowed strangers: with the calm of someone who'd done this before, the way people do when they've stopped hoping\n" +
+  "- similes that'd fit any story: like a coiled spring, like a caged animal, like a moth to a flame\n" +
   "- negation tricks: it wasn't a request, it was a command; she didn't just leave, she ran; not unkind; less X than Y; more than cold, frozen\n" +
   "- the narrator ruling on a line after it's said: the words landed, she meant every one of them, it was half an order\n" +
   "- an action, then a grade for it: she laughed, and it was thin; he smiled, slow and easy\n" +
   "- a laugh, a breath or a sound that escapes somebody\n" +
   "- do-then-undo: reached out, then pulled back; opened her mouth, then closed it\n" +
-  "- the same thing twice: she looked at him, really looked at him; he worked his jaw, his jaw worked";
+  "- the same thing twice: she looked at him, really looked at him; he worked his jaw, his jaw worked\n" +
+  "- narrator flourishes: little did they know, only time would tell, nothing would ever be the same";
 
 const FILLER =
   "suddenly, slowly, slightly, just, really, very, almost, somehow, " +
@@ -1558,9 +1564,7 @@ const PLAIN_LONG: Block[] = [
       "<rhythm>\n" +
       "Three sentences in a row that are all about the same length start to " +
       "drone, so break one up or let one run long.\n\n" +
-      "A single fragment can hit hard. Three in a row is a tic.\n\n" +
-      "If a paragraph runs past about six lines, it's probably two " +
-      "paragraphs wearing a trench coat." +
+      "A single fragment can hit hard. Three in a row is a tic." +
       "\n</rhythm>",
   },
   {
@@ -1616,6 +1620,9 @@ const PLAIN_LONG: Block[] = [
       "The passage stops where it stops. If the last line is setting up what " +
       "happens next, or suddenly turns around and asks the user a question, " +
       "trim that bit.\n\n" +
+      "Same goes for a last line that steps back to tell the user what it " +
+      "all meant, like and for the first time in years, it felt like home. " +
+      "End on the last thing that actually happened.\n\n" +
       "Already ends on a good hook? Leave it. Whoever wrote the passage " +
       "picked that ending, not you." +
       "\n</the_finish>",
@@ -1928,9 +1935,11 @@ const THINKS_LONG: Block[] = [
       "too weak. A tag that only says who is talking stays.\n\n" +
       "Stock moves. Held breaths, hammering hearts, air thick with whatever, " +
       "and the negation trick, where it wasn't a request, it was a command. " +
-      "They show up out of pure habit.\n\n" +
+      "They show up out of pure habit, and so do voices described like " +
+      "fabric and similes that'd fit any story.\n\n" +
       "The last line. If the passage ends by pointing at what's coming next, " +
-      "it's handing the user homework." +
+      "it's handing the user homework. If it ends by telling the user what " +
+      "it all meant, that's the narrator talking over the scene." +
       "\n</hot_spots>",
   },
   {

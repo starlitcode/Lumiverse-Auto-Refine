@@ -24,6 +24,7 @@ _2026-10-09_
 - **No second question while the tab is open.** With the Auto Refine tab open, the question is asked only in the **Waiting for you** card at the top of the tab. That card now shows what changed, marked, instead of both versions in full.
 - **Markup tags are left out of every before and after.** A tag such as a colour tag showed as text among the words. The words now read as they do in the chat. If only the markup changed, the card says so. **Read it in full** still shows the text exactly as written.
 - **Extra reasoning tag names is now called Extra thinking tag names**, the same name Auto Retry uses. It works the same way.
+- **The built-in prompts for replies catch more stock writing.** **A judge** now also lists vague intensity, touch described as electricity, stock smells, borrowed strangers, similes that fit any story and narrator flourishes. **The Finish** trims a last line that tells the user what the moment meant. The rule that split paragraphs over six lines is gone, as paragraph length is a matter of style. **A judge that thinks** gets the same additions in short. The prompts for your own messages and the second model's checks are unchanged.
 
 ### Fixed
 
