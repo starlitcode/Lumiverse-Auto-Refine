@@ -11854,6 +11854,55 @@ console.log("\nreduce motion");
   });
 }
 
+console.log("\nthe floating button shrinks a little when pressed");
+{
+  // Pressed, the button shrinks a little and lightens, and it grows back on
+  // release. With Reduce motion on, from the panel or the device, it only
+  // lightens. Checked at a phone width and a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const how of ["off", "panel", "device"]) {
+      // The host places the button as a small widget fixed in a corner.
+      const css = "#float{position:fixed!important;right:16px;bottom:16px;width:56px!important;height:56px!important}";
+      await inTab(browser, { css, viewport, touch, saved: { widgetOn: true, enabled: true, reduceMotion: how === "panel" } }, async (page) => {
+        if (how === "device") await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.evaluate(async () => {
+          history.pushState({}, "", "/chat/c1");
+          for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+          await new Promise((r) => setTimeout(r, 200));
+        });
+        const b = page.locator("#float .arf-float").first();
+        const r = await b.boundingBox();
+        const read = () => page.evaluate(() => {
+          const cs = getComputedStyle(document.querySelector("#float .arf-float"));
+          const m = /matrix\(([^,]+)/.exec(cs.transform);
+          return { scale: m ? Math.round(parseFloat(m[1]) * 100) / 100 : 1, filter: cs.filter };
+        });
+        const rest = await read();
+        // The press has to land on the button, or it proves nothing.
+        const aim = await page.evaluate(([x, y]) => {
+          const n = document.elementFromPoint(x, y);
+          return !!n && !!n.closest("#float .arf-float");
+        }, [r.x + r.width / 2, r.y + r.height / 2]);
+        ok(label + ", " + how + ": the press lands on the button", aim, JSON.stringify(r));
+        await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+        await page.mouse.down();
+        await page.waitForTimeout(400);
+        const pressed = await read();
+        await page.mouse.move(r.x - 60, r.y - 60);
+        await page.mouse.up();
+        await page.waitForTimeout(400);
+        const after = await read();
+        const name = label + (how === "off" ? "" : ", Reduce motion from the " + how);
+        ok(name + ": pressed, it lightens", /brightness/.test(pressed.filter), JSON.stringify(pressed));
+        if (how === "off") {
+          ok(name + ": pressed, it shrinks a little", pressed.scale > 0.9 && pressed.scale < 0.97, JSON.stringify({ rest, pressed }));
+          ok(name + ": let go, it grows back to its size", after.scale === 1 && rest.scale === 1, JSON.stringify({ rest, after }));
+        } else ok(name + ": pressed, it keeps its size", pressed.scale === 1, JSON.stringify(pressed));
+      });
+    }
+  }
+}
+
 console.log("\nhiding kinds of line in the Log");
 await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
   await goTab(page, "Log");

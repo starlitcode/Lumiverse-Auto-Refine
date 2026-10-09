@@ -5382,9 +5382,10 @@ export function setup(ctx, overrides) {
         "0 0 0 10px rgba(0,0,0,0)}" +
         "100%{box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4))," +
         "0 0 0 0 rgba(0,0,0,0)}}" +
-        // A press lightens the whole button, so a tap answers whether or not it
-        // changed anything. It does not change size: a button that shrinks and
-        // grows back costs a repaint of everything under it. A press is also how
+        // A press lightens the whole button and shrinks it a little, and it grows
+        // back on release, so a tap answers whether or not it changed anything.
+        // With Reduce motion on it only lightens, since a size change with no
+        // movement is a jump. A press is also how
         // the menu is opened, and the ring below is what tells the two apart: a
         // lighter button on its own is a tap, with the ring running it is a hold.
         //
@@ -5392,6 +5393,7 @@ export function setup(ctx, overrides) {
         // refine is running, so a second ring for that would say the same thing
         // twice.
         ".arf-float:active{filter:brightness(1.15)}" +
+        "@media (prefers-reduced-motion: no-preference){" + PRESS + ".arf-float:active{transform:scale(.94)}}" +
         ".arf-float{transition:color 260ms cubic-bezier(.2,.7,.3,1)," +
         "border-color 260ms cubic-bezier(.2,.7,.3,1)," +
         "background-image 260ms cubic-bezier(.2,.7,.3,1)," +

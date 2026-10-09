@@ -16,6 +16,10 @@ _2026-10-09_
 - **Mercury Decide without the free limits.** **Which Mercury Decide** picks the free one or the paid one on OpenRouter. The paid one has no free-model limits. Both use the same line.
 - **More hosts on NanoGPT.** Clef Flash and Decider can now be reached on NanoGPT.
 
+### Changed
+
+- **The floating button shrinks a little when pressed.** In 1.32.0 it stopped shrinking and only got lighter. It now shrinks a little and gets lighter, and grows back when you let go. With Reduce motion on, it only gets lighter.
+
 ---
 
 ## 1.34.0
