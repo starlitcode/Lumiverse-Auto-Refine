@@ -35,6 +35,7 @@ _2026-10-09_
 ### Fixed
 
 - **The time left on a refine that tried again.** The backend gives each call to the model the whole wait. The status line counted the time left from the start of the refine, so after a failed check or a provider wait it could show "0s left" while the model was still working. The panel could then say the refine never came back. The time left and the give-up timer now start again with each call. The line says "left on this try" from the second call on.
+- **The before-and-after card changes size smoothly with UI Scale set.** With Lumiverse's UI Scale at anything but 100%, a new refine landing on an open card could resize it from the wrong height, and it jumped at the end. It now starts from its real height.
 - **The dot on the status line stays beside the words.** When the status was long enough to wrap, such as while waiting for the provider, the dot sat alone on its own line above the words. It now stays at the start of the first line.
 
 ---

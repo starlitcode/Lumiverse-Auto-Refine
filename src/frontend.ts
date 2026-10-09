@@ -8550,7 +8550,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function settleHeight(box: any, was: number) {
     try {
       if (!(was > 0) || !box || !box.style || noMotion()) return;
-      const now = box.getBoundingClientRect().height;
+      const now = cssHeight(box);
       if (!(now > 0) || Math.abs(now - was) < 2) return;
       const mine = ++settleTick;
       box.style.height = was + "px";
@@ -8589,12 +8589,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   function unfold(node: any, fromHidden: boolean) {
     try {
       if (!node || !node.style || typeof node.getBoundingClientRect !== "function") return;
-      const fromH = fromHidden ? 0 : node.getBoundingClientRect().height;
+      const fromH = fromHidden ? 0 : cssHeight(node);
       const fromO = fromHidden ? 0 : parseFloat(getComputedStyle(node).opacity) || 0;
       clearFold(node);
       if (noMotion()) return;
       const cs = getComputedStyle(node);
-      const tall = node.getBoundingClientRect().height;
+      const tall = cssHeight(node);
       if (!(tall > 0)) return;
       const pads = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"];
       const want: Record<string, string> = {};
@@ -8662,6 +8662,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     unfold(node, true);
   }
 
+  // A box's height in its own CSS pixels. getBoundingClientRect gives screen
+  // pixels, and Lumiverse applies its UI Scale as a zoom, so the two differ.
+  // A height read in screen pixels and written back as CSS pixels opened a
+  // row too tall or too short, and it jumped to its real height at the end.
+  // The scale is read off the width, which the browser also reports both
+  // ways.
+  function cssHeight(node: any): number {
+    const r = node.getBoundingClientRect();
+    const scale = node.offsetWidth > 0 && r.width > 0 ? r.width / node.offsetWidth : 1;
+    return r.height / (scale > 0.01 ? scale : 1);
+  }
+
   // A box let down to nothing and then handed over. done runs once, whether the
   // travel finished, was cut short by a second one, or never started because the
   // reader asked for no movement.
@@ -8694,7 +8706,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     };
     try {
       const still = noMotion();
-      const tall = node && node.getBoundingClientRect ? node.getBoundingClientRect().height : 0;
+      const tall = node && node.getBoundingClientRect ? cssHeight(node) : 0;
       if (still || !(tall > 0) || !node.style) {
         finish();
         return;
@@ -8959,7 +8971,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
 
       const box = held || document.createElement("div");
-      const wasTall = held ? held.getBoundingClientRect().height : 0;
+      const wasTall = held ? cssHeight(held) : 0;
       if (held) box.innerHTML = "";
       box.className = "arf-pop arf";
       box.setAttribute("data-arf-pop", "1");
