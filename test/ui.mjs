@@ -12698,8 +12698,26 @@ for (const size of [
     const before = await look();
     ok(size.name + ": Refine the greeting is on the Limits tab, and off", before.has && !before.on, JSON.stringify(before));
     ok(size.name + ": with no warning while it is off", !before.shown, JSON.stringify(before));
-    await page.evaluate(() => document.querySelector('#drawer [data-arf-row="refineGreeting"] input[type=checkbox]').click());
-    await page.waitForTimeout(700);
+    // The warning opens the way every row under a switch does: its space opens
+    // over several frames while it fades and slides in.
+    const motion = await page.evaluate(async () => {
+      const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+      const hold = document.querySelector('#drawer [data-arf-hangs="refineGreeting"]');
+      document.querySelector('#drawer [data-arf-row="refineGreeting"] input[type=checkbox]').click();
+      const heights = [];
+      const fades = [];
+      for (let i = 0; i < 40; i++) {
+        await frame();
+        heights.push(Math.round(hold.getBoundingClientRect().height));
+        fades.push(parseFloat(getComputedStyle(hold).opacity));
+      }
+      return { heights, fades };
+    });
+    const end = Math.max(...motion.heights);
+    const between = motion.heights.filter((v) => v > 0 && v < end).length;
+    ok(size.name + ": the warning opens over several frames, as a row under a switch does", between >= 4, JSON.stringify(motion.heights));
+    ok(size.name + ": and fades in", motion.fades.some((v) => v > 0.05 && v < 0.95), JSON.stringify(motion.fades.map((v) => v.toFixed(2))));
+    await page.waitForTimeout(400);
     const after = await look();
     ok(size.name + ": turned on, the warning shows under it", after.on && after.shown, JSON.stringify(after));
     ok(size.name + ": nothing runs off the side", after.fits && !after.sideways, JSON.stringify(after));

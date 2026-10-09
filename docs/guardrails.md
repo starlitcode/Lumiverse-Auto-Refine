@@ -11,7 +11,7 @@ The opening message is written by a person, so it is not refined. The automatic 
 **Refine the greeting**, on the Limits tab, changes this. It is off by default.
 
 - On, the greeting can be refined like any reply, by a button or by **Refine every reply here**.
-- The automatic pass still never refines it, because the greeting is not generated.
+- The automatic pass never refines it, even when the greeting is swiped or regenerated. Only a press of a button changes it.
 - A refine can change its formatting or what it says. **Put it back** undoes it while **Keep what a refine replaced** is on.
 
 To change a greeting by hand, edit it on the character card.

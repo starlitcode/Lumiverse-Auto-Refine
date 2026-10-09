@@ -3361,6 +3361,13 @@ async function askModel(
 // With the switch on there is no greeting to leave out, so this answers null.
 function greetingIdOf(msgs: any[]): any {
   if (refineGreeting) return null;
+  return firstGreetingIdOf(msgs);
+}
+
+// The greeting whatever the switch says, for the automatic pass, which never
+// refines it. A greeting swiped or regenerated still arrives as a finished
+// reply, and only a press of a button may change it.
+function firstGreetingIdOf(msgs: any[]): any {
   return msgs && msgs.length && msgs[0] && msgs[0].role === 'assistant' ? msgs[0].id : null;
 }
 
@@ -3534,6 +3541,8 @@ async function refineRun(
   // your own message is already you asking for exactly this.
   if (m.role === 'user' && !byHand)
     return { ok: false, why: 'your own messages are only refined when you ask for one' };
+  if (!byHand && m.id === firstGreetingIdOf(msgs))
+    return { ok: false, why: 'the greeting is only refined when you ask for it, never by the automatic pass' };
   // What to refine holds for a refine asked for by hand too. The panel hides
   // the buttons for the side that is off, and this is the same rule for any
   // way in it does not cover, such as a selection.

@@ -15,7 +15,7 @@ _2026-10-09_
 - **Keep them through an update.** A new switch on the Limits tab, under **Keep what a refine replaced**. It is off by default. On, the list of refines you can put back is saved on your server for your account, so an update or a restart of Lumiverse does not clear it. Turning it off empties the saved copy.
 - **Kimi's thinking format is recognised.** Working inside `◁think▷` … `◁/think▷` is held back and never sent to be rewritten.
 - **Your own thinking markers are recognised.** A **Prefix** and **Suffix** saved on a connection in Lumiverse's **Reasoning** settings are read, and thinking between them is held back like any other thinking. Markers set only in the global Reasoning settings cannot be read by an extension.
-- **Refine the greeting.** A new switch on the Limits tab, off by default. On, the first message of a chat can be refined like any reply, by a button or by **Refine every reply here**. A warning under it says the greeting is written by the card's author, and that a refine can change its formatting or what it says.
+- **Refine the greeting.** A new switch on the Limits tab, off by default. On, the first message of a chat can be refined like any reply, by a button or by **Refine every reply here**. The automatic pass never refines it. A warning under it says the greeting is written by the card's author, and that a refine can change its formatting or what it says.
 
 ### Changed
 

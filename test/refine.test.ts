@@ -2382,6 +2382,15 @@ describe("refining a reply", () => {
     expect(h.body("m0")).toBe("The gate stands open. The road past it is dark.");
   });
 
+  test("the automatic pass never refines the greeting, even with Refine the greeting on", async () => {
+    const h = await armed(["<REFINED>The gate stands open. The road past it is dark.</REFINED>"], { refineGreeting: true });
+    // A greeting swiped or regenerated arrives as a finished reply.
+    await h.ended({ chatId: "c1", messageId: "m0" });
+    await wait(50);
+    expect(h.body("m0")).toBe("The gate stands open, and the road past it is dark.");
+    expect(h.asked.length).toBe(0);
+  });
+
   test("your own message is left alone by the automatic pass", async () => {
     const h = await armed(["i stride through it"]);
     await h.ended({ chatId: "c1", messageId: "m1" });

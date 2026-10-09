@@ -2746,7 +2746,7 @@ const LIMIT_FIELDS = [
         key: "refineGreeting",
         label: "Refine the greeting",
         type: "bool",
-        hint: "Off by default. On, the first message of a chat can be refined like any reply, by a button or by Refine every reply here.",
+        hint: "Off by default. On, a button or Refine every reply here can refine the first message of a chat. The automatic pass never does.",
     },
     {
         key: "asSwipe",

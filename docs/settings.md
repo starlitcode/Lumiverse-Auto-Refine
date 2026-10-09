@@ -164,7 +164,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Off, a reply that still holds its refine is not refined again, by any button or by the automatic pass.
   - A reply you swiped, regenerated or edited holds different words, so it is refined either way. This is what lets it work alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry).
   - One reply announced twice is still only refined once.
-- **Refine the greeting** is off by default. On, the first message of a chat can be refined like any reply, by a button or by **Refine every reply here**. A warning under it says the greeting is written by the card's author. See [The greeting](guardrails.md#the-greeting).
+- **Refine the greeting** is off by default. On, the first message of a chat can be refined like any reply, by a button or by **Refine every reply here**. The automatic pass never refines it. A warning under it says the greeting is written by the card's author. See [The greeting](guardrails.md#the-greeting).
 - **Wait out a provider that will not take the call** waits and tries again, twice by default, when the provider is busy or a local model is loading. See [Waiting out a provider that will not take the call](guardrails.md#waiting-out-a-provider-that-will-not-take-the-call).
 - **Seconds between automatic refines** puts a gap between automatic refines, for a provider that limits calls per minute. A reply that arrives too soon waits, with a countdown, and is then refined. It is 0, no gap, by default. Refines you start yourself never wait.
 - **Ask again when a check fails** retries a refine that failed a check a second try could fix. It is 0 by default.
