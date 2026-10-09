@@ -860,6 +860,23 @@ function setThinkTags(raw) {
 // walks forward from an opener looking for a closer, so a passage full of
 // openers and no closer made each of them scan the whole remainder and find
 // nothing. One indexOf makes that case linear.
+// The formats whose opener and closer are fixed tokens of their own. `open`
+// is kept apart so an opener with nothing closing it can be found too.
+const THINK_PAIRS = [
+    // Cohere Command A Reasoning.
+    { needs: '<|start_thinking|>', open: '<\\|START_THINKING\\|>', close: '<\\|END_THINKING\\|>' },
+    // Seed-OSS, whose tag carries a namespace the name list cannot hold.
+    { needs: '<seed:think>', open: '<seed:think>', close: '<\\/seed:think>' },
+    {
+        needs: '<seed:cot_budget_reflect>',
+        open: '<seed:cot_budget_reflect>',
+        close: '<\\/seed:cot_budget_reflect>',
+    },
+    // The named pair some builds use instead of a tag name.
+    { needs: '<|begin_of_thought|>', open: '<\\|begin_of_thought\\|>', close: '<\\|end_of_thought\\|>' },
+    // Kimi, which writes its tags with triangles in place of angle brackets.
+    { needs: '\u25c1think\u25b7', open: '\u25c1think\u25b7', close: '\u25c1\\/think\u25b7' },
+];
 function thinkShapes() {
     const alt = thinkNames().join('|');
     return [
@@ -886,23 +903,34 @@ function thinkShapes() {
             needs: '<|channel|>',
             pattern: '<\\|channel\\|>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*?' + HARMONY_END,
         },
-        // Cohere Command A Reasoning.
-        {
-            needs: '<|start_thinking|>',
-            pattern: '<\\|START_THINKING\\|>[\\s\\S]*?<\\|END_THINKING\\|>',
-        },
-        // Seed-OSS, whose tag carries a namespace the name list cannot hold.
-        { needs: '<seed:think>', pattern: '<seed:think>[\\s\\S]*?<\\/seed:think>' },
-        {
-            needs: '<seed:cot_budget_reflect>',
-            pattern: '<seed:cot_budget_reflect>[\\s\\S]*?<\\/seed:cot_budget_reflect>',
-        },
-        // The named pair some builds use instead of a tag name.
-        {
-            needs: '<|begin_of_thought|>',
-            pattern: '<\\|begin_of_thought\\|>[\\s\\S]*?<\\|end_of_thought\\|>',
-        },
-    ];
+    ].concat(THINK_PAIRS.map((p) => ({ needs: p.needs, pattern: p.open + '[\\s\\S]*?' + p.close })));
+}
+// A message that opens on one of the fixed-token openers and has no closer
+// after it: working that ran to the end.
+function openPairRunsOut(text) {
+    const low = text.toLowerCase();
+    for (const p of THINK_PAIRS) {
+        if (low.indexOf(p.needs) < 0)
+            continue;
+        const opened = new RegExp('^' + LEAD + p.open, 'i').exec(text);
+        if (opened && !new RegExp(p.close, 'i').test(text.slice(opened[0].length)))
+            return true;
+    }
+    return false;
+}
+// Where working whose opener was in the prompt ends: just past the first
+// closing tag, when no opening tag stands in front of it. -1 when there is
+// none. A preset can start the reply inside the thinking tag, so the text
+// opens mid-thought and its first tag is the closer of one it never wrote.
+function closerOnlyEnd(text) {
+    const alt = thinkNames().join('|');
+    const close = new RegExp('<\\/(?:' + alt + ')\\s*>|\\[\\/(?:' + alt + ')\\s*\\]', 'i').exec(text);
+    if (!close)
+        return -1;
+    const open = new RegExp('<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\]', 'i');
+    if (open.test(text.slice(0, close.index)))
+        return -1;
+    return close.index + close[0].length;
 }
 // The same shapes, anchored to the front of a message and allowed to sit
 // between the markers that open the turn and the ones that introduce the reply.
@@ -924,7 +952,12 @@ function stripThinkingFrom(text) {
     const alt = thinkNames().join('|');
     let t = String(text);
     try {
-        // Closed pairs first, in every shape.
+        // Working whose opener was in the refiner's prompt: everything up to the
+        // first closer goes.
+        const cut = closerOnlyEnd(t);
+        if (cut >= 0)
+            t = t.slice(cut);
+        // Closed pairs next, in every shape.
         const low = t.toLowerCase();
         for (const shape of thinkShapes())
             if (low.indexOf(shape.needs) >= 0)
@@ -933,6 +966,8 @@ function stripThinkingFrom(text) {
         // Only from the front: cutting from an opener in the middle would throw
         // away a rewrite that merely mentions the word.
         t = t.replace(new RegExp('^' + LEAD + '<\\|?(?:' + alt + ')\\|?>[\\s\\S]*$', 'i'), '');
+        if (openPairRunsOut(t))
+            t = '';
         // The same for a channel, which has no closer to be missing: an opened
         // thinking channel with no control token after it ran to the end.
         t = t.replace(new RegExp('^' + LEAD + '<\\|channel\\|?>[ \\t]*(?:' + THINK_CHANNELS + ')\\b[\\s\\S]*$', 'i'), '');
@@ -1009,15 +1044,9 @@ function splitThinking(text) {
     // refiner as a passage to rewrite. Only when nothing opens it first, so an
     // ordinary block stays with the rule above.
     if (!head && protectThinking) {
-        const alt = thinkNames().join('|');
-        const close = new RegExp('<\\/(?:' + alt + ')\\s*>|\\[\\/(?:' + alt + ')\\s*\\]', 'i').exec(src);
-        if (close) {
-            const open = new RegExp('<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\]', 'i');
-            if (!open.test(src.slice(0, close.index))) {
-                const end = close.index + close[0].length;
-                head = src.slice(0, end) + /^\s*/.exec(src.slice(end))[0];
-            }
-        }
+        const end = closerOnlyEnd(src);
+        if (end >= 0)
+            head = src.slice(0, end) + /^\s*/.exec(src.slice(end))[0];
     }
     // Working that never finished. The message opens on a thinking tag and
     // nothing closes it, because the model ran out of room or was stopped while
@@ -1027,7 +1056,7 @@ function splitThinking(text) {
         const alt = thinkNames().join('|');
         const opener = new RegExp('^\\s*(?:<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\])', 'i');
         const closer = new RegExp('<\\|?\\/(?:' + alt + ')\\s*\\|?>|\\[\\/(?:' + alt + ')\\s*\\]', 'i');
-        if (opener.test(src) && !closer.test(src))
+        if ((opener.test(src) && !closer.test(src)) || openPairRunsOut(src))
             head = src;
     }
     // No working in front of the reply, but the markers that open the turn and

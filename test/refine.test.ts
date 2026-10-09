@@ -4299,6 +4299,8 @@ describe("reasoning formats that are not a matched pair of tags", () => {
       "<|START_THINKING|>" + WORKING + "<|END_THINKING|><|START_RESPONSE|>" + REPLY + "<|END_RESPONSE|>",
     ],
     ["Seed-OSS", "<seed:think>" + WORKING + "</seed:think>" + REPLY],
+    ["begin and end of thought", "<|begin_of_thought|>" + WORKING + "<|end_of_thought|>\n" + REPLY],
+    ["Kimi", "\u25c1think\u25b7" + WORKING + "\u25c1/think\u25b7" + REPLY],
   ];
 
   const withRaw = (raw: string): Msg[] => [
@@ -4424,6 +4426,43 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     await wait(50);
     expect(h.body("m2")).toContain(WORKING);
     expect(h.asked.length).toBe(0);
+  });
+
+  // The same for the formats with fixed tokens: opened, and never closed.
+  for (const open of ["<|START_THINKING|>", "<seed:think>", "<|begin_of_thought|>", "\u25c1think\u25b7"]) {
+    test("working cut off inside " + open + " is refused rather than sent", async () => {
+      const h = await armed(
+        ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+        {},
+        withRaw(open + WORKING),
+      );
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(open + WORKING);
+      expect(h.asked.length).toBe(0);
+    });
+  }
+
+  // A local refining model whose template opens the thinking in the prompt
+  // answers mid-thought, with only the closer. With the tags off the whole
+  // answer is the rewrite, so the working in front of the closer has to go.
+  test("the refiner's working with only a closer is kept out of the chat", async () => {
+    const h = await armed(
+      ["plan the edit and keep it short\n</think>\n\nShe stepped through and the cold hit her."],
+      { wrapOutput: false },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("and the same for Kimi's working in the answer", async () => {
+    const h = await armed([
+      "<REFINED>\u25c1think\u25b7plan the edit\u25c1/think\u25b7She stepped through and the cold hit her.</REFINED>",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 });
 

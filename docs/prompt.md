@@ -356,7 +356,7 @@ Three forms are recognised by tag name:
 | Square brackets | `[thinking]` … `[/thinking]` |
 | Pipes | `<\|think\|>` … `<\|/think\|>`, and `<\|think>` … `<think\|>` |
 
-Four more are recognised as formats of their own, because their closing token has a different name:
+Six more are recognised as formats of their own, because their closing token has a different name:
 
 | Form | Example |
 | --- | --- |
@@ -364,6 +364,8 @@ Four more are recognised as formats of their own, because their closing token ha
 | Gemma 4 | `<\|channel>thought` … `<channel\|>` |
 | Cohere | `<\|START_THINKING\|>` … `<\|END_THINKING\|>` |
 | Seed-OSS | `<seed:think>` … `</seed:think>` |
+| Begin and end of thought | `<\|begin_of_thought\|>` … `<\|end_of_thought\|>` |
+| Kimi | `◁think▷` … `◁/think▷` |
 
 - **Harmony:** the block runs to the next control token. The channels treated as working are `analysis`, `thinking`, `thought`, `reasoning` and `commentary`. The `final` channel is the reply and is refined.
 - **Gemma 4:** every reply has one, empty when the model is not thinking. An empty pair is held back too.
@@ -374,7 +376,7 @@ Four more are recognised as formats of their own, because their closing token ha
 
 Most cloud providers send reasoning separately, not inside the reply, so none of this is needed there. It matters for local backends.
 
-**Keep the refiner's own reasoning out of your chat** covers the other direction: working that the refining model adds to its answer. The tags already keep most of it out. This also covers an answer read without the tags, and a model that puts its working inside the tags.
+**Keep the refiner's own reasoning out of your chat** covers the other direction: working that the refining model adds to its answer. The tags already keep most of it out. This also covers an answer read without the tags, and a model that puts its working inside the tags. It covers every format above, including working with only a closing tag, and working that opens and never closes.
 
 ## What a refine costs
 
