@@ -7013,7 +7013,10 @@ console.log("\nnever two things on the screen at once");
       },
     ]);
     ok("a refine waiting on your yes never shows two", one(got), JSON.stringify(got));
-    ok("and the host's question is what is left", await page.evaluate(() => !!document.getElementById("hostmodal")));
+    // The tab is open here, so the question is the Waiting for you card in
+    // it, and nothing is left on the page over it.
+    ok("and the question is the one in the tab, with nothing over it",
+      await page.evaluate(() => !document.getElementById("hostmodal") && !document.querySelector(".arf-pop:not(.arf-leaving)") && /Waiting for you/.test(document.querySelector("#drawer").textContent)));
   });
 }
 
@@ -12542,8 +12545,8 @@ console.log("\nrefines you can put back stay short");
       ok(label + ": each older one is named by its time and first words", !!got && /^\d\d:\d\d: Lamp 7 was lit late/.test(got.heads[1] || ""), JSON.stringify(got && got.heads));
       ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
       const reload = await page.evaluate(() => (document.querySelector("[data-arf-last] [data-arf-reloadnote]") || {}).textContent || "");
-      ok(label + ": the card says the list clears when you reload, and how to keep the original",
-        /clears when you reload/.test(reload) && /Add the refine as a swipe/.test(reload), reload);
+      ok(label + ": the card says a reload keeps the list, and how to keep it through an update",
+        /kept through a reload/.test(reload) && /Keep them through an update/.test(reload), reload);
       const tapped = await page.evaluate(async () => {
         const card = document.querySelector("[data-arf-last]");
         const outer = Array.from(card.querySelectorAll(".arf-fold")).find((h) => h.querySelector(".arf-grow").textContent.trim() === "Older refines");
@@ -12577,8 +12580,68 @@ console.log("\nthe reload line follows the swipe setting");
         const n = document.querySelector("[data-arf-last] [data-arf-reloadnote]");
         return { text: n ? n.textContent : "", sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
       });
-      ok(label + ": with the swipe setting on, it says the original stays a swipe back", /clears when you reload/.test(said.text) && /one swipe back/.test(said.text), said.text);
+      ok(label + ": with the swipe setting on, it also says the original stays a swipe back", /kept through a reload/.test(said.text) && /one swipe back/.test(said.text), said.text);
       ok(label + ": nothing runs off the side", !said.sideways, "");
+    });
+  }
+}
+
+console.log("\nthe list comes back after a reload");
+{
+  // The page asks the backend for what it still holds when it starts, and
+  // fills the list in from the answer, with no card coming up for refines
+  // that were already there. Dismissing one tells the backend, so it does not
+  // come back. Keep them through an update sits under Keep what a refine
+  // replaced.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "list_undoable").length);
+      ok(label + ": the page asks for the list when it starts", asked >= 1, String(asked));
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      await page.evaluate(() => {
+        const now = Date.now();
+        window.__fromBackend({ type: "undoable_list", list: [
+          { chatId: "c1", messageId: "m3", before: "The bell rang twice, and then, after a while, it rang again.", after: "The bell rang twice, then again.", at: now - 60000 },
+          { chatId: "c1", messageId: "m4", before: "He waited, quietly, by the old gate for a long time.", after: "He waited by the old gate.", at: now - 30000 },
+        ] });
+      });
+      await goTab(page, "Log");
+      await settle(page);
+      const got = await page.evaluate(() => ({
+        card: !!document.querySelector("[data-arf-last]"),
+        says: (document.querySelector("[data-arf-last]") || {}).textContent || "",
+        pop: !!document.querySelector(".arf-pop"),
+        badge: window.__badge,
+      }));
+      ok(label + ": the refines come back into the list", got.card && /old gate/.test(got.says), got.says.slice(0, 160));
+      ok(label + ": with no card coming up for them", !got.pop, "");
+      ok(label + ": and the tab's badge counts them", got.badge === "2", String(got.badge));
+      await page.evaluate(() => {
+        window.__sent.length = 0;
+        [...document.querySelectorAll("[data-arf-last] button")].find((b) => b.textContent.trim() === "Dismiss").click();
+      });
+      await settle(page);
+      const forgot = await page.evaluate(() => window.__sent.filter((m) => m.type === "forget_undo").pop());
+      ok(label + ": Dismiss tells the backend, so it does not come back", !!forgot && forgot.items.length === 1 && forgot.items[0].messageId === "m4", JSON.stringify(forgot));
+
+      await goTab(page, "Limits");
+      await settle(page);
+      const row = await page.evaluate(() => {
+        const r = document.querySelector('#drawer [data-arf-row="keepPutBack"]');
+        const above = document.querySelector('#drawer [data-arf-row="keepOriginal"]');
+        return {
+          there: !!r && !r.hidden,
+          under: !!r && !!above && (above.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING) > 0,
+          off: !!r && !r.querySelector('input[type="checkbox"]').checked,
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+      ok(label + ": Keep them through an update is under Keep what a refine replaced, and off", row.there && row.under && row.off, JSON.stringify(row));
+      ok(label + ": nothing runs off the side", !row.sideways, "");
     });
   }
 }

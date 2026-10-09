@@ -165,7 +165,11 @@ A refine reads the reply, sends it to a model, and writes the answer back. That 
 
 **Keep what a refine replaced** is on by default. It keeps the text from before each refine, so you can put it back from the panel.
 
-It is kept in memory while the page is open, and never written anywhere. It is there to undo a refine you did not like. It keeps no record of your chat.
+It is kept in your server's memory, so it comes back after a reload. An update or a restart of Lumiverse clears it.
+
+**Keep them through an update** is under it, and off by default. On, the list is also saved on your server, for your account only, so it lasts through an update or a restart. Turning it off empties the saved copy.
+
+Your server keeps the last 30 refines at most. It is there to undo a refine you did not like. It keeps no record of your chat.
 
 ---
 

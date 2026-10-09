@@ -89,13 +89,16 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
 - **Your keys for the second model**, one for each host you saved one for, in Lumiverse's secure store for your account and nowhere else.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.
-- **The text from before each refine**, in memory, so you can put a refine back. It is never written to disk and is gone when you reload.
+- **The text from before and after each refine**, so you can put a refine back. Your server keeps the last 30 at most.
+  - It is held in your server's memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
+  - With **Keep them through an update** on, it is also saved on your server, in Lumiverse's storage for your account. It is off by default. Turning it off empties the saved copy.
+  - Only your account can read or put back your own refines.
 
 ## What it never does
 
 - It never refines the greeting.
 - It never sends anything the block list does not show.
-- It never keeps a copy of a reply after the refine finishes.
+- It never keeps a copy of a reply after the refine finishes, apart from what **Put it back** needs.
 - It never writes to any message except the one it refined.
 - It never runs text as code. There is no `eval` and no `new Function`, so nothing in a reply, a rule or a model's answer can run.
 

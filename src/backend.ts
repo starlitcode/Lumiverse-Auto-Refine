@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.35.3';
+const VERSION = '1.36.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -91,6 +91,9 @@ let minShrinkPct = 40;         // and how much shorter before it looks wrong
 const GROW_FLOOR = 40;
 const SHRINK_FLOOR = 16;
 let keepOriginal = true;
+// Keep them through an update. Off by default, since on it writes the
+// replies that can be put back to the account's storage on the server.
+let keepPutBack = false;
 let confirmBeforeSave = false;
 let chatsOff = new Set<string>();
 
@@ -107,8 +110,96 @@ const generating = new Set<string>();
 // off again and going back to the one before it, not writing the original over
 // the top of it: a write would leave two swipes saying the same thing and no
 // way to tell which was which.
-const before = new Map<string, { text: string; at: number; swipeAt?: number }>();
+//
+// Each one also says whose it is and what the rewrite left, so a page that
+// was reloaded can ask for its own list back, and only ever gets its own.
+type Kept = {
+  text: string;
+  at: number;
+  swipeAt?: number;
+  user: string;
+  chatId: any;
+  messageId: any;
+  after: string;
+};
+const before = new Map<string, Kept>();
 const BEFORE_MAX = 30;
+// The file the list is kept in, with Keep them through an update on.
+const PUTBACK_FILE = 'putback.json';
+// Accounts whose kept file has been read since this backend started.
+const putBackRead = new Set<string>();
+const userKey = (userId: string | undefined) => String(userId == null ? '' : userId);
+
+// This account's part of the list, oldest first.
+function keptFor(userId: string | undefined): Kept[] {
+  const who = userKey(userId);
+  const out: Kept[] = [];
+  before.forEach((v) => {
+    if (v.user === who) out.push(v);
+  });
+  return out.sort((a, b) => a.at - b.at);
+}
+
+// Written to the account's storage with the switch on, and emptied with it
+// off, so turning it off takes the copies away too.
+const putBackWrites = new Map<string, Promise<void>>();
+// What each account's switch was at its last settings save, so the file is
+// emptied once when it goes off and not written at all while it stays off.
+const putBackWas = new Map<string, boolean>();
+function savePutBack(userId: string | undefined, on: boolean = keepPutBack): Promise<void> {
+  if (!hasUserStorage()) return Promise.resolve();
+  const list = on ? keptFor(userId) : [];
+  return inTurn(putBackWrites, userId, async () => {
+    try {
+      await spindle.userStorage.setJson(PUTBACK_FILE, list, { userId: userId });
+    } catch (e: any) {
+      try {
+        spindle.log.warn('the replies you can put back could not be saved: ' + ((e && e.message) || e));
+      } catch (_) {}
+    }
+  });
+}
+
+// Taken off the list, and off the account's copy with the switch on.
+function dropKept(k: string, userId: string | undefined) {
+  before.delete(k);
+  if (keepPutBack) savePutBack(userId);
+}
+
+// Read once per account after a start, with the switch on, so an update or a
+// restart does not lose the list. Entries already in memory are newer and win.
+async function readPutBack(userId: string | undefined): Promise<void> {
+  const who = userKey(userId);
+  if (putBackRead.has(who)) return;
+  putBackRead.add(who);
+  if (!keepPutBack || !hasUserStorage()) return;
+  let list: any = null;
+  try {
+    list = await spindle.userStorage.getJson(PUTBACK_FILE, { fallback: [], userId: userId });
+  } catch (_) {
+    list = null;
+  }
+  if (!Array.isArray(list)) return;
+  for (const one of list) {
+    if (!one || typeof one.text !== 'string' || one.chatId == null || one.messageId == null) continue;
+    const k = key(one.chatId, one.messageId);
+    if (before.has(k)) continue;
+    remember(
+      before,
+      k,
+      {
+        text: one.text,
+        at: Number(one.at) || 0,
+        swipeAt: Number.isFinite(one.swipeAt) ? one.swipeAt : undefined,
+        user: who,
+        chatId: one.chatId,
+        messageId: one.messageId,
+        after: String(one.after == null ? '' : one.after),
+      },
+      BEFORE_MAX,
+    );
+  }
+}
 
 // Messages this run has already refined, each against a mark of the text the
 // refine left in it. Whether that stops a later one is the reader's to say, in
@@ -4157,15 +4248,12 @@ async function saveRefined(
     }
     // Written down after the shape of the write is settled, so the way back
     // knows which kind it is undoing.
-    if (keepOriginal)
-      remember(
-        before,
-        k,
-        addedAt >= 0
-          ? { text: original, at: Date.now(), swipeAt: addedAt }
-          : { text: original, at: Date.now() },
-        BEFORE_MAX,
-      );
+    if (keepOriginal) {
+      const kept: Kept = { text: original, at: Date.now(), user: userKey(userId), chatId: chatId, messageId: m.id, after: next };
+      if (addedAt >= 0) kept.swipeAt = addedAt;
+      remember(before, k, kept, BEFORE_MAX);
+      if (keepPutBack) savePutBack(userId);
+    }
     await spindle.chat.updateMessage(chatId, m.id, patch);
     remember(refined, String(m.id), markOf(next), REFINED_MAX);
     replyTo(userId, {
@@ -5199,6 +5287,7 @@ function applyRules(s: any): void {
   minShrinkPct = Number(s.minShrinkPct);
   minShrinkPct = Number.isFinite(minShrinkPct) ? minShrinkPct : 40;
   keepOriginal = s.keepOriginal !== false;
+  keepPutBack = keepOriginal && !!s.keepPutBack;
   confirmBeforeSave = !!s.confirmBeforeSave;
   // The prompt layout. Only a list of block-shaped things is taken; a
   // corrupted or half-written value falls back to the default rather than
@@ -5489,7 +5578,7 @@ try {
 // account's turn. The rest, such as saving settings or Stop, never wait.
 const WORK = new Set([
   'reroll_added', 'refine_now', 'refine_all', 'refine_selection', 'snip_selection', 'try_refine',
-  'preview_prompt', 'apply_refine', 'undo_refine', 'jev_test',
+  'preview_prompt', 'apply_refine', 'undo_refine', 'jev_test', 'list_undoable', 'forget_undo',
 ]);
 spindle.onFrontendMessage((payload: any, userId?: string) =>
   payload && WORK.has(String(payload.type))
@@ -5555,6 +5644,13 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
       settingsUser = userId;
       rememberRules(userId, s);
       if (payload.keep) return;
+      // Keep them through an update, switched on or off: the file follows.
+      const putBackOn = s.keepOriginal !== false && !!s.keepPutBack;
+      const was = putBackWas.get(userKey(userId));
+      putBackWas.set(userKey(userId), putBackOn);
+      // Emptied once after a start as well, while it is off, in case it was
+      // turned off while this backend was not running.
+      if (putBackOn || was !== false) savePutBack(userId, putBackOn);
       // Written to the account as well as held here, so the next browser to
       // ask gets these rather than a fresh install. One write at a time per
       // account, in the order they were sent, so an older copy cannot finish
@@ -5883,9 +5979,37 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     }
 
     // Put a refined message back the way it was.
+    // The page asks for its list when it starts, so a reload, or leaving the
+    // app on a phone, does not lose what can still be put back. Only this
+    // account's are sent.
+    if (payload.type === 'list_undoable') {
+      await readPutBack(userId);
+      replyTo(userId, {
+        type: 'undoable_list',
+        requestId: payload.requestId,
+        list: keepOriginal
+          ? keptFor(userId).map((v) => ({ chatId: v.chatId, messageId: v.messageId, before: v.text, after: v.after, at: v.at }))
+          : [],
+      });
+      return;
+    }
+    // Dismissed in the panel, so it does not come back on the next reload.
+    if (payload.type === 'forget_undo') {
+      const items = Array.isArray(payload.items) ? payload.items.slice(0, 60) : [];
+      for (const one of items) {
+        if (!one) continue;
+        const k = key(one.chatId, one.messageId);
+        const v = before.get(k);
+        if (v && v.user === userKey(userId)) before.delete(k);
+      }
+      if (keepPutBack) savePutBack(userId);
+      return;
+    }
     if (payload.type === 'undo_refine') {
       const k = key(payload.chatId, payload.messageId);
-      const kept = before.get(k);
+      const found = before.get(k);
+      // Only the account that refined it can put it back.
+      const kept = found && found.user === userKey(userId) ? found : undefined;
       // Which message this is about, on every answer, the failures included.
       //
       // The panel keys what it can put back by chat and message, so an answer
@@ -5905,7 +6029,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         const msgs = await spindle.chat.getMessages(payload.chatId);
         const m = Array.isArray(msgs) ? msgs.find((x: any) => x && x.id === payload.messageId) : null;
         if (!m) {
-          before.delete(k);
+          dropKept(k, userId);
           refined.delete(String(payload.messageId));
           replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: false, gone: true, why: 'that message is gone' });
           return;
@@ -5918,7 +6042,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         const mark = refined.get(String(payload.messageId));
         const holds = String(m.content == null ? '' : m.content);
         if (mark != null && markOf(holds) !== mark) {
-          before.delete(k);
+          dropKept(k, userId);
           refined.delete(String(payload.messageId));
           replyTo(userId, {
             type: 'undo_result',
@@ -5960,7 +6084,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           patch.swipe_id = idx;
         }
         await spindle.chat.updateMessage(payload.chatId, m.id, patch);
-        before.delete(k);
+        dropKept(k, userId);
         refined.delete(String(payload.messageId));
         replyTo(userId, { type: 'undo_result', requestId: payload.requestId, ...about, ok: true, text: kept.text });
       } catch (e: any) {

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.35.3";
+const VERSION = "1.36.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -309,6 +309,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "asSwipe",
       "swipeSelector",
       "keepOriginal",
+      "keepPutBack",
       "confirmBeforeSave",
       "protectOn",
       "protectThinking",
@@ -715,6 +716,7 @@ const CONFIG = {
   // preset changes the pass that uses it.
   passNames: [] as string[],
   keepOriginal: true,
+  keepPutBack: false,
   confirmBeforeSave: false,
   toast: true,
   // A sound when a refine finishes, off until asked for. An extension that starts
@@ -2995,7 +2997,15 @@ const LIMIT_FIELDS: Field[] = [
     key: "keepOriginal",
     label: "Keep what a refine replaced",
     type: "bool",
-    hint: "On by default, and what makes Put it back possible. Held while the page is open and written nowhere.",
+    hint: "On by default, and what makes Put it back possible. Held in memory on your server, so a reload keeps it.",
+  },
+  {
+    key: "keepPutBack",
+    label: "Keep them through an update",
+    type: "bool",
+    under: true,
+    needs: { key: "keepOriginal" },
+    hint: "Off by default. Saves the replies you can put back on your server, so an update or a restart does not clear them.",
   },
   {
     key: "confirmBeforeSave",
@@ -3891,6 +3901,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       } catch (_) {}
       // The account's own copy, handed back to be held. Not written again.
       send({ type: "set_settings", settings: forBackend(), keep: true });
+      askUndoable();
       syncExtras();
       log("settings loaded from your account", true);
       paint();
@@ -3968,6 +3979,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   function armBackend() {
     send({ type: "set_settings", settings: forBackend(), keep: true });
     send({ type: "set_chats_off", chats: chatsOff.slice() });
+    askUndoable();
+  }
+
+  // The refines that can still be put back, asked of the backend, which holds
+  // them in memory while the page is reloaded and, with Keep them through an
+  // update on, on the account. Asked after the settings, so the answer is
+  // read with this account's switches.
+  function askUndoable() {
+    send({ type: "list_undoable", requestId: newId() });
+  }
+
+  // Tells the backend a refine was dismissed, so it does not come back on
+  // the next reload.
+  function forgetUndo(items: Array<{ chatId: any; messageId: any }>) {
+    if (items.length) send({ type: "forget_undo", items: items.map((x) => ({ chatId: x.chatId, messageId: x.messageId })) });
   }
 
   // ---- state the tab shows ----
@@ -8148,12 +8174,14 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
         }),
       );
-    // What a reload does to this list, so nobody finds it empty and thinks a
-    // refine was lost. The refined reply is in the chat either way.
+    // What a reload and an update do to this list, so nobody finds it empty
+    // and thinks a refine was lost. The refined reply is in the chat either
+    // way.
     const kept = note(
-      cfg.asSwipe
-        ? "This list clears when you reload. The original reply stays one swipe back in the chat."
-        : "This list clears when you reload. To always keep the original, turn on Add the refine as a swipe on the Limits tab.",
+      (cfg.keepPutBack
+        ? "This list is kept through a reload and an update."
+        : "This list is kept through a reload. An update or a restart clears it. To keep it then too, turn on Keep them through an update on the Limits tab.") +
+        (cfg.asSwipe ? " The original reply also stays one swipe back in the chat." : ""),
     );
     kept.setAttribute("data-arf-reloadnote", "1");
     wrap.appendChild(kept);
@@ -8162,6 +8190,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       const clear = button("Dismiss them all", false);
       clear.addEventListener("click", () => {
         for (const one of list) undoable.delete(undoKey(one.chatId, one.messageId));
+        forgetUndo(list);
         if (!undoHere().length) setBadge(null);
         paint();
       });
@@ -8527,6 +8556,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const seen = button("Dismiss", false);
     seen.addEventListener("click", () => {
       undoable.delete(undoKey(one.chatId, one.messageId));
+      forgetUndo([one]);
       if (!undoHere().length) setBadge(null);
       paint();
     });
@@ -16985,6 +17015,45 @@ export function setup(ctx: Ctx, overrides?: any) {
               paint();
               return;
             }
+            return;
+          }
+          // The refines the backend still holds, after a reload or a backend
+          // restart. Each one already here stays as it is. The rest join in
+          // order, kept to the same limits, with no card and no toast: they
+          // are what was already there before the page went away.
+          if (msg.type === "undoable_list") {
+            const list = Array.isArray(msg.list) ? msg.list : [];
+            let added = 0;
+            const all: Undo[] = [];
+            undoable.forEach((v) => all.push(v));
+            for (const one of list) {
+              if (!one || one.chatId == null || one.messageId == null) continue;
+              if (undoable.has(undoKey(one.chatId, one.messageId))) continue;
+              all.push({
+                chatId: one.chatId,
+                messageId: one.messageId,
+                before: String(one.before == null ? "" : one.before),
+                after: String(one.after == null ? "" : one.after),
+                at: Number(one.at) || 0,
+              });
+              added++;
+            }
+            if (!added) return;
+            all.sort((a, b) => a.at - b.at);
+            undoable.clear();
+            for (const one of all) undoable.set(undoKey(one.chatId, one.messageId), one);
+            while (undoable.size > UNDO_MAX) undoable.delete(undoable.keys().next().value as string);
+            const perChat = new Map<string, string[]>();
+            undoable.forEach((v, k) => {
+              const c = String(v.chatId);
+              if (!perChat.has(c)) perChat.set(c, []);
+              (perChat.get(c) as string[]).push(k);
+            });
+            perChat.forEach((keys) => {
+              for (let i = 0; i < keys.length - UNDO_PER_CHAT; i++) undoable.delete(keys[i]);
+            });
+            if (undoHere().length) setBadge(String(undoHere().length));
+            paint();
             return;
           }
           if (msg.type === "undo_result") {

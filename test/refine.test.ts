@@ -148,7 +148,9 @@ function host(
   // a check can have an older save finish after a newer one.
   const writeDelays: number[] = [];
   const shared: Record<string, string> = {};
-  const perUser: Record<string, any> = {};
+  // A store handed in stands in for what a backend that restarted, or was
+  // updated, finds already written.
+  const perUser: Record<string, any> = (opts as any).perUser || {};
   const forbidden: string[] = [];
   // The secure store, per account, and every call that went out to Jev.
   const vault: Record<string, string> = {};
@@ -2625,6 +2627,98 @@ describe("putting a refine back", () => {
     await wait(50);
     const done = h.sent.find((m) => m.type === "undo_result");
     expect(done.ok).toBe(false);
+  });
+});
+
+describe("refines you can put back, after a reload or an update", () => {
+  const listed = (h: any) => {
+    const got = h.sent.filter((m: any) => m.type === "undoable_list").pop();
+    return got ? got.list : null;
+  };
+
+  test("a page that was reloaded gets its list back from the backend", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    await h.front({ type: "list_undoable", requestId: "l1" });
+    await wait(20);
+    const list = listed(h);
+    expect(list.length).toBe(1);
+    expect(list[0].messageId).toBe("m2");
+    expect(list[0].before).toBe("She stepped through and, suddenly, the cold just hit her.");
+    expect(list[0].after).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("another account gets nothing of it, and cannot put it back", async () => {
+    const original = "She stepped through and, suddenly, the cold just hit her.";
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    await h.front({ type: "list_undoable", requestId: "l2" }, "u2");
+    await wait(20);
+    expect(listed(h)).toEqual([]);
+    await h.front({ type: "undo_refine", requestId: "u", chatId: "c1", messageId: "m2" }, "u2");
+    await wait(50);
+    expect(h.body("m2")).not.toBe(original);
+    // And the account that refined it still can.
+    await h.front({ type: "undo_refine", requestId: "u", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(original);
+  });
+
+  test("a dismissed one does not come back", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    await h.front({ type: "forget_undo", items: [{ chatId: "c1", messageId: "m2" }] });
+    await h.front({ type: "list_undoable", requestId: "l3" });
+    await wait(20);
+    expect(listed(h)).toEqual([]);
+  });
+
+  test("with Keep them through an update off, nothing is written", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const saved = h.perUser["u1:putback.json"];
+    expect(saved === undefined || (Array.isArray(saved) && saved.length === 0)).toBe(true);
+  });
+
+  test("with it on, the list is kept through a restart, and only for its account", async () => {
+    const original = "She stepped through and, suddenly, the cold just hit her.";
+    const h = await armed(["She stepped through and the cold hit her."], { keepPutBack: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.perUser["u1:putback.json"].length).toBe(1);
+    // A new backend, as after an update, with the same storage and chat.
+    const msgs = chat();
+    msgs[2].content = h.body("m2");
+    const again = host(msgs, [], { perUser: h.perUser } as any);
+    await again.front({ type: "set_settings", settings: { ...RULES, keepPutBack: true }, keep: true });
+    await again.front({ type: "list_undoable", requestId: "l4" });
+    await wait(30);
+    const list = listed(again);
+    expect(list.length).toBe(1);
+    expect(list[0].before).toBe(original);
+    await again.front({ type: "list_undoable", requestId: "l5" }, "u2");
+    await wait(30);
+    expect(listed(again)).toEqual([]);
+    await again.front({ type: "undo_refine", requestId: "u", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(again.body("m2")).toBe(original);
+    // Put back, it is gone from the store too.
+    await wait(30);
+    expect(again.perUser["u1:putback.json"]).toEqual([]);
+  });
+
+  test("turning it off empties what was kept", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { keepPutBack: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.perUser["u1:putback.json"].length).toBe(1);
+    await h.front({ type: "set_settings", settings: { ...RULES, keepPutBack: false } });
+    await wait(50);
+    expect(h.perUser["u1:putback.json"]).toEqual([]);
   });
 });
 

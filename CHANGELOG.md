@@ -6,11 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.35.3
+## 1.36.0
 
 _2026-10-09_
 
+### Added
+
+- **Keep them through an update.** A new switch on the Limits tab, under **Keep what a refine replaced**. It is off by default. On, the list of refines you can put back is saved on your server for your account, so an update or a restart of Lumiverse does not clear it. Turning it off empties the saved copy.
+
 ### Changed
+
+- **The list of refines you can put back comes back after a reload.** It cleared when you reloaded the page or left the app. Your server now holds it, and the tab asks for it when it starts. The line under the list says what keeps it and what clears it. Only your own account can see or put back your refines.
 
 - **The question before a refine is saved uses the refine card.** With **Ask before saving a refine** on, **Save this refine?** opened in a plain window with both versions in full. It now comes up on the same card a finished refine uses, with what changed marked in your colours and the switch between the two views. Its buttons are **Accept it** and **Turn it down**, the same as the tab. It comes up even with **Show the before and after on screen** off.
 - **No second question while the tab is open.** With the Auto Refine tab open, the question is asked only in the **Waiting for you** card at the top of the tab. That card now shows what changed, marked, instead of both versions in full.

@@ -57,7 +57,9 @@ Below them:
 
 - **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
   - Every before and after shows the words as they read in the chat. Markup tags, such as a colour tag, are left out of it. **Read it in full** shows the text exactly as written.
-  - The list clears when you reload. The refined replies stay in your chat.
+  - The list comes back after a reload, or when you leave the app and come back. Your server holds it in memory.
+  - An update or a restart of Lumiverse clears it, unless **Keep them through an update** is on, on the Limits tab.
+  - The refined replies stay in your chat either way.
   - To always keep a way back to the original, turn on **Add the refine as a swipe instead of writing over the reply** on the Limits tab.
   - The newest is open.
   - The others are in one fold, **Older refines**. Each is named by its time and its first words.
@@ -168,10 +170,13 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Several rewrites at once** writes several rewrites at the same time and keeps the first that passes every check. It is off by default, and each rewrite costs a call. See [Several rewrites at once](guardrails.md#several-rewrites-at-once).
 - **Add the refine as a swipe instead of writing over the reply** is off by default.
   - On, the rewrite is added as a new swipe, and the original stays one swipe back.
-  - This is the only way back that survives a reload.
+  - The original stays in the chat, so this way back survives an update and a restart with no other setting.
   - **Put it back** then removes that swipe. It refuses if you have added another swipe since.
   - **Your next / swipe button** is under it. You only need it if a Lumiverse update renames the swipe arrows. It works like **Where the input box is**, below.
-- **Keep what a refine replaced** keeps the original, so you can put it back. It is kept in memory until you reload.
+- **Keep what a refine replaced** keeps the original, so you can put it back. It is on by default.
+  - Your server holds it in memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
+  - **Keep them through an update** is under it, and off by default. On, the list is also saved on your server for your account, so an update or a restart does not clear it.
+  - Turning **Keep them through an update** off empties the saved copy. The list in memory stays until the next update or restart.
 - **Ask before saving a refine** holds every refine until you decide.
   - It appears in a **Waiting for you** card at the top of the tab, with **Accept it** and **Turn it down**. The card shows what changed, marked the same way as every before and after.
   - When the tab is not open, the question also comes up on screen as **Save this refine?**, on the same card a finished refine uses. It comes up even with **Show the before and after on screen** off. Answering either one answers both. Closing it without an answer leaves the question waiting in the tab.
