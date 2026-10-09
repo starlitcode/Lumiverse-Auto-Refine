@@ -17,10 +17,13 @@ _2026-10-09_
 ### Changed
 
 - **The list of refines you can put back comes back after a reload.** It cleared when you reloaded the page or left the app. Your server now holds it, and the tab asks for it when it starts. The line under the list says what keeps it and what clears it. Only your own account can see or put back your refines.
-
 - **The question before a refine is saved uses the refine card.** With **Ask before saving a refine** on, **Save this refine?** opened in a plain window with both versions in full. It now comes up on the same card a finished refine uses, with what changed marked in your colours and the switch between the two views. Its buttons are **Accept it** and **Turn it down**, the same as the tab. It comes up even with **Show the before and after on screen** off.
 - **No second question while the tab is open.** With the Auto Refine tab open, the question is asked only in the **Waiting for you** card at the top of the tab. That card now shows what changed, marked, instead of both versions in full.
 - **Markup tags are left out of every before and after.** A tag such as a colour tag showed as text among the words. The words now read as they do in the chat. If only the markup changed, the card says so. **Read it in full** still shows the text exactly as written.
+
+### Fixed
+
+- **All, None, Fold all and Open all move like a single press.** **All** and **None** turned every switch at once, with no slide. **Fold all** and **Open all** did the same with the blocks on the Prompt tab. Each switch now slides, and each block now folds and opens, the same as when you press one by itself.
 
 ---
 

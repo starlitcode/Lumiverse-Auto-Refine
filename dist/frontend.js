@@ -9600,7 +9600,13 @@ export function setup(ctx, overrides) {
                     ? others.concat(list.map((b) => head + String(b.id))).slice(-FOLDS_MAX)
                     : others;
                 persist();
-                paint();
+                syncFoldAll(view);
+                // Each block folds where it stands, as its own caret does. A rebuild
+                // would put every block in its new place with no movement.
+                wrap.querySelectorAll("[data-arf-block]").forEach((node) => {
+                    if (typeof node._arfFoldTo === "function")
+                        node._arfFoldTo(anyOpen);
+                });
             });
             view.appendChild(foldAll);
             syncFoldAll(view);
@@ -9724,9 +9730,9 @@ export function setup(ctx, overrides) {
         fold2.textContent = shut ? CARET_SHUT : CARET_OPEN;
         fold2.setAttribute("aria-expanded", shut ? "false" : "true");
         fold2.setAttribute("aria-label", (shut ? "Open " : "Close ") + blockLabel(b));
-        fold2.addEventListener("click", () => {
-            const now = !isShut(b);
-            setShut(b, now);
+        // Fold all calls this too, so every block folds and opens the same way,
+        // whether by its own caret or all at once.
+        const foldTo = (now) => {
             fold2.textContent = now ? CARET_SHUT : CARET_OPEN;
             fold2.setAttribute("aria-expanded", now ? "false" : "true");
             fold2.setAttribute("aria-label", (now ? "Open " : "Close ") + blockLabel(b));
@@ -9745,6 +9751,12 @@ export function setup(ctx, overrides) {
                         rest.hidden = true;
                 });
             }
+        };
+        wrap._arfFoldTo = foldTo;
+        fold2.addEventListener("click", () => {
+            const now = !isShut(b);
+            setShut(b, now);
+            foldTo(now);
         });
         left.appendChild(fold2);
         const box = document.createElement("input");
@@ -12570,35 +12582,41 @@ export function setup(ctx, overrides) {
     function partsPicker(which, list, repaintOnChange) {
         const wrap = el("div", "arf-col");
         wrap.setAttribute("data-arf-picker", which);
-        const chosen = list.filter((p) => partOn(which, p.id)).length;
         const bar = el("div", "arf-row");
+        const said = el("span", "arf-note arf-grow", "");
         const all = button("All", false);
         all.className += " arf-mini2";
         all.setAttribute("data-arf-pick", "all");
-        all.disabled = chosen === list.length;
-        all.style.opacity = all.disabled ? "0.45" : "1";
-        all.addEventListener("click", () => {
-            const next = {};
-            for (const p of list)
-                next[p.id] = true;
-            cfg[which] = next;
-            persist(true);
-            paint();
-        });
         const none = button("None", false);
         none.className += " arf-mini2";
         none.setAttribute("data-arf-pick", "none");
-        none.disabled = chosen === 0;
-        none.style.opacity = none.disabled ? "0.45" : "1";
-        none.addEventListener("click", () => {
+        const boxes = [];
+        const sayChosen = () => {
+            const chosen = list.filter((p) => partOn(which, p.id)).length;
+            said.textContent = chosen + " of " + list.length + " chosen";
+            all.disabled = chosen === list.length;
+            all.style.opacity = all.disabled ? "0.45" : "1";
+            none.disabled = chosen === 0;
+            none.style.opacity = none.disabled ? "0.45" : "1";
+        };
+        // Every box is turned where it stands, so each switch slides as it does
+        // under a finger. The rebuild waits for the knobs, as it does for one.
+        const pickAll = (on) => {
             const next = {};
             for (const p of list)
-                next[p.id] = false;
+                next[p.id] = on;
             cfg[which] = next;
             persist(true);
-            paint();
-        });
-        bar.appendChild(el("span", "arf-note arf-grow", chosen + " of " + list.length + " chosen"));
+            for (const box of boxes)
+                box.checked = on;
+            sayChosen();
+            if (repaintOnChange !== false)
+                settle();
+        };
+        all.addEventListener("click", () => pickAll(true));
+        none.addEventListener("click", () => pickAll(false));
+        sayChosen();
+        bar.appendChild(said);
         bar.appendChild(all);
         bar.appendChild(none);
         wrap.appendChild(bar);
@@ -12617,9 +12635,11 @@ export function setup(ctx, overrides) {
             box.setAttribute("aria-label", p.label);
             box.addEventListener("change", () => {
                 setPart(which, p.id, !!box.checked);
+                sayChosen();
                 if (repaintOnChange !== false)
                     settle();
             });
+            boxes.push(box);
             lab.appendChild(box);
             row.appendChild(lab);
             row.appendChild(note(p.what));

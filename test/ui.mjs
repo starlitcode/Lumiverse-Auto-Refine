@@ -5435,6 +5435,8 @@ console.log("\nchoosing what goes where");
         .querySelector('#drawer [data-arf-picker="resetParts"] [data-arf-pick="none"]')
         .click();
     });
+    // The switches slide first, and the rest of the tab catches up after them.
+    await page.waitForTimeout(400);
     await settle(page);
     const off = await page.evaluate(() => {
       const btn = document.querySelector("#drawer [data-arf-reset]");
@@ -5442,6 +5444,83 @@ console.log("\nchoosing what goes where");
     });
     ok("reset with nothing chosen cannot be pressed", off.disabled, off.label);
   });
+}
+
+// ---- All, None and Fold all move each one ----
+// A press on one of these moves every switch or block as a press on one does.
+// A rebuild puts them all in their new place in one frame, with no movement.
+console.log("\nAll, None and Fold all move each one");
+for (const size of [
+  { name: "phone", viewport: { width: 412, height: 860 }, touch: true },
+  { name: "laptop", viewport: { width: 1280, height: 860 }, touch: false },
+]) {
+  const ok2 = (what, pass, detail) => ok(size.name + ": " + what, pass, detail);
+  const errors = await inTab(browser, { viewport: size.viewport, touch: size.touch }, async (page) => {
+    await goTab(page, "Setup");
+    await page.evaluate(() => {
+      const fold = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
+        /What goes in the file/.test(h.textContent),
+      );
+      fold.click();
+    });
+    await settle(page);
+    const slid = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const box = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
+      const knob = () => parseFloat(getComputedStyle(box, "::after").left);
+      const from = knob();
+      document.querySelector('#drawer [data-arf-picker="exportParts"] [data-arf-pick="none"]').click();
+      await wait(60);
+      const mid = knob();
+      const kept = box.isConnected;
+      await wait(700);
+      const now = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
+      const said = document.querySelector('#drawer [data-arf-picker="exportParts"] .arf-note').textContent;
+      return { from, mid, end: parseFloat(getComputedStyle(now, "::after").left), kept, off: !now.checked, said };
+    });
+    ok2("None slides each switch off where it stands", slid.kept && slid.mid < slid.from && slid.mid > slid.end, JSON.stringify(slid));
+    ok2("and every switch ends off", slid.off && /^0 of /.test(slid.said), JSON.stringify(slid));
+    const back = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const box = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
+      document.querySelector('#drawer [data-arf-picker="exportParts"] [data-arf-pick="all"]').click();
+      await wait(60);
+      return { kept: box.isConnected, on: box.checked };
+    });
+    ok2("All turns them on the same way", back.kept && back.on, JSON.stringify(back));
+
+    await goTab(page, "Prompt");
+    await settle(page);
+    const folds = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+      const block = document.querySelectorAll("#drawer .arf-block")[1];
+      const body = block.querySelector("[data-arf-blockbody]");
+      const full = body.getBoundingClientRect().height;
+      document.querySelector("#drawer [data-arf-foldall]").click();
+      await frame();
+      await frame();
+      await wait(60);
+      const mid = body.isConnected ? body.getBoundingClientRect().height : -1;
+      await wait(800);
+      return { full, mid, kept: block.isConnected, hidden: body.hidden };
+    });
+    ok2("Fold all closes each block over a moment", folds.kept && folds.mid > 0 && folds.mid < folds.full, JSON.stringify(folds));
+    ok2("and each ends folded", folds.hidden, JSON.stringify(folds));
+    const opens = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const block = document.querySelectorAll("#drawer .arf-block")[1];
+      const body = block.querySelector("[data-arf-blockbody]");
+      document.querySelector("#drawer [data-arf-foldall]").click();
+      await wait(60);
+      const mid = body.getBoundingClientRect().height;
+      await wait(800);
+      return { mid, end: body.getBoundingClientRect().height, kept: block.isConnected, says: document.querySelector("#drawer [data-arf-foldall]").textContent };
+    });
+    ok2("Open all opens each block over a moment", opens.kept && opens.mid > 0 && opens.mid < opens.end, JSON.stringify(opens));
+    ok2("and the bar offers to fold them again", /Fold all/.test(opens.says), opens.says);
+  });
+  ok2("no errors pressing All, None or Fold all", errors.length === 0, errors.join("\n         "));
 }
 
 console.log("\ntaking more than one file at a time");
