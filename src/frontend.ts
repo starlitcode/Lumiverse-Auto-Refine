@@ -4467,6 +4467,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   let liveEls: { dot: any; text: any } | null = null;
   let clock: any = null;
   let runStartedAt = 0;
+  // When the model call running now began. The backend gives each call to the
+  // model the whole wait, so a refine that asks again after a failed check, or
+  // after the provider turned the call away, has the full wait again. The
+  // countdown and the give-up timer are measured from here for that reason.
+  let callFrom = 0;
   let lastRun: { ms: number; ok: boolean; why: string } | null = null;
   // Counts for the Log tab. Session only: this answers "is it doing anything",
   // not "what did it do last week".
@@ -4726,8 +4731,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     // to, and a countdown that never ran out would be a lie either way.
     const cap = waitCap();
     if (!cap) return "Refining" + clockPart;
-    const left = Math.max(0, cap - secs);
-    return "Refining" + clockPart + (secs > 8 ? ", " + left.toFixed(0) + "s left" : "");
+    // The clock is the whole refine. What is left is this call's, so on a
+    // second try the two do not add up to the wait, and the line says so.
+    const from = callFrom || runStartedAt;
+    const left = Math.max(0, cap - (from ? (Date.now() - from) / 1000 : 0));
+    const later = !!runStartedAt && from - runStartedAt > 1000;
+    return "Refining" + clockPart + (secs > 8 ? ", " + left.toFixed(0) + "s left" + (later ? " on this try" : "") : "");
   }
 
   // The last line of defence. Everything else can fail politely; this catches
@@ -4806,6 +4815,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   disposers.push(clearSweepWatch);
 
   let deadman: any = null;
+  // The second model is given 20 seconds by the backend. This is that and a
+  // little over, so the panel never gives up on a reading still in time.
+  const JUDGE_ROOM_MS = 25000;
   // The longest this waits for anything, whatever the setting says. Every other
   // value is already held under it, since a wait longer than an hour is capped
   // to this on the way in.
@@ -4913,6 +4925,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   ) {
     if (on && !busy) {
       runStartedAt = Date.now();
+      callFrom = runStartedAt;
       awayInRun = typeof document !== "undefined" && document.visibilityState === "hidden";
       streamed = 0;
       // What is on screen belongs to the refine that is running. What the Log
@@ -4931,6 +4944,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       deadFrom = 0;
       deadAllow = 0;
       deadAt = 0;
+      callFrom = 0;
       awayInRun = false;
     }
     if (!on && busy && runStartedAt) lastRunMs = Date.now() - runStartedAt;
@@ -5327,6 +5341,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     // once, rather than at each of the places that hide something.
     ".arf [hidden]{display:none!important}" +
     ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
+    // The status line keeps its dot beside the first line of words. Left to
+    // wrap like any row, long words moved to a line of their own and the dot
+    // sat on a line by itself above them.
+    // 5px puts the 7px dot in the middle of a 12px line at 1.45.
+    ".arf-statusline{flex-wrap:nowrap;align-items:flex-start}" +
+    ".arf-statusline>.arf-dot{margin-top:5px}" +
+    ".arf-statusline>span:last-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}" +
     // The refine buttons above the tabs, in two groups with a heading each:
     // replies, then your own messages. Two equal columns, so the buttons line
     // up rather than wrapping at whatever width each label happens to be. A
@@ -5843,13 +5864,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "font:12px/1.45 var(--lumiverse-font-family,system-ui);" +
-    // Fades in where it opens and out where it stood, rather than appearing and
-    // vanishing between two frames. It arrives over the rows below the one it
-    // belongs to, and something landing on top of what you were reading with no
-    // travel at all reads as the page having flinched.
-    "opacity:0;transition:opacity 140ms ease-out}" +
-    '.arf-hint[data-arf-open]{opacity:1}' +
-    "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none}}" +
+    // Fades in where it opens and out where it stood, the same as the card
+    // that comes up when a refine finishes, and slides 4px from the row it
+    // belongs to: down when it opens under the row, up when it opens over it.
+    "opacity:0;transform:translateY(-4px);transition:opacity 140ms ease-out,transform 140ms ease-out}" +
+    '.arf-hint[data-arf-above]{transform:translateY(4px)}' +
+    '.arf-hint[data-arf-open]{opacity:1;transform:none}' +
+    "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none;transform:none}}" +
     // The card that comes up on the page when a refine finishes, so the answer to
     // "what did it change" is in front of you rather than behind a tab you have
     // to know to open. Bottom right on a desktop, across the bottom on a phone,
@@ -6476,6 +6497,34 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
+  // Cut and added words take their colour from the page, so a new colour
+  // reaches every one of them at once. A word the readability pass repainted
+  // still holds the colour it worked out from the old one, so those are
+  // measured again. Once a frame at most, since a slider sends many changes.
+  let wordsSoon = 0;
+  function reInkWords() {
+    if (wordsSoon) return;
+    const run = () => {
+      wordsSoon = 0;
+      try {
+        const words = document.querySelectorAll(".arf-cut,.arf-add");
+        for (let i = 0; i < words.length; i++) {
+          clearInk(words[i]);
+          sweepReadable(words[i]);
+        }
+      } catch (_) {}
+    };
+    try {
+      wordsSoon = requestAnimationFrame(run);
+    } catch (_) {
+      run();
+    }
+  }
+  disposers.push(() => {
+    if (wordsSoon) cancelAnimationFrame(wordsSoon);
+    wordsSoon = 0;
+  });
+
   function reInk() {
     if (tab && tab.root) {
       const root = tab.root as HTMLElement;
@@ -6764,6 +6813,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     placeFixed(box, left, top);
     try {
+      if (above) box.setAttribute("data-arf-above", "1");
+      // The closed state is read first, so the browser has something to move
+      // from and the box fades in rather than appearing.
+      void box.offsetWidth;
       box.setAttribute("data-arf-open", "1");
     } catch (_) {}
 
@@ -7774,7 +7827,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Built as the clock would write it, so a repaint in the middle of a refine
     // does not throw the line back to what it said before the refine started.
     const shown = liveNow();
-    const line = el("div", "arf-row arf-note");
+    const line = el("div", "arf-row arf-note arf-statusline");
     const dot = el("span", shown.dot);
     const words = el("span", "", shown.text);
     line.appendChild(dot);
@@ -12270,24 +12323,35 @@ export function setup(ctx: Ctx, overrides?: any) {
     editor.appendChild(sample);
     wrap.appendChild(editor);
 
+    // The sliders keep their own hue, saturation and lightness. A colour code
+    // holds less than they do: hue 360 is the same red as hue 0, and with no
+    // saturation there is no hue at all. Read back from the code, a slider at
+    // its far end would jump to 0, and the other two would move a step each
+    // time one of them was dragged. So the sliders set the code, and the code
+    // sets the sliders only when it comes from somewhere else.
+    let hsl = hexHsl(now());
+    const showSliders = () => {
+      for (const part of ["h", "s", "l"] as Array<"h" | "s" | "l">) {
+        sliders[part].value = String(hsl[part]);
+        shown[part].textContent = String(hsl[part]) + (part === "h" ? "" : "%");
+      }
+    };
     // Every part shows the colour in use.
-    const paint = () => {
+    const paint = (fromSliders?: boolean) => {
       const hex = now();
       swatch.style.background = hex;
       back.hidden = !own();
       if (document.activeElement !== code) code.value = hex;
-      const hsl = hexHsl(hex);
-      for (const part of ["h", "s", "l"]) {
-        if (document.activeElement !== sliders[part]) sliders[part].value = String(hsl[part as "h" | "s" | "l"]);
-        shown[part].textContent = String(sliders[part].value) + (part === "h" ? "" : "%");
-      }
+      if (!fromSliders) hsl = hexHsl(hex);
+      showSliders();
     };
     // A colour taken from any part of the editor.
-    function take(hex: string, save: boolean) {
+    function take(hex: string, save: boolean, fromSliders?: boolean) {
       cfg[key] = hex.toLowerCase();
       bad.textContent = "";
-      paint();
+      paint(fromSliders);
       persist(save);
+      reInkWords();
     }
     code.addEventListener("input", () => {
       const hex = colourCode(code.value);
@@ -12301,16 +12365,20 @@ export function setup(ctx: Ctx, overrides?: any) {
         code.value = now();
       }
     });
-    for (const part of ["h", "s", "l"]) {
-      const fromSliders = () => hslHex(Number(sliders.h.value), Number(sliders.s.value), Number(sliders.l.value));
-      sliders[part].addEventListener("input", () => take(fromSliders(), false));
-      sliders[part].addEventListener("change", () => take(fromSliders(), true));
+    for (const part of ["h", "s", "l"] as Array<"h" | "s" | "l">) {
+      const slide = (save: boolean) => {
+        hsl = { ...hsl, [part]: Number(sliders[part].value) };
+        take(hslHex(hsl.h, hsl.s, hsl.l), save, true);
+      };
+      sliders[part].addEventListener("input", () => slide(false));
+      sliders[part].addEventListener("change", () => slide(true));
     }
     back.addEventListener("click", () => {
       cfg[key] = "";
       bad.textContent = "";
       paint();
       persist(true);
+      reInkWords();
     });
     swatch.addEventListener("click", () => {
       const open = editor.hidden;
@@ -16282,6 +16350,15 @@ export function setup(ctx: Ctx, overrides?: any) {
             // Time spent waiting its turn is not time the backend has gone
             // missing for, so each of these gives the give-up timer more room.
             if (msg.stage === "queued") armDeadman(Number(msg.waitMs) || 8000);
+            // A new call to the refine model has the whole wait again in the
+            // backend, so the countdown and the give-up timer start again too.
+            // The second model has its own shorter limit, and is given room
+            // for it.
+            if (msg.stage === "asking" || msg.stage === "thinking") {
+              callFrom = Date.now();
+              armDeadman(0, true);
+            }
+            if (msg.stage === "judging" || msg.stage === "rechecking") armDeadman(JUDGE_ROOM_MS, true);
             // The working, as it is written. Empty on a prompt that does not
             // ask for any, which is most of them, and then nothing opens.
             // The working as it is written, already cut out of its tags by the
@@ -17045,7 +17122,6 @@ export const __testing = {
   OWN_NAME_KEYS,
   SIZE_PICKS,
   sizeInUse,
-  sizeServed,
   homeHost,
   SECOND_MODELS,
   splitSelectorList,

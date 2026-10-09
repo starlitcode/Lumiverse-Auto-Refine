@@ -4125,6 +4125,108 @@ console.log("\nwhen the tab sleeps past the time to give up");
   });
 }
 
+console.log("\nthe status dot stays beside a long status line");
+{
+  // A long line of status wraps under itself. The dot stays at the start of
+  // its first line rather than sitting alone above it.
+  for (const [label, viewport, touch] of [["phone", { width: 360, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Log");
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      const got = await page.evaluate(async () => {
+        Array.from(document.querySelectorAll("#drawer button"))
+          .find((b) => /Refine the latest reply/.test(b.textContent))
+          .click();
+        const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+        window.__fromBackend({ type: "refine_ack", requestId: id });
+        window.__fromBackend({ type: "refine_progress", stage: "waiting", waitMs: 29000, attempt: 2, of: 2 });
+        await new Promise((r) => setTimeout(r, 100));
+        const dot = document.querySelector("#drawer .arf-dot");
+        const words = dot && dot.nextElementSibling;
+        if (!dot || !words) return null;
+        const d = dot.getBoundingClientRect();
+        const w = words.getBoundingClientRect();
+        const lines = words.getClientRects().length && Math.round(w.height / parseFloat(getComputedStyle(words).lineHeight));
+        return {
+          text: words.textContent,
+          lines,
+          beside: d.right <= w.left + 1,
+          firstLine: d.top >= w.top - 1 && d.bottom <= w.top + parseFloat(getComputedStyle(words).lineHeight) + 1,
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+      ok(label + ": the status line is there", !!got && /would not take the call/.test(got.text), JSON.stringify(got));
+      if (label === "phone") ok("phone: the line is long enough to wrap, or this proves nothing", !!got && got.lines >= 2, JSON.stringify(got));
+      ok(label + ": the dot sits beside the words, on their first line", !!got && got.beside && got.firstLine, JSON.stringify(got));
+      ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
+    });
+  }
+}
+
+console.log("\nthe time left is for the call that is running");
+{
+  // The backend gives each call to the model the whole wait. A refine that
+  // asks again, after the provider turned it away or after a failed check,
+  // has the whole wait again, so the time left and the give-up timer start
+  // again with each call. The clock beside it is the whole refine.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, timeoutSecs: 100 } }, async (page) => {
+      await goTab(page, "Log");
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      const line = () => page.evaluate(() => (document.querySelector("#drawer").textContent.match(/Refining, \d+s(, \d+s left( on this try)?)?/) || [""])[0]);
+      const ahead = (secs) =>
+        page.evaluate((secs) => {
+          window.__ahead = (window.__ahead || 0) + secs * 1000;
+          if (!window.__realNow) {
+            window.__realNow = Date.now.bind(Date);
+            Date.now = () => window.__realNow() + window.__ahead;
+          }
+        }, secs);
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll("#drawer button"))
+          .find((b) => /Refine the latest reply/.test(b.textContent))
+          .click();
+        const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+        window.__fromBackend({ type: "refine_ack", requestId: id });
+        window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      });
+      await ahead(60);
+      await page.waitForTimeout(500);
+      const first = await line();
+      ok(label + ": on the first call the time left is the wait less the clock", /^Refining, 6[01]s, (40|39)s left$/.test(first), first);
+      await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "waiting", waitMs: 20000, attempt: 1, of: 2 }));
+      await ahead(20);
+      await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
+      await ahead(30);
+      await page.waitForTimeout(500);
+      const second = await line();
+      ok(label + ": on the next call the whole wait starts again", /^Refining, 11[01]s, (70|69)s left on this try$/.test(second), second);
+      await ahead(50);
+      await page.waitForTimeout(600);
+      const still = await page.evaluate(() => ({
+        busy: /Refining/.test(document.querySelector("#drawer").textContent),
+        toasts: (window.__toasts || []).join(" | "),
+      }));
+      ok(label + ": the panel does not give up on a call still inside its wait", still.busy && !/never came back/.test(still.toasts), JSON.stringify(still));
+      await ahead(70);
+      await page.waitForTimeout(600);
+      const gone = await page.evaluate(() => ({
+        busy: /Refining/.test(document.querySelector("#drawer").textContent),
+        toasts: (window.__toasts || []).join(" | "),
+      }));
+      ok(label + ": and gives up once that call is past it", !gone.busy && /never came back/.test(gone.toasts), JSON.stringify(gone));
+    });
+  }
+}
+
 console.log("\nUse the built-in list, when it is already the built-in list");
 {
   // Pressed with the built-in list already in the box, nothing changes and the
@@ -8088,6 +8190,35 @@ console.log("\na block's footer");
   });
 }
 
+// ---- a description fades and slides in ----
+console.log("\na description fades and slides in");
+{
+  // 4px from the row it belongs to, with the fade, the same as Auto Retry's.
+  // With Reduce motion on, it appears at once.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const reduceMotion of [false, true]) {
+      await inTab(browser, { viewport, touch, saved: { enabled: true, reduceMotion } }, async (page) => {
+        await goTab(page, "Limits");
+        await settle(page);
+        const q = page.locator("#drawer .arf-q").first();
+        await q.scrollIntoViewIfNeeded();
+        if (touch) await q.tap();
+        else await q.click();
+        const got = await page.evaluate(async () => {
+          const el = document.querySelector(".arf-hint[data-arf-open]");
+          if (!el) return null;
+          const moving = el.getAnimations().map((a) => a.transitionProperty).sort();
+          await new Promise((r) => setTimeout(r, 300));
+          return { moving, rest: getComputedStyle(el).transform, opacity: getComputedStyle(el).opacity };
+        });
+        if (!reduceMotion) ok(label + ": the description fades and slides", !!got && got.moving.join() === "opacity,transform", JSON.stringify(got));
+        else ok(label + ": with Reduce motion on, it appears at once", !!got && got.moving.length === 0, JSON.stringify(got));
+        ok(label + ": and comes to rest in its own place, fully shown", !!got && got.rest === "none" && got.opacity === "1", JSON.stringify(got));
+      });
+    }
+  }
+}
+
 // ---- teardown leaves the page as it found it ----
 console.log("\nteardown");
 {
@@ -11898,6 +12029,70 @@ console.log("\nyour own colours for cut and added words");
       await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
       await page.waitForTimeout(400);
       ok(label + ": the swatch shuts the editor again", !(await read("cutColour")).open, "");
+    });
+  }
+  // The sliders keep their own place. A slider at its far end stays there,
+  // and moving one does not move the others.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, cutColour: "#ff0040" } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.waitForTimeout(350);
+      const slide = (part, value) =>
+        page.evaluate(({ part, value }) => {
+          const r = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-colourpart="' + part + '"]');
+          r.value = String(value);
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+          r.dispatchEvent(new Event("change", { bubbles: true }));
+          r.blur();
+        }, { part, value });
+      const sliders = () =>
+        page.evaluate(() => Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColour"] [data-arf-colourpart]')).map((r) => r.value).join());
+      const values = () =>
+        page.evaluate(() => Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColour"] .arf-colourvalue')).map((r) => r.textContent).join());
+      await slide("h", 360);
+      await settle(page);
+      ok(label + ": Hue moved all the way up stays at the top", (await sliders()).split(",")[0] === "360" && (await values()).split(",")[0] === "360", await sliders());
+      await slide("h", 200);
+      await slide("s", 37);
+      const seen = [];
+      for (const l of [5, 23, 41, 67, 88, 0, 100, 50]) {
+        await slide("l", l);
+        seen.push(await sliders());
+      }
+      ok(label + ": moving Lightness leaves Hue and Saturation where they are", seen.every((v, i) => v === "200,37," + [5, 23, 41, 67, 88, 0, 100, 50][i]), JSON.stringify(seen));
+      await slide("s", 0);
+      await slide("s", 80);
+      ok(label + ": Saturation at 0 and back keeps the hue", (await sliders()).startsWith("200,80,"), await sliders());
+    });
+  }
+  // A word the readability pass repainted takes the new colour once it is
+  // changed. #200008 is too dark to read on the stub's dark panel, so the
+  // pass makes it lighter. #00ff88 can be read as it is.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, cutColour: "#200008" } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.waitForTimeout(350);
+      await settle(page);
+      const sample = () =>
+        page.evaluate(() => {
+          const w = document.querySelector('#drawer [data-arf-row="cutColour"] .arf-colouredit .arf-cut');
+          return { colour: getComputedStyle(w).color, painted: w.getAttribute("data-arf-painted") };
+        });
+      const dark = await sample();
+      ok(label + ": a colour too dark to read is made lighter in the preview", dark.painted === "ink" && dark.colour !== "rgb(32, 0, 8)", JSON.stringify(dark));
+      await page.evaluate(() => {
+        const code = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-field="cutColour"]');
+        code.value = "#00ff88";
+        code.dispatchEvent(new Event("input", { bubbles: true }));
+        code.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await settle(page);
+      const bright = await sample();
+      ok(label + ": the preview shows the new colour, not the old one", bright.colour === "rgb(0, 255, 136)" && bright.painted == null, JSON.stringify(bright));
     });
   }
   // A setting that is not a colour, such as one from somebody else's file,

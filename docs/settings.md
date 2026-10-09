@@ -113,6 +113,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Give up waiting after** stops a refine that has not come back.
   - The default is four minutes. The most is an hour. At 0, it waits the full hour.
   - Four minutes is long on purpose. A fast model answers in seconds. A reasoning model on a high setting, or a local model loading, can take minutes, and stopping it early throws that work away.
+  - The wait is for each call to the model. A refine that asks again, after a failed check or after the provider turned the call away, has the whole wait again. The status line then shows the time left as "left on this try". The clock beside it is the whole refine.
   - You can end a refine yourself at any time: **Stop this refine** is always there.
   - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab. A reply that finished while the tab was asleep can miss the panel, so check the reply itself.
 - **Input price, per million tokens** and **Output price, per million tokens** are your provider's prices.
@@ -264,7 +265,8 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 
 **Reduce motion** stops everything in Auto Refine from moving or fading. It is off by default.
 
-- On, the panel, the card, the floating button and every eye change at once, with no fade or slide.
+- On, the panel, the card, the descriptions, the floating button and every eye change at once, with no fade or slide.
+- With it off, the card, the full-size editor and a setting's description fade in and slide a little, and fade out when they close. Nothing grows.
 - The eye works as it does with **Keep the eye still**: shut at rest and open while a refine runs.
 - A device set to reduce motion gets the same, with the switch off.
 - With the switch off, the floating button shrinks a little when pressed, and a switch's knob springs past its end and back. With it on, both keep their size and place.

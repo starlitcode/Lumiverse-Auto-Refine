@@ -29,6 +29,12 @@ _2026-10-09_
 - If you were on any of these three, the panel offers you the new one. If you wrote your own, nothing changes.
 - **Cut words are drawn at full strength.** They were drawn a little faded, so they looked duller than your theme's danger colour. They now use the colour as it is, and keep the line through them.
 - **A scroll bar's thumb is at least 28 pixels tall.** In a box holding a very long text, such as a long block in the raw view, the thumb shrank to a short dash. It now keeps a size you can see and grab.
+- **A setting's description slides as it fades.** It faded in and out where it stood. It now also slides 4 pixels from the setting it belongs to, the same as the card. With Reduce motion on, it appears and goes at once.
+
+### Fixed
+
+- **The time left on a refine that tried again.** The backend gives each call to the model the whole wait. The status line counted the time left from the start of the refine, so after a failed check or a provider wait it could show "0s left" while the model was still working. The panel could then say the refine never came back. The time left and the give-up timer now start again with each call. The line says "left on this try" from the second call on.
+- **The dot on the status line stays beside the words.** When the status was long enough to wrap, such as while waiting for the provider, the dot sat alone on its own line above the words. It now stays at the start of the first line.
 
 ---
 
