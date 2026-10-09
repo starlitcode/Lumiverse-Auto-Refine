@@ -146,8 +146,12 @@ const putBackWrites = new Map<string, Promise<void>>();
 // What each account's switch was at its last settings save, so the file is
 // emptied once when it goes off and not written at all while it stays off.
 const putBackWas = new Map<string, boolean>();
-function savePutBack(userId: string | undefined, on: boolean = keepPutBack): Promise<void> {
-  if (!hasUserStorage()) return Promise.resolve();
+//
+// The saved copy is read in before a write, so a refine saved before the panel
+// asks for the list cannot write over the list kept from before a restart.
+async function savePutBack(userId: string | undefined, on: boolean = keepPutBack): Promise<void> {
+  if (!hasUserStorage()) return;
+  if (on) await readPutBack(userId, true);
   const list = on ? keptFor(userId) : [];
   return inTurn(putBackWrites, userId, async () => {
     try {
@@ -168,11 +172,11 @@ function dropKept(k: string, userId: string | undefined) {
 
 // Read once per account after a start, with the switch on, so an update or a
 // restart does not lose the list. Entries already in memory are newer and win.
-async function readPutBack(userId: string | undefined): Promise<void> {
+async function readPutBack(userId: string | undefined, on: boolean = keepPutBack): Promise<void> {
   const who = userKey(userId);
   if (putBackRead.has(who)) return;
   putBackRead.add(who);
-  if (!keepPutBack || !hasUserStorage()) return;
+  if (!on || !hasUserStorage()) return;
   let list: any = null;
   try {
     list = await spindle.userStorage.getJson(PUTBACK_FILE, { fallback: [], userId: userId });

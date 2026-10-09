@@ -117,9 +117,14 @@ const putBackWrites = new Map();
 // What each account's switch was at its last settings save, so the file is
 // emptied once when it goes off and not written at all while it stays off.
 const putBackWas = new Map();
-function savePutBack(userId, on = keepPutBack) {
+//
+// The saved copy is read in before a write, so a refine saved before the panel
+// asks for the list cannot write over the list kept from before a restart.
+async function savePutBack(userId, on = keepPutBack) {
     if (!hasUserStorage())
-        return Promise.resolve();
+        return;
+    if (on)
+        await readPutBack(userId, true);
     const list = on ? keptFor(userId) : [];
     return inTurn(putBackWrites, userId, async () => {
         try {
@@ -141,12 +146,12 @@ function dropKept(k, userId) {
 }
 // Read once per account after a start, with the switch on, so an update or a
 // restart does not lose the list. Entries already in memory are newer and win.
-async function readPutBack(userId) {
+async function readPutBack(userId, on = keepPutBack) {
     const who = userKey(userId);
     if (putBackRead.has(who))
         return;
     putBackRead.add(who);
-    if (!keepPutBack || !hasUserStorage())
+    if (!on || !hasUserStorage())
         return;
     let list = null;
     try {

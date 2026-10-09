@@ -2711,6 +2711,19 @@ describe("refines you can put back, after a reload or an update", () => {
     expect(again.perUser["u1:putback.json"]).toEqual([]);
   });
 
+  test("a save before the list is asked for keeps what was saved before a restart", async () => {
+    const earlier = { text: "The lamp swung twice and went still.", at: 1, user: "u1", chatId: "c7", messageId: "m7", after: "The lamp swung and stopped." };
+    const h = await armed(["She stepped through and the cold hit her."], { keepPutBack: true }, chat(), {
+      perUser: { "u1:putback.json": [earlier] },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.perUser["u1:putback.json"].map((k: any) => k.messageId)).toEqual(["m7", "m2"]);
+    await h.front({ type: "list_undoable", requestId: "l6" });
+    await wait(20);
+    expect(listed(h).map((k: any) => k.messageId)).toEqual(["m7", "m2"]);
+  });
+
   test("turning it off empties what was kept", async () => {
     const h = await armed(["She stepped through and the cold hit her."], { keepPutBack: true });
     await h.ended({ chatId: "c1", messageId: "m2" });
