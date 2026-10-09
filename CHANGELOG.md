@@ -29,6 +29,7 @@ _2026-10-09_
 - If you were on any of these three, the panel offers you the new one. If you wrote your own, nothing changes.
 - **Cut words are drawn at full strength.** They were drawn a little faded, so they looked duller than your theme's danger colour. They now use the colour as it is, and keep the line through them.
 - **A scroll bar's thumb is at least 28 pixels tall.** In a box holding a very long text, such as a long block in the raw view, the thumb shrank to a short dash. It now keeps a size you can see and grab.
+- **Rows that hang off a switch open and close smoothly.** Their space opened in one step, so the settings below jumped down. The space now opens over a moment, and the rows fade in and slide 4 pixels into place. Closing, the words fade first and then the space closes. Switching back mid-way turns round from where it is. With Reduce motion on, they appear and go at once.
 - **A setting's description slides as it fades.** It faded in and out where it stood. It now also slides 4 pixels from the setting it belongs to, the same as the card. With Reduce motion on, it appears and goes at once.
 
 ### Fixed

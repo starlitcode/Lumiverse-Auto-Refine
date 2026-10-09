@@ -5341,6 +5341,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // once, rather than at each of the places that hide something.
     ".arf [hidden]{display:none!important}" +
     ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
+    ".arf-colourbad{font-size:12px;line-height:1.45;color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     // The status line keeps its dot beside the first line of words. Left to
     // wrap like any row, long words moved to a line of their own and the dot
     // sat on a line by itself above them.
@@ -5918,9 +5919,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A row switched on where somebody is already looking. It fades down into
     // place rather than appearing between two frames, which is the difference
     // between a row arriving and the page having flinched.
-    ".arf-arrive{animation:arf-arrive 260ms cubic-bezier(.2,.8,.28,1) both}" +
-    "@keyframes arf-arrive{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}" +
-    "@media (prefers-reduced-motion: reduce){.arf-arrive{animation:none}}" +
     // On a phone it spans the width and sits above the input bar rather than on
     // top of it, so it can be read while you carry on.
     "@media (max-width: 560px){.arf-pop{left:12px;right:12px;bottom:76px;" +
@@ -7503,10 +7501,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (going === away) continue;
         row._arfGoing = away;
         if (!away) {
+          const wasHidden = row.hidden;
           row.hidden = false;
-          // A close still running is dropped rather than waited out.
-          clearFold(row);
-          arrive(row);
+          // A close still running turns round from where it is.
+          unfold(row, wasHidden);
           continue;
         }
         // Closing rather than vanishing. A switch turned off takes its rows
@@ -7555,17 +7553,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       out.set(k, !going);
     }
     return out;
-  }
-
-  // A row that has just been switched on, fading down into place. Reading the
-  // layout between taking the class off and putting it back is what makes the
-  // browser treat it as a new animation rather than one already finished.
-  function arrive(row: any) {
-    try {
-      row.classList.remove("arf-arrive");
-      void row.offsetWidth;
-      row.classList.add("arf-arrive");
-    } catch (_) {}
   }
 
   // How many times the panel has been rebuilt. Anything holding a measurement
@@ -8591,41 +8578,84 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The other direction. Something arriving takes its full height in one frame
-  // and pushes everything below it down by that much, which reads the same way
-  // the collapse did: the panel losing its place under whatever you were
-  // reading. This walks the height up from nothing instead.
+  // and pushes everything below it down by that much, which reads as the panel
+  // losing its place under whatever you were reading. This opens its space
+  // smoothly instead, so what is below moves down with it. The row fades in a
+  // moment after its space starts to open, and slides 4px down into place.
   //
-  // arrive() fades a row in where it already stands, which is right for a row
-  // that was only hidden. This is for a row that was not there at all and whose
-  // height is the thing that moves.
-  function growIn(node: any) {
+  // fromHidden is a box that was not on the panel, which opens from nothing.
+  // Otherwise the box is part way through closing, and turns round from the
+  // height it has reached.
+  function unfold(node: any, fromHidden: boolean) {
     try {
       if (!node || !node.style || typeof node.getBoundingClientRect !== "function") return;
+      const fromH = fromHidden ? 0 : node.getBoundingClientRect().height;
+      const fromO = fromHidden ? 0 : parseFloat(getComputedStyle(node).opacity) || 0;
+      clearFold(node);
       if (noMotion()) return;
+      const cs = getComputedStyle(node);
       const tall = node.getBoundingClientRect().height;
       if (!(tall > 0)) return;
+      const pads = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"];
+      const want: Record<string, string> = {};
+      let edges = 0;
+      for (const k of pads) {
+        want[k] = (cs as any)[k];
+        edges += parseFloat(want[k]) || 0;
+      }
+      // Height is written as the box-sizing reads it. A content-box row
+      // counts its padding and edge outside its height.
+      const goal = cs.boxSizing === "border-box" ? tall : Math.max(0, tall - edges);
+      let gap = 0;
+      try {
+        const owner = node.parentElement;
+        const how = owner ? getComputedStyle(owner) : null;
+        if (how) gap = parseFloat(how.rowGap || how.gap || "0") || 0;
+      } catch (_) {}
+      node.style.transition = "none";
       node.style.overflow = "hidden";
-      node.style.height = "0px";
-      node.style.opacity = "0";
+      node.style.height = fromH + "px";
+      node.style.opacity = String(fromO);
+      if (fromHidden) {
+        // The gap its parent puts under it, and its own padding and edge,
+        // open with it, or they arrive in one step at the start.
+        node.style.marginBottom = gap > 0 ? -gap + "px" : "0px";
+        for (const k of pads) node.style[k] = "0px";
+        node.style.transform = "translateY(-4px)";
+      }
       void node.offsetWidth;
-      node.style.transition = "height 180ms ease-out, opacity 180ms ease-out";
-      node.style.height = tall + "px";
+      // The curve the pop-up card uses: it moves on the first frame and lands
+      // softly.
+      const ease = "240ms cubic-bezier(.2,.8,.28,1)";
+      node.style.transition =
+        "height " + ease + ",margin-bottom " + ease + ",padding-top " + ease + ",padding-bottom " + ease +
+        ",border-top-width " + ease + ",border-bottom-width " + ease + ",transform " + ease +
+        ",opacity 200ms ease-out 60ms";
+      node.style.height = goal + "px";
+      node.style.marginBottom = cs.marginBottom;
+      for (const k of pads) node.style[k] = want[k];
       node.style.opacity = "1";
+      node.style.transform = "none";
+      const token = {};
+      node._arfUnfold = token;
       const done = (e?: any) => {
-        if (e && e.target !== node) return;
-        // Its own height back, or a block that grows as you type into it would
-        // be held at whatever it measured on arrival.
-        node.style.height = "";
-        node.style.overflow = "";
-        node.style.opacity = "";
-        node.style.transition = "";
+        if (e && (e.target !== node || e.propertyName !== "height")) return;
         try {
           node.removeEventListener("transitionend", done);
         } catch (_) {}
+        // A close started since then owns the styles now.
+        if (node._arfUnfold !== token) return;
+        node._arfUnfold = null;
+        // Its own height back, or a block that grows as you type into it would
+        // be held at whatever it measured on arrival.
+        clearFold(node);
       };
       node.addEventListener("transitionend", done);
       setTimeout(() => done(), 500);
     } catch (_) {}
+  }
+  function growIn(node: any) {
+    unfold(node, true);
   }
 
   // A box let down to nothing and then handed over. done runs once, whether the
@@ -8646,6 +8676,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.paddingBottom = "";
       node.style.borderTopWidth = "";
       node.style.borderBottomWidth = "";
+      node.style.transform = "";
     } catch (_) {}
   }
 
@@ -8674,8 +8705,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         const how = owner ? getComputedStyle(owner) : null;
         if (how) gap = parseFloat(how.rowGap || how.gap || "0") || 0;
       } catch (_) {}
+      // An open still running stops where it is, and this closes from there.
+      node._arfUnfold = null;
+      const was = getComputedStyle(node).opacity;
+      node.style.transition = "none";
       node.style.height = tall + "px";
       node.style.overflow = "hidden";
+      node.style.opacity = was;
       // Read the layout between the two, or the browser sees one value being set
       // and nothing to travel between.
       void node.offsetWidth;
@@ -8688,13 +8724,18 @@ export function setup(ctx: Ctx, overrides?: any) {
       // the row sticking and then jumping shut. Longer than the panel's other
       // movements because this one carries the page with it, and the same
       // distance over more frames is a smaller step in each.
+      //
+      // The words fade and slide 4px up faster than the space closes, so they
+      // are gone before the row is squeezed, and nothing is seen cut in half.
       const ease = "220ms ease-out";
       node.style.transition =
-        "height " + ease + ",opacity " + ease + ",margin-bottom " + ease +
+        "height " + ease + ",margin-bottom " + ease +
         ",padding-top " + ease + ",padding-bottom " + ease +
-        ",border-top-width " + ease + ",border-bottom-width " + ease;
+        ",border-top-width " + ease + ",border-bottom-width " + ease +
+        ",opacity 140ms ease-out,transform 160ms ease-out";
       node.style.height = "0px";
       node.style.opacity = "0";
+      node.style.transform = "translateY(-4px)";
       // The gap under it closes too, or the last few pixels go all at once.
       node.style.marginBottom = gap > 0 ? -gap + "px" : "0px";
       // And its own padding and edge. A height of nothing still leaves those
@@ -8704,8 +8745,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.paddingBottom = "0px";
       node.style.borderTopWidth = "0px";
       node.style.borderBottomWidth = "0px";
+      // The height is the last to finish. The fade ends first and is not the
+      // end of the fold.
       const end = (e?: any) => {
-        if (e && e.target !== node) return;
+        if (e && (e.target !== node || e.propertyName !== "height")) return;
         try {
           node.removeEventListener("transitionend", end);
         } catch (_) {}
@@ -12271,7 +12314,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     code.autocomplete = "off";
     code.setAttribute("autocapitalize", "off");
     codeRow.appendChild(code);
-    const bad = el("span", "arf-note", "");
+    // Says when the code typed is not a colour. Not an arf-note: that class is
+    // a description under a row, and this row's description is behind its ?.
+    const bad = el("span", "arf-colourbad", "");
     bad.setAttribute("data-arf-colourbad", key);
     codeRow.appendChild(bad);
     editor.appendChild(codeRow);

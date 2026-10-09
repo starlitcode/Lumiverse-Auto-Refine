@@ -4125,6 +4125,73 @@ console.log("\nwhen the tab sleeps past the time to give up");
   });
 }
 
+console.log("\nrows that hang off a switch open and close smoothly");
+{
+  // Switching the floating button on brings out its own rows. Their space
+  // opens over several frames, so the row under them moves down in small
+  // steps rather than in one jump, and they fade in and slide down 4px.
+  // Switched off, the words fade before the space closes. With Reduce motion
+  // on, both happen at once.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const reduceMotion of [false, true]) {
+      await inTab(browser, { viewport, touch, saved: { enabled: true, reduceMotion } }, async (page) => {
+        await goTab(page, "Setup");
+        await settle(page);
+        const watch = (on) =>
+          page.evaluate(async (on) => {
+            // Looked up again on every frame. A switch can build its card
+            // again, and a row held from before is no longer on the page.
+            const q = (k) => document.querySelector('#drawer [data-arf-row="' + k + '"]');
+            const box = q("widgetOn") && q("widgetOn").querySelector('input[type="checkbox"]');
+            if (!box || !q("inputRefine") || !q("widgetSize")) return null;
+            // Measured from the switch's own row, so a scroll of the panel
+            // is not counted as the row moving.
+            const gapNow = () => q("inputRefine").getBoundingClientRect().top - q("widgetOn").getBoundingClientRect().bottom;
+            const start = gapNow();
+            const tops = [];
+            const looks = [];
+            box.click();
+            const t0 = performance.now();
+            while (performance.now() - t0 < 520) {
+              await new Promise((r) => requestAnimationFrame(r));
+              tops.push(gapNow() - start);
+              const child = q("widgetSize");
+              const cs = getComputedStyle(child);
+              looks.push({ o: parseFloat(cs.opacity), h: child.getBoundingClientRect().height, t: cs.transform });
+            }
+            const end = tops[tops.length - 1];
+            let biggest = 0;
+            let prev = 0;
+            for (const t of tops) {
+              biggest = Math.max(biggest, Math.abs(t - prev));
+              prev = t;
+            }
+            return { travel: Math.round(end), biggest: Math.round(biggest), frames: tops.length, looks, hidden: q("widgetSize").hidden };
+          }, on);
+        const opened = await watch(true);
+        const shut = await watch(false);
+        const say = label + (reduceMotion ? ", Reduce motion on" : "") + ": ";
+        ok(say + "the rows open and push the next row down", !!opened && opened.travel > 40 && !opened.hidden, JSON.stringify(opened && { travel: opened.travel }));
+        if (!reduceMotion) {
+          ok(say + "opening, the row below moves in small steps, never more than a third in one frame",
+            !!opened && opened.biggest < opened.travel / 3, JSON.stringify(opened && { travel: opened.travel, biggest: opened.biggest, frames: opened.frames }));
+          ok(say + "opening, the rows start faded and slide down into place",
+            !!opened && opened.looks[0].o < 0.5 && /matrix\(1, 0, 0, 1, 0, -/.test(opened.looks[0].t), JSON.stringify(opened && opened.looks.slice(0, 2)));
+          ok(say + "closing, the row below moves up in small steps",
+            !!shut && shut.biggest < Math.abs(shut.travel) / 3, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
+          const faded = shut ? shut.looks.findIndex((l) => l.o < 0.05) : -1;
+          const flat = shut ? shut.looks.findIndex((l) => l.h < 1) : -1;
+          ok(say + "closing, the words are gone before the space is", !!shut && faded >= 0 && (flat === -1 || faded < flat), JSON.stringify({ faded, flat }));
+        } else {
+          ok(say + "the rows open in one step", !!opened && Math.abs(opened.biggest - opened.travel) <= 2, JSON.stringify(opened && { travel: opened.travel, biggest: opened.biggest }));
+          ok(say + "and close in one step", !!shut && Math.abs(shut.biggest - Math.abs(shut.travel)) <= 2, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
+        }
+        ok(say + "and once closed they are hidden", !!shut && shut.hidden, JSON.stringify(shut && shut.hidden));
+      });
+    }
+  }
+}
+
 console.log("\nthe status dot stays beside a long status line");
 {
   // A long line of status wraps under itself. The dot stays at the start of
@@ -6262,7 +6329,7 @@ console.log("\na pick that rebuilds the card still moves its rows");
       return {
         there: !!row,
         hidden: !!row && row.hidden,
-        arriving: !!row && row.classList.contains("arf-arrive"),
+        arriving: !!row && !!row._arfUnfold,
         folding: !!row && !row.hidden && !!row.style.height,
       };
     });
@@ -6274,7 +6341,7 @@ console.log("\na pick that rebuilds the card still moves its rows");
       await settle(page);
       await settle(page);
       const shown = await urlRow(page);
-      ok(label + ": picking another address fades the address row in", shown.there && !shown.hidden && shown.arriving, JSON.stringify(shown));
+      ok(label + ": picking another address opens the address row", shown.there && !shown.hidden && shown.arriving, JSON.stringify(shown));
       await pickHost(page, "openrouter");
       await settle(page);
       await settle(page);

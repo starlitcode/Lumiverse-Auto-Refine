@@ -267,6 +267,7 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 
 - On, the panel, the card, the descriptions, the floating button and every eye change at once, with no fade or slide.
 - With it off, the card, the full-size editor and a setting's description fade in and slide a little, and fade out when they close. Nothing grows.
+- With it off, rows that hang off a switch open and close smoothly, and the settings below move with them.
 - The eye works as it does with **Keep the eye still**: shut at rest and open while a refine runs.
 - A device set to reduce motion gets the same, with the switch off.
 - With the switch off, the floating button shrinks a little when pressed, and a switch's knob springs past its end and back. With it on, both keep their size and place.
