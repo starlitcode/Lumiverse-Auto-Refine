@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.35.0";
+const VERSION = "1.35.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -6087,6 +6087,14 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
     }
+    // Whether this is a cut or added word drawn in a colour the reader picked.
+    function pickedInk(n) {
+        const list = n && n.classList;
+        if (!list)
+            return false;
+        const mine = (v) => /^#[0-9a-f]{6}$/i.test(String(v || ""));
+        return (list.contains("arf-cut") && mine(cfg.cutColour)) || (list.contains("arf-add") && mine(cfg.addColour));
+    }
     // Walk the panel and repair only what genuinely fails. Elements with no text
     // yet are included: a status line waiting for something to say has already
     // been given its colour, and it will not change when the text arrives.
@@ -6097,6 +6105,11 @@ export function setup(ctx, overrides) {
         try {
             const nodes = [root].concat(Array.prototype.slice.call(root.querySelectorAll("*")));
             for (const n of nodes) {
+                // A colour the reader picked for cut or added words is shown as they
+                // picked it, even where it is hard to read. Only the theme's own
+                // colour is repaired.
+                if (pickedInk(n))
+                    continue;
                 const tag = String(n.tagName || "").toLowerCase();
                 const isControl = tag === "button" || tag === "input" || tag === "select" || tag === "textarea";
                 const hasText = !isControl && n.firstChild && n.firstChild.nodeType === 3;
@@ -6262,8 +6275,10 @@ export function setup(ctx, overrides) {
     }
     // Cut and added words take their colour from the page, so a new colour
     // reaches every one of them at once. A word the readability pass repainted
-    // still holds the colour it worked out from the old one, so those are
-    // measured again. Once a frame at most, since a slider sends many changes.
+    // from the theme's colour still holds that repair, so those are measured
+    // again: a colour picked now is shown as it is, and the theme's colour put
+    // back is repaired afresh. Once a frame at most, since a slider sends many
+    // changes.
     let wordsSoon = 0;
     function reInkWords() {
         if (wordsSoon)
@@ -8113,10 +8128,16 @@ export function setup(ctx, overrides) {
     // Capped rather than pruned on every call: a card built and not yet put on
     // the page would be dropped by a pruning pass before it ever arrived.
     let diffSpots = [];
+    // The words are built again, so the readability pass runs on them again.
+    // Without it, a theme colour too faint for the card, which the pass had made
+    // readable, came back at its own colour each time the view was switched.
     function redrawDiffs() {
         diffSpots = diffSpots.filter((s) => s.wrap.isConnected);
-        for (const s of diffSpots)
+        for (const s of diffSpots) {
             fillDiff(s.wrap, s.before, s.after);
+            clearInk(s.wrap);
+            sweepReadable(s.wrap);
+        }
     }
     // One column of the side by side view. The before column keeps what was taken
     // out and leaves out what was put in; the after column does the opposite. Both
@@ -11715,9 +11736,8 @@ export function setup(ctx, overrides) {
     // way to type a colour code. The swatch opens the editor under the row: a
     // box for a code such as #ff0040, sliders for hue, saturation and
     // lightness, the theme's own colours to pick from, and a preview. Use the
-    // theme's colour clears it. A colour too faint to read on the theme is made
-    // lighter or darker by the readability pass, keeping as much of it as it
-    // can.
+    // theme's colour clears it. A colour picked here is shown exactly as it was
+    // picked, everywhere, so the preview matches what the card shows.
     function colourRow(key, label, themeVar, fallback, cut) {
         const wrap = el("div", "arf-col");
         wrap.setAttribute("data-arf-row", key);

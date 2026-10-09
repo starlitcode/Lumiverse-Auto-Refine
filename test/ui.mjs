@@ -4220,6 +4220,52 @@ console.log("\nrows that hang off a switch open and close smoothly");
   }
 }
 
+console.log("\ncut and added words keep their colour when the view is switched");
+{
+  // A colour the reader picked is shown exactly as picked, even where it is
+  // hard to read on the card, and switching between the two views keeps it.
+  // With no colour picked, the theme's colour is used, and one too faint for
+  // the card is made readable, before and after a switch alike. #4c1d95 is a
+  // dark violet that is hard to read on this purple card.
+  const PURPLE = ":root{--lumiverse-bg:rgb(26,10,40);--lumiverse-bg-elevated:rgba(70,20,100,.9);--lumiverse-card-bg-solid:rgb(40,12,60);--lumiverse-primary:rgb(233,200,255)}";
+  const FAINT = PURPLE.replace("}", ";--lumiverse-danger:rgb(76,29,149);--lumiverse-success:rgb(91,10,74)}");
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const own of [true, false]) {
+      const saved = own ? { enabled: true, popup: true, cutColour: "#4c1d95", addColour: "#5b0a4a" } : { enabled: true, popup: true };
+      await inTab(browser, { css: own ? PURPLE : FAINT, viewport, touch, saved }, async (page) => {
+        await goTab(page, "Setup");
+        await settle(page);
+        await page.evaluate(() => document.querySelector("[data-arf-popdemo]").click());
+        await page.waitForTimeout(400);
+        const look = () => page.evaluate(() => {
+          const pop = document.querySelector(".arf-pop:not(.arf-leaving)");
+          if (!pop) return null;
+          const of = (cls) => Array.from(pop.querySelectorAll(cls)).map((s) => getComputedStyle(s).color);
+          return { cut: of(".arf-cut"), add: of(".arf-add") };
+        });
+        const switchView = () => page.evaluate(() => document.querySelector(".arf-pop:not(.arf-leaving) [data-arf-diff-switch]").click());
+        const say = label + (own ? ", your own colours" : ", the theme's colours") + ": ";
+        const first = await look();
+        if (own)
+          ok(say + "they are shown exactly as picked", !!first && first.cut.length > 0 && first.cut.every((c) => c === "rgb(76, 29, 149)") && first.add.every((c) => c === "rgb(91, 10, 74)"), JSON.stringify(first));
+        else
+          ok(say + "a theme colour too faint for the card is made readable", !!first && first.cut.length > 0 && first.cut.every((c) => c !== "rgb(76, 29, 149)") && first.add.every((c) => c !== "rgb(91, 10, 74)"), JSON.stringify(first));
+        ok(say + "every cut word has the same colour", !!first && new Set(first.cut).size === 1, JSON.stringify(first && first.cut));
+        await switchView();
+        await page.waitForTimeout(100);
+        const other = await look();
+        ok(say + "switching the view keeps the cut words' colour",
+          !!other && other.cut.length > 0 && other.cut.every((c) => c === first.cut[0]), JSON.stringify(other && other.cut) + " was " + first.cut[0]);
+        ok(say + "and the added words' colour", !!other && other.add.length > 0 && other.add.every((c) => c === first.add[0]), JSON.stringify(other && other.add) + " was " + first.add[0]);
+        await switchView();
+        await page.waitForTimeout(100);
+        const back = await look();
+        ok(say + "and switching back keeps it too", !!back && back.cut.every((c) => c === first.cut[0]) && back.add.every((c) => c === first.add[0]), JSON.stringify(back));
+      });
+    }
+  }
+}
+
 console.log("\nthe status dot stays beside a long status line");
 {
   // A long line of status wraps under itself. The dot stays at the start of
@@ -12162,11 +12208,13 @@ console.log("\nyour own colours for cut and added words");
       ok(label + ": Saturation at 0 and back keeps the hue", (await sliders()).startsWith("200,80,"), await sliders());
     });
   }
-  // A word the readability pass repainted takes the new colour once it is
-  // changed. #200008 is too dark to read on the stub's dark panel, so the
-  // pass makes it lighter. #00ff88 can be read as it is.
+  // The preview shows the colour in use. A colour you pick is shown exactly,
+  // even one too dark to read. The theme's own colour, when it is too faint
+  // for the panel, is made readable, and that repair goes as soon as you pick
+  // a colour of your own. The theme's danger here is #200008, which cannot be
+  // read on the stub's dark panel.
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    await inTab(browser, { viewport, touch, saved: { enabled: true, cutColour: "#200008" } }, async (page) => {
+    await inTab(browser, { css: ":root{--lumiverse-danger:rgb(32,0,8)}", viewport, touch, saved: { enabled: true } }, async (page) => {
       await goTab(page, "Setup");
       await settle(page);
       await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
@@ -12177,17 +12225,23 @@ console.log("\nyour own colours for cut and added words");
           const w = document.querySelector('#drawer [data-arf-row="cutColour"] .arf-colouredit .arf-cut');
           return { colour: getComputedStyle(w).color, painted: w.getAttribute("data-arf-painted") };
         });
-      const dark = await sample();
-      ok(label + ": a colour too dark to read is made lighter in the preview", dark.painted === "ink" && dark.colour !== "rgb(32, 0, 8)", JSON.stringify(dark));
-      await page.evaluate(() => {
-        const code = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-field="cutColour"]');
-        code.value = "#00ff88";
-        code.dispatchEvent(new Event("input", { bubbles: true }));
-        code.dispatchEvent(new Event("change", { bubbles: true }));
-      });
+      const type = (value) =>
+        page.evaluate((value) => {
+          const code = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-field="cutColour"]');
+          code.value = value;
+          code.dispatchEvent(new Event("input", { bubbles: true }));
+          code.dispatchEvent(new Event("change", { bubbles: true }));
+        }, value);
+      const themed = await sample();
+      ok(label + ": the theme's colour, too dark for the panel, is made readable in the preview", themed.painted === "ink" && themed.colour !== "rgb(32, 0, 8)", JSON.stringify(themed));
+      await type("#00ff88");
       await settle(page);
       const bright = await sample();
-      ok(label + ": the preview shows the new colour, not the old one", bright.colour === "rgb(0, 255, 136)" && bright.painted == null, JSON.stringify(bright));
+      ok(label + ": a colour you pick replaces it in the preview, exactly", bright.colour === "rgb(0, 255, 136)" && bright.painted == null, JSON.stringify(bright));
+      await type("#200008");
+      await settle(page);
+      const dark = await sample();
+      ok(label + ": a colour you pick is shown exactly, even one too dark to read", dark.colour === "rgb(32, 0, 8)" && dark.painted == null, JSON.stringify(dark));
     });
   }
   // A setting that is not a colour, such as one from somebody else's file,

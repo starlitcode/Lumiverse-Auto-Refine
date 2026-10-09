@@ -261,7 +261,8 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 - A colour you set is used instead of the theme's. **Use the theme's colour** puts the theme's colour back.
 - With a dark theme, Lumiverse makes custom danger and success colours lighter before any extension sees them. To use the exact colour you picked in Lumiverse's theme editor, copy its code from there into the code box here.
 - Cut words keep the line through them whatever the colour, so they can be told apart without colour.
-- If a colour is too faint to read on your theme, it is made lighter or darker until it can be read, keeping as much of it as it can.
+- A colour you pick is shown exactly as you picked it, everywhere, even where it is hard to read on your theme.
+- With no colour of your own, the theme's colour is used. If that is too faint to read on your theme, it is made lighter or darker until it can be read.
 
 **Reduce motion** stops everything in Auto Refine from moving or fading. It is off by default.
 

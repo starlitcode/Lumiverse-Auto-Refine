@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.35.1
+
+_2026-10-09_
+
+### Changed
+
+- **A colour you pick for cut or added words is shown exactly.** When a picked colour was hard to read on the card, Auto Refine made it lighter, so the card did not show the colour you chose. It now shows your colour as you picked it, everywhere. With no colour of your own, the theme's colour is still made lighter or darker when it is too faint to read.
+
+### Fixed
+
+- **Cut and added words keep their colour when you switch views.** Pressing **Read them side by side** or **Read them together** drew the words again in a different colour from the one they had before. They now keep the same colour in both views.
+
+---
+
 ## 1.35.0
 
 _2026-10-09_
