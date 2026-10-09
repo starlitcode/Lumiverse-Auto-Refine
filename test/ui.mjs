@@ -6614,6 +6614,8 @@ console.log("\nopening a fold");
     ok("or the card around it", now.sameCard);
 
     await page.evaluate(() => document.querySelectorAll("#drawer .arf-fold")[0].click());
+    // It closes over a moment, so it is looked at once that is over.
+    await closed(page);
     const shut = await page.evaluate(() => {
       const head = document.querySelectorAll("#drawer .arf-fold")[0];
       return { shut: !!head.nextElementSibling.hidden, sameHead: head.__mark === "the fold" };
