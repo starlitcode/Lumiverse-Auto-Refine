@@ -3,7 +3,10 @@
 Auto Refine is a Lumiverse extension built on Spindle. Its sister extension is
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry), and the two are
 kept in step: a fix to something they share, such as how a switch or a field row
-behaves, goes into both.
+behaves, goes into both. Treat them as twins: the same thing has the same name,
+the same wording and the same behaviour in both, such as **Extra thinking tag
+names**, the thinking formats, the put-back and replaced-reply storage, and the
+motion of bulk buttons.
 
 ## Branches and releases
 
@@ -115,6 +118,16 @@ Two skills are available. Load them before starting work.
   the Model tab, its place in `PARTS`, and its built-in name for every host in
   `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove a box.
   `test/model-names.test.ts` fails when a part is missing.
+
+## Thinking formats
+
+- Both extensions recognise the same thinking formats. A new one goes into both,
+  with a test for it closed and a test for it opened with no closer, and a row
+  in both docs tables (`docs/detection.md` in Auto Retry, `docs/prompt.md` in
+  Auto Refine).
+- A Prefix and Suffix saved on a connection in Lumiverse's Reasoning settings
+  are read with `spindle.connections.list`, from `reasoning_bindings.settings`.
+  The global Reasoning settings cannot be read by an extension.
 
 ## Writing
 
