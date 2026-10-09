@@ -252,7 +252,13 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 **Colour of cut words** and **Colour of added words** set the colours used in every before and after: on the card, in the panel and on the Log tab.
 
 - By default, cut words use your theme's danger colour and added words its success colour.
-- Pick a colour and it is used instead. **Use the theme's colour** puts the theme's colour back.
+- Tap the swatch beside each one to open the colour editor under it. It works the same on a phone and a laptop:
+  - a box for a colour code, such as `#ff0040`, with or without the `#`, or the short form such as `#f04`
+  - sliders for **Hue**, **Saturation** and **Lightness**
+  - your theme's **Danger**, **Success**, **Warning** and **Accent** colours, one tap each
+  - a line showing the words in the colour
+- A colour you set is used instead of the theme's. **Use the theme's colour** puts the theme's colour back.
+- With a dark theme, Lumiverse makes custom danger and success colours lighter before any extension sees them. To use the exact colour you picked in Lumiverse's theme editor, copy its code from there into the code box here.
 - Cut words keep the line through them whatever the colour, so they can be told apart without colour.
 - If a colour is too faint to read on your theme, it is made lighter or darker until it can be read, keeping as much of it as it can.
 

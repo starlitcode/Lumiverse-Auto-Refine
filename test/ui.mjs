@@ -11799,62 +11799,105 @@ console.log("\na pattern behind the panel");
 console.log("\nyour own colours for cut and added words");
 {
   // By default, cut words take the theme's danger colour and added words its
-  // success colour. A colour picked in Setup is used instead, in the panel
-  // and on the card, and Use the theme's colour puts the theme's back. Only a
-  // colour written as #rrggbb reaches the page. Checked at a phone width and
-  // a laptop width.
-  const cutColour = () =>
-    document.evaluate ? (() => {
-      const w = document.createElement("span");
-      w.className = "arf-cut";
-      document.body.appendChild(w);
-      const c = getComputedStyle(w).color;
-      w.remove();
-      return c;
-    })() : "";
+  // success colour. The swatch opens Auto Refine's own colour editor, the same
+  // on a phone and a laptop: a box for a colour code, sliders for hue,
+  // saturation and lightness, the theme's colours to pick from, and a
+  // preview. Use the theme's colour puts the theme's back. Only a colour
+  // written as #rrggbb reaches the page.
+  const THEMED = ":root{--lumiverse-danger:rgb(200,30,40);--lumiverse-success:rgb(20,160,60);--lumiverse-warning:rgb(240,160,10)}";
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    await inTab(browser, { css: ":root{--lumiverse-danger:rgb(200,30,40);--lumiverse-success:rgb(20,160,60)}", viewport, touch, saved: { enabled: true } }, async (page) => {
+    await inTab(browser, { css: THEMED, viewport, touch, saved: { enabled: true } }, async (page) => {
       await goTab(page, "Setup");
       await settle(page);
-      const read = () => page.evaluate((fn) => {
-        const cut = new Function("return (" + fn + ")()")();
-        const add = (() => { const w = document.createElement("span"); w.className = "arf-add"; document.body.appendChild(w); const c = getComputedStyle(w).color; w.remove(); return c; })();
-        const pick = document.querySelector('#drawer [data-arf-field="cutColour"]');
-        const back = document.querySelector('#drawer [data-arf-colourback="cutColour"]');
-        const r = pick && pick.getBoundingClientRect();
-        return {
-          cut, add,
-          picker: pick ? pick.value : null,
-          height: r ? Math.round(r.height) : 0,
-          backShown: !!back && !back.hidden && back.getClientRects().length > 0,
-          backHeight: back && back.getClientRects().length ? Math.round(back.getBoundingClientRect().height) : 0,
-          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
-        };
-      }, cutColour.toString());
-      const first = await read();
+      const read = (key) =>
+        page.evaluate((key) => {
+          const ink = (cls) => { const w = document.createElement("span"); w.className = cls; document.body.appendChild(w); const c = getComputedStyle(w).color; w.remove(); return c; };
+          const row = document.querySelector('#drawer [data-arf-row="' + key + '"]');
+          const edit = row.querySelector(".arf-colouredit");
+          const code = row.querySelector('[data-arf-field="' + key + '"]');
+          const swatch = row.querySelector("[data-arf-colourswatch]");
+          const back = row.querySelector("[data-arf-colourback]");
+          const tall = (n) => (n && n.getClientRects().length ? Math.round(n.getBoundingClientRect().height) : 0);
+          return {
+            cut: ink("arf-cut"),
+            add: ink("arf-add"),
+            code: code ? code.value : null,
+            swatch: swatch ? getComputedStyle(swatch).backgroundColor : null,
+            open: !!edit && !edit.hidden && edit.getClientRects().length > 0,
+            bad: (row.querySelector("[data-arf-colourbad]") || {}).textContent || "",
+            backShown: !!back && !back.hidden && back.getClientRects().length > 0,
+            sliders: Array.from(row.querySelectorAll("[data-arf-colourpart]")).map((r) => r.value),
+            heights: {
+              swatch: tall(swatch),
+              code: tall(code),
+              slider: Math.min(...Array.from(row.querySelectorAll("[data-arf-colourpart]")).map(tall)),
+              pick: tall(row.querySelector("[data-arf-colourpick]")),
+            },
+            sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+          };
+        }, key);
+      const typeCode = (key, value) =>
+        page.evaluate(({ key, value }) => {
+          const code = document.querySelector('#drawer [data-arf-row="' + key + '"] [data-arf-field="' + key + '"]');
+          code.focus();
+          code.value = value;
+          code.dispatchEvent(new Event("input", { bubbles: true }));
+          code.dispatchEvent(new Event("change", { bubbles: true }));
+          code.blur();
+        }, { key, value });
+
+      const first = await read("cutColour");
       ok(label + ": by default, cut words take the theme's danger colour", first.cut === "rgb(200, 30, 40)", JSON.stringify(first));
       ok(label + ": and added words its success colour", first.add === "rgb(20, 160, 60)", JSON.stringify(first));
-      ok(label + ": the picker starts on the theme's colour", first.picker === "#c81e28", JSON.stringify(first));
-      ok(label + ": with no colour of your own, there is nothing to put back", !first.backShown, JSON.stringify(first));
-      if (touch) ok(label + ": the picker is tall enough to tap", first.height >= 32, String(first.height));
+      ok(label + ": the swatch and the code show the theme's colour", first.swatch === "rgb(200, 30, 40)" && first.code === "#c81e28", JSON.stringify(first));
+      ok(label + ": the editor starts shut, with nothing to put back", !first.open && !first.backShown, JSON.stringify(first));
+
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.waitForTimeout(350);
+      const opened = await read("cutColour");
+      ok(label + ": the swatch opens the editor", opened.open, JSON.stringify(opened));
+      ok(label + ": the sliders start on the theme's colour", opened.sliders.join() === "356,74,45", JSON.stringify(opened.sliders));
+      if (touch)
+        ok(label + ": the swatch, the code box, the sliders and the picks are tall enough to tap",
+          opened.heights.swatch >= 32 && opened.heights.code >= 32 && opened.heights.slider >= 32 && opened.heights.pick >= 32, JSON.stringify(opened.heights));
+      ok(label + ": nothing runs off the side", !opened.sideways, "");
+
+      await typeCode("cutColour", "ff0040");
+      await settle(page);
+      const typed = await read("cutColour");
+      ok(label + ": a code typed without # is used", typed.cut === "rgb(255, 0, 64)" && typed.swatch === "rgb(255, 0, 64)" && typed.backShown, JSON.stringify(typed));
+      await typeCode("cutColour", "#0f8");
+      await settle(page);
+      ok(label + ": the short form is used too", (await read("cutColour")).cut === "rgb(0, 255, 136)", "");
+      await typeCode("cutColour", "not a colour");
+      await settle(page);
+      const wrong = await read("cutColour");
+      ok(label + ": a code that is not a colour says so, and the colour stays", /colour code/.test(wrong.bad) && wrong.cut === "rgb(0, 255, 136)" && wrong.code === "#00ff88", JSON.stringify(wrong));
+
       await page.evaluate(() => {
-        const pick = document.querySelector('#drawer [data-arf-field="cutColour"]');
-        pick.value = "#3366ff";
-        pick.dispatchEvent(new Event("input", { bubbles: true }));
-        pick.dispatchEvent(new Event("change", { bubbles: true }));
+        const l = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-colourpart="l"]');
+        l.value = "30";
+        l.dispatchEvent(new Event("input", { bubbles: true }));
+        l.dispatchEvent(new Event("change", { bubbles: true }));
       });
       await settle(page);
-      const mine = await read();
-      ok(label + ": a colour you pick is used for cut words", mine.cut === "rgb(51, 102, 255)", JSON.stringify(mine));
-      ok(label + ": and the way back to the theme's colour shows", mine.backShown, JSON.stringify(mine));
-      if (touch) ok(label + ": and is tall enough to tap", mine.backHeight >= 32, String(mine.backHeight));
-      ok(label + ": nothing runs off the side", !mine.sideways, "");
+      const darker = await read("cutColour");
+      ok(label + ": the Lightness slider changes the colour", darker.cut === "rgb(0, 153, 82)" && darker.code === "#009952", JSON.stringify(darker));
+
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-colourpick="warning"]').click());
+      await settle(page);
+      ok(label + ": a pick from the theme is used", (await read("cutColour")).cut === "rgb(240, 160, 10)", "");
       const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").cutColour);
-      ok(label + ": it is saved", saved === "#3366ff", String(saved));
+      ok(label + ": it is saved", saved === "#f0a00a", String(saved));
+
       await page.evaluate(() => document.querySelector('#drawer [data-arf-colourback="cutColour"]').click());
       await settle(page);
-      const back = await read();
-      ok(label + ": Use the theme's colour puts the theme's colour back", back.cut === "rgb(200, 30, 40)" && back.picker === "#c81e28" && !back.backShown, JSON.stringify(back));
+      const back = await read("cutColour");
+      ok(label + ": Use the theme's colour puts the theme's colour back", back.cut === "rgb(200, 30, 40)" && back.code === "#c81e28" && !back.backShown, JSON.stringify(back));
+
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.waitForTimeout(400);
+      ok(label + ": the swatch shuts the editor again", !(await read("cutColour")).open, "");
     });
   }
   // A setting that is not a colour, such as one from somebody else's file,

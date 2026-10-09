@@ -2818,6 +2818,46 @@ const LIMIT_FIELDS = [
 ];
 for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
     FIELD_BY_KEY[f.key] = f;
+// Colour codes for the colour editor. A code is #rrggbb, typed with or
+// without the #, or the three-letter short form.
+function rgbHex(r, g, b) {
+    const two = (n) => ("0" + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2);
+    return "#" + two(r) + two(g) + two(b);
+}
+function colourCode(typed) {
+    const t = String(typed || "").trim().replace(/^#/, "");
+    if (/^[0-9a-f]{6}$/i.test(t))
+        return "#" + t.toLowerCase();
+    if (/^[0-9a-f]{3}$/i.test(t))
+        return "#" + t.split("").map((c) => c + c).join("").toLowerCase();
+    return null;
+}
+function hexHsl(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = ((n >> 16) & 255) / 255;
+    const g = ((n >> 8) & 255) / 255;
+    const b = (n & 255) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0;
+    let s = 0;
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h /= 6;
+    }
+    return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+function hslHex(h, s, l) {
+    const S = s / 100;
+    const L = l / 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = S * Math.min(L, 1 - L);
+    const f = (n) => L - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return rgbHex(f(0) * 255, f(8) * 255, f(4) * 255);
+}
 // getComputedStyle hands colours back as rgb() or rgba() and nothing else, so
 // those forms are the whole of what needs parsing. Anything else is unknown,
 // and unknown means leave it alone.
@@ -5193,11 +5233,21 @@ export function setup(ctx, overrides) {
         // apart still has the line through one of them, and the words themselves.
         // The reader can pick their own colour for each, which is put on the
         // page's root. Unpicked, the theme's danger and success colours are used.
-        // A colour picker the size of a switch, with the theme's edge.
-        ".arf-colour{flex:none;width:44px;height:28px;padding:2px;box-sizing:border-box;cursor:pointer;" +
+        // The colour editor. The swatch is the size of a switch, with the
+        // theme's edge. The sliders are tall enough to drag with a finger.
+        ".arf-swatch{flex:none;width:44px;height:28px;padding:0;cursor:pointer;" +
         "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
-        "border-radius:var(--lumiverse-radius,8px);background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
-        "@media (pointer: coarse){.arf-colour{width:52px;height:36px}}" +
+        "border-radius:var(--lumiverse-radius,8px)}" +
+        ".arf-swatch:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
+        ".arf-colouredit{gap:10px;padding-top:4px}" +
+        ".arf-colourcode{width:110px;flex:none}" +
+        ".arf-colourline{display:grid;grid-template-columns:76px minmax(0,1fr) 40px;align-items:center;gap:8px}" +
+        ".arf-colourname{font-size:12px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-colourvalue{font-size:12px;text-align:right;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+        ".arf-colourrange{width:100%;min-width:0;height:24px;margin:0;accent-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
+        ".arf-colourdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}" +
+        "@media (pointer: coarse){.arf-swatch{width:52px;height:36px}.arf-colourrange{height:36px}" +
+        ".arf-colourcode{height:36px}}" +
         // Drawn at full strength, so it is the theme's colour exactly. The line
         // through it is what sets it apart from added words.
         ".arf-cut{color:var(--arf-cut-ink,var(--lumiverse-danger,#ef4444));text-decoration:line-through;" +
@@ -11540,13 +11590,15 @@ export function setup(ctx, overrides) {
         }));
         return wrap;
     }
-    // Ways in other than the drawer. Both are off until asked for, so a fresh
-    // install adds nothing to the screen.
-    // A colour for the words a before and after marks. The picker starts on the
-    // theme's own colour, and Use the theme's colour puts that back. A colour
-    // too faint to read on the theme is made lighter or darker by the
-    // readability pass, keeping as much of it as it can.
-    function colourRow(key, label, themeVar, fallback) {
+    // A colour for the words a before and after marks, with its own editor
+    // rather than the browser's colour input, which on a phone often has no
+    // way to type a colour code. The swatch opens the editor under the row: a
+    // box for a code such as #ff0040, sliders for hue, saturation and
+    // lightness, the theme's own colours to pick from, and a preview. Use the
+    // theme's colour clears it. A colour too faint to read on the theme is made
+    // lighter or darker by the readability pass, keeping as much of it as it
+    // can.
+    function colourRow(key, label, themeVar, fallback, cut) {
         const wrap = el("div", "arf-col");
         wrap.setAttribute("data-arf-row", key);
         const row = el("div", "arf-between");
@@ -11554,64 +11606,167 @@ export function setup(ctx, overrides) {
         const lab = el("span", "arf-lab", label);
         lab.id = nextId() + "-name";
         left.appendChild(lab);
-        const q = hintButton("Empty uses your theme's colour. Cut words keep the line through them whatever the colour.", label);
+        const q = hintButton("Empty uses your theme's colour. Tap the swatch to type a colour code or pick one.", label);
         if (q)
             left.appendChild(q);
         row.appendChild(left);
-        const pick = document.createElement("input");
-        pick.type = "color";
-        pick.className = "arf-colour";
-        pick.setAttribute("data-arf-field", key);
-        pick.setAttribute("aria-labelledby", lab.id);
-        // The theme's colour, read off the page, as the picker's starting point.
-        const themed = () => {
+        // A theme colour, read off the page as #rrggbb.
+        const read = (name, backup) => {
             try {
                 const probe = document.createElement("span");
-                probe.style.color = "var(" + themeVar + "," + fallback + ")";
+                probe.style.color = "var(" + name + "," + backup + ")";
                 document.body.appendChild(probe);
                 const c = parseColor(getComputedStyle(probe).color);
                 probe.remove();
-                if (!c)
-                    return fallback;
-                const hex = (n) => ("0" + Math.round(n).toString(16)).slice(-2);
-                return "#" + hex(c.r) + hex(c.g) + hex(c.b);
+                return c ? rgbHex(c.r, c.g, c.b) : backup;
             }
             catch (_) {
-                return fallback;
+                return backup;
             }
         };
+        const themed = () => read(themeVar, fallback);
         const own = () => /^#[0-9a-f]{6}$/i.test(String(cfg[key] || ""));
-        pick.value = own() ? String(cfg[key]) : themed();
+        const now = () => (own() ? String(cfg[key]).toLowerCase() : themed());
+        const swatch = document.createElement("button");
+        swatch.type = "button";
+        swatch.className = "arf-swatch";
+        swatch.setAttribute("data-arf-colourswatch", key);
+        swatch.setAttribute("aria-expanded", "false");
+        swatch.setAttribute("aria-labelledby", lab.id);
+        swatch.title = "Change the colour";
         const back = button("Use the theme's colour", false);
         back.classList.add("arf-mini2");
         back.setAttribute("data-arf-colourback", key);
-        const paintBack = () => {
-            back.hidden = !own();
-        };
-        pick.addEventListener("input", () => {
-            cfg[key] = pick.value;
-            paintBack();
-            persist();
-        });
-        pick.addEventListener("change", () => {
-            cfg[key] = pick.value;
-            paintBack();
-            persist(true);
-        });
-        back.addEventListener("click", () => {
-            cfg[key] = "";
-            pick.value = themed();
-            paintBack();
-            persist(true);
-        });
-        paintBack();
         const tools = el("div", "arf-row");
         tools.appendChild(back);
-        tools.appendChild(pick);
+        tools.appendChild(swatch);
         row.appendChild(tools);
         wrap.appendChild(row);
+        // The editor, built once and shown or hidden.
+        const editor = el("div", "arf-col arf-under arf-colouredit");
+        editor.hidden = true;
+        const codeRow = el("div", "arf-row");
+        const code = document.createElement("input");
+        code.type = "text";
+        code.className = "arf-field arf-mono arf-colourcode";
+        code.setAttribute("data-arf-field", key);
+        code.setAttribute("aria-label", label + ", colour code");
+        code.placeholder = "#ff0040";
+        code.maxLength = 7;
+        code.spellcheck = false;
+        code.autocomplete = "off";
+        code.setAttribute("autocapitalize", "off");
+        codeRow.appendChild(code);
+        const bad = el("span", "arf-note", "");
+        bad.setAttribute("data-arf-colourbad", key);
+        codeRow.appendChild(bad);
+        editor.appendChild(codeRow);
+        const sliders = {};
+        const shown = {};
+        for (const [part, name, max] of [["h", "Hue", 360], ["s", "Saturation", 100], ["l", "Lightness", 100]]) {
+            const line = el("div", "arf-colourline");
+            const nameEl = el("span", "arf-colourname", name);
+            const range = document.createElement("input");
+            range.type = "range";
+            range.min = "0";
+            range.max = String(max);
+            range.className = "arf-colourrange";
+            range.setAttribute("data-arf-colourpart", part);
+            range.setAttribute("aria-label", label + ", " + name);
+            const value = el("span", "arf-colourvalue arf-mono", "");
+            line.appendChild(nameEl);
+            line.appendChild(range);
+            line.appendChild(value);
+            editor.appendChild(line);
+            sliders[part] = range;
+            shown[part] = value;
+        }
+        const picks = el("div", "arf-row");
+        for (const [name, v, b] of [
+            ["Danger", "--lumiverse-danger", "#ef4444"],
+            ["Success", "--lumiverse-success", "#22c55e"],
+            ["Warning", "--lumiverse-warning", "#f59e0b"],
+            ["Accent", "--lumiverse-primary", "#9370db"],
+        ]) {
+            const one = button(name, false);
+            one.classList.add("arf-mini2");
+            one.setAttribute("data-arf-colourpick", name.toLowerCase());
+            const dot = el("span", "arf-colourdot", "");
+            dot.style.background = "var(" + v + "," + b + ")";
+            one.insertBefore(dot, one.firstChild);
+            one.addEventListener("click", () => take(read(v, b), true));
+            picks.appendChild(one);
+        }
+        editor.appendChild(picks);
+        const sample = el("div", "arf-well", "");
+        const sampleWord = el("span", cut ? "arf-cut" : "arf-add", cut ? "words that were cut" : "words that were added");
+        sample.appendChild(document.createTextNode("A line with "));
+        sample.appendChild(sampleWord);
+        sample.appendChild(document.createTextNode(" in it."));
+        editor.appendChild(sample);
+        wrap.appendChild(editor);
+        // Every part shows the colour in use.
+        const paint = () => {
+            const hex = now();
+            swatch.style.background = hex;
+            back.hidden = !own();
+            if (document.activeElement !== code)
+                code.value = hex;
+            const hsl = hexHsl(hex);
+            for (const part of ["h", "s", "l"]) {
+                if (document.activeElement !== sliders[part])
+                    sliders[part].value = String(hsl[part]);
+                shown[part].textContent = String(sliders[part].value) + (part === "h" ? "" : "%");
+            }
+        };
+        // A colour taken from any part of the editor.
+        function take(hex, save) {
+            cfg[key] = hex.toLowerCase();
+            bad.textContent = "";
+            paint();
+            persist(save);
+        }
+        code.addEventListener("input", () => {
+            const hex = colourCode(code.value);
+            if (hex)
+                take(hex, false);
+        });
+        code.addEventListener("change", () => {
+            const hex = colourCode(code.value);
+            if (hex)
+                take(hex, true);
+            else {
+                bad.textContent = "Type a colour code such as #ff0040.";
+                code.value = now();
+            }
+        });
+        for (const part of ["h", "s", "l"]) {
+            const fromSliders = () => hslHex(Number(sliders.h.value), Number(sliders.s.value), Number(sliders.l.value));
+            sliders[part].addEventListener("input", () => take(fromSliders(), false));
+            sliders[part].addEventListener("change", () => take(fromSliders(), true));
+        }
+        back.addEventListener("click", () => {
+            cfg[key] = "";
+            bad.textContent = "";
+            paint();
+            persist(true);
+        });
+        swatch.addEventListener("click", () => {
+            const open = editor.hidden;
+            swatch.setAttribute("aria-expanded", open ? "true" : "false");
+            if (open) {
+                editor.hidden = false;
+                paint();
+                growIn(editor);
+            }
+            else
+                foldAway(editor, () => (editor.hidden = swatch.getAttribute("aria-expanded") !== "true"));
+        });
+        paint();
         return wrap;
     }
+    // Ways in other than the drawer. Both are off until asked for, so a fresh
+    // install adds nothing to the screen.
     function buildReachCard() {
         const wrap = card("Ways to reach it", "The drawer tab is always there. These are extra.");
         wrap.appendChild(fieldRow({
@@ -11671,8 +11826,8 @@ export function setup(ctx, overrides) {
             ],
             hint: "None by default. A faint pattern in your theme's colour, drawn behind the cards on this tab.",
         }));
-        wrap.appendChild(colourRow("cutColour", "Colour of cut words", "--lumiverse-danger", "#ef4444"));
-        wrap.appendChild(colourRow("addColour", "Colour of added words", "--lumiverse-success", "#22c55e"));
+        wrap.appendChild(colourRow("cutColour", "Colour of cut words", "--lumiverse-danger", "#ef4444", true));
+        wrap.appendChild(colourRow("addColour", "Colour of added words", "--lumiverse-success", "#22c55e", false));
         return wrap;
     }
     // ---- carrying a setup somewhere else ----

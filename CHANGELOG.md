@@ -17,7 +17,7 @@ _2026-10-09_
 - **More hosts on NanoGPT.** Clef Flash and Decider can now be reached on NanoGPT.
 - **Show me the pop-up.** A button under **Show the before and after on screen**, on the Setup tab. It shows the card with made-up text, so you can see how it looks. Nothing is refined or sent, and its buttons only close it.
 - **Hearts and Stars.** Two more choices for **Pattern behind the panel**.
-- **Your own colours for cut and added words.** **Colour of cut words** and **Colour of added words**, on the Setup tab. By default they are your theme's danger and success colours. **Use the theme's colour** puts the theme's colour back. See [Settings](docs/settings.md).
+- **Your own colours for cut and added words.** **Colour of cut words** and **Colour of added words**, on the Setup tab. By default they are your theme's danger and success colours. The swatch opens a colour editor with a box for a colour code, sliders for hue, saturation and lightness, and your theme's own colours to pick from. It works the same on a phone and a laptop. **Use the theme's colour** puts the theme's colour back. See [Settings](docs/settings.md).
 
 ### Changed
 
