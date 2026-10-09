@@ -4166,7 +4166,7 @@ console.log("\nrows that hang off a switch open and close smoothly");
               biggest = Math.max(biggest, Math.abs(t - prev));
               prev = t;
             }
-            return { travel: Math.round(end), biggest: Math.round(biggest), frames: tops.length, looks, hidden: q("widgetSize").hidden };
+            return { travel: Math.round(end), biggest: Math.round(biggest), frames: tops.length, looks, tops, hidden: q("widgetSize").hidden };
           }, on);
         const opened = await watch(true);
         const shut = await watch(false);
@@ -4177,6 +4177,21 @@ console.log("\nrows that hang off a switch open and close smoothly");
             !!opened && opened.biggest < opened.travel / 3, JSON.stringify(opened && { travel: opened.travel, biggest: opened.biggest, frames: opened.frames }));
           ok(say + "opening, the rows start faded and slide down into place",
             !!opened && opened.looks[0].o < 0.5 && /matrix\(1, 0, 0, 1, 0, -/.test(opened.looks[0].t), JSON.stringify(opened && opened.looks.slice(0, 2)));
+          // The row slows down as it lands. A step bigger than the one before it
+          // is the row skipping, and at the end that reads as an abrupt stop.
+          const skips = (w) => {
+            let worst = 0;
+            for (let i = 2; i < w.tops.length; i++) {
+              const step = Math.abs(w.tops[i] - w.tops[i - 1]);
+              const before = Math.abs(w.tops[i - 1] - w.tops[i - 2]);
+              worst = Math.max(worst, step - before);
+            }
+            return worst;
+          };
+          ok(say + "opening, it lands softly with no skip at the end", !!opened && skips(opened) <= 2,
+            JSON.stringify(opened && opened.tops.map(Math.round)));
+          ok(say + "closing, it lands softly with no skip at the end", !!shut && skips(shut) <= 2,
+            JSON.stringify(shut && shut.tops.map(Math.round)));
           ok(say + "closing, the row below moves up in small steps",
             !!shut && shut.biggest < Math.abs(shut.travel) / 3, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
           const faded = shut ? shut.looks.findIndex((l) => l.o < 0.05) : -1;
