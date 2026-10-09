@@ -4360,8 +4360,8 @@ console.log("\nthe status dot stays beside a long status line");
 {
   // A long line of status wraps under itself. The dot stays at the start of
   // its first line rather than sitting alone above it.
-  for (const [label, viewport, touch] of [["phone", { width: 360, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+  for (const [label, viewport, touch, zoom] of [["phone", { width: 360, height: 900 }, true], ["phone at 412", { width: 412, height: 900 }, true], ["phone at 412, zoom 0.9", { width: 412, height: 900 }, true, 0.9], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, css: zoom ? "html{zoom:" + zoom + "}" : "", saved: { enabled: true } }, async (page) => {
       await goTab(page, "Log");
       await page.evaluate(() => {
         const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
@@ -4393,6 +4393,23 @@ console.log("\nthe status dot stays beside a long status line");
       ok(label + ": the status line is there", !!got && /would not take the call/.test(got.text), JSON.stringify(got));
       if (label === "phone") ok("phone: the line is long enough to wrap, or this proves nothing", !!got && got.lines >= 2, JSON.stringify(got));
       ok(label + ": the dot sits beside the words, on their first line", !!got && got.beside && got.firstLine, JSON.stringify(got));
+      // The countdown stays with the words before it. Wrapped, "trying again
+      // in 29s" moves to the next line as one, rather than leaving the number
+      // alone there.
+      const together = await page.evaluate(() => {
+        const words = document.querySelector("#drawer .arf-dot").nextElementSibling;
+        const text = words.firstChild;
+        const at = (needle) => {
+          const i = text.textContent.indexOf(needle);
+          if (i < 0) return null;
+          const r = document.createRange();
+          r.setStart(text, i);
+          r.setEnd(text, i + needle.length);
+          return Math.round(r.getClientRects()[0].top);
+        };
+        return { trying: at("trying"), number: at("29s") };
+      });
+      ok(label + ": the countdown is on the same line as the words before it", together.trying != null && together.trying === together.number, JSON.stringify(together));
       ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
     });
   }
@@ -4412,7 +4429,7 @@ console.log("\nthe time left is for the call that is running");
         window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
       });
       await settle(page);
-      const line = () => page.evaluate(() => (document.querySelector("#drawer").textContent.match(/Refining, \d+s(, \d+s left( on this try)?)?/) || [""])[0]);
+      const line = () => page.evaluate(() => (document.querySelector("#drawer").textContent.match(/Refining, \d+s(, \d+s\sleft(\son\sthis\stry)?)?/) || [""])[0]);
       const ahead = (secs) =>
         page.evaluate((secs) => {
           window.__ahead = (window.__ahead || 0) + secs * 1000;
@@ -4432,14 +4449,14 @@ console.log("\nthe time left is for the call that is running");
       await ahead(60);
       await page.waitForTimeout(500);
       const first = await line();
-      ok(label + ": on the first call the time left is the wait less the clock", /^Refining, 6[01]s, (40|39)s left$/.test(first), first);
+      ok(label + ": on the first call the time left is the wait less the clock", /^Refining, 6[01]s, (40|39)s\sleft$/.test(first), first);
       await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "waiting", waitMs: 20000, attempt: 1, of: 2 }));
       await ahead(20);
       await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
       await ahead(30);
       await page.waitForTimeout(500);
       const second = await line();
-      ok(label + ": on the next call the whole wait starts again", /^Refining, 11[01]s, (70|69)s left on this try$/.test(second), second);
+      ok(label + ": on the next call the whole wait starts again", /^Refining, 11[01]s, (70|69)s\sleft\son\sthis\stry$/.test(second), second);
       await ahead(50);
       await page.waitForTimeout(600);
       const still = await page.evaluate(() => ({

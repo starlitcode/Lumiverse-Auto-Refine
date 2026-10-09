@@ -14,6 +14,10 @@ _2026-10-09_
 
 - **The list of refines you can put back says what a reload does.** A line under it says the list clears when you reload, and that the refined replies stay in your chat. With **Add the refine as a swipe instead of writing over the reply** off, it says turning that on always keeps a way back to the original. With it on, it says the original stays one swipe back.
 
+### Fixed
+
+- **The countdown on the status line stays with its words.** While waiting for the provider, a long status line wrapped on a phone and left the number, such as **25s**, alone on the next line. **trying again in 25s** now moves to the next line as one piece. The digits are all the same width, so the line does not shift each second.
+
 ---
 
 ## 1.35.1

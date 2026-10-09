@@ -4686,6 +4686,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     return n <= 0 ? 0 : Math.min(3600, Math.max(5, n));
   }
 
+  // Words that stay on one line together.
+  function keep(words: string): string {
+    return words.replace(/ /g, "\u00a0");
+  }
+
   function stageWords(): string {
     const secs = runStartedAt ? (Date.now() - runStartedAt) / 1000 : 0;
     const clockPart = secs >= 1 ? ", " + secs.toFixed(0) + "s" : "";
@@ -4707,15 +4712,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     // down, because a status line that says "waiting" and does not move looks
     // exactly like one that has stopped, and this is the longest anything here
     // ever sits still.
+    // The countdown is held to the words before it with no-break spaces, so
+    // a line that wraps on a phone takes them to the next line together
+    // rather than leaving the number alone there.
     if (stage === "waiting") {
       const left = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
-      if (waitGap) return "Waiting for the gap between refines, starting in " + left + "s";
+      if (waitGap) return "Waiting for the gap between refines, " + keep("starting in " + left + "s");
       return (
         "The provider would not take the call" +
-        (waitAt ? " (" + waitAt + " of " + waitOf + ")" : "") +
-        ", trying again in " +
-        left +
-        "s"
+        (waitAt ? " " + keep("(" + waitAt + " of " + waitOf + ")") : "") +
+        ", " +
+        keep("trying again in " + left + "s")
       );
     }
     // Which try this is, because a refine that takes three times as
@@ -4736,7 +4743,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const from = callFrom || runStartedAt;
     const left = Math.max(0, cap - (from ? (Date.now() - from) / 1000 : 0));
     const later = !!runStartedAt && from - runStartedAt > 1000;
-    return "Refining" + clockPart + (secs > 8 ? ", " + left.toFixed(0) + "s left" + (later ? " on this try" : "") : "");
+    return "Refining" + clockPart + (secs > 8 ? ", " + keep(left.toFixed(0) + "s left" + (later ? " on this try" : "")) : "");
   }
 
   // The last line of defence. Everything else can fail politely; this catches
@@ -5348,7 +5355,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // 5px puts the 7px dot in the middle of a 12px line at 1.45.
     ".arf-statusline{flex-wrap:nowrap;align-items:flex-start}" +
     ".arf-statusline>.arf-dot{margin-top:5px}" +
-    ".arf-statusline>span:last-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}" +
+    // Every digit the same width, so a countdown does not move the words
+    // around it each second.
+    ".arf-statusline>span:last-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}" +
     // The refine buttons above the tabs, in two groups with a heading each:
     // replies, then your own messages. Two equal columns, so the buttons line
     // up rather than wrapping at whatever width each label happens to be. A
