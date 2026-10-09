@@ -346,7 +346,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The floating button, the buttons in the chat, and the input bar row.",
-    keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill", "reduceMotion", "panelPattern"],
+    keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill", "reduceMotion", "panelPattern", "cutColour", "addColour"],
   },
   {
     id: "inputbox",
@@ -735,6 +735,10 @@ const CONFIG = {
   // A faint pattern drawn behind the panel, in the theme's own colour. Empty
   // is plain.
   panelPattern: "",
+  // Colours for cut and added words in a before and after, as #rrggbb. Empty
+  // uses the theme's danger and success colours.
+  cutColour: "",
+  addColour: "",
   // The card that comes up on the page when a refine finishes, with the before,
   // the after and the way back on it. On by default, because a refine changes
   // writing somebody was reading, and the change should be visible without
@@ -3754,6 +3758,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       if (typeof document === "undefined") return;
       const root = document.documentElement;
+      // The reader's own colours for cut and added words. Only a colour
+      // written as #rrggbb is put on the page, so nothing else in a setting
+      // can reach the stylesheet.
+      for (const [key, name] of [["cutColour", "--arf-cut-ink"], ["addColour", "--arf-add-ink"]]) {
+        const v = String(cfg[key] || "");
+        if (/^#[0-9a-f]{6}$/i.test(v)) root.style.setProperty(name, v);
+        else root.style.removeProperty(name);
+      }
       if (cfg.eyeStill || cfg.reduceMotion) root.setAttribute("data-arf-still-eyes", "1");
       else root.removeAttribute("data-arf-still-eyes");
       if (cfg.reduceMotion) root.setAttribute("data-arf-still", "1");
@@ -3765,6 +3777,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       document.documentElement.removeAttribute("data-arf-still-eyes");
       document.documentElement.removeAttribute("data-arf-still");
+      document.documentElement.style.removeProperty("--arf-cut-ink");
+      document.documentElement.style.removeProperty("--arf-add-ink");
     } catch (_) {}
   });
 
@@ -5423,9 +5437,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     //
     // Colour is not the only mark on either. Somebody who cannot tell the two
     // apart still has the line through one of them, and the words themselves.
-    ".arf-cut{color:var(--lumiverse-danger,#ef4444);text-decoration:line-through;" +
+    // The reader can pick their own colour for each, which is put on the
+    // page's root. Unpicked, the theme's danger and success colours are used.
+    // A colour picker the size of a switch, with the theme's edge.
+    ".arf-colour{flex:none;width:44px;height:28px;padding:2px;box-sizing:border-box;cursor:pointer;" +
+    "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
+    "border-radius:var(--lumiverse-radius,8px);background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
+    "@media (pointer: coarse){.arf-colour{width:52px;height:36px}}" +
+    ".arf-cut{color:var(--arf-cut-ink,var(--lumiverse-danger,#ef4444));text-decoration:line-through;" +
     "text-decoration-thickness:1px;opacity:.85}" +
-    ".arf-add{color:var(--lumiverse-success,#22c55e)}" +
+    ".arf-add{color:var(--arf-add-ink,var(--lumiverse-success,#22c55e))}" +
     ".arf-scroll{max-height:130px;overflow-y:auto}" +
     // The two versions in their own columns. They wrap to one on top of the
     // other once there is not room for two readable ones, which is what a
@@ -12075,6 +12096,74 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // Ways in other than the drawer. Both are off until asked for, so a fresh
   // install adds nothing to the screen.
+  // A colour for the words a before and after marks. The picker starts on the
+  // theme's own colour, and Use the theme's colour puts that back. A colour
+  // too faint to read on the theme is made lighter or darker by the
+  // readability pass, keeping as much of it as it can.
+  function colourRow(key: string, label: string, themeVar: string, fallback: string): HTMLElement {
+    const wrap = el("div", "arf-col");
+    wrap.setAttribute("data-arf-row", key);
+    const row = el("div", "arf-between");
+    const left = el("div", "arf-labrow arf-grow");
+    const lab = el("span", "arf-lab", label);
+    lab.id = nextId() + "-name";
+    left.appendChild(lab);
+    const q = hintButton("Empty uses your theme's colour. Cut words keep the line through them whatever the colour.", label);
+    if (q) left.appendChild(q);
+    row.appendChild(left);
+    const pick = document.createElement("input");
+    pick.type = "color";
+    pick.className = "arf-colour";
+    pick.setAttribute("data-arf-field", key);
+    pick.setAttribute("aria-labelledby", lab.id);
+    // The theme's colour, read off the page, as the picker's starting point.
+    const themed = (): string => {
+      try {
+        const probe = document.createElement("span");
+        probe.style.color = "var(" + themeVar + "," + fallback + ")";
+        document.body.appendChild(probe);
+        const c = parseColor(getComputedStyle(probe).color);
+        probe.remove();
+        if (!c) return fallback;
+        const hex = (n: number) => ("0" + Math.round(n).toString(16)).slice(-2);
+        return "#" + hex(c.r) + hex(c.g) + hex(c.b);
+      } catch (_) {
+        return fallback;
+      }
+    };
+    const own = () => /^#[0-9a-f]{6}$/i.test(String(cfg[key] || ""));
+    pick.value = own() ? String(cfg[key]) : themed();
+    const back = button("Use the theme's colour", false);
+    back.classList.add("arf-mini2");
+    back.setAttribute("data-arf-colourback", key);
+    const paintBack = () => {
+      back.hidden = !own();
+    };
+    pick.addEventListener("input", () => {
+      cfg[key] = pick.value;
+      paintBack();
+      persist();
+    });
+    pick.addEventListener("change", () => {
+      cfg[key] = pick.value;
+      paintBack();
+      persist(true);
+    });
+    back.addEventListener("click", () => {
+      cfg[key] = "";
+      pick.value = themed();
+      paintBack();
+      persist(true);
+    });
+    paintBack();
+    const tools = el("div", "arf-row");
+    tools.appendChild(back);
+    tools.appendChild(pick);
+    row.appendChild(tools);
+    wrap.appendChild(row);
+    return wrap;
+  }
+
   function buildReachCard(): HTMLElement {
     const wrap = card("Ways to reach it", "The drawer tab is always there. These are extra.");
     wrap.appendChild(
@@ -12151,6 +12240,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "None by default. A faint pattern in your theme's colour, drawn behind the cards on this tab.",
       }),
     );
+    wrap.appendChild(colourRow("cutColour", "Colour of cut words", "--lumiverse-danger", "#ef4444"));
+    wrap.appendChild(colourRow("addColour", "Colour of added words", "--lumiverse-success", "#22c55e"));
     return wrap;
   }
 

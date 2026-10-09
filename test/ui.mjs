@@ -11796,6 +11796,75 @@ console.log("\na pattern behind the panel");
   }
 }
 
+console.log("\nyour own colours for cut and added words");
+{
+  // By default, cut words take the theme's danger colour and added words its
+  // success colour. A colour picked in Setup is used instead, in the panel
+  // and on the card, and Use the theme's colour puts the theme's back. Only a
+  // colour written as #rrggbb reaches the page. Checked at a phone width and
+  // a laptop width.
+  const cutColour = () =>
+    document.evaluate ? (() => {
+      const w = document.createElement("span");
+      w.className = "arf-cut";
+      document.body.appendChild(w);
+      const c = getComputedStyle(w).color;
+      w.remove();
+      return c;
+    })() : "";
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { css: ":root{--lumiverse-danger:rgb(200,30,40);--lumiverse-success:rgb(20,160,60)}", viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      const read = () => page.evaluate((fn) => {
+        const cut = new Function("return (" + fn + ")()")();
+        const add = (() => { const w = document.createElement("span"); w.className = "arf-add"; document.body.appendChild(w); const c = getComputedStyle(w).color; w.remove(); return c; })();
+        const pick = document.querySelector('#drawer [data-arf-field="cutColour"]');
+        const back = document.querySelector('#drawer [data-arf-colourback="cutColour"]');
+        const r = pick && pick.getBoundingClientRect();
+        return {
+          cut, add,
+          picker: pick ? pick.value : null,
+          height: r ? Math.round(r.height) : 0,
+          backShown: !!back && !back.hidden && back.getClientRects().length > 0,
+          backHeight: back && back.getClientRects().length ? Math.round(back.getBoundingClientRect().height) : 0,
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      }, cutColour.toString());
+      const first = await read();
+      ok(label + ": by default, cut words take the theme's danger colour", first.cut === "rgb(200, 30, 40)", JSON.stringify(first));
+      ok(label + ": and added words its success colour", first.add === "rgb(20, 160, 60)", JSON.stringify(first));
+      ok(label + ": the picker starts on the theme's colour", first.picker === "#c81e28", JSON.stringify(first));
+      ok(label + ": with no colour of your own, there is nothing to put back", !first.backShown, JSON.stringify(first));
+      if (touch) ok(label + ": the picker is tall enough to tap", first.height >= 32, String(first.height));
+      await page.evaluate(() => {
+        const pick = document.querySelector('#drawer [data-arf-field="cutColour"]');
+        pick.value = "#3366ff";
+        pick.dispatchEvent(new Event("input", { bubbles: true }));
+        pick.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await settle(page);
+      const mine = await read();
+      ok(label + ": a colour you pick is used for cut words", mine.cut === "rgb(51, 102, 255)", JSON.stringify(mine));
+      ok(label + ": and the way back to the theme's colour shows", mine.backShown, JSON.stringify(mine));
+      if (touch) ok(label + ": and is tall enough to tap", mine.backHeight >= 32, String(mine.backHeight));
+      ok(label + ": nothing runs off the side", !mine.sideways, "");
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").cutColour);
+      ok(label + ": it is saved", saved === "#3366ff", String(saved));
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourback="cutColour"]').click());
+      await settle(page);
+      const back = await read();
+      ok(label + ": Use the theme's colour puts the theme's colour back", back.cut === "rgb(200, 30, 40)" && back.picker === "#c81e28" && !back.backShown, JSON.stringify(back));
+    });
+  }
+  // A setting that is not a colour, such as one from somebody else's file,
+  // never reaches the page.
+  await inTab(browser, { saved: { enabled: true, cutColour: "url(https://example.com/x.png)" } }, async (page) => {
+    const v = await page.evaluate(() => document.documentElement.style.getPropertyValue("--arf-cut-ink"));
+    ok("a setting that is not a #rrggbb colour is not used", v === "", JSON.stringify(v));
+  });
+}
+
 console.log("\nthe switch knob springs");
 {
   // The knob slides a little past its end and springs back, and stretches

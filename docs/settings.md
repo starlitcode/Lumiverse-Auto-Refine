@@ -246,6 +246,13 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 
 **Pattern behind the panel** draws a faint pattern behind this tab: Diamonds, Stripes, Dots, Hearts or Stars. It is None by default.
 
+**Colour of cut words** and **Colour of added words** set the colours used in every before and after: on the card, in the panel and on the Log tab.
+
+- By default, cut words use your theme's danger colour and added words its success colour.
+- Pick a colour and it is used instead. **Use the theme's colour** puts the theme's colour back.
+- Cut words keep the line through them whatever the colour, so they can be told apart without colour.
+- If a colour is too faint to read on your theme, it is made lighter or darker until it can be read, keeping as much of it as it can.
+
 - The pattern is drawn in your theme's colour.
 - With a pattern on, the cards are solid, so no text is read across the lines. The tab strip is solid with or without a pattern.
 
