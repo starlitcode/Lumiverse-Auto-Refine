@@ -4,21 +4,24 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are nine to pick from. Two of them come in two sizes, a larger model and a faster Flash:
+There are ten to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds).
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
 | **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
 | **Span** | Respan | Span-01 Lite is free. Span-01 is paid. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1) |
-| **Mercury Decide** | Inception | Free on OpenRouter, for now | [Mercury Decide on OpenRouter](https://openrouter.ai/inception/mercury-decide:free) |
+| **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Mercury Decide on OpenRouter](https://openrouter.ai/inception/mercury-decide) |
 | **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Liquid AI: Decision Models](https://docs.liquid.ai/lfm/models/decision-models) |
 | **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide), [Solar Decide Flash on OpenRouter](https://openrouter.ai/upstage/solar-decide-flash) |
 | **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
 | **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
 | **Clef**, and **Clef Flash** | Cloudflare | Paid, per call | [Cloudflare: Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Cloudflare: Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/) |
 | **Decider** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
+| **Mapika Decider**, in 0.8B, 2B and 4B | Mapika | Paid, per call | [Mapika Decider on GitHub](https://github.com/Mapika/decider) |
 
-All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. Where a model's maker has its own API, the link goes to the maker's page about it. With a Flash picked, the link is for the Flash. With Kev 4B picked, a warning that it is a small model shows next to its link. With Clef or Clef Flash picked, a note says how much of a reply Cloudflare reads.
+All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. Where a model's maker has its own API, the link goes to the maker's page about it. With a Flash picked, the link is for the Flash.
+
+Mapika has no hosted API of its own. Its link goes to its page for the models, which are open. With Kev 4B picked, a warning that it is a small model shows next to its link. With Clef or Clef Flash picked, a note says how much of a reply Cloudflare reads.
 
 Inception has no page of its own about Mercury Decide yet, and Upstage has none about Solar Decide Flash, so their links go to OpenRouter, which serves them.
 
@@ -29,7 +32,7 @@ Everything is on the Model tab, in **One model or two**.
 1. Set **How many models** to two.
 2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Clef, see [Clef and Clef Flash](#clef-and-clef-flash). For Solar Decide, see [Solar Decide](#solar-decide). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef and Clef Flash](#clef-and-clef-flash).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide, Clef and Mapika Decider, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef and Clef Flash](#clef-and-clef-flash).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -90,16 +93,37 @@ Span reads a conversation, not named fields. **On OpenRouter** it takes the same
 - Respan's own API only scores once Respan has switched Span-01 on for your account. Until then, **Test** says "Span turned the call down (403: Span-01 scoring is not enabled for your organization...)". Ask Respan for access, or pick OpenRouter as the host, which needs no access request.
 - Respan answers each behavior with three chances: present, absent, and not enough to judge. The chance it is present is the score.
 
+## Sizes and kinds
+
+Some models come in more than one size, or as a free kind and a paid kind. Each is one entry under **Which second model**, with a picker under it:
+
+| Model | Picker | Choices |
+| --- | --- | --- |
+| Mercury Decide | **Which Mercury Decide** | free, or without the free limits |
+| Solar Decide | **Which Solar Decide** | Solar Decide, or Solar Decide Flash |
+| Clef | **Which Clef** | Clef, or Clef Flash |
+| Mapika Decider | **Which Mapika Decider** | 0.8B, 2B or 4B |
+
+- A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
+- The free and paid kinds of Mercury Decide are the same model, so they share one line.
+- A host only offers the sizes it serves. If the size you picked is not served on the host you change to, the standard size is used there, with its line. Change back and your size is picked again.
+- One **Model name** box serves every size of a model. It shows the name for the one picked. A name typed in it is sent whichever size is picked.
+
 ## Mercury Decide
 
-Mercury Decide is reached on OpenRouter, where it is free for now. It takes the same request as Jev, so nothing about the checks changes.
+Mercury Decide is reached on OpenRouter. It takes the same request as Jev, so nothing about the checks changes.
 
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `inception/mercury-decide:free` |
+**Which Mercury Decide** picks one of two kinds of the same model:
+
+- **Mercury Decide, free**, the default. It costs nothing at the moment.
+- **Mercury Decide, without the free limits**. It is paid, per call. OpenRouter's limits for free models do not apply to it.
+
+| Host | Free | Without the free limits |
+| --- | --- | --- |
+| OpenRouter | `inception/mercury-decide:free` | `inception/mercury-decide` |
 
 - OpenRouter limits free models to 20 calls a minute. It also limits them to 50 calls a day, or 1000 a day once you have bought 10 credits or more.
-- It costs nothing at the moment. If that changes, its page on OpenRouter shows the price.
+- Inception has not published an API of its own for it, so it is on OpenRouter only.
 
 ## D1
 
@@ -181,32 +205,51 @@ Clef and Clef Flash are Cloudflare's decision models. Both take the same request
 | Host | Clef | Clef Flash |
 | --- | --- | --- |
 | OpenRouter | `cloudflare/clef` | `cloudflare/clef-flash` |
-| NanoGPT | `cloudflare/clef` | not offered |
+| NanoGPT | `cloudflare/clef` | `cloudflare/clef-flash` |
 | Cloudflare | `clef` | `clef-flash` |
 
-- **How much they read.** OpenRouter says that Cloudflare reads only about the first 2,000 tokens of the text it is sent. The end of a long reply may not be read. OpenRouter can send them to Cloudflare too. Turning off **Also compare with the reply before it** leaves more room for the reply.
+- **How much they read.** OpenRouter says that Cloudflare reads only about the first 2,000 tokens of the text it is sent. NanoGPT limits them to about 1,800. The end of a long reply may not be read. OpenRouter can send them to Cloudflare too. Turning off **Also compare with the reply before it** leaves more room for the reply.
 - **On Cloudflare's own API** you need two things, both from the Workers AI page of your Cloudflare dashboard, under **Use REST API**:
   1. Your account ID. Paste it into **Cloudflare account ID**, which shows when Cloudflare is the host. It is 32 letters and numbers. Anything else is not used.
   2. An API token made with the **Workers AI** template. Save it in the key box.
 - With no account ID saved, Cloudflare is not called, the Log says what is missing, and the reply is refined.
 - Each of the two has its own **Refine when a check reaches**. The panel shows the line for the one in use.
-- NanoGPT serves Clef only, on the same decisions route as Jev. If you picked Clef Flash and then change to NanoGPT, Clef is sent, and its line is used. Change back and Clef Flash is picked again.
+- NanoGPT serves both, on the same decisions route as Jev.
 - One **Model name** box serves both. It shows the name for the one picked. A name typed in it is sent for both. On Cloudflare the name is also part of the address, so it has to be `clef` or `clef-flash`.
 - Both are paid, per call. Each host's own page shows the price.
 
 ## Decider
 
-Decider is Perplexity's decision model. Auto Refine uses Decider V1.1 27B. It takes the same request as Jev, on OpenRouter and on Perplexity's own API. It reads up to 262,144 tokens.
+Decider is Perplexity's decision model. Auto Refine uses Decider V1.1 27B. It takes the same request as Jev, on OpenRouter, NanoGPT and Perplexity's own API. It reads up to 262,144 tokens.
 
 | Host | Model name |
 | --- | --- |
 | OpenRouter | `perplexity/pplx-decider-v1.1-27b` |
+| NanoGPT | `perplexity/pplx-decider-v1.1-27b` |
 | Perplexity | `pplx-decider-v1.1-27b` |
 
 - On Perplexity's own API, the key comes from your Perplexity account, under **API Keys**.
 - The older Decider V1 27B is `pplx-decider-v1-27b` on Perplexity and `perplexity/pplx-decider-v1-27b` on OpenRouter. Type it in **Model name** to use it.
 - It is paid, per call. Each host's own page shows the price.
 
+## Mapika Decider
+
+Mapika Decider is an open decision model from Mapika. It takes the same request as Jev. LLM Tech hosts it on NanoGPT, made smaller to run, in three sizes.
+
+**Which Mapika Decider** picks the size:
+
+- **Decider 0.8B, the smallest**. The fastest. Its maker says it knows less than the 2B, so it does worse on questions that need knowledge.
+- **Decider 2B**, the default. Its maker's default size.
+- **Decider 4B, the largest**. Its maker says it scores above the 2B on most of their tests.
+
+| Host | 0.8B | 2B | 4B |
+| --- | --- | --- | --- |
+| NanoGPT | `llmtech/decider-0.8b-fp8` | `llmtech/decider-2b-fp8` | `llmtech/decider-4b-nvfp4` |
+
+- It is on NanoGPT only. If OpenRouter or another host is left picked, NanoGPT is used.
+- NanoGPT gives each size 32,768 tokens.
+- All three are paid, per call. NanoGPT's page for each shows the price.
+- Mapika's models are open, so you can run them yourself with Mapika's server and reach them under **Another address**. See [Mapika Decider on GitHub](https://github.com/Mapika/decider).
 
 ## When a model is renamed, or a new one comes out
 
@@ -268,8 +311,8 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `perplexity/pplx-decider-v1.1-27b` or `upstage/solar-decide-flash` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13`, `typesafe/jev-latest`, `liquid/d1` or `cloudflare/clef` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `perplexity/pplx-decider-v1.1-27b`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13`, `typesafe/jev-latest`, `liquid/d1`, `cloudflare/clef`, `cloudflare/clef-flash`, `perplexity/pplx-decider-v1.1-27b`, `llmtech/decider-0.8b-fp8`, `llmtech/decider-2b-fp8` or `llmtech/decider-4b-nvfp4` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
 | Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
 | Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` |
@@ -337,6 +380,9 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Clef** | 30 percent |
 | **Clef Flash** | 30 percent |
 | **Decider** | 30 percent |
+| **Mapika Decider 0.8B** | 30 percent |
+| **Mapika Decider 2B** | 30 percent |
+| **Mapika Decider 4B** | 30 percent |
 
 ### Where the defaults come from
 

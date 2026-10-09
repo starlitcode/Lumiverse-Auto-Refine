@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.34.0";
+const VERSION = "1.35.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -55,56 +55,127 @@ function blockText(raw: any): string {
 // line about what the model did, and the links under the card all come from
 // here, so a model added later is one more entry, beside its entry in the
 // backend.
-// A model that comes in two, a larger one and a faster Flash, is one entry
-// here, with the Flash's name and link beside its own. Which one is used is
-// its own setting, such as Which Clef.
-const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: string; flashName?: string; flashAbout?: string }> = [
+// A model offered in more than one size or kind is one entry here. Its sizes
+// are in SIZE_PICKS below.
+const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: string }> = [
   { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
   { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
   // Inception has no page of its own for it, so the link is OpenRouter's,
   // which serves it.
-  { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide:free" },
+  { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide" },
   { value: "d1", name: "D1", from: "Liquid AI", about: "https://docs.liquid.ai/lfm/models/decision-models" },
-  // Upstage has no page of its own for Solar Decide Flash yet, so its link is
-  // OpenRouter's, which serves it.
-  {
-    value: "solar",
-    name: "Solar Decide",
-    from: "Upstage",
-    about: "https://console.upstage.ai/docs/models/solar-decide",
-    flashName: "Solar Decide Flash",
-    flashAbout: "https://openrouter.ai/upstage/solar-decide-flash",
-  },
+  { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
   { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
   // Each of these links to its maker's own page for the model, which is also
   // where its maker's own API is described.
   { value: "luna", name: "GPT-6 Luna Decisions", from: "OpenAI", about: "https://developers.openai.com/api/docs/guides/decisions" },
-  {
-    value: "clef",
-    name: "Clef",
-    from: "Cloudflare",
-    about: "https://developers.cloudflare.com/workers-ai/models/clef/",
-    flashName: "Clef Flash",
-    flashAbout: "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
-  },
+  { value: "clef", name: "Clef", from: "Cloudflare", about: "https://developers.cloudflare.com/workers-ai/models/clef/" },
   { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
+  // Mapika publishes its models with no hosted API of its own. The link is the
+  // maker's page for them.
+  { value: "mapika", name: "Mapika Decider", from: "Mapika", about: "https://github.com/Mapika/decider" },
 ];
 
-// The setting that picks between a model's two, and the hosts that serve only
-// the larger one. Flash picked on one of those hosts sends the larger one, the
-// same as the backend does, and the panel shows the larger one's line.
-const FLASH_PICKS: Record<string, { key: string; without: string[] }> = {
-  clef: { key: "clefTier", without: ["nanogpt"] },
-  solar: { key: "solarTier", without: ["upstage"] },
+// A model offered in more than one size or kind, such as Clef and Clef Flash.
+// It is one entry in Which second model, with a picker of its own under it.
+// Each size has its name, its line and, where it differs, its own link. Two
+// kinds of one model, such as Mercury Decide free and without the free limits,
+// share a line. `standard` is picked by default, and is what is used on a host
+// that does not serve the size picked. A size is served on a host when that
+// host has a built-in name for it.
+type Size = { value: string; label: string; name: string; line: string; about?: string };
+const SIZE_PICKS: Record<string, { key: string; title: string; standard: string; sizes: Size[] }> = {
+  mercury: {
+    key: "mercuryTier",
+    title: "Which Mercury Decide",
+    standard: "free",
+    sizes: [
+      { value: "free", label: "Mercury Decide, free", name: "Mercury Decide", line: "mercuryOver" },
+      { value: "paid", label: "Mercury Decide, without the free limits", name: "Mercury Decide", line: "mercuryOver" },
+    ],
+  },
+  solar: {
+    key: "solarTier",
+    title: "Which Solar Decide",
+    standard: "full",
+    sizes: [
+      { value: "full", label: "Solar Decide", name: "Solar Decide", line: "solarOver" },
+      // Upstage has no page of its own for it yet, so its link is
+      // OpenRouter's, which serves it.
+      {
+        value: "flash",
+        label: "Solar Decide Flash, faster",
+        name: "Solar Decide Flash",
+        line: "solarFlashOver",
+        about: "https://openrouter.ai/upstage/solar-decide-flash",
+      },
+    ],
+  },
+  clef: {
+    key: "clefTier",
+    title: "Which Clef",
+    standard: "full",
+    sizes: [
+      { value: "full", label: "Clef", name: "Clef", line: "clefOver" },
+      {
+        value: "flash",
+        label: "Clef Flash, smaller and faster",
+        name: "Clef Flash",
+        line: "clefFlashOver",
+        about: "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
+      },
+    ],
+  },
+  mapika: {
+    key: "mapikaSize",
+    title: "Which Mapika Decider",
+    standard: "2b",
+    sizes: [
+      { value: "0.8b", label: "Decider 0.8B, the smallest", name: "Mapika Decider 0.8B", line: "mapikaSmallOver" },
+      { value: "2b", label: "Decider 2B", name: "Mapika Decider 2B", line: "mapikaOver" },
+      { value: "4b", label: "Decider 4B, the largest", name: "Mapika Decider 4B", line: "mapikaLargeOver" },
+    ],
+  },
 };
-// Every host in the host list, for the Flash choice to name the ones it is
-// offered on.
-const ALL_HOSTS = ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "custom"];
 
-// Whether the Flash is the one used: picked, and on a host that serves it.
-function flashUsed(c: any): boolean {
-  const pick = FLASH_PICKS[c && c.judgeWho];
-  return !!pick && c[pick.key] === "flash" && pick.without.indexOf(c.judgeHost) < 0;
+// Where a model is reached when the host picked does not serve it: the first
+// host it has, which is OpenRouter for every model OpenRouter serves.
+function homeHost(who: string): string {
+  return Object.keys(BUILT_IN_MODEL_NAMES[who] || {})[0] || "openrouter";
+}
+
+// The models a host serves, for the host list to offer it only to them.
+function modelsOn(host: string): string[] {
+  return Object.keys(BUILT_IN_MODEL_NAMES).filter((who) => !!BUILT_IN_MODEL_NAMES[who][host]);
+}
+
+// The size in use: the one picked, where the host serves it. Another address
+// is sent whatever is typed for it, so the pick holds there.
+function sizeInUse(c: any): Size | null {
+  const pick = SIZE_PICKS[c && c.judgeWho];
+  if (!pick) return null;
+  const picked = pick.sizes.find((z) => z.value === c[pick.key]) || pick.sizes.find((z) => z.value === pick.standard) || pick.sizes[0];
+  if (c.judgeHost === "custom") return picked;
+  const host = BUILT_IN_MODEL_NAMES[c.judgeWho][c.judgeHost] ? c.judgeHost : homeHost(c.judgeWho);
+  const names: any = BUILT_IN_MODEL_NAMES[c.judgeWho][host] || {};
+  return names[picked.value] ? picked : pick.sizes.find((z) => z.value === pick.standard) || pick.sizes[0];
+}
+
+// Whether a line is the one for the size in use. A model with no sizes has
+// one line, which always shows.
+function lineInUse(c: any, line: string): boolean {
+  const z = sizeInUse(c);
+  return !z || z.line === line;
+}
+
+// Whether one size is served where the model is reached: the host picked, or
+// its home host when the host picked does not serve the model. Another
+// address takes any size.
+function sizeServed(c: any, who: string, size: string): boolean {
+  if (c.judgeHost === "custom") return true;
+  const names: any = BUILT_IN_MODEL_NAMES[who] || {};
+  const host = names[c.judgeHost] ? c.judgeHost : homeHost(who);
+  return !!(names[host] && names[host][size]);
 }
 
 // The name each host gives each second model. Shown in the Model name box as
@@ -122,7 +193,7 @@ const BUILT_IN_MODEL_NAMES: Record<string, Record<string, string | Record<string
     openrouter: { free: "respan/span-01-lite:free", lite: "respan/span-01-lite", full: "respan/span-01" },
     respan: { free: "span-01-free", lite: "span-01-free", full: "span-01-pro" },
   },
-  mercury: { openrouter: "inception/mercury-decide:free" },
+  mercury: { openrouter: { free: "inception/mercury-decide:free", paid: "inception/mercury-decide" } },
   d1: { openrouter: "liquid/d1", nanogpt: "liquid/d1", liquid: "d1:free" },
   solar: {
     openrouter: { full: "upstage/solar-decide", flash: "upstage/solar-decide-flash" },
@@ -132,22 +203,31 @@ const BUILT_IN_MODEL_NAMES: Record<string, Record<string, string | Record<string
   luna: { openrouter: "openai/gpt-6-luna-decisions", openai: "gpt-6-luna" },
   clef: {
     openrouter: { full: "cloudflare/clef", flash: "cloudflare/clef-flash" },
-    nanogpt: { full: "cloudflare/clef" },
+    nanogpt: { full: "cloudflare/clef", flash: "cloudflare/clef-flash" },
     cloudflare: { full: "clef", flash: "clef-flash" },
   },
-  decider: { openrouter: "perplexity/pplx-decider-v1.1-27b", perplexity: "pplx-decider-v1.1-27b" },
+  decider: {
+    openrouter: "perplexity/pplx-decider-v1.1-27b",
+    nanogpt: "perplexity/pplx-decider-v1.1-27b",
+    perplexity: "pplx-decider-v1.1-27b",
+  },
+  // LLM Tech hosts Mapika's models on NanoGPT, made smaller to run.
+  mapika: {
+    nanogpt: { "0.8b": "llmtech/decider-0.8b-fp8", "2b": "llmtech/decider-2b-fp8", "4b": "llmtech/decider-4b-nvfp4" },
+  },
 };
 
 // The built-in name for the model and host picked. A host the model is not on
-// is reached on OpenRouter, the same as the backend does.
+// is replaced by the model's home host, the same as the backend does.
 function builtInModelName(c: any): string {
   const hosts = BUILT_IN_MODEL_NAMES[c && c.judgeWho];
   if (!hosts) return "";
-  const at = hosts[c.judgeHost] || hosts.openrouter;
+  const at = hosts[c.judgeHost] || hosts[homeHost(c.judgeWho)];
   if (typeof at === "string") return at;
   if (!at) return "";
   if (c.judgeWho === "jev") return at[c.judgeVersion] || at.latest;
-  if (FLASH_PICKS[c.judgeWho]) return (flashUsed(c) && at.flash) || at.full || "";
+  const size = sizeInUse(c);
+  if (size) return at[size.value] || "";
   return at[c.spanTier] || at.free || "";
 }
 
@@ -163,6 +243,7 @@ const OWN_NAME_KEYS: Record<string, string> = {
   luna: "lunaName",
   clef: "clefName",
   decider: "deciderName",
+  mapika: "mapikaName",
 };
 
 // A link in the panel's own colours. Names are linked rather than printed as
@@ -277,7 +358,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "clefTier", "solarTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "mapikaSize", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "mapikaName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -704,9 +785,11 @@ const CONFIG = {
   judgeWho: "jev",
   // Which Span: Lite at no cost, Lite paid, or the full model.
   spanTier: "free",
-  // Which Clef and which Solar Decide: the larger one, or the Flash.
+  // Which kind or size of a model that has more than one. See SIZE_PICKS.
+  mercuryTier: "free",
   clefTier: "full",
   solarTier: "full",
+  mapikaSize: "2b",
   // Where the second model is reached, and for "custom" the address and model name.
   judgeHost: "openrouter",
   judgeUrl: "",
@@ -726,6 +809,7 @@ const CONFIG = {
   lunaName: "",
   clefName: "",
   deciderName: "",
+  mapikaName: "",
   // The account ID Cloudflare's own address holds. Empty until the reader
   // pastes theirs.
   cloudflareAccount: "",
@@ -743,6 +827,9 @@ const CONFIG = {
   clefFlashOver: 30,
   deciderOver: 30,
   solarFlashOver: 30,
+  mapikaSmallOver: 30,
+  mapikaOver: 30,
+  mapikaLargeOver: 30,
   // With worn phrases on, the second model is also asked whether the reply uses one.
   judgeWorn: true,
   // The reply before this one goes to the second model too, and it is asked
@@ -2291,7 +2378,8 @@ type Field = {
   int?: boolean;
   // An option can carry its own `needs`, the same shape as a row's, for a
   // choice only one host offers.
-  options?: Array<{ value: string; label: string; needs?: { key: string; is?: any } }>;
+  // `test` is for an option that depends on more than one setting.
+  options?: Array<{ value: string; label: string; needs?: { key: string; is?: any; test?: (c: any) => boolean } }>;
   // Shown only while another setting is on, or holds a given value, or one of
   // a list of values. A row that can do nothing where it sits is worse than a
   // row that is not there, and a greyed one still takes up the space and
@@ -2339,18 +2427,21 @@ const JUDGE_FIELDS: Field[] = [
     key: "judgeHost",
     label: "Where it is reached",
     type: "pick",
+    // Each host is offered to the models it has a built-in name for, so the
+    // list cannot offer a host the backend has no address for.
     options: [
       { value: "openrouter", label: "OpenRouter" },
-      { value: "nanogpt", label: "NanoGPT", needs: { key: "judgeWho", is: ["jev", "d1", "clef"] } },
-      { value: "typesafe", label: "TypeSafe", needs: { key: "judgeWho", is: "jev" } },
-      { value: "respan", label: "Respan", needs: { key: "judgeWho", is: "span" } },
-      { value: "liquid", label: "Liquid AI", needs: { key: "judgeWho", is: "d1" } },
-      { value: "upstage", label: "Upstage", needs: { key: "judgeWho", is: "solar" } },
-      { value: "openai", label: "OpenAI", needs: { key: "judgeWho", is: "luna" } },
-      { value: "cloudflare", label: "Cloudflare", needs: { key: "judgeWho", is: "clef" } },
-      { value: "perplexity", label: "Perplexity", needs: { key: "judgeWho", is: "decider" } },
-      { value: "custom", label: "Another address" },
-    ],
+      { value: "nanogpt", label: "NanoGPT" },
+      { value: "typesafe", label: "TypeSafe" },
+      { value: "respan", label: "Respan" },
+      { value: "liquid", label: "Liquid AI" },
+      { value: "upstage", label: "Upstage" },
+      { value: "openai", label: "OpenAI" },
+      { value: "cloudflare", label: "Cloudflare" },
+      { value: "perplexity", label: "Perplexity" },
+    ]
+      .map((o) => ({ ...o, needs: { key: "judgeWho", is: modelsOn(o.value) } }))
+      .concat([{ value: "custom", label: "Another address" } as any]),
     needs: { key: "judgeMode", is: "two" },
     hint: "The key you save below has to be one from this host.",
   },
@@ -2368,30 +2459,23 @@ const JUDGE_FIELDS: Field[] = [
     under: true,
     hint: "The free one costs nothing. Respan's own API calls the two span-01-free and span-01-pro.",
   },
-  {
-    key: "clefTier",
-    label: "Which Clef",
-    type: "pick",
-    options: [
-      { value: "full", label: "Clef" },
-      { value: "flash", label: "Clef Flash, smaller and faster", needs: { key: "judgeHost", is: ALL_HOSTS.filter((h) => FLASH_PICKS.clef.without.indexOf(h) < 0) } },
-    ],
-    needs: { key: "judgeWho", is: "clef" },
-    under: true,
-    hint: "Each has its own line. NanoGPT serves Clef only.",
-  },
-  {
-    key: "solarTier",
-    label: "Which Solar Decide",
-    type: "pick",
-    options: [
-      { value: "full", label: "Solar Decide" },
-      { value: "flash", label: "Solar Decide Flash, faster", needs: { key: "judgeHost", is: ALL_HOSTS.filter((h) => FLASH_PICKS.solar.without.indexOf(h) < 0) } },
-    ],
-    needs: { key: "judgeWho", is: "solar" },
-    under: true,
-    hint: "Each has its own line. Upstage serves Solar Decide only.",
-  },
+  // Which Clef, Which Solar Decide and the rest, one for each model in
+  // SIZE_PICKS. A size is offered on the hosts that serve it.
+  ...Object.keys(SIZE_PICKS).map(
+    (who): Field => ({
+      key: SIZE_PICKS[who].key,
+      label: SIZE_PICKS[who].title,
+      type: "pick",
+      options: SIZE_PICKS[who].sizes.map((z) => ({
+        value: z.value,
+        label: z.label,
+        needs: { key: "judgeHost", test: (c: any) => sizeServed(c, who, z.value) },
+      })),
+      needs: { key: "judgeWho", is: who },
+      under: true,
+      hint: (SIZE_PICKS[who].sizes.some((z) => z.line !== SIZE_PICKS[who].sizes[0].line) ? "Each has its own line. " : "") + "A host shows only the ones it serves.",
+    }),
+  ),
   {
     key: "judgeVersion",
     label: "Which Jev",
@@ -2541,7 +2625,7 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "solar" },
-    when: (c: any) => !flashUsed(c),
+    when: (c: any) => lineInUse(c, "solarOver"),
     hint: "For Solar Decide. A percentage, " + CONFIG.solarOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
@@ -2575,7 +2659,7 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "clef" },
-    when: (c: any) => !flashUsed(c),
+    when: (c: any) => lineInUse(c, "clefOver"),
     hint: "For Clef. A percentage, " + CONFIG.clefOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
@@ -2587,7 +2671,7 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "clef" },
-    when: (c: any) => flashUsed(c),
+    when: (c: any) => lineInUse(c, "clefFlashOver"),
     hint: "For Clef Flash. A percentage, " + CONFIG.clefFlashOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
@@ -2610,8 +2694,44 @@ const JUDGE_FIELDS: Field[] = [
     max: 99,
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "solar" },
-    when: (c: any) => flashUsed(c),
+    when: (c: any) => lineInUse(c, "solarFlashOver"),
     hint: "For Solar Decide Flash. A percentage, " + CONFIG.solarFlashOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "mapikaSmallOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "mapika" },
+    when: (c: any) => lineInUse(c, "mapikaSmallOver"),
+    hint: "For Mapika Decider 0.8B. A percentage, " + CONFIG.mapikaSmallOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "mapikaOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "mapika" },
+    when: (c: any) => lineInUse(c, "mapikaOver"),
+    hint: "For Mapika Decider 2B. A percentage, " + CONFIG.mapikaOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "mapikaLargeOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "mapika" },
+    when: (c: any) => lineInUse(c, "mapikaLargeOver"),
+    hint: "For Mapika Decider 4B. A percentage, " + CONFIG.mapikaLargeOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "judgeWorn",
@@ -3478,18 +3598,19 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The second model's name, for everything the panel says about what it did.
   function whoName(): string {
     const m = SECOND_MODELS.find((x) => x.value === cfg.judgeWho) || SECOND_MODELS[0];
-    return m.flashName && flashUsed(cfg) ? m.flashName : m.name;
+    const z = sizeInUse(cfg);
+    return z ? z.name : m.name;
   }
 
   // The host the second model is reached on, as the host list shows it. A
-  // host the picked model is not on shows as OpenRouter, and the backend
-  // falls back the same way.
+  // host the picked model is not on shows as the model's home host, and the
+  // backend falls back the same way.
   function keyHost(): string {
     const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
     const opt = f && f.options ? f.options.find((o: any) => o.value === cfg.judgeHost) : null;
-    if (!opt) return "openrouter";
+    if (!opt) return homeHost(cfg.judgeWho);
     const needs = (opt as any).needs;
-    return !needs || optionShows(needs) ? String(opt.value) : "openrouter";
+    return !needs || optionShows(needs) ? String(opt.value) : homeHost(cfg.judgeWho);
   }
 
   // What a key answer is about: the host, and for another address the address
@@ -8622,7 +8743,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // cannot do anything until you leave the tab and come back.
 
   // Whether the setting a row or an option needs holds what it asks for.
-  function optionShows(needs: { key: string; is?: any }): boolean {
+  function optionShows(needs: { key: string; is?: any; test?: (c: any) => boolean }): boolean {
+    if (typeof needs.test === "function") return needs.test(cfg);
     const held = cfg[needs.key];
     const is = needs.is;
     return is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
@@ -8839,7 +8961,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // is what the backend sends in its place. The setting is kept, so it
         // comes back if the host that offers it is picked again.
         const offered = shown.some((o: any) => o.value === held) || !opts.some((o: any) => o.value === held);
-        sel.value = offered ? held : String((CONFIG as any)[f.key]);
+        sel.value = offered ? held : f.key === "judgeHost" ? homeHost(cfg.judgeWho) : String((CONFIG as any)[f.key]);
       };
       fill();
       if (opts.some((o: any) => o.needs)) {
@@ -8854,7 +8976,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         // redraws the card rather than only showing and hiding rows. The rows
         // start the rebuild as they were, so the ones that come or go still
         // fade in and fold away like every other row.
-        if (f.key === "judgeWho" || f.key === "judgeHost" || f.key === "clefTier" || f.key === "solarTier" || f.key === "refineSide") {
+        if (f.key === "judgeWho" || f.key === "judgeHost" || Object.keys(SIZE_PICKS).some((w) => SIZE_PICKS[w].key === f.key) || f.key === "refineSide") {
           paint(rowsShowing());
           return;
         }
@@ -10008,8 +10130,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     about.setAttribute("data-arf-jevabout", "1");
     const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
     // A Flash in use is linked by its own name, to its own page.
-    const flash = !!picked.flashAbout && flashUsed(cfg);
-    about.appendChild(linkTo(flash ? String(picked.flashAbout) : picked.about, "What is " + (flash ? picked.flashName : picked.name) + "?"));
+    const z = sizeInUse(cfg);
+    const own = !!z && !!z.about;
+    about.appendChild(linkTo(own ? String(z && z.about) : picked.about, "What is " + (own ? z && z.name : picked.name) + "?"));
     // Only with two models picked. With one there is no second model to read
     // about, and the links are one more line to read past.
     wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));
@@ -10022,7 +10145,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(hangsOff(small, () => cfg.judgeMode === "two", "small model warning"));
     }
     if (picked.value === "clef") {
-      const short = note("Cloudflare, which OpenRouter also uses for Clef, reads only about the first 2,000 tokens it is sent. The end of a long reply may not be read.");
+      const short = note("Cloudflare and NanoGPT read only about the first 2,000 tokens Clef is sent, and OpenRouter can send it to Cloudflare. The end of a long reply may not be read.");
       short.setAttribute("data-arf-clefwarn", "1");
       wrap.appendChild(hangsOff(short, () => cfg.judgeMode === "two", "Clef length note"));
     }
@@ -16518,8 +16641,10 @@ export const __testing = {
   BUILT_IN_MODEL_NAMES,
   builtInModelName,
   OWN_NAME_KEYS,
-  FLASH_PICKS,
-  flashUsed,
+  SIZE_PICKS,
+  sizeInUse,
+  sizeServed,
+  homeHost,
   SECOND_MODELS,
   splitSelectorList,
   blockText,

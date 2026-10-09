@@ -92,12 +92,16 @@ Two skills are available. Load them before starting work.
 - A new second model gets its own line setting, and its default is 30. The
   owner changes a default only if the owner's testing finds a better one or a model
   changes. `test/model-names.test.ts` checks that every line starts at 30.
-- Models from the same maker that are sizes of one model, such as Clef and
-  Clef Flash, are one entry under **Which second model**, with a picker
-  under it, such as **Which Clef**. Each model in the pair still has its own
-  line setting at 30 and its own **What is** link. The pair shares one
-  **Model name** box, which shows the name for the one picked. They are kept
-  in `FLASH_PICKS`, with the hosts that serve only the larger model.
+- Models from the same maker that are sizes or kinds of one model, such as
+  Clef and Clef Flash, or Mercury Decide free and paid, are one entry under
+  **Which second model**, with a picker under it, such as **Which Clef**.
+  They are kept in `SIZE_PICKS`, in the panel and in the backend. Each size
+  has its own line setting at 30. Two kinds of the same model share a line.
+  A size with its own page has its own **What is** link. All the sizes share
+  one **Model name** box, which shows the name for the one picked. A host
+  offers a size when it has a built-in name for it.
+- Never leave out a decision model because it is paid. Paid and free models
+  are added the same way.
 - A paid second model that cannot be tested, because there is no key with
   credit, can still be added if it answers yes-or-no checks and suits Auto
   Refine.

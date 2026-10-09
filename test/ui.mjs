@@ -1770,7 +1770,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["mapika", "nanogpt"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1941,9 +1941,10 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
     ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
-    ["decider", "Decider, from Perplexity", "openrouter,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
+    ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
+    ["mapika", "Mapika Decider, from Mapika", "nanogpt,custom", "mapikaOver", "What is Mapika Decider? https://github.com/Mapika/decider"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -1992,7 +1993,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
         ok(label + ", " + who + ": picked and named " + name, got.label === name, JSON.stringify(got));
         ok(label + ", " + who + ": its hosts are " + hosts, got.hosts === hosts, JSON.stringify(got));
         ok(label + ", " + who + ": only its own line shows, at 30", got.lines.join() === line && got.values[line] === "30", JSON.stringify(got));
-        ok(label + ", " + who + ": " + (who === "clef" || who === "solar" ? "its own picker shows instead of Jev's or Span's" : "no version picker shows"), !got.versions, JSON.stringify(got));
+        ok(label + ", " + who + ": " + (__testing.SIZE_PICKS[who] ? "its own picker shows instead of Jev's or Span's" : "no version picker shows"), !got.versions, JSON.stringify(got));
         ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
         ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
         ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
@@ -2006,7 +2007,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
           solar: [["upstage", "Upstage"]],
           luna: [["openai", "OpenAI"]],
           clef: [["nanogpt", "NanoGPT"], ["cloudflare", "Cloudflare"]],
-          decider: [["perplexity", "Perplexity"]],
+          decider: [["nanogpt", "NanoGPT"], ["perplexity", "Perplexity"]],
         }[who] || [];
         for (const own of owns) {
           await page.evaluate((host) => {
@@ -2029,42 +2030,45 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
   }
 }
 
-console.log("\na model that comes in two");
+console.log("\na model that comes in more than one size");
 {
-  // Clef and Solar Decide each come with a Flash. Each pair is one entry in
-  // Which second model, with its own picker under it. The Flash has its own
-  // line, link and built-in name. On a host that serves only the larger one,
-  // the Flash is not offered, and the larger one's line and name show.
-  const PAIRS = [
-    ["clef", "clefTier", "Which Clef", "clefOver", "clefFlashOver", "What is Clef Flash? https://developers.cloudflare.com/workers-ai/models/clef-flash/", "cloudflare/clef-flash", "nanogpt", "cloudflare/clef", "clefName"],
-    ["solar", "solarTier", "Which Solar Decide", "solarOver", "solarFlashOver", "What is Solar Decide Flash? https://openrouter.ai/upstage/solar-decide-flash", "upstage/solar-decide-flash", "upstage", "solar-decide", "solarName"],
-  ];
+  // Mercury Decide, Solar Decide, Clef and Mapika Decider each have a picker
+  // under them. For each size, on a host that serves it: picking it shows
+  // that size's line and no other, its built-in name, and its own link where
+  // it has one. On a host that does not serve the size, the size is not
+  // offered and the standard size is used. Read from the panel's own list, so
+  // a size added there is checked here too.
+  const { SIZE_PICKS, BUILT_IN_MODEL_NAMES, SECOND_MODELS } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, tierKey, title, line, flashLine, flashLink, flashName, onlyHost, onlyName, nameKey] of PAIRS) {
+    for (const who of Object.keys(SIZE_PICKS)) {
+      const pick = SIZE_PICKS[who];
+      const names = BUILT_IN_MODEL_NAMES[who];
+      const model = SECOND_MODELS.find((m) => m.value === who);
+      const lines = [...new Set(pick.sizes.map((z) => z.line))];
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
         const read = () =>
-          page.evaluate(({ tierKey, line, flashLine, nameKey }) => {
+          page.evaluate(({ key, lines, nameKey }) => {
             const vis = (sel) => {
               const n = document.querySelector(sel);
               return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
             };
-            const tier = document.querySelector('#drawer [data-arf-field="' + tierKey + '"]');
+            const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
             const name = document.querySelector('#drawer [data-arf-field="' + nameKey + '"]');
             return {
-              shown: vis('#drawer [data-arf-row="' + tierKey + '"]'),
-              title: ((document.querySelector('#drawer [data-arf-row="' + tierKey + '"] .arf-lab') || {}).textContent || "").trim(),
-              options: tier ? [...tier.options].map((o) => o.value).join() : "",
-              height: tier ? Math.round(tier.getBoundingClientRect().height) : 0,
-              line: vis('#drawer [data-arf-row="' + line + '"]'),
-              flashLine: vis('#drawer [data-arf-row="' + flashLine + '"]'),
+              shown: vis('#drawer [data-arf-row="' + key + '"]'),
+              title: ((document.querySelector('#drawer [data-arf-row="' + key + '"] .arf-lab') || {}).textContent || "").trim(),
+              options: sel ? [...sel.options].map((o) => o.value) : [],
+              value: sel ? sel.value : "",
+              height: sel ? Math.round(sel.getBoundingClientRect().height) : 0,
+              lines: lines.filter((k) => vis('#drawer [data-arf-row="' + k + '"]')),
               link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).join("|"),
               placeholder: name ? name.placeholder : "",
               sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
             };
-          }, { tierKey, line, flashLine, nameKey });
-        const pick = async (key, value) => {
+          }, { key: pick.key, lines, nameKey: __testing.OWN_NAME_KEYS[who] });
+        const choose = async (key, value) => {
           await page.evaluate(
             ({ key, value }) => {
               const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
@@ -2079,23 +2083,29 @@ console.log("\na model that comes in two");
           await closed(page);
         };
         const first = await read();
-        ok(label + ", " + who + ": " + title + " shows under it", first.shown && first.title === title, JSON.stringify(first));
-        ok(label + ", " + who + ": with both on OpenRouter", first.options === "full,flash", JSON.stringify(first));
-        ok(label + ", " + who + ": the larger one is picked, with its own line", first.line && !first.flashLine, JSON.stringify(first));
+        ok(label + ", " + who + ": " + pick.title + " shows under it, at the standard size", first.shown && first.title === pick.title && first.value === pick.standard, JSON.stringify(first));
         if (touch) ok(label + ", " + who + ": the picker is tall enough to tap", first.height >= 32, String(first.height));
-        await pick(tierKey, "flash");
-        const flash = await read();
-        ok(label + ", " + who + ": the Flash picked shows the Flash's own line only", flash.flashLine && !flash.line, JSON.stringify(flash));
-        ok(label + ", " + who + ": and the Flash's own link", flash.link === flashLink, JSON.stringify(flash.link));
-        ok(label + ", " + who + ": and the Flash's built-in name", flash.placeholder === flashName, JSON.stringify(flash.placeholder));
-        ok(label + ", " + who + ": nothing scrolls sideways", !flash.sideways, "");
-        await pick("judgeHost", onlyHost);
-        const only = await read();
-        ok(label + ", " + who + " on " + onlyHost + ": the Flash is not offered", only.options === "full", JSON.stringify(only));
-        ok(label + ", " + who + " on " + onlyHost + ": the larger one's line and name show", only.line && !only.flashLine && only.placeholder === onlyName, JSON.stringify(only));
-        await pick("judgeHost", "openrouter");
-        const back = await read();
-        ok(label + ", " + who + ": back on OpenRouter, the Flash is picked again", back.flashLine && back.placeholder === flashName, JSON.stringify(back));
+        for (const size of pick.sizes) {
+          const host = Object.keys(names).find((h) => names[h][size.value]);
+          await choose("judgeHost", host);
+          await choose(pick.key, size.value);
+          const got = await read();
+          const link = "What is " + (size.about ? size.name : model.name) + "? " + (size.about || model.about);
+          ok(label + ", " + size.name + " on " + host + ": only its line shows", got.lines.join() === size.line, JSON.stringify(got));
+          ok(label + ", " + size.name + ": its built-in name shows", got.placeholder === names[host][size.value], JSON.stringify(got.placeholder));
+          ok(label + ", " + size.name + ": its link", got.link === link, JSON.stringify(got.link));
+          ok(label + ", " + size.name + ": nothing scrolls sideways", !got.sideways, "");
+          const without = Object.keys(names).find((h) => !names[h][size.value]);
+          if (without) {
+            await choose("judgeHost", without);
+            const there = await read();
+            const standard = pick.sizes.find((z) => z.value === pick.standard);
+            ok(label + ", " + size.name + " on " + without + ": it is not offered, and the standard size is used", there.options.indexOf(size.value) < 0 && there.value === pick.standard && there.lines.join() === standard.line && there.placeholder === names[without][pick.standard], JSON.stringify(there));
+            await choose("judgeHost", host);
+            const back = await read();
+            ok(label + ", " + size.name + ": back on " + host + ", it is picked again", back.value === size.value && back.placeholder === names[host][size.value], JSON.stringify(back));
+          }
+        }
       });
       ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
     }
@@ -2144,7 +2154,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all nine second models are offered, a model and its Flash as one", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider", JSON.stringify(jev.who));
+    ok("all ten second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,mapika", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -9216,7 +9226,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.

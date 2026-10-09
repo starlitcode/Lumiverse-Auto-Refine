@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.34.0';
+const VERSION = '1.35.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4244,10 +4244,18 @@ const SPAN_HOSTS: Record<string, { url: string; models: Partial<Record<SpanTier,
   },
 };
 
-// Mercury Decide, from Inception. OpenRouter serves it free, and it takes the
-// same decisions request as Jev.
-const MERCURY_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
-  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'inception/mercury-decide:free', kind: 'decisions' },
+// A model offered in more than one size or kind keeps a name per size on each
+// host. A host with no name for a size does not serve it.
+type SizedHost = { url: string; models: Record<string, string>; kind: JevKind };
+
+// Mercury Decide, from Inception. OpenRouter serves it free, and without the
+// free limits for a price. It takes the same decisions request as Jev.
+const MERCURY_HOSTS: Record<string, SizedHost> = {
+  openrouter: {
+    url: 'https://openrouter.ai/api/alpha/decisions',
+    models: { free: 'inception/mercury-decide:free', paid: 'inception/mercury-decide' },
+    kind: 'decisions',
+  },
 };
 
 // D1, from Liquid AI, and Solar Decide, from Upstage. Both take the same
@@ -4262,8 +4270,7 @@ const D1_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = 
 // Solar Decide comes in two: Solar Decide, and Solar Decide Flash, which is
 // faster. Upstage's own API has no Flash yet, so asking it for Flash gets
 // Solar Decide.
-type FlashTier = 'full' | 'flash';
-const SOLAR_HOSTS: Record<string, { url: string; models: Partial<Record<FlashTier, string>>; kind: JevKind }> = {
+const SOLAR_HOSTS: Record<string, SizedHost> = {
   openrouter: {
     url: 'https://openrouter.ai/api/alpha/decisions',
     models: { full: 'upstage/solar-decide', flash: 'upstage/solar-decide-flash' },
@@ -4288,25 +4295,39 @@ const LUNA_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> 
 // and faster. Both take Jev's request. Cloudflare's own address holds the
 // account ID and the model name, which are put in for {account} and {model}
 // when the call is made, and its answer comes back inside `result`. NanoGPT
-// serves Clef only, so asking it for Flash gets Clef.
-const CLEF_HOSTS: Record<string, { url: string; models: Partial<Record<FlashTier, string>>; kind: JevKind }> = {
+// serves both too.
+const CLEF_HOSTS: Record<string, SizedHost> = {
   openrouter: {
     url: 'https://openrouter.ai/api/alpha/decisions',
     models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash' },
     kind: 'decisions',
   },
-  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { full: 'cloudflare/clef' }, kind: 'decisions' },
+  nanogpt: {
+    url: 'https://nano-gpt.com/api/v1/decisions',
+    models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash' },
+    kind: 'decisions',
+  },
   cloudflare: {
     url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}',
     models: { full: 'clef', flash: 'clef-flash' },
     kind: 'decisions',
   },
 };
-// Decider, from Perplexity. It takes Jev's request on OpenRouter and on
+// Decider, from Perplexity. It takes Jev's request on OpenRouter, NanoGPT and
 // Perplexity's own API.
 const DECIDER_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
+  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
   perplexity: { url: 'https://api.perplexity.ai/v1/decisions', model: 'pplx-decider-v1.1-27b', kind: 'decisions' },
+};
+// Mapika's Decider, an open model in three sizes. LLM Tech hosts it on
+// NanoGPT, made smaller to run, and it takes Jev's request.
+const MAPIKA_HOSTS: Record<string, SizedHost> = {
+  nanogpt: {
+    url: 'https://nano-gpt.com/api/v1/decisions',
+    models: { '0.8b': 'llmtech/decider-0.8b-fp8', '2b': 'llmtech/decider-2b-fp8', '4b': 'llmtech/decider-4b-nvfp4' },
+    kind: 'decisions',
+  },
 };
 
 // The text of a responses API reply when it has no `output_text` of its own:
@@ -4416,10 +4437,47 @@ const ownNames: Record<string, string> = {
   luna: '',
   clef: '',
   decider: '',
+  mapika: '',
 };
-// Which of the two Clefs, and which of the two Solar Decides.
-let clefTier: FlashTier = 'full';
-let solarTier: FlashTier = 'full';
+
+// A model offered in more than one size or kind, such as Clef and Clef Flash.
+// Each size has its name for what is said about it, and its line. Two kinds
+// of one model, such as Mercury Decide free and without the free limits,
+// share a line. `standard` is picked by default, and is used on a host that
+// does not serve the size picked. The panel holds the same list.
+interface SizePick {
+  setting: string;
+  standard: string;
+  sizes: Record<string, { name: string; line: string }>;
+}
+const SIZE_PICKS: Record<string, SizePick> = {
+  mercury: {
+    setting: 'mercuryTier',
+    standard: 'free',
+    sizes: { free: { name: 'Mercury Decide', line: 'mercuryOver' }, paid: { name: 'Mercury Decide', line: 'mercuryOver' } },
+  },
+  solar: {
+    setting: 'solarTier',
+    standard: 'full',
+    sizes: { full: { name: 'Solar Decide', line: 'solarOver' }, flash: { name: 'Solar Decide Flash', line: 'solarFlashOver' } },
+  },
+  clef: {
+    setting: 'clefTier',
+    standard: 'full',
+    sizes: { full: { name: 'Clef', line: 'clefOver' }, flash: { name: 'Clef Flash', line: 'clefFlashOver' } },
+  },
+  mapika: {
+    setting: 'mapikaSize',
+    standard: '2b',
+    sizes: {
+      '0.8b': { name: 'Mapika Decider 0.8B', line: 'mapikaSmallOver' },
+      '2b': { name: 'Mapika Decider 2B', line: 'mapikaOver' },
+      '4b': { name: 'Mapika Decider 4B', line: 'mapikaLargeOver' },
+    },
+  },
+};
+// The size picked for each model that has sizes.
+const sizesPicked: Record<string, string> = {};
 // The reader's Cloudflare account ID, which Cloudflare's own address holds.
 // Only an ID of 32 letters and numbers is kept, so nothing else can be put
 // into the address.
@@ -4435,18 +4493,13 @@ const LINES: Record<string, { key: string; fallback: number }> = {
   jev: { key: 'judgeOver', fallback: 30 },
   span: { key: 'spanOver', fallback: 30 },
   mercury: { key: 'mercuryOver', fallback: 30 },
+  mapika: { key: 'mapikaOver', fallback: 30 },
   d1: { key: 'd1Over', fallback: 30 },
   solar: { key: 'solarOver', fallback: 30 },
   kev: { key: 'kevOver', fallback: 30 },
   luna: { key: 'lunaOver', fallback: 30 },
   clef: { key: 'clefOver', fallback: 30 },
   decider: { key: 'deciderOver', fallback: 30 },
-};
-// The Flash of a model that has one is a model of its own, so it has a line
-// of its own too.
-const FLASH_LINES: Record<string, { key: string; fallback: number }> = {
-  clef: { key: 'clefFlashOver', fallback: 30 },
-  solar: { key: 'solarFlashOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4492,10 +4545,6 @@ interface JevVerdict {
 // scores do not run on the same scale, and a key is kept per host.
 interface SecondModel {
   name: string;
-  // For a model that comes in two: the name of the Flash, and which of the two
-  // is picked.
-  flashName?: string;
-  tier?: () => FlashTier;
   // Reads a conversation rather than named fields, so its state is the reply
   // as a turn. See spanTurns.
   turns?: boolean;
@@ -4523,7 +4572,7 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   mercury: {
     name: 'Mercury Decide',
     hosts: MERCURY_HOSTS,
-    model: (host) => ownNames.mercury || MERCURY_HOSTS[host].model,
+    model: (host) => ownNames.mercury || sizedName(MERCURY_HOSTS[host]),
   },
   d1: {
     name: 'D1',
@@ -4532,10 +4581,8 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   },
   solar: {
     name: 'Solar Decide',
-    flashName: 'Solar Decide Flash',
-    tier: () => solarTier,
     hosts: SOLAR_HOSTS,
-    model: (host) => ownNames.solar || SOLAR_HOSTS[host].models[flashTier()] || SOLAR_HOSTS[host].models.full || '',
+    model: (host) => ownNames.solar || sizedName(SOLAR_HOSTS[host]),
   },
   kev: {
     name: 'Kev 4B',
@@ -4549,15 +4596,18 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   },
   clef: {
     name: 'Clef',
-    flashName: 'Clef Flash',
-    tier: () => clefTier,
     hosts: CLEF_HOSTS,
-    model: (host) => ownNames.clef || CLEF_HOSTS[host].models[flashTier()] || CLEF_HOSTS[host].models.full || '',
+    model: (host) => ownNames.clef || sizedName(CLEF_HOSTS[host]),
   },
   decider: {
     name: 'Decider',
     hosts: DECIDER_HOSTS,
     model: (host) => ownNames.decider || DECIDER_HOSTS[host].model,
+  },
+  mapika: {
+    name: 'Mapika Decider',
+    hosts: MAPIKA_HOSTS,
+    model: (host) => ownNames.mapika || sizedName(MAPIKA_HOSTS[host]),
   },
 };
 
@@ -4565,31 +4615,40 @@ function secondModel(): SecondModel {
   return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
 }
 
-// Which of a model's two is used. Flash is used when it is picked and the host
-// serves it. Another address is sent whatever name is typed for it, so the
-// pick holds there.
-function flashTier(): FlashTier {
-  const m = secondModel();
-  if (!m.tier || m.tier() !== 'flash') return 'full';
+// The size in use, for a model that has sizes: the one picked, where the host
+// serves it, and the standard one where it does not. Another address is sent
+// whatever is typed for it, so the pick holds there. Empty for a model with
+// no sizes.
+function sizeInUse(): string {
+  const pick = SIZE_PICKS[judgeWho];
+  if (!pick) return '';
+  const want = pick.sizes[sizesPicked[judgeWho]] ? sizesPicked[judgeWho] : pick.standard;
   const host = hostFor(judgeWho, judgeHost);
-  if (host === 'custom') return 'flash';
-  const h: any = m.hosts[host];
-  return h && h.models && h.models.flash ? 'flash' : 'full';
+  if (host === 'custom') return want;
+  const h: any = secondModel().hosts[host];
+  return h && h.models && h.models[want] ? want : pick.standard;
+}
+
+// A sized host's name for the size in use.
+function sizedName(h: SizedHost): string {
+  const pick = SIZE_PICKS[judgeWho];
+  return (h && h.models[sizeInUse()]) || (h && pick && h.models[pick.standard]) || '';
 }
 
 // The second model's name, for everything that is said about what it did.
 function who(): string {
-  const m = secondModel();
-  return m.flashName && flashTier() === 'flash' ? m.flashName : m.name;
+  const pick = SIZE_PICKS[judgeWho];
+  const size = pick && pick.sizes[sizeInUse()];
+  return size ? size.name : secondModel().name;
 }
 
 // The host a model is reached on. A host this model is not on, left picked
-// from another model, falls back to OpenRouter, which is what the panel shows
-// in its place.
+// from another model, falls back to the model's first host, which is
+// OpenRouter for every model OpenRouter serves. The panel shows the same.
 function hostFor(who: string, host: string): string {
   if (host === 'custom') return 'custom';
   const m = SECOND_MODELS[who] || SECOND_MODELS.jev;
-  return m.hosts[host] ? host : 'openrouter';
+  return m.hosts[host] ? host : Object.keys(m.hosts)[0];
 }
 
 // A host's name, for what the Log says. The panel's host list uses the same.
@@ -5211,8 +5270,11 @@ function applyRules(s: any): void {
   judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
   judgeWho = Object.prototype.hasOwnProperty.call(SECOND_MODELS, String(s.judgeWho)) ? String(s.judgeWho) : 'jev';
   spanTier = s.spanTier === 'lite' || s.spanTier === 'full' ? s.spanTier : 'free';
-  clefTier = s.clefTier === 'flash' ? 'flash' : 'full';
-  solarTier = s.solarTier === 'flash' ? 'flash' : 'full';
+  for (const who of Object.keys(SIZE_PICKS)) {
+    const pick = SIZE_PICKS[who];
+    const got = String(s[pick.setting]);
+    sizesPicked[who] = Object.prototype.hasOwnProperty.call(pick.sizes, got) ? got : pick.standard;
+  }
   judgeHost = String(s.judgeHost) === 'custom' || Object.keys(SECOND_MODELS).some((k) => !!SECOND_MODELS[k].hosts[String(s.judgeHost)])
     ? String(s.judgeHost)
     : 'openrouter';
@@ -5246,7 +5308,10 @@ function applyRules(s: any): void {
     const n = Number(raw);
     return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
   };
-  const line = (flashTier() === 'flash' && FLASH_LINES[judgeWho]) || LINES[judgeWho] || LINES.jev;
+  // A model with sizes has a line per size.
+  const pick = SIZE_PICKS[judgeWho];
+  const sized = pick && pick.sizes[sizeInUse()];
+  const line = sized ? { key: sized.line, fallback: 30 } : LINES[judgeWho] || LINES.jev;
   judgeOver = lineOf(s[line.key], line.fallback);
   judgeWorn = s.judgeWorn !== false;
   judgeBefore = s.judgeBefore === true;

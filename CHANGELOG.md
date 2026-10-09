@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.35.0
+
+_2026-10-09_
+
+### Added
+
+- **Mapika Decider.** A new second model, from Mapika, on NanoGPT. **Which Mapika Decider** picks its size: 0.8B, 2B or 4B. Each size has its own **Refine when a check reaches**, at 30 by default. See [Mapika Decider](docs/two-models.md#mapika-decider).
+- **Mercury Decide without the free limits.** **Which Mercury Decide** picks the free one or the paid one on OpenRouter. The paid one has no free-model limits. Both use the same line.
+- **More hosts on NanoGPT.** Clef Flash and Decider can now be reached on NanoGPT.
+
+---
+
 ## 1.34.0
 
 _2026-10-09_

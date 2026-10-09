@@ -1666,8 +1666,12 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef", "clef"],
     ["clef", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef-flash", { clefTier: "flash" }],
     ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-flash", "clef-flash", { clefTier: "flash" }],
-    // NanoGPT serves Clef only, so Flash picked there sends Clef.
-    ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef", { clefTier: "flash" }],
+    ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef-flash", { clefTier: "flash" }],
+    ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b"],
+    ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
+    ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-2b-fp8"],
+    ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-0.8b-fp8", { mapikaSize: "0.8b" }],
+    ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-4b-nvfp4", { mapikaSize: "4b" }],
     ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b"],
     ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide-flash", { solarTier: "flash" }],
@@ -1688,12 +1692,13 @@ describe("two models: Jev reads the reply first", () => {
   // The panel shows the built-in name in each Model name box, so it has to be
   // the name the backend sends. Every model, every host and every kind of Span.
   {
-    const { BUILT_IN_MODEL_NAMES, builtInModelName } = __testing as any;
+    const { BUILT_IN_MODEL_NAMES, builtInModelName, SIZE_PICKS } = __testing as any;
     for (const who of Object.keys(BUILT_IN_MODEL_NAMES))
       for (const host of Object.keys(BUILT_IN_MODEL_NAMES[who]))
-        for (const tier of who === "span" ? ["free", "lite", "full"] : who === "jev" ? ["latest", "preview", "exact"] : who === "clef" || who === "solar" ? ["full", "flash"] : ["free"])
+        for (const tier of who === "span" ? ["free", "lite", "full"] : who === "jev" ? ["latest", "preview", "exact"] : SIZE_PICKS[who] ? SIZE_PICKS[who].sizes.map((z: any) => z.value) : ["free"])
           test("the panel's name for " + who + " on " + host + (tier !== "free" ? " (" + tier + ")" : "") + " is the one sent", async () => {
-            const over = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier, clefTier: tier, solarTier: tier, cloudflareAccount: ACCOUNT };
+            const over: any = { judgeWho: who, judgeHost: host, spanTier: tier, judgeVersion: tier, cloudflareAccount: ACCOUNT };
+            if (SIZE_PICKS[who]) over[SIZE_PICKS[who].key] = tier;
             const h = await keyed(over, { jev: says([10]) });
             await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
             await wait(50);
@@ -1755,13 +1760,16 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "clefFlashOver", { clefTier: "flash" }],
     ["decider", "deciderOver"],
     ["solar", "solarFlashOver", { solarTier: "flash" }],
+    ["mapika", "mapikaSmallOver", { mapikaSize: "0.8b" }],
+    ["mapika", "mapikaOver"],
+    ["mapika", "mapikaLargeOver", { mapikaSize: "4b" }],
   ] as Array<[string, string, any?]>) {
     test(key + " is a line of its own, 30 by default", async () => {
       const over = await keyed({ judgeWho: who, ...(pick || {}) }, { jev: says([31]) });
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, deciderOver: 10, solarFlashOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, deciderOver: 10, solarFlashOver: 10, mapikaSmallOver: 10, mapikaOver: 10, mapikaLargeOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
@@ -1887,6 +1895,41 @@ describe("two models: Jev reads the reply first", () => {
       expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
       expect(h.jevCalls[0].body.model).toBe(model);
     }
+  });
+
+  test("a host Mapika Decider is not on, left picked, sends it to NanoGPT, where it is", async () => {
+    for (const host of ["openrouter", "openai", "cloudflare"]) {
+      const h = await keyed({ judgeWho: "mapika", judgeHost: host, cloudflareAccount: ACCOUNT }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe("https://nano-gpt.com/api/v1/decisions");
+      expect(h.jevCalls[0].body.model).toBe("llmtech/decider-2b-fp8");
+    }
+  });
+
+  test("Mercury Decide free and without the free limits share one line", async () => {
+    for (const tier of ["free", "paid"]) {
+      const h = await keyed({ judgeWho: "mercury", mercuryTier: tier, mercuryOver: 20 }, { jev: says([25]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.asked.length).toBe(1);
+    }
+  });
+
+  test("each size of Mapika Decider is named in what is said about it", async () => {
+    for (const [size, name] of [["0.8b", "Mapika Decider 0.8B"], ["2b", "Mapika Decider 2B"], ["4b", "Mapika Decider 4B"]]) {
+      const h = await keyed({ judgeWho: "mapika", mapikaSize: size }, { jev: () => ({ status: 401, body: "{}" }) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(String(said(h)[0].why)).toBe("the " + name + " key was refused (401)");
+    }
+  });
+
+  test("a size that is not one of a model's sizes uses its standard size", async () => {
+    const h = await keyed({ judgeWho: "mapika", mapikaSize: "35b" }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.model).toBe("llmtech/decider-2b-fp8");
   });
 
   test("a Flash and the model it comes with each use their own line", async () => {
