@@ -7120,11 +7120,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       else openFolds.delete(title);
       // A search holds every fold open, so a click during one records what you
       // wanted without closing anything in front of you.
-      body.hidden = !(now || !!hunt.trim());
-      // Its height as well as its opacity. A fold's body is most of a screen on
-      // the longer cards, and appearing at full height moved everything under
-      // it that far in one frame.
-      if (!body.hidden) growIn(body);
+      const want = now || !!hunt.trim();
+      // Its height as well as its opacity, both ways. A fold's body is most of
+      // a screen on the longer cards, and appearing or going at full height
+      // moved everything under it that far in one frame. A press while it is
+      // still moving turns it round from where it is.
+      if (want) {
+        const wasHidden = body.hidden;
+        body.hidden = false;
+        unfold(body, wasHidden);
+      } else if (!body.hidden) {
+        foldAway(body, () => {
+          if (!(openFolds.has(title) || !!hunt.trim())) body.hidden = true;
+        });
+      }
       caret.textContent = now ? CARET_OPEN : CARET_SHUT;
       head.setAttribute("aria-expanded", now ? "true" : "false");
     });
@@ -8612,6 +8621,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!node || !node.style || typeof node.getBoundingClientRect !== "function") return;
       const fromH = fromHidden ? 0 : cssHeight(node);
       const fromO = fromHidden ? 0 : parseFloat(getComputedStyle(node).opacity) || 0;
+      // A close still running is dropped, and its hand-over with it.
+      node._arfFold = null;
       clearFold(node);
       if (noMotion()) return;
       const cs = getComputedStyle(node);
@@ -8684,9 +8695,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       setTimeout(() => done(), 500);
     } catch (_) {}
   }
-  function growIn(node: any) {
-    unfold(node, true);
-  }
 
   // A box's height in its own CSS pixels. getBoundingClientRect gives screen
   // pixels, and Lumiverse applies its UI Scale as a zoom, so the two differ.
@@ -8725,9 +8733,15 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   function foldAway(node: any, done: () => void) {
     let ran = false;
+    const token = {};
+    node._arfFold = token;
     const finish = () => {
       if (ran) return;
       ran = true;
+      // An open started since then owns the styles now, and the box is
+      // wanted after all.
+      if (node._arfFold !== token) return;
+      node._arfFold = null;
       clearFold(node);
       done();
     };
@@ -9567,7 +9581,19 @@ export function setup(ctx: Ctx, overrides?: any) {
       const pill = root.querySelector("[data-arf-blockcount]");
       if (pill) pill.textContent = on + " of " + list.length + " on";
       const said = root.querySelector("[data-arf-noturn]") as any;
-      if (said) said.hidden = holdsTurn(list);
+      // The warning opens and closes with the switch that changed it.
+      if (said) {
+        const gone = holdsTurn(list);
+        if (!gone && (said.hidden || said._arfFold)) {
+          const wasHidden = said.hidden;
+          said.hidden = false;
+          unfold(said, wasHidden);
+        } else if (gone && !said.hidden && !said._arfFold) {
+          foldAway(said, () => {
+            if (holdsTurn(blockList())) said.hidden = true;
+          });
+        }
+      }
       const line = root.querySelector("[data-arf-whatthisis]") as any;
       if (line) line.textContent = whatThisIs() + " " + aboutWorking();
       // Only when the header would say something different. Switching a block
@@ -9856,9 +9882,17 @@ export function setup(ctx: Ctx, overrides?: any) {
       fold2.setAttribute("aria-label", (now ? "Open " : "Close ") + blockLabel(b));
       // Where it stands, rather than through a rebuild. The card holds every
       // box of prompt on the tab and tearing it down to hide one block is the
-      // heaviest thing a press here could ask for. Shown or hidden in one step,
-      // with no animation.
-      rest.hidden = now;
+      // heaviest thing a press here could ask for. Its space opens and closes
+      // over a moment, and a press while it moves turns it round.
+      if (!now) {
+        const wasHidden = rest.hidden;
+        rest.hidden = false;
+        unfold(rest, wasHidden);
+      } else if (!rest.hidden) {
+        foldAway(rest, () => {
+          if (isShut(b)) rest.hidden = true;
+        });
+      }
     });
     left.appendChild(fold2);
 
@@ -12479,13 +12513,17 @@ export function setup(ctx: Ctx, overrides?: any) {
       persist(true);
       reInkWords();
     });
+    // Read off what the swatch says rather than off the editor, which is
+    // still shown while it closes. A press while it is closing opens it again
+    // from where it is.
     swatch.addEventListener("click", () => {
-      const open = editor.hidden;
+      const open = swatch.getAttribute("aria-expanded") !== "true";
       swatch.setAttribute("aria-expanded", open ? "true" : "false");
       if (open) {
+        const wasHidden = editor.hidden;
         editor.hidden = false;
         paint();
-        growIn(editor);
+        unfold(editor, wasHidden);
       } else foldAway(editor, () => (editor.hidden = swatch.getAttribute("aria-expanded") !== "true"));
     });
     paint();

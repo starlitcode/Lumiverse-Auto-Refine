@@ -4266,6 +4266,79 @@ console.log("\ncut and added words keep their colour when the view is switched")
   }
 }
 
+console.log("\nfolds and the colour editor open and close smoothly");
+{
+  // A fold, such as Sampler values or Older refines, and the colour editor
+  // open and close over several frames, so what is under them moves with
+  // them. Pressed again while moving, they turn round from where they are.
+  // Measured by the height of the box holding each one, which a scroll does
+  // not change, at each zoom, since UI Scale is a zoom.
+  const watchBox = (page, press, box) =>
+    page.evaluate(async ({ press, box }) => {
+      const q = (sel) => document.querySelector(sel);
+      const findPress = () => (press.startsWith("text:") ? [...document.querySelectorAll("#drawer button.arf-fold")].find((b) => b.textContent.includes(press.slice(5))) : q(press));
+      const holder = () => (box === "parent" ? findPress().parentElement : q(box));
+      const h = () => holder().getBoundingClientRect().height;
+      const run = async (turn) => {
+        const start = h();
+        const tops = [];
+        const times = [];
+        findPress().click();
+        const t0 = performance.now();
+        let turned = false;
+        while (performance.now() - t0 < 620) {
+          await new Promise((r) => requestAnimationFrame(r));
+          if (turn && !turned && performance.now() - t0 > 90) {
+            turned = true;
+            findPress().click();
+          }
+          tops.push(h() - start);
+          times.push(performance.now());
+        }
+        const steps = tops.map((t, i) => (Math.abs(t - (i ? tops[i - 1] : 0)) * 16.7) / Math.max(16.7, times[i] - (i ? times[i - 1] : t0)));
+        return { travel: Math.round(tops[tops.length - 1]), tops: tops.map(Math.round), steps };
+      };
+      const opened = await run(false);
+      const shut = await run(false);
+      const turned = await run(true);
+      return { opened, shut, turned };
+    }, { press, box });
+  const skips = (w) => {
+    let worst = 0;
+    for (let i = 2; i < w.steps.length; i++) worst = Math.max(worst, w.steps[i] - Math.max(w.steps[i - 1], w.steps[i - 2]));
+    return worst;
+  };
+  const CASES = [
+    ["Sampler values", "Model", "text:Sampler values", "parent", {}],
+    ["the colour editor", "Setup", '#drawer [data-arf-colourswatch="cutColour"]', '#drawer [data-arf-row="cutColour"]', {}],
+  ];
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const zoom of [1, 0.9, 1.25]) {
+      for (const [name, tabName, press, box, extra] of CASES) {
+        await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true, ...extra } }, async (page) => {
+          await goTab(page, tabName);
+          await settle(page);
+          const out = await watchBox(page, press, box);
+          const say = label + (zoom === 1 ? "" : ", zoom " + zoom) + ", " + name + ": ";
+          ok(say + "it opens", out.opened.travel > 20, JSON.stringify(out.opened.tops));
+          ok(say + "opening, it moves in small steps and lands with no skip",
+            Math.max(...out.opened.steps) < out.opened.travel / 3 && skips(out.opened) <= 6, JSON.stringify(out.opened.tops));
+          ok(say + "it closes all the way", Math.abs(out.shut.travel + out.opened.travel) <= 2, JSON.stringify(out.shut.tops));
+          ok(say + "closing, it moves in small steps and lands with no skip",
+            Math.max(...out.shut.steps) < Math.abs(out.shut.travel) / 3 && skips(out.shut) <= 6, JSON.stringify(out.shut.tops));
+          // Judged from the turn on. A close starts at its fastest, so the
+          // first step back is bigger than the last step up, and that is not a
+          // skip.
+          const peak = out.turned.tops.indexOf(Math.max(...out.turned.tops));
+          const back = { steps: out.turned.steps.slice(peak + 1) };
+          ok(say + "pressed again while opening, it turns round with no jump and ends shut",
+            skips(back) <= 6 && Math.max(...out.turned.steps) < out.opened.travel / 3 && Math.abs(out.turned.travel) <= 2, JSON.stringify(out.turned.tops));
+        });
+      }
+    }
+  }
+}
+
 console.log("\nthe status dot stays beside a long status line");
 {
   // A long line of status wraps under itself. The dot stays at the start of
