@@ -244,7 +244,7 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 - While a refine runs, the eye is open, with no pupil moving and no blink.
 - Pointing at a button does not open its eye.
 
-**Pattern behind the panel** draws a faint pattern behind this tab: Diamonds, Stripes or Dots. It is None by default.
+**Pattern behind the panel** draws a faint pattern behind this tab: Diamonds, Stripes, Dots, Hearts or Stars. It is None by default.
 
 - The pattern is drawn in your theme's colour.
 - With a pattern on, the cards are solid, so no text is read across the lines. The tab strip is solid with or without a pattern.

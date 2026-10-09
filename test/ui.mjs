@@ -1744,7 +1744,7 @@ console.log("\nMercury Decide, the third second model");
       ok(label + ": neither Which Jev nor Which Span shows", !got.versionShown && !got.tierShown, JSON.stringify(got));
       ok(label + ": only its own line shows, at 30", got.ownLine && !got.jevLine && !got.spanLine && got.ownLineValue === "30", JSON.stringify(got));
       ok(label + ": the key is OpenRouter's", got.key === "Key for OpenRouter", String(got.key));
-      ok(label + ": its link is OpenRouter's page for it", got.link === "What is Mercury Decide? https://openrouter.ai/inception/mercury-decide:free", String(got.link));
+      ok(label + ": its link is OpenRouter's page for it", got.link === "What is Mercury Decide? https://openrouter.ai/inception/mercury-decide", String(got.link));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
       await page.evaluate(() => {
         const sel = document.querySelector('#drawer [data-arf-field="judgeHost"]');
@@ -4916,11 +4916,11 @@ console.log("\nthe bigger editor");
     });
     await settle(page);
     const open = await page.evaluate(() => {
-      const over = document.querySelector(".arf-over");
+      const over = document.querySelector(".arf-over:not(.arf-leaving)");
       const ta = over && over.querySelector("textarea");
       const big = over && over.querySelector(".arf-bigbox");
       return {
-        still: !!over && getComputedStyle(over).animationName === "none" && !!big && getComputedStyle(big).animationName === "none",
+        moves: !!over && getComputedStyle(over).animationName === "arf-fade-in" && !!big && getComputedStyle(big).animationName === "arf-card-in",
         there: !!over,
         filled: ta ? ta.value.length > 0 : false,
         editable: ta ? !ta.readOnly : false,
@@ -4929,7 +4929,7 @@ console.log("\nthe bigger editor");
       };
     });
     ok("it opens with the report in it", open.there && open.filled);
-    ok("and it appears with no animation", open.still);
+    ok("and it fades in, with the card sliding up a little", open.moves);
     ok("and lets you take lines out before it is copied", open.editable);
     ok("and does not focus the box, so no keyboard pops up", !open.focused);
 
@@ -4943,8 +4943,9 @@ console.log("\nthe bigger editor");
     await settle(page);
     const copied = await page.evaluate(() => window.__copied.slice());
     ok("Done copies what you left in it", copied.indexOf("edited in the big editor") >= 0, copied.join(" | "));
+    await page.waitForTimeout(400);
     const shut = await page.evaluate(() => !document.querySelector(".arf-over"));
-    ok("and closes", shut);
+    ok("and closes, and is gone once it has faded", shut);
   });
   ok("no errors in the big editor", errors.length === 0, errors.join("\n         "));
 }
@@ -5386,19 +5387,20 @@ console.log("\nwatching it work");
     await settle(page);
     const done = await page.evaluate(() => {
       const el = document.querySelector("[data-arf-pop]");
-      const dim = document.querySelector(".arf-shade");
+      const dim = document.querySelector("[data-arf-shade]");
       const still = (n) => !!n && getComputedStyle(n).animationName === "none" && /^0s$/.test(getComputedStyle(n).transitionDuration);
       return el
         ? {
             cards: document.querySelectorAll("[data-arf-pop]").length,
             diff: !!el.querySelector("[data-arf-diff]"),
-            still: still(el) && still(dim) && still(el.querySelector(".arf-pop-body")),
+            moves: getComputedStyle(el).animationName === "arf-card-in" && !!dim && getComputedStyle(dim).animationName === "arf-fade-in" && still(el.querySelector(".arf-pop-body")),
           }
         : null;
     });
     ok("landing opens one card, and it says what changed", !!done && done.cards === 1 && done.diff, JSON.stringify(done));
-    // Pop-ups appear at once. Nothing rises, grows or fades.
-    ok("the card and its dim appear with no animation", !!done && done.still, JSON.stringify(done));
+    // The card fades in and slides up a little, and the dim fades in. Nothing
+    // inside the card moves.
+    ok("the card fades in and slides up a little, and its dim fades in", !!done && done.moves, JSON.stringify(done));
 
     // And the working that never went on screen is in the Log.
     await goTab(page, "Log");
@@ -5700,7 +5702,8 @@ console.log("\nthe card that comes up on the page");
     // Keeping it closes the card and leaves the refine in the Log.
     await page.evaluate(() => document.querySelector("[data-arf-pop-keep]").click());
     await settle(page);
-    ok("keeping it closes the card", !(await pop(page)));
+    await page.waitForTimeout(400);
+    ok("keeping it closes the card", !(await pop(page)) && (await page.evaluate(() => !document.querySelector(".arf-pop"))));
     ok(
       "and takes the dim with it",
       await page.evaluate(() => !document.querySelector("[data-arf-shade]")),
@@ -5839,32 +5842,111 @@ console.log("\nthe preview says which prompt it used");
   });
 }
 
-console.log("\nthe refine card appears in place");
+console.log("\nthe refine card fades in and glows once");
 {
-  // The card saying a refine happened appears at once, with the dim behind
-  // it. Nothing rises or fades, whatever the motion setting.
-  for (const reduce of [false, true]) {
-    await inTab(browser, { saved: { enabled: true, popup: true } }, async (page) => {
-      if (reduce) await page.emulateMedia({ reducedMotion: "reduce" });
-      await page.evaluate(() =>
-        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line of the reply.", after: "The new line of the reply." }),
-      );
-      await page.waitForTimeout(40);
-      const got = await page.evaluate(() => {
-        const pop = document.querySelector(".arf-pop");
-        const shade = document.querySelector(".arf-shade");
-        return pop ? { pop: getComputedStyle(pop).animationName, shade: shade ? getComputedStyle(shade).animationName : null, opacity: Number(getComputedStyle(pop).opacity) } : null;
+  // The card saying a refine happened fades in and slides up a little, with
+  // the dim fading in behind it. Its edge glows once, slowly, and goes back to
+  // normal. On the way out it fades. With Reduce motion on, from the panel or
+  // the device, it appears and goes at once with no glow. Checked at a phone
+  // width and a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const how of ["off", "panel", "device"]) {
+      await inTab(browser, { viewport, touch, saved: { enabled: true, popup: true, reduceMotion: how === "panel" } }, async (page) => {
+        if (how === "device") await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.evaluate(() =>
+          window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line of the reply.", after: "The new line of the reply." }),
+        );
+        await page.waitForTimeout(40);
+        const got = await page.evaluate(() => {
+          const pop = document.querySelector("[data-arf-pop]");
+          const shade = document.querySelector("[data-arf-shade]");
+          if (!pop) return null;
+          const glow = getComputedStyle(pop, "::after");
+          const anims = pop.getAnimations({ subtree: true }).filter((a) => a.animationName === "arf-glow");
+          const timing = anims[0] ? anims[0].effect.getTiming() : null;
+          return {
+            pop: getComputedStyle(pop).animationName,
+            shade: shade ? getComputedStyle(shade).animationName : null,
+            glow: glow.animationName,
+            // Once only, and slow: a glow, not a blink.
+            glowRuns: timing ? timing.iterations : 0,
+            glowMs: timing ? timing.duration : 0,
+          };
+        });
+        await page.waitForTimeout(1900);
+        const settled = await page.evaluate(() => {
+          const p = document.querySelector("[data-arf-pop]");
+          return p ? { transform: getComputedStyle(p).transform, opacity: Number(getComputedStyle(p).opacity), glow: Number(getComputedStyle(p, "::after").opacity) } : null;
+        });
+        await page.evaluate(() => document.querySelector("[data-arf-pop-keep]").click());
+        const leaving = await page.evaluate(() => ({ still: document.querySelectorAll(".arf-pop").length, open: document.querySelectorAll("[data-arf-pop]").length }));
+        await page.waitForTimeout(400);
+        const gone = await page.evaluate(() => document.querySelectorAll(".arf-pop, .arf-shade").length);
+        const name = label + (how === "off" ? "" : ", Reduce motion from the " + how);
+        if (how === "off") {
+          ok(name + ": the card fades in and slides up a little, and the dim fades in", !!got && got.pop === "arf-card-in" && got.shade === "arf-fade-in", JSON.stringify(got));
+          ok(name + ": its edge glows once, slowly", !!got && got.glow === "arf-glow" && got.glowRuns === 1 && got.glowMs >= 1000, JSON.stringify(got));
+          ok(name + ": closing, it fades out before it is taken away", leaving.still === 1 && leaving.open === 0, JSON.stringify(leaving));
+        } else {
+          ok(name + ": the card appears at once, with no glow", !!got && got.pop === "none" && got.shade === "none" && got.glow === "none", JSON.stringify(got));
+          ok(name + ": closing, it goes at once", leaving.still === 0, JSON.stringify(leaving));
+        }
+        ok(name + ": it settles in place, with the glow gone", !!settled && settled.opacity === 1 && settled.glow === 0 && /matrix\(1, 0, 0, 1, 0, 0\)|none/.test(settled.transform), JSON.stringify(settled));
+        ok(name + ": once closed, nothing is left behind", gone === 0, String(gone));
       });
-      await page.waitForTimeout(450);
-      const settled = await page.evaluate(() => {
-        const p = document.querySelector(".arf-pop");
-        return p ? { transform: getComputedStyle(p).transform, opacity: Number(getComputedStyle(p).opacity) } : null;
-      });
-      ok((reduce ? "with less movement asked for, " : "") + "the refine card appears at once, with no animation",
-        !!got && got.pop === "none" && got.shade === "none" && got.opacity === 1, JSON.stringify(got));
-      ok("and it stays in place", !!settled && settled.opacity === 1 && /matrix\(1, 0, 0, 1, 0, 0\)|none/.test(settled.transform), JSON.stringify(settled));
+    }
+  }
+}
+
+console.log("\nshow me the pop-up");
+{
+  // Under Show the before and after on screen, a button shows the real card
+  // with made-up text. Nothing is refined or sent, and its buttons only close
+  // it. With the switch off, the button is not there. Checked at a phone width
+  // and a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, popup: true } }, async (page, host) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      const btn = page.locator("#drawer [data-arf-popdemo]");
+      await btn.scrollIntoViewIfNeeded();
+      const r = await btn.boundingBox();
+      const before = await page.evaluate(() => (window.__sent || []).length);
+      await btn.click();
+      await page.waitForTimeout(300);
+      const got = await page.evaluate((before) => {
+        const pop = document.querySelector("[data-arf-pop]");
+        const pr = pop && pop.getBoundingClientRect();
+        return pop
+          ? {
+              title: pop.querySelector(".arf-h").textContent,
+              diff: !!pop.querySelector("[data-arf-diff]"),
+              inside: pr.left >= 0 && pr.right <= window.innerWidth + 1 && pr.bottom <= window.innerHeight + 1,
+              sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+              // Nothing that asks the backend to do anything. A settings
+              // save from the panel is not about the card.
+              sent: (window.__sent || []).slice(before).map((m) => m.type).filter((t) => t !== "set_settings" && t !== "active_chat"),
+            }
+          : null;
+      }, before);
+      ok(label + ": the button shows the card", !!got && /an example/.test(got.title) && got.diff, JSON.stringify(got));
+      ok(label + ": nothing is sent for it", !!got && got.sent.length === 0, JSON.stringify(got));
+      ok(label + ": the card fits on the screen", !!got && got.inside && !got.sideways, JSON.stringify(got));
+      if (touch) ok(label + ": the button is tall enough to tap", r && r.height >= 32, JSON.stringify(r));
+      await page.evaluate(() => document.querySelector("[data-arf-pop-undo]").click());
+      await page.waitForTimeout(400);
+      ok(label + ": its Put it back only closes it", await page.evaluate(() => !document.querySelector(".arf-pop")), "");
     });
   }
+  await inTab(browser, { saved: { enabled: true, popup: false } }, async (page) => {
+    await goTab(page, "Setup");
+    await settle(page);
+    const shown = await page.evaluate(() => {
+      const b = document.querySelector("#drawer [data-arf-popdemo]");
+      return !!b && !b.closest("[hidden]") && b.getClientRects().length > 0;
+    });
+    ok("with the card switched off, the button is not there", !shown, "");
+  });
 }
 
 console.log("\nthe raw view");
@@ -7022,10 +7104,11 @@ console.log("\nreading the request at full size");
     ok("as something to read rather than edit", view.readOnly, view.labels.join(","));
     ok("with Copy and Close, and no Done", view.labels.indexOf("Done") < 0 && view.labels.indexOf("Close") >= 0);
 
-    // It appears at once, with no animation, whatever the motion setting.
+    // It fades in and the card slides up a little. With less motion asked
+    // for, it appears at once.
     const moves = async () => {
       await page.evaluate(() => {
-        const over = document.querySelector(".arf-over");
+        const over = document.querySelector(".arf-over:not(.arf-leaving)");
         const close = over && Array.from(over.querySelectorAll("button")).find((b) => b.textContent.trim() === "Close");
         if (close) close.click();
         const card = Array.from(document.querySelectorAll("#drawer .arf-card")).find((c) =>
@@ -7036,7 +7119,7 @@ console.log("\nreading the request at full size");
           .click();
       });
       return page.evaluate(() => {
-        const over = document.querySelector(".arf-over");
+        const over = document.querySelector(".arf-over:not(.arf-leaving)");
         const box = over && over.querySelector(".arf-bigbox");
         return {
           dim: over ? getComputedStyle(over).animationName : "",
@@ -7046,7 +7129,7 @@ console.log("\nreading the request at full size");
       });
     };
     const normal = await moves();
-    ok("the full-size view appears at once, with no animation", normal.dim === "none" && normal.box === "none" && normal.running === 0, JSON.stringify(normal));
+    ok("the full-size view fades in, with the card sliding up a little", normal.dim === "arf-fade-in" && normal.box === "arf-card-in", JSON.stringify(normal));
     await page.emulateMedia({ reducedMotion: "reduce" });
     const still = await moves();
     ok("with less motion asked for, it just appears", still.dim === "none" && still.box === "none" && still.running === 0, JSON.stringify(still));
@@ -7169,7 +7252,8 @@ console.log("\nrefining the draft from the panel");
           === "i walk through it, suddenly"),
       await page.evaluate(() =>
         document.querySelector('[data-component="InputArea"] textarea').value));
-    ok("and closes the card", !(await page.$("[data-arf-pop]")));
+    await page.waitForTimeout(400);
+    ok("and closes the card", !(await page.$("[data-arf-pop]")) && !(await page.$(".arf-pop")));
   });
 
   // ---- and its working reaches the Log, the same as a reply's ----
@@ -11681,7 +11765,7 @@ console.log("\na pattern behind the panel");
     ok("with a pattern, the cards take the theme's colour, not a fixed grey", colour === "rgb(40, 0, 60)", colour);
   });
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
-    for (const kind of ["diamonds", "stripes", "dots"]) {
+    for (const kind of ["diamonds", "stripes", "dots", "hearts", "stars"]) {
       await inTab(browser, { viewport, touch, saved: { enabled: true, panelPattern: kind } }, async (page) => {
         await goTab(page, "Setup");
         await settle(page);
@@ -11691,7 +11775,12 @@ console.log("\na pattern behind the panel");
           const tabs = root.querySelector(".arf-tabs");
           return {
             kind: root.getAttribute("data-arf-pattern"),
-            drawn: /gradient/.test(getComputedStyle(root).backgroundImage),
+            // Lines and dots are gradients. Hearts and stars are a layer
+            // behind the panel, masked to the shape, which has to cover the
+            // whole panel and sit behind everything on it.
+            drawn:
+              /gradient/.test(getComputedStyle(root).backgroundImage) ||
+              ((cs) => /url\(/.test(cs.maskImage || cs.webkitMaskImage || "") && cs.zIndex === "-1" && Math.abs(parseFloat(cs.height) - root.getBoundingClientRect().height) < 2)(getComputedStyle(root, "::before")),
             // Solid enough that nothing reads through: opaque, or a theme
             // colour that is at most a little see-through.
             cardSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(card).backgroundColor),

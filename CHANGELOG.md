@@ -15,10 +15,13 @@ _2026-10-09_
 - **Mapika Decider.** A new second model, from Mapika, on NanoGPT. **Which Mapika Decider** picks its size: 0.8B, 2B or 4B. Each size has its own **Refine when a check reaches**, at 30 by default. See [Mapika Decider](docs/two-models.md#mapika-decider).
 - **Mercury Decide without the free limits.** **Which Mercury Decide** picks the free one or the paid one on OpenRouter. The paid one has no free-model limits. Both use the same line.
 - **More hosts on NanoGPT.** Clef Flash and Decider can now be reached on NanoGPT.
+- **Show me the pop-up.** A button under **Show the before and after on screen**, on the Setup tab. It shows the card with made-up text, so you can see how it looks. Nothing is refined or sent, and its buttons only close it.
+- **Hearts and Stars.** Two more choices for **Pattern behind the panel**.
 
 ### Changed
 
 - **The floating button shrinks a little when pressed.** In 1.32.0 it stopped shrinking and only got lighter. It now shrinks a little and gets lighter, and grows back when you let go. With Reduce motion on, it only gets lighter.
+- **The before-and-after card fades in and glows once.** It appeared at once. It now fades in and slides up a little, and its edge glows softly once and goes back to normal. The glow is slow, so it does not blink. Closing it fades it out. The full-size editor fades in and out the same way. With Reduce motion on, both appear and go at once, with no glow.
 - **One built-in check in What the second model checks is narrower.** It caught an action followed by a comment on how it came out, such as "he smiled, slow and easy". Plain description has that shape too, so fine replies were refined. It now asks for a comment that judges the action, such as "and it sounded wrong".
 - **The lead-in to the checks says the user picked them.** It said the checks were written by the user. Most people use the built-in checks, so it now says "checks the user picked".
 - **The built-in note about the stand-ins is plainer.** It ended by telling the model to treat each stand-in "as a single character you cannot spell". It now says "Do not change, split, translate or remove any of them."

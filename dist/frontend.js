@@ -4943,8 +4943,19 @@ export function setup(ctx, overrides) {
     // element with a stronger selector. With one on, the
     // cards and the tab strip get a solid colour, so nothing is read across the
     // lines.
-    const PATTERNS = ["", "diamonds", "stripes", "dots"];
+    const PATTERNS = ["", "diamonds", "stripes", "dots", "hearts", "stars"];
     const PAT_INK = "var(--lumiverse-primary-010,rgba(147,112,219,.12))";
+    // The two patterns drawn as shapes. Each tile holds two, set apart from
+    // each other so the rows sit between one another.
+    const SHAPE_PATTERNS = ["hearts", "stars"];
+    function shapeTile(kind) {
+        const path = kind === "hearts"
+            ? "M12 21 C12 21 3 15.3 3 9.4 C3 6.4 5.3 4 8.2 4 C9.9 4 11.3 4.9 12 6.2 C12.7 4.9 14.1 4 15.8 4 C18.7 4 21 6.4 21 9.4 C21 15.3 12 21 12 21 Z"
+            : "M12 2.8 L14.8 8.9 L21.4 9.6 L16.4 14.1 L17.8 20.7 L12 17.3 L6.2 20.7 L7.6 14.1 L2.6 9.6 L9.2 8.9 Z";
+        const one = (x, y) => "<g transform='translate(" + x + " " + y + ") scale(.45)'><path d='" + path + "'/></g>";
+        const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'>" + one(3, 3) + one(21, 21) + "</svg>";
+        return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
+    }
     // Solid, and in the theme's own colour: the theme's raised colour, laid
     // twice. The raised colour is what Lumiverse draws its own panels in, so it
     // is light on a light theme and dark on a dark one. A theme that makes it
@@ -4964,7 +4975,15 @@ export function setup(ctx, overrides) {
         "repeating-linear-gradient(135deg," + PAT_INK + " 0 1px,transparent 1px 9px)!important}" +
         '.arf[data-arf-pattern="dots"]{background-image:' +
         "radial-gradient(" + PAT_INK + " 1.2px,transparent 1.6px)!important;background-size:14px 14px!important}" +
-        ".arf[data-arf-pattern] .arf-card,.arf[data-arf-pattern] .arf-tabs{" + PAT_SOLID + "}";
+        ".arf[data-arf-pattern] .arf-card,.arf[data-arf-pattern] .arf-tabs{" + PAT_SOLID + "}" +
+        // Hearts and stars are shapes, which a gradient cannot draw. Each is a
+        // small picture used as a mask over a layer filled with the theme's
+        // colour, so the shapes take the colour and follow a theme change. The
+        // layer sits behind everything in the panel.
+        SHAPE_PATTERNS.map((k) => '.arf[data-arf-pattern="' + k + '"]{position:relative;isolation:isolate}' +
+            '.arf[data-arf-pattern="' + k + '"]::before{content:"";position:absolute;inset:0;z-index:-1;' +
+            "pointer-events:none;background-color:" + PAT_INK + ";" +
+            "-webkit-mask:" + shapeTile(k) + " 0 0/36px 36px repeat;mask:" + shapeTile(k) + " 0 0/36px 36px repeat}").join("");
     // Put before a rule that changes a part's size or place while it is
     // pressed. With Reduce motion on, the part keeps its size and place.
     const PRESS = "html:not([data-arf-still]) ";
@@ -5524,6 +5543,29 @@ export function setup(ctx, overrides) {
         // closes, which is what everybody expects of a dim.
         ".arf-shade{position:fixed;inset:0;z-index:2147482999;" +
         "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.45))}" +
+        // A large card fades in and slides up a little, and a dim fades in. Neither
+        // grows, since a large card growing is a lot of movement to look at. On
+        // the way out they fade, and the card slides down a little. Only opacity
+        // and position move, which the browser draws without laying out the page
+        // again.
+        ".arf-pop,.arf-bigbox{animation:arf-card-in 220ms cubic-bezier(.2,.8,.28,1) both}" +
+        ".arf-shade,.arf-over{animation:arf-fade-in 200ms ease-out both}" +
+        "@keyframes arf-card-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}" +
+        "@keyframes arf-fade-in{from{opacity:0}to{opacity:1}}" +
+        ".arf-leaving{pointer-events:none;animation:arf-fade-out 160ms ease-in both!important}" +
+        ".arf-pop.arf-leaving{animation:arf-card-out 160ms ease-in both!important}" +
+        "@keyframes arf-fade-out{from{opacity:1}to{opacity:0}}" +
+        "@keyframes arf-card-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(6px)}}" +
+        // A refine landing on the card lights its edge once: a soft glow in the
+        // accent colour that rises over about half a second and fades back over
+        // a second, then is gone. Slow and once, so it reads as a glow and never
+        // as a blink. It is drawn on a layer of its own and only its opacity
+        // moves.
+        ".arf-pop::after{content:\"\";position:absolute;inset:0;border-radius:inherit;pointer-events:none;" +
+        "box-shadow:inset 0 0 0 2px var(--lumiverse-primary-050,rgba(147,112,219,.5))," +
+        "inset 0 0 22px var(--lumiverse-primary-020,rgba(147,112,219,.2));opacity:0}" +
+        ".arf-pop.arf-glow::after{animation:arf-glow 1600ms ease-in-out 120ms both}" +
+        "@keyframes arf-glow{0%{opacity:0}35%{opacity:.9}100%{opacity:0}}" +
         // A row switched on where somebody is already looking. It fades down into
         // place rather than appearing between two frames, which is the difference
         // between a row arriving and the page having flinched.
@@ -5553,8 +5595,7 @@ export function setup(ctx, overrides) {
         // Fixed at the width the two carets share, so the name beside it does not
         // shift when one turns.
         ".arf-blockfold{font-size:12px;padding:2px 4px;min-width:16px;text-align:center;flex:0 0 auto}" +
-        // The full-screen editor for one block of text. It appears at once, with
-        // no animation, like every pop-up here.
+        // The full-screen editor for one block of text.
         ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
         "justify-content:center;padding:16px;box-sizing:border-box;" +
         "background:var(--lumiverse-modal-backdrop,rgba(0,0,0,.6))}" +
@@ -8127,20 +8168,49 @@ export function setup(ctx, overrides) {
             undoAsked.delete(undoAsked.keys().next().value);
         send({ type: "undo_refine", requestId: id, chatId: chatId, messageId: messageId });
     }
-    function dropPop() {
+    // Takes a card or a dim off the page, fading it out first unless motion is
+    // off or `now` is set. The timer removes it even if the fade never reports
+    // its end, such as in a tab in the background.
+    function leave(node, now) {
+        if (!node)
+            return;
+        const go = () => {
+            try {
+                node.remove();
+            }
+            catch (_) { }
+        };
+        if (now || noMotion() || !node.classList)
+            return go();
         try {
-            popEl && popEl.remove && popEl.remove();
+            node.classList.add("arf-leaving");
+            node.setAttribute("aria-hidden", "true");
+            // What marks it as the open card or its dim comes off now, so nothing
+            // that looks for the open card finds the one on its way out.
+            node.removeAttribute("data-arf-pop");
+            node.removeAttribute("data-arf-shade");
+            node.addEventListener("animationend", (e) => {
+                if (e && e.target === node)
+                    go();
+            });
+            setTimeout(go, 320);
         }
-        catch (_) { }
-        try {
-            popShade && popShade.remove && popShade.remove();
+        catch (_) {
+            go();
         }
-        catch (_) { }
+    }
+    function dropPopAt(now) {
+        leave(popEl, now);
+        leave(popShade, now);
         popEl = null;
         popShade = null;
         popKey = "";
     }
-    disposers.push(dropPop);
+    // Also handed to click listeners, which pass an event, so it takes nothing.
+    function dropPop() {
+        dropPopAt(false);
+    }
+    disposers.push(() => dropPopAt(true));
     // The card is pinned to the bottom of the screen, so a card that gets shorter
     // moves its top edge down by the difference, all at once. Held at the height
     // it had and let down to the one it wants, so the edge travels instead.
@@ -8552,6 +8622,14 @@ export function setup(ctx, overrides) {
             else
                 settleHeight(box, wasTall);
             popEl = box;
+            // The glow, again for each refine that lands on a card already up.
+            // Reading the layout between taking the class off and putting it back is
+            // what makes the browser start it over.
+            if (!noMotion()) {
+                box.classList.remove("arf-glow");
+                void box.offsetWidth;
+                box.classList.add("arf-glow");
+            }
             // Painted a frame later, once it is in the page and has a colour behind
             // it to measure against, the same as the panel.
             try {
@@ -11000,6 +11078,27 @@ export function setup(ctx, overrides) {
             type: "bool",
             hint: "On by default. A card shows the reply before and after the refine, with a button to put it back.",
         }));
+        // A look at the card without refining anything. It is the real card, in
+        // the theme and in its place, filled with made-up text. Nothing is sent
+        // and nothing is changed, and its buttons only close it.
+        {
+            const tryIt = hangsOff(el("div", "arf-row arf-under"), "popup");
+            const show = button("Show me the pop-up", false);
+            show.setAttribute("data-arf-popdemo", "1");
+            show.title = "Shows the card with made-up text. Nothing is refined.";
+            show.addEventListener("click", () => {
+                showCard({
+                    key: "example",
+                    title: "Refined (an example)",
+                    before: "The kettle began to whistle, and she turned away from the window very slowly, almost as if she did not want to.",
+                    after: "The kettle whistled. She turned from the window slowly, as if she did not want to.",
+                    back: () => { },
+                });
+            });
+            tryIt.appendChild(show);
+            tryIt.appendChild(note("Made-up text. Nothing is refined or sent."));
+            wrap.appendChild(tryIt);
+        }
         wrap.appendChild(fieldRow({
             key: "toast",
             label: "Show a brief message",
@@ -11467,6 +11566,8 @@ export function setup(ctx, overrides) {
                 { value: "diamonds", label: "Diamonds" },
                 { value: "stripes", label: "Stripes" },
                 { value: "dots", label: "Dots" },
+                { value: "hearts", label: "Hearts" },
+                { value: "stars", label: "Stars" },
             ],
             hint: "None by default. A faint pattern in your theme's colour, drawn behind the cards on this tab.",
         }));
@@ -12031,6 +12132,8 @@ export function setup(ctx, overrides) {
     // the keyboard on a phone, which covers the thing you opened, and somebody
     // who wants to type will tap it anyway.
     let closeBig = null;
+    // The same, at once, for teardown, which leaves nothing behind to fade.
+    let closeBigNow = null;
     // done is left out for a viewer: something to read at full size rather than
     // edit, which is what the preview wants.
     function openBig(label, initial, done) {
@@ -12075,17 +12178,20 @@ export function setup(ctx, overrides) {
             if (e && e.key === "Escape")
                 shut();
         };
-        function shut() {
-            try {
-                over.remove();
-            }
-            catch (_) { }
+        function shutAt(now) {
+            leave(over, now);
             try {
                 document.removeEventListener("keydown", onKey);
             }
             catch (_) { }
-            if (closeBig === shut)
+            if (closeBig === shut) {
                 closeBig = null;
+                closeBigNow = null;
+            }
+        }
+        // Also a click listener, so it takes nothing.
+        function shut() {
+            shutAt(false);
         }
         cancel.addEventListener("click", shut);
         if (save && done)
@@ -12102,6 +12208,7 @@ export function setup(ctx, overrides) {
         document.addEventListener("keydown", onKey);
         document.body.appendChild(over);
         closeBig = shut;
+        closeBigNow = () => shutAt(true);
         // The scheme and the readability sweep apply here too: this is a panel of
         // ours sitting on the page rather than inside the drawer.
         setScheme(box);
@@ -12111,9 +12218,9 @@ export function setup(ctx, overrides) {
         catch (_) { }
     }
     disposers.push(() => {
-        if (closeBig) {
+        if (closeBigNow) {
             try {
-                closeBig();
+                closeBigNow();
             }
             catch (_) { }
         }
