@@ -15907,7 +15907,14 @@ export function setup(ctx, overrides) {
             const z = scale > 0.01 ? scale : 1;
             const first = rects[0];
             const last = rects[rects.length - 1];
-            const gap = 10;
+            // On a touch screen the selection's drag handles hang below the text,
+            // so the bar sits further off, clear of them.
+            let coarse = false;
+            try {
+                coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+            }
+            catch (_) { }
+            const gap = coarse ? 30 : 10;
             const h = box.height;
             const w = box.width;
             // The window's size and the selection's place are both screen pixels.

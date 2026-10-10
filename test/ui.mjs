@@ -11386,7 +11386,10 @@ console.log("\nhold to select text in messages");
               heldPrevented, menusOnText, menusElsewhere, blockedSelect, shown, shownMid,
               acts: acts.map((a) => a.textContent.trim()),
               inside: !!b && b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight,
-              near: !!b && Math.abs(b.top - sr.bottom) < 40,
+              // Below the selection, or above it when there is no room below.
+              near: !!b && (Math.abs(b.top - sr.bottom) < 60 || Math.abs(sr.top - b.bottom) < 60),
+              // Clear of the drag handles under the selection on a touch screen.
+              clear: !!b && (b.top - sr.bottom >= 24 || b.bottom <= sr.top),
               tallest,
               snip: snip && { picked: snip.picked, messageId: snip.messageId },
               hiddenAfter,
@@ -11404,6 +11407,7 @@ console.log("\nhold to select text in messages");
           ok(tag + ": it fades in", out.shownMid > 0 && out.shownMid < 1, JSON.stringify(out));
           ok(tag + ": by the selection, inside the screen", out.inside && out.near, JSON.stringify(out));
           if (touch) ok(tag + ": its buttons are 32px tap targets", out.tallest >= 32, JSON.stringify(out));
+          if (touch) ok(tag + ": it sits clear of the selection's drag handles", out.clear, JSON.stringify(out));
           ok(tag + ": Take it out takes out what was selected", !!out.snip && out.snip.picked === "wiped both hands" && out.snip.messageId === "msg-one", JSON.stringify(out));
           ok(tag + ": and the bar goes", out.hiddenAfter, JSON.stringify(out));
         });
