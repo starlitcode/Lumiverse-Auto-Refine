@@ -147,9 +147,9 @@ _2026-10-09_
 
 _2026-10-08_
 
-### Fixed
+### Changed
 
-- **The tab names could be hard to read on a light theme.** In 1.33.0 the tab strip and the cards over a pattern were drawn on the theme's deepest background colour. A custom light theme that does not set that colour left it dark, so the tab names were coloured for a dark strip that was drawn light. They are now drawn in the theme's raised colour, the one Lumiverse uses for its own panels, which is light on a light theme and dark on a dark one.
+- **The tab strip and the cards over a pattern use the theme's raised colour.** This is the colour Lumiverse uses for its own panels. It is light on a light theme and dark on a dark one, so the tab names are easy to read on any theme.
 
 ---
 
