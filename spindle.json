@@ -5,7 +5,7 @@
   "author": "starlitcode",
   "github": "https://github.com/starlitcode/Lumiverse-Auto-Refine",
   "homepage": "https://github.com/starlitcode/Lumiverse-Auto-Refine",
-  "description": "Automatically rewrite finished replies to your own writing rules, with the original kept so you can put it back.",
+  "description": "Sends each finished reply, or a message of your own, to a model with a prompt of writing rules you can read and edit, and saves the rewrite only if it passes its checks. The text it replaced is kept, so you can put it back with one tap.",
   "permissions": [
     "generation",
     "chat_mutation",
