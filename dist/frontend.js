@@ -5086,23 +5086,81 @@ export function setup(ctx, overrides) {
     const PAT_SOLID = "background-color:var(--lumiverse-bg-elevated,rgba(35,30,48,.96));" +
         "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));";
-    const PATTERN_CSS = ".arf[data-arf-pattern]{min-height:100%}" +
-        '.arf[data-arf-pattern="diamonds"]{background-image:' +
+    // The pattern is a wallpaper: the tab scrolls over it and it stays where
+    // it is. It is drawn on a layer that sticks to the top of the box that
+    // scrolls, as tall as that box shows (--arf-view, measured by
+    // pinWallpaper), and pulled out of the flow by its own margins, so the
+    // rows sit where they would without it. The side and top margins match
+    // the panel's padding, so the layer reaches its edges.
+    const PATTERN_CSS = ".arf[data-arf-pattern]{min-height:100%;position:relative;isolation:isolate}" +
+        '.arf[data-arf-pattern]::before{content:"";display:block;position:sticky;top:0;flex:none;' +
+        "height:var(--arf-view,100vh);margin:-14px -14px calc(-1 * var(--arf-view,100vh));" +
+        "z-index:-1;pointer-events:none}" +
+        '.arf[data-arf-pattern="diamonds"]::before{background-image:' +
         "repeating-linear-gradient(45deg," + PAT_INK + " 0 1px,transparent 1px 16px)," +
-        "repeating-linear-gradient(-45deg," + PAT_INK + " 0 1px,transparent 1px 16px)!important}" +
-        '.arf[data-arf-pattern="stripes"]{background-image:' +
-        "repeating-linear-gradient(135deg," + PAT_INK + " 0 1px,transparent 1px 9px)!important}" +
-        '.arf[data-arf-pattern="dots"]{background-image:' +
-        "radial-gradient(" + PAT_INK + " 1.2px,transparent 1.6px)!important;background-size:14px 14px!important}" +
+        "repeating-linear-gradient(-45deg," + PAT_INK + " 0 1px,transparent 1px 16px)}" +
+        '.arf[data-arf-pattern="stripes"]::before{background-image:' +
+        "repeating-linear-gradient(135deg," + PAT_INK + " 0 1px,transparent 1px 9px)}" +
+        '.arf[data-arf-pattern="dots"]::before{background-image:' +
+        "radial-gradient(" + PAT_INK + " 1.2px,transparent 1.6px);background-size:14px 14px}" +
         ".arf[data-arf-pattern] .arf-card,.arf[data-arf-pattern] .arf-tabs{" + PAT_SOLID + "}" +
         // Hearts and stars are shapes, which a gradient cannot draw. Each is a
-        // small picture used as a mask over a layer filled with the theme's
-        // colour, so the shapes take the colour and follow a theme change. The
-        // layer sits behind everything in the panel.
-        SHAPE_PATTERNS.map((k) => '.arf[data-arf-pattern="' + k + '"]{position:relative;isolation:isolate}' +
-            '.arf[data-arf-pattern="' + k + '"]::before{content:"";position:absolute;inset:0;z-index:-1;' +
-            "pointer-events:none;background-color:" + PAT_INK + ";" +
+        // small picture used as a mask over the layer, filled with the theme's
+        // colour, so the shapes take the colour and follow a theme change.
+        SHAPE_PATTERNS.map((k) => '.arf[data-arf-pattern="' + k + '"]::before{background-color:' + PAT_INK + ";" +
             "-webkit-mask:" + shapeTile(k) + " 0 0/36px 36px repeat;mask:" + shapeTile(k) + " 0 0/36px 36px repeat}").join("");
+    // How tall the wallpaper layer is: the height the box that scrolls the tab
+    // shows. Measured again whenever that box or the tab changes size, which
+    // also catches the tab being put into a box after it was drawn.
+    let wallBox = null;
+    let wallRoot = null;
+    let wallSeen = null;
+    function scrollBoxOf(el) {
+        for (let p = el.parentElement; p; p = p.parentElement) {
+            const oy = getComputedStyle(p).overflowY;
+            if (oy === "auto" || oy === "scroll")
+                return p;
+        }
+        return null;
+    }
+    function sizeWallpaper() {
+        const root = wallRoot;
+        if (!root)
+            return;
+        const box = root.isConnected ? scrollBoxOf(root) : null;
+        if (box !== wallBox) {
+            if (wallSeen && wallBox)
+                wallSeen.unobserve(wallBox);
+            wallBox = box;
+            if (wallSeen && box)
+                wallSeen.observe(box);
+        }
+        if (box && box.clientHeight > 0)
+            root.style.setProperty("--arf-view", box.clientHeight + "px");
+    }
+    function pinWallpaper(root) {
+        if (root !== wallRoot) {
+            if (wallSeen)
+                wallSeen.disconnect();
+            wallRoot = root;
+            wallBox = null;
+            try {
+                wallSeen = new ResizeObserver(() => sizeWallpaper());
+                wallSeen.observe(root);
+            }
+            catch (_) {
+                wallSeen = null;
+            }
+        }
+        sizeWallpaper();
+    }
+    disposers.push(() => {
+        if (wallSeen)
+            wallSeen.disconnect();
+        wallSeen = null;
+        wallRoot = null;
+        wallBox = null;
+    });
     // Put before a rule that changes a part's size or place while it is
     // pressed. With Reduce motion on, the part keeps its size and place.
     const PRESS = "html:not([data-arf-still]) ";
@@ -7517,6 +7575,7 @@ export function setup(ctx, overrides) {
             root.setAttribute("data-arf-pattern", String(cfg.panelPattern));
         else
             root.removeAttribute("data-arf-pattern");
+        pinWallpaper(root);
         liveEls = null;
         root.appendChild(buildHeader());
         // A refused permission that stops the whole thing is the answer to "why is

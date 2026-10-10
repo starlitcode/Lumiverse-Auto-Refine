@@ -12331,12 +12331,15 @@ console.log("\na pattern behind the panel");
           const tabs = root.querySelector(".arf-tabs");
           return {
             kind: root.getAttribute("data-arf-pattern"),
-            // Lines and dots are gradients. Hearts and stars are a layer
-            // behind the panel, masked to the shape, which has to cover the
-            // whole panel and sit behind everything on it.
-            drawn:
-              /gradient/.test(getComputedStyle(root).backgroundImage) ||
-              ((cs) => /url\(/.test(cs.maskImage || cs.webkitMaskImage || "") && cs.zIndex === "-1" && Math.abs(parseFloat(cs.height) - root.getBoundingClientRect().height) < 2)(getComputedStyle(root, "::before")),
+            // Drawn on a layer held at the top of the box that scrolls,
+            // behind everything on the panel. Lines and dots are gradients.
+            // Hearts and stars are masked to the shape.
+            drawn: ((cs) =>
+              cs.position === "sticky" &&
+              cs.zIndex === "-1" &&
+              (/gradient/.test(cs.backgroundImage) || /url\(/.test(cs.maskImage || cs.webkitMaskImage || "")))(
+              getComputedStyle(root, "::before"),
+            ),
             // Solid enough that nothing reads through: opaque, or a theme
             // colour that is at most a little see-through.
             cardSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(card).backgroundColor),
@@ -12667,6 +12670,50 @@ console.log("\nthe reload line follows the swipe setting");
 
 // The greeting is left alone unless the reader turns this on, and a warning
 // under the switch says what a refine of it can do.
+// The pattern behind the panel is a wallpaper: the tab scrolls over it and it
+// stays where it is. With every row hidden, the box looks the same at any
+// scroll position. A pattern drawn on the tab itself moves with it.
+console.log("\nthe pattern stays still while the tab scrolls");
+for (const zoom of [1, 1.25, 0.85]) {
+  for (const kind of zoom === 1 ? ["diamonds", "dots", "hearts"] : ["diamonds"]) {
+    const css =
+      // The box that scrolls is around the tab, as Lumiverse's drawer is.
+      "html{zoom:" + zoom + ";overflow:hidden}body{margin:0;height:520px;overflow-y:auto;scrollbar-width:none}" +
+      "body::-webkit-scrollbar{display:none}.arf>*{visibility:hidden}";
+    await inTab(browser, { css, saved: { enabled: true, panelPattern: kind } }, async (page) => {
+      await page.waitForTimeout(150);
+      const box = page.locator("body");
+      const tall = await page.evaluate(() => document.body.scrollHeight - document.body.clientHeight);
+      const a = await box.screenshot();
+      await page.evaluate(() => (document.body.scrollTop = 37));
+      await page.waitForTimeout(60);
+      const b = await box.screenshot();
+      await page.evaluate(() => (document.body.scrollTop = 1e6));
+      await page.waitForTimeout(60);
+      const c = await box.screenshot();
+      ok("zoom " + zoom + ", " + kind + ": the tab can scroll", tall > 100, String(tall));
+      ok("zoom " + zoom + ", " + kind + ": the pattern does not move as it scrolls", a.equals(b) && a.equals(c));
+    });
+  }
+}
+// The rows sit where they would with no pattern, so a pattern moves nothing.
+{
+  const place = async (pattern) => {
+    let top = 0;
+    await inTab(browser, { css: "html{overflow:hidden}body{margin:0;height:520px;overflow-y:auto}", saved: { enabled: true, panelPattern: pattern } }, async (page) => {
+      await page.waitForTimeout(150);
+      top = await page.evaluate(() => {
+        const first = document.querySelector("#drawer > *");
+        return first.getBoundingClientRect().top - document.body.getBoundingClientRect().top;
+      });
+    });
+    return top;
+  };
+  const plain = await place("");
+  const drawn = await place("stripes");
+  ok("a pattern does not move the rows", Math.abs(plain - drawn) < 0.5, plain + " and " + drawn);
+}
+
 console.log("\nrefine the greeting");
 for (const size of [
   { name: "phone", viewport: { width: 412, height: 860 }, touch: true },
