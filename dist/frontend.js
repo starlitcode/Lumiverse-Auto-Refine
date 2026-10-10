@@ -5202,6 +5202,7 @@ export function setup(ctx, overrides) {
         "-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}" +
         // The bar by a selection. It fades in and slides up 4 pixels.
         ".arf-selbar{position:fixed;left:0;top:0;z-index:2147483100;display:flex;gap:6px;" +
+        "--arf-sel-x:0px;--arf-sel-y:0px;" +
         "box-sizing:border-box;padding:6px;max-width:calc(100vw - 16px);" +
         "border-radius:var(--lumiverse-radius-md,10px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
@@ -5211,12 +5212,16 @@ export function setup(ctx, overrides) {
         "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
         "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-        "opacity:0;transform:translateY(4px);pointer-events:none;" +
-        "transition:opacity 160ms ease,transform 160ms ease}" +
-        ".arf-selbar[data-arf-on]{opacity:1;transform:none;pointer-events:auto}" +
+        "opacity:0;transform:translate(var(--arf-sel-x),calc(var(--arf-sel-y) + 4px));pointer-events:none;" +
+        "transition:opacity 160ms ease,transform 140ms cubic-bezier(.2,.7,.3,1)}" +
+        ".arf-selbar[data-arf-on]{opacity:1;transform:translate(var(--arf-sel-x),var(--arf-sel-y));pointer-events:auto}" +
+        // Placed without gliding when it first comes up, and passed through by
+        // touches while the selection is still being dragged.
+        ".arf-selbar[data-arf-place]{transition:opacity 160ms ease}" +
+        ".arf-selbar[data-arf-moving]{pointer-events:none;-webkit-user-select:none;user-select:none}" +
         ".arf-selbar .arf-btn{white-space:nowrap}" +
-        "html[data-arf-still] .arf-selbar{transition:none;transform:none}" +
-        "@media (prefers-reduced-motion: reduce){.arf-selbar{transition:none;transform:none}}" +
+        "html[data-arf-still] .arf-selbar{transition:none}" +
+        "@media (prefers-reduced-motion: reduce){.arf-selbar{transition:none}}" +
         ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf *{box-sizing:border-box}" +
@@ -15448,6 +15453,10 @@ export function setup(ctx, overrides) {
                     // message the selection is in. A button that is always there and
                     // usually does nothing is one people press once and stop trusting,
                     // which is the same rule the menu entry follows.
+                    // Left as they are while a selection is still being dragged, as
+                    // a button added or taken away moves the text under the finger.
+                    if (!pickSettled)
+                        continue;
                     const mine = !!holding && String(holding.messageId) === id;
                     // While something is selected in this message, the button that
                     // refines the whole of it steps aside. Three marks sat in a row, two
@@ -15706,24 +15715,43 @@ export function setup(ctx, overrides) {
     // Read after the gesture rather than during it. A drag across a paragraph
     // fires many times on the way and only the end of it is a selection anybody
     // meant to make.
-    function notePicked() {
+    // settled is false while a selection is still being dragged. The bar
+    // follows it then, but the panel and the message's own buttons wait:
+    // adding buttons to the message mid-drag moves the text under the finger
+    // and the selection jumps. Whatever they owe is done once it settles.
+    let pickOwed = false;
+    // False from the first change of a drag until it settles. The message's
+    // own selection buttons are left exactly as they are while it is false.
+    let pickSettled = true;
+    function pickRedraw(settled) {
+        if (!settled) {
+            pickOwed = true;
+            return;
+        }
+        pickOwed = false;
+        // Three different surfaces: paint redraws the panel's own button,
+        // syncExtras puts the row in the chat input's menu up or takes it
+        // down, and fillSlots does the same for the two buttons in the
+        // toolbar and the two that sit on the message itself.
+        paint();
+        syncExtrasSoon();
+        fillSlotsSoon();
+    }
+    function notePicked(settled = true) {
+        pickSettled = settled;
         try {
+            if (settled && pickOwed)
+                pickRedraw(true);
             const sel = typeof getSelection === "function" ? getSelection() : null;
             const text = sel ? String(sel.toString()) : "";
             // A collapsed selection is a click, which is how somebody puts a selection
             // away. Cleared here so the entry for it goes with it.
             if (!sel || !text.trim() || sel.isCollapsed) {
-                syncSelBarSoon();
                 if (pickedRun) {
                     pickedRun = null;
-                    // Three different surfaces: paint redraws the panel's own button,
-                    // syncExtras puts the row in the chat input's menu up or takes it
-                    // down, and fillSlots does the same for the two buttons in the
-                    // toolbar and the two that sit on the message itself.
-                    paint();
-                    syncExtrasSoon();
-                    fillSlotsSoon();
+                    pickRedraw(settled);
                 }
+                syncSelBarSoon(settled);
                 return;
             }
             const found = messageUnder(sel.anchorNode);
@@ -15755,12 +15783,9 @@ export function setup(ctx, overrides) {
             // moving to another reply. This runs on every selection anybody makes
             // anywhere on the page, and redrawing the panel for each one would be a
             // repaint per drag.
-            if (!was || was.messageId !== pickedRun.messageId) {
-                paint();
-                syncExtrasSoon();
-                fillSlotsSoon();
-            }
-            syncSelBarSoon();
+            if (!was || was.messageId !== pickedRun.messageId)
+                pickRedraw(settled);
+            syncSelBarSoon(settled);
         }
         catch (_) { }
     }
@@ -15821,7 +15846,12 @@ export function setup(ctx, overrides) {
     let selBar = null;
     let selBarFrame = 0;
     let selBarSnap = null;
-    function syncSelBarSoon() {
+    // Whether the selection was still moving at the last update. While it is,
+    // the bar glides after it and lets touches through, so it can never be
+    // what a dragging finger lands on.
+    let selMoving = false;
+    function syncSelBarSoon(settled = true) {
+        selMoving = !settled;
         if (selBarFrame)
             return;
         try {
@@ -15930,8 +15960,22 @@ export function setup(ctx, overrides) {
                 top = Math.min(screenH - h - 8, last.bottom + gap);
             let left = last.left + last.width / 2 - w / 2;
             left = Math.max(8, Math.min(left, screenW - w - 8));
-            bar.style.left = left / z + "px";
-            bar.style.top = top / z + "px";
+            // Placed with a transform, so it glides from one place to the next.
+            // The first time it comes up it is put in place first and then faded
+            // in, rather than sliding over from wherever it last was.
+            const shownBefore = bar.hasAttribute("data-arf-on");
+            if (!shownBefore)
+                bar.setAttribute("data-arf-place", "1");
+            bar.style.setProperty("--arf-sel-x", left / z + "px");
+            bar.style.setProperty("--arf-sel-y", top / z + "px");
+            if (selMoving)
+                bar.setAttribute("data-arf-moving", "1");
+            else
+                bar.removeAttribute("data-arf-moving");
+            if (!shownBefore) {
+                void bar.offsetWidth;
+                bar.removeAttribute("data-arf-place");
+            }
             bar.setAttribute("data-arf-on", "1");
         }
         catch (_) {
@@ -16119,17 +16163,67 @@ export function setup(ctx, overrides) {
     // Both, because neither covers the other. A drag ends with pointerup and never
     // fires selectionchange on some builds; selecting with shift and the arrow keys
     // fires selectionchange and no pointer event at all.
+    //
+    // A selection still being dragged is read at once for the bar, which
+    // follows it, and settled after it stops changing for everything else (see
+    // notePicked). A pointerup is the end of a drag with a mouse, so it is
+    // settled at once.
+    const PICK_SETTLE_MS = 450;
+    let pickTimer = null;
     try {
         if (typeof document !== "undefined") {
-            const onPick = () => notePicked();
-            document.addEventListener("pointerup", onPick, true);
-            document.addEventListener("selectionchange", onPick);
+            const onUp = () => {
+                if (pickTimer)
+                    clearTimeout(pickTimer);
+                pickTimer = null;
+                notePicked();
+            };
+            // Where the selection's two ends were at the last change. A redraw of
+            // the panel or the message's buttons fires selectionchange with the
+            // selection where it was. Treating that as a drag would start the
+            // settle over again each time it finished.
+            let lastEnds = "";
+            const endsNow = () => {
+                try {
+                    const sel = getSelection();
+                    if (!sel || !sel.rangeCount)
+                        return "";
+                    const r = sel.getRangeAt(0);
+                    return [sel.anchorOffset, sel.focusOffset, r.toString().length, r.startOffset, r.endOffset].join(":") +
+                        ":" + String(sel.anchorNode && sel.anchorNode.nodeValue).slice(0, 20) +
+                        ":" + String(sel.focusNode && sel.focusNode.nodeValue).slice(0, 20);
+                }
+                catch (_) {
+                    return "";
+                }
+            };
+            const onChange = () => {
+                const ends = endsNow();
+                if (ends === lastEnds)
+                    return;
+                lastEnds = ends;
+                notePicked(false);
+                if (pickTimer)
+                    clearTimeout(pickTimer);
+                pickTimer = setTimeout(() => {
+                    pickTimer = null;
+                    notePicked(true);
+                    // Settled, so the bar stops letting touches through, whatever
+                    // notePicked found.
+                    syncSelBarSoon(true);
+                }, PICK_SETTLE_MS);
+            };
+            document.addEventListener("pointerup", onUp, true);
+            document.addEventListener("selectionchange", onChange);
             disposers.push(() => {
                 try {
-                    document.removeEventListener("pointerup", onPick, true);
-                    document.removeEventListener("selectionchange", onPick);
+                    document.removeEventListener("pointerup", onUp, true);
+                    document.removeEventListener("selectionchange", onChange);
                 }
                 catch (_) { }
+                if (pickTimer)
+                    clearTimeout(pickTimer);
+                pickTimer = null;
                 pickedRun = null;
             });
         }
@@ -16226,6 +16320,8 @@ export function setup(ctx, overrides) {
                         return;
                     if (msg.type === "message_roles") {
                         takeRoles(msg);
+                        // A selection made before the answer came has a bar to show now.
+                        syncSelBarSoon();
                         return;
                     }
                     if (msg.type === "backend_ready") {

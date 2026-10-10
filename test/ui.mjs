@@ -11416,6 +11416,82 @@ console.log("\nhold to select text in messages");
   }
 }
 
+// While a selection is dragged, the bar glides after it and lets touches
+// through, and nothing on the page moves. Adding the selection's buttons to
+// the message mid-drag shifted the text under the finger, and the selection
+// jumped, so those wait until it stops.
+console.log("\na selection being dragged is followed by the bar");
+for (const [label, viewport, touch, zoom] of [
+  ["phone", { width: 390, height: 844 }, true, 1],
+  ["phone, zoom 1.25", { width: 390, height: 844 }, true, 1.25],
+  ["phone, zoom 0.85", { width: 390, height: 844 }, true, 0.85],
+  ["laptop", { width: 1280, height: 860 }, false, 1],
+]) {
+  const BUBBLE = `
+  <div class="_bubble_86318_171">
+    <span data-spindle-mount="message_header" data-spindle-scope="message:msg-one:minimal:header" style="display:contents"></span>
+    <div data-component="MessageContent"><div class="_prose_1rr8k_181">
+      <p id="d1">Wren set the crate down on the step and wiped both hands on her jeans.</p>
+      <p id="d2">The lock had been changed again, and the new key was not on her ring.</p>
+      <p id="d3">She tried the handle twice anyway, then sat down on the crate to wait.</p>
+    </div></div>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
+  </div>`;
+  await inTab(browser, { css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", viewport, touch, saved: { enabled: true, freeSelect: true, messageButton: true } }, async (page) => {
+    const out = await page.evaluate(async (html) => {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      document.body.appendChild(wrap);
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      for (const f of window.__handlers.CHARACTER_MESSAGE_RENDERED || []) f({ chatId: "c1", messageId: "msg-one" });
+      await new Promise((r) => setTimeout(r, 120));
+      document.getElementById("d2").scrollIntoView({ block: "center" });
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const top = () => Math.round(document.getElementById("d3").getBoundingClientRect().top);
+      const extras = () => document.querySelectorAll('[data-arf-slot="part"],[data-arf-slot="snip"]').length;
+      const bar = () => document.querySelector("[data-arf-selbar]");
+      const barState = () => {
+        const b = bar();
+        if (!b) return { on: false };
+        const r = b.getBoundingClientRect();
+        return { on: b.hasAttribute("data-arf-on"), through: getComputedStyle(b).pointerEvents === "none", top: Math.round(r.top) };
+      };
+      const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+      const start = top();
+      // A finger dragging the end of the selection down, a paragraph at a time.
+      const from = document.getElementById("d1").firstChild;
+      const steps = [["d1", 30], ["d1", 60], ["d2", 20], ["d2", 50], ["d3", 10], ["d3", 40]];
+      const seen = [];
+      let glides = 0;
+      for (const [id, at] of steps) {
+        const r = document.createRange();
+        r.setStart(from, 5);
+        r.setEnd(document.getElementById(id).firstChild, at);
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        // Frame by frame after each move: a glide passes through places
+        // between where it was and where it goes.
+        const tops = [];
+        for (let i = 0; i < 7; i++) {
+          await frame();
+          tops.push(barState().top);
+        }
+        const distinct = new Set(tops.filter((t) => t != null)).size;
+        if (distinct >= 3) glides++;
+        seen.push(Object.assign({ textTop: top(), extras: extras() }, barState()));
+      }
+      await wait(700);
+      return { start, seen, glides, settled: Object.assign({ textTop: top(), extras: extras() }, barState()) };
+    }, BUBBLE);
+    const still = out.seen.every((x) => x.textTop === out.start && x.extras === 0);
+    ok(label + ": while the selection is dragged, the text does not move", still, JSON.stringify(out.seen));
+    ok(label + ": the bar follows it the whole way", out.seen.every((x) => x.on) && new Set(out.seen.map((x) => x.top)).size >= 3, JSON.stringify(out.seen));
+    ok(label + ": gliding from place to place", out.glides >= 2, String(out.glides));
+    ok(label + ": and touches pass through it while the drag goes on", out.seen.every((x) => x.through), JSON.stringify(out.seen));
+    ok(label + ": once it stops, the message's buttons come up and the bar can be pressed", out.settled.on && !out.settled.through && out.settled.extras > 0, JSON.stringify(out.settled));
+  });
+}
+
 console.log("\nthe selection listeners come off with the panel");
 {
   // Watching for a selection means listening on the document, not on anything

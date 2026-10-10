@@ -252,6 +252,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - Message text can be selected even where another extension stops it from being selected.
 - When you select part of a message, a small bar comes up by the selection, with **Refine it**, **Take it out** and **Copy**.
 - The bar also comes up on a laptop. A right-click is left to Lumiverse.
+- While you drag the selection, the bar moves with it. Its buttons can be pressed once the selection stops.
 - The bar follows the same rules as the buttons on a message. On the greeting, it only works with **Refine the greeting** on.
 
 Both chat buttons copy the look of the Lumiverse button next to them, so your theme and your own CSS apply to them. While a refine runs, each turns into **Stop this refine**.

@@ -16,6 +16,11 @@ _2026-10-10_
   - Holding message text on a phone selects it, instead of opening Lumiverse's menu. Holding anywhere else on a message still opens that menu.
   - Message text can be selected even where another extension stops it from being selected.
   - A small bar comes up by the selection, with **Refine it**, **Take it out** and **Copy**.
+  - While you drag the selection, the bar moves with it.
+
+### Fixed
+
+- **A selection no longer jumps while you drag it.** The buttons on a message for a selected part were added while the selection was still being dragged. This moved the text under your finger or mouse, and the selection could jump to another line. The buttons now wait until the selection stops.
 
 ---
 
