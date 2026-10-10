@@ -1815,8 +1815,10 @@ const YOURS_NOT_YOURS: Block = {
     "Finishing a thought they left hanging, or answering a question they " +
     "left open.\n\n" +
     "Tidying fragments into full sentences when fragments are just how " +
-    "they write.\n\n" +    "Taking out extra spaces. They might be there on purpose, so they " +
-    "stay right where they are.\n\n" +
+    "they write.\n\n" +    "Taking out extra spaces that look placed. A double space wedged " +
+    "between two words mid-sentence is probably a slip, so fix that one. " +
+    "Spacing that sets something apart, like a gap before a line or a " +
+    "space left for a pause, stays.\n\n" +
     "If you can't tell a slip from a choice, it's a choice. Leave it." +
     "\n</hands_off>",
 };
