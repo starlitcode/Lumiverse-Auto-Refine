@@ -11294,6 +11294,124 @@ console.log("\nwhat each pass changed, on the Log tab");
   });
 }
 
+// ---- hold to select text in messages ----
+// Off by default. On, message text is selectable even where something set it
+// not to be, a hold on it does not open the host's menu, and a bar by the
+// selection offers what can be done with it.
+console.log("\nhold to select text in messages");
+{
+  const BUBBLE = `
+  <div class="_bubble_86318_171">
+    <div data-component="MessageContent"><div class="_prose_1rr8k_181">
+      <p id="p1">Wren set the crate down on the step and wiped both hands on her jeans.</p>
+      <p id="p2"><span id="blocked" style="user-select:none;-webkit-user-select:none">"The lock's been changed."</span> She tried the handle twice anyway.</p>
+    </div></div>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
+  </div>
+  <div id="elsewhere">Not a message.</div>`;
+  for (const [label, viewport, touch] of [
+    ["phone", { width: 390, height: 844 }, true],
+    ["laptop", { width: 1280, height: 860 }, false],
+  ]) {
+    for (const zoom of label === "phone" ? [1, 1.25, 0.85] : [1]) {
+      for (const on of [false, true]) {
+        const css = zoom === 1 ? "" : "html{zoom:" + zoom + "}";
+        await inTab(browser, { css, viewport, touch, saved: { enabled: true, freeSelect: on } }, async (page) => {
+          const tag = label + (zoom === 1 ? "" : ", zoom " + zoom) + (on ? ", on" : ", off");
+          if (!on && zoom === 1) {
+            await goTab(page, "Setup");
+            await settle(page);
+            const row = await page.evaluate(() => {
+              const r = document.querySelector('#drawer [data-arf-row="freeSelect"]');
+              const rows = [...document.querySelectorAll("#drawer [data-arf-row]")].map((n) => n.getAttribute("data-arf-row"));
+              return { has: !!r, off: !!r && !r.querySelector("input[type=checkbox]").checked, after: rows.indexOf("freeSelect") === rows.indexOf("messageButton") + 1 };
+            });
+            ok(tag + ": the switch is under A button on every message, and off", row.has && row.off && row.after, JSON.stringify(row));
+          }
+          const out = await page.evaluate(async (html) => {
+            const wrap = document.createElement("div");
+            wrap.innerHTML = html;
+            document.body.appendChild(wrap);
+            for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+            for (const f of window.__handlers.CHARACTER_MESSAGE_RENDERED || []) f({ chatId: "c1", messageId: "msg-one" });
+            await new Promise((r) => setTimeout(r, 40));
+            const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+            // The host's menu listens on the page, above the message.
+            let menus = 0;
+            document.body.addEventListener("contextmenu", () => menus++);
+            const hold = (node) => {
+              node.dispatchEvent(new Event("touchstart", { bubbles: true }));
+              const ev = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+              node.dispatchEvent(ev);
+              return ev.defaultPrevented;
+            };
+            const heldPrevented = hold(document.getElementById("p1"));
+            const menusOnText = menus;
+            hold(document.getElementById("elsewhere"));
+            const menusElsewhere = menus - menusOnText;
+            const blockedSelect = getComputedStyle(document.getElementById("blocked")).userSelect;
+            // Select part of the reply, as a hold or a drag would, with the
+            // reply on screen as it is when somebody holds it.
+            document.getElementById("p1").scrollIntoView({ block: "center" });
+            await frame();
+            const node = document.getElementById("p1").firstChild;
+            const at = node.nodeValue.indexOf("wiped both hands");
+            const r = document.createRange();
+            r.setStart(node, at);
+            r.setEnd(node, at + "wiped both hands".length);
+            getSelection().removeAllRanges();
+            getSelection().addRange(r);
+            document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+            await frame();
+            await frame();
+            await new Promise((res) => setTimeout(res, 40));
+            const bar = document.querySelector("[data-arf-selbar]");
+            const shownMid = bar ? parseFloat(getComputedStyle(bar).opacity) : -1;
+            await new Promise((res) => setTimeout(res, 300));
+            const shown = !!bar && bar.hasAttribute("data-arf-on");
+            const b = bar ? bar.getBoundingClientRect() : null;
+            const sr = r.getBoundingClientRect();
+            const acts = bar ? [...bar.querySelectorAll("[data-arf-selbar-act]")] : [];
+            // In CSS pixels, which is what a tap target is sized in.
+            const tallest = Math.min(...acts.map((a) => a.offsetHeight));
+            let snip = null;
+            if (shown) {
+              window.__sent.length = 0;
+              bar.querySelector('[data-arf-selbar-act="snip"]').click();
+              await new Promise((res) => setTimeout(res, 60));
+              snip = window.__sent.filter((m) => m && m.type === "snip_selection").pop() || null;
+            }
+            const hiddenAfter = !bar || !bar.hasAttribute("data-arf-on");
+            return {
+              heldPrevented, menusOnText, menusElsewhere, blockedSelect, shown, shownMid,
+              acts: acts.map((a) => a.textContent.trim()),
+              inside: !!b && b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight,
+              near: !!b && Math.abs(b.top - sr.bottom) < 40,
+              tallest,
+              snip: snip && { picked: snip.picked, messageId: snip.messageId },
+              hiddenAfter,
+            };
+          }, BUBBLE);
+          if (!on) {
+            ok(tag + ": a hold on message text reaches the host as usual", out.menusOnText === 1, JSON.stringify(out));
+            ok(tag + ": and no bar comes up", !out.shown, JSON.stringify(out));
+            return;
+          }
+          ok(tag + ": text another extension blocked can be selected", out.blockedSelect === "text", JSON.stringify(out));
+          ok(tag + ": a hold on message text does not open the host's menu", out.menusOnText === 0 && out.heldPrevented, JSON.stringify(out));
+          ok(tag + ": a hold anywhere else still does", out.menusElsewhere === 1, JSON.stringify(out));
+          ok(tag + ": selecting text brings up the bar", out.shown && out.acts.join("|") === "Refine it|Take it out|Copy", JSON.stringify(out));
+          ok(tag + ": it fades in", out.shownMid > 0 && out.shownMid < 1, JSON.stringify(out));
+          ok(tag + ": by the selection, inside the screen", out.inside && out.near, JSON.stringify(out));
+          if (touch) ok(tag + ": its buttons are 32px tap targets", out.tallest >= 32, JSON.stringify(out));
+          ok(tag + ": Take it out takes out what was selected", !!out.snip && out.snip.picked === "wiped both hands" && out.snip.messageId === "msg-one", JSON.stringify(out));
+          ok(tag + ": and the bar goes", out.hiddenAfter, JSON.stringify(out));
+        });
+      }
+    }
+  }
+}
+
 console.log("\nthe selection listeners come off with the panel");
 {
   // Watching for a selection means listening on the document, not on anything

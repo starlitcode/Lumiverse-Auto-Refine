@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.36.0";
+const VERSION = "1.37.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -347,7 +347,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The floating button, the buttons in the chat, and the input bar row.",
-    keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "eyeStill", "reduceMotion", "panelPattern", "cutColour", "addColour"],
+    keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "freeSelect", "eyeStill", "reduceMotion", "panelPattern", "cutColour", "addColour"],
   },
   {
     id: "inputbox",
@@ -898,6 +898,9 @@ const CONFIG = {
   // without selecting the whole of it first. Off by default for the same
   // reason as the rest.
   messageButton: false,
+  // Holding message text selects it, with Auto Refine's own bar by the
+  // selection. Off by default, since it stands in for Lumiverse's own menu.
+  freeSelect: false,
   // How many messages of the run-up go in the prompt. A rewrite that cannot see
   // what just happened flattens a scene into general prose, which is the
   // failure people blame on the model.
@@ -3838,6 +3841,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       }
       if (cfg.eyeStill || cfg.reduceMotion) root.setAttribute("data-arf-still-eyes", "1");
       else root.removeAttribute("data-arf-still-eyes");
+      if (cfg.freeSelect) root.setAttribute("data-arf-free-select", "1");
+      else root.removeAttribute("data-arf-free-select");
+      // Before the bar's code has run on the way up, there is no bar to hide.
+      try {
+        if (!cfg.freeSelect) hideSelBar();
+      } catch (_) {}
       if (cfg.reduceMotion) root.setAttribute("data-arf-still", "1");
       else root.removeAttribute("data-arf-still");
     } catch (_) {}
@@ -5421,6 +5430,28 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   const CSS =
     PATTERN_CSS +
+    // Hold to select text in messages. Message text stays selectable even where
+    // another extension switched selecting off for its own taps.
+    "html[data-arf-free-select] [data-component=\"MessageContent\"]," +
+    "html[data-arf-free-select] [data-component=\"MessageContent\"] *{" +
+    "-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}" +
+    // The bar by a selection. It fades in and slides up 4 pixels.
+    ".arf-selbar{position:fixed;left:0;top:0;z-index:2147483100;display:flex;gap:6px;" +
+    "box-sizing:border-box;padding:6px;max-width:calc(100vw - 16px);" +
+    "border-radius:var(--lumiverse-radius-md,10px);" +
+    "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+    "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+    "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
+    "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));" +
+    "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
+    "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;" +
+    "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+    "opacity:0;transform:translateY(4px);pointer-events:none;" +
+    "transition:opacity 160ms ease,transform 160ms ease}" +
+    ".arf-selbar[data-arf-on]{opacity:1;transform:none;pointer-events:auto}" +
+    ".arf-selbar .arf-btn{white-space:nowrap}" +
+    "html[data-arf-still] .arf-selbar{transition:none;transform:none}" +
+    "@media (prefers-reduced-motion: reduce){.arf-selbar{transition:none;transform:none}}" +
     ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
     "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf *{box-sizing:border-box}" +
@@ -12755,6 +12786,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     wrap.appendChild(
       fieldRow({
+        key: "freeSelect",
+        label: "Hold to select text in messages",
+        type: "bool",
+        hint: "Off by default. Holding message text selects it, even where another extension blocks it, with a bar to refine, take out or copy it.",
+      }),
+    );
+    wrap.appendChild(
+      fieldRow({
         key: "eyeStill",
         label: "Keep the eye still",
         type: "bool",
@@ -16229,6 +16268,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // A collapsed selection is a click, which is how somebody puts a selection
       // away. Cleared here so the entry for it goes with it.
       if (!sel || !text.trim() || sel.isCollapsed) {
+        syncSelBarSoon();
         if (pickedRun) {
           pickedRun = null;
           // Three different surfaces: paint redraws the panel's own button,
@@ -16272,8 +16312,176 @@ export function setup(ctx: Ctx, overrides?: any) {
         syncExtrasSoon();
         fillSlotsSoon();
       }
+      syncSelBarSoon();
     } catch (_) {}
   }
+
+  // ---- hold to select text in messages ----
+  // With the switch on, a hold on message text selects it. Lumiverse opens its
+  // own menu after a hold, and on Android its handler also cancels the
+  // device's selection, so the menu event is kept from reaching it while the
+  // hold is on message text. A hold anywhere else on the message still opens
+  // the menu, and a right-click with a mouse is left alone.
+  let touchAt = 0;
+  const HOLD_WINDOW_MS = 2500;
+  function onMessageText(t: any): boolean {
+    try {
+      const el = t && t.nodeType === 3 ? t.parentElement : t;
+      if (!el || !el.closest) return false;
+      if (!el.closest('[data-component="MessageContent"]')) return false;
+      // Links, buttons, fields and pictures keep what a hold does to them.
+      return !el.closest("a,button,input,textarea,select,summary,img,video,[role=button]");
+    } catch (_) {
+      return false;
+    }
+  }
+  try {
+    if (typeof document !== "undefined") {
+      const onTouch = (e: any) => {
+        touchAt = cfg.freeSelect && onMessageText(e && e.target) ? Date.now() : 0;
+      };
+      const onMenu = (e: any) => {
+        if (!cfg.freeSelect || !touchAt || Date.now() - touchAt > HOLD_WINDOW_MS) return;
+        if (!onMessageText(e && e.target)) return;
+        // Stopped before it reaches the page. The device's own event is not
+        // cancelled, so the selection it starts goes ahead. Lumiverse's own
+        // event, sent to open its menu, is cancelled as well.
+        e.stopPropagation();
+        if (!e.isTrusted) e.preventDefault();
+      };
+      document.addEventListener("touchstart", onTouch, { capture: true, passive: true });
+      document.addEventListener("contextmenu", onMenu, true);
+      disposers.push(() => {
+        try {
+          document.removeEventListener("touchstart", onTouch, true);
+          document.removeEventListener("contextmenu", onMenu, true);
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
+
+  // The bar by a selection. Below the selection, or above it when there is no
+  // room below, and kept inside the screen. Positions are read in screen
+  // pixels and written in CSS pixels, as Lumiverse's UI Scale zooms the page.
+  let selBar: HTMLElement | null = null;
+  let selBarFrame = 0;
+  let selBarSnap: { chatId: any; messageId: any; text: string; ahead: string } | null = null;
+  function syncSelBarSoon() {
+    if (selBarFrame) return;
+    try {
+      selBarFrame = requestAnimationFrame(() => {
+        selBarFrame = 0;
+        syncSelBar();
+      });
+    } catch (_) {
+      syncSelBar();
+    }
+  }
+  function hideSelBar() {
+    if (selBar) selBar.removeAttribute("data-arf-on");
+  }
+  function makeSelBar(): HTMLElement {
+    const bar = el("div", "arf-selbar");
+    bar.setAttribute("data-arf-selbar", "1");
+    bar.setAttribute("role", "toolbar");
+    bar.setAttribute("aria-label", "Auto Refine, for the text you selected");
+    // A press on the bar keeps the selection, which a tap would otherwise put
+    // away before the button heard it.
+    const keep = (e: any) => {
+      selBarSnap = pickedRun;
+      try {
+        e.preventDefault();
+      } catch (_) {}
+    };
+    bar.addEventListener("pointerdown", keep);
+    bar.addEventListener("mousedown", keep);
+    const act = (label: string, mark: string, run: () => void) => {
+      const b = button(label, false);
+      b.className += " arf-mini2";
+      b.setAttribute("data-arf-selbar-act", mark);
+      b.addEventListener("click", () => {
+        if (!pickedRun && selBarSnap) pickedRun = selBarSnap;
+        selBarSnap = null;
+        run();
+        try {
+          const sel = getSelection();
+          if (sel) sel.removeAllRanges();
+        } catch (_) {}
+        hideSelBar();
+      });
+      bar.appendChild(b);
+    };
+    act("Refine it", "refine", () => refinePicked());
+    act("Take it out", "snip", () => snipPicked());
+    act("Copy", "copy", () => {
+      const one = pickedRun;
+      if (!one) return;
+      copyText(one.text);
+      toast("Copied.", true, "success");
+    });
+    document.body.appendChild(bar);
+    try {
+      sweepReadable(bar);
+    } catch (_) {}
+    return bar;
+  }
+  function syncSelBar() {
+    try {
+      if (!cfg.freeSelect || !pickedHere()) return hideSelBar();
+      const sel = getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return hideSelBar();
+      const rects = Array.from(sel.getRangeAt(0).getClientRects()).filter((r) => r.width > 0 || r.height > 0);
+      if (!rects.length) return hideSelBar();
+      if (!selBar || !selBar.isConnected) selBar = makeSelBar();
+      const bar = selBar;
+      const box = bar.getBoundingClientRect();
+      const scale = bar.offsetWidth > 0 && box.width > 0 ? box.width / bar.offsetWidth : 1;
+      const z = scale > 0.01 ? scale : 1;
+      const first = rects[0];
+      const last = rects[rects.length - 1];
+      const gap = 10;
+      const h = box.height;
+      const w = box.width;
+      // The window's size and the selection's place are both screen pixels.
+      const screenH = window.innerHeight;
+      const screenW = window.innerWidth;
+      // Scrolled out of sight, the selection has nothing on screen to sit by.
+      if (last.bottom < 0 || first.top > screenH) return hideSelBar();
+      let top = last.bottom + gap;
+      if (top + h > screenH - 8) top = first.top - gap - h;
+      if (top < 8) top = Math.min(screenH - h - 8, last.bottom + gap);
+      let left = last.left + last.width / 2 - w / 2;
+      left = Math.max(8, Math.min(left, screenW - w - 8));
+      bar.style.left = left / z + "px";
+      bar.style.top = top / z + "px";
+      bar.setAttribute("data-arf-on", "1");
+    } catch (_) {
+      hideSelBar();
+    }
+  }
+  try {
+    if (typeof window !== "undefined") {
+      const onMove = () => {
+        if (selBar && selBar.hasAttribute("data-arf-on")) syncSelBarSoon();
+      };
+      window.addEventListener("scroll", onMove, true);
+      window.addEventListener("resize", onMove);
+      disposers.push(() => {
+        try {
+          window.removeEventListener("scroll", onMove, true);
+          window.removeEventListener("resize", onMove);
+        } catch (_) {}
+        try {
+          if (selBarFrame) cancelAnimationFrame(selBarFrame);
+        } catch (_) {}
+        selBarFrame = 0;
+        try {
+          if (selBar) selBar.remove();
+        } catch (_) {}
+        selBar = null;
+      });
+    }
+  } catch (_) {}
 
   // What is on screen to refine, if anything. A selection made in another chat
   // is not offered: the reply it was made in is not the one in front of you.

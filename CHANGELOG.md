@@ -6,6 +6,19 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.37.0
+
+_2026-10-10_
+
+### Added
+
+- **Hold to select text in messages.** A new switch on the Setup tab, under **A button on every message**. It is off by default. On:
+  - Holding message text on a phone selects it, instead of opening Lumiverse's menu. Holding anywhere else on a message still opens that menu.
+  - Message text can be selected even where another extension stops it from being selected.
+  - A small bar comes up by the selection, with **Refine it**, **Take it out** and **Copy**.
+
+---
+
 ## 1.36.0
 
 _2026-10-09_

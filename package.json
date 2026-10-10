@@ -1,6 +1,6 @@
 {
   "name": "lumiverse-auto-refine",
-  "version": "1.36.0",
+  "version": "1.37.0",
   "description": "Sends each finished reply, or a message of your own, to a model with a prompt of writing rules you can read and edit, and saves the rewrite only if it passes its checks. The text it replaced is kept, so you can put it back with one tap.",
   "author": "starlitcode",
   "license": "GPL-3.0-only",

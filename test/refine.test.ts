@@ -2382,6 +2382,25 @@ describe("refining a reply", () => {
     expect(h.body("m0")).toBe("The gate stands open. The road past it is dark.");
   });
 
+  // A selection is a press of a button too, so it follows the same switch:
+  // refused on the greeting with it off, and done with it on.
+  test("a selection on the greeting follows Refine the greeting", async () => {
+    const greeting = "The gate stands open, and the road past it is dark.";
+    const off = await armed(["<REFINED>The road past it lies dark.</REFINED>"]);
+    await off.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m0", picked: "the road past it is dark.", ahead: "The gate stands open, and " });
+    await off.front({ type: "snip_selection", requestId: "s", chatId: "c1", messageId: "m0", picked: ", and the road past it is dark", ahead: "The gate stands open" });
+    await wait(60);
+    expect(off.body("m0")).toBe(greeting);
+    const on = await armed(["<REFINED>the road past it lies dark.</REFINED>"], { refineGreeting: true });
+    await on.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m0", picked: "the road past it is dark.", ahead: "The gate stands open, and " });
+    await wait(60);
+    expect(on.body("m0")).toBe("The gate stands open, and the road past it lies dark.");
+    const cut = await armed([], { refineGreeting: true });
+    await cut.front({ type: "snip_selection", requestId: "s", chatId: "c1", messageId: "m0", picked: ", and the road past it is dark", ahead: "The gate stands open" });
+    await wait(60);
+    expect(cut.body("m0")).toBe("The gate stands open.");
+  });
+
   test("the automatic pass never refines the greeting, even with Refine the greeting on", async () => {
     const h = await armed(["<REFINED>The gate stands open. The road past it is dark.</REFINED>"], { refineGreeting: true });
     // A greeting swiped or regenerated arrives as a finished reply.
