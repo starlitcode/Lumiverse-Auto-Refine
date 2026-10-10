@@ -5468,23 +5468,44 @@ for (const size of [
       const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       const box = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
       const knob = () => parseFloat(getComputedStyle(box, "::after").left);
+      const width = () => parseFloat(getComputedStyle(box, "::after").width);
       const from = knob();
+      const restWidth = width();
       document.querySelector('#drawer [data-arf-picker="exportParts"] [data-arf-pick="none"]').click();
-      await wait(60);
-      const mid = knob();
-      const kept = box.isConnected;
+      // First the press: the knob stretches toward where it is going, as it
+      // does under a finger.
+      await wait(90);
+      const pressed = { left: knob(), width: width() };
+      // Then it lets go and slides, overshooting a little before it settles.
+      // Read from the moment it lets go until the panel catches up.
+      for (let i = 0; i < 30 && box.classList.contains("arf-nudge"); i++)
+        await new Promise((r) => requestAnimationFrame(() => r()));
+      const letGo = knob();
+      let mid = null;
+      let least = letGo;
+      for (let i = 0; i < 40 && box.isConnected; i++) {
+        await new Promise((r) => requestAnimationFrame(() => r()));
+        if (!box.isConnected) break;
+        const l = knob();
+        if (mid === null && l < letGo - 0.5) mid = l;
+        least = Math.min(least, l);
+      }
+      const kept = mid !== null;
       await wait(700);
       const now = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
       const said = document.querySelector('#drawer [data-arf-picker="exportParts"] .arf-note').textContent;
-      return { from, mid, end: parseFloat(getComputedStyle(now, "::after").left), kept, off: !now.checked, said };
+      const end = parseFloat(getComputedStyle(now, "::after").left);
+      return { from, restWidth, pressed, mid, least, end, kept, off: !now.checked, said };
     });
+    ok2("None presses each switch first: the knob stretches", slid.pressed.width > slid.restWidth + 1, JSON.stringify(slid));
     ok2("None slides each switch off where it stands", slid.kept && slid.mid < slid.from && slid.mid > slid.end, JSON.stringify(slid));
+    ok2("and the knob springs past its end before it settles", slid.least < slid.end - 0.5, JSON.stringify(slid));
     ok2("and every switch ends off", slid.off && /^0 of /.test(slid.said), JSON.stringify(slid));
     const back = await page.evaluate(async () => {
       const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       const box = document.querySelector('#drawer [data-arf-part="exportParts:prompt"]');
       document.querySelector('#drawer [data-arf-picker="exportParts"] [data-arf-pick="all"]').click();
-      await wait(60);
+      await wait(250);
       return { kept: box.isConnected, on: box.checked };
     });
     ok2("All turns them on the same way", back.kept && back.on, JSON.stringify(back));

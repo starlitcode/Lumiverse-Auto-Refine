@@ -31,7 +31,7 @@ _2026-10-09_
 
 - **Thinking that never closes, in the fixed-token formats, is held back.** A reply cut off inside Cohere's `<|START_THINKING|>`, Seed-OSS's `<seed:think>` or `<|begin_of_thought|>` was sent to be rewritten as if it were prose. It is now treated as working, and the refine stops and says why, the same as for `<think>`.
 - **The refining model's own thinking with only a closing tag is kept out of your chat.** A local model whose template opens the thinking in the prompt answers with its working, then `</think>`, then the rewrite. With the tags off, that working was saved as part of the rewrite. Everything up to the closing tag is now removed.
-- **All, None, Fold all and Open all move like a single press.** **All** and **None** turned every switch at once, with no slide. **Fold all** and **Open all** did the same with the blocks on the Prompt tab. Each switch now slides, and each block now folds and opens, the same as when you press one by itself.
+- **All, None, Fold all and Open all move like a single press.** **All** and **None** turned every switch at once, with no slide. **Fold all** and **Open all** did the same with the blocks on the Prompt tab. Each switch now stretches, slides and springs into place, and each block now folds and opens, the same as when you press one by itself.
 
 ---
 

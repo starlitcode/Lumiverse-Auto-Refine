@@ -5580,9 +5580,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The stretch is left out under Reduce motion. With no transition it
     // would jump wider on a press and jump back on release, which reads as
     // the switch catching.
+    // arf-nudge is the same press, given by All and None.
     "@media (prefers-reduced-motion: no-preference){" +
-    PRESS + ".arf-box:active:not(:disabled)::after{width:18px}" +
-    PRESS + ".arf-box:checked:active:not(:disabled)::after{left:15px}}" +
+    PRESS + ".arf-box:active:not(:disabled)::after," + PRESS + ".arf-box.arf-nudge::after{width:18px}" +
+    PRESS + ".arf-box:checked:active:not(:disabled)::after," + PRESS + ".arf-box.arf-nudge:checked::after{left:15px}}" +
     ".arf-box:checked{background:var(--lumiverse-primary-020,rgba(147,112,219,.2));" +
     "border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
     ".arf-box:checked::after{left:19px;background:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
@@ -6242,8 +6243,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-box::after{width:24px;height:24px;left:4px}" +
     ".arf-box:checked::after{left:24px}" +
     "}@media (pointer: coarse) and (prefers-reduced-motion: no-preference){" +
-    PRESS + ".arf-box:active:not(:disabled)::after{width:29px}" +
-    PRESS + ".arf-box:checked:active:not(:disabled)::after{left:19px}}" +
+    PRESS + ".arf-box:active:not(:disabled)::after," + PRESS + ".arf-box.arf-nudge::after{width:29px}" +
+    PRESS + ".arf-box:checked:active:not(:disabled)::after," + PRESS + ".arf-box.arf-nudge:checked::after{left:19px}}" +
     "@media (pointer: coarse){" +
     // A little room around it takes the tap too, so a finger that lands just
     // off the edge still flips it. Auto Retry's tick boxes have the same.
@@ -7569,12 +7570,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   // button - waits until the knob has arrived. Flicking three switches in a row
   // is one rebuild rather than three.
   let settleTimer: any = null;
-  function settle() {
+  function settle(ms: number = SETTLE_MS) {
     if (settleTimer) clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
       settleTimer = null;
       paint();
-    }, SETTLE_MS);
+    }, ms);
   }
   disposers.push(() => {
     if (settleTimer) clearTimeout(settleTimer);
@@ -13228,6 +13229,21 @@ export function setup(ctx: Ctx, overrides?: any) {
   // An empty record means everything is on. That way a fresh install and
   // somebody who has never opened one of these behave the same, and the stored
   // value only ever holds a choice somebody actually made.
+  // How long All and None hold the press before letting go, about as long
+  // as a quick tap.
+  const NUDGE_MS = 110;
+  // How long the knob takes to slide and spring back, as the switch's
+  // transition says.
+  const KNOB_MS = 320;
+  function motionStill(): boolean {
+    try {
+      if (cfg.reduceMotion) return true;
+      return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function partOn(which: string, id: string): boolean {
     const held = cfg[which];
     if (!held || typeof held !== "object") return true;
@@ -13266,16 +13282,29 @@ export function setup(ctx: Ctx, overrides?: any) {
       none.disabled = chosen === 0;
       none.style.opacity = none.disabled ? "0.45" : "1";
     };
-    // Every box is turned where it stands, so each switch slides as it does
-    // under a finger. The rebuild waits for the knobs, as it does for one.
+    // Every box is turned where it stands, with the same press a finger
+    // gives it: the knob stretches toward where it is going, then lets go and
+    // springs into place. The rebuild waits for the knobs, as it does for one.
+    // With Reduce motion on there is no stretch, so nothing waits for it.
     const pickAll = (on: boolean) => {
       const next: Record<string, boolean> = {};
       for (const p of list) next[p.id] = on;
       cfg[which] = next;
       persist(true);
-      for (const box of boxes) box.checked = on;
-      sayChosen();
-      if (repaintOnChange !== false) settle();
+      const moving = boxes.filter((b) => b.checked !== on);
+      const flip = () => {
+        for (const box of moving) {
+          box.checked = on;
+          box.classList.remove("arf-nudge");
+        }
+        sayChosen();
+        // Past the knob's whole slide, spring included, so the rebuild does
+        // not cut the spring short.
+        if (repaintOnChange !== false) settle(KNOB_MS + 60);
+      };
+      if (!moving.length || motionStill()) return flip();
+      for (const box of moving) box.classList.add("arf-nudge");
+      setTimeout(flip, NUDGE_MS);
     };
     all.addEventListener("click", () => pickAll(true));
     none.addEventListener("click", () => pickAll(false));
