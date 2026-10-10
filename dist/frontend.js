@@ -16172,12 +16172,6 @@ export function setup(ctx, overrides) {
     let pickTimer = null;
     try {
         if (typeof document !== "undefined") {
-            const onUp = () => {
-                if (pickTimer)
-                    clearTimeout(pickTimer);
-                pickTimer = null;
-                notePicked();
-            };
             // Where the selection's two ends were at the last change. A redraw of
             // the panel or the message's buttons fires selectionchange with the
             // selection where it was. Treating that as a drag would start the
@@ -16196,6 +16190,16 @@ export function setup(ctx, overrides) {
                 catch (_) {
                     return "";
                 }
+            };
+            // A release records where the ends are, so the selectionchange the
+            // browser sends just after it, with nothing moved, is not read as the
+            // start of another drag.
+            const onUp = () => {
+                if (pickTimer)
+                    clearTimeout(pickTimer);
+                pickTimer = null;
+                lastEnds = endsNow();
+                notePicked();
             };
             const onChange = () => {
                 const ends = endsNow();

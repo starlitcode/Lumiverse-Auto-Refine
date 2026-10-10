@@ -11441,11 +11441,16 @@ for (const [label, viewport, touch, zoom] of [
     const out = await page.evaluate(async (html) => {
       const wrap = document.createElement("div");
       wrap.innerHTML = html;
+      // Room above and below, so the page can always scroll the message to
+      // the middle of the screen, with space for the bar under it.
+      wrap.style.padding = "100vh 0";
       document.body.appendChild(wrap);
       for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
       for (const f of window.__handlers.CHARACTER_MESSAGE_RENDERED || []) f({ chatId: "c1", messageId: "msg-one" });
       await new Promise((r) => setTimeout(r, 120));
       document.getElementById("d2").scrollIntoView({ block: "center" });
+      // Where the text sits as a share of the screen's height.
+      const aim = document.getElementById("d2").getBoundingClientRect().top / innerHeight;
       const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       const top = () => Math.round(document.getElementById("d3").getBoundingClientRect().top);
       const extras = () => document.querySelectorAll('[data-arf-slot="part"],[data-arf-slot="snip"]').length;
@@ -11481,8 +11486,9 @@ for (const [label, viewport, touch, zoom] of [
         seen.push(Object.assign({ textTop: top(), extras: extras() }, barState()));
       }
       await wait(700);
-      return { start, seen, glides, settled: Object.assign({ textTop: top(), extras: extras() }, barState()) };
+      return { aim, start, seen, glides, settled: Object.assign({ textTop: top(), extras: extras() }, barState()) };
     }, BUBBLE);
+    ok(label + ": the message is in the middle of the screen for the test", out.aim > 0.3 && out.aim < 0.7, String(out.aim));
     const still = out.seen.every((x) => x.textTop === out.start && x.extras === 0);
     ok(label + ": while the selection is dragged, the text does not move", still, JSON.stringify(out.seen));
     ok(label + ": the bar follows it the whole way", out.seen.every((x) => x.on) && new Set(out.seen.map((x) => x.top)).size >= 3, JSON.stringify(out.seen));
