@@ -5435,8 +5435,9 @@ console.log("\nchoosing what goes where");
         .querySelector('#drawer [data-arf-picker="resetParts"] [data-arf-pick="none"]')
         .click();
     });
-    // The switches slide first, and the rest of the tab catches up after them.
-    await page.waitForTimeout(400);
+    // The switches press, slide and land first, and the rest of the tab
+    // catches up after them.
+    await page.waitForTimeout(800);
     await settle(page);
     const off = await page.evaluate(() => {
       const btn = document.querySelector("#drawer [data-arf-reset]");

@@ -5138,8 +5138,14 @@ export function setup(ctx, overrides) {
             if (wallSeen && box)
                 wallSeen.observe(box);
         }
-        if (box && box.clientHeight > 0)
-            root.style.setProperty("--arf-view", box.clientHeight + "px");
+        if (!box || box.clientHeight <= 0)
+            return;
+        // The space inside the box's padding. A layer as tall as the whole box
+        // would reach past its content and give it extra room to scroll.
+        const cs = getComputedStyle(box);
+        const inner = box.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+        if (inner > 0)
+            root.style.setProperty("--arf-view", inner + "px");
     }
     function pinWallpaper(root) {
         if (root !== wallRoot) {
