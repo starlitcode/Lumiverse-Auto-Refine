@@ -168,6 +168,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Wait out a provider that will not take the call** waits and tries again, twice by default, when the provider is busy or a local model is loading. See [Waiting out a provider that will not take the call](guardrails.md#waiting-out-a-provider-that-will-not-take-the-call).
 - **Seconds between automatic refines** puts a gap between automatic refines, for a provider that limits calls per minute. A reply that arrives too soon waits, with a countdown, and is then refined. It is 0, no gap, by default. Refines you start yourself never wait.
 - **Ask again when a check fails** retries a refine that failed a check a second try could fix. It is 0 by default.
+  - **Send a note when it asks again** is off by default. On, an ask made again after a refusal, a softened rewrite or an empty answer ends with a note that says what went wrong. See [A note when it asks again](guardrails.md#a-note-when-it-asks-again).
 - **Several rewrites at once** writes several rewrites at the same time and keeps the first that passes every check. It is off by default, and each rewrite costs a call. See [Several rewrites at once](guardrails.md#several-rewrites-at-once).
 - **Add the refine as a swipe instead of writing over the reply** is off by default.
   - On, the rewrite is added as a new swipe, and the original stays one swipe back.

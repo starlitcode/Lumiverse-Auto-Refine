@@ -88,6 +88,32 @@ What it cannot catch:
 - A call you stopped is never repeated.
 - Every retry is another call on your bill, which is why it is off by default.
 
+## A note when it asks again
+
+**Send a note when it asks again** is off by default. It shows under **Ask again when a check fails** once that is above 0.
+
+When it is on, the ask made again carries a note at the end of the request. The note says what went wrong with the last answer. The first ask never carries a note.
+
+There are three notes, one for each failure:
+
+| Failure | Note |
+| --- | --- |
+| The model declined, or a provider's filter stopped it | **After a refusal** |
+| The rewrite took out or toned down strong words | **After a softened rewrite** |
+| The model answered with nothing | **After an empty answer** |
+
+Other failures, such as an answer that talks about the edit, are asked again with no note.
+
+What to know:
+
+- Each note is in the fold **What the notes say**, with its built-in text. You can change it there.
+- **Use the built-in text** under a note puts its built-in text back.
+- A note left empty is not sent. The ask goes out without it.
+- **Who the notes come from** sets the role of the note: System, User or Assistant. It is System by default.
+- The note goes after the whole prompt, so it is the last thing the model reads.
+- The Log says when a note went with an ask, and which one.
+- With **Several rewrites at once** on, every rewrite in the new try gets the note.
+
 ## Several rewrites at once
 
 **Several rewrites at once** is off by default. When it is on, each try writes several rewrites at the same time instead of one.

@@ -5219,6 +5219,93 @@ describe("asking again when a check fails", () => {
   });
 });
 
+describe("a note when it asks again", () => {
+  const last = (req: any) => req.messages[req.messages.length - 1];
+  const refusedThenFine = [
+    "I'm sorry, but I can't help with that.",
+    "<REFINED>She stepped through and the cold hit her.</REFINED>",
+  ];
+
+  test("off by default, so the second ask is the same request as the first", async () => {
+    const h = await armed(refusedThenFine, { retryRefine: 2 });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.asked[1].messages).toEqual(h.asked[0].messages);
+  });
+
+  test("on, the ask after a refusal ends with the refusal note, and the first ask has none", async () => {
+    const h = await armed(refusedThenFine, { retryRefine: 2, askNote: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.asked[1].messages.length).toBe(h.asked[0].messages.length + 1);
+    expect(last(h.asked[1]).role).toBe("system");
+    expect(last(h.asked[1]).content).toMatch(/^Your last answer declined to rewrite the passage\./);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    // The panel is told which note went, for its Log.
+    expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "retrying" && m.note === "After a refusal")).toBe(true);
+  });
+
+  test("a provider's filter gets the refusal note too", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      { retryRefine: 2, askNote: true },
+      chat(),
+      { failFirst: { times: 1, why: "content_filtered" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(last(h.asked[1]).content).toMatch(/declined to rewrite/);
+  });
+
+  test("a softened rewrite gets the softening note", async () => {
+    const h = await armed(
+      [
+        "<REFINED>She unalived him where he stood, and did not look back at the door.</REFINED>",
+        "<REFINED>She killed him where he stood and did not look back at the door.</REFINED>",
+      ],
+      { retryRefine: 1, askNote: true },
+      [
+        { id: "m0", role: "assistant", content: "The gate stands open." },
+        { id: "m1", role: "user", content: "i go in" },
+        { id: "m2", role: "assistant", content: "She killed him where he stood, and did not look back at the door." },
+      ],
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(last(h.asked[1]).content).toMatch(/^Your last rewrite took out or toned down words/);
+  });
+
+  test("an empty answer gets the empty note", async () => {
+    const h = await armed(["", "<REFINED>She stepped through and the cold hit her.</REFINED>"], { retryRefine: 1, askNote: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(last(h.asked[1]).content).toMatch(/^Your last answer was empty\./);
+  });
+
+  test("your own text and role are used, and an empty text sends no note", async () => {
+    const h = await armed(refusedThenFine, {
+      retryRefine: 2,
+      askNote: true,
+      askNoteRole: "user",
+      askNoteRefused: "Please try the edit once more.",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(last(h.asked[1])).toEqual({ role: "user", content: "Please try the edit once more." });
+
+    const quiet = await armed(refusedThenFine, { retryRefine: 2, askNote: true, askNoteRefused: "" });
+    await quiet.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(quiet.asked.length).toBe(2);
+    expect(quiet.asked[1].messages).toEqual(quiet.asked[0].messages);
+  });
+});
+
 describe("shielding what the built-in rules miss", () => {
   const withScaffold = (body: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The gate stands open." },

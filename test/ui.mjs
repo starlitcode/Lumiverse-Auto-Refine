@@ -2282,6 +2282,102 @@ console.log("\nwhat it compares with the reply before it");
   );
 }
 
+console.log("\na note when it asks again");
+{
+  // A switch under Ask again when a check fails, shown once that is above 0.
+  // On, it shows who the notes come from and a fold with the three notes,
+  // each holding its built-in text and a way back to it.
+  const vis = (page, sel) =>
+    page.evaluate((sel) => {
+      const n = document.querySelector(sel);
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    }, sel);
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Limits");
+      ok(label + ": with Ask again at 0, the switch is not shown", !(await vis(page, '#drawer [data-arf-row="askNote"]')));
+    });
+
+    await inTab(browser, { viewport, touch, saved: { enabled: true, retryRefine: 1 } }, async (page) => {
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      await goTab(page, "Limits");
+      ok(label + ": with Ask again above 0, the switch is shown, and off", await vis(page, '#drawer [data-arf-row="askNote"]') &&
+        !(await page.evaluate(() => document.querySelector('#drawer [data-arf-row="askNote"] input[type="checkbox"]').checked)));
+      ok(label + ": its rows are not shown while it is off", !(await vis(page, '#drawer [data-arf-row="askNoteRole"]')));
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="askNote"] input[type="checkbox"]').click());
+      await settle(page);
+      await settle(page);
+      ok(label + ": switched on, Who the notes come from is shown", await vis(page, '#drawer [data-arf-row="askNoteRole"]'));
+      const role = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="askNoteRole"]') || {}).value);
+      ok(label + ": and is System", role === "system", String(role));
+      await page.evaluate(() => {
+        const h = [...document.querySelectorAll("#drawer [aria-expanded]")].find((b) => /What the notes say/.test(b.textContent));
+        h.click();
+      });
+      await settle(page);
+      await settle(page);
+      const boxes = await page.evaluate(() =>
+        ["askNoteRefused", "askNoteSoftened", "askNoteEmpty"].map((k) => {
+          const b = document.querySelector('#drawer [data-arf-field="' + k + '"]');
+          return b && !b.closest("[hidden]") ? b.value : null;
+        }));
+      ok(label + ": the fold holds the three notes with their built-in text",
+        /^Your last answer declined to rewrite/.test(boxes[0] || "") && /^Your last rewrite took out or toned down/.test(boxes[1] || "") && /^Your last answer was empty/.test(boxes[2] || ""),
+        JSON.stringify(boxes));
+      ok(label + ": each has its own button for the built-in text",
+        (await vis(page, '#drawer [data-arf-asknoterefused="builtin"]')) && (await vis(page, '#drawer [data-arf-asknotesoftened="builtin"]')) && (await vis(page, '#drawer [data-arf-asknoteempty="builtin"]')));
+
+      // Typed over, then put back.
+      await page.evaluate(() => {
+        const b = document.querySelector('#drawer [data-arf-field="askNoteEmpty"]');
+        b.value = "Write it again.";
+        b.dispatchEvent(new Event("input", { bubbles: true }));
+        b.dispatchEvent(new Event("change", { bubbles: true }));
+        b.blur();
+      });
+      await settle(page);
+      await new Promise((r) => setTimeout(r, 600));
+      const typed = await page.evaluate(() => {
+        const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+        return raw ? JSON.parse(raw).askNoteEmpty : null;
+      });
+      ok(label + ": a note you type is saved", typed === "Write it again.", JSON.stringify(typed));
+      const press = async () => {
+        await page.evaluate(() => document.querySelector('#drawer [data-arf-asknoteempty="builtin"]').click());
+        await settle(page);
+        await settle(page);
+      };
+      await press();
+      await press();
+      const back = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="askNoteEmpty"]') || {}).value);
+      ok(label + ": Use the built-in text puts the note back", /^Your last answer was empty/.test(back || ""), String(back));
+
+      const look = await page.evaluate((touch) => {
+        const out = { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small: [] };
+        if (touch)
+          for (const n of document.querySelectorAll('#drawer [data-arf-row^="askNote"] input, #drawer [data-arf-row^="askNote"] select, #drawer [data-arf-row^="askNote"] button, #drawer [data-arf-asknoterefused="builtin"], #drawer [data-arf-asknotesoftened="builtin"], #drawer [data-arf-asknoteempty="builtin"]')) {
+            if (n.closest("[hidden]") || !n.getClientRects().length || n.type === "checkbox") continue;
+            if (n.offsetHeight < 32) out.small.push((n.getAttribute("data-arf-field") || n.textContent || n.tagName).slice(0, 30) + ":" + n.offsetHeight);
+          }
+        return out;
+      }, touch);
+      ok(label + ": nothing runs off the side", !look.sideways, "");
+      if (touch) ok(label + ": every control is at least 32 pixels high", look.small.length === 0, JSON.stringify(look.small));
+
+      // The Log says which note went with an ask.
+      await page.evaluate(() => {
+        window.__fromBackend({ type: "refine_progress", stage: "retrying", attempt: 2, of: 2, note: "After a refusal" });
+      });
+      await goTab(page, "Log");
+      await settle(page);
+      const said = await page.evaluate(() => [...document.querySelectorAll("#drawer [data-arf-logline]")].map((n) => n.textContent).join(" | "));
+      ok(label + ": the Log names the note that went", /asking again, with the note After a refusal/.test(said), said.slice(0, 200));
+      ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+    });
+  }
+}
+
 console.log("\nevery fixed text is a box of its own");
 {
   // Nothing sent to a model is hidden: the worn-phrase check, the lead-in to
