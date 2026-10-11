@@ -13481,7 +13481,13 @@ console.log("\nevery tab on a phone and under a mouse");
   await inTab(browser, { viewport: { width: 1280, height: 900 }, saved: SAVED }, async (page) => {
     await goTab(page, "Limits");
     const look = (sel) => page.evaluate((sel) => { const n = document.querySelector(sel); const cs = getComputedStyle(n); return [cs.backgroundColor, cs.borderColor, cs.boxShadow, cs.filter].join("|"); }, sel);
-    for (const [name, sel] of [["a switch", '#drawer [data-arf-row="protectOn"] .arf-box'], ["a list", "#drawer select.arf-field"], ['a "?"', "#drawer .arf-q"]]) {
+    // The first list on the tab that is drawn. A list under a switch that is
+    // off is on the card and hidden, and a pointer cannot reach it.
+    await page.evaluate(() => {
+      const n = [...document.querySelectorAll("#drawer select.arf-field")].find((x) => !x.closest("[hidden]") && x.getClientRects().length);
+      if (n) n.setAttribute("data-probe-list", "1");
+    });
+    for (const [name, sel] of [["a switch", '#drawer [data-arf-row="protectOn"] .arf-box'], ["a list", "#drawer [data-probe-list]"], ['a "?"', "#drawer .arf-q"]]) {
       await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: "center" }), sel);
       const before = await look(sel);
       await page.hover(sel);
