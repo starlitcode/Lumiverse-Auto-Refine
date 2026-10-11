@@ -13061,6 +13061,61 @@ console.log("\nthe list comes back after a reload");
   }
 }
 
+console.log("\nthe view switch on the tab's card turns that card round");
+{
+  // Lumiverse takes the tab's panel out of the page while the drawer is shut
+  // or on another tab, and puts the same panel back when it is opened. A view
+  // picked on the page's card in that time is the view the tab's card shows
+  // when it comes back, and the tab's own switch still turns that card round.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, keepPutBack: true, panelPattern: "hearts" } }, async (page) => {
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      const read = () => page.evaluate(() => {
+        const c = document.querySelector("#drawer [data-arf-last]");
+        const w = c && c.querySelector("[data-arf-diff]");
+        const b = c && c.querySelector("[data-arf-diff-switch]");
+        return { card: !!c, mode: w ? w.getAttribute("data-arf-diff-mode") : null, cols: c ? c.querySelectorAll("[data-arf-side]").length : -1, says: b ? b.textContent : null };
+      });
+      const tapTab = () => page.evaluate(() => document.querySelector("#drawer [data-arf-last] [data-arf-diff-switch]").click());
+      await page.evaluate(() => window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "She set the kettle on, slowly, and waited for it.", after: "She set the kettle on and waited." }));
+      await settle(page);
+      const first = await read();
+      ok(label + ": the card is on the tab, marked up together", first.card && first.mode === "inline" && first.says === "Read them side by side", JSON.stringify(first));
+
+      // The drawer is shut: the panel is out of the page, and the view is
+      // picked on the card on the page.
+      await page.evaluate(() => {
+        const d = document.getElementById("drawer");
+        window.__drawerSpot = { el: d, parent: d.parentNode, next: d.nextSibling };
+        d.remove();
+        document.querySelector("[data-arf-pop] [data-arf-diff-switch]").click();
+      });
+      await settle(page);
+      // Opened again: the same panel goes back where it was.
+      await page.evaluate(() => {
+        const s = window.__drawerSpot;
+        s.parent.insertBefore(s.el, s.next);
+      });
+      await settle(page);
+      const back = await read();
+      ok(label + ": opened again, the tab's card shows the view picked on the page", back.mode === "side" && back.cols === 2 && back.says === "Read them together", JSON.stringify(back));
+
+      await tapTab();
+      await settle(page);
+      const together = await read();
+      ok(label + ": its own switch puts that card back together", together.mode === "inline" && together.cols === 0 && together.says === "Read them side by side", JSON.stringify(together));
+      await tapTab();
+      await settle(page);
+      const side = await read();
+      ok(label + ": and side by side again", side.mode === "side" && side.cols === 2 && side.says === "Read them together", JSON.stringify(side));
+    });
+  }
+}
+
 console.log("\nreduce motion");
 {
   // With Reduce motion on, or the device set to reduce motion, nothing of

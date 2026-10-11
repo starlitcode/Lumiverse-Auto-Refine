@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.37.0";
+const VERSION = "1.37.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -8303,23 +8303,40 @@ export function setup(ctx, overrides) {
         range(0, x.length, 0, y.length, true);
         return out;
     }
-    // Every before-and-after currently on the screen, so pressing the switch on
-    // one of them redraws all of them. Without this the card you pressed changes
-    // and the two behind it stay as they were, which reads as a button that only
-    // half worked.
-    //
-    // Capped rather than pruned on every call: a card built and not yet put on
-    // the page would be dropped by a pruning pass before it ever arrived.
-    let diffSpots = [];
+    // The two texts each before-and-after was drawn from, kept with the element
+    // so the switch can draw it again. Pressing the switch on one redraws all of
+    // them. Without this the card you pressed changes and the others stay as
+    // they were, which reads as a button that only half worked.
+    const diffTexts = new WeakMap();
+    // Where a before-and-after can be: the page, and this tab's panel. Lumiverse
+    // takes the panel out of the page while the drawer is shut or on another
+    // tab, and puts the same panel back when it is opened, so a switch pressed
+    // on the page's card in that time has to reach the panel as well.
+    function diffScopes() {
+        const out = [document];
+        try {
+            const root = tab && tab.root;
+            if (root && !root.isConnected)
+                out.push(root);
+        }
+        catch (_) { }
+        return out;
+    }
     // The words are built again, so the readability pass runs on them again.
     // Without it, a theme colour too faint for the card, which the pass had made
     // readable, came back at its own colour each time the view was switched.
     function redrawDiffs() {
-        diffSpots = diffSpots.filter((s) => s.wrap.isConnected);
-        for (const s of diffSpots) {
-            fillDiff(s.wrap, s.before, s.after);
-            clearInk(s.wrap);
-            sweepReadable(s.wrap);
+        for (const scope of diffScopes()) {
+            const all = scope.querySelectorAll("[data-arf-diff]");
+            for (let i = 0; i < all.length; i++) {
+                const wrap = all[i];
+                const texts = diffTexts.get(wrap);
+                if (!texts)
+                    continue;
+                fillDiff(wrap, texts.before, texts.after);
+                clearInk(wrap);
+                sweepReadable(wrap);
+            }
         }
     }
     // One column of the side by side view. The before column keeps what was taken
@@ -8400,9 +8417,7 @@ export function setup(ctx, overrides) {
         const wrap = el("div", "arf-diff");
         wrap.setAttribute("data-arf-diff", "1");
         fillDiff(wrap, before, after);
-        diffSpots.push({ wrap: wrap, before: before, after: after });
-        if (diffSpots.length > 40)
-            diffSpots.splice(0, diffSpots.length - 40);
+        diffTexts.set(wrap, { before: before, after: after });
         return wrap;
     }
     function switchLabel() {
@@ -8419,11 +8434,13 @@ export function setup(ctx, overrides) {
             cfg.sideBySide = !cfg.sideBySide;
             persist(true);
             redrawDiffs();
-            const all = document.querySelectorAll("[data-arf-diff-switch]");
-            for (let i = 0; i < all.length; i++) {
-                const one = all[i];
-                one.textContent = switchLabel();
-                one.setAttribute("data-arf-btn", switchLabel());
+            for (const scope of diffScopes()) {
+                const all = scope.querySelectorAll("[data-arf-diff-switch]");
+                for (let i = 0; i < all.length; i++) {
+                    const one = all[i];
+                    one.textContent = switchLabel();
+                    one.setAttribute("data-arf-btn", switchLabel());
+                }
             }
         });
         return b;

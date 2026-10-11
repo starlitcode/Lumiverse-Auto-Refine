@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.37.1
+
+_2026-10-10_
+
+### Fixed
+
+- **The view switch on the tab's card works after you pick a view on the page.** Picking **Read them side by side** or **Read them together** on the card on the page, while the drawer was shut or on another tab, left the tab's card behind. After that, its own switch changed its words but not the view. Every card now follows the switch, wherever it is.
+
+---
+
 ## 1.37.0
 
 _2026-10-10_
