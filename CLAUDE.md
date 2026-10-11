@@ -84,6 +84,10 @@ Two skills are available. Load them before starting work.
   so they suit group chats and do not assume who plays which character.
 - The built-in prompts carry a mark worked out from their text. Changing their
   text tells every user the built-in prompts have changed, so do it on purpose.
+- Any other built-in text or default that changes after it was released, such
+  as a note, a check or a number, goes in `MOVED_DEFAULTS`. A user still on
+  the old one is then told, and can take the new one. A setting added in the
+  version being written has no old value, so it is not listed.
 
 ## Second models
 
