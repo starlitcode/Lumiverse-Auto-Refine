@@ -109,7 +109,7 @@ What to know:
 - Each note is in the fold **What the notes say**, with its built-in text. You can change it there.
 - **Use the built-in text** under a note puts its built-in text back.
 - A note left empty is not sent. The ask goes out without it.
-- **Who the notes come from** sets the role of the note: System, User or Assistant. It is System by default.
+- **Who the notes come from** sets the role of the note: System, User or Assistant. It is User by default, and the built-in notes are written as you.
 - The note goes after the whole prompt, so it is the last thing the model reads.
 - The Log says when a note went with an ask, and which one.
 - With **Several rewrites at once** on, every rewrite in the new try gets the note.

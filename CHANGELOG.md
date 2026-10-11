@@ -15,7 +15,7 @@ _2026-10-10_
 - **Send a note when it asks again.** A new switch on the Limits tab, under **Ask again when a check fails**. It is off by default, and shows once **Ask again when a check fails** is above 0. On:
   - After a refusal, a softened rewrite or an empty answer, the next ask ends with a note that says what went wrong.
   - Each of the three has its own note, in the fold **What the notes say**. Each comes with built-in text that you can change, and **Use the built-in text** puts it back.
-  - **Who the notes come from** sets the note's role. It is System by default.
+  - **Who the notes come from** sets the note's role. It is User by default, and the built-in notes are written as you.
   - The Log says which note went with an ask.
   - See [A note when it asks again](docs/guardrails.md#a-note-when-it-asks-again).
 

@@ -5240,7 +5240,7 @@ describe("a note when it asks again", () => {
     await wait(80);
     expect(h.asked.length).toBe(2);
     expect(h.asked[1].messages.length).toBe(h.asked[0].messages.length + 1);
-    expect(last(h.asked[1]).role).toBe("system");
+    expect(last(h.asked[1]).role).toBe("user");
     expect(last(h.asked[1]).content).toMatch(/^Your last answer declined to rewrite the passage\./);
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
     // The panel is told which note went, for its Log.
@@ -5291,12 +5291,12 @@ describe("a note when it asks again", () => {
     const h = await armed(refusedThenFine, {
       retryRefine: 2,
       askNote: true,
-      askNoteRole: "user",
+      askNoteRole: "system",
       askNoteRefused: "Please try the edit once more.",
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(80);
-    expect(last(h.asked[1])).toEqual({ role: "user", content: "Please try the edit once more." });
+    expect(last(h.asked[1])).toEqual({ role: "system", content: "Please try the edit once more." });
 
     const quiet = await armed(refusedThenFine, { retryRefine: 2, askNote: true, askNoteRefused: "" });
     await quiet.ended({ chatId: "c1", messageId: "m2" });

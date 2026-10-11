@@ -2310,7 +2310,7 @@ console.log("\na note when it asks again");
       await settle(page);
       ok(label + ": switched on, Who the notes come from is shown", await vis(page, '#drawer [data-arf-row="askNoteRole"]'));
       const role = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="askNoteRole"]') || {}).value);
-      ok(label + ": and is System", role === "system", String(role));
+      ok(label + ": and is User", role === "user", String(role));
       await page.evaluate(() => {
         const h = [...document.querySelectorAll("#drawer [aria-expanded]")].find((b) => /What the notes say/.test(b.textContent));
         h.click();
