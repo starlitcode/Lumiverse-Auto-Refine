@@ -33,7 +33,9 @@ describe("every second model has a Model name box", () => {
     expect(SECOND_MODELS.length).toBeGreaterThan(1);
   });
 
-  for (const m of SECOND_MODELS) {
+  // A model not in this list is named in the Model name box under Another
+  // address, which is checked below, so it has no box of its own.
+  for (const m of SECOND_MODELS.filter((x: any) => x.value !== "other")) {
     const who = m.value;
     describe(m.name, () => {
       const key = OWN_NAME_KEYS[who];
@@ -69,6 +71,18 @@ describe("every second model has a Model name box", () => {
       });
     });
   }
+
+  test("A model not in this list has its own line at 30, and the address boxes", () => {
+    expect(OWN_NAME_KEYS.other).toBeUndefined();
+    expect(BUILT_IN_MODEL_NAMES.other).toBeUndefined();
+    expect(CONFIG.otherOver).toBe(30);
+    expect(PARTS.some((p: any) => p.keys.indexOf("otherOver") >= 0)).toBe(true);
+    expect(homeHost("other")).toBe("custom");
+    for (const key of ["judgeUrl", "judgeModel"]) {
+      const field = JUDGE_FIELDS.find((f: any) => f.key === key);
+      expect(field && field.needs).toEqual({ key: "judgeHost", is: "custom" });
+    }
+  });
 
   test("and no box for a model that is not in the list", () => {
     const models = SECOND_MODELS.map((m: any) => m.value);
@@ -151,7 +165,7 @@ describe("the host list", () => {
       expect(o.needs.is.slice().sort()).toEqual(named.sort());
     });
   }
-  for (const m of SECOND_MODELS) {
+  for (const m of SECOND_MODELS.filter((x: any) => x.value !== "other")) {
     test(m.name + "'s home host serves it", () => {
       expect(!!BUILT_IN_MODEL_NAMES[m.value][homeHost(m.value)]).toBe(true);
     });
@@ -165,7 +179,8 @@ describe("the host list", () => {
 describe("every What is link goes to the maker's own page", () => {
   const NO_MAKER_PAGE: string[] = [];
   const links: Array<[string, string]> = [];
-  for (const m of SECOND_MODELS) links.push([m.value, m.about]);
+  // A model not in this list has no maker, and no link.
+  for (const m of SECOND_MODELS) if (m.value !== "other") links.push([m.value, m.about]);
   for (const who of Object.keys(SIZE_PICKS))
     for (const z of SIZE_PICKS[who].sizes) if (z.about) links.push([who + " " + z.value, z.about]);
   for (const [what, url] of links)

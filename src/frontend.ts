@@ -59,7 +59,7 @@ function blockText(raw: any): string {
 // backend.
 // A model offered in more than one size or kind is one entry here. Its sizes
 // are in SIZE_PICKS below.
-const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: string }> = [
+const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: string; label?: string }> = [
   { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
   { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
   { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://docs.inceptionlabs.ai/capabilities/decisions" },
@@ -76,6 +76,9 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   { value: "drex", name: "Drex", from: "Nace.AI", about: "https://huggingface.co/nace-ai/drex-v2.0" },
   { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
   { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://docs.subq.ai/" },
+  // A decision model with no entry of its own, reached at an address the
+  // reader types. It has no maker and no page, and its own line.
+  { value: "other", name: "Your model", from: "", about: "", label: "A model not in this list" },
 ];
 
 // A model offered in more than one size or kind, such as Clef and Clef Flash.
@@ -145,6 +148,9 @@ const SIZE_PICKS: Record<string, { key: string; title: string; standard: string;
 // Where a model is reached when the host picked does not serve it: the first
 // host it has, which is OpenRouter for every model OpenRouter serves.
 function homeHost(who: string): string {
+  // A model with no host of its own, such as A model not in this list, is
+  // reached at the address typed for it.
+  if (!BUILT_IN_MODEL_NAMES[who]) return "custom";
   return Object.keys(BUILT_IN_MODEL_NAMES[who] || {})[0] || "openrouter";
 }
 
@@ -371,7 +377,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -915,6 +921,7 @@ const CONFIG = {
   drexOver: 30,
   classifyOver: 30,
   subqOver: 30,
+  otherOver: 30,
   solarFlashOver: 30,
   // With worn phrases on, the second model is also asked whether the reply uses one.
   judgeWorn: true,
@@ -2588,7 +2595,7 @@ const JUDGE_FIELDS: Field[] = [
     key: "judgeWho",
     label: "Which second model",
     type: "pick",
-    options: SECOND_MODELS.map((m) => ({ value: m.value, label: m.name + ", from " + m.from })),
+    options: SECOND_MODELS.map((m) => ({ value: m.value, label: m.label || m.name + ", from " + m.from })),
     needs: { key: "judgeMode", is: "two" },
     hint: "All of them answer the same checks. Span-01 Lite and Mercury Decide are free on OpenRouter.",
   },
@@ -2716,6 +2723,7 @@ const JUDGE_FIELDS: Field[] = [
           drex: "nace-ai/drex-v2.0",
           classify: "scaledown/classify-1",
           subq: "subq-snap-preview",
+          other: "my-decision-model",
         } as Record<string, string>
       )[c.judgeWho] || "typesafe/jev-latest"),
     hint: "What that host calls the model, as its own docs spell it.",
@@ -2913,6 +2921,17 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "subq" },
     hint: "For SubQ Snap. A percentage, " + CONFIG.subqOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "otherOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "other" },
+    hint: "For your model. A percentage, " + CONFIG.otherOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "solarFlashOver",
@@ -3851,6 +3870,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The second model's name, for everything the panel says about what it did.
   function whoName(): string {
     const m = SECOND_MODELS.find((x) => x.value === cfg.judgeWho) || SECOND_MODELS[0];
+    if (m.value === "other") return String(cfg.judgeModel || "").trim() || m.name;
     const z = sizeInUse(cfg);
     return z ? z.name : m.name;
   }
@@ -4175,6 +4195,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   // always shown.
   function logKind(text: string): string {
     for (const m of SECOND_MODELS) if (text.indexOf(m.name + " ") === 0) return "judge";
+    const typed = String(cfg.judgeModel || "").trim();
+    if (cfg.judgeWho === "other" && typed && text.indexOf(typed + " ") === 0) return "judge";
     if (/^(left a reply (alone|as it was)|left your draft as it was|did not touch your draft)/.test(text)) return "left";
     if (SETUP_LINE.test(text)) return "setup";
     return "";
@@ -9453,7 +9475,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // Whether the setting a row or an option needs holds what it asks for.
   function optionShows(needs: { key: string; is?: any; test?: (c: any) => boolean }): boolean {
     if (typeof needs.test === "function") return needs.test(cfg);
-    const held = cfg[needs.key];
+    // A model with no host of its own is always at Another address, whatever
+    // host was left picked, so the address boxes show for it.
+    const held = needs.key === "judgeHost" && !BUILT_IN_MODEL_NAMES[cfg.judgeWho] ? "custom" : cfg[needs.key];
     const is = needs.is;
     return is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
   }
@@ -10871,7 +10895,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A Flash in use is linked by its own name, to its own page.
     const z = sizeInUse(cfg);
     const own = !!z && !!z.about;
-    about.appendChild(linkTo(own ? String(z && z.about) : picked.about, "What is " + (own ? z && z.name : picked.name) + "?"));
+    // A model not in the list has no page, so it says what to fill in.
+    if (picked.about) about.appendChild(linkTo(own ? String(z && z.about) : picked.about, "What is " + (own ? z && z.name : picked.name) + "?"));
+    else about.textContent = "Any decision model that answers yes-or-no checks. Fill in its address and name below.";
     // Only with two models picked. With one there is no second model to read
     // about, and the links are one more line to read past.
     wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));

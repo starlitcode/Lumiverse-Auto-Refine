@@ -155,7 +155,8 @@ Two skills are available. Load them before starting work.
   the defaults come from testing during the beta and can change.
 - Every entry under **Which second model** has a **Model name** box, Jev
   included, so a user can type a new name when a host renames a model or
-  releases a new version. When
+  releases a new version. **A model not in this list** is the one exception:
+  it has no host of its own and uses the boxes under **Another address**. When
   a second model or a host for one is added or changed, keep all of its parts:
   the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
   the Model tab, its place in `PARTS`, and its built-in name for every host in

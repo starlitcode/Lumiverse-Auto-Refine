@@ -19,6 +19,7 @@ _2026-10-15_
 
   See [Two models](docs/two-models.md).
 - **SubQ Snap.** A new second model, from Subquadratic, on NanoGPT and on SubQ's own API. It sends SubQ Snap Preview. It has its own **Refine when a check reaches**, 30 by default. It takes at most 16 checks in one call, so more checks are sent over more than one call. See [SubQ Snap](docs/two-models.md#subq-snap).
+- **A model not in this list.** The last choice under **Which second model**, for a decision model Auto Refine does not have yet. It is reached at **Another address**, has its own **Refine when a check reaches**, 30 by default, and the Log calls it by the name you type. See [A model not in this list](docs/two-models.md#a-model-not-in-this-list).
 - **Which Decider.** With Decider picked, **Decider Latest, always the newest** can be picked on OpenRouter. It always sends Perplexity's newest Decider. Decider V1.1 27B stays the default, and is used on the other hosts. Both use the same line.
 - **GPT-6 Luna Decisions and Kev 4B on NanoGPT.** **Where it is reached** now offers NanoGPT for both.
 

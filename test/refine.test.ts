@@ -1714,6 +1714,32 @@ describe("two models: Jev reads the reply first", () => {
     });
   }
 
+  // A model not in this list is reached only at the address typed for it,
+  // whatever host was left picked, and is named by the model name typed there.
+  const MINE = { judgeWho: "other", judgeUrl: "https://decide.example.test/v1/decisions", judgeModel: "made-up-decider" };
+  test("a model not in this list is asked at the typed address, by the typed name", async () => {
+    for (const host of ["openrouter", "custom"]) {
+      const h = await keyed({ ...MINE, judgeHost: host }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe("https://decide.example.test/v1/decisions");
+      expect(h.jevCalls[0].body.model).toBe("made-up-decider");
+      expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+    }
+  });
+
+  test("and it has a line of its own, 30 by default, and says its typed name", async () => {
+    const over = await keyed({ ...MINE, judgeOver: 90 }, { jev: says([31]) });
+    await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(over.asked.length).toBe(1);
+    const own = await keyed({ ...MINE, otherOver: 40 }, { jev: says([31]) });
+    await own.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(own.asked.length).toBe(0);
+    expect(own.stood().some((w: string) => /^made-up-decider found nothing/.test(w))).toBe(true);
+  });
+
   // SubQ takes at most 16 questions in a call. Eighteen checks go over two
   // calls, and the answers are read together: the last check, in the second
   // call, is the one over the line.

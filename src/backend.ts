@@ -4740,6 +4740,7 @@ const LINES: Record<string, { key: string; fallback: number }> = {
   drex: { key: 'drexOver', fallback: 30 },
   classify: { key: 'classifyOver', fallback: 30 },
   subq: { key: 'subqOver', fallback: 30 },
+  other: { key: 'otherOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4866,6 +4867,13 @@ const SECOND_MODELS: Record<string, SecondModel> = {
     hosts: CLASSIFY_HOSTS,
     model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
   },
+  // A model not in this list: reached only at the address typed for it, and
+  // called by the model name typed there.
+  other: {
+    name: 'Your model',
+    hosts: {},
+    model: () => judgeModel,
+  },
   subq: {
     name: 'SubQ Snap',
     most: 16,
@@ -4900,6 +4908,7 @@ function sizedName(h: SizedHost): string {
 
 // The second model's name, for everything that is said about what it did.
 function who(): string {
+  if (judgeWho === 'other') return judgeModel || SECOND_MODELS.other.name;
   const pick = SIZE_PICKS[judgeWho];
   const size = pick && pick.sizes[sizeInUse()];
   return size ? size.name : secondModel().name;
@@ -4911,6 +4920,8 @@ function who(): string {
 function hostFor(who: string, host: string): string {
   if (host === 'custom') return 'custom';
   const m = SECOND_MODELS[who] || SECOND_MODELS.jev;
+  // A model with no host of its own is always at the address typed for it.
+  if (!Object.keys(m.hosts).length) return 'custom';
   return m.hosts[host] ? host : Object.keys(m.hosts)[0];
 }
 

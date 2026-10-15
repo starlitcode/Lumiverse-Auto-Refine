@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are thirteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds).
+There are thirteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds). The last choice, **A model not in this list**, is for any other decision model. See [A model not in this list](#a-model-not-in-this-list).
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -314,14 +314,20 @@ The model names are built in, and a host can change them. You do not have to wai
 2. Type the new name in **Model name**, under the host. The box shows the built-in name as an example, and an empty box uses it.
 3. Press **Test**. It says whether the model answered, and which one.
 
-**A new model that is not in the list:**
+**A new model that is not in the list:** see [A model not in this list](#a-model-not-in-this-list).
 
-1. Pick the model under **Which second model** that is most like it. Its **Refine when a check reaches** line is the one used.
-2. Pick **Another address** under **Where it is reached**.
-3. Fill in **Address** and **Model name** with what the new model's host gives. For a model on OpenRouter, the address is `https://openrouter.ai/api/alpha/decisions`.
-4. Save the key for that host, and press **Test**.
+## A model not in this list
 
-The new model has to answer the same kind of request as the models in the list: a list of yes-or-no checks, each answered with a chance from 0 to 100 percent. See [Another address](#another-address) for the kinds of request it can take.
+**A model not in this list** is the last choice under **Which second model**. It is for any decision model Auto Refine does not have yet.
+
+1. Pick **A model not in this list** under **Which second model**. **Where it is reached** shows **Another address**, since this choice has no host of its own.
+2. Fill in **Address** and **Model name** with what the model's host gives. For a model on OpenRouter, the address is `https://openrouter.ai/api/alpha/decisions`.
+3. Save the key for that address, and press **Test**.
+
+- It has its own **Refine when a check reaches**, 30 by default.
+- The Log calls it by the **Model name** you typed.
+- The model has to answer the same kind of request as the models in the list: a list of yes-or-no checks, each answered with a chance from 0 to 100 percent. See [Another address](#another-address) for the kinds of request it can take.
+- It is sent the plain request, with the reply as a named field. A model in the list that needs its request laid out another way, such as Span, Classify-1 or SubQ Snap, works best picked by its own name, with **Another address** under it.
 
 ## Another address
 
@@ -462,6 +468,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Drex** | 30 percent |
 | **Classify-1** | 30 percent |
 | **SubQ Snap** | 30 percent |
+| **A model not in this list** | 30 percent |
 
 ### Where the defaults come from
 

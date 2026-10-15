@@ -1957,6 +1957,44 @@ for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, t
   });
 }
 
+// A model not in this list is reached only at Another address. Picked with
+// another host left over, the host list shows Another address, its boxes
+// show, its own line shows, and a line says what to fill in.
+console.log("\na model not in this list");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "other", judgeHost: "openrouter" } }, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    const got = await page.evaluate(() => {
+      const vis = (sel) => {
+        const n = document.querySelector(sel);
+        return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+      };
+      const who = document.querySelector('#drawer [data-arf-field="judgeWho"]');
+      const host = document.querySelector('#drawer [data-arf-field="judgeHost"]');
+      const lines = [...document.querySelectorAll('#drawer [data-arf-row$="Over"]')].filter((n) => !n.closest("[hidden]") && n.getClientRects().length > 0).map((n) => n.getAttribute("data-arf-row"));
+      return {
+        label: who && who.selectedOptions[0] && who.selectedOptions[0].textContent,
+        host: host && host.value,
+        hosts: host ? [...host.options].filter((o) => !o.hidden && !o.disabled).map((o) => o.value) : [],
+        url: vis('#drawer [data-arf-row="judgeUrl"]'),
+        model: vis('#drawer [data-arf-row="judgeModel"]'),
+        lines,
+        about: (document.querySelector("#drawer [data-arf-jevabout]") || {}).textContent,
+        links: document.querySelectorAll("#drawer [data-arf-jevabout] a").length,
+        sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      };
+    });
+    ok(label + ": it is offered as A model not in this list", got.label === "A model not in this list", JSON.stringify(got));
+    ok(label + ": the host shows as Another address", got.host === "custom", JSON.stringify(got));
+    ok(label + ": the Address and Model name boxes show", got.url && got.model, JSON.stringify(got));
+    ok(label + ": only its own line shows", got.lines.join() === "otherOver", JSON.stringify(got.lines));
+    ok(label + ": a line says what to fill in, with no link", got.links === 0 && /Fill in its address and name below/.test(got.about), JSON.stringify(got));
+    ok(label + ": nothing scrolls sideways", !got.sideways, "");
+  });
+  ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+}
+
 console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
 {
   // Each shows its own hosts and only its own line, at 30, with its link to
@@ -2187,7 +2225,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all thirteen second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq", JSON.stringify(jev.who));
+    ok("all thirteen second models are offered, each model's sizes under one entry, and one for a model not in the list", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq,other", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
