@@ -1770,7 +1770,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "openrouter"], ["classify", "openrouter"], ["mapika", "nanogpt"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "openrouter"], ["classify", "openrouter"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1929,6 +1929,34 @@ console.log("\nanother address that needs no key");
   });
 }
 
+// Mapika Decider was hosted by LLM Tech, which closes on 31 October 2026, and
+// is not in the list. A setup saved with it picked shows Jev, which is what is asked.
+console.log("\na second model that was taken out of the list");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "mapika", judgeHost: "nanogpt", mapikaSize: "2b" } }, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    const got = await page.evaluate(() => {
+      const sel = document.querySelector('#drawer [data-arf-field="judgeWho"]');
+      return {
+        value: sel && sel.value,
+        mapika: !!sel && [...sel.options].some((o) => o.value === "mapika"),
+        links: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent),
+      };
+    });
+    ok(label + ": Mapika Decider is not offered", !got.mapika, JSON.stringify(got));
+    ok(label + ": Jev shows as the second model", got.value === "jev" && got.links.join() === "What is Jev?", JSON.stringify(got));
+  });
+  ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
+  // Span-01 Lite without the free limits, saved, shows as the free one.
+  await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "span", judgeHost: "openrouter", spanTier: "lite" } }, async (page) => {
+    await goTab(page, "Model");
+    await settle(page);
+    const tier = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="spanTier"]') || {}).value);
+    ok(label + ": a saved Span-01 Lite without the free limits shows as Span-01 Lite, free", tier === "free", String(tier));
+  });
+}
+
 console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
 {
   // Each shows its own hosts and only its own line, at 30, with its link to
@@ -1946,9 +1974,8 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
     ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://huggingface.co/nace-ai/drex-v2.0"],
     ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
-    ["mapika", "Mapika Decider, from Mapika", "nanogpt,custom", "mapikaOver", "What is Mapika Decider? https://github.com/Mapika/decider"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -2036,7 +2063,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
 
 console.log("\na model that comes in more than one size");
 {
-  // Mercury Decide, Solar Decide, Clef and Mapika Decider each have a picker
+  // Mercury Decide, Solar Decide and Clef each have a picker
   // under them. For each size, on a host that serves it: picking it shows
   // that size's line and no other, its built-in name, and its own link where
   // it has one. On a host that does not serve the size, the size is not
@@ -2158,7 +2185,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all thirteen second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,mapika", JSON.stringify(jev.who));
+    ok("all twelve second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -10084,7 +10111,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.

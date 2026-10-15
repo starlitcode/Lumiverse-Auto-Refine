@@ -68,9 +68,6 @@ const SECOND_MODELS = [
     // Nace.AI's page for Drex is its model card on Hugging Face.
     { value: "drex", name: "Drex", from: "Nace.AI", about: "https://huggingface.co/nace-ai/drex-v2.0" },
     { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
-    // Mapika publishes its models with no hosted API of its own. The link is the
-    // maker's page for them.
-    { value: "mapika", name: "Mapika Decider", from: "Mapika", about: "https://github.com/Mapika/decider" },
 ];
 const SIZE_PICKS = {
     mercury: {
@@ -112,16 +109,6 @@ const SIZE_PICKS = {
                 line: "clefOmniOver",
                 about: "https://developers.cloudflare.com/workers-ai/models/clef-omni/",
             },
-        ],
-    },
-    mapika: {
-        key: "mapikaSize",
-        title: "Which Mapika Decider",
-        standard: "2b",
-        sizes: [
-            { value: "0.8b", label: "Decider 0.8B, the smallest", name: "Mapika Decider 0.8B", line: "mapikaSmallOver" },
-            { value: "2b", label: "Decider 2B", name: "Mapika Decider 2B", line: "mapikaOver" },
-            { value: "4b", label: "Decider 4B, the largest", name: "Mapika Decider 4B", line: "mapikaLargeOver" },
         ],
     },
 };
@@ -199,10 +186,6 @@ const BUILT_IN_MODEL_NAMES = {
     microsoft: { openrouter: "microsoft/microsoft-decision-1" },
     drex: { openrouter: "nace-ai/drex-v2.0" },
     classify: { openrouter: "scaledown/classify-1" },
-    // LLM Tech hosts Mapika's models on NanoGPT, made smaller to run.
-    mapika: {
-        nanogpt: { "0.8b": "llmtech/decider-0.8b-fp8", "2b": "llmtech/decider-2b-fp8", "4b": "llmtech/decider-4b-nvfp4" },
-    },
 };
 // The built-in name for the model and host picked. A host the model is not on
 // is replaced by the model's home host, the same as the backend does.
@@ -237,7 +220,6 @@ const OWN_NAME_KEYS = {
     microsoft: "microsoftName",
     drex: "drexName",
     classify: "classifyName",
-    mapika: "mapikaName",
 };
 // A link in the panel's own colours. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
@@ -357,7 +339,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "mapikaSize", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "mapikaName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -851,7 +833,6 @@ const CONFIG = {
     mercuryTier: "free",
     clefTier: "full",
     solarTier: "full",
-    mapikaSize: "2b",
     // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
     judgeUrl: "",
@@ -874,7 +855,6 @@ const CONFIG = {
     microsoftName: "",
     drexName: "",
     classifyName: "",
-    mapikaName: "",
     // The account ID Cloudflare's own address holds. Empty until the reader
     // pastes theirs.
     cloudflareAccount: "",
@@ -896,9 +876,6 @@ const CONFIG = {
     drexOver: 30,
     classifyOver: 30,
     solarFlashOver: 30,
-    mapikaSmallOver: 30,
-    mapikaOver: 30,
-    mapikaLargeOver: 30,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -2722,42 +2699,6 @@ const JUDGE_FIELDS = [
         hint: "For Solar Decide Flash. A percentage, " + CONFIG.solarFlashOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
-        key: "mapikaSmallOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mapika" },
-        when: (c) => lineInUse(c, "mapikaSmallOver"),
-        hint: "For Mapika Decider 0.8B. A percentage, " + CONFIG.mapikaSmallOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "mapikaOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mapika" },
-        when: (c) => lineInUse(c, "mapikaOver"),
-        hint: "For Mapika Decider 2B. A percentage, " + CONFIG.mapikaOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "mapikaLargeOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mapika" },
-        when: (c) => lineInUse(c, "mapikaLargeOver"),
-        hint: "For Mapika Decider 4B. A percentage, " + CONFIG.mapikaLargeOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
         key: "judgeWorn",
         label: "Also check for worn-out phrases",
         type: "bool",
@@ -3423,6 +3364,15 @@ export function setup(ctx, overrides) {
             delete into.judgeName;
         }
         catch (_) { }
+        // A second model taken out of the list, such as Mapika Decider, whose only
+        // host closes on 31 October 2026. The backend asks Jev for any name it does
+        // not know, so the panel shows Jev too, rather than an empty picker.
+        if (typeof into.judgeWho === "string" && !SECOND_MODELS.some((m) => m.value === into.judgeWho))
+            into.judgeWho = "jev";
+        // Span-01 Lite without the free limits is the free one, which OpenRouter
+        // lists at no cost.
+        if (into.spanTier === "lite")
+            into.spanTier = "free";
         // Refine when a check reaches is kept per second model. A line somebody set
         // themselves, rather than one of the defaults, was meant for whichever model
         // they had, so it is given to Span too the first time Span's is looked for.

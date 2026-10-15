@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are thirteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds).
+There are twelve to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds).
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -20,11 +20,10 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
 | **Drex** | Nace.AI | Paid, per call | [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
-| **Mapika Decider**, in 0.8B, 2B and 4B | Mapika | Paid, per call | [Mapika Decider on GitHub](https://github.com/Mapika/decider) |
 
 All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked. Where the maker has a page for one size, such as Clef Flash, that size links to it.
 
-Mapika has no hosted API of its own. Its link goes to its page for the models, which are open. With Kev 4B picked, a warning that it is a small model shows next to its link. With any Clef picked, a note says how much of a reply Cloudflare reads.
+With Kev 4B picked, a warning that it is a small model shows next to its link. With any Clef picked, a note says how much of a reply Cloudflare reads.
 
 Solar Decide Flash links to Upstage's page for Solar Decide. Nace.AI's page for Drex is its model card on Hugging Face.
 
@@ -35,7 +34,7 @@ Everything is on the Model tab, in **One model or two**.
 1. Set **How many models** to two.
 2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide, Clef and Mapika Decider, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide and Clef, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -106,7 +105,6 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | Mercury Decide | **Which Mercury Decide** | free, or without the free limits |
 | Solar Decide | **Which Solar Decide** | Solar Decide, or Solar Decide Flash |
 | Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
-| Mapika Decider | **Which Mapika Decider** | 0.8B, 2B or 4B |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
 - The free and paid kinds of Mercury Decide are the same model, so they share one line.
@@ -276,25 +274,6 @@ Classify-1 is ScaleDown's decision model. It takes the same request as Jev on Op
 - ScaleDown's own API takes the key in an `x-api-key` header. Auto Refine sends the key the way OpenRouter takes it, so ScaleDown's own API is not offered.
 - It is paid, per call. OpenRouter's page for it shows the price.
 
-## Mapika Decider
-
-Mapika Decider is an open decision model from Mapika. It takes the same request as Jev. LLM Tech hosts it on NanoGPT, made smaller to run, in three sizes.
-
-**Which Mapika Decider** picks the size:
-
-- **Decider 0.8B, the smallest**. The fastest. Its maker says it knows less than the 2B, so it does worse on questions that need knowledge.
-- **Decider 2B**, the default. Its maker's default size.
-- **Decider 4B, the largest**. Its maker says it scores above the 2B on most of their tests.
-
-| Host | 0.8B | 2B | 4B |
-| --- | --- | --- | --- |
-| NanoGPT | `llmtech/decider-0.8b-fp8` | `llmtech/decider-2b-fp8` | `llmtech/decider-4b-nvfp4` |
-
-- It is on NanoGPT only. If OpenRouter or another host is left picked, NanoGPT is used.
-- NanoGPT gives each size 32,768 tokens.
-- All three are paid, per call. NanoGPT's page for each shows the price.
-- Mapika's models are open, so you can run them yourself with Mapika's server and reach them under **Another address**. See [Mapika Decider on GitHub](https://github.com/Mapika/decider).
-
 ## When a model is renamed, or a new one comes out
 
 The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
@@ -362,7 +341,7 @@ Addresses known to work:
 | Host | Address | Model name |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `llmtech/decider-0.8b-fp8`, `llmtech/decider-2b-fp8` or `llmtech/decider-4b-nvfp4` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni` or `perplexity/pplx-decider-v1.1-27b` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
 | Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
@@ -457,9 +436,6 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Microsoft-Decision-1** | 30 percent |
 | **Drex** | 30 percent |
 | **Classify-1** | 30 percent |
-| **Mapika Decider 0.8B** | 30 percent |
-| **Mapika Decider 2B** | 30 percent |
-| **Mapika Decider 4B** | 30 percent |
 
 ### Where the defaults come from
 

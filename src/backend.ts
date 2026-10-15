@@ -4552,15 +4552,6 @@ const DREX_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> 
 const CLASSIFY_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'scaledown/classify-1', kind: 'decisions' },
 };
-// Mapika's Decider, an open model in three sizes. LLM Tech hosts it on
-// NanoGPT, made smaller to run, and it takes Jev's request.
-const MAPIKA_HOSTS: Record<string, SizedHost> = {
-  nanogpt: {
-    url: 'https://nano-gpt.com/api/v1/decisions',
-    models: { '0.8b': 'llmtech/decider-0.8b-fp8', '2b': 'llmtech/decider-2b-fp8', '4b': 'llmtech/decider-4b-nvfp4' },
-    kind: 'decisions',
-  },
-};
 
 // The text of a responses API reply when it has no `output_text` of its own:
 // the first output_text part of the first message in `output`.
@@ -4672,7 +4663,6 @@ const ownNames: Record<string, string> = {
   microsoft: '',
   drex: '',
   classify: '',
-  mapika: '',
 };
 
 // A model offered in more than one size or kind, such as Clef and Clef Flash.
@@ -4705,15 +4695,6 @@ const SIZE_PICKS: Record<string, SizePick> = {
       omni: { name: 'Clef Omni', line: 'clefOmniOver' },
     },
   },
-  mapika: {
-    setting: 'mapikaSize',
-    standard: '2b',
-    sizes: {
-      '0.8b': { name: 'Mapika Decider 0.8B', line: 'mapikaSmallOver' },
-      '2b': { name: 'Mapika Decider 2B', line: 'mapikaOver' },
-      '4b': { name: 'Mapika Decider 4B', line: 'mapikaLargeOver' },
-    },
-  },
 };
 // The size picked for each model that has sizes.
 const sizesPicked: Record<string, string> = {};
@@ -4732,7 +4713,6 @@ const LINES: Record<string, { key: string; fallback: number }> = {
   jev: { key: 'judgeOver', fallback: 30 },
   span: { key: 'spanOver', fallback: 30 },
   mercury: { key: 'mercuryOver', fallback: 30 },
-  mapika: { key: 'mapikaOver', fallback: 30 },
   d1: { key: 'd1Over', fallback: 30 },
   solar: { key: 'solarOver', fallback: 30 },
   kev: { key: 'kevOver', fallback: 30 },
@@ -4865,11 +4845,6 @@ const SECOND_MODELS: Record<string, SecondModel> = {
     text: true,
     hosts: CLASSIFY_HOSTS,
     model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
-  },
-  mapika: {
-    name: 'Mapika Decider',
-    hosts: MAPIKA_HOSTS,
-    model: (host) => ownNames.mapika || sizedName(MAPIKA_HOSTS[host]),
   },
 };
 

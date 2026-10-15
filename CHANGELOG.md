@@ -23,8 +23,11 @@ _2026-10-15_
 ### Changed
 
 - **The What is links go to the makers' own pages.** **What is Mercury Decide?** now goes to Inception's page about it, and the docs say how to reach it on Inception's own API, under **Another address**. With Solar Decide Flash picked, the link is **What is Solar Decide?**, to Upstage's page. Both went to OpenRouter before.
-
 - **One Span-01 Lite on OpenRouter.** OpenRouter now lists `respan/span-01-lite` as free, so **Span-01 Lite, free** sends that name. **Span-01 Lite, without the free limits** is gone, since it was the same model. Anyone who had it picked now has **Span-01 Lite, free**, which sends the same model. See [Which Span](docs/two-models.md#which-span).
+
+### Removed
+
+- **Mapika Decider.** Its three sizes were reached on NanoGPT, where LLM Tech hosts them. LLM Tech closes its service on 31 October 2026. If you had Mapika Decider picked, Jev is used now. Mapika's models are open, so you can still run one yourself and reach it under **Another address**.
 
 ---
 
@@ -154,7 +157,7 @@ _2026-10-09_
 
 ### Added
 
-- **Mapika Decider.** A new second model, from Mapika, on NanoGPT. **Which Mapika Decider** picks its size: 0.8B, 2B or 4B. Each size has its own **Refine when a check reaches**, at 30 by default. See [Mapika Decider](docs/two-models.md#mapika-decider).
+- **Mapika Decider.** A new second model, from Mapika, on NanoGPT. **Which Mapika Decider** picks its size: 0.8B, 2B or 4B. Each size has its own **Refine when a check reaches**, at 30 by default. See [Mapika Decider on GitHub](https://github.com/Mapika/decider).
 - **Mercury Decide without the free limits.** **Which Mercury Decide** picks the free one or the paid one on OpenRouter. The paid one has no free-model limits. Both use the same line.
 - **More hosts on NanoGPT.** Clef Flash and Decider can now be reached on NanoGPT.
 - **Show me the pop-up.** A button under **Show the before and after on screen**, on the Setup tab. It shows the card with made-up text, so you can see how it looks. Nothing is refined or sent, and its buttons only close it.
