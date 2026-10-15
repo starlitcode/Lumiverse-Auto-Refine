@@ -1621,8 +1621,10 @@ describe("two models: Jev reads the reply first", () => {
   // ---- Span, the other second model ----
   // On OpenRouter Span takes the same decisions request as Jev, so only the
   // model name changes. Each kind of Span by the name OpenRouter gives it.
+  // A saved "lite" was Span-01 Lite without the free limits, which is the
+  // free one now.
   for (const [tier, model] of [
-    ["free", "respan/span-01-lite:free"],
+    ["free", "respan/span-01-lite"],
     ["lite", "respan/span-01-lite"],
     ["full", "respan/span-01"],
   ]) {
@@ -1684,6 +1686,9 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-omni", "clef-omni", { clefTier: "omni" }],
     ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef-omni", { clefTier: "omni" }],
     ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b"],
+    ["microsoft", "openrouter", "https://openrouter.ai/api/alpha/decisions", "microsoft/microsoft-decision-1"],
+    ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-v2.0"],
+    ["classify", "openrouter", "https://openrouter.ai/api/alpha/decisions", "scaledown/classify-1"],
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
     ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-2b-fp8"],
     ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-0.8b-fp8", { mapikaSize: "0.8b" }],
@@ -1776,6 +1781,9 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "clefFlashOver", { clefTier: "flash" }],
     ["clef", "clefOmniOver", { clefTier: "omni" }],
     ["decider", "deciderOver"],
+    ["microsoft", "microsoftOver"],
+    ["drex", "drexOver"],
+    ["classify", "classifyOver"],
     ["solar", "solarFlashOver", { solarTier: "flash" }],
     ["mapika", "mapikaSmallOver", { mapikaSize: "0.8b" }],
     ["mapika", "mapikaOver"],
@@ -1786,7 +1794,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, solarFlashOver: 10, mapikaSmallOver: 10, mapikaOver: 10, mapikaLargeOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, solarFlashOver: 10, mapikaSmallOver: 10, mapikaOver: 10, mapikaLargeOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
@@ -2012,7 +2020,7 @@ describe("two models: Jev reads the reply first", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
-    expect(h.jevCalls[0].body.model).toBe("respan/span-01-lite:free");
+    expect(h.jevCalls[0].body.model).toBe("respan/span-01-lite");
   });
 
   test("and Respan, left picked when Jev is chosen again, sends Jev to OpenRouter", async () => {

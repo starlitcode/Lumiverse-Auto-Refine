@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.39.0';
+const VERSION = '1.40.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4253,7 +4253,7 @@ const JEV_HOSTS = {
 const SPAN_HOSTS = {
     openrouter: {
         url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { free: 'respan/span-01-lite:free', lite: 'respan/span-01-lite', full: 'respan/span-01' },
+        models: { free: 'respan/span-01-lite', full: 'respan/span-01' },
         kind: 'decisions',
     },
     respan: {
@@ -4333,6 +4333,19 @@ const DECIDER_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
     nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
     perplexity: { url: 'https://api.perplexity.ai/v1/decisions', model: 'pplx-decider-v1.1-27b', kind: 'decisions' },
+};
+// Microsoft-Decision-1, from Microsoft. OpenRouter takes Jev's request for it.
+// It reads up to 32,768 tokens.
+const MICROSOFT_HOSTS = {
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'microsoft/microsoft-decision-1', kind: 'decisions' },
+};
+// Drex, from Nace.AI. OpenRouter takes Jev's request for it.
+const DREX_HOSTS = {
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'nace-ai/drex-v2.0', kind: 'decisions' },
+};
+// Classify-1, from ScaleDown. OpenRouter takes Jev's request for it.
+const CLASSIFY_HOSTS = {
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'scaledown/classify-1', kind: 'decisions' },
 };
 // Mapika's Decider, an open model in three sizes. LLM Tech hosts it on
 // NanoGPT, made smaller to run, and it takes Jev's request.
@@ -4460,6 +4473,9 @@ const ownNames = {
     luna: '',
     clef: '',
     decider: '',
+    microsoft: '',
+    drex: '',
+    classify: '',
     mapika: '',
 };
 const SIZE_PICKS = {
@@ -4516,6 +4532,9 @@ const LINES = {
     luna: { key: 'lunaOver', fallback: 30 },
     clef: { key: 'clefOver', fallback: 30 },
     decider: { key: 'deciderOver', fallback: 30 },
+    microsoft: { key: 'microsoftOver', fallback: 30 },
+    drex: { key: 'drexOver', fallback: 30 },
+    classify: { key: 'classifyOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4591,6 +4610,21 @@ const SECOND_MODELS = {
         name: 'Decider',
         hosts: DECIDER_HOSTS,
         model: (host) => ownNames.decider || DECIDER_HOSTS[host].model,
+    },
+    microsoft: {
+        name: 'Microsoft-Decision-1',
+        hosts: MICROSOFT_HOSTS,
+        model: (host) => ownNames.microsoft || MICROSOFT_HOSTS[host].model,
+    },
+    drex: {
+        name: 'Drex',
+        hosts: DREX_HOSTS,
+        model: (host) => ownNames.drex || DREX_HOSTS[host].model,
+    },
+    classify: {
+        name: 'Classify-1',
+        hosts: CLASSIFY_HOSTS,
+        model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
     },
     mapika: {
         name: 'Mapika Decider',
@@ -5314,7 +5348,9 @@ function applyRules(s) {
     refineGap = Number.isFinite(refineGap) ? Math.min(120, Math.max(0, refineGap)) : 0;
     judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
     judgeWho = Object.prototype.hasOwnProperty.call(SECOND_MODELS, String(s.judgeWho)) ? String(s.judgeWho) : 'jev';
-    spanTier = s.spanTier === 'lite' || s.spanTier === 'full' ? s.spanTier : 'free';
+    // A saved 'lite' was Span-01 Lite without the free limits, which is the
+    // free one now.
+    spanTier = s.spanTier === 'full' ? 'full' : 'free';
     for (const who of Object.keys(SIZE_PICKS)) {
         const pick = SIZE_PICKS[who];
         const got = String(s[pick.setting]);

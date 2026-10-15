@@ -6,6 +6,25 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.40.0
+
+_2026-10-15_
+
+### Added
+
+- **Three more second models.** Under **Which second model**, all on OpenRouter, each with its own **Refine when a check reaches**, 30 by default:
+  - **Microsoft-Decision-1**, from Microsoft.
+  - **Drex**, from Nace.AI. It sends Drex v2.0. To use Drex v1.5, type `nace-ai/drex-v1.5` in **Model name**.
+  - **Classify-1**, from ScaleDown.
+
+  See [Two models](docs/two-models.md).
+
+### Changed
+
+- **One Span-01 Lite on OpenRouter.** OpenRouter now lists `respan/span-01-lite` as free, so **Span-01 Lite, free** sends that name. **Span-01 Lite, without the free limits** is gone, since it was the same model. Anyone who had it picked now has **Span-01 Lite, free**, which sends the same model. See [Which Span](docs/two-models.md#which-span).
+
+---
+
 ## 1.39.0
 
 _2026-10-15_

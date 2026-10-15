@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.39.0";
+const VERSION = "1.40.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -64,6 +64,11 @@ const SECOND_MODELS = [
     { value: "luna", name: "GPT-6 Luna Decisions", from: "OpenAI", about: "https://developers.openai.com/api/docs/guides/decisions" },
     { value: "clef", name: "Clef", from: "Cloudflare", about: "https://developers.cloudflare.com/workers-ai/models/clef/" },
     { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
+    { value: "microsoft", name: "Microsoft-Decision-1", from: "Microsoft", about: "https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/introducing-microsoft-decision-1-in-microsoft-foundry-for-decision-and-classific/4562742" },
+    // Nace.AI and ScaleDown have no page of their own for these, so the links
+    // are OpenRouter's, which serves them.
+    { value: "drex", name: "Drex", from: "Nace.AI", about: "https://openrouter.ai/nace-ai/drex-v2.0" },
+    { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://openrouter.ai/scaledown/classify-1" },
     // Mapika publishes its models with no hosted API of its own. The link is the
     // maker's page for them.
     { value: "mapika", name: "Mapika Decider", from: "Mapika", about: "https://github.com/Mapika/decider" },
@@ -170,8 +175,7 @@ function sizeServed(c, who, size) {
 // the name used when the box is empty. The backend holds the same names, and a
 // test checks the two agree. Jev's are per choice under Which Jev, and a host
 // with no preview or no exact Jev of its own is sent its latest. Span's are per
-// kind of Span; Respan's own API serves Span-02 for every kind. Span's are per kind of Span;
-// Respan's own API has no paid Lite, so asking it for one gets the free one.
+// kind of Span. Respan's own API serves Span-02 for both kinds.
 const BUILT_IN_MODEL_NAMES = {
     jev: {
         openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "~typesafe/jev-latest" },
@@ -179,8 +183,8 @@ const BUILT_IN_MODEL_NAMES = {
         typesafe: { latest: "jev-latest", preview: "jev-preview", exact: "jev-1.14.0" },
     },
     span: {
-        openrouter: { free: "respan/span-01-lite:free", lite: "respan/span-01-lite", full: "respan/span-01" },
-        respan: { free: "span-02", lite: "span-02", full: "span-02" },
+        openrouter: { free: "respan/span-01-lite", full: "respan/span-01" },
+        respan: { free: "span-02", full: "span-02" },
     },
     mercury: { openrouter: { free: "inception/mercury-decide:free", paid: "inception/mercury-decide" } },
     d1: { openrouter: "liquid/d1", nanogpt: "liquid/d1", liquid: "d1:free" },
@@ -200,6 +204,9 @@ const BUILT_IN_MODEL_NAMES = {
         nanogpt: "perplexity/pplx-decider-v1.1-27b",
         perplexity: "pplx-decider-v1.1-27b",
     },
+    microsoft: { openrouter: "microsoft/microsoft-decision-1" },
+    drex: { openrouter: "nace-ai/drex-v2.0" },
+    classify: { openrouter: "scaledown/classify-1" },
     // LLM Tech hosts Mapika's models on NanoGPT, made smaller to run.
     mapika: {
         nanogpt: { "0.8b": "llmtech/decider-0.8b-fp8", "2b": "llmtech/decider-2b-fp8", "4b": "llmtech/decider-4b-nvfp4" },
@@ -235,6 +242,9 @@ const OWN_NAME_KEYS = {
     luna: "lunaName",
     clef: "clefName",
     decider: "deciderName",
+    microsoft: "microsoftName",
+    drex: "drexName",
+    classify: "classifyName",
     mapika: "mapikaName",
 };
 // A link in the panel's own colours. Names are linked rather than printed as
@@ -355,7 +365,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "mapikaSize", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "mapikaName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "mapikaSize", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "mapikaName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -869,6 +879,9 @@ const CONFIG = {
     lunaName: "",
     clefName: "",
     deciderName: "",
+    microsoftName: "",
+    drexName: "",
+    classifyName: "",
     mapikaName: "",
     // The account ID Cloudflare's own address holds. Empty until the reader
     // pastes theirs.
@@ -887,6 +900,9 @@ const CONFIG = {
     clefFlashOver: 30,
     clefOmniOver: 30,
     deciderOver: 30,
+    microsoftOver: 30,
+    drexOver: 30,
+    classifyOver: 30,
     solarFlashOver: 30,
     mapikaSmallOver: 30,
     mapikaOver: 30,
@@ -2428,7 +2444,6 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "free", label: "Span-01 Lite, free" },
-            { value: "lite", label: "Span-01 Lite, without the free limits", needs: { key: "judgeHost", is: "openrouter" } },
             { value: "full", label: "Span-01" },
         ],
         needs: { key: "judgeWho", is: "span" },
@@ -2513,6 +2528,9 @@ const JUDGE_FIELDS = [
             luna: "openai/gpt-6-luna-decisions",
             clef: "cloudflare/clef",
             decider: "perplexity/pplx-decider-v1.1-27b",
+            microsoft: "microsoft/microsoft-decision-1",
+            drex: "nace-ai/drex-v2.0",
+            classify: "scaledown/classify-1",
         }[c.judgeWho] || "typesafe/jev-latest"),
         hint: "What that host calls the model, as its own docs spell it.",
     },
@@ -2665,6 +2683,39 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "decider" },
         hint: "For Decider. A percentage, " + CONFIG.deciderOver + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "microsoftOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "microsoft" },
+        hint: "For Microsoft-Decision-1. A percentage, " + CONFIG.microsoftOver + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "drexOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "drex" },
+        hint: "For Drex. A percentage, " + CONFIG.drexOver + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "classifyOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "classify" },
+        hint: "For Classify-1. A percentage, " + CONFIG.classifyOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "solarFlashOver",

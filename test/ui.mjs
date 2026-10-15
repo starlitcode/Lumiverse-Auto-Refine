@@ -1770,7 +1770,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["mapika", "nanogpt"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "openrouter"], ["classify", "openrouter"], ["mapika", "nanogpt"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1943,9 +1943,12 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
+    ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/introducing-microsoft-decision-1-in-microsoft-foundry-for-decision-and-classific/4562742"],
+    ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://openrouter.ai/nace-ai/drex-v2.0"],
+    ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://openrouter.ai/scaledown/classify-1"],
     ["mapika", "Mapika Decider, from Mapika", "nanogpt,custom", "mapikaOver", "What is Mapika Decider? https://github.com/Mapika/decider"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -2155,7 +2158,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all ten second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,mapika", JSON.stringify(jev.who));
+    ok("all thirteen second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,mapika", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -2167,7 +2170,7 @@ console.log("\nSpan, the other second model");
     const span = await read();
     ok("with Span, Span's hosts are offered", span.hosts.join() === "openrouter,respan,custom", JSON.stringify(span.hosts));
     ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
-    ok("on OpenRouter, all three Spans are offered", span.tiers.join() === "free,lite,full", JSON.stringify(span.tiers));
+    ok("on OpenRouter, both Spans are offered", span.tiers.join() === "free,full", JSON.stringify(span.tiers));
     ok("and the same key is used for Span on the same host", span.key === "Key for OpenRouter", String(span.key));
     ok("and only Span's line shows, at 30", span.spanLine && !span.jevLine && span.spanLineValue === "30", JSON.stringify(span));
     ok("and the link is Span's alone", span.links.length === 1 && span.links[0] === "What is Span? https://www.respan.ai/blog/introducing-span-1", JSON.stringify(span.links));
@@ -10081,7 +10084,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.
