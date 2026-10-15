@@ -272,6 +272,21 @@ the defaults. An effect the owner asks for overrides them.
   is a jump.
 - Move opacity and position where possible, which is cheap to draw.
 
+## Notifications
+
+The owner does not want notifications to be noisy. Each extension sends one
+only where it is needed, and leaves it out where it is not.
+
+- Send a notification when nothing else on screen shows what happened. For
+  example, Auto Retry's floating button can turn it on or off with the panel
+  closed, so it says whether it is now on or off.
+- Send none when the screen already shows the change. A switch in the panel
+  or a Save in the settings shows its own new state.
+- Warn when something could not be done, saved or remembered. Nothing else on
+  screen says so.
+- Before adding a notification, check whether the panel, a card or the status
+  line already shows the same thing. If it does, leave the notification out.
+
 ## Talking to the owner
 
 The owner has a learning disability. Contradictions are confusing.
