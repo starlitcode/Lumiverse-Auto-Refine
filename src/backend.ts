@@ -4532,11 +4532,16 @@ const CLEF_HOSTS: Record<string, SizedHost> = {
   },
 };
 // Decider, from Perplexity. It takes Jev's request on OpenRouter, NanoGPT and
-// Perplexity's own API.
-const DECIDER_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
-  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
-  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'perplexity/pplx-decider-v1.1-27b', kind: 'decisions' },
-  perplexity: { url: 'https://api.perplexity.ai/v1/decisions', model: 'pplx-decider-v1.1-27b', kind: 'decisions' },
+// Perplexity's own API. OpenRouter also has a name that always points at the
+// newest Decider.
+const DECIDER_HOSTS: Record<string, SizedHost> = {
+  openrouter: {
+    url: 'https://openrouter.ai/api/alpha/decisions',
+    models: { exact: 'perplexity/pplx-decider-v1.1-27b', latest: '~perplexity/pplx-decider-latest' },
+    kind: 'decisions',
+  },
+  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { exact: 'perplexity/pplx-decider-v1.1-27b' }, kind: 'decisions' },
+  perplexity: { url: 'https://api.perplexity.ai/v1/decisions', models: { exact: 'pplx-decider-v1.1-27b' }, kind: 'decisions' },
 };
 // Microsoft-Decision-1, from Microsoft. OpenRouter takes Jev's request for it.
 // It reads up to 32,768 tokens.
@@ -4693,6 +4698,11 @@ const SIZE_PICKS: Record<string, SizePick> = {
     standard: 'full',
     sizes: { full: { name: 'Solar Decide', line: 'solarOver' }, flash: { name: 'Solar Decide Flash', line: 'solarFlashOver' } },
   },
+  decider: {
+    setting: 'deciderVersion',
+    standard: 'exact',
+    sizes: { exact: { name: 'Decider', line: 'deciderOver' }, latest: { name: 'Decider', line: 'deciderOver' } },
+  },
   clef: {
     setting: 'clefTier',
     standard: 'full',
@@ -4838,7 +4848,7 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   decider: {
     name: 'Decider',
     hosts: DECIDER_HOSTS,
-    model: (host) => ownNames.decider || DECIDER_HOSTS[host].model,
+    model: (host) => ownNames.decider || sizedName(DECIDER_HOSTS[host]),
   },
   microsoft: {
     name: 'Microsoft-Decision-1',

@@ -35,7 +35,7 @@ Everything is on the Model tab, in **One model or two**.
 1. Set **How many models** to two.
 2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide and Clef, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide, Clef and Decider, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -106,9 +106,10 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | Mercury Decide | **Which Mercury Decide** | free, or without the free limits |
 | Solar Decide | **Which Solar Decide** | Solar Decide, or Solar Decide Flash |
 | Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
+| Decider | **Which Decider** | Decider V1.1 27B, or Decider Latest |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
-- The free and paid kinds of Mercury Decide are the same model, so they share one line.
+- The free and paid kinds of Mercury Decide are the same model, so they share one line. The two kinds of Decider share one line too.
 - A host only offers the sizes it serves. If the size you picked is not served on the host you change to, the standard size is used there, with its line. Change back and your size is picked again.
 - One **Model name** box serves every size of a model. It shows the name for the one picked. A name typed in it is sent whichever size is picked.
 
@@ -226,13 +227,20 @@ Clef, Clef Flash and Clef Omni are Cloudflare's decision models. All three take 
 
 ## Decider
 
-Decider is Perplexity's decision model. Auto Refine uses Decider V1.1 27B. It takes the same request as Jev, on OpenRouter, NanoGPT and Perplexity's own API. It reads up to 262,144 tokens.
+Decider is Perplexity's decision model. It takes the same request as Jev, on OpenRouter, NanoGPT and Perplexity's own API. It reads up to 262,144 tokens.
 
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `perplexity/pplx-decider-v1.1-27b` |
-| NanoGPT | `perplexity/pplx-decider-v1.1-27b` |
-| Perplexity | `pplx-decider-v1.1-27b` |
+**Which Decider** shows when Decider is picked:
+
+- **Decider V1.1 27B**, the default. Every host serves it.
+- **Decider Latest, always the newest**. It is only offered on OpenRouter, which has a name that always points at Perplexity's newest Decider. On another host, Decider V1.1 27B is used.
+
+| Host | Decider V1.1 27B | Decider Latest |
+| --- | --- | --- |
+| OpenRouter | `perplexity/pplx-decider-v1.1-27b` | `~perplexity/pplx-decider-latest` |
+| NanoGPT | `perplexity/pplx-decider-v1.1-27b` | |
+| Perplexity | `pplx-decider-v1.1-27b` | |
+
+- Both kinds use the same **Refine when a check reaches**.
 
 - On Perplexity's own API, the key comes from your Perplexity account, under **API Keys**.
 - The older Decider V1 27B is `pplx-decider-v1-27b` on Perplexity and `perplexity/pplx-decider-v1-27b` on OpenRouter. Type it in **Model name** to use it.
@@ -356,7 +364,7 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `~perplexity/pplx-decider-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b` or `subq/subq-snap-preview` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |

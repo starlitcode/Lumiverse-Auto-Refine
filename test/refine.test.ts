@@ -1695,6 +1695,10 @@ describe("two models: Jev reads the reply first", () => {
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
     ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b"],
+    ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "~perplexity/pplx-decider-latest", { deciderVersion: "latest" }],
+    // Only OpenRouter has a name for the newest Decider, so it is V1.1 27B elsewhere.
+    ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b", { deciderVersion: "latest" }],
+    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b", { deciderVersion: "latest" }],
     ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide-flash", { solarTier: "flash" }],
     // Upstage serves Solar Decide only, so Flash picked there sends Solar Decide.
     ["solar", "upstage", "https://api.upstage.ai/v1/systemone", "solar-decide", { solarTier: "flash" }],

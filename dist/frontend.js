@@ -90,6 +90,17 @@ const SIZE_PICKS = {
             { value: "flash", label: "Solar Decide Flash, faster", name: "Solar Decide Flash", line: "solarFlashOver" },
         ],
     },
+    // Perplexity's newest Decider has a name of its own only on OpenRouter, so
+    // V1.1 27B, which every host serves, is the standard.
+    decider: {
+        key: "deciderVersion",
+        title: "Which Decider",
+        standard: "exact",
+        sizes: [
+            { value: "exact", label: "Decider V1.1 27B", name: "Decider", line: "deciderOver" },
+            { value: "latest", label: "Decider Latest, always the newest", name: "Decider", line: "deciderOver" },
+        ],
+    },
     clef: {
         key: "clefTier",
         title: "Which Clef",
@@ -180,9 +191,9 @@ const BUILT_IN_MODEL_NAMES = {
         cloudflare: { full: "clef", flash: "clef-flash", omni: "clef-omni" },
     },
     decider: {
-        openrouter: "perplexity/pplx-decider-v1.1-27b",
-        nanogpt: "perplexity/pplx-decider-v1.1-27b",
-        perplexity: "pplx-decider-v1.1-27b",
+        openrouter: { exact: "perplexity/pplx-decider-v1.1-27b", latest: "~perplexity/pplx-decider-latest" },
+        nanogpt: { exact: "perplexity/pplx-decider-v1.1-27b" },
+        perplexity: { exact: "pplx-decider-v1.1-27b" },
     },
     microsoft: { openrouter: "microsoft/microsoft-decision-1" },
     drex: { openrouter: "nace-ai/drex-v2.0" },
@@ -342,7 +353,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -836,6 +847,7 @@ const CONFIG = {
     mercuryTier: "free",
     clefTier: "full",
     solarTier: "full",
+    deciderVersion: "exact",
     // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
     judgeUrl: "",
