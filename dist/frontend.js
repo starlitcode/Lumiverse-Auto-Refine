@@ -44,8 +44,9 @@ function blockText(raw) {
     return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
 }
 // The second models, one entry each: the name the panel uses for it, who
-// makes it, and the page that says what it is. That page is the maker's own,
-// and OpenRouter's page only for a model whose maker has none. The picker, the name in every
+// makes it, and the page that says what it is. That page is the maker's own
+// introduction to its decision model, and need not be about one exact model
+// or size. A host's listing is used only for a maker with no page at all. The picker, the name in every
 // line about what the model did, and the links under the card all come from
 // here, so a model added later is one more entry, beside its entry in the
 // backend.
@@ -87,15 +88,8 @@ const SIZE_PICKS = {
         standard: "full",
         sizes: [
             { value: "full", label: "Solar Decide", name: "Solar Decide", line: "solarOver" },
-            // Upstage has no page of its own for it yet, so its link is
-            // OpenRouter's, which serves it.
-            {
-                value: "flash",
-                label: "Solar Decide Flash, faster",
-                name: "Solar Decide Flash",
-                line: "solarFlashOver",
-                about: "https://openrouter.ai/upstage/solar-decide-flash",
-            },
+            // No page of its own, so its link is Upstage's page for Solar Decide.
+            { value: "flash", label: "Solar Decide Flash, faster", name: "Solar Decide Flash", line: "solarFlashOver" },
         ],
     },
     clef: {

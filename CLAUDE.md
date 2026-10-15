@@ -128,11 +128,14 @@ Two skills are available. Load them before starting work.
   own, so the code holds no names a host has stopped serving. A user who wants
   the old one types its name in **Model name**. The changelog and
   `docs/two-models.md` say which name to type.
-- Each second model's **What is** link goes to its maker's own page about
-  it, such as the maker's docs, launch post or model card. Research it for
-  every model added, and check that the page opens and is about that model.
-  Only when the maker has no page for it does the link go to OpenRouter, or
-  to the host that mainly serves it. The docs use the same link.
+- Each second model's **What is** link goes to its maker's own introduction
+  to its decision model, such as the maker's docs, launch post or model card.
+  It does not need to be a page for that exact model or size. A size with no
+  page of its own uses its model's link. Research it for every model added,
+  and check that the page opens and is the maker's. Only a maker with no page
+  at all gets OpenRouter's link, or the host that mainly serves it.
+  `test/model-names.test.ts` fails on a link to a host's listing. The docs
+  use the same link.
 - Never leave out a decision model because it is paid. Paid and free models
   are added the same way.
 - A paid second model that cannot be tested, because there is no key with

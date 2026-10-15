@@ -157,3 +157,20 @@ describe("the host list", () => {
     });
   }
 });
+
+// The What is link introduces the maker's decision model. It goes to the
+// maker's own page, which does not have to be about that exact model or size:
+// a size with no page of its own uses its model's link. A host's listing is
+// used only for a maker with no page at all, and such a model is named here.
+describe("every What is link goes to the maker's own page", () => {
+  const NO_MAKER_PAGE: string[] = [];
+  const links: Array<[string, string]> = [];
+  for (const m of SECOND_MODELS) links.push([m.value, m.about]);
+  for (const who of Object.keys(SIZE_PICKS))
+    for (const z of SIZE_PICKS[who].sizes) if (z.about) links.push([who + " " + z.value, z.about]);
+  for (const [what, url] of links)
+    test(what + ": " + url, () => {
+      const host = new URL(url).hostname;
+      if (NO_MAKER_PAGE.indexOf(what.split(" ")[0]) < 0) expect(host).not.toMatch(/(^|\.)(openrouter\.ai|nano-gpt\.com)$/);
+    });
+});

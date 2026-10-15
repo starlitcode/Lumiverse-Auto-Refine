@@ -12,7 +12,7 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | **Span** | Respan | Span-01 Lite is free on OpenRouter. Span-01 is paid. Span-02, on Respan's own API, is paid, per call. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1), [Introducing Span-02](https://www.respan.ai/blog/introducing-span-2) |
 | **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Inception: Decisions](https://docs.inceptionlabs.ai/capabilities/decisions) |
 | **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Liquid AI: Decision Models](https://docs.liquid.ai/lfm/models/decision-models) |
-| **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide), [Solar Decide Flash on OpenRouter](https://openrouter.ai/upstage/solar-decide-flash) |
+| **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide) |
 | **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
 | **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
 | **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Cloudflare: Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Cloudflare: Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Cloudflare: Clef Omni](https://developers.cloudflare.com/workers-ai/models/clef-omni/) |
@@ -22,11 +22,11 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
 | **Mapika Decider**, in 0.8B, 2B and 4B | Mapika | Paid, per call | [Mapika Decider on GitHub](https://github.com/Mapika/decider) |
 
-All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own page about the model, where there is one. With a Flash picked, the link is for the Flash.
+All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked. Where the maker has a page for one size, such as Clef Flash, that size links to it.
 
 Mapika has no hosted API of its own. Its link goes to its page for the models, which are open. With Kev 4B picked, a warning that it is a small model shows next to its link. With any Clef picked, a note says how much of a reply Cloudflare reads.
 
-Upstage has no page of its own about Solar Decide Flash that can be read, so its link goes to OpenRouter, which serves it. Nace.AI's page for Drex is its model card on Hugging Face.
+Solar Decide Flash links to Upstage's page for Solar Decide. Nace.AI's page for Drex is its model card on Hugging Face.
 
 ## Setting it up
 
