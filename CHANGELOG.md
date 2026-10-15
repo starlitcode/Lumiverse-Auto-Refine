@@ -12,12 +12,13 @@ _2026-10-15_
 
 ### Added
 
-- **Three more second models.** Under **Which second model**, all on OpenRouter, each with its own **Refine when a check reaches**, 30 by default:
+- **Three more second models on OpenRouter.** Under **Which second model**, each with its own **Refine when a check reaches**, 30 by default:
   - **Microsoft-Decision-1**, from Microsoft.
   - **Drex**, from Nace.AI. It sends Drex v2.0. To use Drex v1.5, type `nace-ai/drex-v1.5` in **Model name**.
   - **Classify-1**, from ScaleDown.
 
   See [Two models](docs/two-models.md).
+- **SubQ Snap.** A new second model, from Subquadratic, on NanoGPT and on SubQ's own API. It sends SubQ Snap Preview. It has its own **Refine when a check reaches**, 30 by default. It takes at most 16 checks in one call, so more checks are sent over more than one call. See [SubQ Snap](docs/two-models.md#subq-snap).
 - **GPT-6 Luna Decisions and Kev 4B on NanoGPT.** **Where it is reached** now offers NanoGPT for both.
 
 ### Changed

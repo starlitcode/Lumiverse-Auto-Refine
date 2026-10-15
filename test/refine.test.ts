@@ -1690,6 +1690,8 @@ describe("two models: Jev reads the reply first", () => {
     ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["microsoft", "openrouter", "https://openrouter.ai/api/alpha/decisions", "microsoft/microsoft-decision-1"],
     ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-v2.0"],
+    ["subq", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "subq/subq-snap-preview"],
+    ["subq", "subq", "https://api.subq.ai/v1/systemone", "subq-snap-preview"],
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
     ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b"],
@@ -1707,6 +1709,38 @@ describe("two models: Jev reads the reply first", () => {
       expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
     });
   }
+
+  // SubQ takes at most 16 questions in a call. Eighteen checks go over two
+  // calls, and the answers are read together: the last check, in the second
+  // call, is the one over the line.
+  test("SubQ Snap is asked 16 questions at a time, and every answer counts", async () => {
+    const checks = Array.from({ length: 18 }, (_, i) => "`reply` has problem number " + (i + 1) + ".").join("\n");
+    const high = (_url: string, init: any) => {
+      const b = JSON.parse(init.body);
+      const answers: any = {};
+      for (const id of Object.keys(b.questions)) answers[id] = { noul: id === "check_18" ? 0.9 : 0.1 };
+      return { status: 200, body: JSON.stringify({ model: b.model, answers: answers, usage: { cost: 0.00001 } }) };
+    };
+    const h = await keyed({ judgeWho: "subq", judgeHost: "subq", judgeWorn: false, judgeChecks: checks }, { jev: high });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.jevCalls.length).toBe(2);
+    const first = Object.keys(h.jevCalls[0].body.questions);
+    const second = Object.keys(h.jevCalls[1].body.questions);
+    expect(first.length).toBe(16);
+    expect(second.length).toBe(2);
+    expect(first.concat(second).sort()).toEqual(Array.from({ length: 18 }, (_, i) => "check_" + (i + 1)).sort());
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a model with no limit is asked every question in one call", async () => {
+    const checks = Array.from({ length: 18 }, (_, i) => "`reply` has problem number " + (i + 1) + ".").join("\n");
+    const h = await keyed({ judgeWho: "jev", judgeWorn: false, judgeChecks: checks }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls.length).toBe(1);
+    expect(Object.keys(h.jevCalls[0].body.questions).length).toBe(18);
+  });
 
   // ScaleDown says Classify-1 reads only `state.text`. The named fields go in
   // it as JSON text, so the checks still find `reply` and `previous_reply`.
@@ -1798,6 +1832,7 @@ describe("two models: Jev reads the reply first", () => {
     ["microsoft", "microsoftOver"],
     ["drex", "drexOver"],
     ["classify", "classifyOver"],
+    ["subq", "subqOver"],
     ["solar", "solarFlashOver", { solarTier: "flash" }],
   ] as Array<[string, string, any?]>) {
     test(key + " is a line of its own, 30 by default", async () => {
@@ -1805,7 +1840,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, solarFlashOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);

@@ -4346,6 +4346,12 @@ const MICROSOFT_HOSTS = {
 const DREX_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'nace-ai/drex-v2.0', kind: 'decisions' },
 };
+// SubQ Snap, from Subquadratic, in public preview. It takes Jev's request on
+// NanoGPT and on SubQ's own API, and at most 16 questions in one call.
+const SUBQ_HOSTS = {
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'subq/subq-snap-preview', kind: 'decisions' },
+    subq: { url: 'https://api.subq.ai/v1/systemone', model: 'subq-snap-preview', kind: 'decisions' },
+};
 // Classify-1, from ScaleDown. OpenRouter takes Jev's request for it. It reads
 // only the text field of the state, which ScaleDown's own docs say.
 const CLASSIFY_HOSTS = {
@@ -4471,6 +4477,7 @@ const ownNames = {
     microsoft: '',
     drex: '',
     classify: '',
+    subq: '',
 };
 const SIZE_PICKS = {
     mercury: {
@@ -4519,6 +4526,7 @@ const LINES = {
     microsoft: { key: 'microsoftOver', fallback: 30 },
     drex: { key: 'drexOver', fallback: 30 },
     classify: { key: 'classifyOver', fallback: 30 },
+    subq: { key: 'subqOver', fallback: 30 },
 };
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
@@ -4611,6 +4619,12 @@ const SECOND_MODELS = {
         hosts: CLASSIFY_HOSTS,
         model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
     },
+    subq: {
+        name: 'SubQ Snap',
+        most: 16,
+        hosts: SUBQ_HOSTS,
+        model: (host) => ownNames.subq || SUBQ_HOSTS[host].model,
+    },
 };
 function secondModel() {
     return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
@@ -4661,6 +4675,7 @@ const HOST_LABELS = {
     openai: 'OpenAI',
     cloudflare: 'Cloudflare',
     perplexity: 'Perplexity',
+    subq: 'SubQ',
     custom: 'the address you gave',
 };
 const hostLabel = (host) => HOST_LABELS[host] || host;
@@ -4814,9 +4829,33 @@ function turnsRequest(model, state, questions) {
         asked[id] = { ...questions[id], instructions: spanWords(questions[id] && questions[id].instructions, state) };
     return { model: model, state: spanTurns(state), questions: asked };
 }
+// One ask of the second model. A model that takes only so many questions in
+// a call is sent them in parts, and the answers are put back together. A part
+// that fails fails the whole ask, the same as one call that fails.
+async function askJev(userId, state, questions) {
+    const most = secondModel().most || 0;
+    const ids = Object.keys(questions);
+    if (!most || ids.length <= most)
+        return askJevOnce(userId, state, questions);
+    const answers = {};
+    let cost = 0;
+    let model = '';
+    for (let i = 0; i < ids.length; i += most) {
+        const part = {};
+        for (const id of ids.slice(i, i + most))
+            part[id] = questions[id];
+        const got = await askJevOnce(userId, state, part);
+        if (got.error)
+            return got;
+        Object.assign(answers, got.answers || {});
+        cost += got.cost || 0;
+        model = model || got.model || '';
+    }
+    return { answers: answers, cost: cost, model: model };
+}
 // One call to the second model. Answers with what it said, or with why it
 // could not be asked, in words fit for the Log.
-async function askJev(userId, state, questions) {
+async function askJevOnce(userId, state, questions) {
     const where = jevWhere();
     if (!where.url && hostFor(judgeWho, judgeHost) === 'cloudflare')
         return { error: 'no usable Cloudflare account ID is saved. Paste its 32 letters and numbers into Cloudflare account ID on the Model tab' };

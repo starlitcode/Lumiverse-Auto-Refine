@@ -75,6 +75,7 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   // Nace.AI's page for Drex is its model card on Hugging Face.
   { value: "drex", name: "Drex", from: "Nace.AI", about: "https://huggingface.co/nace-ai/drex-v2.0" },
   { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
+  { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://docs.subq.ai/" },
 ];
 
 // A model offered in more than one size or kind, such as Clef and Clef Flash.
@@ -206,6 +207,7 @@ const BUILT_IN_MODEL_NAMES: Record<string, Record<string, string | Record<string
   microsoft: { openrouter: "microsoft/microsoft-decision-1" },
   drex: { openrouter: "nace-ai/drex-v2.0" },
   classify: { openrouter: "scaledown/classify-1" },
+  subq: { nanogpt: "subq/subq-snap-preview", subq: "subq-snap-preview" },
 };
 
 // The built-in name for the model and host picked. A host the model is not on
@@ -237,6 +239,7 @@ const OWN_NAME_KEYS: Record<string, string> = {
   microsoft: "microsoftName",
   drex: "drexName",
   classify: "classifyName",
+  subq: "subqName",
 };
 
 // A link in the panel's own colours. Names are linked rather than printed as
@@ -357,7 +360,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -878,6 +881,7 @@ const CONFIG = {
   microsoftName: "",
   drexName: "",
   classifyName: "",
+  subqName: "",
   // The account ID Cloudflare's own address holds. Empty until the reader
   // pastes theirs.
   cloudflareAccount: "",
@@ -898,6 +902,7 @@ const CONFIG = {
   microsoftOver: 30,
   drexOver: 30,
   classifyOver: 30,
+  subqOver: 30,
   solarFlashOver: 30,
   // With worn phrases on, the second model is also asked whether the reply uses one.
   judgeWorn: true,
@@ -2591,6 +2596,7 @@ const JUDGE_FIELDS: Field[] = [
       { value: "openai", label: "OpenAI" },
       { value: "cloudflare", label: "Cloudflare" },
       { value: "perplexity", label: "Perplexity" },
+      { value: "subq", label: "SubQ" },
     ]
       .map((o) => ({ ...o, needs: { key: "judgeWho", is: modelsOn(o.value) } }))
       .concat([{ value: "custom", label: "Another address" } as any]),
@@ -2657,7 +2663,7 @@ const JUDGE_FIELDS: Field[] = [
       label: "Model name",
       type: "text",
       needs: { key: "judgeWho", is: who },
-      also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity"] },
+      also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq"] },
       under: true,
       placeholder: (c: any) => builtInModelName(c),
       hint: "Empty uses the name shown. If the host renames the model, type its new name here.",
@@ -2697,6 +2703,7 @@ const JUDGE_FIELDS: Field[] = [
           microsoft: "microsoft/microsoft-decision-1",
           drex: "nace-ai/drex-v2.0",
           classify: "scaledown/classify-1",
+          subq: "subq-snap-preview",
         } as Record<string, string>
       )[c.judgeWho] || "typesafe/jev-latest"),
     hint: "What that host calls the model, as its own docs spell it.",
@@ -2883,6 +2890,17 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "classify" },
     hint: "For Classify-1. A percentage, " + CONFIG.classifyOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "subqOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "subq" },
+    hint: "For SubQ Snap. A percentage, " + CONFIG.subqOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "solarFlashOver",

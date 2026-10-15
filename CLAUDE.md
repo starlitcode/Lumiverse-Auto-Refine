@@ -136,6 +136,16 @@ Two skills are available. Load them before starting work.
   at all gets OpenRouter's link, or the host that mainly serves it.
   `test/model-names.test.ts` fails on a link to a host's listing. The docs
   use the same link.
+- To look for new decision models, read each host's whole model list and
+  pick out every model that returns decisions, whoever makes it. On
+  OpenRouter that is `output_modalities` holding `decisions`, from
+  `/api/v1/models?output_modalities=all`. On NanoGPT it is a description
+  that names Choice, Score and Noul questions, from
+  `/api/v1/models?detailed=true`. Never search only for the names of models
+  already in the list, which misses a new maker.
+- A second model whose every host stops serving it is taken out of the list,
+  with all of its parts. A setup saved with it picked reads as Jev, in the
+  panel and in the backend, and the changelog says so under "Removed".
 - Never leave out a decision model because it is paid. Paid and free models
   are added the same way.
 - A paid second model that cannot be tested, because there is no key with
@@ -149,7 +159,8 @@ Two skills are available. Load them before starting work.
   a second model or a host for one is added or changed, keep all of its parts:
   the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
   the Model tab, its place in `PARTS`, and its built-in name for every host in
-  `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove a box.
+  `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove the box of a
+  model that is still in the list.
   `test/model-names.test.ts` fails when a part is missing.
 
 ## Thinking formats

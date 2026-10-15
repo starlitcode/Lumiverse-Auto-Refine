@@ -1770,7 +1770,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "openrouter"], ["classify", "openrouter"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "openrouter"], ["classify", "openrouter"], ["subq", "subq"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -1973,9 +1973,10 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
     ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://huggingface.co/nace-ai/drex-v2.0"],
+    ["subq", "SubQ Snap, from Subquadratic", "nanogpt,subq,custom", "subqOver", "What is SubQ Snap? https://docs.subq.ai/"],
     ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -2039,6 +2040,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
           luna: [["openai", "OpenAI"]],
           clef: [["nanogpt", "NanoGPT"], ["cloudflare", "Cloudflare"]],
           decider: [["nanogpt", "NanoGPT"], ["perplexity", "Perplexity"]],
+          subq: [["subq", "SubQ"]],
         }[who] || [];
         for (const own of owns) {
           await page.evaluate((host) => {
@@ -2185,7 +2187,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all twelve second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify", JSON.stringify(jev.who));
+    ok("all thirteen second models are offered, each model's sizes under one entry", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -10111,7 +10113,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.

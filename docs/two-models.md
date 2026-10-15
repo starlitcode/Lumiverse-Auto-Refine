@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are twelve to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds).
+There are thirteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds).
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ There are twelve to pick from. Some come in more than one size or kind, picked u
 | **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
 | **Drex** | Nace.AI | Paid, per call | [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
+| **SubQ Snap** | Subquadratic | Paid, per call | [SubQ: Docs](https://docs.subq.ai/) |
 
 All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked. Where the maker has a page for one size, such as Clef Flash, that size links to it.
 
@@ -274,6 +275,21 @@ Classify-1 is ScaleDown's decision model. It takes the same request as Jev on Op
 - ScaleDown's own API takes the key in an `x-api-key` header. Auto Refine sends the key the way OpenRouter takes it, so ScaleDown's own API is not offered.
 - It is paid, per call. OpenRouter's page for it shows the price.
 
+## SubQ Snap
+
+SubQ Snap is Subquadratic's decision model. Auto Refine uses SubQ Snap Preview, which Subquadratic marks as a public preview. It takes the same request as Jev, on NanoGPT and on SubQ's own API. It reads up to 384,000 tokens.
+
+| Host | Model name |
+| --- | --- |
+| NanoGPT | `subq/subq-snap-preview` |
+| SubQ | `subq-snap-preview` |
+
+- It takes at most 16 checks in one call. With more checks than that, such as with **More checks you can add** and **Also compare with the reply before it** on, Auto Refine sends them over two or more calls and reads the answers together. Each call is paid.
+- If one of those calls fails, the reply is refined, the same as when any second model cannot answer.
+- On SubQ's own API, the key comes from your SubQ account.
+- It is not on OpenRouter. If OpenRouter or another host is left picked, NanoGPT is used.
+- It is paid, per call. Each host's own page shows the price.
+
 ## When a model is renamed, or a new one comes out
 
 The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
@@ -341,7 +357,7 @@ Addresses known to work:
 | Host | Address | Model name |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni` or `perplexity/pplx-decider-v1.1-27b` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b` or `subq/subq-snap-preview` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
 | Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
@@ -350,6 +366,7 @@ Addresses known to work:
 | OpenAI | `https://api.openai.com/v1/decisions` | `gpt-6-luna` |
 | Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` or `clef-omni` with the address ending in that name |
 | Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.1-27b` |
+| SubQ | `https://api.subq.ai/v1/systemone` | `subq-snap-preview` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 
@@ -436,6 +453,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Microsoft-Decision-1** | 30 percent |
 | **Drex** | 30 percent |
 | **Classify-1** | 30 percent |
+| **SubQ Snap** | 30 percent |
 
 ### Where the defaults come from
 
