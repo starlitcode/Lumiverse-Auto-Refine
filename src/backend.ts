@@ -4493,16 +4493,19 @@ const SOLAR_HOSTS: Record<string, SizedHost> = {
   upstage: { url: 'https://api.upstage.ai/v1/systemone', models: { full: 'solar-decide' }, kind: 'decisions' },
 };
 // Kev 4B, an open model from Jared Palmer that takes Jev's request too. It is
-// small, and OpenRouter gives it 8,192 tokens, so a long reply with the one
+// small, and OpenRouter and NanoGPT give it 8,192 tokens, so a long reply with the one
 // before it can be too much for it. The host then refuses the call, and the
 // reply is refined the same as when any second model cannot answer.
 const KEV_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'jaredpalmer/kev-4b', kind: 'decisions' },
+  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'jaredpalmer/kev-4b', kind: 'decisions' },
 };
-// GPT-6 Luna Decisions, from OpenAI. OpenRouter takes Jev's request for it.
+// GPT-6 Luna Decisions, from OpenAI. OpenRouter and NanoGPT take Jev's request
+// for it.
 // OpenAI's own API calls it gpt-6-luna and takes a predicates request.
 const LUNA_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
+  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
   openai: { url: 'https://api.openai.com/v1/decisions', model: 'gpt-6-luna', kind: 'predicates' },
 };
 // Clef, from Cloudflare, comes in three: Clef, Clef Flash, which is smaller

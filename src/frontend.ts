@@ -204,8 +204,8 @@ const BUILT_IN_MODEL_NAMES: Record<string, Record<string, string | Record<string
     openrouter: { full: "upstage/solar-decide", flash: "upstage/solar-decide-flash" },
     upstage: { full: "solar-decide" },
   },
-  kev: { openrouter: "jaredpalmer/kev-4b" },
-  luna: { openrouter: "openai/gpt-6-luna-decisions", openai: "gpt-6-luna" },
+  kev: { openrouter: "jaredpalmer/kev-4b", nanogpt: "jaredpalmer/kev-4b" },
+  luna: { openrouter: "openai/gpt-6-luna-decisions", nanogpt: "openai/gpt-6-luna-decisions", openai: "gpt-6-luna" },
   clef: {
     openrouter: { full: "cloudflare/clef", flash: "cloudflare/clef-flash", omni: "cloudflare/clef-omni" },
     nanogpt: { full: "cloudflare/clef", flash: "cloudflare/clef-flash", omni: "cloudflare/clef-omni" },

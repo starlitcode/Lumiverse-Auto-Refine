@@ -1939,8 +1939,8 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
   const MODELS = [
     ["d1", "D1, from Liquid AI", "openrouter,nanogpt,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
     ["solar", "Solar Decide, from Upstage", "openrouter,upstage,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
-    ["kev", "Kev 4B, from Jared Palmer", "openrouter,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
-    ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
+    ["kev", "Kev 4B, from Jared Palmer", "openrouter,nanogpt,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
+    ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,nanogpt,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],

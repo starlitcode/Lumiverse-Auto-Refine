@@ -171,14 +171,15 @@ Kev 4B is an open model made by Jared Palmer. It takes the same request as Jev. 
 | Host | Model name |
 | --- | --- |
 | OpenRouter | `jaredpalmer/kev-4b` |
+| NanoGPT | `jaredpalmer/kev-4b` |
 
 It is a small model, so keep these in mind:
 
 - It can miss more problems than the larger models, and score more checks wrongly.
-- OpenRouter gives it 8,192 tokens. That covers the reply, the checks, and the reply before it when **Also compare with the reply before it** is on.
+- OpenRouter and NanoGPT give it 8,192 tokens. That covers the reply, the checks, and the reply before it when **Also compare with the reply before it** is on.
 - Its maker trained it on texts up to about 7,500 tokens. A very long reply can be more than it handles well.
-- When a call is too long for it, OpenRouter refuses the call. The reply is then refined, the same as when any second model cannot answer.
-- It is paid, per call. OpenRouter's page for it shows the price.
+- When a call is too long for it, the host refuses the call. The reply is then refined, the same as when any second model cannot answer.
+- It is paid, per call. Each host's own page shows the price.
 
 ## GPT-6 Luna Decisions
 
@@ -187,9 +188,10 @@ GPT-6 Luna Decisions is GPT-6 Luna, from OpenAI, answering through OpenAI's deci
 | Host | Model name |
 | --- | --- |
 | OpenRouter | `openai/gpt-6-luna-decisions` |
+| NanoGPT | `openai/gpt-6-luna-decisions` |
 | OpenAI | `gpt-6-luna` |
 
-- On OpenRouter it takes the same request as Jev.
+- On OpenRouter and NanoGPT it takes the same request as Jev.
 - On OpenAI's own API the request is laid out the way OpenAI asks. The panel does this for you:
   - The reply, and the reply before it when that is sent, go as JSON text, so the checks can still call them `reply` and `previous_reply`.
   - Each check goes as a named yes-or-no question.
@@ -360,7 +362,7 @@ Addresses known to work:
 | Host | Address | Model name |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `llmtech/decider-0.8b-fp8`, `llmtech/decider-2b-fp8` or `llmtech/decider-4b-nvfp4` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `llmtech/decider-0.8b-fp8`, `llmtech/decider-2b-fp8` or `llmtech/decider-4b-nvfp4` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
 | Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |

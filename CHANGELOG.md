@@ -18,6 +18,7 @@ _2026-10-15_
   - **Classify-1**, from ScaleDown.
 
   See [Two models](docs/two-models.md).
+- **GPT-6 Luna Decisions and Kev 4B on NanoGPT.** **Where it is reached** now offers NanoGPT for both.
 
 ### Changed
 
