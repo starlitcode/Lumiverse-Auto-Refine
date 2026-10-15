@@ -83,6 +83,8 @@ function host(
     // Fails the first n calls with this message and then answers normally,
     // which is what a rate limit looks like from here.
     failFirst?: { times: number; why: string };
+    // With delays, the calls by their place in order that end in an error.
+    errorsAt?: Record<number, string>;
     chatFail?: string;
     cardFail?: string;
     noCard?: boolean;
@@ -217,6 +219,7 @@ function host(
                 rej(e);
               });
           });
+          if (opts.errorsAt && opts.errorsAt[mine]) throw new Error(opts.errorsAt[mine]);
           return { content: answers[Math.min(mine, answers.length - 1)], finish_reason: "stop", usage: {} };
         }
         if (opts.whileAsking) opts.whileAsking();
@@ -7519,6 +7522,21 @@ describe("several rewrites at once", () => {
     expect(h.asked.length).toBe(2);
     expect(h.writes.length).toBe(0);
     expect(h.skipped().join(" ")).toMatch(/declined to rewrite/i);
+  });
+
+  // A provider's filter stopping one of them is a refusal, which a new try can
+  // fix, so it is the failure kept over one that a new try cannot fix.
+  test("a refusal through the provider's filter among them is asked again", async () => {
+    const h = await armed(
+      ["unused", "<REFINED>Short.</REFINED>", GOOD, GOOD],
+      { refineAtOnce: true, refineAtOnceCount: 2, retryRefine: 1 },
+      chat(),
+      { delays: [5, 10, 5, 10], errorsAt: { 0: "Generation failed: prohibited_content" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(120);
+    expect(h.asked.length).toBe(4);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
   test("a hand-edited count cannot go past five", async () => {

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.38.0";
+const VERSION = "1.38.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -621,6 +621,13 @@ const PRESET_KEYS = [
 // release, under Where the input box is on the Setup tab. These stay behind
 // whatever they type, so a selector that turns out to be wrong costs nothing:
 // the built-in list still answers.
+// Every part another extension puts on the page: a drawer tab, a floating
+// widget, a pop-up, or HTML it added. Lumiverse marks each one. Another
+// extension can draw its own chat with its own input box and buttons, such as
+// an agent's chat in a drawer tab, and nothing here may write into one or
+// press one.
+const OTHER_UI = "[data-spindle-extension-root],[data-spindle-ext],[data-spindle-modal]";
+
 const INPUT_PICKS = [
   '[data-component="InputArea"] textarea[name="chat-message"]',
   'textarea[name="chat-message"]',
@@ -14665,6 +14672,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       try {
         if (!node || node.disabled) continue;
         if (node.closest && node.closest(".arf")) continue;
+        if (node.closest && node.closest(OTHER_UI)) continue;
         if (node.hasAttribute && node.hasAttribute("data-arf-slot")) continue;
         if (within && within.contains && !within.contains(node)) continue;
         const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
@@ -14885,6 +14893,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!node || node.disabled || node.readOnly) continue;
       if (!typeable(node)) continue;
       if (node.closest && node.closest(".arf")) continue;
+      if (node.closest && node.closest(OTHER_UI)) continue;
       const box = node.getBoundingClientRect ? node.getBoundingClientRect() : null;
       if (box && (!box.width || !box.height)) continue;
       return node;
@@ -16368,6 +16377,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const el = node && node.nodeType === 3 ? node.parentElement : node;
       const body = el && el.closest ? el.closest('[data-component="MessageContent"]') : null;
       if (!body || !body.parentElement) return null;
+      // A chat message drawn inside another extension's part is that
+      // extension's copy, not the message in the chat.
+      if (body.closest(OTHER_UI)) return null;
       const mount = body.parentElement.querySelector('[data-spindle-scope^="message:"]');
       if (!mount) return null;
       const parts = String(mount.getAttribute("data-spindle-scope") || "").split(":");

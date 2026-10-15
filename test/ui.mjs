@@ -3117,6 +3117,38 @@ console.log("\nstarting again");
   );
 }
 
+console.log("\nanother extension's input box is never written into");
+{
+  // Another extension can draw its own chat with its own input box, such as
+  // an agent's chat in a drawer tab. The built-in list ends with any
+  // textarea, so with the chat's own box not on the page, that one was the
+  // only match.
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
+    const out = await page.evaluate(async () => {
+      const other = document.createElement("div");
+      other.setAttribute("data-spindle-extension-root", "another_one");
+      other.innerHTML = '<textarea style="width:200px;height:40px"></textarea>';
+      document.body.appendChild(other);
+      const theirs = other.querySelector("textarea");
+      theirs.value = "a message for the other extension";
+      window.__sent.length = 0;
+      window.__inputClick();
+      await new Promise((r) => setTimeout(r, 60));
+      const alone = window.__sent.filter((m) => m.type === "try_refine").length;
+      // With the chat's own box there too, that one is read.
+      window.__makeComposer("i walk through it, suddenly");
+      window.__sent.length = 0;
+      window.__inputClick();
+      await new Promise((r) => setTimeout(r, 60));
+      const asked = window.__sent.filter((m) => m.type === "try_refine").pop();
+      return { alone, text: asked ? asked.text : null, theirs: theirs.value };
+    });
+    ok("with only the other extension's box on the page, nothing is sent", out.alone === 0, JSON.stringify(out));
+    ok("with the chat's box there too, the chat's box is read", /i walk through it/.test(out.text || ""), JSON.stringify(out));
+    ok("and the other extension's box is left as it was", out.theirs === "a message for the other extension", JSON.stringify(out));
+  });
+}
+
 console.log("\nthe extras, which are off until asked for");
 {
   await inTab(browser, {}, async (page) => {

@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.38.0';
+const VERSION = '1.38.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -3489,17 +3489,27 @@ async function askAtOnce(
       }
       resolve(out);
     };
+    // The failure handed back when none pass. One a new try could fix is
+    // kept over one it could not, so a refusal among them still leads to
+    // Ask again when a check fails.
+    const keep = (v: Verdict) => {
+      if (!failed || (!worthRetrying(failed.why) && worthRetrying(v.why))) failed = v;
+    };
     for (let i = 0; i < count; i++) {
       askModel(input, isUser, scene, userId, use, undefined, group, note)
         .then((a) => {
           if (over) return;
           if (a.error) {
-            error = a.error;
+            // A provider's filter stopping one of them is a refusal, judged
+            // the same way as for a single rewrite.
+            if (REFUSAL_ERROR.test(String(a.error)))
+              keep({ ok: false, text: '', why: 'the model declined to rewrite it, through the provider\'s filter: ' + a.error });
+            else error = a.error;
             return;
           }
           const v = judge(a.content, input);
           if (v.ok) finish({ error: '', verdict: v });
-          else failed = v;
+          else keep(v);
         })
         .catch((e: any) => {
           error = (e && e.message) || String(e);

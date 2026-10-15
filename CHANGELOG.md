@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.38.1
+
+_2026-10-15_
+
+### Fixed
+
+- **Another extension's input box is never written into.** Another extension can have its own chat with its own input box, such as an agent's chat in a drawer tab. With the chat's own box not found, a refine of your draft could read that box and write the rewrite into it. The input box and the next button are now never looked for inside another extension, and text selected inside one is not read as part of a chat message.
+- **A refusal among several rewrites at once is asked again.** With **Several rewrites at once** on, a rewrite stopped by the provider's filter, such as "prohibited_content", next to one that failed for its length, ended the refine without asking again. The refusal is now the failure kept, so **Ask again when a check fails** asks again.
+
+---
+
 ## 1.38.0
 
 _2026-10-11_
