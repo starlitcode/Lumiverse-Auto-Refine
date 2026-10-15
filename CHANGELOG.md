@@ -21,6 +21,8 @@ _2026-10-15_
 
 ### Changed
 
+- **What is Mercury Decide? links to Inception's own page.** Inception now has a page about Mercury Decide, so the link goes there instead of to OpenRouter. The docs also say how to reach it on Inception's own API, under **Another address**.
+
 - **One Span-01 Lite on OpenRouter.** OpenRouter now lists `respan/span-01-lite` as free, so **Span-01 Lite, free** sends that name. **Span-01 Lite, without the free limits** is gone, since it was the same model. Anyone who had it picked now has **Span-01 Lite, free**, which sends the same model. See [Which Span](docs/two-models.md#which-span).
 
 ---

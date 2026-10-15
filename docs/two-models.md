@@ -10,23 +10,23 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | --- | --- | --- | --- |
 | **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
 | **Span** | Respan | Span-01 Lite is free on OpenRouter. Span-01 is paid. Span-02, on Respan's own API, is paid, per call. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1), [Introducing Span-02](https://www.respan.ai/blog/introducing-span-2) |
-| **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Mercury Decide on OpenRouter](https://openrouter.ai/inception/mercury-decide) |
+| **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Inception: Decisions](https://docs.inceptionlabs.ai/capabilities/decisions) |
 | **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Liquid AI: Decision Models](https://docs.liquid.ai/lfm/models/decision-models) |
 | **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide), [Solar Decide Flash on OpenRouter](https://openrouter.ai/upstage/solar-decide-flash) |
 | **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
 | **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
 | **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Cloudflare: Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Cloudflare: Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Cloudflare: Clef Omni](https://developers.cloudflare.com/workers-ai/models/clef-omni/) |
 | **Decider** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
-| **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Introducing Microsoft-Decision-1](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/introducing-microsoft-decision-1-in-microsoft-foundry-for-decision-and-classific/4562742) |
-| **Drex** | Nace.AI | Paid, per call | [Drex v2.0 on OpenRouter](https://openrouter.ai/nace-ai/drex-v2.0) |
-| **Classify-1** | ScaleDown | Paid, per call | [Classify-1 on OpenRouter](https://openrouter.ai/scaledown/classify-1) |
+| **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
+| **Drex** | Nace.AI | Paid, per call | [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0) |
+| **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
 | **Mapika Decider**, in 0.8B, 2B and 4B | Mapika | Paid, per call | [Mapika Decider on GitHub](https://github.com/Mapika/decider) |
 
-All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. Where a model's maker has its own API, the link goes to the maker's page about it. With a Flash picked, the link is for the Flash.
+All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own page about the model, where there is one. With a Flash picked, the link is for the Flash.
 
 Mapika has no hosted API of its own. Its link goes to its page for the models, which are open. With Kev 4B picked, a warning that it is a small model shows next to its link. With any Clef picked, a note says how much of a reply Cloudflare reads.
 
-Inception has no page of its own about Mercury Decide yet, Upstage has none about Solar Decide Flash, Nace.AI has none about Drex, and ScaleDown has none about Classify-1. Their links go to OpenRouter, which serves them.
+Upstage has no page of its own about Solar Decide Flash that can be read, so its link goes to OpenRouter, which serves it. Nace.AI's page for Drex is its model card on Hugging Face.
 
 ## Setting it up
 
@@ -127,7 +127,7 @@ Mercury Decide is reached on OpenRouter. It takes the same request as Jev, so no
 | OpenRouter | `inception/mercury-decide:free` | `inception/mercury-decide` |
 
 - OpenRouter limits free models to 20 calls a minute. It also limits them to 50 calls a day, or 1000 a day once you have bought 10 credits or more.
-- Inception has not published an API of its own for it, so it is on OpenRouter only.
+- Inception's own API serves it too, as `mercury-decide`, at `https://api.inceptionlabs.ai/v1/decisions`. To use it there, pick **Another address**, fill in that address and model name, and save a key from your Inception account. See [Inception: Decisions](https://docs.inceptionlabs.ai/capabilities/decisions).
 
 ## D1
 
@@ -258,6 +258,7 @@ Drex is Nace.AI's decision model. Auto Refine uses Drex v2.0. It takes the same 
 
 - It is on OpenRouter only. If another host is left picked, OpenRouter is used.
 - The older Drex v1.5 is `nace-ai/drex-v1.5` on OpenRouter. Type it in **Model name** to use it.
+- Its weights are open. You can run it yourself with Nace.AI's server and reach it under **Another address**. See [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0).
 - It is paid, per call. OpenRouter's page for it shows the price.
 
 ## Classify-1
@@ -269,6 +270,8 @@ Classify-1 is ScaleDown's decision model. It takes the same request as Jev on Op
 | OpenRouter | `scaledown/classify-1` |
 
 - It is on OpenRouter only. If another host is left picked, OpenRouter is used.
+- ScaleDown says it reads only the text of the request. So the reply goes to it as JSON text, and the names the checks use, such as `reply`, are still in it.
+- ScaleDown's own API takes the key in an `x-api-key` header. Auto Refine sends the key the way OpenRouter takes it, so ScaleDown's own API is not offered.
 - It is paid, per call. OpenRouter's page for it shows the price.
 
 ## Mapika Decider

@@ -44,7 +44,8 @@ function blockText(raw) {
     return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
 }
 // The second models, one entry each: the name the panel uses for it, who
-// makes it, and the page that says what it is. The picker, the name in every
+// makes it, and the page that says what it is. That page is the maker's own,
+// and OpenRouter's page only for a model whose maker has none. The picker, the name in every
 // line about what the model did, and the links under the card all come from
 // here, so a model added later is one more entry, beside its entry in the
 // backend.
@@ -53,9 +54,7 @@ function blockText(raw) {
 const SECOND_MODELS = [
     { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
     { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
-    // Inception has no page of its own for it, so the link is OpenRouter's,
-    // which serves it.
-    { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://openrouter.ai/inception/mercury-decide" },
+    { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://docs.inceptionlabs.ai/capabilities/decisions" },
     { value: "d1", name: "D1", from: "Liquid AI", about: "https://docs.liquid.ai/lfm/models/decision-models" },
     { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
     { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
@@ -64,11 +63,10 @@ const SECOND_MODELS = [
     { value: "luna", name: "GPT-6 Luna Decisions", from: "OpenAI", about: "https://developers.openai.com/api/docs/guides/decisions" },
     { value: "clef", name: "Clef", from: "Cloudflare", about: "https://developers.cloudflare.com/workers-ai/models/clef/" },
     { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
-    { value: "microsoft", name: "Microsoft-Decision-1", from: "Microsoft", about: "https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/introducing-microsoft-decision-1-in-microsoft-foundry-for-decision-and-classific/4562742" },
-    // Nace.AI and ScaleDown have no page of their own for these, so the links
-    // are OpenRouter's, which serves them.
-    { value: "drex", name: "Drex", from: "Nace.AI", about: "https://openrouter.ai/nace-ai/drex-v2.0" },
-    { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://openrouter.ai/scaledown/classify-1" },
+    { value: "microsoft", name: "Microsoft-Decision-1", from: "Microsoft", about: "https://commandline.microsoft.com/microsoft-decision-1-model-foundry/" },
+    // Nace.AI's page for Drex is its model card on Hugging Face.
+    { value: "drex", name: "Drex", from: "Nace.AI", about: "https://huggingface.co/nace-ai/drex-v2.0" },
+    { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
     // Mapika publishes its models with no hosted API of its own. The link is the
     // maker's page for them.
     { value: "mapika", name: "Mapika Decider", from: "Mapika", about: "https://github.com/Mapika/decider" },

@@ -4343,7 +4343,8 @@ const MICROSOFT_HOSTS = {
 const DREX_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'nace-ai/drex-v2.0', kind: 'decisions' },
 };
-// Classify-1, from ScaleDown. OpenRouter takes Jev's request for it.
+// Classify-1, from ScaleDown. OpenRouter takes Jev's request for it. It reads
+// only the text field of the state, which ScaleDown's own docs say.
 const CLASSIFY_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'scaledown/classify-1', kind: 'decisions' },
 };
@@ -4623,6 +4624,7 @@ const SECOND_MODELS = {
     },
     classify: {
         name: 'Classify-1',
+        text: true,
         hosts: CLASSIFY_HOSTS,
         model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
     },
@@ -4878,7 +4880,9 @@ async function askJev(userId, state, questions) {
                         ? predicatesRequest(where.model, stateText, questions)
                         : secondModel().turns
                             ? turnsRequest(where.model, state, questions)
-                            : { model: where.model, state: state, questions: questions });
+                            : secondModel().text
+                                ? { model: where.model, state: { text: stateText }, questions: questions }
+                                : { model: where.model, state: state, questions: questions });
     // Claude-style hosts read the key from x-api-key and want a version header.
     // Both go only to the address the user picked, the same as the bearer key.
     const headers = { 'Content-Type': 'application/json' };

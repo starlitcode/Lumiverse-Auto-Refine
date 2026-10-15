@@ -1744,7 +1744,7 @@ console.log("\nMercury Decide, the third second model");
       ok(label + ": neither Which Jev nor Which Span shows", !got.versionShown && !got.tierShown, JSON.stringify(got));
       ok(label + ": only its own line shows, at 30", got.ownLine && !got.jevLine && !got.spanLine && got.ownLineValue === "30", JSON.stringify(got));
       ok(label + ": the key is OpenRouter's", got.key === "Key for OpenRouter", String(got.key));
-      ok(label + ": its link is OpenRouter's page for it", got.link === "What is Mercury Decide? https://openrouter.ai/inception/mercury-decide", String(got.link));
+      ok(label + ": its link is Inception's page for it", got.link === "What is Mercury Decide? https://docs.inceptionlabs.ai/capabilities/decisions", String(got.link));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
       await page.evaluate(() => {
         const sel = document.querySelector('#drawer [data-arf-field="judgeHost"]');
@@ -1943,9 +1943,9 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
-    ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/introducing-microsoft-decision-1-in-microsoft-foundry-for-decision-and-classific/4562742"],
-    ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://openrouter.ai/nace-ai/drex-v2.0"],
-    ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://openrouter.ai/scaledown/classify-1"],
+    ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
+    ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://huggingface.co/nace-ai/drex-v2.0"],
+    ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
     ["mapika", "Mapika Decider, from Mapika", "nanogpt,custom", "mapikaOver", "What is Mapika Decider? https://github.com/Mapika/decider"],
   ];
   const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver"];

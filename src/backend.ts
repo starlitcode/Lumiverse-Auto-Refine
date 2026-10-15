@@ -4544,7 +4544,8 @@ const MICROSOFT_HOSTS: Record<string, { url: string; model: string; kind: JevKin
 const DREX_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'nace-ai/drex-v2.0', kind: 'decisions' },
 };
-// Classify-1, from ScaleDown. OpenRouter takes Jev's request for it.
+// Classify-1, from ScaleDown. OpenRouter takes Jev's request for it. It reads
+// only the text field of the state, which ScaleDown's own docs say.
 const CLASSIFY_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'scaledown/classify-1', kind: 'decisions' },
 };
@@ -4786,6 +4787,9 @@ interface SecondModel {
   // Reads a conversation rather than named fields, so its state is the reply
   // as a turn. See spanTurns.
   turns?: boolean;
+  // Reads only `state.text`, so the named fields go in it as JSON text, and
+  // the names the checks use, such as `reply`, are still in it.
+  text?: boolean;
   hosts: Record<string, { url: string; kind: JevKind }>;
   model: (host: string) => string;
 }
@@ -4855,6 +4859,7 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   },
   classify: {
     name: 'Classify-1',
+    text: true,
     hosts: CLASSIFY_HOSTS,
     model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
   },
@@ -5115,6 +5120,8 @@ async function askJev(
               ? predicatesRequest(where.model, stateText, questions)
               : secondModel().turns
               ? turnsRequest(where.model, state, questions)
+              : secondModel().text
+              ? { model: where.model, state: { text: stateText }, questions: questions }
               : { model: where.model, state: state, questions: questions },
   );
   // Claude-style hosts read the key from x-api-key and want a version header.

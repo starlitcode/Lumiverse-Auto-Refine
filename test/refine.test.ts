@@ -1688,7 +1688,6 @@ describe("two models: Jev reads the reply first", () => {
     ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["microsoft", "openrouter", "https://openrouter.ai/api/alpha/decisions", "microsoft/microsoft-decision-1"],
     ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-v2.0"],
-    ["classify", "openrouter", "https://openrouter.ai/api/alpha/decisions", "scaledown/classify-1"],
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
     ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-2b-fp8"],
     ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-0.8b-fp8", { mapikaSize: "0.8b" }],
@@ -1709,6 +1708,22 @@ describe("two models: Jev reads the reply first", () => {
       expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
     });
   }
+
+  // ScaleDown says Classify-1 reads only `state.text`. The named fields go in
+  // it as JSON text, so the checks still find `reply` and `previous_reply`.
+  test("classify on openrouter: scaledown/classify-1, with the reply as the state's text", async () => {
+    const h = await keyed({ judgeWho: "classify", judgeBefore: true }, { jev: says([10]) });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].url).toBe("https://openrouter.ai/api/alpha/decisions");
+    expect(h.jevCalls[0].body.model).toBe("scaledown/classify-1");
+    const state = h.jevCalls[0].body.state;
+    expect(Object.keys(state)).toEqual(["text"]);
+    const named = JSON.parse(state.text);
+    expect(Object.keys(named)).toEqual(["reply", "previous_reply"]);
+    expect(named.reply).toBe(REPLY);
+    expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
+  });
 
   // The panel shows the built-in name in each Model name box, so it has to be
   // the name the backend sends. Every model, every host and every kind of Span.
