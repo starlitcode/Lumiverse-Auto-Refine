@@ -64,6 +64,22 @@ Two skills are available. Load them before starting work.
 - `test/lumiverse-themes.json` holds the colours Lumiverse's own theme engine
   writes, dark and light. `bun scripts/engine-themes.ts` writes it again from a
   Lumiverse clone, which `setup.sh` puts in `~/lumiverse-src`.
+- A double check covers more than the code just changed. It also covers the
+  places that are easy to miss:
+  - `setup.sh` and the workflow in `.github`.
+  - `SECURITY.md` and `docs/privacy.md`, against the permissions in `spindle.json`.
+  - Every link and anchor in the docs.
+  - Comments, tests and docs that still describe something removed.
+  - Names that nothing uses, and names only the tests use.
+  - The README and the descriptions in `spindle.json` and `package.json`.
+  - How the two extensions work together, such as the event Auto Retry sends
+    when it adds a reroll.
+  - How it behaves with another extension's panel, widget or pop-up open.
+- Nothing reads, writes or presses inside another extension's part of the
+  page. Lumiverse marks every such part with `data-spindle-extension-root`,
+  `data-spindle-ext` or `data-spindle-modal`, and `OTHER_UI` holds those
+  marks. Another extension can draw its own chat, with its own input box and
+  its own Regenerate button.
 - A new check has to be seen failing: break the rule it guards in `dist`, watch
   that check fail, then put `dist` back.
 - `test/host-calls.test.ts` needs a `try {` within 60 lines above every
