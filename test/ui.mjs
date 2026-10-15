@@ -4614,9 +4614,8 @@ console.log("\nthe status dot stays beside a long status line");
       ok(label + ": the status line is there", !!got && /would not take the call/.test(got.text), JSON.stringify(got));
       if (label === "phone") ok("phone: the line is long enough to wrap, or this proves nothing", !!got && got.lines >= 2, JSON.stringify(got));
       ok(label + ": the dot sits beside the words, on their first line", !!got && got.beside && got.firstLine, JSON.stringify(got));
-      // The countdown stays with the words before it. Wrapped, "trying again
-      // in 29s" moves to the next line as one, rather than leaving the number
-      // alone there.
+      // The countdown comes first, so a line that wraps keeps it on the first
+      // line, with the words that go with it.
       const together = await page.evaluate(() => {
         const words = document.querySelector("#drawer .arf-dot").nextElementSibling;
         const text = words.firstChild;
@@ -4628,9 +4627,9 @@ console.log("\nthe status dot stays beside a long status line");
           r.setEnd(text, i + needle.length);
           return Math.round(r.getClientRects()[0].top);
         };
-        return { trying: at("trying"), number: at("29s") };
+        return { trying: at("Trying"), number: at("29s"), first: Math.round(words.getClientRects()[0].top) };
       });
-      ok(label + ": the countdown is on the same line as the words before it", together.trying != null && together.trying === together.number, JSON.stringify(together));
+      ok(label + ": the countdown is on the first line, with the words before it", together.trying != null && together.trying === together.number && Math.abs(together.number - together.first) <= 2, JSON.stringify(together));
       ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
     });
   }

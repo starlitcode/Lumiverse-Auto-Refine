@@ -14,6 +14,7 @@ _2026-10-15_
 
 - **Another extension's input box is never written into.** Another extension can have its own chat with its own input box, such as an agent's chat in a drawer tab. With the chat's own box not found, a refine of your draft could read that box and write the rewrite into it. The input box and the next button are now never looked for inside another extension, and text selected inside one is not read as part of a chat message.
 - **A refusal among several rewrites at once is asked again.** With **Several rewrites at once** on, a rewrite stopped by the provider's filter, such as "prohibited_content", next to one that failed for its length, ended the refine without asking again. The refusal is now the failure kept, so **Ask again when a check fails** asks again.
+- **Fixed again: the countdown on the status line stays on the first line.** 1.35.2 kept **trying again in 25s** together, but a long line on a phone still put it on the line below the words. The countdown now comes first, as it does in Auto Retry: **Trying again in 25s (1 of 2). The provider would not take the call.** The wait between automatic refines reads the same way.
 
 ---
 

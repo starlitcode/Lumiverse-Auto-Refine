@@ -4610,17 +4610,17 @@ export function setup(ctx, overrides) {
         // down, because a status line that says "waiting" and does not move looks
         // exactly like one that has stopped, and this is the longest anything here
         // ever sits still.
-        // The countdown is held to the words before it with no-break spaces, so
-        // a line that wraps on a phone takes them to the next line together
-        // rather than leaving the number alone there.
+        // The countdown comes first, and the reason after it, the same as Auto
+        // Retry's line. A line that wraps on a phone then keeps the number on its
+        // first line, and the words held together with no-break spaces stay
+        // together.
         if (stage === "waiting") {
             const left = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
             if (waitGap)
-                return "Waiting for the gap between refines, " + keep("starting in " + left + "s");
-            return ("The provider would not take the call" +
+                return keep("Starting in " + left + "s") + ". Waiting for the gap between refines.";
+            return (keep("Trying again in " + left + "s") +
                 (waitAt ? " " + keep("(" + waitAt + " of " + waitOf + ")") : "") +
-                ", " +
-                keep("trying again in " + left + "s"));
+                ". The provider would not take the call.");
         }
         // Which try this is, because a refine that takes three times as
         // long reads as broken unless it says why.
