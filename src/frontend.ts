@@ -482,6 +482,22 @@ const JUDGE_CHECKS = [
   "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
 ].join("\n");
 
+// More checks a reader can add to What the second model checks. Each one finds
+// one more kind of stock writing, and none is sent until it is added. They
+// are not in the built-in list, since some styles use these on purpose. Each
+// names something narrow, such as a feeling written as an object, or needs a
+// count, so ordinary prose and dialogue do not trip it.
+const MORE_CHECKS = [
+  "`reply` gives a feeling or a silence weight or force, as in \"the quiet pressed down on the room\" or \"her answer hit him like a slap\".",
+  "`reply` says something inside a character changed without naming what, as in \"something in him loosened\" or \"a part of her went still\".",
+  "`reply` puts a feeling into the body as if it were an object, as in \"dread pooled in his gut\" or \"guilt lodged in her throat\".",
+  "`reply` has a smell or taste that nothing in the scene gives off, such as ozone, copper or something metallic, added only for tension.",
+  "`reply` starts a sentence of narration, outside anyone's speech, with \"And yet\" or \"Everything changed\".",
+  "`reply` ends on a summary or a lesson about what the scene meant, as in \"and for the first time, he understood what home meant\".",
+  "`reply` describes how words or a silence were taken before anyone acts, as in \"the words settled between them\" or \"the question lingered\".",
+  "`reply` shrinks three or more gestures with \"small\", \"slight\" or \"faint\", as in \"a small nod\" and \"a faint smile\".",
+].join("\n");
+
 // What the second model checks, as it was up to 1.34.0, word for word. A
 // reader still holding exactly these never wrote their own, and is offered
 // the ones above.
@@ -10946,6 +10962,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
     wrap.appendChild(fieldRow(checksField));
     wrap.appendChild(builtInRow("judgeChecks", JUDGE_CHECKS, "What the second model checks", "jevchecks", () => cfg.judgeMode === "two", "checks"));
+    wrap.appendChild(buildMoreChecks());
     for (const f of afterChecks) {
       wrap.appendChild(fieldRow(f));
       if (f.key === "judgeBeforeChecks")
@@ -11285,6 +11302,46 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The way back to the built-in text of a box, beside the box. Resetting the
   // whole part it belongs to would move every other setting in it too, which
   // is more than somebody who mistyped a line wants.
+  // The checks a reader can add, in a fold under What the second model
+  // checks. Each is shown in full, and Add them puts in the ones the box does
+  // not already hold, at the end.
+  function buildMoreChecks(): HTMLElement {
+    return hangsOff(
+      fold("More checks you can add", (body) => {
+        body.appendChild(note("Optional. Each one finds one more kind of stock writing. Add them, then take out any you do not want from the box above."));
+        const list = el("div", "arf-col");
+        list.setAttribute("data-arf-morechecks", "list");
+        for (const line of MORE_CHECKS.split("\n")) list.appendChild(el("div", "arf-note", line));
+        body.appendChild(list);
+        const row = el("div", "arf-row");
+        const add = button("Add them to the checks", false);
+        add.setAttribute("data-arf-morechecks", "add");
+        const said = el("span", "arf-note");
+        said.setAttribute("data-arf-morechecks", "said");
+        add.addEventListener("click", () => {
+          const have = String(cfg.judgeChecks == null ? "" : cfg.judgeChecks)
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          const missing = MORE_CHECKS.split("\n").filter((l) => have.indexOf(l) < 0);
+          if (!missing.length) {
+            alreadyBuiltIn(said, "These are already in the checks. Nothing changed.");
+            return;
+          }
+          cfg.judgeChecks = have.concat(missing).join("\n");
+          persist(true);
+          paint();
+          toast(missing.length === 1 ? "Added 1 check." : "Added " + missing.length + " checks.", true, "success");
+        });
+        row.appendChild(add);
+        row.appendChild(said);
+        body.appendChild(row);
+      }),
+      () => cfg.judgeMode === "two",
+      "more checks",
+    );
+  }
+
   function builtInRow(key: string, list: string, label: string, tag: string, shows: () => boolean, what: "checks" | "text" = "text"): any {
     const these = what === "checks" ? "the built-in checks" : "the built-in text";
     const row = el("div", "arf-row");
@@ -17948,6 +18005,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 // against each other. A setting in one and not the other looks fine and
 // never loads.
 export const __testing = {
+  MORE_CHECKS,
   SETUP_LINE,
   BUILT_IN_MODEL_NAMES,
   builtInModelName,

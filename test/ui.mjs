@@ -2240,6 +2240,60 @@ console.log("\nSpan, the other second model");
   ok("no console errors", !errors || !errors.length, JSON.stringify(errors));
 }
 
+console.log("\nmore checks you can add");
+{
+  // A fold under What the second model checks holds more checks, each shown
+  // in full. Add them puts in the ones the box does not hold, once.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { judgeMode: "two" } }, async (page) => {
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      await goTab(page, "Model");
+      await settle(page);
+      await page.evaluate(() => {
+        const h = [...document.querySelectorAll("#drawer [aria-expanded]")].find((b) => /More checks you can add/.test(b.textContent));
+        h.click();
+      });
+      await settle(page);
+      await settle(page);
+      const before = await page.evaluate(() => ({
+        lines: [...document.querySelectorAll('#drawer [data-arf-morechecks="list"] > *')].map((n) => n.textContent),
+        box: (document.querySelector('#drawer [data-arf-field="judgeChecks"]') || {}).value || "",
+      }));
+      ok(label + ": the fold shows each check in full", before.lines.length === 8 && before.lines.every((l) => /^`reply` /.test(l)), JSON.stringify(before.lines));
+      ok(label + ": none of them is in the checks yet", before.lines.every((l) => before.box.indexOf(l) < 0), "");
+      const press = () => page.evaluate(() => document.querySelector('#drawer [data-arf-morechecks="add"]').click());
+      await press();
+      await settle(page);
+      const after = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="judgeChecks"]') || {}).value || "");
+      ok(label + ": Add them puts all of them at the end of the checks", before.lines.every((l) => after.indexOf(l) >= 0) && after.indexOf(before.box.trim()) === 0, after.slice(-200));
+      // The fold is drawn again with the panel, so it is opened again.
+      await page.evaluate(() => {
+        const h = [...document.querySelectorAll("#drawer [aria-expanded]")].find((b) => /More checks you can add/.test(b.textContent));
+        if (h.getAttribute("aria-expanded") === "false") h.click();
+      });
+      await settle(page);
+      await press();
+      await settle(page);
+      const again = await page.evaluate(() => ({
+        box: (document.querySelector('#drawer [data-arf-field="judgeChecks"]') || {}).value || "",
+        said: (document.querySelector('#drawer [data-arf-morechecks="said"]') || {}).textContent || "",
+      }));
+      ok(label + ": pressed again, nothing is added twice", again.box === after, "");
+      ok(label + ": and it says so", /already in the checks/.test(again.said), again.said);
+      const look = await page.evaluate((touch) => {
+        const out = { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small: null };
+        const b = document.querySelector('#drawer [data-arf-morechecks="add"]');
+        if (touch && b) out.small = b.offsetHeight < 32 ? b.offsetHeight : null;
+        return out;
+      }, touch);
+      ok(label + ": nothing runs off the side", !look.sideways, "");
+      if (touch) ok(label + ": the button is at least 32 pixels high", look.small === null, String(look.small));
+      ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+    });
+  }
+}
+
 console.log("\nwhat it compares with the reply before it");
 {
   // The comparison checks are a box of their own under the switch, shown only

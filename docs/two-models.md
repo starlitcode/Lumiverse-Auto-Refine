@@ -357,6 +357,28 @@ Each one has to be false of a clean reply. A reply is refined when any one check
 
 All but the first two match rules the built-in reply prompts carry, with the same examples. So a reply the second model sends through is one the refine has a rule for. Write your own to match what your prompt fixes. A check for something your prompt never touches refines replies for a reason the refine will not act on.
 
+### More checks you can add
+
+The fold **More checks you can add**, under **What the second model checks**, holds eight more checks. Each finds one more kind of stock writing:
+
+- A feeling or a silence given weight or force.
+- Something inside a character changing, with no name for what.
+- A feeling put into the body as if it were an object.
+- A smell or taste that nothing in the scene gives off.
+- A sentence of narration that starts with "And yet" or "Everything changed".
+- An ending that sums up the scene or states a lesson.
+- Narration about how words or a silence were taken, before anyone acts.
+- Three or more gestures shrunk with "small", "slight" or "faint".
+
+What to know:
+
+- None of them is sent until you add it. **Add them to the checks** puts the ones your box does not hold at the end of it. Pressed again, it adds nothing twice.
+- Take out any you do not want, the same as any other check. **Use the built-in checks** puts the box back to the built-in list, without these.
+- They are not in the built-in list, because some writing styles use these on purpose.
+- Each one names something narrow, or needs a count, so ordinary prose and dialogue do not trip it.
+- The built-in prompts have no rule for some of them. What the second model finds goes to the refine model in `{{checks_found}}`, so it knows what to fix.
+- Each check is one more question in every call. Some hosts take only so many in one call. If **Test** fails after you add them, take a few out.
+
 ### How the second model reads a check
 
 The second model is not a chat model. It reads the meaning of a check, not only its words. But it scores whether the statement you wrote is true of the reply, and it does not stretch a check to cover what you meant. So a check that describes a different pattern from the one you have in mind scores low, even on a reply that has your pattern.

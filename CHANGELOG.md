@@ -14,6 +14,8 @@ _2026-10-15_
 
 - **Clef Omni.** A third choice under **Which Clef**: Cloudflare's Clef that also reads pictures and sound. Auto Refine sends it text only, the same as the others. It is on OpenRouter, NanoGPT and Cloudflare, and has its own **Refine when a check reaches**, 30 by default.
 
+- **More checks you can add.** A fold under **What the second model checks** holds eight more checks for stock writing, such as a feeling put into the body as if it were an object, or three or more gestures shrunk with "small", "slight" or "faint". None is sent until you press **Add them to the checks**, which adds the ones your box does not hold. See [More checks you can add](docs/two-models.md#more-checks-you-can-add).
+
 ### Changed
 
 - **Jev 1.14 exactly takes the place of Jev 1.13 exactly.** Under **Which Jev**, the exact choice is now Jev 1.14, on TypeSafe and NanoGPT. OpenRouter has no name for it yet, so it is not offered there, and the latest Jev is sent. To keep Jev 1.13, type its name in **Model name**: `jev-1.13.0` on TypeSafe, or `typesafe/jev-1.13` on NanoGPT and OpenRouter.
