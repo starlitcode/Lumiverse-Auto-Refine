@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.38.1";
+const VERSION = "1.39.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -108,6 +108,13 @@ const SIZE_PICKS = {
                 line: "clefFlashOver",
                 about: "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
             },
+            {
+                value: "omni",
+                label: "Clef Omni, which also reads pictures and sound",
+                name: "Clef Omni",
+                line: "clefOmniOver",
+                about: "https://developers.cloudflare.com/workers-ai/models/clef-omni/",
+            },
         ],
     },
     mapika: {
@@ -162,17 +169,18 @@ function sizeServed(c, who, size) {
 // The name each host gives each second model. Shown in the Model name box as
 // the name used when the box is empty. The backend holds the same names, and a
 // test checks the two agree. Jev's are per choice under Which Jev, and a host
-// with no preview of its own is sent its latest. Span's are per kind of Span;
+// with no preview or no exact Jev of its own is sent its latest. Span's are per
+// kind of Span; Respan's own API serves Span-02 for every kind. Span's are per kind of Span;
 // Respan's own API has no paid Lite, so asking it for one gets the free one.
 const BUILT_IN_MODEL_NAMES = {
     jev: {
-        openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "typesafe/jev-1.13" },
-        nanogpt: { latest: "typesafe/jev-latest", preview: "typesafe/jev-latest", exact: "typesafe/jev-1.13" },
-        typesafe: { latest: "jev-latest", preview: "jev-preview", exact: "jev-1.13.0" },
+        openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "~typesafe/jev-latest" },
+        nanogpt: { latest: "typesafe/jev-latest", preview: "typesafe/jev-latest", exact: "typesafe/jev-1.14" },
+        typesafe: { latest: "jev-latest", preview: "jev-preview", exact: "jev-1.14.0" },
     },
     span: {
         openrouter: { free: "respan/span-01-lite:free", lite: "respan/span-01-lite", full: "respan/span-01" },
-        respan: { free: "span-01-free", lite: "span-01-free", full: "span-01-pro" },
+        respan: { free: "span-02", lite: "span-02", full: "span-02" },
     },
     mercury: { openrouter: { free: "inception/mercury-decide:free", paid: "inception/mercury-decide" } },
     d1: { openrouter: "liquid/d1", nanogpt: "liquid/d1", liquid: "d1:free" },
@@ -183,9 +191,9 @@ const BUILT_IN_MODEL_NAMES = {
     kev: { openrouter: "jaredpalmer/kev-4b" },
     luna: { openrouter: "openai/gpt-6-luna-decisions", openai: "gpt-6-luna" },
     clef: {
-        openrouter: { full: "cloudflare/clef", flash: "cloudflare/clef-flash" },
-        nanogpt: { full: "cloudflare/clef", flash: "cloudflare/clef-flash" },
-        cloudflare: { full: "clef", flash: "clef-flash" },
+        openrouter: { full: "cloudflare/clef", flash: "cloudflare/clef-flash", omni: "cloudflare/clef-omni" },
+        nanogpt: { full: "cloudflare/clef", flash: "cloudflare/clef-flash", omni: "cloudflare/clef-omni" },
+        cloudflare: { full: "clef", flash: "clef-flash", omni: "clef-omni" },
     },
     decider: {
         openrouter: "perplexity/pplx-decider-v1.1-27b",
@@ -347,7 +355,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "mapikaSize", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "mapikaName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "mapikaSize", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "mapikaName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "solarFlashOver", "mapikaSmallOver", "mapikaOver", "mapikaLargeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -862,6 +870,7 @@ const CONFIG = {
     lunaOver: 30,
     clefOver: 30,
     clefFlashOver: 30,
+    clefOmniOver: 30,
     deciderOver: 30,
     solarFlashOver: 30,
     mapikaSmallOver: 30,
@@ -2408,9 +2417,9 @@ const JUDGE_FIELDS = [
             { value: "full", label: "Span-01" },
         ],
         needs: { key: "judgeWho", is: "span" },
-        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
+        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] },
         under: true,
-        hint: "The free one costs nothing. Respan's own API calls the two span-01-free and span-01-pro.",
+        hint: "The free one costs nothing. Respan's own API serves Span-02 instead.",
     },
     // Which Clef, Which Solar Decide and the rest, one for each model in
     // SIZE_PICKS. A size is offered on the hosts that serve it.
@@ -2434,12 +2443,12 @@ const JUDGE_FIELDS = [
         options: [
             { value: "latest", label: "The latest Jev" },
             { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
-            { value: "exact", label: "Jev 1.13 exactly" },
+            { value: "exact", label: "Jev 1.14 exactly", needs: { key: "judgeHost", is: ["nanogpt", "typesafe"] } },
         ],
         needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
         also: { key: "judgeWho", is: "jev" },
         under: true,
-        hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.13 to keep them steady.",
+        hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.14 to keep them steady.",
     },
     {
         key: "cloudflareAccount",
@@ -2468,7 +2477,7 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeHost", is: "custom" },
         under: true,
         placeholder: (c) => c.judgeWho === "span"
-            ? "https://span.example.com/api/v1/scores"
+            ? "https://span.example.com/api/v1/decisions"
             : c.judgeWho === "jev"
                 ? "https://jev.example.com/v1/decisions"
                 : "https://decide.example.com/v1/decisions",
@@ -2481,7 +2490,7 @@ const JUDGE_FIELDS = [
         needs: { key: "judgeHost", is: "custom" },
         under: true,
         placeholder: (c) => ({
-            span: "span-01-pro",
+            span: "span-02",
             mercury: "inception/mercury-decide:free",
             d1: "liquid/d1",
             solar: "upstage/solar-decide",
@@ -2618,6 +2627,18 @@ const JUDGE_FIELDS = [
         also: { key: "judgeWho", is: "clef" },
         when: (c) => lineInUse(c, "clefFlashOver"),
         hint: "For Clef Flash. A percentage, " + CONFIG.clefFlashOver + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "clefOmniOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "clef" },
+        when: (c) => lineInUse(c, "clefOmniOver"),
+        hint: "For Clef Omni. A percentage, " + CONFIG.clefOmniOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "deciderOver",
@@ -3330,10 +3351,10 @@ export function setup(ctx, overrides) {
         }
         catch (_) { }
         // Settings saved with "A name I type" picked under Which Jev. That choice
-        // sent the name typed under it, and Jev 1.13 when it was empty. Jev's name
+        // sent the name typed under it, and the exact Jev when it was empty. Jev's name
         // is a Model name box like every other model's, sent whenever it holds a
         // name, so a name moves across only from a reader who had that choice
-        // picked, with Jev 1.13 under it. A name saved under another choice was
+        // picked, with the exact Jev under it. A name saved under another choice was
         // never sent, and is dropped rather than starting to be.
         if (into.judgeVersion === "own") {
             if (!into.jevName && typeof into.judgeName === "string" && into.judgeName.trim())

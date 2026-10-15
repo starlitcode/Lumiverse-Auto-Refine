@@ -9,19 +9,19 @@ There are ten to pick from. Some come in more than one size or kind, picked unde
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
 | **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
-| **Span** | Respan | Span-01 Lite is free. Span-01 is paid. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1) |
+| **Span** | Respan | Span-01 Lite is free on OpenRouter. Span-01 is paid. Span-02, on Respan's own API, is paid, per call. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1), [Introducing Span-02](https://www.respan.ai/blog/introducing-span-2) |
 | **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Mercury Decide on OpenRouter](https://openrouter.ai/inception/mercury-decide) |
 | **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Liquid AI: Decision Models](https://docs.liquid.ai/lfm/models/decision-models) |
 | **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide), [Solar Decide Flash on OpenRouter](https://openrouter.ai/upstage/solar-decide-flash) |
 | **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
 | **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
-| **Clef**, and **Clef Flash** | Cloudflare | Paid, per call | [Cloudflare: Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Cloudflare: Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/) |
+| **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Cloudflare: Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Cloudflare: Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Cloudflare: Clef Omni](https://developers.cloudflare.com/workers-ai/models/clef-omni/) |
 | **Decider** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
 | **Mapika Decider**, in 0.8B, 2B and 4B | Mapika | Paid, per call | [Mapika Decider on GitHub](https://github.com/Mapika/decider) |
 
 All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. Where a model's maker has its own API, the link goes to the maker's page about it. With a Flash picked, the link is for the Flash.
 
-Mapika has no hosted API of its own. Its link goes to its page for the models, which are open. With Kev 4B picked, a warning that it is a small model shows next to its link. With Clef or Clef Flash picked, a note says how much of a reply Cloudflare reads.
+Mapika has no hosted API of its own. Its link goes to its page for the models, which are open. With Kev 4B picked, a warning that it is a small model shows next to its link. With any Clef picked, a note says how much of a reply Cloudflare reads.
 
 Inception has no page of its own about Mercury Decide yet, and Upstage has none about Solar Decide Flash, so their links go to OpenRouter, which serves them.
 
@@ -32,7 +32,7 @@ Everything is on the Model tab, in **One model or two**.
 1. Set **How many models** to two.
 2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide, Clef and Mapika Decider, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef and Clef Flash](#clef-and-clef-flash).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide, Clef and Mapika Decider, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -53,23 +53,26 @@ A key is kept for each host:
 
 - **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
 - **The preview Jev**, only when the host is TypeSafe. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest.
-- **Jev 1.13 exactly**. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
+- **Jev 1.14 exactly**, only when the host is TypeSafe or NanoGPT. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
 
 The name each host is sent:
 
-| Host | The latest Jev | The preview Jev | Jev 1.13 exactly |
+| Host | The latest Jev | The preview Jev | Jev 1.14 exactly |
 | --- | --- | --- | --- |
-| OpenRouter | `~typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
-| TypeSafe | `jev-latest` | `jev-preview` | `jev-1.13.0` |
-| NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.13` |
+| OpenRouter | `~typesafe/jev-latest` | not offered | not offered |
+| TypeSafe | `jev-latest` | `jev-preview` | `jev-1.14.0` |
+| NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.14` |
 
-OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them. If you picked it on TypeSafe and then change host, the list shows **The latest Jev**, and the latest is what is sent. Change back to TypeSafe and the preview is picked again.
+- OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them.
+- OpenRouter has no name for Jev 1.14 exactly, so that is not in the list for OpenRouter.
+- A choice that is not in the list for the host sends the latest. Change back to a host that has it, and it is picked again.
+- **Jev 1.14 exactly** is the newest Jev. When a newer one comes out, this choice moves to it. To keep an older Jev, type its name in **Model name**, such as `jev-1.13.0` on TypeSafe or `typesafe/jev-1.13` on NanoGPT and OpenRouter. It works for as long as the host serves it.
 
 **Model name**, under **Which Jev**, is the same box every second model has. It shows the name your choice above sends. Type a different name and that name is sent instead, whatever **Which Jev** says. See [When a model is renamed, or a new one comes out](#when-a-model-is-renamed-or-a-new-one-comes-out).
 
 ## Which Span
 
-**Which Span** shows when Span is picked. It has these choices:
+**Which Span** shows when Span is picked and the host is OpenRouter. It has these choices:
 
 - **Span-01 Lite, free**, the default. It costs nothing.
 - **Span-01 Lite, without the free limits**, only on OpenRouter. The same model as the free one. OpenRouter limits free models to 20 calls a minute, and to 50 or 1000 calls a day, depending on the credit on your account. This one has no such limit. OpenRouter sets its price, and it costs nothing at the moment.
@@ -80,18 +83,17 @@ The name each host is sent:
 | Host | Span-01 Lite, free | Span-01 Lite, without the free limits | Span-01 |
 | --- | --- | --- | --- |
 | OpenRouter | `respan/span-01-lite:free` | `respan/span-01-lite` | `respan/span-01` |
-| Respan | `span-01-free` | not offered | `span-01-pro` |
+| Respan | `span-02` | `span-02` | `span-02` |
 
-Respan has no Lite without the free limits, so it is not in the list for Respan. If you picked it on OpenRouter and then change to Respan, the free one is sent.
+**Respan's own API** serves Span-02, the newest Span, so **Which Span** is not shown there. Span-02 is on Respan's own API only.
 
-Span reads a conversation, not named fields. **On OpenRouter** it takes the same kind of request as Jev, with the reply sent as a conversation. **On Respan's own API** the request is a scores request. The panel does this for you on both:
+Span reads a conversation, not named fields. It takes the same kind of request as Jev, with the reply sent as a conversation. The panel does this for you:
 
 - The reply is sent as the assistant's turn of a conversation.
-- The word `reply` in backticks is written out as "the reply" in each check. On Respan's own API, each check is sent as a behavior.
+- The word `reply` in backticks is written out as "the reply" in each check.
 - With **Also compare with the reply before it** on, that reply is sent as the turn before, and `previous_reply` is written out as "the previous reply". See [Comparing with the reply before it](#comparing-with-the-reply-before-it).
 - A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
-- Respan's own API only scores once Respan has switched Span-01 on for your account. Until then, **Test** says "Span turned the call down (403: Span-01 scoring is not enabled for your organization...)". Ask Respan for access, or pick OpenRouter as the host, which needs no access request.
-- Respan answers each behavior with three chances: present, absent, and not enough to judge. The chance it is present is the score.
+- To use Span-01 on Respan's own API, pick **Another address**, with the address `https://api.respan.ai/api/v1/scores` and the model name `span-01-pro`. That address takes a scores request: each check is sent as a behavior, and the chance the behavior is present is the score.
 
 ## Sizes and kinds
 
@@ -101,7 +103,7 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | --- | --- | --- |
 | Mercury Decide | **Which Mercury Decide** | free, or without the free limits |
 | Solar Decide | **Which Solar Decide** | Solar Decide, or Solar Decide Flash |
-| Clef | **Which Clef** | Clef, or Clef Flash |
+| Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
 | Mapika Decider | **Which Mapika Decider** | 0.8B, 2B or 4B |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
@@ -193,30 +195,31 @@ GPT-6 Luna Decisions is GPT-6 Luna, from OpenAI, answering through OpenAI's deci
 - On OpenAI's own API, the key comes from your OpenAI account, at [platform.openai.com](https://platform.openai.com/api-keys).
 - It is paid, per call. OpenAI marks the decisions API as a beta.
 
-## Clef and Clef Flash
+## Clef
 
-Clef and Clef Flash are Cloudflare's decision models. Both take the same request as Jev. Their weights are open.
+Clef, Clef Flash and Clef Omni are Cloudflare's decision models. All three take the same request as Jev. Their weights are open.
 
 **Which Clef** shows when Clef is picked:
 
 - **Clef**, the default. The larger one.
 - **Clef Flash, smaller and faster**. It is only offered where it is served.
+- **Clef Omni, which also reads pictures and sound**. Auto Refine sends it text only, the same as the others.
 
-| Host | Clef | Clef Flash |
-| --- | --- | --- |
-| OpenRouter | `cloudflare/clef` | `cloudflare/clef-flash` |
-| NanoGPT | `cloudflare/clef` | `cloudflare/clef-flash` |
-| Cloudflare | `clef` | `clef-flash` |
+| Host | Clef | Clef Flash | Clef Omni |
+| --- | --- | --- | --- |
+| OpenRouter | `cloudflare/clef` | `cloudflare/clef-flash` | `cloudflare/clef-omni` |
+| NanoGPT | `cloudflare/clef` | `cloudflare/clef-flash` | `cloudflare/clef-omni` |
+| Cloudflare | `clef` | `clef-flash` | `clef-omni` |
 
 - **How much they read.** OpenRouter says that Cloudflare reads only about the first 2,000 tokens of the text it is sent. NanoGPT limits them to about 1,800. The end of a long reply may not be read. OpenRouter can send them to Cloudflare too. Turning off **Also compare with the reply before it** leaves more room for the reply.
 - **On Cloudflare's own API** you need two things, both from the Workers AI page of your Cloudflare dashboard, under **Use REST API**:
   1. Your account ID. Paste it into **Cloudflare account ID**, which shows when Cloudflare is the host. It is 32 letters and numbers. Anything else is not used.
   2. An API token made with the **Workers AI** template. Save it in the key box.
 - With no account ID saved, Cloudflare is not called, the Log says what is missing, and the reply is refined.
-- Each of the two has its own **Refine when a check reaches**. The panel shows the line for the one in use.
-- NanoGPT serves both, on the same decisions route as Jev.
-- One **Model name** box serves both. It shows the name for the one picked. A name typed in it is sent for both. On Cloudflare the name is also part of the address, so it has to be `clef` or `clef-flash`.
-- Both are paid, per call. Each host's own page shows the price.
+- Each of the three has its own **Refine when a check reaches**. The panel shows the line for the one in use.
+- NanoGPT serves all three, on the same decisions route as Jev.
+- One **Model name** box serves all three. It shows the name for the one picked. A name typed in it is sent for all three. On Cloudflare the name is also part of the address, so it has to be `clef`, `clef-flash` or `clef-omni`.
+- All three are paid, per call. Each host's own page shows the price.
 
 ## Decider
 
@@ -254,6 +257,12 @@ Mapika Decider is an open decision model from Mapika. It takes the same request 
 ## When a model is renamed, or a new one comes out
 
 The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
+
+**An older version of a model in the list.** When a model has a new version, the new one takes the old one's place in the list, so the list holds only models that work today. An older version still works for as long as its host serves it:
+
+1. Pick the model, and its host.
+2. Type the older version's name in **Model name**, such as `jev-1.13.0` on TypeSafe.
+3. Press **Test**.
 
 **A model in the list was renamed, or has a new version on the same host:**
 
@@ -311,21 +320,22 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `typesafe/jev-1.13`, `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `perplexity/pplx-decider-v1.1-27b`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.13`, `typesafe/jev-latest`, `liquid/d1`, `cloudflare/clef`, `cloudflare/clef-flash`, `perplexity/pplx-decider-v1.1-27b`, `llmtech/decider-0.8b-fp8`, `llmtech/decider-2b-fp8` or `llmtech/decider-4b-nvfp4` |
-| TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.13.0` or `jev-latest` |
-| Respan | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite:free`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `llmtech/decider-0.8b-fp8`, `llmtech/decider-2b-fp8` or `llmtech/decider-4b-nvfp4` |
+| TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
+| Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
+| Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
 | Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` |
 | Upstage | `https://api.upstage.ai/v1/systemone` | `solar-decide` |
 | OpenAI | `https://api.openai.com/v1/decisions` | `gpt-6-luna` |
-| Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` with the address ending in `clef-flash` |
+| Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` or `clef-omni` with the address ending in that name |
 | Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.1-27b` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 
 The hosts in this table are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether the model answered, and which one.
 
-Every answer says which exact model gave it. The Log shows it next to each decision, for example "Jev (jev-1.13.0) says leave it".
+Every answer says which exact model gave it. The Log shows it next to each decision, for example "Jev (jev-1.14.0) says leave it".
 
 ## What the second model checks
 
@@ -379,6 +389,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **GPT-6 Luna Decisions** | 30 percent |
 | **Clef** | 30 percent |
 | **Clef Flash** | 30 percent |
+| **Clef Omni** | 30 percent |
 | **Decider** | 30 percent |
 | **Mapika Decider 0.8B** | 30 percent |
 | **Mapika Decider 2B** | 30 percent |
@@ -555,8 +566,8 @@ The decision card, on the Log tab, shows the last reply the second model read. I
 Every answer also goes in the Log as one line:
 
 ```
-Jev (jev-1.13.0) says leave it: reply uses the same phrase of three or more words twice within a few sentences. 12%; ...
-Span (span-01-free) says refine: ... uses a stock phrase, such as a held breath or a shiver down a spine 71%; ...
+Jev (jev-1.14.0) says leave it: reply uses the same phrase of three or more words twice within a few sentences. 12%; ...
+Span (span-02) says refine: ... uses a stock phrase, such as a held breath or a shiver down a spine 71%; ...
 ```
 
 A reply left alone also says so where a refine that stood down would, with the highest percentage given. If the second model is letting through replies you would have refined, lower the line or add the check it is missing. If it refines replies that were fine, raise the line or drop the check that keeps firing.

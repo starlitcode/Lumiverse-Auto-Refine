@@ -6,9 +6,19 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.38.1
+## 1.39.0
 
 _2026-10-15_
+
+### Added
+
+- **Clef Omni.** A third choice under **Which Clef**: Cloudflare's Clef that also reads pictures and sound. Auto Refine sends it text only, the same as the others. It is on OpenRouter, NanoGPT and Cloudflare, and has its own **Refine when a check reaches**, 30 by default.
+
+### Changed
+
+- **Jev 1.14 exactly takes the place of Jev 1.13 exactly.** Under **Which Jev**, the exact choice is now Jev 1.14, on TypeSafe and NanoGPT. OpenRouter has no name for it yet, so it is not offered there, and the latest Jev is sent. To keep Jev 1.13, type its name in **Model name**: `jev-1.13.0` on TypeSafe, or `typesafe/jev-1.13` on NanoGPT and OpenRouter.
+- **Respan's own API sends Span-02.** With Respan as the host, Span-02 is sent, and **Which Span** is not shown. Span-01 is still on OpenRouter. To use Span-01 on Respan's own API, pick **Another address**, with `https://api.respan.ai/api/v1/scores` and `span-01-pro`.
+- **A new version takes the old one's place.** When a second model has a new version, the list holds the new one. An older one is reached by typing its name in **Model name**, for as long as its host serves it. See [When a model is renamed, or a new one comes out](docs/two-models.md#when-a-model-is-renamed-or-a-new-one-comes-out).
 
 ### Fixed
 

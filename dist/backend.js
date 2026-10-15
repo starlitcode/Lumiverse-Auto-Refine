@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.38.1';
+const VERSION = '1.39.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4243,10 +4243,12 @@ onSwipe) {
         return { ok: false, why: 'the message could not be saved: ' + ((e && e.message) || 'no reason given') };
     }
 }
+// model is the newest Jev exactly, on the hosts that serve it. An older one is
+// reached by typing its name in the Model name box.
 const JEV_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13', latest: '~typesafe/jev-latest', kind: 'decisions' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.13', latest: 'typesafe/jev-latest', kind: 'decisions' },
-    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.13.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
+    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', latest: '~typesafe/jev-latest', kind: 'decisions' },
+    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.14', latest: 'typesafe/jev-latest', kind: 'decisions' },
+    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.14.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
 };
 const SPAN_HOSTS = {
     openrouter: {
@@ -4255,9 +4257,9 @@ const SPAN_HOSTS = {
         kind: 'decisions',
     },
     respan: {
-        url: 'https://api.respan.ai/api/v1/scores',
-        models: { free: 'span-01-free', full: 'span-01-pro' },
-        kind: 'scores',
+        url: 'https://api.respan.ai/api/v1/decisions',
+        models: { free: 'span-02' },
+        kind: 'decisions',
     },
 };
 // Mercury Decide, from Inception. OpenRouter serves it free, and without the
@@ -4302,25 +4304,26 @@ const LUNA_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
     openai: { url: 'https://api.openai.com/v1/decisions', model: 'gpt-6-luna', kind: 'predicates' },
 };
-// Clef, from Cloudflare, comes in two: Clef, and Clef Flash, which is smaller
-// and faster. Both take Jev's request. Cloudflare's own address holds the
+// Clef, from Cloudflare, comes in three: Clef, Clef Flash, which is smaller
+// and faster, and Clef Omni, which also reads pictures and sound. All three
+// take Jev's request. Cloudflare's own address holds the
 // account ID and the model name, which are put in for {account} and {model}
 // when the call is made, and its answer comes back inside `result`. NanoGPT
 // serves both too.
 const CLEF_HOSTS = {
     openrouter: {
         url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash' },
+        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash', omni: 'cloudflare/clef-omni' },
         kind: 'decisions',
     },
     nanogpt: {
         url: 'https://nano-gpt.com/api/v1/decisions',
-        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash' },
+        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash', omni: 'cloudflare/clef-omni' },
         kind: 'decisions',
     },
     cloudflare: {
         url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}',
-        models: { full: 'clef', flash: 'clef-flash' },
+        models: { full: 'clef', flash: 'clef-flash', omni: 'clef-omni' },
         kind: 'decisions',
     },
 };
@@ -4473,7 +4476,11 @@ const SIZE_PICKS = {
     clef: {
         setting: 'clefTier',
         standard: 'full',
-        sizes: { full: { name: 'Clef', line: 'clefOver' }, flash: { name: 'Clef Flash', line: 'clefFlashOver' } },
+        sizes: {
+            full: { name: 'Clef', line: 'clefOver' },
+            flash: { name: 'Clef Flash', line: 'clefFlashOver' },
+            omni: { name: 'Clef Omni', line: 'clefOmniOver' },
+        },
     },
     mapika: {
         setting: 'mapikaSize',
@@ -4539,8 +4546,9 @@ const SECOND_MODELS = {
             // A name typed in wins, so a host that renames Jev needs no update here.
             if (ownNames.jev)
                 return ownNames.jev;
+            // A host with no exact name is sent its latest.
             const moving = judgeVersion === 'preview' ? h.preview || h.latest : judgeVersion === 'latest' ? h.latest : '';
-            return moving || h.model;
+            return moving || h.model || h.latest;
         },
     },
     span: {
@@ -5329,8 +5337,8 @@ function applyRules(s) {
         ownNames[who] = String(raw == null ? '' : raw).trim().slice(0, 200);
     }
     // Settings saved before Jev had a Model name box of its own: a typed name was
-    // a choice under Which Jev, sent only with that choice picked, and Jev 1.13
-    // when it was empty. The panel moves these across when it loads; this covers
+    // a choice under Which Jev, sent only with that choice picked, and the exact
+    // Jev when it was empty. The panel moves these across when it loads; this covers
     // a backend reading them before it does.
     if (s.judgeVersion === 'own') {
         judgeVersion = 'exact';

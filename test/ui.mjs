@@ -1820,14 +1820,15 @@ console.log("\na model name of your own for every second model");
     ok("and handed to the backend", kept.sent === "liquid/d1-renamed", JSON.stringify(kept));
   });
   // A Jev name saved with "A name I type" picked moves into Jev's box, and the
-  // choice becomes Jev 1.13, which is what an empty box under it sent. A name
+  // choice becomes the exact Jev, which is what an empty box under it sent. A name
   // saved under another choice was never sent, and is not picked up.
   for (const [saved, want] of [
     [{ judgeVersion: "own", judgeName: "typesafe/jev-renamed" }, { name: "typesafe/jev-renamed", version: "exact" }],
     [{ judgeVersion: "own", judgeName: "" }, { name: "", version: "exact" }],
     [{ judgeVersion: "latest", judgeName: "typesafe/jev-left-over" }, { name: "", version: "latest" }],
   ]) {
-    await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", ...saved } }, async (page) => {
+    // On TypeSafe, which offers the exact Jev, so the list shows what is kept.
+    await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", judgeHost: "typesafe", ...saved } }, async (page) => {
       await goTab(page, "Model");
       await settle(page);
       const got = await page.evaluate(() => ({
@@ -2172,8 +2173,9 @@ console.log("\nSpan, the other second model");
     ok("and the link is Span's alone", span.links.length === 1 && span.links[0] === "What is Span? https://www.respan.ai/blog/introducing-span-1", JSON.stringify(span.links));
 
     await pick("judgeHost", "respan");
+    await closed(page);
     const respan = await read();
-    ok("on Respan, the Lite without the free limits is not offered", respan.tiers.join() === "free,full", JSON.stringify(respan.tiers));
+    ok("on Respan, which serves Span-02, Which Span is not shown", !respan.tierShown, JSON.stringify(respan));
     ok("and the key is Respan's", respan.key === "Key for Respan", String(respan.key));
     ok("the http switch is only for another address", !(await page.evaluate(() => {
       const n = document.querySelector('#drawer [data-arf-row="judgeHttpOk"]');
@@ -2208,7 +2210,7 @@ console.log("\nSpan, the other second model");
       url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
       model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
     }));
-    ok("with Span, the empty boxes show a Span example", /span/.test(spanEx.url) && spanEx.model === "span-01-pro" && !/jev/.test(spanEx.url + spanEx.model), JSON.stringify(spanEx));
+    ok("with Span, the empty boxes show a Span example", /span/.test(spanEx.url) && spanEx.model === "span-02" && !/jev/.test(spanEx.url + spanEx.model), JSON.stringify(spanEx));
     const addr = await page.evaluate(async () => {
       const vis = (sel) => {
         const n = document.querySelector(sel);
@@ -2520,11 +2522,17 @@ console.log("\none model or two");
     await settle(page);
     const onTs = await versions();
     ok("TypeSafe offers the preview", onTs.values.indexOf("preview") >= 0 && onTs.chosen === "latest", JSON.stringify(onTs));
+    const exactLabel = await page.evaluate(() => {
+      const o = [...document.querySelector('#drawer [data-arf-field="judgeVersion"]').options].find((x) => x.value === "exact");
+      return o ? o.textContent : null;
+    });
+    ok("the exact choice is the newest Jev, 1.14", exactLabel === "Jev 1.14 exactly", String(exactLabel));
     await pick("judgeVersion", "preview");
     await pick("judgeHost", "openrouter");
     await settle(page);
     const onOr = await versions();
     ok("a preview picked on TypeSafe shows as the latest on OpenRouter", onOr.values.indexOf("preview") < 0 && onOr.chosen === "latest", JSON.stringify(onOr));
+    ok("OpenRouter has no exact Jev, so it offers only the latest", onOr.values.join() === "latest", JSON.stringify(onOr));
     await pick("judgeHost", "typesafe");
     await settle(page);
     const again = await versions();

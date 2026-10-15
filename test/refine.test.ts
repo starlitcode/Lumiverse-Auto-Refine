@@ -794,19 +794,19 @@ describe("two models: Jev reads the reply first", () => {
 
   // Which Jev answers, per host. The latest is each host's own alias where it
   // has published one, and the exact version is pinned. Settings saved with
-  // "A name I type" picked send the name typed under it, and Jev 1.13 when it
-  // was empty.
+  // "A name I type" picked send the name typed under it, and the exact Jev
+  // when it was empty. A host with no exact Jev of its own is sent its latest.
   for (const [host, version, name, url, model] of [
-    ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
+    ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "~typesafe/jev-latest"],
     ["typesafe", "latest", "", "https://api.typesafe.ai/v1/systemone", "jev-latest"],
-    ["typesafe", "exact", "", "https://api.typesafe.ai/v1/systemone", "jev-1.13.0"],
+    ["typesafe", "exact", "", "https://api.typesafe.ai/v1/systemone", "jev-1.14.0"],
     ["typesafe", "preview", "", "https://api.typesafe.ai/v1/systemone", "jev-preview"],
     ["openrouter", "preview", "", "https://openrouter.ai/api/alpha/decisions", "~typesafe/jev-latest"],
     ["nanogpt", "preview", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-latest"],
     ["nanogpt", "latest", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-latest"],
-    ["nanogpt", "exact", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-1.13"],
+    ["nanogpt", "exact", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-1.14"],
     ["nanogpt", "own", "typesafe/jev-renamed", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-renamed"],
-    ["openrouter", "own", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.13"],
+    ["openrouter", "own", "", "https://openrouter.ai/api/alpha/decisions", "~typesafe/jev-latest"],
   ]) {
     test(host + ", " + version + (name ? " " + name : "") + ": " + model, async () => {
       const h = await keyed({ judgeHost: host, judgeVersion: version, judgeName: name }, { jev: says([10]) });
@@ -1680,6 +1680,9 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef-flash", { clefTier: "flash" }],
     ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-flash", "clef-flash", { clefTier: "flash" }],
     ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef-flash", { clefTier: "flash" }],
+    ["clef", "openrouter", "https://openrouter.ai/api/alpha/decisions", "cloudflare/clef-omni", { clefTier: "omni" }],
+    ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-omni", "clef-omni", { clefTier: "omni" }],
+    ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef-omni", { clefTier: "omni" }],
     ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b"],
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
     ["mapika", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "llmtech/decider-2b-fp8"],
@@ -1771,6 +1774,7 @@ describe("two models: Jev reads the reply first", () => {
     ["luna", "lunaOver"],
     ["clef", "clefOver"],
     ["clef", "clefFlashOver", { clefTier: "flash" }],
+    ["clef", "clefOmniOver", { clefTier: "omni" }],
     ["decider", "deciderOver"],
     ["solar", "solarFlashOver", { solarTier: "flash" }],
     ["mapika", "mapikaSmallOver", { mapikaSize: "0.8b" }],
@@ -1782,7 +1786,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, deciderOver: 10, solarFlashOver: 10, mapikaSmallOver: 10, mapikaOver: 10, mapikaLargeOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, solarFlashOver: 10, mapikaSmallOver: 10, mapikaOver: 10, mapikaLargeOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
@@ -2031,22 +2035,25 @@ describe("two models: Jev reads the reply first", () => {
     return { status: 200, body: JSON.stringify({ model: b.model, results: results }) };
   };
 
-  for (const [tier, model] of [
-    ["free", "span-01-free"],
-    ["full", "span-01-pro"],
-    ["lite", "span-01-free"],
-  ]) {
-    test("Span on Respan, " + tier + ": " + model, async () => {
-      const h = await keyed({ judgeWho: "span", judgeHost: "respan", spanTier: tier }, { jev: scoresSay([10]) });
+  // Respan's own API serves Span-02, with Jev's request, whichever kind of
+  // Span was picked on OpenRouter.
+  for (const tier of ["free", "full", "lite"]) {
+    test("Span on Respan, " + tier + ": span-02", async () => {
+      const h = await keyed({ judgeWho: "span", judgeHost: "respan", spanTier: tier }, { jev: says([10]) });
       await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
-      expect(h.jevCalls[0].url).toBe("https://api.respan.ai/api/v1/scores");
-      expect(h.jevCalls[0].body.model).toBe(model);
+      expect(h.jevCalls[0].url).toBe("https://api.respan.ai/api/v1/decisions");
+      expect(h.jevCalls[0].body.model).toBe("span-02");
+      expect(h.jevCalls[0].body.questions).toBeDefined();
     });
   }
 
+  // Span-01 on Respan's own API is reached through Another address, at its
+  // scores address, which takes a scores request.
+  const SCORES = { judgeWho: "span", judgeHost: "custom", judgeUrl: "https://api.respan.ai/api/v1/scores", judgeModel: "span-01-pro" };
+
   test("a scores request carries the reply as the assistant's turn and each check as a behavior", async () => {
-    const h = await keyed({ judgeWho: "span", judgeHost: "respan" }, { jev: scoresSay([10]) });
+    const h = await keyed(SCORES, { jev: scoresSay([10]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     const call = h.jevCalls[0];
@@ -2061,7 +2068,7 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   test("and the chance each behavior is present is its score", async () => {
-    const h = await keyed({ judgeWho: "span", judgeHost: "respan" }, { jev: scoresSay([10, 72]) });
+    const h = await keyed(SCORES, { jev: scoresSay([10, 72]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     expect(said(h)[0].failed).toBe(false);
@@ -2096,7 +2103,7 @@ describe("two models: Jev reads the reply first", () => {
     expect(said(h)[0].scores.map((x: any) => x.pct)).toEqual([10, 60]);
   });
 
-  test("worn phrases go to Respan written out in the behavior", async () => {
+  test("worn phrases go to Respan's scores address written out in the behavior", async () => {
     const worn: Msg[] = [
       { id: "m0", role: "assistant", content: "The gate stood open and the cold wind bit at her face." },
       { id: "m1", role: "user", content: "i go on" },
@@ -2104,7 +2111,7 @@ describe("two models: Jev reads the reply first", () => {
       { id: "m3", role: "user", content: "i keep going" },
       { id: "m4", role: "assistant", content: "She went through the gate, and the cold wind bit at her again." },
     ];
-    const h = await keyed({ judgeWho: "span", judgeHost: "respan", wornOn: true, wornLeast: 2 }, { jev: scoresSay([10]) }, worn);
+    const h = await keyed({ ...SCORES, wornOn: true, wornLeast: 2 }, { jev: scoresSay([10]) }, worn);
     await h.ended({ chatId: "c1", messageId: "m4", generationId: "g1" });
     await wait(50);
     const worned = h.jevCalls[0].body.behaviors.find((b: any) => b.id === "worn");
@@ -2200,8 +2207,8 @@ describe("two models: Jev reads the reply first", () => {
     expect(Object.keys(h.jevCalls[0].body.questions)).toEqual(["check_1"]);
   });
 
-  test("on Respan, the reply before it is the turn ahead of the reply", async () => {
-    const h = await keyed({ judgeWho: "span", judgeHost: "respan", judgeBefore: true, judgeChecks: BEATS }, { jev: scoresSay([10]) });
+  test("on Respan's scores address, the reply before it is the turn ahead of the reply", async () => {
+    const h = await keyed({ ...SCORES, judgeBefore: true, judgeChecks: BEATS }, { jev: scoresSay([10]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(50);
     const body = h.jevCalls[0].body;

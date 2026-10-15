@@ -107,6 +107,11 @@ Two skills are available. Load them before starting work.
   A size with its own page has its own **What is** link. All the sizes share
   one **Model name** box, which shows the name for the one picked. A host
   offers a size when it has a built-in name for it.
+- When a second model has a new version, the new one takes the old one's
+  place, under the same choice. The old one is not kept as a choice of its
+  own, so the code holds no names a host has stopped serving. A user who wants
+  the old one types its name in **Model name**. The changelog and
+  `docs/two-models.md` say which name to type.
 - Never leave out a decision model because it is paid. Paid and free models
   are added the same way.
 - A paid second model that cannot be tested, because there is no key with
