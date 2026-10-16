@@ -75,7 +75,7 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   // Nace.AI's page for Drex is its model card on Hugging Face.
   { value: "drex", name: "Drex", from: "Nace.AI", about: "https://huggingface.co/nace-ai/drex-v2.0" },
   { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
-  { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://docs.subq.ai/" },
+  { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://subq.ai/introducing-subq-snap" },
   // A decision model with no entry of its own, reached at an address the
   // reader types. It has no maker and no page, and its own line.
   { value: "other", name: "Your model", from: "", about: "", label: "A model not in this list" },

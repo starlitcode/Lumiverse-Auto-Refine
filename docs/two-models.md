@@ -20,7 +20,7 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
 | **Drex** | Nace.AI | Paid, per call | [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
-| **SubQ Snap** | Subquadratic | Paid, per call | [SubQ: Docs](https://docs.subq.ai/) |
+| **SubQ Snap** | Subquadratic | Paid, per call | [Introducing SubQ Snap](https://subq.ai/introducing-subq-snap) |
 
 All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked. Where the maker has a page for one size, such as Clef Flash, that size links to it.
 
