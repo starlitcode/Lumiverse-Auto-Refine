@@ -10118,6 +10118,64 @@ console.log("\na built-in prompt cannot be typed into");
     ok("and both of them go to the backend to run", !!sent && sent.passes === 2, JSON.stringify(sent));
   });
 
+  // A pass whose preset names a model setup runs on it, with the switch on.
+  // The panel resolves the setup and sends its values with the pass. Off, or
+  // for a preset with no setup, the pass is sent with no model and runs on the
+  // Model tab. Checked at a phone width and a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(
+      browser,
+      {
+        viewport,
+        touch,
+        saved: { passMode: "many", passNames: ["Quick", "A judge"] },
+        presets: [{
+          name: "Quick",
+          at: 1,
+          settings: { blocks: [{ id: "t", name: "Turn", on: true, role: "user", text: "Fix typos.\n{{message}}" }] },
+          setup: "Small",
+        }],
+        setups: [{
+          name: "Small",
+          at: 1,
+          settings: { connectionId: "conn-small", thinkingMode: "off", thinkingEffort: "medium", timeoutSecs: 60, samplers: { temperature: 0.2 }, costIn: 0.1, costOut: 0.4 },
+        }],
+      },
+      async (page) => {
+        await goTab(page, "Limits");
+        const out = await page.evaluate(async () => {
+          const passesNow = () => {
+            const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+            return (last && last.settings && last.settings.passes) || [];
+          };
+          const box = document.querySelector('#drawer [data-arf-field="passOwnModel"]');
+          if (!box) return { err: "no switch" };
+          const r = box.getBoundingClientRect();
+          const drawer = document.getElementById("drawer").getBoundingClientRect();
+          const before = passesNow().map((p) => p.model || null);
+          box.click();
+          await new Promise((res) => setTimeout(res, 400));
+          const after = passesNow().map((p) => p.model || null);
+          return {
+            inside: r.right <= drawer.right + 1 && r.left >= drawer.left - 1,
+            before,
+            after,
+          };
+        });
+        ok(label + ": the switch for a model per pass is there, inside the panel",
+          !out.err && out.inside, JSON.stringify(out));
+        ok(label + ": off, no pass is sent with a model of its own",
+          !out.err && out.before.length === 2 && out.before.every((m) => m === null), JSON.stringify(out.before));
+        ok(label + ": on, the pass whose preset names a setup is sent with that setup",
+          !out.err && out.after[0] && out.after[0].setup === "Small" && out.after[0].connectionId === "conn-small" &&
+            out.after[0].thinkingMode === "off" && out.after[0].costIn === 0.1,
+          JSON.stringify(out.after));
+        ok(label + ": and a built-in prompt, which names none, is sent without one",
+          !out.err && out.after[1] === null, JSON.stringify(out.after));
+      },
+    );
+  }
+
   await inTab(browser, { saved: { passMode: "many", passNames: "A judge\nMine" } }, async (page) => {
     await goTab(page, "Limits");
     const shown = await page.evaluate(() => document.querySelector('#drawer textarea[data-arf-field="passNames"]').value);
@@ -12226,7 +12284,7 @@ console.log("\nthe rows that only appear when switched on, at both sizes");
       await goTab(page, "Limits");
       const out = await page.evaluate(() => {
         const drawer = document.getElementById("drawer");
-        const rows = ["passMode", "passNames", "wornOn", "wornBack", "wornLeast", "wornFine"];
+        const rows = ["passMode", "passNames", "passOwnModel", "wornOn", "wornBack", "wornLeast", "wornFine"];
         const missing = [];
         const spilling = [];
         const small = [];

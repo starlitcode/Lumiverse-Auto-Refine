@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.42.0
+
+_2026-10-16_
+
+### Added
+
+- **A different model for each pass.** With several passes, **Each pass uses its preset's model setup**, on the Limits tab, runs each pass on the model setup its preset is linked to. That covers the connection, thinking, timeout, samplers and prices. For example, a quick pass with thinking off on a cheap model, then a prose pass with thinking on. A pass with no linked setup uses the Model tab. It is off by default. See [A different model for each pass](docs/prompt.md#a-different-model-for-each-pass).
+- **The cost of a refine follows each pass's model.** The cost on the Log tab, and the one under **See what gets sent**, use the prices of the model setup each pass ran on.
+
+---
+
 ## 1.41.2
 
 _2026-10-16_

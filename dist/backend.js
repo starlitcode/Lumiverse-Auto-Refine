@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.41.2';
+const VERSION = '1.42.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -42,6 +42,11 @@ let connectionId = ''; // empty means the reader's active connection
 let thinkingMode = 'off'; // off | inherit | custom
 let thinkingEffort = 'medium'; // only read when thinkingMode is custom
 let timeoutSecs = 240;
+// What the refine model charges, per million tokens in and out. Used to price
+// a refine whose passes run on different models, where one price for all of
+// it would be wrong.
+let costIn = 0;
+let costOut = 0;
 // Who these settings came from, which is who the automatic pass runs as.
 //
 // A generation event carries the generation, the chat, the message, the content
@@ -2373,6 +2378,24 @@ let wornFine = [];
 // One pass or several. One is the default and what every refine did before this
 // existed. Several walks a list, each pass handed what the one before it wrote.
 let manyPasses = false;
+// A model setup as the panel sent it, checked the way applyRules checks the
+// Model tab, or null when there is none.
+function passModelOf(raw) {
+    if (!raw || typeof raw !== 'object')
+        return null;
+    const secs = Number(raw.timeoutSecs);
+    const price = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+    return {
+        setup: String(raw.setup == null ? '' : raw.setup),
+        connectionId: String(raw.connectionId == null ? '' : raw.connectionId),
+        thinkingMode: raw.thinkingMode === 'inherit' || raw.thinkingMode === 'custom' ? raw.thinkingMode : 'off',
+        thinkingEffort: EFFORTS.indexOf(String(raw.thinkingEffort)) >= 0 ? String(raw.thinkingEffort) : 'medium',
+        timeoutSecs: Number.isFinite(secs) ? secs : 240,
+        samplers: raw.samplers && typeof raw.samplers === 'object' && !Array.isArray(raw.samplers) ? raw.samplers : {},
+        costIn: price(raw.costIn),
+        costOut: price(raw.costOut),
+    };
+}
 let passList = [];
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
 // softened rewrite and an answer cut off mid-write are all the model having a
@@ -2819,9 +2842,13 @@ async function countTokens(text, userId) {
 // What the refine running right now has put through the model, added up across
 // however many asks it took. Keyed by account, because one backend serves every
 // account on the server and a shared total would report somebody else's spend.
+//
+// cost is priced call by call, with the prices of the model that answered,
+// since the passes of one refine can run on models that charge different
+// amounts.
 const usedRun = new Map();
 function startUsed(userId) {
-    usedRun.set(String(userId || ''), { sent: 0, back: 0, counted: true });
+    usedRun.set(String(userId || ''), { sent: 0, back: 0, counted: true, cost: 0 });
 }
 // The same count, carrying the news of where the number came from. A count and
 // a guess are different things to act on, so anything that puts a token figure
@@ -3024,13 +3051,16 @@ async function gatherLore(chatId, userId) {
 // the reader saying "whatever I already set", which is why it sends nothing at
 // all rather than a value that would override it.
 const EFFORTS = ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-function reasoningFor() {
-    if (thinkingMode === 'off')
+// A pass with a model setup of its own is asked with that setup's thinking.
+function reasoningFor(model) {
+    const mode = model ? model.thinkingMode : thinkingMode;
+    const effort = model ? model.thinkingEffort : thinkingEffort;
+    if (mode === 'off')
         return { source: 'off' };
-    if (thinkingMode === 'custom')
+    if (mode === 'custom')
         return {
             source: 'custom',
-            effort: EFFORTS.indexOf(thinkingEffort) >= 0 ? thinkingEffort : 'medium',
+            effort: EFFORTS.indexOf(effort) >= 0 ? effort : 'medium',
         };
     return null;
 }
@@ -3054,10 +3084,11 @@ const SAMPLERS = [
     { id: 'presence_penalty', min: -2, max: 2 },
     { id: 'repetition_penalty', min: 0, max: 2 },
 ];
-function cleanSamplers() {
+function cleanSamplers(model) {
     const out = {};
     let any = false;
-    const src = samplers && typeof samplers === 'object' ? samplers : {};
+    const from = model ? model.samplers : samplers;
+    const src = from && typeof from === 'object' ? from : {};
     for (const s of SAMPLERS) {
         const raw = src[s.id];
         // Blank is the reader leaving it to the connection, and is not the same as
@@ -3201,11 +3232,13 @@ group,
 // The note that goes with an ask made again after a refusal, a softened
 // rewrite or an empty answer. Added after the whole prompt, so it is the
 // last thing the model reads.
-note) {
+note, 
+// A pass's own model setup. Without one, the Model tab's settings are used.
+model) {
     const controller = typeof globalThis.AbortController === 'function'
         ? new globalThis.AbortController()
         : null;
-    const secs = Number(timeoutSecs);
+    const secs = Number(model ? model.timeoutSecs : timeoutSecs);
     // Zero is off, and waits for as long as the model takes. A reasoning model on
     // a high effort level can think for minutes before it writes a character, and
     // a cap that fires mid-thought throws away work that was about to arrive.
@@ -3255,6 +3288,8 @@ note) {
                     return;
                 run.sent += sent.n;
                 run.back += back.n;
+                run.cost +=
+                    (sent.n / 1e6) * (model ? model.costIn : costIn) + (back.n / 1e6) * (model ? model.costOut : costOut);
                 if (!sent.counted || !back.counted)
                     run.counted = false;
                 tell(userId, {
@@ -3263,6 +3298,7 @@ note) {
                     sent: run.sent,
                     back: run.back,
                     counted: run.counted,
+                    cost: run.cost,
                 });
             })
                 .catch(() => { });
@@ -3270,7 +3306,7 @@ note) {
         // Only the values the reader actually changed. An empty object is left out
         // so the connection's own preset stays in charge, which is what somebody
         // who never opened the sampler section expects.
-        let params = cleanSamplers();
+        let params = cleanSamplers(model);
         if (params && drop && drop.length) {
             const kept = {};
             for (const key of Object.keys(params))
@@ -3283,8 +3319,9 @@ note) {
         // The connection the reader picked for refining, which is the point of
         // being able to pick one: a rewrite does not need the model you roleplay
         // with, and running it on a cheaper one is most of the saving.
-        if (connectionId)
-            req.connection_id = connectionId;
+        const useConnection = model ? model.connectionId : connectionId;
+        if (useConnection)
+            req.connection_id = useConnection;
         // Who the call is for. Without it an operator-scoped install refuses the
         // whole request with "userId is required for operator-scoped extensions",
         // which is a refusal rather than a fault and read as a broken rule.
@@ -3294,7 +3331,7 @@ note) {
         // extended thinking on every reply is the cost nobody notices until the
         // bill arrives. Inherit leaves the field off entirely, which is what hands
         // the question back to the connection's own settings.
-        const think = reasoningFor();
+        const think = reasoningFor(model);
         if (think && !(drop && drop.indexOf('reasoning') >= 0))
             req.reasoning = think;
         if (controller)
@@ -3374,15 +3411,15 @@ note) {
         // The provider turned the request down over a field it does not take. Ask
         // again without the fields it named, once: a second refusal is a real one.
         if (!drop) {
-            const sentParams = cleanSamplers();
-            const sent = (sentParams ? Object.keys(sentParams) : []).concat(reasoningFor() ? ['reasoning'] : []);
+            const sentParams = cleanSamplers(model);
+            const sent = (sentParams ? Object.keys(sentParams) : []).concat(reasoningFor(model) ? ['reasoning'] : []);
             const bad = rejectedFields(String(msg), sent);
             if (bad.length) {
                 say('warn', 'the connection refused ' + bad.join(', ') + ', asking again without');
                 if (timer != null)
                     clearTimeout(timer);
                 dropRun(userId, controller);
-                return askModel(text, isUser, scene, userId, use, bad, group, note);
+                return askModel(text, isUser, scene, userId, use, bad, group, note, model);
             }
         }
         if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
@@ -3458,7 +3495,7 @@ async function latestReplyId(chatId, role = 'assistant') {
 // passing, the last check that failed is the answer, so the refusal says what
 // went wrong. With every call failing, the last error is, so a rate limit is
 // waited out the same way as for one rewrite.
-async function askAtOnce(count, input, isUser, scene, userId, use, note) {
+async function askAtOnce(count, input, isUser, scene, userId, use, note, model) {
     const group = { controllers: new Set() };
     say('info', 'writing ' + count + ' rewrites at once');
     return new Promise((resolve) => {
@@ -3488,7 +3525,7 @@ async function askAtOnce(count, input, isUser, scene, userId, use, note) {
                 failed = v;
         };
         for (let i = 0; i < count; i++) {
-            askModel(input, isUser, scene, userId, use, undefined, group, note)
+            askModel(input, isUser, scene, userId, use, undefined, group, note, model)
                 .then((a) => {
                 if (over)
                     return;
@@ -3873,6 +3910,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             if (chain.length > 1)
                 steps.push({
                     name: pass.name,
+                    setup: pass.model ? pass.model.setup : '',
                     before: unshield(carried, armed.parts).text,
                     after: unshield(got.text, armed.parts).text,
                 });
@@ -4008,7 +4046,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             }
             tell(userId, {
                 type: 'refine_progress',
-                stage: thinkingMode === 'off' ? 'asking' : 'thinking',
+                stage: (pass.model ? pass.model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
                 atOnce: refineAtOnce > 1 ? refineAtOnce : 0,
             });
             // With Several rewrites at once on, the ask is several at the same time,
@@ -4016,12 +4054,12 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             let answer;
             let ready = null;
             if (refineAtOnce > 1) {
-                const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note);
+                const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note, pass.model);
                 answer = { content: '', error: got.verdict ? '' : got.error };
                 ready = got.verdict;
             }
             else
-                answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note);
+                answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, pass.model);
             if (answer.error) {
                 // The provider would not take the call. Waiting is what fixes that, and
                 // nothing has been spent, so it is worth waiting for: a free tier meters
@@ -5450,6 +5488,8 @@ function applyRules(s) {
     // Not `|| 90`. Zero is a setting here, meaning never give up, and the
     // short form would have turned it back into a minute and a half.
     timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;
+    costIn = Number.isFinite(Number(s.costIn)) && Number(s.costIn) > 0 ? Number(s.costIn) : 0;
+    costOut = Number.isFinite(Number(s.costOut)) && Number(s.costOut) > 0 ? Number(s.costOut) : 0;
     maxGrowthPct = Number(s.maxGrowthPct);
     maxGrowthPct = Number.isFinite(maxGrowthPct) ? maxGrowthPct : 60;
     minShrinkPct = Number(s.minShrinkPct);
@@ -5619,6 +5659,7 @@ function applyRules(s) {
             .map((x, i) => ({
             name: String(x.name == null || !String(x.name).trim() ? 'Pass ' + (i + 1) : x.name),
             blocks: x.blocks,
+            model: passModelOf(x.model),
         }))
             .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
             .slice(0, CHAIN_MAX)
@@ -6370,10 +6411,14 @@ async function onPanel(payload, userId) {
                         passage: passage.n,
                         parts: blockParts.map((b, i) => ({ name: b.name, tokens: tokens.per[i] || 0 })),
                     },
-                    parameters: cleanSamplers(),
+                    parameters: cleanSamplers(chain ? chain[0].model : null),
                     wrapOutput: wrapOutput,
-                    connectionId: connectionId || '',
-                    reasoning: reasoningFor(),
+                    connectionId: (chain && chain[0].model ? chain[0].model.connectionId : connectionId) || '',
+                    reasoning: reasoningFor(chain ? chain[0].model : null),
+                    // The model setup the first pass runs on, and its prices, so the
+                    // panel prices this request at what that model charges.
+                    setup: chain && chain[0].model ? chain[0].model.setup : '',
+                    prices: chain && chain[0].model ? { in: chain[0].model.costIn, out: chain[0].model.costOut } : null,
                     // A preview never asks the second model, so a block holding
                     // {{checks_found}} comes out empty here and is left out, where a real
                     // refine it read would

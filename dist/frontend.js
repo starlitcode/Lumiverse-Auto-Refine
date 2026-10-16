@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.41.2";
+const VERSION = "1.42.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -251,7 +251,7 @@ const PARTS = [
         id: "prompt",
         label: "Your prompt",
         what: "Every block, and whether a refine runs one pass or several.",
-        keys: ["blocks", "userBlocks", "presetPick", "presetPickYours", "passMode", "passNames"],
+        keys: ["blocks", "userBlocks", "presetPick", "presetPickYours", "passMode", "passNames", "passOwnModel"],
     },
     {
         id: "context",
@@ -736,6 +736,9 @@ const CONFIG = {
     // one before it wrote. Names rather than copies of the blocks, so editing a
     // preset changes the pass that uses it.
     passNames: [],
+    // With several passes, whether a pass whose preset names a model setup runs
+    // on that setup. Off, every pass runs on the Model tab's settings.
+    passOwnModel: false,
     keepOriginal: true,
     keepPutBack: false,
     confirmBeforeSave: false,
@@ -2923,6 +2926,14 @@ const LIMIT_FIELDS = [
         hint: "One preset name per line, up to six, run top to bottom. A name that matches nothing is skipped. Each pass is one model call, so six passes cost six times as much.",
     },
     {
+        key: "passOwnModel",
+        label: "Each pass uses its preset's model setup",
+        type: "bool",
+        needs: { key: "passMode", is: "many" },
+        under: true,
+        hint: "Off by default. On, a pass whose preset has a model setup runs on that setup. The other passes use the Model tab.",
+    },
+    {
         key: "wornOn",
         label: "Find phrases this chat has worn out",
         type: "bool",
@@ -3564,6 +3575,7 @@ export function setup(ctx, overrides) {
     // reads it to turn a pass's name into its blocks and the first settings send
     // can happen before that code has run.
     let presets = [];
+    let setups = [];
     function forBackend() {
         const out = {};
         for (const k of Object.keys(cfg))
@@ -3599,7 +3611,21 @@ export function setup(ctx, overrides) {
                 : builtIn
                     ? usable(builtIn.blocks)
                     : [];
-            return { name: name, on: list.length > 0, blocks: list };
+            // The model setup the preset names, sent as its values so the backend
+            // runs this pass on it. Only with the switch on, and only when that
+            // setup is saved here. A built-in prompt names none.
+            const wants = cfg.passOwnModel && mineNamed ? String(mineNamed.setup || "") : "";
+            const setup = wants ? setups.find((x) => x.name === wants) : null;
+            const model = setup
+                ? (() => {
+                    const one = { setup: setup.name };
+                    for (const k of SETUP_KEYS)
+                        if (k in setup.settings)
+                            one[k] = setup.settings[k];
+                    return one;
+                })()
+                : null;
+            return { name: name, on: list.length > 0, blocks: list, model: model };
         })
             .filter((one) => one.blocks.length > 0);
         return out;
@@ -4583,6 +4609,8 @@ export function setup(ctx, overrides) {
     let previewRaw = false;
     // What the last refine put through the model. Sent on after the answer rather
     // than with it, so it lands a moment later and stays until the next one.
+    // cost is priced by the backend, call by call, at the prices of the model
+    // that answered. Null from a backend that does not send it.
     let lastUsed = null;
     // The passes the last chain made, each with what it was handed and what it
     // gave back. Empty for a single pass, which has nothing to break down: the
@@ -10462,24 +10490,31 @@ export function setup(ctx, overrides) {
         // known until it arrives, so it is taken as the same size as the passage:
         // a rewrite is the passage said better, and the length limits are what keep
         // that true.
-        if (hasPrices()) {
+        // A first pass on a model setup of its own is priced at that setup's
+        // prices, not the Model tab's.
+        const own = preview.prices && typeof preview.prices === "object" ? preview.prices : null;
+        const priceIn = own ? Number(own.in) || 0 : Number(cfg.costIn) || 0;
+        const priceOut = own ? Number(own.out) || 0 : Number(cfg.costOut) || 0;
+        if (priceIn > 0 || priceOut > 0) {
             // The passage is counted on its own and comes down with the request, so
             // this does not depend on where in the order the block holding it sits.
             const back = tok && Number(tok.passage) > 0 ? Number(tok.passage) : Math.ceil(chars / 4);
-            const one = costOf(totalTokens, back);
+            const one = (totalTokens / 1e6) * priceIn + (back / 1e6) * priceOut;
             // Which half of the sum is real. One price left at 0 is not a cost of
             // nothing on that side, it is a price nobody has given, and a total that
             // leaves half out is worse than one that says what it covers.
-            const covers = Number(cfg.costIn) <= 0
+            const covers = priceIn <= 0
                 ? " Only what the model writes back is priced, since the input price is 0."
-                : Number(cfg.costOut) <= 0
+                : priceOut <= 0
                     ? " Only what is sent is priced, since the output price is 0."
                     : " What comes back is taken as the same size as the passage.";
             wrap.appendChild(note("About " +
                 money(one) +
                 " for this refine, or " +
                 money(one * 100) +
-                " across a hundred replies, at the prices on the Model tab." +
+                " across a hundred replies, at the prices " +
+                (own ? "in the model setup " + String(preview.setup || "") : "on the Model tab") +
+                "." +
                 covers));
         }
         // Where the tokens are going, block by block. This is the part worth having
@@ -10511,6 +10546,8 @@ export function setup(ctx, overrides) {
         // The rest of the call, which is part of what gets sent and is otherwise
         // spread across two other tabs.
         const extras = [];
+        if (preview.setup)
+            extras.push("Model setup: " + String(preview.setup) + ", for pass 1");
         extras.push("Connection: " +
             (preview.connectionId
                 ? (connections.find((c) => c.id === preview.connectionId) || {}).name ||
@@ -11265,8 +11302,11 @@ export function setup(ctx, overrides) {
                     tokenWord(lastUsed.back, lastUsed.counted) +
                     " output",
             ]);
-            if (hasPrices())
-                rows.push(["Last refine cost", "about " + money(costOf(lastUsed.sent, lastUsed.back))]);
+            // The backend's figure where it sent one, since passes on different model
+            // setups are priced at what each of those models charges.
+            const spent = lastUsed.cost != null ? lastUsed.cost : costOf(lastUsed.sent, lastUsed.back);
+            if (hasPrices() || spent > 0)
+                rows.push(["Last refine cost", "about " + money(spent)]);
         }
         for (const [k, v] of rows) {
             const r = el("div", "arf-between");
@@ -11285,7 +11325,7 @@ export function setup(ctx, overrides) {
                 for (let i = 0; i < lastSteps.length; i++) {
                     const one = lastSteps[i];
                     const head = el("div", "arf-between");
-                    head.appendChild(el("span", "arf-lab arf-grow", i + 1 + ". " + one.name));
+                    head.appendChild(el("span", "arf-lab arf-grow", i + 1 + ". " + one.name + (one.setup ? ", on " + one.setup : "")));
                     // Measured rather than described. A pass that took a fifth out is
                     // the thing a reader is looking for, and the number says it faster
                     // than the marking does.
@@ -13264,8 +13304,24 @@ export function setup(ctx, overrides) {
             send({ type: "save_presets", presets: presets });
         }
         catch (_) { }
+        passesMoved();
     }
-    let setups = [];
+    // The passes are sent as the presets and setups they name, resolved. When
+    // either changes, the backend is handed the passes again, held and not
+    // written to the account, the same as when the panel opens.
+    function passesMoved() {
+        if (cfg.passMode !== "many")
+            return;
+        try {
+            send({ type: "set_settings", settings: forBackend(), keep: true });
+        }
+        catch (_) { }
+    }
+    // ---- model setups ----
+    // A named set of the Model tab: the connection, the thinking, the wait and
+    // the samplers. Presets keep the prompt; these keep what runs it, so the same
+    // prompt can be sent to a cheap model one minute and a good one the next
+    // without either of them being edited to do it.
     let setupPick = "";
     let setupName = "";
     // The Model tab as it stood before the last pick loaded a setup over it. Same
@@ -13304,6 +13360,7 @@ export function setup(ctx, overrides) {
             send({ type: "save_setups", setups: setups });
         }
         catch (_) { }
+        passesMoved();
     }
     let setupAsk = "";
     function loadSetupsFromAccount() {
@@ -13322,6 +13379,7 @@ export function setup(ctx, overrides) {
                     localStorage.setItem(SETUPS_KEY, JSON.stringify(setups));
             }
             catch (_) { }
+            passesMoved();
             log("brought " + clean.length + (clean.length === 1 ? " model setup" : " model setups") + " down from your account", true);
             paint();
         }
@@ -13440,6 +13498,7 @@ export function setup(ctx, overrides) {
             : [];
         if (clean.length) {
             presets = clean;
+            passesMoved();
             try {
                 if (typeof localStorage !== "undefined")
                     localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
@@ -17082,6 +17141,7 @@ export function setup(ctx, overrides) {
                         lastSteps = got
                             .map((one) => ({
                             name: String((one && one.name) || ""),
+                            setup: String((one && one.setup) || ""),
                             before: String((one && one.before) || ""),
                             after: String((one && one.after) || ""),
                         }))
@@ -17094,8 +17154,9 @@ export function setup(ctx, overrides) {
                         // the refine itself and simply replaces the figure on the Log tab.
                         const sent = Number(msg.sent);
                         const back = Number(msg.back);
+                        const cost = Number(msg.cost);
                         if (Number.isFinite(sent) && Number.isFinite(back))
-                            lastUsed = { sent: sent, back: back, counted: !!msg.counted };
+                            lastUsed = { sent: sent, back: back, counted: !!msg.counted, cost: Number.isFinite(cost) ? cost : null };
                         paint();
                         return;
                     }

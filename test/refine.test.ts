@@ -7083,6 +7083,103 @@ describe("the built-in prompt carries the new macros", () => {
 // What each pass of a chain did. One before and one after, with three calls
 // somewhere between them, says a chain came out worse and never says which link
 // did it.
+// A pass on a model setup of its own, with "Each pass uses its preset's model
+// setup" on. The panel sends the setup's values with the pass. A pass without
+// one runs on the Model tab's settings.
+describe("a pass on its own model setup", () => {
+  const reply = (text: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The ferry was late again, and the dock was cold." },
+    { id: "m1", role: "user", content: "i wait" },
+    { id: "m2", role: "assistant", content: text },
+  ];
+  const pass = (name: string, mark: string, model: any = null) => ({
+    name: name,
+    on: true,
+    blocks: [
+      { id: "which", name: "Which", on: true, role: "system", text: "<pass>\n" + mark + "\n</pass>" },
+      { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+    ],
+    model: model,
+  });
+  const quick = {
+    setup: "Quick fixes",
+    connectionId: "conn-small",
+    thinkingMode: "off",
+    thinkingEffort: "medium",
+    timeoutSecs: 60,
+    samplers: { temperature: 0.2 },
+    costIn: 2000000,
+    costOut: 0,
+  };
+  const body = "Ines waited by the rail and, honestly, the wind was just really sharp.";
+  const answers = [
+    "<REFINED>Ines waited by the rail, and the wind was really sharp.</REFINED>",
+    "<REFINED>Ines waited by the rail. The wind was sharp.</REFINED>",
+  ];
+  const main = {
+    passMode: "many",
+    connectionId: "conn-main",
+    thinkingMode: "custom",
+    thinkingEffort: "high",
+    samplers: { temperature: 0.9 },
+    costIn: 0,
+    costOut: 0,
+  };
+
+  test("each pass is asked on its own connection, thinking and samplers", async () => {
+    const h = await armed(answers, { ...main, passes: [pass("Prose", "PASS ONE"), pass("Fixes", "PASS TWO", quick)] }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(h.asked.length).toBe(2);
+    expect(h.asked[0].connection_id).toBe("conn-main");
+    expect(h.asked[0].reasoning).toEqual({ source: "custom", effort: "high" });
+    expect(h.asked[0].parameters).toEqual({ temperature: 0.9 });
+    expect(h.asked[1].connection_id).toBe("conn-small");
+    expect(h.asked[1].reasoning).toEqual({ source: "off" });
+    expect(h.asked[1].parameters).toEqual({ temperature: 0.2 });
+  });
+
+  test("a pass with no model setup runs on the Model tab", async () => {
+    const h = await armed(answers, { ...main, passes: [pass("Prose", "PASS ONE"), pass("More", "PASS TWO")] }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(h.asked.map((a: any) => a.connection_id)).toEqual(["conn-main", "conn-main"]);
+  });
+
+  test("the cost is priced at the prices of the model each pass ran on", async () => {
+    const h = await armed(answers, { ...main, passes: [pass("Prose", "PASS ONE"), pass("Fixes", "PASS TWO", quick)] }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(200);
+    const used = h.sent.filter((m: any) => m.type === "refine_used");
+    expect(used.length).toBe(2);
+    // The first pass is on the Model tab, priced at 0. The second is priced at
+    // 2 per input token, so the total is twice what the second pass sent.
+    expect(used[0].cost).toBe(0);
+    expect(used[1].cost).toBeCloseTo((used[1].sent - used[0].sent) * 2, 6);
+    expect(used[1].cost).toBeGreaterThan(0);
+  });
+
+  test("what each pass changed names the model setup it ran on", async () => {
+    const h = await armed(answers, { ...main, passes: [pass("Prose", "PASS ONE"), pass("Fixes", "PASS TWO", quick)] }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    const steps = (h.sent.find((m: any) => m.type === "refine_steps") || {}).steps || [];
+    expect(steps.map((x: any) => x.setup)).toEqual(["", "Quick fixes"]);
+  });
+
+  test("the preview shows the first pass on its model setup, with its prices", async () => {
+    const h = await armed([], { ...main, passes: [pass("Fixes", "PASS ONE", quick), pass("Prose", "PASS TWO")] }, reply(body));
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1" });
+    await wait(80);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    expect(got.connectionId).toBe("conn-small");
+    expect(got.reasoning).toEqual({ source: "off" });
+    expect(got.parameters).toEqual({ temperature: 0.2 });
+    expect(got.setup).toBe("Quick fixes");
+    expect(got.prices).toEqual({ in: 2000000, out: 0 });
+  });
+});
+
 describe("what each pass changed", () => {
   const reply = (text: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },

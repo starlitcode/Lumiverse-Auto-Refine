@@ -295,6 +295,23 @@ The built-in prompts are whole refines, so running two in a row does the same wo
 
 **What it costs:** one call per pass. A refine with a built-in prompt is about 1,600 tokens in, so six passes is nearer ten thousand. The Log adds all the passes up.
 
+### A different model for each pass
+
+**Each pass uses its preset's model setup**, on the Limits tab, lets each pass run on its own model. It is off by default.
+
+1. On the Model tab, save a model setup for each model you want, under **Saved model setups**. For example, one with thinking off for quick fixes, and one with thinking on for prose.
+2. On the Prompt tab, link each of your presets to a setup with **Model setup to load with it**.
+3. On the Limits tab, turn on **Each pass uses its preset's model setup**.
+
+What happens:
+
+- A pass whose preset has a model setup runs on that setup: its connection, thinking, timeout, samplers and prices.
+- A pass whose preset has no model setup runs on the Model tab, as before. So does a built-in prompt, which has no setup.
+- If the setup a preset names is not saved, that pass runs on the Model tab.
+- The cost on the Log tab uses the prices of each pass's own model setup.
+- **What each pass changed**, on the Log tab, names the model setup each pass ran on.
+- **See what gets sent** shows the first pass on its model setup.
+
 If a line is wrong:
 
 - A name that matches no preset is skipped.
@@ -309,7 +326,7 @@ How the checks apply:
 - **Stop ends the chain.** The call in progress stops, and the passes after it never run.
 - **A reply being replaced ends it too.** If Auto Retry swipes the reply, or you press regenerate, the chain stops between passes, so you only pay for the passes that already ran.
 
-**What each pass changed**, on the Log tab, shows every pass in order: what it was given, what it gave back, and how much it changed the length.
+**What each pass changed**, on the Log tab, shows every pass in order: what it was given, what it gave back, and how much it changed the length. A pass on its own model setup also shows the setup's name.
 
 Markup protection is applied once before the first pass and undone after the last, so the same tokens are used throughout.
 
@@ -477,6 +494,7 @@ What a preset never changes: whether refining is on, the length limits, whether 
 
 - The link can only be set on a preset of your own. To link one to a built-in prompt, pick the setup, then press **Save as new**. The card says this while you are there.
 - The setup is linked by name, so a preset can be shared. If you load a preset that names a setup you do not have, the preset still loads and the card says which setup it wanted.
+- With several passes, the link can also pick the model each pass runs on. See [A different model for each pass](#a-different-model-for-each-pass).
 
 **Picking a preset loads it.** Its prompt is on screen and in use straight away. This means the prompt on screen is always the preset the picker names, so **Update selected** can never save one preset over another by mistake.
 
