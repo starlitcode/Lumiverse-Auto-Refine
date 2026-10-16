@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.41.0";
+const VERSION = "1.41.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -6168,12 +6168,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "font:12px/1.45 var(--lumiverse-font-family,system-ui);" +
     // Fades in where it opens and out where it stood, the same as the card
-    // that comes up when a refine finishes, and slides 4px from the row it
-    // belongs to: down when it opens under the row, up when it opens over it.
-    "opacity:0;transform:translateY(-4px);transition:opacity 140ms ease-out,transform 140ms ease-out}" +
-    '.arf-hint[data-arf-above]{transform:translateY(4px)}' +
+    // that comes up when a refine finishes, and slides 4px away from the row
+    // it belongs to: up when it opens over the row, down when it opens under
+    // it. It is placed with no offset and no transition, since placeFixed
+    // reads the box's rect and would count an offset into its position.
+    // data-arf-from then sets where the slide starts, and data-arf-moving
+    // turns the transition on, in that order, so the slide runs from there.
+    "opacity:0;transform:none}" +
+    '.arf-hint[data-arf-from="over"]{transform:translateY(4px)}' +
+    '.arf-hint[data-arf-from="under"]{transform:translateY(-4px)}' +
+    '.arf-hint[data-arf-moving]{transition:opacity 140ms ease-out,transform 140ms ease-out}' +
     '.arf-hint[data-arf-open]{opacity:1;transform:none}' +
-    "@media (prefers-reduced-motion: reduce){.arf-hint{transition:none;transform:none}}" +
+    "@media (prefers-reduced-motion: reduce){.arf-hint[data-arf-from],.arf-hint[data-arf-moving]{transition:none;transform:none}}" +
     // The card that comes up on the page when a refine finishes, so the answer to
     // "what did it change" is in front of you rather than behind a tab you have
     // to know to open. Bottom right on a desktop, across the bottom on a phone,
@@ -7101,13 +7107,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Lined up with the row's left edge rather than centred on the "?", which
     // reads as belonging to the row, and nudged back inside a narrow screen.
     const left = Math.max(EDGE, Math.min(r.left, vw - w - EDGE));
-    // Below the row unless there is more room above it. Whichever side it lands
-    // on, a description too tall for the room there is capped and scrolls rather
-    // than moving over the row: covering the setting is the one thing this
-    // exists not to do.
+    // Above the row, the same as Auto Retry's. Below only when it does not fit
+    // above and there is more room below, which is a row near the top of the
+    // screen. Whichever side it lands on, a description too tall for the room
+    // there is capped and scrolls rather than moving over the row: covering
+    // the setting is the one thing this exists not to do.
     const under = Math.max(0, vh - EDGE - (r.bottom + GAP));
     const over = Math.max(0, r.top - GAP - EDGE);
-    const above = under < Math.min(h, over);
+    const above = over >= Math.min(h, under);
     const room = above ? over : under;
     const top = above ? Math.max(EDGE, r.top - GAP - Math.min(h, room)) : r.bottom + GAP;
     if (h > room) {
@@ -7127,9 +7134,14 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     placeFixed(box, left, top);
     try {
-      if (above) box.setAttribute("data-arf-above", "1");
-      // The closed state is read first, so the browser has something to move
-      // from and the box fades in rather than appearing.
+      // Where the slide starts is read before the transition is turned on,
+      // and the transition is read before the box opens, so the browser moves
+      // it from the start to its place rather than from where it was placed.
+      if (!noMotion()) {
+        box.setAttribute("data-arf-from", above ? "over" : "under");
+        void box.offsetWidth;
+        box.setAttribute("data-arf-moving", "1");
+      }
       void box.offsetWidth;
       box.setAttribute("data-arf-open", "1");
     } catch (_) {}

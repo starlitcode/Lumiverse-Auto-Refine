@@ -8995,6 +8995,70 @@ console.log("\na description fades and slides in");
       });
     }
   }
+
+  // The slide follows the side it opens on. Over the row, it rises 4px into
+  // place as it fades in and sinks 4px as it fades out, so it moves away from
+  // the row and back. Under the row it is the other way round. With Reduce
+  // motion it does neither. At rest it is 6px from its row either way.
+  for (const [zoom, reduceMotion] of [[1, false], [1.25, false], [0.85, false], [1, true]]) {
+    await inTab(browser, { css: zoom === 1 ? "" : "body{zoom:" + zoom + "}", viewport: { width: 390, height: 900 }, touch: true, saved: { enabled: true, reduceMotion } }, async (page) => {
+      await goTab(page, "Limits");
+      await settle(page);
+      const got = await page.evaluate(async () => {
+        const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const ty = (n) => new DOMMatrix(getComputedStyle(n).transform).m42;
+        const q = document.querySelector("#drawer .arf-q");
+        const row = q.closest("[data-arf-row]");
+        const run = async () => {
+          await frame();
+          q.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+          q.click();
+          const pop = document.querySelector('[role="tooltip"]');
+          if (!pop) return null;
+          await wait(40);
+          const opening = ty(pop);
+          await wait(220);
+          const tr = pop.getBoundingClientRect(), rr = row.getBoundingClientRect();
+          const above = tr.bottom <= rr.top + 1;
+          const gap = Math.round(above ? rr.top - tr.bottom : tr.top - rr.bottom);
+          pop.click();
+          await wait(60);
+          const closing = ty(pop);
+          await wait(300);
+          return { above, opening, gap, closing, gone: !pop.isConnected };
+        };
+        row.scrollIntoView({ block: "center" });
+        const over = await run();
+        // The drawer moved up until the row is 30px from the top of the
+        // screen, where there is no room above it.
+        const drawer = document.getElementById("drawer");
+        drawer.style.position = "relative";
+        // The move is written in CSS pixels and the row is read in screen
+        // pixels, which differ under a zoom.
+        const z = drawer.offsetWidth > 0 ? drawer.getBoundingClientRect().width / drawer.offsetWidth : 1;
+        drawer.style.top = Math.round(-(row.getBoundingClientRect().top - 30) / z) + "px";
+        if (row.getBoundingClientRect().top > 40) return { over, under: null, missed: Math.round(row.getBoundingClientRect().top) };
+        const under = await run();
+        return { over, under, rowTop: Math.round(row.getBoundingClientRect().top) };
+      });
+      const o = got && got.over, u = got && got.under;
+      const what = reduceMotion ? "with Reduce motion" : "with motion at zoom " + zoom;
+      if (!reduceMotion) {
+        ok(what + ": over the row, it rises into place as it fades in",
+          !!o && o.above && o.opening > 0.2 && o.opening < 4.01, JSON.stringify(got));
+        ok(what + ": and sinks back toward the row as it fades out", !!o && o.closing > 0.2, JSON.stringify(got));
+        ok(what + ": under the row, it drops into place and lifts back as it goes",
+          !!u && !u.above && u.opening < -0.2 && u.closing < -0.2, JSON.stringify(got));
+      } else {
+        ok("with Reduce motion it does not move at all",
+          !!o && !!u && o.opening === 0 && o.closing === 0 && u.opening === 0 && u.closing === 0, JSON.stringify(got));
+      }
+      ok(what + ": at rest it is 6px from its row, over it or under it",
+        !!o && !!u && Math.abs(o.gap - 6) <= 1 && Math.abs(u.gap - 6) <= 1, JSON.stringify(got));
+      ok(what + ": each one is gone after it fades", !!o && !!u && o.gone && u.gone, JSON.stringify(got));
+    });
+  }
 }
 
 // ---- teardown leaves the page as it found it ----
@@ -9288,6 +9352,9 @@ console.log("\ndescriptions behind a ?");
       let moved = 0;
       const wider = [];
       const outside = [];
+      let above = 0;
+      let drawn = 0;
+      const belowWithRoom = [];
       for (const t of TABS) {
         await goTab(page, t);
         const r = await page.evaluate(async () => {
@@ -9296,7 +9363,7 @@ console.log("\ndescriptions behind a ?");
           const over = (a, b) =>
             !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right);
           const qs = [...document.querySelectorAll("#drawer .arf-q")];
-          const out = { n: 0, covering: [], offscreen: 0, moved: 0, wider: [], outside: [] };
+          const out = { n: 0, covering: [], offscreen: 0, moved: 0, wider: [], outside: [], above: 0, drawn: 0, belowWithRoom: [] };
           for (const q of qs) {
             q.scrollIntoView({ block: "center" });
             await frame();
@@ -9314,10 +9381,23 @@ console.log("\ndescriptions behind a ?");
             // Nothing below it may move: the description is parented to the page,
             // so opening one must not reflow the panel under the finger.
             out.moved = Math.max(out.moved, Math.abs(Math.round(row.getBoundingClientRect().top - was)));
-            const pr = pop.getBoundingClientRect();
+            // Where it comes to rest. Read a frame after it opens, it is still
+            // partway through its 4px slide.
+            const raw = pop.getBoundingClientRect();
+            const shift = new DOMMatrix(getComputedStyle(pop).transform).m42 *
+              (pop.offsetWidth > 0 ? raw.width / pop.offsetWidth : 1);
+            const pr = { left: raw.left, right: raw.right, width: raw.width, height: raw.height,
+              top: raw.top - shift, bottom: raw.bottom - shift };
             if (getComputedStyle(pop).display !== "none") {
               const rr = row.getBoundingClientRect();
               if (over(pr, rr)) out.covering.push((row.textContent || "").trim().slice(0, 28));
+              // Above whenever it fits there. The 18 is the gap over the row
+              // and the margin at the screen's edge.
+              if (rr.height > 0) {
+                out.drawn++;
+                if (pr.bottom <= rr.top + 1) out.above++;
+                else if (rr.top - 18 >= pr.height) out.belowWithRoom.push((row.textContent || "").trim().slice(0, 28));
+              }
               if (pr.left < -1 || pr.right > innerWidth + 1 || pr.top < -1 || pr.bottom > innerHeight + 1)
                 out.offscreen++;
               // No wider than the setting it describes, and inside the panel it
@@ -9350,12 +9430,17 @@ console.log("\ndescriptions behind a ?");
         moved = Math.max(moved, r.moved);
         wider.push(...r.wider);
         outside.push(...r.outside);
+        above += r.above;
+        drawn += r.drawn;
+        belowWithRoom.push(...r.belowWithRoom);
       }
       ok(label + ": none of " + checked + " descriptions cover their row", covering.length === 0, covering.slice(0, 4));
       ok(label + ": none open off the screen", offscreen === 0, "off screen " + offscreen);
       ok(label + ": opening one moves nothing", moved === 0, "moved " + moved);
       ok(label + ": none are wider than their row", wider.length === 0, wider.slice(0, 4));
       ok(label + ": none hang off the panel", outside.length === 0, outside.slice(0, 4));
+      ok(label + ": each opens above its row when it fits there (" + above + " of " + drawn + " above)",
+        belowWithRoom.length === 0 && above > drawn / 2, belowWithRoom.slice(0, 4));
     });
   }
 

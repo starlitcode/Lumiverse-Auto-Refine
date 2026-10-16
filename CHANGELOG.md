@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.41.1
+
+_2026-10-16_
+
+### Changed
+
+- **Descriptions open above.** Press **?** on any setting, and its description now opens just above the setting, not below it. If the setting is near the top of the screen and there is no room above, it opens below. It fades in and rises 4 pixels into place, and sinks back as it closes.
+
+### Fixed
+
+- **A description over its setting moved the wrong way.** When there was no room under a setting, its description opened above it. As it faded in, it moved down toward the setting instead of up, away from it.
+- **A description rests the same distance from its setting.** Every description sat a few pixels from where it was meant to be: closer to its setting when above it, further when below. It now sits 6 pixels from it on either side.
+
+---
+
 ## 1.41.0
 
 _2026-10-16_
