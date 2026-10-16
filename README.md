@@ -70,7 +70,7 @@ A rewrite is dropped, and your reply is left as it was, when:
 Also:
 
 - The model's own thinking is never sent, so a rewrite cannot change it.
-- The original is kept so you can put it back, for as long as the page is open.
+- The original is kept so you can put it back, even after a reload. An update or a restart of Lumiverse clears it, unless you keep it through one on the Limits tab.
 - Every check says why it fired, in the Log tab.
 
 More in [What it refuses to save](docs/guardrails.md).
