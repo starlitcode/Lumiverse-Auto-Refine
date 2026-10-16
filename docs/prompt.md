@@ -308,6 +308,8 @@ What happens:
 - A pass whose preset has a model setup runs on that setup: its connection, thinking, timeout, samplers and prices.
 - A pass whose preset has no model setup runs on the Model tab, as before. So does a built-in prompt, which has no setup.
 - If the setup a preset names is not saved, that pass runs on the Model tab.
+- A value the setup does not have comes from the Model tab. For example, a setup saved before prices existed uses the prices on the Model tab.
+- The time left on the status line, and how long the panel waits, follow each pass's own setup.
 - The cost on the Log tab uses the prices of each pass's own model setup.
 - **What each pass changed**, on the Log tab, names the model setup each pass ran on.
 - **See what gets sent** shows the first pass on its model setup.

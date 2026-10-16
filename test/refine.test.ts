@@ -6326,6 +6326,97 @@ describe("refining what you selected", () => {
     expect(out).not.toContain("[the");
   });
 
+  // A preamble set above the rewrite on its own line, worded after the part
+  // that was picked, is caught like the phrases the check has always known.
+  // Each line it catches has a close one beside it that it must not.
+  test("a preamble above a rewritten selection is caught, however it is worded", async () => {
+    const answers = [
+      "Here's the marked part, rewritten:\n\nThe lock was new.",
+      "Revised selection:\n\nThe lock was new.",
+      "Okay, here is the edit.\n\nThe lock was new.",
+      "Rewritten:\nThe lock was new.",
+      "Here's a tighter version:\n\nThe lock was new.",
+      "**Revised passage:**\n\nThe lock was new.",
+      "Here is the revised passage:\n\nThe lock was new."
+    ];
+    for (const answer of answers) {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], {}, reply("She set the crate down. The lock had been changed again. Nobody was in."));
+      await ask(h, "The lock had been changed again.");
+      await wait(60);
+      const why = (h.sent.filter((m: any) => m.type === "refine_result").pop() || {}).why;
+      expect([answer, h.writes.length, why]).toEqual([answer, 0, "the model wrote about the edit instead of making it"]);
+    }
+  });
+
+  test("a first line that is the passage's own, or plain prose, is not a preamble", async () => {
+    const pairs: Array<[string, string]> = [
+      [
+            "He counted what was left:\nthe lock, the key, the crate.",
+            "He counted what remained:\nthe key, the crate, the lock."
+      ],
+      [
+            "Part two, the revised plan:\nThe lock had been changed again.",
+            "Part two, the revised plan:\nThe lock was new."
+      ],
+      [
+            "Sure, the lock had been changed again.",
+            "Sure, the lock was new now."
+      ],
+      [
+            "She edited the letter twice.\nThe lock had been changed again.",
+            "She edited the letter twice.\nThe lock was new."
+      ]
+    ];
+    for (const [picked, answer] of pairs) {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], {}, reply("Wren stood at the gate. " + picked + " Then she left."));
+      await ask(h, picked);
+      await wait(60);
+      const why = (h.sent.filter((m: any) => m.type === "refine_result").pop() || {}).why;
+      expect([answer, why]).toEqual([answer, ""]);
+      expect(h.writes.length).toBe(1);
+    }
+  });
+
+  // The rewrite, then a line offering another version, then the rewrite again.
+  // Only the first version is saved. The offer and what follows it go to the
+  // notes. Each line it catches has a close one beside it that it must not.
+  test("an offer of another version after the rewrite is cut off, and the first version is saved", async () => {
+    const answers = [
+      "The lock was new.\n\nIf you would like a second version, here it is:\n\nThe lock had been swapped.",
+      "The lock was new.\n\nAlternatively:\n\nThe lock had been swapped.",
+      "The lock was new.\n\n---\n\nHere's another take that keeps the rhythm:\n\nThe lock had been swapped.",
+      "The lock was new.\n\nWould you like a version that is shorter?",
+      "The lock was new.\n\n**Option 2:** The lock had been swapped."
+    ];
+    for (const answer of answers) {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], {}, reply("She set the crate down. The lock had been changed again. Nobody was in."));
+      await ask(h, "The lock had been changed again.");
+      await wait(60);
+      expect([answer, h.writes.length && h.writes[0].content]).toEqual([answer, "She set the crate down. The lock was new. Nobody was in."]);
+      const notes = h.sent.filter((m: any) => m.type === "refine_notes" || m.type === "refine_result").map((m: any) => m.notes || "").join(" ");
+      expect(notes).toContain(answer.split("\n").filter(Boolean).pop());
+    }
+  });
+
+  test("a line like that inside the story is kept", async () => {
+    const pairs: Array<[string, string]> = [
+      [
+            "Alternatively, she could climb the fence.",
+            "The lock was new.\n\nAlternatively, she could climb over the fence."
+      ],
+      [
+            "\"Would you like another key?\" he asked.",
+            "The lock was new.\n\n\"Would you like a different key?\" he asked."
+      ]
+    ];
+    for (const [extra, answer] of pairs) {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], {}, reply("The lock had been changed again.\n\n" + extra));
+      await ask(h, "The lock had been changed again.\n\n" + extra);
+      await wait(60);
+      expect([answer, h.writes.length && h.writes[0].content]).toEqual([answer, answer]);
+    }
+  });
+
   test("only the part picked is sent to the model", async () => {
     const body = "She set the crate down. The lock had been changed again. Nobody was in.";
     const h = await armed(["<REFINED>The lock was new.</REFINED>"], {}, reply(body));
@@ -7137,6 +7228,17 @@ describe("a pass on its own model setup", () => {
     expect(h.asked[1].connection_id).toBe("conn-small");
     expect(h.asked[1].reasoning).toEqual({ source: "off" });
     expect(h.asked[1].parameters).toEqual({ temperature: 0.2 });
+  });
+
+  test("each call tells the panel its own wait", async () => {
+    const h = await armed(answers, { ...main, timeoutSecs: 240, passes: [pass("Prose", "PASS ONE"), pass("Fixes", "PASS TWO", quick)] }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    const asks = h.sent.filter((m: any) => m.type === "refine_progress" && (m.stage === "asking" || m.stage === "thinking"));
+    // Each call says its wait, both where the pass starts and where the call
+    // is made, and the pass with thinking off is never said to be thinking.
+    expect(asks.map((m: any) => m.waitSecs)).toEqual([240, 240, 60, 60]);
+    expect(asks.map((m: any) => m.stage)).toEqual(["thinking", "thinking", "asking", "asking"]);
   });
 
   test("a pass with no model setup runs on the Model tab", async () => {

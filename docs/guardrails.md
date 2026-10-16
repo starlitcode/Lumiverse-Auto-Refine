@@ -41,6 +41,9 @@ Another way to keep them is to add `\*+` to **Patterns of your own to hide**. Ea
 A rewrite is dropped when it is:
 
 - **A preamble**, such as "Here is the rewritten message", "Sure!" or "I've polished this for you". The model wrote about the edit instead of making it. Saving it would put that line in your chat as if the character said it.
+  - A short first line about the edit, on its own line above the rewrite, counts too. For example, a label such as "Revised selection:", or "Okay, here is the edit."
+  - A first line your passage already started with is never a preamble. So a heading such as "Part two:" is kept, and so is a passage that starts with "Sure,".
+- **An offer of another version.** Some models write the rewrite, then a line such as "If you would like a second version, here it is:", then the rewrite again. Only the first version is saved. The offer and what follows it are shown with the model's notes on the Log tab. A line that was already in your passage is never counted as an offer.
 - **A refusal.** The model declined the job. Saving it would replace your scene with an apology.
 - **Empty**, or the same text back. Neither is a rewrite.
 

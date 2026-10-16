@@ -4899,6 +4899,58 @@ console.log("\nthe time left is for the call that is running");
   }
 }
 
+console.log("\na pass on its own model setup has that setup's wait");
+{
+  // The backend says each call's wait. A pass on a model setup that waits
+  // longer than the Model tab is not given up on at the Model tab's wait, and
+  // its time left counts down from its own.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, timeoutSecs: 100 } }, async (page) => {
+      await goTab(page, "Log");
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      const line = () => page.evaluate(() => (document.querySelector("#drawer").textContent.match(/Refining, \d+s(, \d+s\sleft(\son\sthis\stry)?)?/) || [""])[0]);
+      const ahead = (secs) =>
+        page.evaluate((secs) => {
+          window.__ahead = (window.__ahead || 0) + secs * 1000;
+          if (!window.__realNow) {
+            window.__realNow = Date.now.bind(Date);
+            Date.now = () => window.__realNow() + window.__ahead;
+          }
+        }, secs);
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll("#drawer button"))
+          .find((b) => /Refine the latest reply/.test(b.textContent))
+          .click();
+        const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+        window.__fromBackend({ type: "refine_ack", requestId: id });
+        window.__fromBackend({ type: "refine_progress", stage: "asking", waitSecs: 300 });
+      });
+      await ahead(60);
+      await page.waitForTimeout(500);
+      const first = await line();
+      ok(label + ": the time left counts down from the pass's own wait", /^Refining, 6[01]s, (240|239)s\sleft$/.test(first), first);
+      await ahead(100);
+      await page.waitForTimeout(600);
+      const still = await page.evaluate(() => ({
+        busy: /Refining/.test(document.querySelector("#drawer").textContent),
+        toasts: (window.__toasts || []).join(" | "),
+      }));
+      ok(label + ": past the Model tab's wait, the panel still waits for the pass", still.busy && !/never came back/.test(still.toasts), JSON.stringify(still));
+      await ahead(200);
+      await page.waitForTimeout(600);
+      const gone = await page.evaluate(() => ({
+        busy: /Refining/.test(document.querySelector("#drawer").textContent),
+        toasts: (window.__toasts || []).join(" | "),
+      }));
+      ok(label + ": and gives up once the pass is past its own wait", !gone.busy && /never came back/.test(gone.toasts), JSON.stringify(gone));
+    });
+  }
+}
+
 console.log("\nUse the built-in list, when it is already the built-in list");
 {
   // Pressed with the built-in list already in the box, nothing changes and the
@@ -10128,7 +10180,7 @@ console.log("\na built-in prompt cannot be typed into");
       {
         viewport,
         touch,
-        saved: { passMode: "many", passNames: ["Quick", "A judge"] },
+        saved: { passMode: "many", passNames: ["Quick", "A judge"], costOut: 0.7 },
         presets: [{
           name: "Quick",
           at: 1,
@@ -10138,7 +10190,8 @@ console.log("\na built-in prompt cannot be typed into");
         setups: [{
           name: "Small",
           at: 1,
-          settings: { connectionId: "conn-small", thinkingMode: "off", thinkingEffort: "medium", timeoutSecs: 60, samplers: { temperature: 0.2 }, costIn: 0.1, costOut: 0.4 },
+          // No output price, as a setup saved before prices existed has none.
+          settings: { connectionId: "conn-small", thinkingMode: "off", thinkingEffort: "medium", timeoutSecs: 60, samplers: { temperature: 0.2 }, costIn: 0.1 },
         }],
       },
       async (page) => {
@@ -10170,6 +10223,8 @@ console.log("\na built-in prompt cannot be typed into");
           !out.err && out.after[0] && out.after[0].setup === "Small" && out.after[0].connectionId === "conn-small" &&
             out.after[0].thinkingMode === "off" && out.after[0].costIn === 0.1,
           JSON.stringify(out.after));
+        ok(label + ": a value the setup does not hold is taken from the Model tab",
+          !out.err && out.after[0] && out.after[0].costOut === 0.7, JSON.stringify(out.after));
         ok(label + ": and a built-in prompt, which names none, is sent without one",
           !out.err && out.after[1] === null, JSON.stringify(out.after));
       },

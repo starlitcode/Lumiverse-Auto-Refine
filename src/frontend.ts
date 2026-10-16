@@ -2297,7 +2297,7 @@ const GUARD_FIELDS: Field[] = [
     key: "guardPreamble",
     label: "Refuse an answer that talks about the edit",
     type: "bool",
-    hint: "On by default. Throws away an answer that opens with something like “Here is the rewritten message”.",
+    hint: "On by default. Throws away an answer that opens with something like “Here is the rewritten message”, and cuts off an offer of another version.",
   },
   {
     key: "guardSoften",
@@ -3846,11 +3846,15 @@ export function setup(ctx: Ctx, overrides?: any) {
         // The model setup the preset names, sent as its values so the backend
         // runs this pass on it. Only with the switch on, and only when that
         // setup is saved here. A built-in prompt names none.
+        //
+        // A value the setup does not hold is taken from the Model tab, the same
+        // as loading the setup there leaves it. A setup saved before prices
+        // existed holds none, and its pass is priced at the Model tab's.
         const wants = cfg.passOwnModel && mineNamed ? String(mineNamed.setup || "") : "";
         const setup = wants ? setups.find((x) => x.name === wants) : null;
         const model = setup
           ? (() => {
-              const one: Record<string, any> = { setup: setup.name };
+              const one: Record<string, any> = { ...setupFromNow(), setup: setup.name };
               for (const k of SETUP_KEYS) if (k in setup.settings) one[k] = setup.settings[k];
               return one;
             })()
@@ -4706,6 +4710,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // after the provider turned the call away, has the full wait again. The
   // countdown and the give-up timer are measured from here for that reason.
   let callFrom = 0;
+  // The wait for the call running now, in seconds, from the backend. A pass on
+  // a model setup of its own has that setup's wait. Null uses the Model tab's.
+  let callWait: number | null = null;
   let lastRun: { ms: number; ok: boolean; why: string } | null = null;
   // Counts for the Log tab. Session only: this answers "is it doing anything",
   // not "what did it do last week".
@@ -4917,7 +4924,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // behind it disagreeing about it is how a panel says "12s left" and then
   // waits another two minutes.
   function waitCap(): number {
-    const n = Number(cfg.timeoutSecs);
+    const n = busy && callWait != null ? callWait : Number(cfg.timeoutSecs);
     if (!Number.isFinite(n)) return 90;
     return n <= 0 ? 0 : Math.min(3600, Math.max(5, n));
   }
@@ -5169,6 +5176,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (on && !busy) {
       runStartedAt = Date.now();
       callFrom = runStartedAt;
+      callWait = null;
       awayInRun = typeof document !== "undefined" && document.visibilityState === "hidden";
       streamed = 0;
       // What is on screen belongs to the refine that is running. What the Log
@@ -17323,6 +17331,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             // for it.
             if (msg.stage === "asking" || msg.stage === "thinking") {
               callFrom = Date.now();
+              callWait = Number.isFinite(Number(msg.waitSecs)) && msg.waitSecs !== null && msg.waitSecs !== "" ? Number(msg.waitSecs) : null;
               armDeadman(0, true);
             }
             if (msg.stage === "judging" || msg.stage === "rechecking") armDeadman(JUDGE_ROOM_MS, true);

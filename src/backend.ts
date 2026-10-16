@@ -1822,6 +1822,67 @@ async function buildPrompt(
 const PREAMBLE =
   /^\s*(?:here(?:'|’)?s?\s+(?:is\s+)?(?:the\s+)?(?:your\s+)?(?:rewritten|revised|refined|edited|polished|updated)\b|sure[,!.]|certainly[,!.]|of course[,!.]|i(?:'|’)?ve\s+(?:rewritten|revised|refined|edited|polished)\b|(?:rewritten|revised|refined|edited|polished)\s+(?:message|version|text)\s*:)/i;
 
+// A short first line that talks about the edit, set above the rewrite on its
+// own line: a label such as "Rewritten:", or an opener such as "Okay, here is
+// the edit." The phrase list above names exact wordings, and a model asked to
+// rewrite part of a reply words its label after that part, so a label is
+// found by its shape and by a word about the edit in it.
+const PREAMBLE_WORDS =
+  /\b(?:rewr(?:ite|itten|ote|iting)|revis(?:e|ed|ion|ing)|refin(?:e|ed|ement|ing)|edit(?:ed|s|ing)?|polish(?:ed|ing)?|tighten(?:ed|ing)?|improv(?:e|ed|ement)|version|passage|selection|section|marked|draft|cleaned[ -]up|fixed)\b/i;
+const PREAMBLE_OPENER =
+  /^(?:okay|ok|alright|all right|sure|certainly|of course|absolutely|got it|done|here(?:'|’)?s|here is|here are|below is)\b/i;
+
+// The answer's first line when it is a preamble, or nothing. A first line the
+// passage itself starts with is the passage, not something the model added,
+// so a heading such as "Part two:" that was already there is kept.
+function preambleLine(text: string, original: string): string {
+  const m = /^([^\n]{1,160})\n+\s*\S/.exec(text);
+  if (!m) return '';
+  const line = m[1].trim();
+  if (original.trim().startsWith(line)) return '';
+  // Markdown around a label, such as **Revised passage:**, is read through.
+  const bare = line.replace(/[*_#>`]+/g, '').trim();
+  if (!bare || !PREAMBLE_WORDS.test(bare)) return '';
+  return /:\s*$/.test(bare) || PREAMBLE_OPENER.test(bare) ? line : '';
+}
+
+// A line offering another version, set as its own paragraph after the
+// rewrite, such as "If you would like a second version, here it is:" or
+// "Alternatively:". What follows it is the rewrite again, in the same or
+// other words, and saving it puts the offer and both versions in the chat.
+const OFFER_START =
+  /^(?:alternatively|or,|or if\b|if you(?:'|’)?d?\b|if you would\b|option\s*(?:2|two|b)\b|version\s*(?:2|two|b)\b|another (?:version|option|take|way)\b|a (?:second|different|shorter|longer) (?:version|option|take)\b|here(?:'|’)?s (?:a|an|another)\b|here is (?:a|an|another)\b|let me know\b|would you (?:like|prefer)\b|i can also\b)/i;
+const OFFER_WORDS =
+  /\b(?:versions?|options?|alternatives?|variations?|takes?|drafts?|rewrites?|rewritten|revisions?|tweak(?:ed|s)?)\b/i;
+
+// The rewrite with an offer of another version cut off it, or null when there
+// is none. The offer and everything after it are handed back to be shown with
+// the model's notes. A line the passage itself has is never an offer.
+function secondVersion(text: string, original: string): { keep: string; rest: string } | null {
+  const lines = text.split('\n');
+  for (let i = 1; i < lines.length; i++) {
+    // Its own paragraph: a blank line or a divider above it.
+    const above = lines[i - 1].trim();
+    if (above && !/^(?:-{3,}|\*{3,}|_{3,})$/.test(above)) continue;
+    const line = lines[i].trim();
+    if (!line || line.length > 220) continue;
+    const bare = line.replace(/[*_#>`]+/g, '').trim();
+    if (!bare || original.indexOf(line) >= 0 || original.indexOf(bare) >= 0) continue;
+    const start = OFFER_START.test(bare);
+    const label = /[:?]\s*$/.test(bare);
+    const meta = OFFER_WORDS.test(bare);
+    const toYou = /\b(?:you|another|second|different|alternative)\b/i.test(bare);
+    if (!((start && (meta || label)) || (label && meta && toYou))) continue;
+    const keep = lines
+      .slice(0, i)
+      .join('\n')
+      .replace(/\n\s*(?:-{3,}|\*{3,}|_{3,})\s*$/, '')
+      .trim();
+    return { keep: keep, rest: lines.slice(i).join('\n').trim() };
+  }
+  return null;
+}
+
 // A model declining the job, which must never be saved over the reply.
 // A model declining to do the rewrite, which is the one answer that must never
 // be saved over somebody's reply.
@@ -2720,8 +2781,15 @@ function judge(answer: any, original: string, tags: boolean = true): Verdict {
       text: '',
       why: 'the model did not put the rewrite between <' + OUT_TAG + '> tags, as the prompt asks',
     };
-  const out = judgeInner(got.text, original);
-  if (got.outside) out.notes = got.outside;
+  // An offer of another version after the rewrite is cut off, and the first
+  // version is judged on its own. The offer goes with the notes, so it can
+  // still be read on the Log tab.
+  const extra = guardPreamble ? secondVersion(got.text, original) : null;
+  if (extra && !extra.keep)
+    return { ok: false, text: '', why: 'the model offered another version instead of writing one', notes: extra.rest };
+  const out = judgeInner(extra ? extra.keep : got.text, original);
+  const said = [got.outside, extra ? extra.rest : ''].filter(Boolean).join('\n\n');
+  if (said) out.notes = said;
   // Handed back unchanged with something said outside the tags is the model
   // declining to edit it and saying why, which the prompts ask for. "It already
   // read well" would put words in its mouth, so the reason points at its own.
@@ -2743,7 +2811,8 @@ function judgeInner(answer: any, original: string): Verdict {
   // what an input box holds, it was the usual answer.
   if (text === orig)
     return { ok: false, text: '', why: 'it already read well, so nothing was changed', same: true };
-  if (guardPreamble && PREAMBLE.test(text))
+  // An opening the passage itself already had is not one the model added.
+  if (guardPreamble && ((PREAMBLE.test(text) && !PREAMBLE.test(orig)) || preambleLine(text, orig)))
     return { ok: false, text: '', why: 'the model wrote about the edit instead of making it' };
   // Only a short answer. A long one that happens to carry the words is a scene
   // rather than a refusal, which is the same call Auto Retry makes with its own
@@ -3545,7 +3614,11 @@ async function askModel(
       }
     }
 
-    tell(userId, { type: 'refine_progress', stage: thinkingMode === 'off' ? 'asking' : 'thinking' });
+    tell(userId, {
+      type: 'refine_progress',
+      stage: (model ? model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
+      waitSecs: model ? model.timeoutSecs : timeoutSecs,
+    });
     const result = await spindle.generate.quiet(req);
     const answer = String((result && result.content) || '');
     reportUsed(answer);
@@ -4217,6 +4290,9 @@ async function refineRun(
       type: 'refine_progress',
       stage: (pass.model ? pass.model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
       atOnce: refineAtOnce > 1 ? refineAtOnce : 0,
+      // This call's wait, so the panel's countdown and its give-up timer match
+      // a pass whose model setup waits longer or shorter than the Model tab.
+      waitSecs: pass.model ? pass.model.timeoutSecs : timeoutSecs,
     });
     // With Several rewrites at once on, the ask is several at the same time,
     // already judged. A verdict from there goes straight to the checks below.
