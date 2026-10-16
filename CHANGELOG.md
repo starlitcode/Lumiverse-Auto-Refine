@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.40.1
+
+_2026-10-15_
+
+### Changed
+
+- **The note under Clef is clearer.** It now says that Clef may not read the end of a long reply, and that Cloudflare and NanoGPT read only about the first 1,500 words. [Clef](docs/two-models.md#clef) in the docs says which hosts have the limit, and that OpenRouter sends only some calls to Cloudflare.
+
+---
+
 ## 1.40.0
 
 _2026-10-15_

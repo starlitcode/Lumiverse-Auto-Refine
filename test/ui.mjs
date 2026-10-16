@@ -2070,7 +2070,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
         ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
         ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
         const clefs = who === "clef";
-        ok(label + ", " + who + ": " + (clefs ? "the card says how much Cloudflare reads" : "no note about Cloudflare"), /first 2,000 tokens/.test(got.clefNote) === clefs, JSON.stringify(got.clefNote));
+        ok(label + ", " + who + ": " + (clefs ? "the card says how much Cloudflare reads" : "no note about Cloudflare"), /may not read the end of a long reply/.test(got.clefNote) === clefs, JSON.stringify(got.clefNote));
         ok(label + ", " + who + ": on OpenRouter, no Cloudflare account ID box", !got.account, JSON.stringify(got));
         const owns = {
           d1: [["nanogpt", "NanoGPT"], ["liquid", "Liquid AI"]],

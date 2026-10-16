@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.40.0";
+const VERSION = "1.40.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -10892,7 +10892,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(hangsOff(small, () => cfg.judgeMode === "two", "small model warning"));
     }
     if (picked.value === "clef") {
-      const short = note("Cloudflare and NanoGPT read only about the first 2,000 tokens Clef is sent, and OpenRouter can send it to Cloudflare. The end of a long reply may not be read.");
+      const short = note("Clef may not read the end of a long reply. Cloudflare and NanoGPT read only the first 2,000 tokens or so, about 1,500 words. OpenRouter sends some Clef calls to Cloudflare.");
       short.setAttribute("data-arf-clefwarn", "1");
       wrap.appendChild(hangsOff(short, () => cfg.judgeMode === "two", "Clef length note"));
     }

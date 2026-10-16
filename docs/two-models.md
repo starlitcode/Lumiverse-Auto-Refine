@@ -213,7 +213,12 @@ Clef, Clef Flash and Clef Omni are Cloudflare's decision models. All three take 
 | NanoGPT | `cloudflare/clef` | `cloudflare/clef-flash` | `cloudflare/clef-omni` |
 | Cloudflare | `clef` | `clef-flash` | `clef-omni` |
 
-- **How much they read.** OpenRouter says that Cloudflare reads only about the first 2,000 tokens of the text it is sent. NanoGPT limits them to about 1,800. The end of a long reply may not be read. OpenRouter can send them to Cloudflare too. Turning off **Also compare with the reply before it** leaves more room for the reply.
+- **How much they read.** Clef may not read the end of a long reply. How much it reads depends on who runs it:
+  - **Cloudflare** reads only about the first 2,000 tokens it is sent, which is about 1,500 words.
+  - **NanoGPT** reads only about the first 1,800 tokens.
+  - **OpenRouter** does not run Clef itself. It passes each call to a company that does, and it can pick a different one each time. For Clef and Clef Flash, that is Cloudflare, DeepInfra or PrimeIntellect. Only Cloudflare has the short limit. Clef Omni is only run by Cloudflare, so it always has the short limit.
+  - What Clef is sent counts toward the limit: the reply, the checks, and the reply before it when **Also compare with the reply before it** is on. Turning that switch off leaves more room for the reply.
+  - A short reply is read in full on every host.
 - **On Cloudflare's own API** you need two things, both from the Workers AI page of your Cloudflare dashboard, under **Use REST API**:
   1. Your account ID. Paste it into **Cloudflare account ID**, which shows when Cloudflare is the host. It is 32 letters and numbers. Anything else is not used.
   2. An API token made with the **Workers AI** template. Save it in the key box.
