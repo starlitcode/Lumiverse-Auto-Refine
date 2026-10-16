@@ -633,6 +633,78 @@ console.log("\nthe tab as the host mounts it");
   ok("no errors in the console", errors.length === 0, errors.join("\n         "));
 }
 
+
+console.log("\na theme's own custom CSS");
+// A theme's own custom CSS, written the way Lumiverse themes are written. Its
+// class selectors aim at Lumiverse's hashed class names, which carry an
+// underscore on each side, and none of them may reach the panel. Its element
+// rules reach every box on the page, Lumiverse's and the panel's alike, so a
+// box painted light with no text colour of its own still has to read.
+const THEME_CLASSES =
+  '[class*="_card_"],[class*="_btn_"],[class*="_button_"],[class*="_toggle_"],[class*="_switch_"],' +
+  '[class*="_container_"],[class*="_label_"],[class*="_row_"],[class*="_header_"],[class*="_input_"],' +
+  '[class*="_panel_"],[class*="_modal_"],[class*="_tab_"],[class*="_pill_"],[class*="_list_"]';
+const THEME_SHEET =
+  THEME_CLASSES + "{display:none!important;background:#ff00ff!important}" +
+  "input,textarea,select{background:#fff6e0!important}";
+const THEME_PROBE = ([rootSel, classes]) => {
+  const root = document.querySelector(rootSel);
+  const all = root ? [...root.querySelectorAll("*")] : [];
+  const reached = all.filter((e) => e.matches(classes)).map((e) => e.tagName.toLowerCase() + "." + String(e.className)).slice(0, 5);
+  const rgba = (c) => {
+    const n = (String(c).match(/[\d.]+/g) || []).map(Number);
+    return [n[0] || 0, n[1] || 0, n[2] || 0, n.length > 3 ? n[3] : 1];
+  };
+  const lum = ([r, g, b]) => {
+    const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+  const fields = all.filter(
+    (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName) &&
+      !/^(checkbox|range|file|radio|hidden)$/.test(e.type) &&
+      e.getClientRects().length > 0 && e.getBoundingClientRect().width > 0,
+  );
+  let worst = 99, where = "";
+  for (const f of fields) {
+    const cs = getComputedStyle(f);
+    const bg = rgba(cs.backgroundColor);
+    const t = rgba(cs.color);
+    const mix = [0, 1, 2].map((i) => t[i] * t[3] + bg[i] * (1 - t[3]));
+    const a = lum(mix), b = lum(bg);
+    const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    if (ratio < worst) { worst = ratio; where = f.tagName.toLowerCase() + (f.getAttribute("aria-label") ? " " + f.getAttribute("aria-label") : ""); }
+  }
+  return { reached, fields: fields.length, worst: Math.round(worst * 100) / 100, where };
+};
+
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  for (const tab of ["Setup", "Model", "Prompt", "Context", "Limits"]) {
+    await inTab(browser, { css: THEME_SHEET, viewport, touch, saved: { judgeMode: "two" } }, async (page) => {
+      await goTab(page, tab);
+      await settle(page);
+      const out = await page.evaluate(THEME_PROBE, ["#drawer", THEME_CLASSES]);
+      ok(`${label}, ${tab}: a theme's class selectors reach nothing in the panel`, out.reached.length === 0, JSON.stringify(out.reached));
+      ok(`${label}, ${tab}: there are boxes to measure`, out.fields > 0, JSON.stringify(out));
+      ok(`${label}, ${tab}: a box the theme paints light still reads (${out.worst}:1)`, out.worst >= 4.5, JSON.stringify(out));
+    });
+  }
+}
+// A theme that changes Lumiverse's input colour changes every box here too.
+for (const tab of ["Setup", "Model", "Prompt", "Context", "Limits"]) {
+  await inTab(browser, { css: ":root{--lumiverse-input-bg:rgb(12,34,56)}", saved: { judgeMode: "two" } }, async (page) => {
+    await goTab(page, tab);
+    await settle(page);
+    const out = await page.evaluate(([rootSel]) => {
+    const root = document.querySelector(rootSel);
+    const boxes = [...root.querySelectorAll("input,textarea,select")].filter(
+      (e) => !/^(checkbox|range|file|radio|hidden)$/.test(e.type) && e.getClientRects().length > 0,
+    );
+    return { n: boxes.length, other: boxes.map((e) => getComputedStyle(e).backgroundColor).filter((c) => c !== "rgb(12, 34, 56)") };
+  }, ["#drawer"]);
+    ok(tab + ": every box takes Lumiverse's input colour", out.n > 0 && out.other.length === 0, JSON.stringify(out));
+  });
+}
+
 console.log("\ncolour on somebody else's theme");
 {
   await inTab(browser, {}, async (page) => {

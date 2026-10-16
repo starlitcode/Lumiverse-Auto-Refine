@@ -5422,11 +5422,13 @@ export function setup(ctx, overrides) {
         ".arf-btngrid>.arf-btn{width:100%;min-width:0;white-space:normal;text-align:center;line-height:1.3}" +
         ".arf-btngrid>.arf-wide{grid-column:1/-1}" +
         ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
-        // Inputs sit on a fill rather than an invented black, and take a neutral
-        // border so a theme with a strong accent does not tint every box.
+        // Inputs sit on Lumiverse's own input colour, so a theme that changes its
+        // boxes changes these too, and take a neutral border so a theme with a
+        // strong accent does not tint every box. Older builds without the input
+        // colour fall back to the fill.
         ".arf-field{width:100%;padding:8px 10px;border-radius:var(--lumiverse-radius,8px);" +
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
-        "background:var(--lumiverse-fill,rgba(0,0,0,.15));" +
+        "background:var(--lumiverse-input-bg,var(--lumiverse-fill,rgba(0,0,0,.15)));" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);" +
         // The mark below fades up as the box is reached and back down as it is

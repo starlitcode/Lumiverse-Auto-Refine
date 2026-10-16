@@ -16,6 +16,7 @@ _2026-10-16_
 
 ### Changed
 
+- **The boxes follow Lumiverse's input colour.** Every text box and list on the panel now uses Lumiverse's own input colour, the same as Lumiverse's boxes. It is the same shade as before on the built-in themes. A theme that changes the colour of Lumiverse's boxes now changes these too.
 - **The macro list says it is not every macro.** Every Lumiverse macro works in a block, even one that is not listed. The card and the note under the list now say so. See [Prompt](docs/prompt.md).
 
 ---
