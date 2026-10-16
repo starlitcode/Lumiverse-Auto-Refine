@@ -268,7 +268,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "prompt",
     label: "Your prompt",
     what: "Every block, and whether a refine runs one pass or several.",
-    keys: ["blocks", "userBlocks", "presetPick", "presetPickYours", "passMode", "passNames", "passOwnModel"],
+    keys: ["blocks", "userBlocks", "presetPick", "presetPickYours", "passMode", "passNames", "passNamesYours", "passOwnModel"],
   },
   {
     id: "context",
@@ -761,6 +761,9 @@ const CONFIG = {
   // one before it wrote. Names rather than copies of the blocks, so editing a
   // preset changes the pass that uses it.
   passNames: [] as string[],
+  // The same for your own messages, each pass run with that preset's prompt
+  // for your messages. Empty runs your messages once, with their own prompt.
+  passNamesYours: [] as string[],
   // With several passes, whether a pass whose preset names a model setup runs
   // on that setup. Off, every pass runs on the Model tab's settings.
   passOwnModel: false,
@@ -3118,7 +3121,7 @@ const LIMIT_FIELDS: Field[] = [
       { value: "one", label: "One pass" },
       { value: "many", label: "Several passes, one after another" },
     ],
-    hint: "One by default. Several runs your saved presets in order on a reply, one model call each.",
+    hint: "One by default. Several runs your saved presets in order, one model call each.",
   },
   {
     key: "passNames",
@@ -3127,6 +3130,14 @@ const LIMIT_FIELDS: Field[] = [
     needs: { key: "passMode", is: "many" },
     under: true,
     hint: "One preset name per line, up to six, run top to bottom. A name that matches nothing is skipped. Each pass is one model call, so six passes cost six times as much.",
+  },
+  {
+    key: "passNamesYours",
+    label: "The passes for your messages, in order",
+    type: "lines",
+    needs: { key: "passMode", is: "many" },
+    under: true,
+    hint: "Optional. Preset names, one per line, up to six, run on your own messages with each preset's prompt for them. Empty runs your messages once.",
   },
   {
     key: "passOwnModel",
@@ -3675,10 +3686,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     // A list saved as the text of its box, which is how the box used to save
     // it. Read back as the list it always meant to be.
-    for (const k of ["passNames", "wornFine"]) if (typeof into[k] === "string") into[k] = linesOf(into[k]);
+    for (const k of ["passNames", "passNamesYours", "wornFine"]) if (typeof into[k] === "string") into[k] = linesOf(into[k]);
     // A built-in prompt picked or chained under the name it had before.
     for (const k of ["presetPick", "presetPickYours"]) if (k in into) into[k] = renamedBuiltIn(into[k]);
     if (Array.isArray(into.passNames)) into.passNames = into.passNames.map(renamedBuiltIn);
+    if (Array.isArray(into.passNamesYours)) into.passNamesYours = into.passNamesYours.map(renamedBuiltIn);
     return into;
   }
 
@@ -3809,28 +3821,52 @@ export function setup(ctx: Ctx, overrides?: any) {
   type Setup = { name: string; at: number; settings: Record<string, any> };
   let setups: Setup[] = [];
 
+  // The prompt one pass runs, looked up the same way for what is sent and for
+  // the line under the box, so the two cannot disagree. Your presets first,
+  // so one saved under a built-in name is the one that runs, then the built-in
+  // prompts.
+  //
+  // On your own messages a pass runs the preset's prompt for your messages. A
+  // preset saved with that prompt left as it was holds the built-in one. A
+  // built-in prompt for replies has no prompt for your messages, so it is
+  // skipped there. On replies a pass runs the preset's prompt for replies, or
+  // the built-in prompt of that name.
+  function passPrompt(
+    name: string,
+    yours: boolean,
+  ): { blocks: any[]; preset: Preset | null; why: "" | "missing" | "replies" | "nomessage" } {
+    const want = name.toLowerCase();
+    const mineNamed = presets.find((p) => p && String(p.name).toLowerCase() === want) || null;
+    const builtIn = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
+    const usable = (list: any): any[] =>
+      (Array.isArray(list) ? list : []).filter((b: any) => b && typeof b === "object" && b.id);
+    let blocks: any[] = [];
+    if (mineNamed && mineNamed.settings) {
+      const got = usable((mineNamed.settings as any)[yours ? "userBlocks" : "blocks"]);
+      blocks = got.length ? got : yours ? YOURS_DEFAULT.map((b) => ({ ...b })) : [];
+    } else if (builtIn) {
+      if (yours && !builtIn.mine) return { blocks: [], preset: null, why: "replies" };
+      blocks = usable(builtIn.blocks);
+    } else return { blocks: [], preset: null, why: "missing" };
+    const holds = blocks.some((b: any) => b && b.on !== false && String(b.text || "").indexOf(TURN_MACRO) >= 0);
+    return { blocks: holds ? blocks : [], preset: mineNamed, why: holds ? "" : "nomessage" };
+  }
+
   // What is wrong with a list of passes, in words, or nothing. Worked out the
-  // way forBackend and the backend take the list: a name matching no preset is
-  // dropped, then a preset with no block holding {{message}}, then everything
-  // after the first six.
-  function passTrouble(names: string[]): string {
+  // way the passes are sent: a pass that cannot run is dropped, then
+  // everything after the first six.
+  function passTrouble(names: string[], yours: boolean): string {
     const missing: string[] = [];
+    const replies: string[] = [];
     const empty: string[] = [];
     const runs: string[] = [];
     for (const raw of Array.isArray(names) ? names : []) {
       const name = String(raw == null ? "" : raw).trim();
       if (!name) continue;
-      const want = name.toLowerCase();
-      const mineNamed = presets.find((p) => p && String(p.name).toLowerCase() === want);
-      const builtIn = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
-      const blocks: any[] = mineNamed && mineNamed.settings ? (mineNamed.settings as any).blocks : builtIn ? builtIn.blocks : null;
-      if (!blocks) missing.push(name);
-      else if (
-        !(Array.isArray(blocks) ? blocks : []).some(
-          (b: any) => b && b.on !== false && String(b.text || "").indexOf(TURN_MACRO) >= 0,
-        )
-      )
-        empty.push(name);
+      const got = passPrompt(name, yours);
+      if (got.why === "missing") missing.push(name);
+      else if (got.why === "replies") replies.push(name);
+      else if (got.why === "nomessage") empty.push(name);
       else runs.push(name);
     }
     // "A", "A and B", "A, B and C".
@@ -3839,12 +3875,46 @@ export function setup(ctx: Ctx, overrides?: any) {
     const out: string[] = [];
     if (missing.length === 1) out.push("No preset is called " + missing[0] + ", so it is skipped.");
     else if (missing.length) out.push("No presets are called " + list(missing) + ", so they are skipped.");
+    if (replies.length === 1) out.push(replies[0] + " is a prompt for replies, so it is skipped here.");
+    else if (replies.length) out.push(list(replies) + " are prompts for replies, so they are skipped here.");
     if (empty.length === 1) out.push(empty[0] + " has no block with " + TURN_MACRO + ", so it is skipped.");
     else if (empty.length) out.push(list(empty) + " have no block with " + TURN_MACRO + ", so they are skipped.");
     const extra = runs.slice(PASSES_MOST);
     if (extra.length)
       out.push("Only six passes run. " + list(extra) + (extra.length === 1 ? " is skipped." : " are skipped."));
     return out.join(" ");
+  }
+
+  // The passes as the backend needs them, resolved here rather than named. The
+  // panel holds preset names because a name follows the preset when it is
+  // edited, and the backend needs the blocks themselves because it is the
+  // thing that sends them. A pass that cannot run is dropped here, so a typo is
+  // a pass that does not run rather than a pass that sends an empty prompt.
+  function passesFor(names: any, yours: boolean): any[] {
+    return (Array.isArray(names) ? names : [])
+      .map((raw: any) => String(raw == null ? "" : raw).trim())
+      .filter(Boolean)
+      .map((name: string) => {
+        const got = passPrompt(name, yours);
+        // The model setup the preset names, sent as its values so the backend
+        // runs this pass on it. Only with the switch on, and only when that
+        // setup is saved here. A built-in prompt names none.
+        //
+        // A value the setup does not hold is taken from the Model tab, the same
+        // as loading the setup there leaves it. A setup saved before prices
+        // existed holds none, and its pass is priced at the Model tab's.
+        const wants = cfg.passOwnModel && got.preset ? String(got.preset.setup || "") : "";
+        const setup = wants ? setups.find((x) => x.name === wants) : null;
+        const model = setup
+          ? (() => {
+              const one: Record<string, any> = { ...setupFromNow(), setup: setup.name };
+              for (const k of SETUP_KEYS) if (k in setup.settings) one[k] = setup.settings[k];
+              return one;
+            })()
+          : null;
+        return { name: name, on: got.blocks.length > 0, blocks: got.blocks, model: model };
+      })
+      .filter((one: any) => one.blocks.length > 0);
   }
 
   function forBackend(): any {
@@ -3863,46 +3933,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const yours = usable(cfg.userBlocks);
     out.blocks = mine.length ? mine : DEFAULT_BLOCKS.map((b) => ({ ...b }));
     out.userBlocks = yours.length ? yours : YOURS_DEFAULT.map((b) => ({ ...b }));
-    // The passes, resolved here rather than named. The panel holds preset names
-    // because a name follows the preset when it is edited, and the backend needs
-    // the blocks themselves because it is the thing that sends them. A name
-    // matching no preset is dropped here, so a typo is a pass that does not run
-    // rather than a pass that sends an empty prompt.
-    out.passes = (Array.isArray(cfg.passNames) ? cfg.passNames : [])
-      .map((raw: any) => String(raw == null ? "" : raw).trim())
-      .filter(Boolean)
-      .map((name: string) => {
-        const want = name.toLowerCase();
-        // Yours first, so a preset you saved under a built-in name is the one that
-        // runs. Then the built-in prompts, which are a separate list from your
-        // saved ones: without this line a pass named after one of them resolved
-        // to nothing and was skipped without saying so.
-        const mineNamed = presets.find((p) => p && String(p.name).toLowerCase() === want);
-        const builtIn = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
-        const list = mineNamed && mineNamed.settings
-          ? usable((mineNamed.settings as any).blocks)
-          : builtIn
-            ? usable(builtIn.blocks)
-            : [];
-        // The model setup the preset names, sent as its values so the backend
-        // runs this pass on it. Only with the switch on, and only when that
-        // setup is saved here. A built-in prompt names none.
-        //
-        // A value the setup does not hold is taken from the Model tab, the same
-        // as loading the setup there leaves it. A setup saved before prices
-        // existed holds none, and its pass is priced at the Model tab's.
-        const wants = cfg.passOwnModel && mineNamed ? String(mineNamed.setup || "") : "";
-        const setup = wants ? setups.find((x) => x.name === wants) : null;
-        const model = setup
-          ? (() => {
-              const one: Record<string, any> = { ...setupFromNow(), setup: setup.name };
-              for (const k of SETUP_KEYS) if (k in setup.settings) one[k] = setup.settings[k];
-              return one;
-            })()
-          : null;
-        return { name: name, on: list.length > 0, blocks: list, model: model };
-      })
-      .filter((one: any) => one.blocks.length > 0);
+    out.passes = passesFor(cfg.passNames, false);
+    out.passesYours = passesFor(cfg.passNamesYours, true);
     return out;
   }
 
@@ -9701,10 +9733,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       // Under the passes, a line naming any pass that will not run and why.
       // Nothing else on screen says so, and a pass that is skipped without a
       // word reads as a pass that ran and changed nothing.
-      const said = f.key === "passNames" ? el("div", "arf-note") : null;
+      const said = f.key === "passNames" || f.key === "passNamesYours" ? el("div", "arf-note") : null;
       const sayPasses = (moving: boolean) => {
         if (!said) return;
-        const text = passTrouble(take() as string[]);
+        const text = passTrouble(take() as string[], f.key === "passNamesYours");
         const was = said.style.display !== "none";
         if (text) said.textContent = text;
         if (text && !was) {
@@ -9726,7 +9758,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       });
       wrap.appendChild(ta);
       if (said) {
-        said.setAttribute("data-arf-passnote", "1");
+        said.setAttribute("data-arf-passnote", f.key);
         said.style.display = "none";
         wrap.appendChild(said);
         sayPasses(false);

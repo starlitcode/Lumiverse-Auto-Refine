@@ -314,14 +314,25 @@ What happens:
 - **What each pass changed**, on the Log tab, names the model setup each pass ran on.
 - **See what gets sent** shows the first pass on its model setup.
 
-Several passes are for replies. Your own messages always run once, with your prompt for your messages, which fixes mistakes and leaves your style alone.
+### Passes for your own messages
+
+**The passes, in order** is for replies. Your own messages have their own list, **The passes for your messages, in order**, under it.
+
+- It is empty by default. Empty, your messages run once, with your prompt for your messages.
+- Each name runs that preset's prompt for your messages, not its prompt for replies.
+- A built-in prompt for your messages, such as **A line judge**, runs as it is.
+- A built-in prompt for replies, such as **A judge**, is skipped in this list.
+- The other rules below are the same for both lists, and so is **Each pass uses its preset's model setup**.
+- It is for messages you have sent. A draft still in the input box is refined once, with your prompt for your messages.
+
+Your prompt for your messages fixes mistakes and leaves your style alone. Each pass rewrites your words again, so keep this list short.
 
 If a line is wrong:
 
 - A name that matches no preset is skipped.
 - A preset with no block containing `{{message}}` is skipped.
 - Only the first six passes run. The rest are skipped.
-- A line under the box names each pass that is skipped, and why. It goes once the list is fixed.
+- A line under each box names each pass that is skipped, and why. It goes once the list is fixed.
 - With no usable line at all, the prompt on the **Prompt** tab runs as one pass.
 
 How the checks apply:

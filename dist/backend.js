@@ -539,7 +539,7 @@ function promptHasTurn(isUser) {
 // A prompt of your own that never mentions them is not held to them.
 const OUT_ASK = new RegExp('<\\s*' + OUT_TAG + '\\b', 'i');
 function promptAsksForTags() {
-    const all = activeBlocks(false).concat(activeBlocks(true), manyPasses ? passList.flatMap((p) => p.blocks || []) : []);
+    const all = activeBlocks(false).concat(activeBlocks(true), manyPasses ? passList.concat(passListYours).flatMap((p) => p.blocks || []) : []);
     for (const b of all)
         if (b && b.on !== false && OUT_ASK.test(String(b.text || '')))
             return true;
@@ -2438,6 +2438,28 @@ let wornFine = [];
 // One pass or several. One is the default and what every refine did before this
 // existed. Several walks a list, each pass handed what the one before it wrote.
 let manyPasses = false;
+// A list of passes as the panel sent it, checked.
+function passesFrom(raw) {
+    return Array.isArray(raw)
+        ? raw
+            .filter((x) => x && x.on !== false && Array.isArray(x.blocks) && x.blocks.length)
+            .map((x, i) => ({
+            name: String(x.name == null || !String(x.name).trim() ? 'Pass ' + (i + 1) : x.name),
+            blocks: x.blocks,
+            model: passModelOf(x.model),
+        }))
+            .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
+            .slice(0, CHAIN_MAX)
+        : [];
+}
+// The passes a refine of this side runs, or null for one pass with its own
+// prompt.
+function chainFor(isUser) {
+    if (!manyPasses)
+        return null;
+    const list = isUser ? passListYours : passList;
+    return list.length ? list : null;
+}
 // A model setup as the panel sent it, checked the way applyRules checks the
 // Model tab, or null when there is none.
 function passModelOf(raw) {
@@ -2457,6 +2479,9 @@ function passModelOf(raw) {
     };
 }
 let passList = [];
+// The passes for your own messages, each with that preset's prompt for your
+// messages. Empty runs your messages once, with their own prompt.
+let passListYours = [];
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
 // softened rewrite and an answer cut off mid-write are all the model having a
 // bad turn. A rewrite refused for its length is the model meaning it, and one
@@ -3773,10 +3798,10 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     // under its own name, so the walk further down is the only path either way and
     // the single pass case cannot drift away from the chained one.
     //
-    // Several passes are for replies. The passes are built from each preset's
-    // prompt for replies, so your own message always runs once, with the prompt
-    // for your messages, which fixes mistakes and leaves your style alone.
-    const chain = manyPasses && passList.length && !isUser ? passList : [{ name: 'the prompt', blocks: activeBlocks(isUser) }];
+    // Replies run the passes for replies. Your own messages run the passes for
+    // your messages, built from each preset's prompt for them, or run once with
+    // their own prompt when that list is empty.
+    const chain = chainFor(isUser) || [{ name: 'the prompt', blocks: activeBlocks(isUser) }];
     // Every block any pass is going to send. The scene is built once, before the
     // first pass runs, so a macro only the last pass asks for still has to be
     // gathered for it.
@@ -5732,17 +5757,8 @@ function applyRules(s) {
     // with no block carrying {{message}} would never show the model the thing
     // it is meant to rewrite. Both are dropped here rather than found halfway
     // through a chain somebody is paying for.
-    passList = Array.isArray(s.passes)
-        ? s.passes
-            .filter((x) => x && x.on !== false && Array.isArray(x.blocks) && x.blocks.length)
-            .map((x, i) => ({
-            name: String(x.name == null || !String(x.name).trim() ? 'Pass ' + (i + 1) : x.name),
-            blocks: x.blocks,
-            model: passModelOf(x.model),
-        }))
-            .filter((x) => x.blocks.some((b) => b && b.on !== false && String(b.text || '').indexOf(TURN_MACRO) >= 0))
-            .slice(0, CHAIN_MAX)
-        : [];
+    passList = passesFrom(s.passes);
+    passListYours = passesFrom(s.passesYours);
     protectInline = !!s.protectInline;
     wrapOutput = s.wrapOutput !== false;
     requireTags = s.requireTags !== false;
@@ -6452,7 +6468,7 @@ async function onPanel(payload, userId) {
                 // the one on the Prompt tab. The first pass is built here as it would
                 // go out. The ones after it are handed the rewrite the one before wrote,
                 // which does not exist until a refine runs, so they are named instead.
-                const chain = manyPasses && passList.length && !isUser ? passList : null;
+                const chain = chainFor(isUser);
                 const allBlocks = [];
                 if (chain)
                     for (const one of chain)

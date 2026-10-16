@@ -10248,7 +10248,7 @@ console.log("\na built-in prompt cannot be typed into");
       async (page) => {
         await goTab(page, "Limits");
         const out = await page.evaluate(async () => {
-          const note = () => document.querySelector("#drawer [data-arf-passnote]");
+          const note = () => document.querySelector('#drawer [data-arf-passnote="passNames"]');
           const shown = (n) => !!n && n.style.display !== "none" && n.getBoundingClientRect().height > 0;
           const first = note();
           const drawer = document.getElementById("drawer").getBoundingClientRect();
@@ -10268,6 +10268,60 @@ console.log("\na built-in prompt cannot be typed into");
         ok(label + ": and a pass past the sixth", /Only six passes run\. Seven is skipped\./.test(t), t);
         ok(label + ": the line is shown inside the panel", out.before.shown && out.before.inside && !out.sideways, JSON.stringify(out));
         ok(label + ": and goes once the list is fixed", out.after.shown === false, JSON.stringify(out.after));
+      },
+    );
+  }
+
+  // The passes for your own messages. Each name runs that preset's prompt for
+  // your messages, a built-in prompt for your messages runs as it is, and a
+  // built-in prompt for replies is skipped and named under the box. The line
+  // and what is sent come from one lookup, so they agree. Phone and laptop.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(
+      browser,
+      {
+        viewport,
+        touch,
+        saved: { passMode: "many", passNamesYours: ["Tidy", "A line judge", "A judge", "Nowhere"] },
+        presets: [{
+          name: "Tidy",
+          at: 1,
+          settings: {
+            blocks: [{ id: "r", name: "Reply", on: true, role: "user", text: "FOR REPLIES {{message}}" }],
+            userBlocks: [{ id: "u", name: "Yours", on: true, role: "user", text: "FOR YOUR MESSAGES {{message}}" }],
+          },
+        }],
+      },
+      async (page) => {
+        await goTab(page, "Limits");
+        const out = await page.evaluate(async () => {
+          const area = document.querySelector('#drawer textarea[data-arf-field="passNamesYours"]');
+          const note = document.querySelector('#drawer [data-arf-passnote="passNamesYours"]');
+          // A change sends the settings, so the last send is what runs.
+          area.dispatchEvent(new Event("blur"));
+          await new Promise((res) => setTimeout(res, 400));
+          const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+          const sent = (last && last.settings && last.settings.passesYours) || [];
+          const drawer = document.getElementById("drawer").getBoundingClientRect();
+          const r = area.getBoundingClientRect();
+          return {
+            names: sent.map((p) => p.name),
+            first: sent[0] ? sent[0].blocks.map((b) => b.text).join(" ") : "",
+            replies: ((last && last.settings && last.settings.passes) || []).length,
+            note: note ? note.textContent : null,
+            inside: r.left >= drawer.left - 1 && r.right <= drawer.right + 1,
+            sideways: document.documentElement.scrollWidth > innerWidth + 1,
+          };
+        });
+        ok(label + ": the passes for your messages are sent in order, skipping the ones that cannot run",
+          JSON.stringify(out.names) === JSON.stringify(["Tidy", "A line judge"]), JSON.stringify(out));
+        ok(label + ": a preset's pass runs its prompt for your messages, not for replies",
+          /FOR YOUR MESSAGES/.test(out.first) && !/FOR REPLIES/.test(out.first), out.first);
+        ok(label + ": and it leaves the passes for replies empty", out.replies === 0, String(out.replies));
+        ok(label + ": a built-in prompt for replies is named as skipped",
+          /A judge is a prompt for replies, so it is skipped here\./.test(String(out.note)), String(out.note));
+        ok(label + ": and so is a name no preset has", /No preset is called Nowhere/.test(String(out.note)), String(out.note));
+        ok(label + ": the box fits the panel", out.inside && !out.sideways, JSON.stringify(out));
       },
     );
   }
@@ -12380,7 +12434,7 @@ console.log("\nthe rows that only appear when switched on, at both sizes");
       await goTab(page, "Limits");
       const out = await page.evaluate(() => {
         const drawer = document.getElementById("drawer");
-        const rows = ["passMode", "passNames", "passOwnModel", "wornOn", "wornBack", "wornLeast", "wornFine"];
+        const rows = ["passMode", "passNames", "passNamesYours", "passOwnModel", "wornOn", "wornBack", "wornLeast", "wornFine"];
         const missing = [];
         const spilling = [];
         const small = [];
