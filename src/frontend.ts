@@ -63,17 +63,14 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
   { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
   { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://docs.inceptionlabs.ai/capabilities/decisions" },
-  { value: "d1", name: "D1", from: "Liquid AI", about: "https://docs.liquid.ai/lfm/models/decision-models" },
+  { value: "d1", name: "D1", from: "Liquid AI", about: "https://www.liquid.ai/blog/d1-decision-model" },
   { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
   { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
-  // Each of these links to its maker's own page for the model, which is also
-  // where its maker's own API is described.
   { value: "luna", name: "GPT-6 Luna Decisions", from: "OpenAI", about: "https://developers.openai.com/api/docs/guides/decisions" },
-  { value: "clef", name: "Clef", from: "Cloudflare", about: "https://developers.cloudflare.com/workers-ai/models/clef/" },
+  { value: "clef", name: "Clef", from: "Cloudflare", about: "https://blog.cloudflare.com/clef-decision-models" },
   { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
   { value: "microsoft", name: "Microsoft-Decision-1", from: "Microsoft", about: "https://commandline.microsoft.com/microsoft-decision-1-model-foundry/" },
-  // Nace.AI's page for Drex is its model card on Hugging Face.
-  { value: "drex", name: "Drex", from: "Nace.AI", about: "https://huggingface.co/nace-ai/drex-v2.0" },
+  { value: "drex", name: "Drex", from: "Nace.AI", about: "https://www.nace.ai/drex" },
   { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
   { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://subq.ai/introducing-subq-snap" },
   // A decision model with no entry of its own, reached at an address the
@@ -83,13 +80,13 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
 
 // A model offered in more than one size or kind, such as Clef and Clef Flash.
 // It is one entry in Which second model, with a picker of its own under it.
-// Each size has its name, its line and, where its maker has a page for that
-// size, its own link. A size without one uses its model's link. Two
+// Each size has its name and its line, and uses its model's link, which
+// introduces the maker's decision model as a whole. Two
 // kinds of one model, such as Mercury Decide free and without the free limits,
 // share a line. `standard` is picked by default, and is what is used on a host
 // that does not serve the size picked. A size is served on a host when that
 // host has a built-in name for it.
-type Size = { value: string; label: string; name: string; line: string; about?: string };
+type Size = { value: string; label: string; name: string; line: string };
 const SIZE_PICKS: Record<string, { key: string; title: string; standard: string; sizes: Size[] }> = {
   mercury: {
     key: "mercuryTier",
@@ -127,20 +124,8 @@ const SIZE_PICKS: Record<string, { key: string; title: string; standard: string;
     standard: "full",
     sizes: [
       { value: "full", label: "Clef", name: "Clef", line: "clefOver" },
-      {
-        value: "flash",
-        label: "Clef Flash, smaller and faster",
-        name: "Clef Flash",
-        line: "clefFlashOver",
-        about: "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
-      },
-      {
-        value: "omni",
-        label: "Clef Omni, which also reads pictures and sound",
-        name: "Clef Omni",
-        line: "clefOmniOver",
-        about: "https://developers.cloudflare.com/workers-ai/models/clef-omni/",
-      },
+      { value: "flash", label: "Clef Flash, smaller and faster", name: "Clef Flash", line: "clefFlashOver" },
+      { value: "omni", label: "Clef Omni, which also reads pictures and sound", name: "Clef Omni", line: "clefOmniOver" },
     ],
   },
 };
@@ -10892,11 +10877,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const about = note("");
     about.setAttribute("data-arf-jevabout", "1");
     const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
-    // A Flash in use is linked by its own name, to its own page.
-    const z = sizeInUse(cfg);
-    const own = !!z && !!z.about;
     // A model not in the list has no page, so it says what to fill in.
-    if (picked.about) about.appendChild(linkTo(own ? String(z && z.about) : picked.about, "What is " + (own ? z && z.name : picked.name) + "?"));
+    if (picked.about) about.appendChild(linkTo(picked.about, "What is " + picked.name + "?"));
     else about.textContent = "Any decision model that answers yes-or-no checks. Fill in its address and name below.";
     // Only with two models picked. With one there is no second model to read
     // about, and the links are one more line to read past.

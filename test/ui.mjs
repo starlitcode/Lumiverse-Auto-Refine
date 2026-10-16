@@ -2003,14 +2003,14 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
   // two Clefs say how much Cloudflare reads. Checked at a phone width and a
   // laptop width.
   const MODELS = [
-    ["d1", "D1, from Liquid AI", "openrouter,nanogpt,liquid,custom", "d1Over", "What is D1? https://docs.liquid.ai/lfm/models/decision-models"],
+    ["d1", "D1, from Liquid AI", "openrouter,nanogpt,liquid,custom", "d1Over", "What is D1? https://www.liquid.ai/blog/d1-decision-model"],
     ["solar", "Solar Decide, from Upstage", "openrouter,upstage,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
     ["kev", "Kev 4B, from Jared Palmer", "openrouter,nanogpt,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
     ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,nanogpt,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
-    ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://developers.cloudflare.com/workers-ai/models/clef/"],
+    ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://blog.cloudflare.com/clef-decision-models"],
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
-    ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://huggingface.co/nace-ai/drex-v2.0"],
+    ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://www.nace.ai/drex"],
     ["subq", "SubQ Snap, from Subquadratic", "nanogpt,subq,custom", "subqOver", "What is SubQ Snap? https://subq.ai/introducing-subq-snap"],
     ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
   ];
@@ -2161,7 +2161,7 @@ console.log("\na model that comes in more than one size");
           await choose("judgeHost", host);
           await choose(pick.key, size.value);
           const got = await read();
-          const link = "What is " + (size.about ? size.name : model.name) + "? " + (size.about || model.about);
+          const link = "What is " + model.name + "? " + model.about;
           ok(label + ", " + size.name + " on " + host + ": only its line shows", got.lines.join() === size.line, JSON.stringify(got));
           ok(label + ", " + size.name + ": its built-in name shows", got.placeholder === names[host][size.value], JSON.stringify(got.placeholder));
           ok(label + ", " + size.name + ": its link", got.link === link, JSON.stringify(got.link));

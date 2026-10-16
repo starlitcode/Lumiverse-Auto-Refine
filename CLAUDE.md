@@ -120,7 +120,7 @@ Two skills are available. Load them before starting work.
   **Which second model**, with a picker under it, such as **Which Clef**.
   They are kept in `SIZE_PICKS`, in the panel and in the backend. Each size
   has its own line setting at 30. Two kinds of the same model share a line.
-  A size with its own page has its own **What is** link. All the sizes share
+  Every size uses its model's **What is** link. All the sizes share
   one **Model name** box, which shows the name for the one picked. A host
   offers a size when it has a built-in name for it.
 - When a second model has a new version, the new one takes the old one's
@@ -129,13 +129,20 @@ Two skills are available. Load them before starting work.
   the old one types its name in **Model name**. The changelog and
   `docs/two-models.md` say which name to type.
 - Each second model's **What is** link goes to its maker's own introduction
-  to its decision model, such as the maker's docs, launch post or model card.
-  It does not need to be a page for that exact model or size. A size with no
-  page of its own uses its model's link. Research it for every model added,
-  and check that the page opens and is the maker's. Only a maker with no page
-  at all gets OpenRouter's link, or the host that mainly serves it.
-  `test/model-names.test.ts` fails on a link to a host's listing. The docs
-  use the same link.
+  to its decision model. It introduces the decision model as a whole, so it
+  does not need to be a page for that exact model or size, and every size
+  uses its model's link. Original sources come first, since a third party
+  can describe a model wrongly. Pick the first of these that exists:
+  1. The maker's introduction post. Search for `introducing [model] by
+     [maker]`.
+  2. The maker's own docs for its decisions API.
+  3. The page of the host where the model was found, usually OpenRouter, or
+     NanoGPT when OpenRouter does not have it.
+  Check that the page opens and is the maker's. If an introduction cannot be
+  found, or a maker's site cannot be opened from the session, ask the owner
+  to search for it before falling back to the next one. A host's page needs
+  the model named in `NO_MAKER_PAGE` in `test/model-names.test.ts`, which
+  fails on any other link to a host. The docs use the same link.
 - To look for new decision models, read each host's whole model list and
   pick out every model that returns decisions, whoever makes it. On
   OpenRouter that is `output_modalities` holding `decisions`, from

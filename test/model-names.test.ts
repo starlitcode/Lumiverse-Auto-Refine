@@ -181,8 +181,6 @@ describe("every What is link goes to the maker's own page", () => {
   const links: Array<[string, string]> = [];
   // A model not in this list has no maker, and no link.
   for (const m of SECOND_MODELS) if (m.value !== "other") links.push([m.value, m.about]);
-  for (const who of Object.keys(SIZE_PICKS))
-    for (const z of SIZE_PICKS[who].sizes) if (z.about) links.push([who + " " + z.value, z.about]);
   for (const [what, url] of links)
     test(what + ": " + url, () => {
       const host = new URL(url).hostname;
