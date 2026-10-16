@@ -6272,6 +6272,27 @@ describe("refining what you selected", () => {
     }
   });
 
+  // Speech in its own colour, the way a model or a preset often writes it.
+  const coloured = 'Mara wiped the counter. <font color="#c9a227">"Sit down, the soup is nearly ready."</font> Then she turned the flame low.';
+
+  test("a selection inside coloured speech leaves the colour tags where they are", async () => {
+    const h = await armed(["<REFINED>the soup needs one more minute</REFINED>"], {}, reply(coloured));
+    await ask(h, "the soup is nearly ready");
+    await wait(60);
+    expect(h.writes[0].content).toBe(
+      'Mara wiped the counter. <font color="#c9a227">"Sit down, the soup needs one more minute."</font> Then she turned the flame low.',
+    );
+  });
+
+  test("a selection from coloured speech into the narration takes the whole colour pair", async () => {
+    const h = await armed(['<REFINED>[[AR1]]"Sit, it is nearly done."[[AR2]] She lowered the flame.</REFINED>'], {}, reply(coloured));
+    await ask(h, 'nearly ready." Then she turned the flame low.');
+    await wait(60);
+    const out = h.writes[0].content;
+    expect(out).toBe('Mara wiped the counter. <font color="#c9a227">"Sit, it is nearly done."</font> She lowered the flame.');
+    expect(out.split("<font").length).toBe(out.split("</font>").length);
+  });
+
   test("a selection ending on &amp; takes the whole of it", async () => {
     const h = await armed(["<REFINED>Salt and [[AR1]]</REFINED>"], {}, reply("Salt &amp; pepper went on the eggs."));
     await ask(h, "Salt &");
