@@ -10231,6 +10231,47 @@ console.log("\na built-in prompt cannot be typed into");
     );
   }
 
+  // A pass that will not run is named under the box, with the reason: a name
+  // no preset has, a preset with no {{message}} block, or one past the sixth.
+  // The line goes again once the list is fixed. Phone and laptop.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    const mine = (name, text) => ({ name, at: 1, settings: { blocks: [{ id: "t", name: "Turn", on: true, role: "user", text }] } });
+    const seven = ["One", "Two", "Three", "Four", "Five", "Six", "Seven"];
+    await inTab(
+      browser,
+      {
+        viewport,
+        touch,
+        saved: { passMode: "many", passNames: seven.concat(["Nowhere", "Bare"]) },
+        presets: seven.map((n) => mine(n, "Tidy this.\n{{message}}")).concat([mine("Bare", "Tidy this.")]),
+      },
+      async (page) => {
+        await goTab(page, "Limits");
+        const out = await page.evaluate(async () => {
+          const note = () => document.querySelector("#drawer [data-arf-passnote]");
+          const shown = (n) => !!n && n.style.display !== "none" && n.getBoundingClientRect().height > 0;
+          const first = note();
+          const drawer = document.getElementById("drawer").getBoundingClientRect();
+          const r = first ? first.getBoundingClientRect() : null;
+          const before = { text: first ? first.textContent : null, shown: shown(first),
+            inside: !!r && r.left >= drawer.left - 1 && r.right <= drawer.right + 1 };
+          const area = document.querySelector('#drawer textarea[data-arf-field="passNames"]');
+          area.value = "One\nTwo";
+          area.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((res) => setTimeout(res, 600));
+          const after = { shown: shown(note()) };
+          return { before, after, sideways: document.documentElement.scrollWidth > innerWidth + 1 };
+        });
+        const t = String(out.before.text || "");
+        ok(label + ": a name no preset has is named as skipped", /No preset is called Nowhere, so it is skipped\./.test(t), t);
+        ok(label + ": so is a preset with no {{message}} block", /Bare has no block with \{\{message\}\}, so it is skipped\./.test(t), t);
+        ok(label + ": and a pass past the sixth", /Only six passes run\. Seven is skipped\./.test(t), t);
+        ok(label + ": the line is shown inside the panel", out.before.shown && out.before.inside && !out.sideways, JSON.stringify(out));
+        ok(label + ": and goes once the list is fixed", out.after.shown === false, JSON.stringify(out.after));
+      },
+    );
+  }
+
   await inTab(browser, { saved: { passMode: "many", passNames: "A judge\nMine" } }, async (page) => {
     await goTab(page, "Limits");
     const shown = await page.evaluate(() => document.querySelector('#drawer textarea[data-arf-field="passNames"]').value);

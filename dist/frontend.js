@@ -565,6 +565,8 @@ const SETUP_KEYS = [
     "costIn",
     "costOut",
 ];
+// How many passes one refine walks. The backend holds the same number.
+const PASSES_MOST = 6;
 // What a preset carries: everything that decides how a refine reads. The rest
 // stays yours whichever preset you load, which is the split that makes a preset
 // worth having.
@@ -2915,7 +2917,7 @@ const LIMIT_FIELDS = [
             { value: "one", label: "One pass" },
             { value: "many", label: "Several passes, one after another" },
         ],
-        hint: "One by default. Several runs your saved presets in order, one model call each.",
+        hint: "One by default. Several runs your saved presets in order on a reply, one model call each.",
     },
     {
         key: "passNames",
@@ -3576,6 +3578,45 @@ export function setup(ctx, overrides) {
     // can happen before that code has run.
     let presets = [];
     let setups = [];
+    // What is wrong with a list of passes, in words, or nothing. Worked out the
+    // way forBackend and the backend take the list: a name matching no preset is
+    // dropped, then a preset with no block holding {{message}}, then everything
+    // after the first six.
+    function passTrouble(names) {
+        const missing = [];
+        const empty = [];
+        const runs = [];
+        for (const raw of Array.isArray(names) ? names : []) {
+            const name = String(raw == null ? "" : raw).trim();
+            if (!name)
+                continue;
+            const want = name.toLowerCase();
+            const mineNamed = presets.find((p) => p && String(p.name).toLowerCase() === want);
+            const builtIn = BUILT_IN_PROMPTS.find((p) => p && String(p.name).toLowerCase() === want);
+            const blocks = mineNamed && mineNamed.settings ? mineNamed.settings.blocks : builtIn ? builtIn.blocks : null;
+            if (!blocks)
+                missing.push(name);
+            else if (!(Array.isArray(blocks) ? blocks : []).some((b) => b && b.on !== false && String(b.text || "").indexOf(TURN_MACRO) >= 0))
+                empty.push(name);
+            else
+                runs.push(name);
+        }
+        // "A", "A and B", "A, B and C".
+        const list = (all) => all.length < 2 ? all.join("") : all.slice(0, -1).join(", ") + " and " + all[all.length - 1];
+        const out = [];
+        if (missing.length === 1)
+            out.push("No preset is called " + missing[0] + ", so it is skipped.");
+        else if (missing.length)
+            out.push("No presets are called " + list(missing) + ", so they are skipped.");
+        if (empty.length === 1)
+            out.push(empty[0] + " has no block with " + TURN_MACRO + ", so it is skipped.");
+        else if (empty.length)
+            out.push(list(empty) + " have no block with " + TURN_MACRO + ", so they are skipped.");
+        const extra = runs.slice(PASSES_MOST);
+        if (extra.length)
+            out.push("Only six passes run. " + list(extra) + (extra.length === 1 ? " is skipped." : " are skipped."));
+        return out.join(" ");
+    }
     function forBackend() {
         const out = {};
         for (const k of Object.keys(cfg))
@@ -9458,15 +9499,45 @@ export function setup(ctx, overrides) {
             const shown = cfg[f.key];
             ta.value = isList && Array.isArray(shown) ? shown.join("\n") : String(shown == null ? "" : shown);
             const take = () => (isList ? linesOf(ta.value) : ta.value);
+            // Under the passes, a line naming any pass that will not run and why.
+            // Nothing else on screen says so, and a pass that is skipped without a
+            // word reads as a pass that ran and changed nothing.
+            const said = f.key === "passNames" ? el("div", "arf-note") : null;
+            const sayPasses = (moving) => {
+                if (!said)
+                    return;
+                const text = passTrouble(take());
+                const was = said.style.display !== "none";
+                if (text)
+                    said.textContent = text;
+                if (text && !was) {
+                    said.style.display = "";
+                    if (moving)
+                        unfold(said, true);
+                }
+                else if (!text && was) {
+                    if (moving)
+                        foldAway(said, () => (said.style.display = "none"));
+                    else
+                        said.style.display = "none";
+                }
+            };
             ta.addEventListener("input", () => {
                 cfg[f.key] = take();
                 persist();
+                sayPasses(true);
             });
             ta.addEventListener("blur", () => {
                 cfg[f.key] = take();
                 persist(true);
             });
             wrap.appendChild(ta);
+            if (said) {
+                said.setAttribute("data-arf-passnote", "1");
+                said.style.display = "none";
+                wrap.appendChild(said);
+                sayPasses(false);
+            }
         }
         else if (f.type === "pick") {
             wrap.appendChild(labelRow(f));

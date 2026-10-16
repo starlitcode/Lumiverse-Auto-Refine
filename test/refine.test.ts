@@ -7282,6 +7282,52 @@ describe("a pass on its own model setup", () => {
   });
 });
 
+// Several passes are for replies. Your own message runs once, with the prompt
+// for your messages, whatever the passes say.
+describe("several passes and your own messages", () => {
+  const pass = (name: string, mark: string) => ({
+    name: name,
+    on: true,
+    blocks: [
+      { id: "which", name: "Which", on: true, role: "system", text: "<pass>\n" + mark + "\n</pass>" },
+      { id: "turn", name: "The turn", on: true, role: "user", text: "<turn_to_refine>\n{{message}}\n</turn_to_refine>" },
+    ],
+  });
+  const settings = {
+    passMode: "many",
+    passes: [pass("A", "REPLY PASS ONE"), pass("B", "REPLY PASS TWO")],
+    userBlocks: [{ id: "u", name: "Mine", on: true, role: "user", text: "OWN MESSAGE PROMPT {{message}}" }],
+  };
+
+  test("your own message is refined once, with the prompt for your messages", async () => {
+    const h = await armed(["<REFINED>I walk through the gate.</REFINED>"], settings);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(150);
+    expect(h.asked.length).toBe(1);
+    const sent = JSON.stringify(h.asked[0].messages);
+    expect(sent).toContain("OWN MESSAGE PROMPT");
+    expect(sent).not.toContain("REPLY PASS");
+  });
+
+  test("and See what gets sent shows that prompt for it, not a pass", async () => {
+    const h = await armed([], settings);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m1" });
+    await wait(80);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    const text = (got.messages || []).map((m: any) => m.content).join("\n");
+    expect(text).toContain("OWN MESSAGE PROMPT");
+    expect(text).not.toContain("REPLY PASS");
+    expect(got.passes).toEqual([]);
+  });
+
+  test("a reply still runs every pass", async () => {
+    const h = await armed(["<REFINED>The gate stood open when she arrived.</REFINED>", "<REFINED>The gate was open when she arrived.</REFINED>"], settings);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(h.asked.length).toBe(2);
+  });
+});
+
 describe("what each pass changed", () => {
   const reply = (text: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The yard gate stood open when she got there." },

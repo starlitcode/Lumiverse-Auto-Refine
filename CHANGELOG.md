@@ -13,10 +13,12 @@ _2026-10-16_
 ### Added
 
 - **A different model for each pass.** With several passes, **Each pass uses its preset's model setup**, on the Limits tab, runs each pass on the model setup its preset is linked to. That covers the connection, thinking, timeout, samplers and prices. For example, a quick pass with thinking off on a cheap model, then a prose pass with thinking on. A pass with no linked setup uses the Model tab. It is off by default. See [A different model for each pass](docs/prompt.md#a-different-model-for-each-pass).
+- **The passes box says which passes will not run.** A line under **The passes, in order** names each pass that is skipped, and why: no preset has that name, the preset has no `{{message}}` block, or it is past the sixth pass.
 - **The cost of a refine follows each pass's model.** The cost on the Log tab, and the one under **See what gets sent**, use the prices of the model setup each pass ran on.
 
 ### Fixed
 
+- **Your own messages were refined with the passes for replies.** With several passes on, a refine of one of your own messages ran through every pass, using each preset's prompt for replies. Your prompt for your own messages was never used. Several passes are now for replies only. Your own messages run once, with your prompt for your messages.
 - **A preamble above a rewrite was saved.** A model can put a short line about the edit above the rewrite, such as "Revised selection:" or "Okay, here is the edit." Only a few exact wordings were caught, so most of these were saved into the reply. This happened most with a refine of a selection. **Refuse an answer that talks about the edit** now catches a short first line about the edit, set on its own line above the rewrite.
 - **An offer of another version was saved into the reply.** Some models write the rewrite, then a line offering a second version, then the rewrite again. All of it was saved. Now only the first version is saved, and the offer and the second version are shown with the model's notes on the Log tab. **Refuse an answer that talks about the edit** turns this on and off.
 - **A passage that starts with "Sure," was refused.** A selection or reply that itself started with "Sure,", "Certainly," or "Of course," was refused as a preamble. An opening the passage already had is now never counted as one.

@@ -3772,7 +3772,11 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     // What this refine is going to run. One pass is the list on the Prompt tab
     // under its own name, so the walk further down is the only path either way and
     // the single pass case cannot drift away from the chained one.
-    const chain = manyPasses && passList.length ? passList : [{ name: 'the prompt', blocks: activeBlocks(isUser) }];
+    //
+    // Several passes are for replies. The passes are built from each preset's
+    // prompt for replies, so your own message always runs once, with the prompt
+    // for your messages, which fixes mistakes and leaves your style alone.
+    const chain = manyPasses && passList.length && !isUser ? passList : [{ name: 'the prompt', blocks: activeBlocks(isUser) }];
     // Every block any pass is going to send. The scene is built once, before the
     // first pass runs, so a macro only the last pass asks for still has to be
     // gathered for it.
@@ -6448,7 +6452,7 @@ async function onPanel(payload, userId) {
                 // the one on the Prompt tab. The first pass is built here as it would
                 // go out. The ones after it are handed the rewrite the one before wrote,
                 // which does not exist until a refine runs, so they are named instead.
-                const chain = manyPasses && passList.length ? passList : null;
+                const chain = manyPasses && passList.length && !isUser ? passList : null;
                 const allBlocks = [];
                 if (chain)
                     for (const one of chain)

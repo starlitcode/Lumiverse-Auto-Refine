@@ -314,10 +314,14 @@ What happens:
 - **What each pass changed**, on the Log tab, names the model setup each pass ran on.
 - **See what gets sent** shows the first pass on its model setup.
 
+Several passes are for replies. Your own messages always run once, with your prompt for your messages, which fixes mistakes and leaves your style alone.
+
 If a line is wrong:
 
 - A name that matches no preset is skipped.
 - A preset with no block containing `{{message}}` is skipped.
+- Only the first six passes run. The rest are skipped.
+- A line under the box names each pass that is skipped, and why. It goes once the list is fixed.
 - With no usable line at all, the prompt on the **Prompt** tab runs as one pass.
 
 How the checks apply:
