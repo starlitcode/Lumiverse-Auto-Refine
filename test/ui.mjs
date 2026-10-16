@@ -9727,6 +9727,40 @@ console.log("\nprices as a provider writes them");
 
 console.log("\nthe macro list");
 {
+  // The longest names are the focused group macros. Each row stays inside the
+  // card at a phone width and a laptop width, with nothing to scroll sideways.
+  for (const [label, viewport, touch] of [["phone", { width: 360, height: 800 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch }, async (page) => {
+      await goTab(page, "Prompt");
+      // The list sits in a fold. Every fold on the tab is opened, twice over
+      // for one inside another.
+      for (let i = 0; i < 2; i++) {
+        await page.evaluate(() => {
+          for (const h of document.querySelectorAll('#drawer [aria-expanded="false"]')) h.click();
+        });
+        await settle(page);
+        await page.waitForTimeout(300);
+      }
+      const fit = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll('#drawer [data-arf-row^="macro:"]')].filter((r) => r.getClientRects().length > 0 && r.getBoundingClientRect().height > 0);
+        const out = rows.filter((r) => {
+          const box = r.getBoundingClientRect();
+          return [...r.querySelectorAll("*")].some((c) => c.getBoundingClientRect().right > box.right + 1);
+        }).map((r) => r.getAttribute("data-arf-row"));
+        const tag = document.querySelector('#drawer [data-arf-row="macro:{{charGroupFocusedDescription}}"] button');
+        return {
+          rows: rows.length,
+          out,
+          sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+          tall: tag ? Math.round(tag.getBoundingClientRect().height) : 0,
+        };
+      });
+      ok(label + ": every macro row stays inside the card", fit.rows > 0 && fit.out.length === 0, JSON.stringify(fit));
+      ok(label + ": nothing scrolls sideways", !fit.sideways, JSON.stringify(fit));
+      if (touch) ok(label + ": the longest macro is tall enough to tap", fit.tall >= 32, JSON.stringify(fit));
+    });
+  }
+
   // A list you scan for a name you half remember. The meanings sit behind the
   // same ? every other row uses, so ten paragraphs do not stand between you and
   // the name you came for.
@@ -9754,6 +9788,14 @@ console.log("\nthe macro list");
     ok("each one carries a ?", out.withQ === out.n, JSON.stringify(out));
     ok("and none spells its meaning out under the row", out.prose === 0, JSON.stringify(out));
     ok("the tag itself still copies", out.copyLabels === out.n, JSON.stringify(out));
+    const listed = await page.evaluate(() => ({
+      desc: !!document.querySelector('#drawer [data-arf-row="macro:{{charGroupFocusedDescription}}"]'),
+      pers: !!document.querySelector('#drawer [data-arf-row="macro:{{charGroupFocusedPersonality}}"]'),
+      says: /Every Lumiverse macro works, not only the ones listed/.test(document.getElementById("drawer").textContent),
+      note: /This list is not every macro/.test(document.getElementById("drawer").textContent),
+    }));
+    ok("the focused group description and personality are listed", listed.desc && listed.pers, JSON.stringify(listed));
+    ok("and the card says a macro that is not listed still works", listed.says && listed.note, JSON.stringify(listed));
 
     // The longest description of the lot, which is the reason for the change.
     const opened = await page.evaluate(async () => {

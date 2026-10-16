@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.41.0
+
+_2026-10-16_
+
+### Added
+
+- **Two more macros in the list.** **Macros you can use** now lists `{{charGroupFocusedDescription}}` and `{{charGroupFocusedPersonality}}`. In a group chat they give the description and personality of the character whose turn is being refined, the same as `{{description}}` and `{{personality}}`.
+
+### Changed
+
+- **The macro list says it is not every macro.** Every Lumiverse macro works in a block, even one that is not listed. The card and the note under the list now say so. See [Prompt](docs/prompt.md).
+
+---
+
 ## 1.40.1
 
 _2026-10-16_

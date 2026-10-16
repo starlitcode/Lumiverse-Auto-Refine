@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.40.1";
+const VERSION = "1.41.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -1086,6 +1086,16 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
   {
     tag: "{{charGroupFocused}}",
     what: "In a group chat, the name of the character in focus, which is the one this turn belongs to.",
+    ours: false,
+  },
+  {
+    tag: "{{charGroupFocusedDescription}}",
+    what: "In a group chat, the description of the character this turn belongs to. Here it is the same as {{description}}, which follows that character too.",
+    ours: false,
+  },
+  {
+    tag: "{{charGroupFocusedPersonality}}",
+    what: "In a group chat, the personality of the character this turn belongs to. Here it is the same as {{personality}}, which follows that character too.",
     ours: false,
   },
   { tag: "{{user}}", what: "Your name.", ours: false },
@@ -10442,7 +10452,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildMacroCard(): HTMLElement {
     const wrap = card(
       "Macros you can use",
-      "Anything in double braces is filled in at the moment of the refine. Tap one to copy it.",
+      "Anything in double braces is filled in at the moment of the refine. Tap one to copy it. Every Lumiverse macro works, not only the ones listed.",
     );
     wrap.appendChild(
       fold("The list", (body) => {
@@ -10477,7 +10487,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         }
         body.appendChild(
           note(
-            "The ones marked Lumiverse are the host's own, so anything you already use in a character card or a preset works here too. A macro nobody can answer is left as you typed it rather than being blanked.",
+            "This list is not every macro. The ones marked Lumiverse are the host's own, and any other Lumiverse macro works here too, even if it is not listed, such as one you use in a character card or a preset. A macro nobody can answer is left as you typed it rather than being blanked.",
           ),
         );
       }),

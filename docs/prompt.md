@@ -45,7 +45,11 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. You can change it on the Limits tab. |
 
-**Lumiverse's macros:** `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{user}}`, and anything else that works in a character card or a preset.
+**Lumiverse's macros:** `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{charGroupFocusedDescription}}`, `{{charGroupFocusedPersonality}}` and `{{user}}`.
+
+The list in the panel is not every macro. Every Lumiverse macro works in a block, even one that is not listed, such as one you use in a character card or a preset. Auto Refine hands them to Lumiverse, which fills them in.
+
+In a group chat, the character in focus is the one whose turn is being refined. So `{{charGroupFocusedDescription}}` gives the same text as `{{description}}`, and `{{charGroupFocusedPersonality}}` the same as `{{personality}}`.
 
 Rules for macros:
 
