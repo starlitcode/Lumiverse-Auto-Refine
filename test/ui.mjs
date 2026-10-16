@@ -12080,6 +12080,53 @@ console.log("\nreaching a selection refine without the floating button");
       !out.gone.panel && !out.gone.extras && !out.gone.cut, JSON.stringify(out.gone));
   });
 
+  // A selection made from its end back to its start, which is what dragging
+  // the start handle on a phone often makes. The text in front of it is
+  // measured to where the selection starts, not to where the drag began.
+  // Measured to the drag's start, it held the selection itself, the backend
+  // looked for a second copy of it, and the refine was refused as not in the
+  // reply any more. Checked at a phone width and a laptop width, with the
+  // selection reaching across a line of bold, which is where the start of a
+  // range is a different node from the end.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const backward of [false, true]) {
+      await inTab(browser, { viewport, touch, saved: { widgetOn: false, inputRefine: true, enabled: true } }, async (page) => {
+        const out = await page.evaluate(async ({ html, backward }) => {
+          const wrap = document.createElement("div");
+          wrap.innerHTML = html.replace(
+            "Wren set the crate down on the step and wiped both hands on her jeans.",
+            "Wren set the crate down on the step and <strong>wiped</strong> both hands on her jeans.",
+          );
+          document.body.appendChild(wrap);
+          for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+          await new Promise((r) => setTimeout(r, 40));
+          const p = document.getElementById("pp");
+          const first = p.firstChild;
+          const last = p.lastChild;
+          const startAt = first.nodeValue.indexOf("the step");
+          const endAt = last.nodeValue.indexOf(" on her jeans");
+          const sel = getSelection();
+          sel.removeAllRanges();
+          if (backward) sel.setBaseAndExtent(last, endAt, first, startAt);
+          else sel.setBaseAndExtent(first, startAt, last, endAt);
+          document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+          await new Promise((r2) => setTimeout(r2, 420));
+          window.__sent.length = 0;
+          const b = document.querySelector("#drawer [data-arf-part]");
+          if (b) b.click();
+          await new Promise((r2) => setTimeout(r2, 60));
+          const fired = window.__sent.filter((m) => m && m.type === "refine_selection");
+          return { anchorIsEnd: sel.anchorNode === last, fired };
+        }, { html: BUBBLE, backward });
+        const f = out.fired[0] || {};
+        const how = label + (backward ? ", selected backwards" : ", selected forwards");
+        ok(how + ": the selection really was made that way", out.anchorIsEnd === backward, JSON.stringify(out));
+        ok(how + ": it sends what was selected", f.picked === "the step and wiped both hands", JSON.stringify(f));
+        ok(how + ": and only the text in front of it", f.ahead === "Wren set the crate down on ", JSON.stringify(f));
+      });
+    }
+  }
+
   // With only one side refined, a selection in a message on the other side
   // gets no way in: not on the panel and not in the chat input's menu. The
   // message's side comes from the backend, so the check answers that question

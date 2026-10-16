@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.41.1";
+const VERSION = "1.41.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -16018,9 +16018,18 @@ export function setup(ctx, overrides) {
                 return;
             let ahead = "";
             try {
+                // Measured to where the selection starts on the page. The anchor is
+                // where the drag began, which is the end of a selection made from its
+                // end back to its start, as dragging the start handle on a phone
+                // makes. Measured to that, the text in front held the selection
+                // itself, and the backend went looking for a second copy of it.
+                const picked = sel.rangeCount ? sel.getRangeAt(0) : null;
                 const run = document.createRange();
                 run.selectNodeContents(found.body);
-                run.setEnd(sel.anchorNode, sel.anchorOffset);
+                if (picked)
+                    run.setEnd(picked.startContainer, picked.startOffset);
+                else
+                    run.setEnd(sel.anchorNode, sel.anchorOffset);
                 ahead = String(run.toString());
             }
             catch (_) {

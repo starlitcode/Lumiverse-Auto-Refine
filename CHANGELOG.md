@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.41.2
+
+_2026-10-16_
+
+### Fixed
+
+- **Refining a selection made from its end.** A selection can be made from its end back to its start. Dragging the start handle on a phone often does this. Refining or taking out a selection made that way was refused with "what you selected is not in that reply any more". It now works whichever way the selection was made.
+
+---
+
 ## 1.41.1
 
 _2026-10-16_
