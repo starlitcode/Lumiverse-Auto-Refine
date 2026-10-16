@@ -6248,6 +6248,63 @@ describe("refining what you selected", () => {
   const ask = (h: any, picked: string, ahead = "") =>
     h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m2", picked: picked, ahead: ahead });
 
+  // Lumiverse draws some markup differently from how it is stored: a tag is
+  // drawn and not shown, &amp; shows as &, a link shows its text, a backslash
+  // before a star shows the star. A selection is made in what is shown, so
+  // each of these has to be read through or the selection is never found.
+  test("a selection is found across HTML tags, entities, links, escapes and strikethrough", async () => {
+    const cases: Array<[string, string, string]> = [
+      ["Salt &amp; pepper went on the eggs, and then the toast.", "Salt & pepper went on", "[[AR1]]"],
+      ["He said \\*nothing\\* at all to the guard that night.", "He said *nothing* at all", ""],
+      ["Go to [the side door](x) now and wait there for me.", "Go to the side door now", "[[AR1]]"],
+      ["The ~~old~~ new lock held fast against her key.", "The old new lock held", ""],
+      ["She paused.<br>Then she left the yard for good.", "She paused. Then she left", "[[AR1]]"],
+      ['<span style="color:red">red words</span> after that line here.', "red words after", "[[AR1]][[AR2]]"],
+      ["She was <b>very</b> tired by the end of the walk.", "She was very tired", ""],
+    ];
+    for (const [body, picked, keep] of cases) {
+      const h = await armed(["<REFINED>Kept " + keep + " here.</REFINED>"], {}, reply(body));
+      await ask(h, picked);
+      await wait(60);
+      const said = (h.sent.filter((m: any) => m.type === "refine_result").pop() || {}).why;
+      expect([body, said]).toEqual([body, ""]);
+      expect(h.writes.length).toBe(1);
+    }
+  });
+
+  test("a selection ending on &amp; takes the whole of it", async () => {
+    const h = await armed(["<REFINED>Salt and [[AR1]]</REFINED>"], {}, reply("Salt &amp; pepper went on the eggs."));
+    await ask(h, "Salt &");
+    await wait(60);
+    expect(h.writes[0].content).toBe("Salt and &amp; pepper went on the eggs.");
+  });
+
+  test("a selection starting on an escaped star takes its backslash with it", async () => {
+    const h = await armed(["<REFINED>*none*</REFINED>"], {}, reply("He said \\*nothing\\* at all."));
+    await ask(h, "*nothing*");
+    await wait(60);
+    expect(h.writes[0].content).toBe("He said *none* at all.");
+  });
+
+  test("a selection starting inside a tag and ending after it takes the pair", async () => {
+    const body = "She was <b>very tired</b> by the end of the walk.";
+    const h = await armed(["<REFINED>exhausted when the walk ended</REFINED>"], {}, reply(body));
+    await ask(h, "tired by the end of the walk");
+    await wait(60);
+    const out = h.writes[0].content;
+    expect(out.split("<b>").length).toBe(out.split("</b>").length);
+  });
+
+  test("a selection starting inside a link's text takes the whole link", async () => {
+    const body = "Go to [the side door](x) now and wait there.";
+    const h = await armed(["<REFINED>Go round the back</REFINED>"], { protectOn: false }, reply(body));
+    await ask(h, "side door now");
+    await wait(60);
+    const out = h.writes[0].content;
+    expect(out).not.toContain("](x)");
+    expect(out).not.toContain("[the");
+  });
+
   test("only the part picked is sent to the model", async () => {
     const body = "She set the crate down. The lock had been changed again. Nobody was in.";
     const h = await armed(["<REFINED>The lock was new.</REFINED>"], {}, reply(body));

@@ -1324,36 +1324,98 @@ function overusedIn(replies, opts) {
 // raw source. The two are different strings: emphasis markers style the text
 // rather than appearing in it, so an offset counted on screen lands in the wrong
 // place in the source. Rather than do arithmetic on that difference, the source
-// is walked once and two things are recorded: the characters a reader can
-// actually select, and the source index each of them came from.
+// is walked once and three things are recorded: the characters a reader can
+// actually select, the source index each of them starts at, and the source
+// index just after it. The two differ where one character on screen is several
+// in the source, such as &amp; or \*, so a span never ends partway into one.
 function renderMap(raw) {
     const seen = [];
     const from = [];
+    const to = [];
     const n = raw.length;
+    const put = (text, start, end) => {
+        for (let k = 0; k < text.length; k++) {
+            seen.push(text[k]);
+            from.push(start);
+            to.push(end);
+        }
+    };
+    // Where a link's text ends and its address begins, so the "](address)" part
+    // is passed over when the walk reaches it.
+    let linkShut = -1;
+    let linkEnd = -1;
     let i = 0;
     while (i < n) {
         const c = raw[i];
+        if (i === linkShut) {
+            i = linkEnd;
+            linkShut = -1;
+            continue;
+        }
         // A fenced block is shown as written, so its markers are selectable.
         if (raw.startsWith('```', i)) {
             const end = raw.indexOf('```', i + 3);
             const stop = end < 0 ? n : end + 3;
-            for (let k = i; k < stop; k++) {
-                seen.push(raw[k]);
-                from.push(k);
-            }
+            for (let k = i; k < stop; k++)
+                put(raw[k], k, k + 1);
             i = stop;
             continue;
         }
         if (c === '`') {
             const end = raw.indexOf('`', i + 1);
             if (end > 0) {
-                for (let k = i + 1; k < end; k++) {
-                    seen.push(raw[k]);
-                    from.push(k);
-                }
+                for (let k = i + 1; k < end; k++)
+                    put(raw[k], k, k + 1);
                 i = end + 1;
                 continue;
             }
+        }
+        // A backslash before a mark shows the mark and not the backslash.
+        if (c === '\\' && i + 1 < n && ESCAPABLE.test(raw[i + 1])) {
+            put(raw[i + 1], i, i + 2);
+            i += 2;
+            continue;
+        }
+        // An HTML tag is drawn, not shown. A tag that starts a new line on screen
+        // stands for the line break a selection reads across it.
+        if (c === '<') {
+            const tag = /^<\/?([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?\/?>/.exec(raw.slice(i, i + 500));
+            if (tag) {
+                if (BLOCK_TAGS.test(tag[1]))
+                    put('\n', i, i + tag[0].length);
+                i += tag[0].length;
+                continue;
+            }
+            const note = raw.startsWith('<!--', i) ? raw.indexOf('-->', i + 4) : -1;
+            if (note > 0) {
+                i = note + 3;
+                continue;
+            }
+        }
+        // A named or numbered character such as &amp; shows as the one character.
+        if (c === '&') {
+            const ent = /^&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z]{2,8});/.exec(raw.slice(i, i + 12));
+            const ch = ent ? entityChar(ent[1]) : '';
+            if (ent && ch) {
+                put(ch, i, i + ent[0].length);
+                i += ent[0].length;
+                continue;
+            }
+        }
+        // A link shows its text. The address is passed over once the text ends.
+        if (c === '[') {
+            const link = /^\[([^\[\]\n]*)\]\([^()\s]*(?:\s+"[^"\n]*")?\)/.exec(raw.slice(i, i + 1000));
+            if (link) {
+                linkShut = i + 1 + link[1].length;
+                linkEnd = i + link[0].length;
+                i += 1;
+                continue;
+            }
+        }
+        // Strikethrough marks style the run, the same as emphasis.
+        if (c === '~' && raw[i + 1] === '~') {
+            i += 2;
+            continue;
         }
         // One or two of either emphasis marker, which style the run rather than
         // being part of it.
@@ -1377,11 +1439,36 @@ function renderMap(raw) {
             i += 1;
             continue;
         }
-        seen.push(c);
-        from.push(i);
+        put(c, i, i + 1);
         i += 1;
     }
-    return { seen: seen.join(''), from: from };
+    return { seen: seen.join(''), from: from, to: to };
+}
+// Marks a backslash can show as themselves.
+const ESCAPABLE = /[!-\/:-@\[-`{-~]/;
+// Tags the host draws as a block of their own, so the text either side is on
+// separate lines and a selection across one reads a line break there.
+const BLOCK_TAGS = /^(br|p|div|li|ul|ol|h[1-6]|blockquote|pre|hr|tr|table|section|article|header|footer|details|summary)$/i;
+// The character an entity shows as, or nothing for one it does not know, which
+// is then read as the plain text it is.
+const ENTITIES = {
+    amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
+    mdash: '\u2014', ndash: '\u2013', hellip: '\u2026', lsquo: '\u2018', rsquo: '\u2019',
+    ldquo: '\u201c', rdquo: '\u201d', middot: '\u00b7', bull: '\u2022', copy: '\u00a9',
+};
+function entityChar(body) {
+    if (body[0] === '#') {
+        const code = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+        if (!(code > 0 && code <= 0x10ffff) || (code >= 0xd800 && code <= 0xdfff))
+            return '';
+        try {
+            return String.fromCodePoint(code);
+        }
+        catch (_) {
+            return '';
+        }
+    }
+    return ENTITIES[body] || '';
 }
 // Whitespace does not survive the trip identically: block elements join with one
 // newline in a DOM range and with a blank line in the source. Both sides are
@@ -1406,46 +1493,98 @@ function loosen(s) {
     }
     return { text: out.join(''), at: at };
 }
-// Emphasis markers come in pairs. A span that starts or ends between a pair
-// takes one marker with it, and replacing it leaves the other one with no
-// partner, which turns the rest of the message italic. The span is widened outward to
-// whichever marker it is inside, so the pair travels together.
+// Marks come in pairs: emphasis, strikethrough, an HTML tag and its closing
+// tag, and a link's text and its address. A span that starts or ends between
+// a pair takes one half with it, and replacing it leaves the other half with
+// no partner, which turns the rest of the message italic or breaks the tag.
+// The span is widened outward to whichever pair it is inside, so the pair
+// travels together.
 function balanced(raw, start, end) {
     let from = start;
     let to = end;
-    // Runs of one or two markers, in source order, so a span can be tested
-    // against the pair it falls between.
+    // Each pair as where it opens, where its inside starts and ends, and where
+    // it shuts.
+    const pairs = [];
+    // Runs of one or two emphasis markers, and runs of two tildes, in source
+    // order, paired off in order, which is how a reader reads them and how the
+    // host renders them. A marker after a backslash is shown as itself and is
+    // not part of a pair.
     const runs = [];
     for (let i = 0; i < raw.length; i++) {
         const c = raw[i];
+        if (c === '\\') {
+            i += 1;
+            continue;
+        }
+        if (c === '~' && raw[i + 1] === '~') {
+            runs.push({ at: i, len: 2, mark: c });
+            i += 1;
+            continue;
+        }
         if (c !== '*' && c !== '_')
             continue;
         const len = raw[i + 1] === c ? 2 : 1;
         runs.push({ at: i, len: len, mark: c });
         i += len - 1;
     }
-    // Paired off in order, which is how a reader reads them and how the host
-    // renders them.
-    for (let k = 0; k + 1 < runs.length; k += 2) {
-        const open = runs[k];
-        const shut = runs[k + 1];
-        if (open.mark !== shut.mark || open.len !== shut.len)
-            continue;
-        const inside = open.at + open.len;
-        const outside = shut.at;
-        // One end of the span inside this pair and the other outside it: take the
-        // whole pair, markers and all, or the one left behind turns the rest of the
-        // reply into emphasis.
-        //
-        // A span can never begin or end inside the markers themselves. Both ends
-        // come from the map of characters a reader can select, and a marker is not
-        // one of those.
-        const startsInside = from >= inside && from <= outside;
-        const endsInside = to >= inside && to <= outside;
-        if (startsInside !== endsInside) {
-            from = Math.min(from, open.at);
-            to = Math.max(to, shut.at + shut.len);
+    for (const mine of [runs.filter((r) => r.mark !== '~'), runs.filter((r) => r.mark === '~')]) {
+        for (let k = 0; k + 1 < mine.length; k += 2) {
+            const open = mine[k];
+            const shut = mine[k + 1];
+            if (open.mark !== shut.mark || open.len !== shut.len)
+                continue;
+            pairs.push({ open: open.at, inside: open.at + open.len, outside: shut.at, shut: shut.at + shut.len });
         }
+    }
+    // An HTML tag and the closing tag that matches it by name.
+    const stack = [];
+    const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?(\/?)>/g;
+    let t;
+    while ((t = tagRe.exec(raw))) {
+        const name = t[2].toLowerCase();
+        if (t[3] || /^(br|hr|img|input|wbr|meta|link|source|col|area|base|embed|track|param)$/.test(name))
+            continue;
+        if (!t[1]) {
+            stack.push({ name: name, at: t.index, end: t.index + t[0].length });
+            continue;
+        }
+        for (let k = stack.length - 1; k >= 0; k--) {
+            if (stack[k].name !== name)
+                continue;
+            const open = stack[k];
+            stack.length = k;
+            pairs.push({ open: open.at, inside: open.end, outside: t.index, shut: t.index + t[0].length });
+            break;
+        }
+    }
+    // A link's text and the address after it.
+    const linkRe = /\[([^\[\]\n]*)\]\([^()\s]*(?:\s+"[^"\n]*")?\)/g;
+    let l;
+    while ((l = linkRe.exec(raw))) {
+        pairs.push({ open: l.index, inside: l.index + 1, outside: l.index + 1 + l[1].length, shut: l.index + l[0].length });
+    }
+    // Widening for one pair can put an end inside another, so this runs until
+    // nothing moves.
+    //
+    // A span can never begin or end inside the marks themselves. Both ends come
+    // from the map of characters a reader can select, and a mark is not one of
+    // those.
+    for (let round = 0; round <= pairs.length; round++) {
+        let moved = false;
+        for (const p of pairs) {
+            const startsInside = from >= p.inside && from <= p.outside;
+            const endsInside = to >= p.inside && to <= p.outside;
+            if (startsInside === endsInside)
+                continue;
+            const a = Math.min(from, p.open);
+            const b = Math.max(to, p.shut);
+            if (a !== from || b !== to)
+                moved = true;
+            from = a;
+            to = b;
+        }
+        if (!moved)
+            break;
     }
     if (from < 0 || to > raw.length || from >= to)
         return null;
@@ -1490,10 +1629,10 @@ function pickedSpan(raw, picked, ordinal) {
     if (firstSeen == null || lastSeen == null)
         return null;
     const start = map.from[firstSeen];
-    const end = map.from[lastSeen];
+    const end = map.to[lastSeen];
     if (start == null || end == null)
         return null;
-    return balanced(raw, start, end + 1);
+    return balanced(raw, start, end);
 }
 // Takes a span out of a passage and closes the gap the way a person would.
 //

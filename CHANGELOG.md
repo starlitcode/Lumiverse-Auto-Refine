@@ -13,6 +13,7 @@ _2026-10-16_
 ### Fixed
 
 - **Refining a selection made from its end.** A selection can be made from its end back to its start. Dragging the start handle on a phone often does this. Refining or taking out a selection made that way was refused with "what you selected is not in that reply any more". It now works whichever way the selection was made.
+- **Refining a selection in a reply with some kinds of markup.** Lumiverse shows some markup differently from how it is stored. Examples: an HTML tag such as `<b>` or `<br>`, an entity such as `&amp;`, a link, `~~strikethrough~~`, and a backslash before a star. A selection across any of these was refused with "what you selected is not in that reply any more". This often happened after an edit or a refine added one. A selection is now found across all of them. If it starts or ends inside a pair, such as a tag and its closing tag, the whole pair is rewritten with it.
 
 ---
 
