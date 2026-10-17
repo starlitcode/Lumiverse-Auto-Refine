@@ -295,6 +295,30 @@ The built-in prompts are whole refines, so running two in a row does the same wo
 
 **What it costs:** one call per pass. A refine with a built-in prompt is about 1,600 tokens in, so six passes is nearer ten thousand. The Log adds all the passes up.
 
+### An example: a quick pass, then a careful one
+
+This example uses two presets of your own. The names are only examples.
+
+1. On the Prompt tab, write a prompt that only fixes typos, grammar and words used twice in a row. Under **Presets**, type `Quick cleanup` in the name box and press **Save as new**.
+2. Write a second prompt that works on the writing itself: rhythm, word choice and filler. Save it the same way, as `Prose pass`.
+3. On the Limits tab, set **How many passes a refine makes** to **Several passes, one after another**.
+4. In **The passes, in order**, type the two names, one per line:
+
+   ```
+   Quick cleanup
+   Prose pass
+   ```
+
+The easiest way to write each prompt is to load a built-in prompt and remove the parts you do not want. Each prompt needs a block with `{{message}}` in it, or that pass is skipped.
+
+To run the two passes on different models, as in [A different model for each pass](#a-different-model-for-each-pass):
+
+- Link `Quick cleanup` to a cheap model setup with thinking off.
+- Link `Prose pass` to a stronger model setup with thinking on.
+- Turn on **Each pass uses its preset's model setup**.
+
+The first pass is fast and costs little. The second pass gets a reply with the small mistakes already fixed, so it can work on the prose.
+
 ### A different model for each pass
 
 **Each pass uses its preset's model setup**, on the Limits tab, lets each pass run on its own model. It is off by default.
