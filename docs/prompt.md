@@ -32,6 +32,8 @@ Each block has an arrow beside its switch. A folded block shows only its switch 
 
 Anything in double braces is filled in when the refine runs. There are two kinds.
 
+The **Macros you can use** card on the Prompt tab lists them. Tap one to copy it, then paste it into a block. The ones marked **Lumiverse** come from Lumiverse. The rest come from this extension.
+
 **This extension's macros:**
 
 | Macro | What it becomes |
@@ -45,9 +47,9 @@ Anything in double braces is filled in when the refine runs. There are two kinds
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. You can change it on the Limits tab. |
 
-**Lumiverse's macros:** `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{charGroupFocusedDescription}}`, `{{charGroupFocusedPersonality}}` and `{{user}}`.
+**Lumiverse's macros recommended for a refine:** `{{description}}`, `{{personality}}`, `{{scenario}}`, `{{persona}}`, `{{char}}`, `{{charGroupFocused}}` (the character in focus in a group chat), `{{charGroupFocusedDescription}}`, `{{charGroupFocusedPersonality}}` and `{{user}}`.
 
-The list in the panel is not every macro. Every Lumiverse macro works in a block, even one that is not listed, such as one you use in a character card or a preset. Auto Refine hands them to Lumiverse, which fills them in.
+These are the ones listed in the panel, but every Lumiverse macro works in a block, even one that is not listed, such as one you use in a character card or a preset. Auto Refine hands them to Lumiverse, which fills them in.
 
 In a group chat, the character in focus is the one whose turn is being refined. So `{{charGroupFocusedDescription}}` gives the same text as `{{description}}`, and `{{charGroupFocusedPersonality}}` the same as `{{personality}}`.
 

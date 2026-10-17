@@ -32,7 +32,7 @@ Your settings are never sent. Nothing from a chat you are not in is sent.
 
 The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. The only call to somewhere other than your provider is the call to the second model, with two models on, and it goes through Lumiverse's own proxy, `spindle.cors`.
 
-There are two links on the Model tab, **What is Jev?** and **What is Span?**. They point at TypeSafe's page introducing Jev and Respan's page introducing Span. Showing them fetches nothing. Tapping one opens the page in your browser.
+With two models on, the Model tab shows one link, for the second model you picked, such as **What is Jev?**. It points at that model's maker's page introducing it. [Two models](two-models.md) lists every model and its maker. Showing the link fetches nothing. Tapping it opens the page in your browser.
 
 ## The second model
 

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.43.0";
+const VERSION = "1.44.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -770,7 +770,7 @@ const CONFIG = {
   keepOriginal: true,
   keepPutBack: false,
   confirmBeforeSave: false,
-  toast: true,
+  toast: false,
   // A sound when a refine finishes, off until asked for. An extension that starts
   // making noise because it was installed is an extension people uninstall.
   soundOn: false,
@@ -2238,6 +2238,12 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
     label: "What the model is told about the stand-ins",
     why: "It ended by telling the model to treat each stand-in as a character it cannot spell. It now says plainly not to change, split, translate or remove any of them.",
   },
+  {
+    key: "toast",
+    was: true,
+    label: "Lumiverse notification when a refine finishes",
+    why: "With the before and after card on, the notification said the same thing a second time. It is now off by default.",
+  },
 ];
 
 const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
@@ -3206,9 +3212,9 @@ const LIMIT_FIELDS: Field[] = [
 
   {
     key: "toast",
-    label: "Show a pop-up on each refine",
+    label: "Lumiverse notification when a refine finishes",
     type: "bool",
-    hint: "On by default. Turn it off to see refines only here, on this tab, with no pop-up.",
+    hint: "Off by default. A short Lumiverse notification each time a refine finishes. Turn off the card above to use this instead.",
   },
 ];
 for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
@@ -10665,7 +10671,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildMacroCard(): HTMLElement {
     const wrap = card(
       "Macros you can use",
-      "Anything in double braces is filled in at the moment of the refine. Tap one to copy it. Every Lumiverse macro works, not only the ones listed.",
+      "Tap one to copy it, then paste it into a block. Ones marked Lumiverse come from Lumiverse, and the rest come from this extension. The Lumiverse ones listed are the ones recommended for a refine, but any Lumiverse macro works.",
     );
     wrap.appendChild(
       fold("The list", (body) => {
@@ -12575,14 +12581,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       tryIt.appendChild(note("Made-up text. Nothing is refined or sent."));
       wrap.appendChild(tryIt);
     }
-    wrap.appendChild(
-      fieldRow({
-        key: "toast",
-        label: "Show a brief message",
-        type: "bool",
-        hint: "On by default. A Lumiverse notification that says a refine happened.",
-      }),
-    );
+    // The same field the Limits list holds, so the row and the line about its
+    // moved default use one label.
+    wrap.appendChild(fieldRow(FIELD_BY_KEY.toast));
     wrap.appendChild(
       fieldRow({
         key: "soundOn",

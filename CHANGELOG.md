@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.44.0
+
+_2026-10-17_
+
+### Changed
+
+- **The Lumiverse notification for a refine is off by default.** **Show a brief message** is renamed **Lumiverse notification when a refine finishes**, and it now starts off. With the before and after card on, the notification said the same thing a second time. If yours is still on the old default, the panel says so and offers the new one. To get a small notification in place of the card, turn this on and turn off **Show the before and after on screen**.
+- **The macro card says what its list is for.** **Macros you can use** now says to tap a macro to copy it and paste it into a block. It says the ones marked **Lumiverse** come from Lumiverse and the rest come from this extension, and that the Lumiverse ones listed are the ones recommended for a refine.
+
+---
+
 ## 1.43.0
 
 _2026-10-17_

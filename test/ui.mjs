@@ -2876,6 +2876,39 @@ console.log("\none model or two");
 // ---- what Jev decided ----
 // The card on the Log tab that lays out Jev's last decision: one bar per check,
 // the ones that reached the line marked, and which Jev answered.
+console.log("\nthe notification for a finished refine is a switch, off by default");
+{
+  // The card already shows a finished refine, so the Lumiverse notification is
+  // off unless somebody turns it on. Phone and laptop.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const on of [false, true]) {
+      await inTab(browser, { viewport, touch, saved: on ? { enabled: true, toast: true } : { enabled: true } }, async (page) => {
+        await goTab(page, "Setup");
+        await settle(page);
+        const out = await page.evaluate(async () => {
+          window.__toasts = [];
+          window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", before: "The lamp was lit.", after: "The lamp burned." });
+          await new Promise((r) => setTimeout(r, 300));
+          const row = document.querySelector('#drawer [data-arf-row="toast"]');
+          const box = row ? row.querySelector('input[type="checkbox"]') : null;
+          return {
+            toasts: window.__toasts.slice(),
+            label: row ? row.textContent : "",
+            checked: box ? box.checked : null,
+          };
+        });
+        if (!on) {
+          ok(label + ": by default, a finished refine sends no notification", out.toasts.length === 0, JSON.stringify(out.toasts));
+          ok(label + ": the switch says what it is and starts off",
+            /Lumiverse notification when a refine finishes/.test(out.label) && out.checked === false, JSON.stringify(out));
+        } else {
+          ok(label + ": switched on, a finished refine sends one", out.toasts.length === 1 && /^Reply refined\./.test(out.toasts[0]), JSON.stringify(out.toasts));
+        }
+      });
+    }
+  }
+}
+
 console.log("\na refine you start is logged once");
 {
   // A refine asked for by hand is answered twice: once as the save, once as the
