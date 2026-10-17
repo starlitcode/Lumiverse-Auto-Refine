@@ -367,6 +367,11 @@ The owner has a learning disability. Contradictions are confusing.
   do not reuse it or a close copy of it. Write a new one that shows the same
   thing.
 - Something that is inconsistent and wrong can be fixed without asking first.
+- The extensions are made for adults, 18 and older. Lumiverse itself is not
+  an adult app: anyone can use it, and it has no adult content of its own.
+  Never write that Lumiverse is built for adults.
+- `docs/safety.md` is in the owner's own voice: human, honest and a little
+  blunt, in short sentences. It still follows the writing rules above.
 - Refusal and false-positive handling stays broad: the owner wants every false
   refusal caught for users. Wording in prompts, comments and docs must never read
   as condoning sexual content involving minors. The README states this plainly.

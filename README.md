@@ -44,6 +44,10 @@ A prompt comes with it, so switching it on is all the setup you need. Everything
 - **Ask before saving a refine** shows you each rewrite before it is written.
 - **Put it back** undoes a refine.
 
+## Made for adults
+
+Auto Refine is made for adults, 18 and older. Lumiverse itself can be used by anyone, and it has no adult content of its own. This extension is not meant for anyone under 18.
+
 ## Not for sexual content involving minors
 
 Auto Refine is not intended for sexual content involving minors, and I do not condone or support anybody using it for that. It is a writing tool for fiction between adults, and for stories with younger characters in them where nothing sexual happens to those characters.
