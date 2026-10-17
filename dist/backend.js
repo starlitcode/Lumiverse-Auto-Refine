@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.42.0';
+const VERSION = '1.42.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -368,7 +368,7 @@ function say(level, text) {
 }
 // One of Lumiverse's own notifications. Lumiverse takes them only from an
 // extension's server side, so the panel sends its words here to be shown. The
-// kind sets the colour. It is sent to the account that asked: on a shared
+// kind sets the color. It is sent to the account that asked: on a shared
 // server, a notification with no account named goes to everybody. Lumiverse
 // shows the extension's name as the title, so none is added. It also shows at
 // most five in ten seconds from one extension and drops the rest.
@@ -604,7 +604,7 @@ const TOKEN_ONLY = /^\[\[AR\d+\]\]$/;
 // Two kinds of markup, and they need opposite treatment.
 //
 // Anything opaque comes out: code, images, links, comments, and any tag
-// carrying attributes, because a colour or an href is exactly what a rewrite
+// carrying attributes, because a color or an href is exactly what a rewrite
 // mangles and none of it is prose.
 //
 // Bare inline formatting stays in. <i>, <b> and the rest wrap words mid
@@ -819,7 +819,7 @@ const LEAD_RE = new RegExp('^' + LEAD, 'i');
 const END_MARK = '(?:<turn\\|>|<end_of_turn>|<\\|(?:end|return|call|eot_id|im_end|endoftext|END_RESPONSE)\\|>)';
 const TAIL_RE = new RegExp('(?:\\s*' + END_MARK + ')+\\s*$', 'i');
 // Names the reader added, because no built-in list can cover every model. A
-// name here is not cosmetic: a reasoning block this fails to recognise is
+// name here is not cosmetic: a reasoning block this fails to recognize is
 // handed to the refiner as prose, rewritten, and saved into the chat in place
 // of the reply. Getting it wrong loses somebody's writing rather than just
 // missing a check.
@@ -1176,14 +1176,14 @@ const PHRASE_MAX = 6;
 // How many to put in the prompt. A list of forty is a list a model skims; the
 // ones worth saying are the ones at the top of it.
 const WORN_SHOWN = 12;
-// Narration only. A character repeating a phrase is characterisation, and
+// Narration only. A character repeating a phrase is characterization, and
 // flagging somebody's catchphrase as slop would be telling them off for writing.
 // Everything between one quotation mark and the next comes out.
 // Everything in a reply that is not prose, taken out before anything is
 // counted. Markup, trackers and status lines are printed to the same shape in
 // every reply, so their words would come back as a worn-out phrase every time.
 //
-// A colour tag matters twice over: its attribute quotes, as in color="#aabbcc",
+// A color tag matters twice over: its attribute quotes, as in color="#aabbcc",
 // read as a line of speech opening and closing, which throws off the dialogue
 // check that follows.
 //
@@ -1823,7 +1823,7 @@ const REFUSAL_STRONG = [
     // The object matters: a refusal is aimed at "that" or "this request", never at
     // a concrete thing in the scene. Without this, a servant or aide saying "I
     // can't assist you with the horses today" reads as the model refusing.
-    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:be able to )?(?:assist|comply|fulfil|fulfill)\b(?:[^.?!\n]{0,30}?\b(?:that|this|it|your request|this request|the request|your prompt)\b|(?:\s+you)?\s*[.!?,"'\u201d\u2019]|(?:\s+you)?\s*$)/i,
+    /\bI(?: (?:can(?:no|')?t|cannot|will not|won'?t|am (?:not able|unable) to)|'m (?:not able|unable) to) (?:be able to )?(?:assist|comply|fulfill?)\b(?:[^.?!\n]{0,30}?\b(?:that|this|it|your request|this request|the request|your prompt)\b|(?:\s+you)?\s*[.!?,"'\u201d\u2019]|(?:\s+you)?\s*$)/i,
     // A reply that opens by declining to write, and names the content or the
     // request in the next few sentences: "I won't produce the next part. It is
     // explicit...". Both halves are needed. The opening alone is a line a
@@ -1835,7 +1835,7 @@ const REFUSAL_STRONG = [
     // Common modern refusal openers and bodies: "I'm sorry, but I can't create/generate...",
     // "that's not something I can help with", "I'm not going to generate that". Anchored on
     // assistant-action verbs so an in-character line like "I can't marry you" stays safe.
-    /\bI(?:'m| am) sorry,? but I(?: can'?t| cannot| won'?t|'m (?:not able|unable) to| am (?:not able|unable) to) (?:create|generate|write|produce|provide|assist|comply|fulfil|fulfill|help you with|engage with)\b/i,
+    /\bI(?:'m| am) sorry,? but I(?: can'?t| cannot| won'?t|'m (?:not able|unable) to| am (?:not able|unable) to) (?:create|generate|write|produce|provide|assist|comply|fulfill?|help you with|engage with)\b/i,
     // "that's not something I can help with" and "that isn't something I can
     // help with" are the same sentence, and only the first was matched. Written
     // as three explicit alternatives rather than an optional "not", so it can
@@ -1903,11 +1903,11 @@ const REFUSAL_STRONG = [
     // conjunction hid the most emphatic refusal there is. A meta object is still
     // required, because "I cannot and will not marry him" is a line from a scene.
     /\bI (?:can(?:no|')?t|cannot|will not|won'?t) and (?:will not|won'?t|cannot|can(?:no|')?t) (?:engage|participate|assist|comply|help|create|generate|produce|write|continue)\b[^.?!\n]{0,40}?\b(?:content|request|prompt|scenario|roleplay|role-?play|this|that)\b/i,
-    // "I'm not going to fulfil that request", "I'm not going to comply with that
+    // "I'm not going to fulfill that request", "I'm not going to comply with that
     // request", "I'm not going to assist with that". The refusal opener list
     // above starts at "I can't" and never covered this shape.
     /\bI(?:'m| am) not going to (?:assist|comply|help|engage)\b[^.?!\n]{0,24}?\b(?:that|this|it|your request|the request)\b/i,
-    /\bI(?:'m| am) not going to (?:fulfil|fulfill|process|answer)\b[^.?!\n]{0,24}?\b(?:that|this|your|the) (?:request|prompt|message|one)\b/i,
+    /\bI(?:'m| am) not going to (?:fulfill?|process|answer)\b[^.?!\n]{0,24}?\b(?:that|this|your|the) (?:request|prompt|message|one)\b/i,
     // "I can't generate that", "I cannot generate that content", "I'm not able to
     // generate that". The object has to follow the verb directly. Allowing
     // anything in between caught "I can't generate enough heat with this flint",
@@ -1970,7 +1970,7 @@ const REFUSAL_STRONG = [
 // The subjects a model names when it refuses one.
 //
 // Read this for what it is: a list of words that appear in refusal messages,
-// so that a refiner declining the job is recognised as declining it. It is
+// so that a refiner declining the job is recognized as declining it. It is
 // not a list of things the extension produces, asks for, or helps anybody
 // get. Nothing here reaches a prompt. All a match does is keep the refusal
 // from being saved over your reply, which is left as it was.
@@ -2035,7 +2035,7 @@ const REFUSAL_PHRASES = [
     "i can't provide instructions",
     "i can't provide guidance on that",
     "i can't fulfill that request",
-    "i can't fulfil that request",
+    "i can't fulfill that request",
     "i can't support that request",
     "i won't be able to help with that",
     "i can't generate a response to that",
@@ -2132,7 +2132,7 @@ function replyRefused(text) {
     const shown = stripThinkingFrom(String(text == null ? '' : text)).trim();
     return !!shown && shown.length <= REFUSAL_REPLY_MAX && looksLikeRefusal(shown);
 }
-// ---- a rewrite that sanitised the reply ----
+// ---- a rewrite that sanitized the reply ----
 // The failure the other checks cannot see. A softened reply is not a refusal,
 // is the right length, and keeps every protected token: it just came back with
 // the strong words taken out. Nothing catches that by looking at the rewrite alone,
@@ -2226,7 +2226,7 @@ function softenedAway(original, rewrite) {
     if (!lostTotal)
         return [];
     // Below this there are too few of them to say anything was taken out. One strong word in a reply, gone from the rewrite, is an edit,
-    // and reading that as sanitising would fail a good refine over one word.
+    // and reading that as sanitizing would fail a good refine over one word.
     if (hadTotal < 3)
         return [];
     const pct = (lostTotal / hadTotal) * 100;
@@ -2835,7 +2835,7 @@ async function gatherCard(chatId, userId, speaker) {
         return empty;
     }
 }
-// The messages leading up to the one being rewritten, oldest first, labelled so
+// The messages leading up to the one being rewritten, oldest first, labeled so
 // the model can tell the two voices apart. The message itself is not in here:
 // it arrives as its own block, and sending it twice teaches the model that
 // repeating it is what the answer looks like.
@@ -2863,7 +2863,7 @@ async function gatherPersonaName(chatId, characterId, userId) {
                     : '';
         const name = String(got).trim();
         // An unresolved macro is not a name. Some builds hand the tag straight back
-        // rather than answering, and labelling every line "{{user}}" is worse than
+        // rather than answering, and labeling every line "{{user}}" is worse than
         // the fallback.
         if (!name || name.indexOf('{{') >= 0)
             return '';
@@ -2897,7 +2897,7 @@ async function gatherHistory(msgs, at, charName, userId, youName) {
         // Both sides named, so the run-up reads the way the chat does and the
         // model is never working out which of two labels is a person. A reply
         // posted under its own name keeps that name, so in a group chat each
-        // character's turn is labelled with who wrote it. Off where the messages
+        // character's turn is labeled with who wrote it. Off where the messages
         // already start with a name.
         const label = m.role === 'user' ? you : speakerOf(m) || them;
         out.push(nameSpeakers ? label + ': ' + body : body);
@@ -2915,7 +2915,7 @@ const LORE_ENTRIES_MAX = 24;
 // characters is wildly different depending on the language and the formatting.
 let maxLoreTokens = 2500;
 let maxHistoryTokens = 4500;
-// The host's own tokeniser when it will answer, and the usual estimate when it
+// The host's own tokenizer when it will answer, and the usual estimate when it
 // will not. Roughly four characters a token is close enough for a budget, and
 // being approximate here costs a few tokens either way rather than anything
 // that matters.
@@ -2952,7 +2952,7 @@ async function countSaying(text, userId) {
         if (!spindle.tokens || typeof spindle.tokens.countText !== 'function')
             return { n: guess, counted: false };
         const got = await spindle.tokens.countText(text, { userId: userId });
-        // Lumiverse says when it had no tokeniser for the model and fell back to
+        // Lumiverse says when it had no tokenizer for the model and fell back to
         // characters over four, which is the same guess made here. Taken at its
         // word: a guess reported as a count is a figure that looks exact and is
         // not, and every price on the panel is worked out from it.
@@ -3865,7 +3865,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
         tell(userId, { type: 'refine_progress', stage: 'judging' });
         const worn = jevWorn;
         // Held like a call to the refine model, so Stop reaches it. The request to
-        // the second model cannot be pulled back once sent, so Stop is honoured
+        // the second model cannot be pulled back once sent, so Stop is honored
         // when it answers.
         let stopped = false;
         const handle = { abort: () => { stopped = true; } };
@@ -4479,7 +4479,7 @@ onSwipe) {
         //
         // Only where the build gives the message a swipe list. Where it does not
         // there is nothing to add to, and writing content alone is the old
-        // behaviour, which is what this falls back to.
+        // behavior, which is what this falls back to.
         let addedAt = -1;
         if (asSwipe && swipes && kind !== 'snip') {
             swipes.push(next);
@@ -6476,7 +6476,7 @@ async function onPanel(payload, userId) {
                             allBlocks.push(b);
                 const messages = await buildPrompt(armed.text, isUser, scene, userId, blockParts, chain ? chain[0].blocks : undefined);
                 const whichPrompt = isUser ? 'yours' : 'replies';
-                // Counted here rather than in the panel, because the tokeniser lives on
+                // Counted here rather than in the panel, because the tokenizer lives on
                 // this side and characters over four is the number this card exists to
                 // stop somebody having to work out for themselves. A preview is a press
                 // with a wait already attached, so the extra calls cost nothing anybody

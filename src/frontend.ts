@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.42.0";
+const VERSION = "1.42.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -244,7 +244,7 @@ const OWN_NAME_KEYS: Record<string, string> = {
   subq: "subqName",
 };
 
-// A link in the panel's own colours. Names are linked rather than printed as
+// A link in the panel's own colors. Names are linked rather than printed as
 // bare addresses, which read as noise and cannot be followed on a phone.
 function linkTo(url: string, text: string): HTMLElement {
   const a = document.createElement("a");
@@ -350,7 +350,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "reach",
     label: "Buttons and the widget",
     what: "The floating button, the buttons in the chat, and the input bar row.",
-    keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "freeSelect", "eyeStill", "reduceMotion", "panelPattern", "cutColour", "addColour"],
+    keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "freeSelect", "eyeStill", "reduceMotion", "panelPattern", "cutColor", "addColor"],
   },
   {
     id: "inputbox",
@@ -387,7 +387,7 @@ const DEBUG_PARTS: Array<{ id: string; label: string; what: string }> = [
   { id: "counts", label: "Counts for this session", what: "How many refines were saved, dropped and put back, and why." },
   { id: "log", label: "What it has been doing", what: "The last dozen lines from the Log tab." },
   { id: "chat", label: "Where you are", what: "Whether a chat is open and whether it has a card. Chat ids and names are left out." },
-  { id: "browser", label: "Your browser", what: "The user agent string and the screen size, which is what a layout bug needs." },
+  { id: "browser", label: "Your browser", what: "Your browser's name and version, and the screen size, which a layout bug needs." },
 ];
 
 // What the manifest asks for, what each one is for, and what still works
@@ -446,7 +446,7 @@ const PERMS: Array<{ id: string; label: string; why: string; without: string; fa
 // A scoring model scores whether the statement is true of the reply, and does
 // not stretch a check to cover what was meant, so each one names something
 // that can be seen on the page, with examples of it. A check that asks for a
-// judgement, such as whether a feeling is already shown, scores less steadily
+// judgment, such as whether a feeling is already shown, scores less steadily
 // from one reply to the next, and is left out.
 //
 // Each has to be false of a clean reply. A reply is refined when any check
@@ -774,7 +774,7 @@ const CONFIG = {
   // A sound when a refine finishes, off until asked for. An extension that starts
   // making noise because it was installed is an extension people uninstall.
   soundOn: false,
-  // Empty means the built-in two-note blip, which is synthesised rather than
+  // Empty means the built-in two-note blip, which is synthesized rather than
   // built in so there is no audio file in the repository. A reader's own sound
   // is held as a data URL, which is why it is capped.
   soundUrl: "",
@@ -786,13 +786,13 @@ const CONFIG = {
   // Nothing of Auto Refine's moves or fades. A device set to reduce motion
   // gets the same without this.
   reduceMotion: false,
-  // A faint pattern drawn behind the panel, in the theme's own colour. Empty
+  // A faint pattern drawn behind the panel, in the theme's own color. Empty
   // is plain.
   panelPattern: "",
-  // Colours for cut and added words in a before and after, as #rrggbb. Empty
-  // uses the theme's danger and success colours.
-  cutColour: "",
-  addColour: "",
+  // Colors for cut and added words in a before and after, as #rrggbb. Empty
+  // uses the theme's danger and success colors.
+  cutColor: "",
+  addColor: "",
   // The card that comes up on the page when a refine finishes, with the before,
   // the after and the way back on it. On by default, because a refine changes
   // writing somebody was reading, and the change should be visible without
@@ -804,7 +804,7 @@ const CONFIG = {
   widgetSize: 44,
   // Markup, code and the model's own thinking are lifted out of a message
   // before it is sent and put back afterwards. On by default: a rewrite that
-  // eats a colour tag is the most common way this kind of extension ruins
+  // eats a color tag is the most common way this kind of extension ruins
   // somebody's reply, and they only notice three messages later.
   protectOn: true,
   protectThinking: true,
@@ -965,10 +965,10 @@ const CONFIG = {
   // what just happened flattens a scene into general prose, which is the
   // failure people blame on the model.
   contextMessages: 4,
-  // Whether each line of the run-up is labelled with who said it. On, because
+  // Whether each line of the run-up is labeled with who said it. On, because
   // the run-up goes out as one flat string and the labels are the only thing
   // telling two voices apart in it. Off for a chat whose messages already carry
-  // names, where labelling them again says everything twice.
+  // names, where labeling them again says everything twice.
   nameSpeakers: true,
   // Budgets in tokens, which is the unit a context window is measured in.
   // Whole entries and whole messages are kept or dropped: half a lorebook entry
@@ -978,10 +978,10 @@ const CONFIG = {
   // Which tab the panel opens on, remembered so it comes back where you left it.
   tab: "prompt",
   // How a before and an after are drawn. Off puts one text on the screen with
-  // the changes coloured where they happened, which is the shorter read when a
+  // the changes colored where they happened, which is the shorter read when a
   // rewrite moved a word here and there. On puts the two in their own columns,
   // which is the easier read when whole sentences were replaced and the marked
-  // version is more colour than text. Remembered, so the one you prefer is the
+  // version is more color than text. Remembered, so the one you prefer is the
   // one every card comes back on.
   sideBySide: false,
   // What each of the three carries. Empty means everything, which is what a
@@ -1055,7 +1055,7 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
       "(4 replies)\". Counted across replies rather than within " +
       "one, so a phrase used five times in a single reply is that reply's choice " +
       "and is not here. Dialogue is left out, since a character repeating " +
-      "themselves is characterisation. Empty unless Find phrases this chat has " +
+      "themselves is characterization. Empty unless Find phrases this chat has " +
       "worn out is on under Limits.",
     ours: true,
   },
@@ -1378,7 +1378,7 @@ const PHRASES =
   "- stock smells: ozone, and the vague completer (pine and something metallic)\n" +
   "- rooms with a will of their own (the house watched, the room held its breath) and sounds from nowhere (somewhere, a door slammed)\n" +
   "- weather on cue: rain that starts as someone cries, a sky that sulks along with them\n" +
-  "- movement graded instead of shown: deliberate, measured, unhurried, fluid, with practised ease\n" +
+  "- movement graded instead of shown: deliberate, measured, unhurried, fluid, with practiced ease\n" +
   "- pauses named instead of filled: a beat, a long moment, the silence stretched, time slowed, the world narrowed\n" +
   "- fancy stand-ins for plain words: orbs, ministrations, crimson beads, palpable, a testament to, a tapestry of\n" +
   "- office and maths talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten, load-bearing\n" +
@@ -1413,7 +1413,7 @@ const COPY_EXACTLY: Block = {
     "trackers, inventories, timestamps, and any line printed to the same " +
     "shape every time\n- a second language beside the first, with the line " +
     "translating it: both stay as they are, in the order they are in\n- " +
-    "names as spelled, including odd spellings and capitalisation\n- " +
+    "names as spelled, including odd spellings and capitalization\n- " +
     "numbers, dates, times and measurements\n\n" +
     "If you're not sure whether something counts as prose, assume it " +
     "doesn't and leave it." +
@@ -2270,7 +2270,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional. One regular expression per line. Capitals do not matter. Code, links, tags and the like are kept already. One that will not work is named under this box.",
+    hint: "Optional. One regular expression per line, capitals ignored. Code, links and tags are already kept. A broken one is named under this box.",
   },
   {
     key: "shieldKeep",
@@ -2278,7 +2278,7 @@ const SHIELD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "protectOn" },
     under: true,
-    hint: "Optional, one per line. A region matching one of these stays in front of the model even when a rule above would have hidden it, which is how you narrow a built-in rule without losing it.",
+    hint: "Optional, one regular expression per line. Text matching one is shown to the model, even where a rule above would hide it.",
   },
 ];
 
@@ -2307,20 +2307,20 @@ const GUARD_FIELDS: Field[] = [
   },
   {
     key: "guardSoften",
-    label: "Refuse a rewrite that sanitised the reply",
+    label: "Refuse a rewrite that sanitized the reply",
     type: "bool",
     hint: "On by default. Refuses a rewrite that took out most of the reply's explicit or violent words.",
   },
   {
     key: "softenPct",
     int: true,
-    label: "How much of it may go",
+    label: "Strong words a rewrite can lose (%)",
     type: "num",
     min: 10,
     max: 100,
     needs: { key: "guardSoften" },
     under: true,
-    hint: "As a percentage of the strong words that were in the reply. 60 by default, so losing more than three in five counts as sanitising and losing one or two reads as an ordinary edit. Lower is stricter.",
+    hint: "The share of the reply's strong words a rewrite can drop before it counts as sanitizing. 60 by default. Lower is stricter.",
   },
   {
     key: "softenWords",
@@ -2328,7 +2328,7 @@ const GUARD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "guardSoften" },
     under: true,
-    hint: "Optional, one per line, added to the built-in list. That list holds only words that are hard to use innocently, so add what softening looks like in what you write.",
+    hint: "Optional, one word per line, added to the built-in list. Add the strong words your story uses that the list does not have.",
   },
   {
     key: "softenSwaps",
@@ -2336,7 +2336,7 @@ const GUARD_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "guardSoften" },
     under: true,
-    hint: "Optional, one per line as soft => blunt, added to the built-in list. A refine is refused when it puts the soft word in and takes the blunt one out, so both halves have to happen before it counts.",
+    hint: "Optional, one pair per line, written soft => blunt. A rewrite is refused when it takes out the blunt word and puts in the soft one.",
   },
   {
     key: "guardStars",
@@ -2492,7 +2492,7 @@ const SAMPLER_FIELDS: Array<{ id: string; label: string; min: number; max: numbe
     min: 512,
     max: 2000000,
     step: "1",
-    hint: "How much the provider is told it may read. Blank leaves that to the connection, which is nearly always right: a refine is a small request next to a chat.",
+    hint: "The context size sent to the provider. Blank leaves it to the connection, which is nearly always right.",
   },
   {
     id: "max_tokens",
@@ -2550,7 +2550,7 @@ type Field = {
   options?: Array<{ value: string; label: string; needs?: { key: string; is?: any; test?: (c: any) => boolean } }>;
   // Shown only while another setting is on, or holds a given value, or one of
   // a list of values. A row that can do nothing where it sits is worse than a
-  // row that is not there, and a greyed one still takes up the space and
+  // row that is not there, and a grayed one still takes up the space and
   // invites the tap.
   needs?: { key: string; is?: any };
   // A second condition, for a row that only makes sense for one host and one
@@ -3026,7 +3026,7 @@ const COST_FIELDS: Field[] = [
       { value: "inherit", label: "Whatever my connection is set to" },
       { value: "custom", label: "Yes, and I will say how much" },
     ],
-    hint: "Off by default. Rewriting rarely needs thinking, and thinking costs more. Whatever my connection is set to uses the connection's thinking setting, or your own.",
+    hint: "Off by default, since rewriting rarely needs thinking and thinking costs more. “Whatever my connection is set to” uses its own setting.",
   },
   {
     key: "thinkingEffort",
@@ -3044,7 +3044,7 @@ const COST_FIELDS: Field[] = [
       { value: "xhigh", label: "Extra high" },
       { value: "max", label: "Max" },
     ],
-    hint: "Only used when you picked the last option above. Each provider decides what each level means, and a model with no effort setting ignores it. A rewrite rarely needs more than low.",
+    hint: "Only used with the last choice above. Each provider decides what each level means. A rewrite rarely needs more than low.",
   },
   {
     key: "timeoutSecs",
@@ -3053,7 +3053,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 3600,
-    hint: "A refine that takes longer is cancelled, and the reply is left as it was. Up to an hour. At 0, it waits the full hour.",
+    hint: "A refine that takes longer is canceled, and the reply is left as it was. Up to an hour. At 0, it waits the full hour.",
   },
   // Prices, so a token count can be shown as the number people actually want.
   // Nothing here knows what a model costs and no two providers agree, so the
@@ -3072,7 +3072,7 @@ const COST_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 10000,
-    hint: "Your provider's output price per million tokens, for what the model writes back. Type the number or paste the line. Nothing is converted between currencies.",
+    hint: "Your provider's output price per million tokens, for the text the model writes. Type the number, or paste the whole line.",
   },
 ];
 
@@ -3111,7 +3111,7 @@ const LIMIT_FIELDS: Field[] = [
     key: "asSwipe",
     label: "Add the refine as a swipe instead of writing over the reply",
     type: "bool",
-    hint: "Off by default. On, the rewrite is added as a new swipe and the original stays one swipe back. Where Lumiverse gives no swipes, it is written over the reply as usual.",
+    hint: "Off by default. On, the rewrite is added as a new swipe, and the original stays one swipe back.",
   },
   {
     key: "passMode",
@@ -3129,7 +3129,7 @@ const LIMIT_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "passMode", is: "many" },
     under: true,
-    hint: "One preset name per line, up to six, run top to bottom. A name that matches nothing is skipped. Each pass is one model call, so six passes cost six times as much.",
+    hint: "One preset name per line, up to six, run top to bottom. Each pass is one model call.",
   },
   {
     key: "passNamesYours",
@@ -3214,28 +3214,28 @@ const LIMIT_FIELDS: Field[] = [
 for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
   FIELD_BY_KEY[f.key] = f;
 
-// ---- colour, and staying readable on a theme nobody here has seen ----
+// ---- color, and staying readable on a theme nobody here has seen ----
 // Everything is styled from the host's --lumiverse-* variables so it arrives in
 // the reader's theme. That is most of the job and not all of it: a theme can
-// set a near-white accent, or a panel colour close to its own text, and a rule
+// set a near-white accent, or a panel color close to its own text, and a rule
 // that looked right on the stock dark theme comes out as a blank rectangle.
 //
-// So nothing here guesses at another variable to fix a colour. It reads what
-// the browser actually painted and steps in only when two colours are genuinely
-// too close. A theme that already reads well keeps its own colours exactly.
+// So nothing here guesses at another variable to fix a color. It reads what
+// the browser actually painted and steps in only when two colors are genuinely
+// too close. A theme that already reads well keeps its own colors exactly.
 //
 
 // The four below are pure, so a theme with a light accent can be checked
 // without a browser.
 interface Rgb { r: number; g: number; b: number; a: number }
 
-// Colour codes for the colour editor. A code is #rrggbb, typed with or
+// Color codes for the color editor. A code is #rrggbb, typed with or
 // without the #, or the three-letter short form.
 function rgbHex(r: number, g: number, b: number): string {
   const two = (n: number) => ("0" + Math.max(0, Math.min(255, Math.round(n))).toString(16)).slice(-2);
   return "#" + two(r) + two(g) + two(b);
 }
-function colourCode(typed: string): string | null {
+function colorCode(typed: string): string | null {
   const t = String(typed || "").trim().replace(/^#/, "");
   if (/^[0-9a-f]{6}$/i.test(t)) return "#" + t.toLowerCase();
   if (/^[0-9a-f]{3}$/i.test(t)) return "#" + t.split("").map((c) => c + c).join("").toLowerCase();
@@ -3268,7 +3268,7 @@ function hslHex(h: number, s: number, l: number): string {
   return rgbHex(f(0) * 255, f(8) * 255, f(4) * 255);
 }
 
-// getComputedStyle hands colours back as rgb() or rgba() and nothing else, so
+// getComputedStyle hands colors back as rgb() or rgba() and nothing else, so
 // those forms are the whole of what needs parsing. Anything else is unknown,
 // and unknown means leave it alone.
 function parseColor(input: any): Rgb | null {
@@ -3291,7 +3291,7 @@ function parseColor(input: any): Rgb | null {
   return { r: r, g: g, b: b, a: a };
 }
 
-// One colour laid over another, which is what a translucent panel over a
+// One color laid over another, which is what a translucent panel over a
 // translucent drawer over the page actually is.
 function blendColor(top: Rgb, under: Rgb): Rgb {
   const a = top.a + under.a * (1 - top.a);
@@ -3319,7 +3319,7 @@ function contrastRatio(a: Rgb, b: Rgb): number {
 // These are the two numbers the standard actually gives, and the panel used one
 // number for both: 3.2, which is the large-text figure applied to 12px labels.
 // Everything from 3.2 to 4.5 passed, and that band is exactly where a quiet
-// colour on a quiet surface lives, so a timestamp at 3.77 and a button label at
+// color on a quiet surface lives, so a timestamp at 3.77 and a button label at
 // 4.33 were being called readable. Which number a line gets is decided by its
 // own size, since that is what the standard measures.
 const TEXT_FLOOR = 4.5;
@@ -3345,16 +3345,16 @@ const WHITE: Rgb = { r: 255, g: 255, b: 255, a: 1 };
 const BLACK: Rgb = { r: 0, g: 0, b: 0, a: 1 };
 const PAGE_FALLBACK: Rgb = { r: 24, g: 20, b: 34, a: 1 };
 
-// The colour to repaint a failing line, given what is behind it, the ratio it
-// has to reach, and the colour it already has.
+// The color to repaint a failing line, given what is behind it, the ratio it
+// has to reach, and the color it already has.
 //
 // The smallest step toward white or black that clears the floor, rather than a
 // jump to one of them. The panel says things at three volumes on purpose: a
 // heading, a label, and a quiet aside underneath. Repainting every failing line
 // to the same near-white would flatten all three into one, so a hint that only
-// needs nudging keeps its own volume. Where the existing colour is not known,
+// needs nudging keeps its own volume. Where the existing color is not known,
 // or where nothing on this surface reaches the floor, it takes the most
-// readable colour there is.
+// readable color there is.
 function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio: number } {
   const onWhite = contrastRatio(WHITE, back);
   const onBlack = contrastRatio(BLACK, back);
@@ -3363,7 +3363,7 @@ function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio
   // Softened a little, because full white on a dark panel is harsher than
   // anything the theme itself draws. Only while it still clears the floor: the
   // softening costs about a tenth of the ratio, which is enough to drop a label
-  // from 4.5 to 4.46. When the softened one falls short the solid colour is
+  // from 4.5 to 4.46. When the softened one falls short the solid color is
   // used, which is the whole point of repainting in the first place.
   const soft = toward === WHITE
     ? { color: "rgba(255,255,255,0.94)", ink: { r: 255, g: 255, b: 255, a: 0.94 } as Rgb }
@@ -3399,10 +3399,10 @@ function betterInk(back: Rgb, want?: number, from?: Rgb): { color: string; ratio
   return full;
 }
 
-// What an element is really sitting on. A panel is usually a solid colour with
+// What an element is really sitting on. A panel is usually a solid color with
 // the theme's translucent tint laid over it as a gradient, and backgroundColor
-// reports only the colour underneath. So the first stop of a gradient is read
-// too: these tints are one colour repeated, so the first stop is the whole
+// reports only the color underneath. So the first stop of a gradient is read
+// too: these tints are one color repeated, so the first stop is the whole
 // story.
 // The caller usually has the computed style in hand already, and reading it a
 // second time for the same element is the single most repeated thing the
@@ -3430,8 +3430,8 @@ function surfaceOf(el: any, style?: any): Rgb | null {
 // which was most of the delay between pressing something and the panel coming
 // back.
 //
-// Only surface colours go in here. The sweep writes text colour and border
-// colour and nothing else, so nothing cached can go stale while it runs.
+// Only surface colors go in here. The sweep writes text color and border
+// color and nothing else, so nothing cached can go stale while it runs.
 let backdropSeen: Map<any, Rgb> | null = null;
 
 // An element's own surface over whatever is behind it, down to the first opaque
@@ -3652,6 +3652,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   // shown, and losing it would swallow the one line saying they changed.
   function carryOldNames(into: any) {
     if (!into || typeof into !== "object") return into;
+    // The two word colors, saved under their British names before the panel
+    // moved to American spelling. Those names are read here and nowhere else.
+    for (const [was, now] of [["cutColour", "cutColor"], ["addColour", "addColor"]]) {
+      if (was in into) {
+        if (!(now in into)) into[now] = into[was];
+        try {
+          delete into[was];
+        } catch (_) {}
+      }
+    }
     if (!into.builtInSeen && into.shippedSeen) into.builtInSeen = into.shippedSeen;
     try {
       delete into.shippedSeen;
@@ -4084,10 +4094,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       if (typeof document === "undefined") return;
       const root = document.documentElement;
-      // The reader's own colours for cut and added words. Only a colour
+      // The reader's own colors for cut and added words. Only a color
       // written as #rrggbb is put on the page, so nothing else in a setting
       // can reach the stylesheet.
-      for (const [key, name] of [["cutColour", "--arf-cut-ink"], ["addColour", "--arf-add-ink"]]) {
+      for (const [key, name] of [["cutColor", "--arf-cut-ink"], ["addColor", "--arf-add-ink"]]) {
         const v = String(cfg[key] || "");
         if (/^#[0-9a-f]{6}$/i.test(v)) root.style.setProperty(name, v);
         else root.style.removeProperty(name);
@@ -4405,7 +4415,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let slow = 0;
   // The chat walked out of. The backend goes on naming it while you stand on
   // the home screen, since it answers with the account's most recent chat, and
-  // this is what lets that one answer be recognised and dropped without
+  // this is what lets that one answer be recognized and dropped without
   // dropping the answer for a chat you have genuinely just opened.
   let leftBehind: any = null;
   const hereUrl = (): string => {
@@ -5062,7 +5072,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     return "Refining" + clockPart + (secs > 8 ? ", " + keep(left.toFixed(0) + "s left" + (later ? " on this try" : "")) : "");
   }
 
-  // The last line of defence. Everything else can fail politely; this catches
+  // The last line of defense. Everything else can fail politely; this catches
   // the case where nothing comes back at all, which is what a crashed backend
   // or a dropped bridge message looks like from here. Without it the panel
   // spins until the page is reloaded.
@@ -5534,7 +5544,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // One of Lumiverse's own notifications. Lumiverse takes them only from an
   // extension's server side, so the words are sent there to be shown. `force`
   // shows it even with Show a brief message off, for anything that is not a
-  // routine "it worked". `kind` sets the colour: success is green, info blue,
+  // routine "it worked". `kind` sets the color: success is green, info blue,
   // warning yellow and error red. Left out, a forced one is info and a routine
   // one is success.
   //
@@ -5554,7 +5564,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // font scale is the reader's story text, and chrome that inherits it grows
   // until a section stops fitting on a phone.
   // The cross the browser puts inside a search field, as a shape rather than a
-  // glyph, so it can be given a colour.
+  // glyph, so it can be given a color.
   const FOCUS_RING =
     "0 0 0 2px var(--lumiverse-primary-020,rgba(147,112,219,.2))," +
     "0 0 8px 0 var(--lumiverse-primary-020,rgba(147,112,219,.2))";
@@ -5565,11 +5575,11 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The shadow along the tab strip's lower edge while it is held at the top.
   const STRIP_SHADOW = "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));";
 
-  // The patterns behind the panel. Thin lines or dots in the theme's colour,
+  // The patterns behind the panel. Thin lines or dots in the theme's color,
   // drawn with gradients so there is no image to load. Marked important,
   // since the host's own drawer can set a background of its own on the same
   // element with a stronger selector. With one on, the
-  // cards and the tab strip get a solid colour, so nothing is read across the
+  // cards and the tab strip get a solid color, so nothing is read across the
   // lines.
   const PATTERNS = ["", "diamonds", "stripes", "dots", "hearts", "stars"];
   const PAT_INK = "var(--lumiverse-primary-010,rgba(147,112,219,.12))";
@@ -5585,13 +5595,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'>" + one(3, 3) + one(21, 21) + "</svg>";
     return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
   }
-  // Solid, and in the theme's own colour: the theme's raised colour, laid
-  // twice. The raised colour is what Lumiverse draws its own panels in, so it
+  // Solid, and in the theme's own color: the theme's raised color, laid
+  // twice. The raised color is what Lumiverse draws its own panels in, so it
   // is light on a light theme and dark on a dark one. A theme that makes it
   // see-through is near solid once it is laid twice. Lumiverse's "solid card"
-  // colour is a fixed grey that no theme changes, and the theme's deepest
+  // color is a fixed gray that no theme changes, and the theme's deepest
   // background is not always set by a custom theme, so neither is used: a
-  // dark colour under a light strip makes the readability sweep darken the
+  // dark color under a light strip makes the readability sweep darken the
   // text on it.
   const PAT_SOLID =
     "background-color:var(--lumiverse-bg-elevated,rgba(35,30,48,.96));" +
@@ -5618,7 +5628,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf[data-arf-pattern] .arf-card,.arf[data-arf-pattern] .arf-tabs{" + PAT_SOLID + "}" +
     // Hearts and stars are shapes, which a gradient cannot draw. Each is a
     // small picture used as a mask over the layer, filled with the theme's
-    // colour, so the shapes take the colour and follow a theme change.
+    // color, so the shapes take the color and follow a theme change.
     SHAPE_PATTERNS.map(
       (k) =>
         '.arf[data-arf-pattern="' + k + '"]::before{background-color:' + PAT_INK + ";" +
@@ -5722,8 +5732,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     ".arf *{box-sizing:border-box}" +
     // The tab strip's holder. The strip is solid at all times, in the theme's
-    // own colour, so the rows scrolling under it never show through and
-    // nothing about it changes colour as you scroll. Held at the top, it gains
+    // own color, so the rows scrolling under it never show through and
+    // nothing about it changes color as you scroll. Held at the top, it gains
     // a shadow along its lower edge, which fades in and out.
     //
     // A browser that can tell by itself that the strip is held does it here,
@@ -5748,7 +5758,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // once, rather than at each of the places that hide something.
     ".arf [hidden]{display:none!important}" +
     ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
-    ".arf-colourbad{font-size:12px;line-height:1.45;color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
+    ".arf-colorbad{font-size:12px;line-height:1.45;color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     // The status line keeps its dot beside the first line of words. Left to
     // wrap like any row, long words moved to a line of their own and the dot
     // sat on a line by itself above them.
@@ -5769,10 +5779,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-btngrid>.arf-btn{width:100%;min-width:0;white-space:normal;text-align:center;line-height:1.3}" +
     ".arf-btngrid>.arf-wide{grid-column:1/-1}" +
     ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
-    // Inputs sit on Lumiverse's own input colour, so a theme that changes its
+    // Inputs sit on Lumiverse's own input color, so a theme that changes its
     // boxes changes these too, and take a neutral border so a theme with a
     // strong accent does not tint every box. Older builds without the input
-    // colour fall back to the fill.
+    // color fall back to the fill.
     ".arf-field{width:100%;padding:8px 10px;border-radius:var(--lumiverse-radius,8px);" +
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:var(--lumiverse-input-bg,var(--lumiverse-fill,rgba(0,0,0,.15)));" +
@@ -5807,17 +5817,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-field[type=search]:focus,.arf-field[type=search]:focus-visible{outline:none;" +
     "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The browser draws its own clear button inside a search field and takes
-    // its colour from the page's colour scheme rather than from any CSS, so on
+    // its color from the page's color scheme rather than from any CSS, so on
     // a dark panel it arrives as a white cross: the one thing here that does
     // not follow the theme, because it is the browser's element and not ours.
-    // Replacing the glyph with a masked shape lets it take a colour like
+    // Replacing the glyph with a masked shape lets it take a color like
     // everything else.
     //
-    // The fill is currentColor, the field's own text colour, rather than a
+    // The fill is currentColor, the field's own text color, rather than a
     // theme variable. Naming a variable means naming a fallback, every fallback
-    // here is a dark one, and a light theme that set the common colours and not
+    // here is a dark one, and a light theme that set the common colors and not
     // that one would paint a near-white cross on a near-white field. The
-    // field's text colour is whatever the theme asked for and the readability
+    // field's text color is whatever the theme asked for and the readability
     // sweep has already corrected it if it did not read, so whatever the cross
     // inherits is legible by the time it is used, with nothing to keep in step.
     //
@@ -5836,7 +5846,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "select.arf-field:focus,select.arf-field:focus-visible{outline:none;" +
     "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
     // The browser's own up and down arrows on a number box are drawn by the
-    // browser rather than the theme, so on a dark panel they arrive as grey
+    // browser rather than the theme, so on a dark panel they arrive as gray
     // chevrons belonging to no design here. The value is typed, and a focused
     // box still steps with the arrow keys.
     ".arf-field[type=number]::-webkit-outer-spin-button," +
@@ -5853,8 +5863,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     "transition:background-color var(--lumiverse-transition-fast,150ms ease)}" +
     ".arf-btn:hover:not(:disabled){background:var(--lumiverse-secondary-hover,rgba(128,128,128,.25))}" +
     // Filled with the accent at a tint, edged with it, and lettered in the
-    // theme's own accent text colour, which is the one token a theme defines
-    // for exactly this: accent-coloured words on the panel's own background.
+    // theme's own accent text color, which is the one token a theme defines
+    // for exactly this: accent-colored words on the panel's own background.
     //
     // Not the accent at full strength with the label hardcoded white. That is
     // readable only on a theme whose accent is dark; on one whose accent is
@@ -5903,31 +5913,61 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-well.arf-dim{color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     // What changed, marked on the words rather than left for the reader to
     // find by comparing two paragraphs. Taken out is struck through in the
-    // theme's danger colour, put in is the success colour, and anything the
+    // theme's danger color, put in is the success color, and anything the
     // rewrite left alone is drawn exactly as the rest of the text: the point is
-    // that the changes stand out, and colouring the parts that did not change
-    // would be colouring nearly all of it.
+    // that the changes stand out, and coloring the parts that did not change
+    // would be coloring nearly all of it.
     //
-    // Colour is not the only mark on either. Somebody who cannot tell the two
+    // Color is not the only mark on either. Somebody who cannot tell the two
     // apart still has the line through one of them, and the words themselves.
-    // The reader can pick their own colour for each, which is put on the
-    // page's root. Unpicked, the theme's danger and success colours are used.
-    // The colour editor. The swatch is the size of a switch, with the
+    // The reader can pick their own color for each, which is put on the
+    // page's root. Unpicked, the theme's danger and success colors are used.
+    // The color editor. The swatch is the size of a switch, with the
     // theme's edge. The sliders are tall enough to drag with a finger.
     ".arf-swatch{flex:none;width:44px;height:28px;padding:0;cursor:pointer;" +
     "border:1px solid var(--lumiverse-border-hover,rgba(147,112,219,.25));" +
     "border-radius:var(--lumiverse-radius,8px)}" +
     ".arf-swatch:focus-visible{outline:none;box-shadow:" + FOCUS_RING + "}" +
-    ".arf-colouredit{gap:10px;padding-top:4px}" +
-    ".arf-colourcode{width:110px;flex:none}" +
-    ".arf-colourline{display:grid;grid-template-columns:76px minmax(0,1fr) 40px;align-items:center;gap:8px}" +
-    ".arf-colourname{font-size:12px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
-    ".arf-colourvalue{font-size:12px;text-align:right;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
-    ".arf-colourrange{width:100%;min-width:0;height:24px;margin:0;accent-color:var(--lumiverse-primary,rgba(147,112,219,.9))}" +
-    ".arf-colourdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}" +
-    "@media (pointer: coarse){.arf-swatch{width:52px;height:36px}.arf-colourrange{height:36px}" +
-    ".arf-colourcode{height:36px}}" +
-    // Drawn at full strength, so it is the theme's colour exactly. The line
+    ".arf-coloredit{gap:10px;padding-top:4px}" +
+    ".arf-colorcode{width:110px;flex:none}" +
+    ".arf-colorline{display:grid;grid-template-columns:76px minmax(0,1fr) 40px;align-items:center;gap:8px}" +
+    ".arf-colorname{font-size:12px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+    ".arf-colorvalue{font-size:12px;text-align:right;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+    // The three sliders draw their own track and knob. Each track shows the
+    // colors that slider can reach from the color in use, and the knob is
+    // filled with that color, so where it sits reads at a glance. The track
+    // and the knob come from --arf-track and --arf-thumb, set as the color
+    // changes. The knob's ring and shadow keep it clear on light and dark
+    // themes alike.
+    ".arf-colorrange{-webkit-appearance:none;appearance:none;width:100%;min-width:0;height:28px;margin:0;background:transparent;cursor:pointer}" +
+    ".arf-colorrange:focus{outline:none}" +
+    ".arf-colorrange::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:var(--arf-track,var(--lumiverse-fill,rgba(255,255,255,.12)));" +
+    "box-shadow:inset 0 0 0 1px rgba(0,0,0,.25),inset 0 1px 2px rgba(0,0,0,.25)}" +
+    ".arf-colorrange::-moz-range-track{height:12px;border-radius:999px;background:var(--arf-track,var(--lumiverse-fill,rgba(255,255,255,.12)));" +
+    "box-shadow:inset 0 0 0 1px rgba(0,0,0,.25),inset 0 1px 2px rgba(0,0,0,.25)}" +
+    ".arf-colorrange::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;margin-top:-5px;border-radius:50%;" +
+    "background:var(--arf-thumb,#fff);border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4);" +
+    "transition:box-shadow 160ms ease-out}" +
+    ".arf-colorrange::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--arf-thumb,#fff);border:3px solid #fff;" +
+    "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4);transition:box-shadow 160ms ease-out}" +
+    // A soft ring in the theme's accent while the knob is held or focused,
+    // so it is clear which slider is moving.
+    ".arf-colorrange:focus-visible::-webkit-slider-thumb,.arf-colorrange:active::-webkit-slider-thumb{" +
+    "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(147,112,219,.35);" +
+    "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px color-mix(in srgb,var(--lumiverse-primary,#9370db) 35%,transparent)}" +
+    ".arf-colorrange:focus-visible::-moz-range-thumb,.arf-colorrange:active::-moz-range-thumb{" +
+    "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(147,112,219,.35);" +
+    "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px color-mix(in srgb,var(--lumiverse-primary,#9370db) 35%,transparent)}" +
+    // One rule for each engine. A rule naming the other engine's knob is
+    // thrown away whole by a browser that does not know it.
+    "html[data-arf-still] .arf-colorrange::-webkit-slider-thumb{transition:none}" +
+    "html[data-arf-still] .arf-colorrange::-moz-range-thumb{transition:none}" +
+    "@media (prefers-reduced-motion: reduce){.arf-colorrange::-webkit-slider-thumb{transition:none}" +
+    ".arf-colorrange::-moz-range-thumb{transition:none}}" +
+    ".arf-colordot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}" +
+    "@media (pointer: coarse){.arf-swatch{width:52px;height:36px}.arf-colorrange{height:36px}" +
+    ".arf-colorcode{height:36px}}" +
+    // Drawn at full strength, so it is the theme's color exactly. The line
     // through it is what sets it apart from added words.
     ".arf-cut{color:var(--arf-cut-ink,var(--lumiverse-danger,#ef4444));text-decoration:line-through;" +
     "text-decoration-thickness:1px}" +
@@ -5941,7 +5981,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-sbs-lab{font-size:11.5px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     ".arf-well.arf-tall{max-height:340px}" +
     // A bar per check, with a mark where the line is. The fill takes the
-    // accent where the check reached the line and the muted text colour where
+    // accent where the check reached the line and the muted text color where
     // it did not, so the one that decided it stands out in any theme.
     ".arf-jevbar{position:relative;height:6px;margin-top:4px;border-radius:3px;overflow:hidden;" +
     "background:var(--lumiverse-fill,rgba(0,0,0,.15))}" +
@@ -6017,7 +6057,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // the sides rather than the row breaking.
     // A selector can be one long string with nowhere to wrap, so it is allowed
     // to break anywhere rather than push the card sideways. The one in use is
-    // marked by its border and its text colour, not by a word after it. A
+    // marked by its border and its text color, not by a word after it. A
     // status after every line is harder to read.
     ".arf-pick{font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.5;" +
     "overflow-wrap:anywhere;padding:3px 7px;border-radius:var(--lumiverse-radius-sm,5px);" +
@@ -6037,10 +6077,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Lumiverse styles every scroll bar on the page, with no least size for the
     // thumb, so a box holding a very long text gets a thumb a few pixels tall.
     // Inside our boxes it is never shorter than this, and keeps the theme's
-    // colour and shape.
+    // color and shape.
     ".arf ::-webkit-scrollbar-thumb,.arf::-webkit-scrollbar-thumb{min-height:28px;min-width:28px}" +
     // The panel is built from nothing on every repaint, and the readability
-    // sweep then writes colours onto it. Reading a computed colour resolves the
+    // sweep then writes colors onto it. Reading a computed color resolves the
     // element's style, so the write that follows counts as a change and the
     // transitions above start running: a rebuild that should be invisible
     // instead fades. Held off until the rebuild has been on the screen for a
@@ -6067,7 +6107,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-tab:hover{color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "background:var(--lumiverse-primary-010,rgba(147,112,219,.1))}" +
     // Filled, and the text at full strength. Two marks rather than one, because
-    // a fill alone is lost on a theme that washes it out and colour alone is
+    // a fill alone is lost on a theme that washes it out and color alone is
     // lost on one that flattens it.
     ".arf-tab[aria-selected=true]{color:var(--lumiverse-text,rgba(255,255,255,.95));" +
     "background:var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
@@ -6091,7 +6131,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Dimmed the moment it is switched off, and not faded. A block holds a box
     // of prose, thousands of characters of it, and animating the opacity of
     // anything holding text has the browser composite the whole of it for the
-    // duration: the text is rasterised a different way while it travels and
+    // duration: the text is rasterized a different way while it travels and
     // then put back, which reads as the words shivering.
     ".arf-block.arf-hushed{opacity:.55}" +
     ".arf-mini{min-height:28px;width:32px;padding:0;font-size:13px;line-height:1}" +
@@ -6120,7 +6160,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // A highlight under the mouse, for the two-way choices and the switches,
     // the same as every other button here has. Only where the device can
     // hover: a phone has none, and a tap does the work either way.
-    // A ring rather than a new border colour for the switches, since a switch
+    // A ring rather than a new border color for the switches, since a switch
     // that is on already wears the accent border. The text boxes and lists
     // take the accent edge; one with the keyboard in it already has its own
     // mark and is left alone.
@@ -6145,13 +6185,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     // trusting it, so it is a circle whatever shape the container turns out to
     // be: it was coming out as a squashed oval.
     //
-    // Three states, and the colour says which: quiet while nothing is running,
+    // Three states, and the color says which: quiet while nothing is running,
     // quieter still when there is nothing here to refine, and the theme's accent
     // while a refine is going. Auto Retry's button says on and off the same way,
     // so somebody running both reads one control rather than two.
     //
     // The base is opaque. A floating control sits over whatever the chat is
-    // showing, and a fill with alpha in it takes the colour of the message
+    // showing, and a fill with alpha in it takes the color of the message
     // underneath, so the same button is muddy over one reply and clear over the
     // next. The accent goes on as a second layer over that solid base rather
     // than replacing it.
@@ -6250,8 +6290,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     "border-radius:50%;border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
     "background:transparent;color:var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
     "cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" +
-    // The border only. The text colour is the readability sweep's to write, and
-    // a theme that makes its own muted colour unreadable has that rewritten a
+    // The border only. The text color is the readability sweep's to write, and
+    // a theme that makes its own muted color unreadable has that rewritten a
     // frame after the panel is built: animating it means the repair can be
     // watched happening, which is the label reading correct, then wrong, then
     // correct.
@@ -6266,7 +6306,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The description itself, parented to the page rather than to the row: the
     // panel is a scroll box and anything inside it would be clipped at the edge.
     // Opaque, since it sits directly over the rows below the one it belongs to:
-    // the theme's solid surface is painted first and the elevated colour laid
+    // the theme's solid surface is painted first and the elevated color laid
     // over it, so the tint follows the theme and nothing shows through.
     ".arf-hint{position:fixed;z-index:2147483300;box-sizing:border-box;padding:8px 10px;" +
     "border-radius:var(--lumiverse-radius,8px);" +
@@ -6325,7 +6365,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "@keyframes arf-fade-out{from{opacity:1}to{opacity:0}}" +
     "@keyframes arf-card-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(6px)}}" +
     // A refine landing on the card lights its edge once: a soft glow in the
-    // accent colour that rises over about half a second and fades back over
+    // accent color that rises over about half a second and fades back over
     // a second, then is gone. Slow and once, so it reads as a glow and never
     // as a blink. It is drawn on a layer of its own and only its opacity
     // moves.
@@ -6389,7 +6429,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     //
     // Everything moves around the middle of the 24 box rather than the middle of
     // whatever each part's own bounds happen to be, so the lid shuts onto the
-    // eye's centre line and the pupil crosses the eye rather than drifting off
+    // eye's center line and the pupil crosses the eye rather than drifting off
     // its own edge.
     ".arf-eye .arf-eye-ball,.arf-eye .arf-eye-lid,.arf-eye .arf-eye-pupil{" +
     "transform-box:view-box;transform-origin:12px 12px}" +
@@ -6398,7 +6438,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     "opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
     ".arf-eye .arf-eye-lid{opacity:1;" +
     "transition:opacity " + EYE_MS + "ms cubic-bezier(.2,.7,.3,1)}" +
-    // Reading. The lid lifts and the eye comes up from its own centre line
+    // Reading. The lid lifts and the eye comes up from its own center line
     // rather than being swapped for a second drawing, so opening and shutting
     // are one movement in either direction.
     ".arf-eye.arf-eye-read .arf-eye-ball{" +
@@ -6505,10 +6545,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     STILL_RULES("html[data-arf-still] ") +
     "html[data-arf-still] .arf-float .arf-hold{display:none}" +
     "@media (prefers-reduced-motion: reduce){" + STILL_RULES("") + "}" +
-    // ---- saying something is wrong, in the theme's own colours ----
-    // Lumiverse has a danger colour and a success colour, and a warning drawn
+    // ---- saying something is wrong, in the theme's own colors ----
+    // Lumiverse has a danger color and a success color, and a warning drawn
     // in neither reads as one more muted paragraph. Tinted background, matching
-    // edge, text left at full strength so the colour is the signal rather than
+    // edge, text left at full strength so the color is the signal rather than
     // the thing you have to read through.
     ".arf-warn,.arf-bad,.arf-good{display:flex;gap:8px;align-items:flex-start;" +
     "font-size:12px;line-height:1.45;padding:8px 10px;" +
@@ -6520,14 +6560,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 12%,transparent)}" +
     ".arf-good{border-color:var(--lumiverse-success,#22c55e);" +
     "background:color-mix(in srgb,var(--lumiverse-success,#22c55e) 12%,transparent)}" +
-    // The mark at the front of one. A glyph rather than a coloured dot alone,
+    // The mark at the front of one. A glyph rather than a colored dot alone,
     // so the line still says which kind it is to somebody who cannot tell the
-    // three colours apart.
+    // three colors apart.
     ".arf-sign{flex:none;font-weight:700;line-height:1.45}" +
     ".arf-warn .arf-sign{color:var(--lumiverse-warning,#f59e0b)}" +
     ".arf-bad .arf-sign{color:var(--lumiverse-danger,#ef4444)}" +
     ".arf-good .arf-sign{color:var(--lumiverse-success,#22c55e)}" +
-    // A button that throws something away. Edged in the danger colour rather
+    // A button that throws something away. Edged in the danger color rather
     // than filled with it: filled, it draws the eye to the one control on the
     // panel that should not be pressed by accident.
     ".arf-btn.arf-danger{border-color:var(--lumiverse-danger,#ef4444);" +
@@ -6565,7 +6605,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-field{padding:10px 12px}}" +
     // The buttons that sit in Lumiverse's own slots. Drawn from theme
     // variables rather than copied off the host's buttons, whose class names
-    // carry a build hash: the colours follow the reader's theme and there is
+    // carry a build hash: the colors follow the reader's theme and there is
     // nothing to keep in step with a Lumiverse rebuild.
     ".arf-slot{display:inline-flex;align-items:center;justify-content:center;" +
     "background:none;border:0;margin:0;padding:5px;border-radius:8px;" +
@@ -6582,7 +6622,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // host's classes and not this extension's.
     "[data-arf-slot][aria-busy=true]{opacity:.55}" +
     // The message one is a block in the message's own column, so it needs a row
-    // of its own to sit in. Centred, which is where the host puts the row of
+    // of its own to sit in. Centered, which is where the host puts the row of
     // buttons under it.
     ".arf-slot-row{display:flex;justify-content:center;align-items:center;" +
     "padding:2px 0}" +
@@ -6631,8 +6671,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     return b;
   }
   // A line that says something is wrong, or is about to be, or went right.
-  // Each carries a glyph as well as a colour, so the three are told apart
-  // without relying on being able to tell the three colours apart.
+  // Each carries a glyph as well as a color, so the three are told apart
+  // without relying on being able to tell the three colors apart.
   function notice(kind: "warn" | "bad" | "good", text: string): HTMLElement {
     const box = el("div", "arf-" + kind);
     box.appendChild(el("span", "arf-sign", kind === "good" ? "\u2713" : "!"));
@@ -6725,12 +6765,12 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The draft is not a reply, and not everything that stops one stops the
   // other. Being switched off, here or everywhere, stops it, and so does a
   // prompt with nowhere to put the text. While the panel waits to be told which
-  // chat you are in, it is greyed out with the rest, so every button above the
+  // chat you are in, it is grayed out with the rest, so every button above the
   // tabs is in the same state at once.
   function whyNotDraft(): string {
     if (!cfg.enabled) return "Auto Refine is switched off.";
     // The home screen has no input box to read, so the button had nothing to
-    // act on and said nothing about why. The two beside it were already greyed
+    // act on and said nothing about why. The two beside it were already grayed
     // there and this one stayed lit, which read as the one that still worked.
     if (outsideAnyChat()) return "No chat is open, so there is no input box to read.";
     if (lastChatId == null) return "Waiting to be told which chat you are in.";
@@ -6741,7 +6781,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     return "";
   }
 
-  // Browser-drawn controls are painted from the page's colour scheme, and with
+  // Browser-drawn controls are painted from the page's color scheme, and with
   // none set the browser assumes light, which is why a checkbox comes out as a
   // white block on a dark panel. Measured rather than assumed, so a light theme
   // still gets light controls.
@@ -6752,17 +6792,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
-  // Whether this is a cut or added word drawn in a colour the reader picked.
+  // Whether this is a cut or added word drawn in a color the reader picked.
   function pickedInk(n: any): boolean {
     const list = n && n.classList;
     if (!list) return false;
     const mine = (v: any) => /^#[0-9a-f]{6}$/i.test(String(v || ""));
-    return (list.contains("arf-cut") && mine(cfg.cutColour)) || (list.contains("arf-add") && mine(cfg.addColour));
+    return (list.contains("arf-cut") && mine(cfg.cutColor)) || (list.contains("arf-add") && mine(cfg.addColor));
   }
 
   // Walk the panel and repair only what genuinely fails. Elements with no text
   // yet are included: a status line waiting for something to say has already
-  // been given its colour, and it will not change when the text arrives.
+  // been given its color, and it will not change when the text arrives.
   function sweepReadable(root: any) {
     // Document order, so a parent is measured before its children and the
     // cache is warm by the time they ask.
@@ -6770,9 +6810,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     try {
       const nodes: any[] = [root].concat(Array.prototype.slice.call(root.querySelectorAll("*")));
       for (const n of nodes) {
-        // A colour the reader picked for cut or added words is shown as they
+        // A color the reader picked for cut or added words is shown as they
         // picked it, even where it is hard to read. Only the theme's own
-        // colour is repaired.
+        // color is repaired.
         if (pickedInk(n)) continue;
         const tag = String(n.tagName || "").toLowerCase();
         const isControl = tag === "button" || tag === "input" || tag === "select" || tag === "textarea";
@@ -6783,7 +6823,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const fg = parseColor(cs.color);
         if (!fg) continue;
         // From the element itself, not its parent. A filled button's label sits
-        // on the button's own colour, and measuring it against the card behind
+        // on the button's own color, and measuring it against the card behind
         // instead is how white-on-lavender passed a contrast check and went out
         // as an unreadable button.
         const back = backdropOf(n, cs);
@@ -6792,14 +6832,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         // read off the line rather than being one number for the whole panel.
         const want = floorFor(cs);
         if (contrastRatio(shown, back) < want) {
-          // Prose keeps as much of its own colour as it can: the panel says
+          // Prose keeps as much of its own color as it can: the panel says
           // things at three volumes on purpose, and repainting a quiet aside to
           // full white would put it level with the heading above it.
           //
           // A control has no such hierarchy to keep. A button label is one
           // thing at one volume, so the smallest step that scrapes the floor is
           // the wrong answer there: on a theme with a light accent it left
-          // "Refine the latest reply" as mid-grey on lavender, which reads as
+          // "Refine the latest reply" as mid-gray on lavender, which reads as
           // half-erased rather than as readable. Controls get the most readable
           // ink there is.
           const ink = isControl ? betterInk(back, want) : betterInk(back, want, fg);
@@ -6925,10 +6965,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     } catch (_) {}
   }
 
-  // Cut and added words take their colour from the page, so a new colour
+  // Cut and added words take their color from the page, so a new color
   // reaches every one of them at once. A word the readability pass repainted
-  // from the theme's colour still holds that repair, so those are measured
-  // again: a colour picked now is shown as it is, and the theme's colour put
+  // from the theme's color still holds that repair, so those are measured
+  // again: a color picked now is shown as it is, and the theme's color put
   // back is repaired afresh. Once a frame at most, since a slider sends many
   // changes.
   let wordsSoon = 0;
@@ -6964,7 +7004,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     // A description open at the moment the theme changes. It hangs off the page
     // rather than off the panel, so the walk above never reaches it, and it
-    // would sit there in the colours of the theme that has just gone.
+    // would sit there in the colors of the theme that has just gone.
     if (hintPop) {
       clearInk(hintPop);
       setScheme(hintPop);
@@ -6977,7 +7017,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // What the theme resolves to, as a string to compare against the last one.
   // The variables the panel is drawn from, plus the two surfaces behind it: a
-  // theme that swaps only the page colour and leaves the variables alone still
+  // theme that swaps only the page color and leaves the variables alone still
   // changes every answer the sweep gives.
   const THEME_VARS = [
     "--lumiverse-bg",
@@ -6987,6 +7027,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     "--lumiverse-primary",
     "--lumiverse-secondary",
     "--lumiverse-border",
+    // The default colors of cut and added words.
+    "--lumiverse-danger",
+    "--lumiverse-success",
   ];
   function themeMark(): string {
     try {
@@ -7007,7 +7050,22 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (now === themeWas) return;
     themeWas = now;
     reInk();
+    // A color row on the theme's color shows that color in its swatch, code,
+    // sliders and preview, and those were set when it was drawn.
+    for (const one of Array.from(colorPainters)) {
+      if (!one.row.isConnected) colorPainters.delete(one);
+      else
+        try {
+          one.paint();
+        } catch (_) {}
+    }
   }
+  // The color rows on the page, each with the function that shows its color.
+  const colorPainters = new Set<{ row: HTMLElement; paint: () => void }>();
+  // The color editors that are open, by setting. The panel is drawn again
+  // after many changes, and an editor that was open is drawn open again, so a
+  // change somewhere else does not shut it.
+  const openColorEditors = new Set<string>();
 
   // Three ways a theme changes and none of them covers the others. The reader
   // switching their system between light and dark fires the media query and
@@ -7214,7 +7272,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     const w = got.width || box.offsetWidth || 0;
     const GAP = 6;
     const EDGE = 12;
-    // Lined up with the row's left edge rather than centred on the "?", which
+    // Lined up with the row's left edge rather than centered on the "?", which
     // reads as belonging to the row, and nudged back inside a narrow screen.
     const left = Math.max(EDGE, Math.min(r.left, vw - w - EDGE));
     // Above the row, the same as Auto Retry's. Below only when it does not fit
@@ -7601,7 +7659,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       }, 120);
     });
     // No Clear button beside it. A search field already carries one, drawn by
-    // the browser, and the rule above gives it a colour that follows the theme
+    // the browser, and the rule above gives it a color that follows the theme
     // instead of the white cross it came with. A second one is a button that
     // appears and disappears next to a control that never moved.
     row.appendChild(box);
@@ -7885,7 +7943,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // So a switch does two things instead of one. The rows hanging off it are
   // shown and hidden where they stand, which is instant and moves nothing else,
   // and the rebuild that catches everything else up - the count on the card,
-  // the warning that appears when the last check goes off, the greyed-out
+  // the warning that appears when the last check goes off, the grayed-out
   // button - waits until the knob has arrived. Flicking three switches in a row
   // is one rebuild rather than three.
   let settleTimer: any = null;
@@ -8155,10 +8213,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
     setScheme(root);
     // Before the frame is painted. The tree is already in the page, so asking
-    // for a computed colour lays it out there and then and the repair lands on
+    // for a computed color lays it out there and then and the repair lands on
     // the first frame the reader sees. Running it a frame later instead painted
-    // the panel once in the theme's own colours and once in the repaired ones,
-    // which reads as a flicker on every press, and the tabs carry a colour
+    // the panel once in the theme's own colors and once in the repaired ones,
+    // which reads as a flicker on every press, and the tabs carry a color
     // transition so theirs faded across it.
     if (stick) {
       watchStuck(stick);
@@ -8175,7 +8233,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // strip is held at the top. Transitions are off while the panel settles,
     // so it is there at once.
     if (stick) markStuck();
-    // A second pass a frame later, for anything whose colour only settles once
+    // A second pass a frame later, for anything whose color only settles once
     // the panel has been through a real layout. The scroll is set again there
     // and once more after: a panel that grows taller between the frames clamps
     // the earlier attempts to its old height.
@@ -8304,7 +8362,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     //
     // Stopping belongs here as well as on the floating button, since that
     // button can be switched off and a panel that answers a running refine by
-    // greying its buttons out says wait rather than saying there is a way out
+    // graying its buttons out says wait rather than saying there is a way out
     // of it.
     if (busy) {
       const halt = button("Stop this refine", true);
@@ -8449,7 +8507,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // while you are reaching for it is one you press by accident.
     // Only with replies: your own messages are never refined automatically.
     if (refinesReplies()) (replies.parentElement || wrap).appendChild(auto);
-    // Why the button is greyed out, said once rather than left to a tooltip
+    // Why the button is grayed out, said once rather than left to a tooltip
     // nobody sees on a phone. The master switch being off is not written out:
     // the switch is right there saying it.
     const said = (refinesReplies() && stop) || (refinesMine() && stopMine) || "";
@@ -8595,7 +8653,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // themselves, which on a rewrite of one sentence in six is most of the work.
   // This marks it: taken out is struck through, put in is not, and everything
   // the rewrite left alone is drawn as ordinary text, because that is nearly
-  // all of it and colouring it would drown the part that matters.
+  // all of it and coloring it would drown the part that matters.
   //
   // By word, not by character. A character diff on prose finds the letters two
   // different words happen to share and marks half of each, which reads as
@@ -8776,8 +8834,8 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The words are built again, so the readability pass runs on them again.
-  // Without it, a theme colour too faint for the card, which the pass had made
-  // readable, came back at its own colour each time the view was switched.
+  // Without it, a theme color too faint for the card, which the pass had made
+  // readable, came back at its own color each time the view was switched.
   function redrawDiffs() {
     for (const scope of diffScopes()) {
       const all = scope.querySelectorAll("[data-arf-diff]");
@@ -8861,7 +8919,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       well.appendChild(el("span", "", after));
       // The words are the same, but the markup around them may not be.
       if (rawBefore !== rawAfter)
-        wrap.appendChild(el("div", "arf-note", "The words are the same. Only the markup around them changed, such as a colour tag."));
+        wrap.appendChild(el("div", "arf-note", "The words are the same. Only the markup around them changed, such as a color tag."));
       return;
     }
     for (const p of parts)
@@ -9332,7 +9390,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // way on a full-length prompt.
   //
   // Asked of the page rather than by hunting up the panel's ancestors for a
-  // scroll box. Which of them is the scroller is a judgement about somebody
+  // scroll box. Which of them is the scroller is a judgment about somebody
   // else's layout and it came out wrong on the first build it met; whether the
   // page has a scroll to lose is the thing that actually decides the cost, and
   // it is one measurement.
@@ -9563,7 +9621,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         void box.offsetWidth;
         box.classList.add("arf-glow");
       }
-      // Painted a frame later, once it is in the page and has a colour behind
+      // Painted a frame later, once it is in the page and has a color behind
       // it to measure against, the same as the panel.
       try {
         requestAnimationFrame(() => {
@@ -10436,9 +10494,9 @@ export function setup(ctx: Ctx, overrides?: any) {
       const next = blockList();
       next[i].on = !!box.checked;
       // Saved without a rebuild. This tab holds the whole prompt, several
-      // boxes of it, and tearing all of that down to grey one block out was
+      // boxes of it, and tearing all of that down to gray one block out was
       // the heaviest thing any switch on the panel did, and the flicker that
-      // came with it. The greying is done here and the rest by refreshBlocks,
+      // came with it. The graying is done here and the rest by refreshBlocks,
       // which brings the card's count, its warning, the line naming the prompt
       // and the header up to date without touching a single box of prompt.
       setBlocks(next, false);
@@ -10519,7 +10577,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // the input handler above has already written the new text into cfg, so
       // by the time this runs there is nothing left to compare against. One
       // edit can take {{message}} out of the whole prompt, which changes the
-      // warning on this card and greys out the refine button, and both have to
+      // warning on this card and grays out the refine button, and both have to
       // be right the moment you leave the box.
       setBlocks(next);
     });
@@ -10692,7 +10750,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     );
     wrap.appendChild(
       note(
-        "Counted with Lumiverse's own tokeniser where it will answer, and estimated at four characters a token where it will not.",
+        "Counted with Lumiverse's own tokenizer where it will answer, and estimated at four characters a token where it will not.",
       ),
     );
     return wrap;
@@ -10823,8 +10881,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     const msgs = Array.isArray(preview.messages) ? preview.messages : [];
     let chars = 0;
     for (const m of msgs) chars += String((m && m.content) || "").length;
-    // Counted on the way here where the tokeniser is. An older panel, or a host
-    // whose tokeniser would not answer, leaves the estimate in place rather
+    // Counted on the way here where the tokenizer is. An older panel, or a host
+    // whose tokenizer would not answer, leaves the estimate in place rather
     // than leaving the line off.
     const tok = preview.tokens && typeof preview.tokens === "object" ? preview.tokens : null;
     const totalTokens = tok ? Number(tok.total) || 0 : Math.ceil(chars / 4);
@@ -10993,7 +11051,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (hasPrices())
       wrap.appendChild(
         note(
-          "Read every cost here as a ceiling rather than your bill. It is worked out from the prompt this extension builds, so anything your provider wraps around it is missing, and it prices every token at the full rate, which is the most you could be charged rather than what you will be. Lumiverse counts the tokens with its own tokeniser for the model, which is not the counter your provider bills you against.",
+          "Every cost here is an estimate, not your bill. It prices every token at the full rate, so a provider discount, such as for cached tokens, makes the real cost lower. It is worked out from the prompt this extension builds, so anything your provider adds around it is left out. Lumiverse counts the tokens with its own tokenizer for the model, and your provider may count them differently.",
         ),
       );
     if (lostConnection())
@@ -11575,7 +11633,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildProtectCard(): HTMLElement {
     const wrap = card(
       "Protecting what is not prose",
-      "A model asked to improve writing can change colour tags, code blocks or image links. These keep that kind of text exactly as it was.",
+      "A model asked to improve writing can change color tags, code blocks or image links. These keep that kind of text exactly as it was.",
     );
     wrap.appendChild(
       fieldRow({
@@ -11627,7 +11685,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               key: "thinkTags",
               label: "Extra thinking tag names",
               type: "lines",
-              hint: "Optional, one per line, just the name with no brackets or pipes. The common tag names and the channel formats are known already. Working that is not recognised is rewritten and saved over the reply.",
+              hint: "Optional. One tag name per line, with no brackets. The common thinking tags are already known.",
             }),
           );
         }),
@@ -11727,7 +11785,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       wrap.appendChild(fieldRow(f));
     // The switches stay in front. What each one measures by is a number and a
     // word list, which belong behind a fold with the rest of the tuning.
-    // Only the sanitising check's tuning goes in the fold. Any other row that
+    // Only the sanitizing check's tuning goes in the fold. Any other row that
     // waits on a switch, such as How many at once, sits straight under that
     // switch, where it shows as soon as the switch is on.
     const softens = (f: any) => !!f.under && !!f.needs && f.needs.key === "guardSoften";
@@ -11748,7 +11806,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     if (tuning.length)
       wrap.appendChild(
         hangsOff(
-          fold("What counts as sanitising", (body) => {
+          fold("What counts as sanitizing", (body) => {
             // Each keeps the switch it waits on, so one going off takes its own
             // rows with it while the fold stays for the others.
             for (const f of tuning) body.appendChild(fieldRow({ ...f, under: false }));
@@ -12668,7 +12726,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         key: "swipeSelector",
         label: "Your next / swipe button",
         type: "text",
-        hint: "Only needed if a Lumiverse update renames the arrows on a message and the refine stops appearing as a swipe. Separated by commas and tried in the order you write them. Emptying the box falls back to the built-in list.",
+        hint: "Only needed if a Lumiverse update renames the swipe arrows and refines stop appearing as swipes. Comma-separated, tried in order. Empty uses the built-in list.",
       }),
     );
 
@@ -12945,14 +13003,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // A colour for the words a before and after marks, with its own editor
-  // rather than the browser's colour input, which on a phone often has no
-  // way to type a colour code. The swatch opens the editor under the row: a
+  // A color for the words a before and after marks, with its own editor
+  // rather than the browser's color input, which on a phone often has no
+  // way to type a color code. The swatch opens the editor under the row: a
   // box for a code such as #ff0040, sliders for hue, saturation and
-  // lightness, the theme's own colours to pick from, and a preview. Use the
-  // theme's colour clears it. A colour picked here is shown exactly as it was
+  // lightness, the theme's own colors to pick from, and a preview. Use the
+  // theme's color clears it. A color picked here is shown exactly as it was
   // picked, everywhere, so the preview matches what the card shows.
-  function colourRow(key: string, label: string, themeVar: string, fallback: string, cut: boolean): HTMLElement {
+  function colorRow(key: string, label: string, themeVar: string, fallback: string, cut: boolean): HTMLElement {
     const wrap = el("div", "arf-col");
     wrap.setAttribute("data-arf-row", key);
     const row = el("div", "arf-between");
@@ -12960,11 +13018,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     const lab = el("span", "arf-lab", label);
     lab.id = nextId() + "-name";
     left.appendChild(lab);
-    const q = hintButton("Empty uses your theme's colour. Tap the swatch to type a colour code or pick one.", label);
+    const q = hintButton("Empty uses your theme's color. Tap the swatch to type a color code or pick one.", label);
     if (q) left.appendChild(q);
     row.appendChild(left);
 
-    // A theme colour, read off the page as #rrggbb.
+    // A theme color, read off the page as #rrggbb.
     const read = (name: string, backup: string): string => {
       try {
         const probe = document.createElement("span");
@@ -12984,13 +13042,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     const swatch = document.createElement("button");
     swatch.type = "button";
     swatch.className = "arf-swatch";
-    swatch.setAttribute("data-arf-colourswatch", key);
+    swatch.setAttribute("data-arf-colorswatch", key);
     swatch.setAttribute("aria-expanded", "false");
     swatch.setAttribute("aria-labelledby", lab.id);
-    swatch.title = "Change the colour";
-    const back = button("Use the theme's colour", false);
+    swatch.title = "Change the color";
+    const back = button("Use the theme's color", false);
     back.classList.add("arf-mini2");
-    back.setAttribute("data-arf-colourback", key);
+    back.setAttribute("data-arf-colorback", key);
     const tools = el("div", "arf-row");
     tools.appendChild(back);
     tools.appendChild(swatch);
@@ -12998,40 +13056,40 @@ export function setup(ctx: Ctx, overrides?: any) {
     wrap.appendChild(row);
 
     // The editor, built once and shown or hidden.
-    const editor = el("div", "arf-col arf-under arf-colouredit");
+    const editor = el("div", "arf-col arf-under arf-coloredit");
     editor.hidden = true;
     const codeRow = el("div", "arf-row");
     const code = document.createElement("input");
     code.type = "text";
-    code.className = "arf-field arf-mono arf-colourcode";
+    code.className = "arf-field arf-mono arf-colorcode";
     code.setAttribute("data-arf-field", key);
-    code.setAttribute("aria-label", label + ", colour code");
+    code.setAttribute("aria-label", label + ", color code");
     code.placeholder = "#ff0040";
     code.maxLength = 7;
     code.spellcheck = false;
     code.autocomplete = "off";
     code.setAttribute("autocapitalize", "off");
     codeRow.appendChild(code);
-    // Says when the code typed is not a colour. Not an arf-note: that class is
+    // Says when the code typed is not a color. Not an arf-note: that class is
     // a description under a row, and this row's description is behind its ?.
-    const bad = el("span", "arf-colourbad", "");
-    bad.setAttribute("data-arf-colourbad", key);
+    const bad = el("span", "arf-colorbad", "");
+    bad.setAttribute("data-arf-colorbad", key);
     codeRow.appendChild(bad);
     editor.appendChild(codeRow);
 
     const sliders: Record<string, HTMLInputElement> = {};
     const shown: Record<string, HTMLElement> = {};
     for (const [part, name, max] of [["h", "Hue", 360], ["s", "Saturation", 100], ["l", "Lightness", 100]] as Array<[string, string, number]>) {
-      const line = el("div", "arf-colourline");
-      const nameEl = el("span", "arf-colourname", name);
+      const line = el("div", "arf-colorline");
+      const nameEl = el("span", "arf-colorname", name);
       const range = document.createElement("input");
       range.type = "range";
       range.min = "0";
       range.max = String(max);
-      range.className = "arf-colourrange";
-      range.setAttribute("data-arf-colourpart", part);
+      range.className = "arf-colorrange";
+      range.setAttribute("data-arf-colorpart", part);
       range.setAttribute("aria-label", label + ", " + name);
-      const value = el("span", "arf-colourvalue arf-mono", "");
+      const value = el("span", "arf-colorvalue arf-mono", "");
       line.appendChild(nameEl);
       line.appendChild(range);
       line.appendChild(value);
@@ -13044,13 +13102,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     for (const [name, v, b] of [
       ["Danger", "--lumiverse-danger", "#ef4444"],
       ["Success", "--lumiverse-success", "#22c55e"],
-      ["Warning", "--lumiverse-warning", "#f59e0b"],
-      ["Accent", "--lumiverse-primary", "#9370db"],
     ]) {
       const one = button(name, false);
       one.classList.add("arf-mini2");
-      one.setAttribute("data-arf-colourpick", name.toLowerCase());
-      const dot = el("span", "arf-colourdot", "");
+      one.setAttribute("data-arf-colorpick", name.toLowerCase());
+      const dot = el("span", "arf-colordot", "");
       dot.style.background = "var(" + v + "," + b + ")";
       one.insertBefore(dot, one.firstChild);
       one.addEventListener("click", () => take(read(v, b), true));
@@ -13066,20 +13122,34 @@ export function setup(ctx: Ctx, overrides?: any) {
     editor.appendChild(sample);
     wrap.appendChild(editor);
 
-    // The sliders keep their own hue, saturation and lightness. A colour code
+    // The sliders keep their own hue, saturation and lightness. A color code
     // holds less than they do: hue 360 is the same red as hue 0, and with no
     // saturation there is no hue at all. Read back from the code, a slider at
     // its far end would jump to 0, and the other two would move a step each
     // time one of them was dragged. So the sliders set the code, and the code
     // sets the sliders only when it comes from somewhere else.
     let hsl = hexHsl(now());
+    // Each track shows what its slider reaches from the color in use: every
+    // hue, gray to full color, and black through the color to white.
     const showSliders = () => {
+      const { h, s, l } = hsl;
+      const hues = [0, 60, 120, 180, 240, 300, 360].map((x) => "hsl(" + x + "," + s + "%," + l + "%)").join(",");
+      const tracks: Record<string, string> = {
+        h: "linear-gradient(to right," + hues + ")",
+        s: "linear-gradient(to right,hsl(" + h + ",0%," + l + "%),hsl(" + h + ",100%," + l + "%))",
+        l: "linear-gradient(to right,hsl(" + h + "," + s + "%,0%),hsl(" + h + "," + s + "%,50%),hsl(" + h + "," + s + "%,100%))",
+      };
+      // The exact color in use. Built back from the rounded slider values it
+      // can be a step off.
+      const thumb = now();
       for (const part of ["h", "s", "l"] as Array<"h" | "s" | "l">) {
         sliders[part].value = String(hsl[part]);
+        sliders[part].style.setProperty("--arf-track", tracks[part]);
+        sliders[part].style.setProperty("--arf-thumb", thumb);
         shown[part].textContent = String(hsl[part]) + (part === "h" ? "" : "%");
       }
     };
-    // Every part shows the colour in use.
+    // Every part shows the color in use.
     const paint = (fromSliders?: boolean) => {
       const hex = now();
       swatch.style.background = hex;
@@ -13088,7 +13158,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (!fromSliders) hsl = hexHsl(hex);
       showSliders();
     };
-    // A colour taken from any part of the editor.
+    // A color taken from any part of the editor.
     function take(hex: string, save: boolean, fromSliders?: boolean) {
       cfg[key] = hex.toLowerCase();
       bad.textContent = "";
@@ -13096,15 +13166,20 @@ export function setup(ctx: Ctx, overrides?: any) {
       persist(save);
       reInkWords();
     }
+    // While typing, only a whole six-digit code is shown. Partway through
+    // one, the first three digits are a short code for another color, and
+    // the swatch and preview would jump to it. The short form is taken when
+    // typing ends, on change.
     code.addEventListener("input", () => {
-      const hex = colourCode(code.value);
+      if (code.value.trim().replace(/^#/, "").length !== 6) return;
+      const hex = colorCode(code.value);
       if (hex) take(hex, false);
     });
     code.addEventListener("change", () => {
-      const hex = colourCode(code.value);
+      const hex = colorCode(code.value);
       if (hex) take(hex, true);
       else {
-        bad.textContent = "Type a colour code such as #ff0040.";
+        bad.textContent = "Type a color code such as #ff0040.";
         code.value = now();
       }
     });
@@ -13129,6 +13204,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     swatch.addEventListener("click", () => {
       const open = swatch.getAttribute("aria-expanded") !== "true";
       swatch.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) openColorEditors.add(key);
+      else openColorEditors.delete(key);
       if (open) {
         const wasHidden = editor.hidden;
         editor.hidden = false;
@@ -13136,7 +13213,14 @@ export function setup(ctx: Ctx, overrides?: any) {
         unfold(editor, wasHidden);
       } else foldAway(editor, () => (editor.hidden = swatch.getAttribute("aria-expanded") !== "true"));
     });
+    // Open again, with no movement, when it was open before the panel was
+    // drawn again.
+    if (openColorEditors.has(key)) {
+      swatch.setAttribute("aria-expanded", "true");
+      editor.hidden = false;
+    }
     paint();
+    colorPainters.add({ row: wrap, paint: () => paint() });
     return wrap;
   }
 
@@ -13223,11 +13307,11 @@ export function setup(ctx: Ctx, overrides?: any) {
           { value: "hearts", label: "Hearts" },
           { value: "stars", label: "Stars" },
         ],
-        hint: "None by default. A faint pattern in your theme's colour, drawn behind the cards on this tab.",
+        hint: "None by default. A faint pattern in your theme's color, drawn behind the cards on this tab.",
       }),
     );
-    wrap.appendChild(colourRow("cutColour", "Colour of cut words", "--lumiverse-danger", "#ef4444", true));
-    wrap.appendChild(colourRow("addColour", "Colour of added words", "--lumiverse-success", "#22c55e", false));
+    wrap.appendChild(colorRow("cutColor", "Color of cut words", "--lumiverse-danger", "#ef4444", true));
+    wrap.appendChild(colorRow("addColor", "Color of added words", "--lumiverse-success", "#22c55e", false));
     return wrap;
   }
 
@@ -14346,7 +14430,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     sel.appendChild(none);
     // Under headings, because four that come with it and however many of your
     // own is a column nobody can read. A heading is not an option: the browser
-    // draws it greyed and will not let it be picked, which is what makes it a
+    // draws it grayed and will not let it be picked, which is what makes it a
     // heading rather than an entry that does nothing.
     //
     // The two halves are told apart by which prompt they carry, not by name, so
@@ -14492,7 +14576,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     }
     // The prompts that come with the extension cannot hold this. Picking one
     // here still works, because Save as new writes it onto the copy, but Update
-    // selected is greyed out on a built-in prompt and switching the picker puts
+    // selected is grayed out on a built-in prompt and switching the picker puts
     // the box back to what the next preset carries. Without this line the pick
     // looks like it took and then goes without a word.
     const builtInSaid = note(
@@ -14831,7 +14915,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   let resetArmed = false;
 
   // ---- the sound ----
-  // A short two-note blip when nothing else is chosen, synthesised rather than
+  // A short two-note blip when nothing else is chosen, synthesized rather than
   // built in so the repository holds no audio file and the switch still makes a
   // sound on its own. A file you attach or a link you paste replaces it.
   const hasSound = () => !!String(cfg.soundUrl || "").trim();
@@ -15394,7 +15478,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     widgetAt = widgetWanted();
     try {
       // The host's container is whatever shape it is, so this squares itself
-      // rather than trusting it, and the icon is centred in a fixed box.
+      // rather than trusting it, and the icon is centered in a fixed box.
       const root = widget.root as HTMLElement;
       root.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center";
       const b = document.createElement("button");
@@ -16021,7 +16105,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The button the host put in a row, for the next one to be made in its image.
-  // The first, because the last is often a delete carrying a warning colour of
+  // The first, because the last is often a delete carrying a warning color of
   // its own and the one before the end of the input bar is a gear with a class
   // of its own, and neither is what the rest of the row looks like.
   function hostButton(bar: Element): HTMLElement | null {
@@ -16787,8 +16871,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         if (!cfg.freeSelect || !touchAt || Date.now() - touchAt > HOLD_WINDOW_MS) return;
         if (!onMessageText(e && e.target)) return;
         // Stopped before it reaches the page. The device's own event is not
-        // cancelled, so the selection it starts goes ahead. Lumiverse's own
-        // event, sent to open its menu, is cancelled as well.
+        // canceled, so the selection it starts goes ahead. Lumiverse's own
+        // event, sent to open its menu, is canceled as well.
         e.stopPropagation();
         if (!e.isTrusted) e.preventDefault();
       };
@@ -17537,7 +17621,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               // nothing. Asked which chat is open, the backend answers with the
               // account's most recent one, and on the home screen that is the
               // chat you left before the update. leftBehind is empty, so the
-              // check above has nothing to recognise it by, and the panel came
+              // check above has nothing to recognize it by, and the panel came
               // back saying it was ready to refine in a chat nobody was in.
               //
               // The address settles it on any build whose addresses name chats.
@@ -18129,7 +18213,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   // The question before a refine is saved, on the same card a finished refine
-  // comes up on: what changed, marked, in the reader's colours, with the
+  // comes up on: what changed, marked, in the reader's colors, with the
   // switch between the two views. Its buttons are the Waiting for you card's,
   // and both go through the same place, so answering either settles the
   // other. Closing it without an answer leaves the question waiting in the

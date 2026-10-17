@@ -164,7 +164,7 @@ the rewritten message
 - The scores come before the rewrite, so they decide what changes. They do not grade the rewrite afterwards.
 - `<REFINE_NOTES>` is outside `<REFINED>`, so it can never reach your chat.
 - The notes are kept on the **Log** tab, under **What the model worked out**. Only a refine that finishes replaces them. Stopping one keeps the last notes.
-- A score is only the model's judgement. The quoted line is the part to trust.
+- A score is only the model's judgment. The quoted line is the part to trust.
 
 **The two plain prompts ask for the rewrite and nothing else.** A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost.
 
@@ -252,7 +252,7 @@ Four settings on the **Context** tab. Three of them set a size, and every one of
 **In a group chat**, each reply is named after the character who wrote it. The card sent in `{{description}}` is that character's card too, found by name among the cards in the chat. Where no card matches the name, the chat's own card is sent.
 - **Most tokens of lorebook** is a size limit on the lorebook entries. Whole entries are kept or dropped.
 
-Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokeniser where it can, and estimated at four characters a token where it cannot.
+Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokenizer where it can, and estimated at four characters a token where it cannot.
 
 ## Phrases this chat has worn out
 
@@ -358,7 +358,7 @@ A model asked to improve a paragraph may drop a `<font color>` tag, reflow a cod
 3. Afterwards, the real markup goes back in.
 4. **If a token did not come back, the rewrite is dropped.** This check is what makes the protection a guarantee.
 
-What is hidden: fenced code, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, tracker brackets, and any tag with an attribute (such as a colour or a link).
+What is hidden: fenced code, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, tracker brackets, and any tag with an attribute (such as a color or a link).
 
 What is not hidden:
 
@@ -371,7 +371,7 @@ What is not hidden:
 - A pattern that cannot be read is named under the box.
 - A pattern that matches nothing at all, the empty string, is refused, because it would match everywhere.
 
-**Patterns to keep visible** keeps a region visible even when a rule above would hide it. The usual use is a colour span in the middle of a sentence, which the model handles better when it can see it.
+**Patterns to keep visible** keeps a region visible even when a rule above would hide it. The usual use is a color span in the middle of a sentence, which the model handles better when it can see it.
 
 Some things cannot be found by pattern, such as a stat block or a translation line. The built-in prompts have an **Out of Bounds** block that tells the model to keep these as they are.
 
@@ -386,7 +386,7 @@ Some things cannot be found by pattern, such as a stat block or a translation li
 
 In both, there is no reply to rewrite, so the refine stops and says why in the Log.
 
-Three forms are recognised by tag name:
+Three forms are recognized by tag name:
 
 | Form | Example |
 | --- | --- |
@@ -394,7 +394,7 @@ Three forms are recognised by tag name:
 | Square brackets | `[thinking]` … `[/thinking]` |
 | Pipes | `<\|think\|>` … `<\|/think\|>`, and `<\|think>` … `<think\|>` |
 
-Six more are recognised as formats of their own, because their closing token has a different name:
+Six more are recognized as formats of their own, because their closing token has a different name:
 
 | Form | Example |
 | --- | --- |
@@ -410,7 +410,7 @@ Six more are recognised as formats of their own, because their closing token has
 - **Turn markers** that open and close a reply are always held back and put back around the rewrite, whatever the reasoning switches say.
 - **Thinking opened in the prompt:** if the reply has a closing tag with no opening tag, everything before it is treated as thinking.
 
-**Your own thinking markers** are recognised too. In Lumiverse's **Reasoning** settings, a **Prefix** and **Suffix** saved on a connection are read from that connection.
+**Your own thinking markers** are recognized too. In Lumiverse's **Reasoning** settings, a **Prefix** and **Suffix** saved on a connection are read from that connection.
 
 - Each must be at least 3 characters, so ordinary punctuation is never taken for thinking.
 - They are read again at most once a minute.
@@ -433,7 +433,7 @@ Set **Input price, per million tokens** and **Output price, per million tokens**
 
 **What to type:** price lists show prices like `$5.00/M` or `$0.075/M`, which already means per million tokens. Type `5` or `0.075`. You can also paste the whole thing, with `$` and `/M`, and the number is taken out.
 
-**Read it as the most it could cost, not your exact bill.** It is worked out from the prompt this extension builds, so anything your provider adds is missing. It also prices every token at the full rate. Tokens are counted with Lumiverse's own tokeniser. Where it has none for your model, the panel says "roughly".
+**Read it as the most it could cost, not your exact bill.** It is worked out from the prompt this extension builds, so anything your provider adds is missing. It also prices every token at the full rate. Tokens are counted with Lumiverse's own tokenizer. Where it has none for your model, the panel says "roughly".
 
 Where costs appear:
 
@@ -474,7 +474,7 @@ On the **Model** tab, **Let it think first** has three choices:
 
 **Show me the request** builds the request for the reply you are looking at and shows it, message by message, with each message's role and size. No model is called and nothing is charged.
 
-- **The line at the top** gives the whole request in tokens, with the character count. If the tokeniser cannot answer, it says **roughly**.
+- **The line at the top** gives the whole request in tokens, with the character count. If the tokenizer cannot answer, it says **roughly**.
 - **Where the tokens go** lists each block, largest first, with its share. This shows you when history or lorebook takes most of every request.
 - It is built by the same code a real refine uses, so it is what the model gets, apart from the two things below. That is why markup shows as `[[AR1]]` tokens and the reasoning is already taken off.
 - Below the messages, it also shows the connection, thinking and samplers the call would use.

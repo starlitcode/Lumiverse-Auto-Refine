@@ -56,7 +56,7 @@ The buttons are in two groups. **What to refine**, on the Setup tab, can hide on
 Below them:
 
 - **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
-  - Every before and after shows the words as they read in the chat. Markup tags, such as a colour tag, are left out of it. **Read it in full** shows the text exactly as written.
+  - Every before and after shows the words as they read in the chat. Markup tags, such as a color tag, are left out of it. **Read it in full** shows the text exactly as written.
   - The list comes back after a reload, or when you leave the app and come back. Your server holds it in memory.
   - An update or a restart of Lumiverse clears it, unless **Keep them through an update** is on, on the Limits tab.
   - The refined replies stay in your chat either way.
@@ -142,7 +142,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Hide markup from the model** and **Hide plain italic and bold too** keep formatting out of the rewrite.
 - **What the model is told about the stand-ins** is the text `{{protect_notes}}` puts in. You can change it. **Use the built-in text** puts it back.
 - **Keep the reply's own reasoning out of the refine** keeps the model's thinking out.
-- **Extra thinking tag names** is folded under it. Thinking in these tags is already recognised: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Only add a name if your model uses a different one. Thinking that is not recognised is rewritten like prose and saved over the reply.
+- **Extra thinking tag names** is folded under it. Thinking in these tags is already recognized: think, thinking, thought, thoughts, reasoning, reflection, scratchpad and analysis. Only add a name if your model uses a different one. Thinking that is not recognized is rewritten like prose and saved over the reply.
 - **Patterns of your own to hide** is folded under the markup switch.
 
 **Reading the answer.**
@@ -154,7 +154,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 **What it refuses to save.** See [What it refuses to save](guardrails.md).
 
 - **Longest a rewrite may get** and **Shortest a rewrite may get** are the two length limits.
-- **Refuse an answer that declines the job**, **Refuse an answer that talks about the edit** and **Refuse a rewrite that sanitised the reply** each have a switch. If all three are off, the panel warns you.
+- **Refuse an answer that declines the job**, **Refuse an answer that talks about the edit** and **Refuse a rewrite that sanitized the reply** each have a switch. If all three are off, the panel warns you.
 - **Refuse a rewrite that loses \* marks** is off by default. On, a rewrite with fewer \* marks than the reply, or with one left unpaired, is thrown away. See [The \* marks around actions](guardrails.md#the--marks-around-actions).
 - **Leave a refusal as it is** is on by default. A short reply where the model refused is not refined by the automatic pass. See [A reply that is a refusal](guardrails.md#a-reply-that-is-a-refusal).
 
@@ -223,7 +223,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 **When a refine finishes** chooses how you are told.
 
 - **Show the before and after on screen** puts a card on the page with the before, the after, and a button to put it back. It is on by default.
-- **Read them side by side** or **Read them together** switches every before-and-after on screen between two columns and one text with the changes coloured. The next card opens the way you left it. On a narrow screen, the columns stack.
+- **Read them side by side** or **Read them together** switches every before-and-after on screen between two columns and one text with the changes colored. The next card opens the way you left it. On a narrow screen, the columns stack.
 - **Show a brief message** shows a Lumiverse notification when a reply is refined, and one when a run through the whole chat ends. Messages about a problem, such as a refine that could not run, show either way.
 - The sound is off by default. With no file chosen, it is a short built-in sound.
 
@@ -266,28 +266,28 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 
 **Pattern behind the panel** draws a faint pattern behind this tab: Diamonds, Stripes, Dots, Hearts or Stars. It is None by default.
 
-- The pattern is drawn in your theme's colour.
+- The pattern is drawn in your theme's color.
 - With a pattern on, the cards are solid, so no text is read across the lines. The tab strip is solid with or without a pattern.
 
-**Colour of cut words** and **Colour of added words** set the colours used in every before and after: on the card, in the panel and on the Log tab.
+**Color of cut words** and **Color of added words** set the colors used in every before and after: on the card, in the panel and on the Log tab.
 
-- By default, cut words use your theme's danger colour and added words its success colour.
-- Tap the swatch beside each one to open the colour editor under it. It works the same on a phone and a laptop:
-  - a box for a colour code, such as `#ff0040`, with or without the `#`, or the short form such as `#f04`
-  - sliders for **Hue**, **Saturation** and **Lightness**
-  - your theme's **Danger**, **Success**, **Warning** and **Accent** colours, one tap each
-  - a line showing the words in the colour
-- A colour you set is used instead of the theme's. **Use the theme's colour** puts the theme's colour back.
-- With a dark theme, Lumiverse makes custom danger and success colours lighter before any extension sees them. To use the exact colour you picked in Lumiverse's theme editor, copy its code from there into the code box here.
-- Cut words keep the line through them whatever the colour, so they can be told apart without colour.
-- A colour you pick is shown exactly as you picked it, everywhere, even where it is hard to read on your theme.
-- With no colour of your own, the theme's colour is used. If that is too faint to read on your theme, it is made lighter or darker until it can be read.
+- By default, cut words use your theme's danger color and added words its success color.
+- Tap the swatch beside each one to open the color editor under it. It works the same on a phone and a laptop:
+  - a box for a color code, such as `#ff0040`, with or without the `#`, or the short form such as `#f04`
+  - sliders for **Hue**, **Saturation** and **Lightness**. Each track shows the colors its slider can reach, and each knob shows the color in use.
+  - your theme's **Danger** and **Success** colors, one tap each
+  - a line showing the words in the color
+- A color you set is used instead of the theme's. **Use the theme's color** puts the theme's color back.
+- With a dark theme, Lumiverse makes custom danger and success colors lighter before any extension sees them. To use the exact color you picked in Lumiverse's theme editor, copy its code from there into the code box here.
+- Cut words keep the line through them whatever the color, so they can be told apart without color.
+- A color you pick is shown exactly as you picked it, everywhere, even where it is hard to read on your theme.
+- With no color of your own, the theme's color is used. If that is too faint to read on your theme, it is made lighter or darker until it can be read.
 
 **Reduce motion** stops everything in Auto Refine from moving or fading. It is off by default.
 
 - On, the panel, the card, the descriptions, the floating button and every eye change at once, with no fade or slide.
 - With it off, the card, the full-size editor and a setting's description fade in and slide a little, and fade out when they close. Nothing grows.
-- With it off, rows that hang off a switch, folds, a block's text on the Prompt tab and the colour editor open and close smoothly, and the settings below move with them. Pressing again while one moves turns it round.
+- With it off, rows that hang off a switch, folds, a block's text on the Prompt tab and the color editor open and close smoothly, and the settings below move with them. Pressing again while one moves turns it round.
 - The eye works as it does with **Keep the eye still**: shut at rest and open while a refine runs.
 - A device set to reduce motion gets the same, with the switch off.
 - With the switch off, the floating button shrinks a little when pressed, and a switch's knob springs past its end and back. With it on, both keep their size and place.
@@ -307,7 +307,7 @@ It rewrites only what you selected. It works in your own messages too, with thei
 - It will not delete the whole message.
 - **Put it back** undoes it.
 
-**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is greyed out when no chat is open, because there is no input box to read. Like every button above the tabs, it is also greyed out while the panel is waiting to be told which chat you are in. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
+**Refining the draft in your input box** is off by default, because it writes into the box you type in. On, **Refine what I am typing** appears above the tabs and in the Extras menu, or in the floating button's menu when that is on screen. It is grayed out when no chat is open, because there is no input box to read. Like every button above the tabs, it is also grayed out while the panel is waiting to be told which chat you are in. **Your draft, refined** then shows at the top of the tab, with **Put it back**, **Dismiss** and **Read it in full**.
 
 While the floating button is on screen, its menu holds these extra actions. With the button off, they are in the chat input's Extras menu instead, which is how you reach them on a phone.
 

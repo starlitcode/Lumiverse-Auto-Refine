@@ -91,9 +91,9 @@ describe("the roles a block can be sent as", () => {
 });
 
 // The mark on the button, the widget and the Extras row is one drawing, and it
-// takes its colour from whatever it is sitting in. A fill written into the icon
+// takes its color from whatever it is sitting in. A fill written into the icon
 // would ignore the reader's theme and show up as the one thing on the panel
-// that never gets repaired, since the repair works on text colour.
+// that never gets repaired, since the repair works on text color.
 describe("the extension's own mark", () => {
   test("is one svg", () => {
     const svg = refineIcon();
@@ -101,10 +101,10 @@ describe("the extension's own mark", () => {
     expect(svg.trim().endsWith("</svg>")).toBe(true);
   });
 
-  test("takes its colour from what it sits in", () => {
+  test("takes its color from what it sits in", () => {
     const svg = refineIcon();
     expect(svg).toContain("currentColor");
-    // No colour of its own anywhere: a hex, an rgb() or a named colour here is
+    // No color of its own anywhere: a hex, an rgb() or a named color here is
     // a mark that stays the same on every theme.
     expect(svg).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(svg).not.toMatch(/\b(?:rgb|hsl)a?\(/i);

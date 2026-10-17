@@ -1,6 +1,6 @@
-// Writes test/lumiverse-themes.json: the colours Lumiverse's own theme engine
+// Writes test/lumiverse-themes.json: the colors Lumiverse's own theme engine
 // gives a purple theme, dark and light. The browser checks read every panel on
-// both, because a hand-written test theme sets every colour to suit itself and
+// both, because a hand-written test theme sets every color to suit itself and
 // the engine does not.
 //
 //   bun scripts/engine-themes.ts [path to a Lumiverse clone]

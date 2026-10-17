@@ -6,6 +6,25 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.42.1
+
+_2026-10-17_
+
+### Changed
+
+- **American spelling.** Every word in the panel, the docs and the changelog now uses American spelling, such as "color" and "sanitizing". Refusals in British spelling, such as "I am not going to fulfil that", are still caught.
+- **The built-in prompts changed spelling.** Two words in the built-in prompts are now spelled the American way: "practiced" and "capitalization". Nothing else in them changed. The Prompt tab says the built-in prompts have changed. Your prompt is not touched. To take the new spelling, load a built-in prompt again.
+- **The color editor looks different.** The Hue, Saturation and Lightness sliders have wider tracks that show the colors they reach. Each knob is filled with the color you have now. The **Warning** and **Accent** picks are gone, so the picks are your theme's **Danger** and **Success** colors.
+- **Clearer labels and hints.** **How much of it may go** is now **Strong words a rewrite can lose (%)**. The hints under the shield boxes, the strong words, the soft => blunt pairs, the context size, thinking, effort, the output price, swipes, the passes and **Extra thinking tag names** are shorter and plainer. The cost note on the Model tab now says plainly that each cost is an estimate, not your bill.
+
+### Fixed
+
+- **An open color editor kept the old theme color.** With a color left at your theme's default, changing the theme while the editor was open left the swatch and the code showing the old color. It now changes with the theme.
+- **An open color editor closed when another setting changed.** Changing a setting that redraws the panel, such as **Reduce motion**, closed the editor. It now stays open.
+- **Typing a color code showed the wrong color for a moment.** Typing `#ff0040` one key at a time showed yellow after `#ff0`, because a three-character code is a short form. The color now changes once the code is six characters long. A three-character code still works when you press Enter or leave the box.
+
+---
+
 ## 1.42.0
 
 _2026-10-16_
@@ -62,7 +81,7 @@ _2026-10-16_
 
 ### Changed
 
-- **The boxes follow Lumiverse's input colour.** Every text box and list on the panel now uses Lumiverse's own input colour, the same as Lumiverse's boxes. It is the same shade as before on the built-in themes. A theme that changes the colour of Lumiverse's boxes now changes these too.
+- **The boxes follow Lumiverse's input color.** Every text box and list on the panel now uses Lumiverse's own input color, the same as Lumiverse's boxes. It is the same shade as before on the built-in themes. A theme that changes the color of Lumiverse's boxes now changes these too.
 - **The macro list says it is not every macro.** Every Lumiverse macro works in a block, even one that is not listed. The card and the note under the list now say so. See [Prompt](docs/prompt.md).
 
 ---
@@ -173,16 +192,16 @@ _2026-10-09_
 ### Added
 
 - **Keep them through an update.** A new switch on the Limits tab, under **Keep what a refine replaced**. It is off by default. On, the list of refines you can put back is saved on your server for your account, so an update or a restart of Lumiverse does not clear it. Turning it off empties the saved copy.
-- **Kimi's thinking format is recognised.** Working inside `◁think▷` … `◁/think▷` is held back and never sent to be rewritten.
-- **Your own thinking markers are recognised.** A **Prefix** and **Suffix** saved on a connection in Lumiverse's **Reasoning** settings are read, and thinking between them is held back like any other thinking. Markers set only in the global Reasoning settings cannot be read by an extension.
+- **Kimi's thinking format is recognized.** Working inside `◁think▷` … `◁/think▷` is held back and never sent to be rewritten.
+- **Your own thinking markers are recognized.** A **Prefix** and **Suffix** saved on a connection in Lumiverse's **Reasoning** settings are read, and thinking between them is held back like any other thinking. Markers set only in the global Reasoning settings cannot be read by an extension.
 - **Refine the greeting.** A new switch on the Limits tab, off by default. On, the first message of a chat can be refined like any reply, by a button or by **Refine every reply here**. The automatic pass never refines it. A warning under it says the greeting is written by the card's author, and that a refine can change its formatting or what it says.
 
 ### Changed
 
 - **The list of refines you can put back comes back after a reload.** It cleared when you reloaded the page or left the app. Your server now holds it, and the tab asks for it when it starts. The line under the list says what keeps it and what clears it. Only your own account can see or put back your refines.
-- **The question before a refine is saved uses the refine card.** With **Ask before saving a refine** on, **Save this refine?** opened in a plain window with both versions in full. It now comes up on the same card a finished refine uses, with what changed marked in your colours and the switch between the two views. Its buttons are **Accept it** and **Turn it down**, the same as the tab. It comes up even with **Show the before and after on screen** off.
+- **The question before a refine is saved uses the refine card.** With **Ask before saving a refine** on, **Save this refine?** opened in a plain window with both versions in full. It now comes up on the same card a finished refine uses, with what changed marked in your colors and the switch between the two views. Its buttons are **Accept it** and **Turn it down**, the same as the tab. It comes up even with **Show the before and after on screen** off.
 - **No second question while the tab is open.** With the Auto Refine tab open, the question is asked only in the **Waiting for you** card at the top of the tab. That card now shows what changed, marked, instead of both versions in full.
-- **Markup tags are left out of every before and after.** A tag such as a colour tag showed as text among the words. The words now read as they do in the chat. If only the markup changed, the card says so. **Read it in full** still shows the text exactly as written.
+- **Markup tags are left out of every before and after.** A tag such as a color tag showed as text among the words. The words now read as they do in the chat. If only the markup changed, the card says so. **Read it in full** still shows the text exactly as written.
 - **Extra reasoning tag names is now called Extra thinking tag names**, the same name Auto Retry uses. It works the same way.
 - **The built-in prompts for replies catch more stock writing.** **A judge** now also lists vague intensity, touch described as electricity, stock smells, borrowed strangers, similes that fit any story and narrator flourishes. **The Finish** trims a last line that tells the user what the moment meant. The rule that split paragraphs over six lines is gone, as paragraph length is a matter of style. **A judge that thinks** gets the same additions in short. Both prompts for your own messages now say how to treat extra spaces. A double space between two words in the middle of a sentence is fixed as a slip. Spacing that looks placed, such as a gap left for a pause, stays. The second model's checks are unchanged.
 - **The pattern behind the panel stays still.** It works like a phone wallpaper: the tab scrolls over it, and it does not move.
@@ -215,13 +234,13 @@ _2026-10-09_
 
 ### Changed
 
-- **A colour you pick for cut or added words is shown exactly.** When a picked colour was hard to read on the card, Auto Refine made it lighter, so the card did not show the colour you chose. It now shows your colour as you picked it, everywhere. With no colour of your own, the theme's colour is still made lighter or darker when it is too faint to read.
+- **A color you pick for cut or added words is shown exactly.** When a picked color was hard to read on the card, Auto Refine made it lighter, so the card did not show the color you chose. It now shows your color as you picked it, everywhere. With no color of your own, the theme's color is still made lighter or darker when it is too faint to read.
 - **Folds and a block's text close smoothly.** A fold, such as **Sampler values** or **Older refines**, opened smoothly but shut in one step. It now closes smoothly too. The arrow that folds a block on the Prompt tab, and the warning that no block has {{message}}, now open and close smoothly as well. Pressing again while one moves turns it round. With Reduce motion on, they open and close at once.
 
 ### Fixed
 
-- **The colour editor opens again when you tap the swatch while it closes.** It started to close a second time instead.
-- **Cut and added words keep their colour when you switch views.** Pressing **Read them side by side** or **Read them together** drew the words again in a different colour from the one they had before. They now keep the same colour in both views.
+- **The color editor opens again when you tap the swatch while it closes.** It started to close a second time instead.
+- **Cut and added words keep their color when you switch views.** Pressing **Read them side by side** or **Read them together** drew the words again in a different color from the one they had before. They now keep the same color in both views.
 
 ---
 
@@ -236,7 +255,7 @@ _2026-10-09_
 - **More hosts on NanoGPT.** Clef Flash and Decider can now be reached on NanoGPT.
 - **Show me the pop-up.** A button under **Show the before and after on screen**, on the Setup tab. It shows the card with made-up text, so you can see how it looks. Nothing is refined or sent, and its buttons only close it.
 - **Hearts and Stars.** Two more choices for **Pattern behind the panel**.
-- **Your own colours for cut and added words.** **Colour of cut words** and **Colour of added words**, on the Setup tab. By default they are your theme's danger and success colours. The swatch opens a colour editor with a box for a colour code, sliders for hue, saturation and lightness, and your theme's own colours to pick from. It works the same on a phone and a laptop. **Use the theme's colour** puts the theme's colour back. See [Settings](docs/settings.md).
+- **Your own colors for cut and added words.** **Color of cut words** and **Color of added words**, on the Setup tab. By default they are your theme's danger and success colors. The swatch opens a color editor with a box for a color code, sliders for hue, saturation and lightness, and your theme's own colors to pick from. It works the same on a phone and a laptop. **Use the theme's color** puts the theme's color back. See [Settings](docs/settings.md).
 
 ### Changed
 
@@ -246,7 +265,7 @@ _2026-10-09_
 - **The lead-in to the checks says the user picked them.** It said the checks were written by the user. Most people use the built-in checks, so it now says "checks the user picked".
 - **The built-in note about the stand-ins is plainer.** It ended by telling the model to treat each stand-in "as a single character you cannot spell". It now says "Do not change, split, translate or remove any of them."
 - If you were on any of these three, the panel offers you the new one. If you wrote your own, nothing changes.
-- **Cut words are drawn at full strength.** They were drawn a little faded, so they looked duller than your theme's danger colour. They now use the colour as it is, and keep the line through them.
+- **Cut words are drawn at full strength.** They were drawn a little faded, so they looked duller than your theme's danger color. They now use the color as it is, and keep the line through them.
 - **A scroll bar's thumb is at least 28 pixels tall.** In a box holding a very long text, such as a long block in the raw view, the thumb shrank to a short dash. It now keeps a size you can see and grab.
 - **Rows that hang off a switch open and close smoothly.** Their space opened in one step, so the settings below jumped down. The space now opens over a moment, and the rows fade in and slide 4 pixels into place. Closing, the words fade first and then the space closes. Switching back mid-way turns round from where it is. With Reduce motion on, they appear and go at once.
 - **A setting's description slides as it fades.** It faded in and out where it stood. It now also slides 4 pixels from the setting it belongs to, the same as the card. With Reduce motion on, it appears and goes at once.
@@ -291,7 +310,7 @@ _2026-10-08_
 
 ### Changed
 
-- **The tab strip and the cards over a pattern use the theme's raised colour.** This is the colour Lumiverse uses for its own panels. It is light on a light theme and dark on a dark one, so the tab names are easy to read on any theme.
+- **The tab strip and the cards over a pattern use the theme's raised color.** This is the color Lumiverse uses for its own panels. It is light on a light theme and dark on a dark one, so the tab names are easy to read on any theme.
 
 ---
 
@@ -301,11 +320,11 @@ _2026-10-08_
 
 ### Added
 
-- **A pattern behind the panel.** A new setting, **Pattern behind the panel**, under **Buttons and the widget**, with Diamonds, Stripes and Dots. It is drawn faintly in your theme's colour, and the cards turn solid over it. It is None by default. See [Settings](docs/settings.md).
+- **A pattern behind the panel.** A new setting, **Pattern behind the panel**, under **Buttons and the widget**, with Diamonds, Stripes and Dots. It is drawn faintly in your theme's color, and the cards turn solid over it. It is None by default. See [Settings](docs/settings.md).
 
 ### Changed
 
-- **The tab strip is solid at all times.** In 1.32.0 the strip was see-through in its own place and turned solid when it was held at the top. It now keeps one solid colour, in your theme's colour, the whole time you scroll. Held at the top, it gets a shadow along its lower edge.
+- **The tab strip is solid at all times.** In 1.32.0 the strip was see-through in its own place and turned solid when it was held at the top. It now keeps one solid color, in your theme's color, the whole time you scroll. Held at the top, it gets a shadow along its lower edge.
 - **The switches spring.** The knob slides a little past its end and springs back. Pressed, it stretches toward the way it is about to go. Reduce motion turns this off.
 
 ---
@@ -335,7 +354,7 @@ _2026-10-08_
 - **Why rewrites were dropped cut each reason short.** A reason was cut to its first 80 characters, which often lost the part that says what went wrong. The whole reason now shows, wrapped to fit the screen. The same failure with a different detail at the end is still counted once.
 - **A refusal written another way was saved as the rewrite.** An answer that opens by declining to write, such as "I won't produce the next part", and then names the content or the request, was not caught. It is now caught as a refusal, both in a rewrite and in a reply. Auto Retry catches it too.
 - **What changed said "Too long to mark up" for an ordinary reply.** Past about 600 words in each version, the changes were not marked. A reply of any normal length is now marked word by word. A very long one is matched paragraph by paragraph first.
-- **The tab strip flashed see-through when it went back in place.** Scrolling back up, its solid colour went off in one frame. It now fades out. It still comes on at once when the strip is held at the top.
+- **The tab strip flashed see-through when it went back in place.** Scrolling back up, its solid color went off in one frame. It now fades out. It still comes on at once when the strip is held at the top.
 - **The Samplers card named the wrong preset.** It said a blank sampler uses "the values from your preset". Lumiverse fills it from the preset linked to the connection, which is not always the one you chat with. The card and the docs now say so. See [Sampler settings](docs/prompt.md#sampler-settings).
 - **The switches were too small to tap on a phone.** Each switch on the panel took a tap only on its drawn shape, 26 pixels high. On a phone, the switches are now 32 pixels high, and the whole switch takes the tap. Nothing changes with a mouse.
 
@@ -389,7 +408,7 @@ _2026-10-03_
 
 - **Pop-up messages never showed.** Messages such as "Reply refined." or "A refine is already running." were meant to show as a pop-up, and Lumiverse never showed them. They now show as Lumiverse's own notifications: green for success, blue for information, yellow for a problem and red for an error. Each one goes only to the account that caused it. **Show a brief message** turns off the ones that only say a refine worked. A run through the whole chat shows one notification when it ends, not one for each reply. See [Settings](docs/settings.md).
 - **The floating button could stop showing what it was doing.** After Auto Refine updated while Lumiverse was open, the button could lose its look, while a tap still worked. The button now puts its look back. A button left over from before the update takes itself away when tapped. Holding it does nothing.
-- **Your own messages were held up by the prompt for replies.** Before refining one of your messages or your draft, the panel and the floating button checked that the prompt for replies has `{{message}}`. Your messages are refined with the prompt for your messages. So with only your messages refined, the buttons could be greyed out when that prompt was fine, or look ready when it was missing `{{message}}`. They now check the prompt that will be used.
+- **Your own messages were held up by the prompt for replies.** Before refining one of your messages or your draft, the panel and the floating button checked that the prompt for replies has `{{message}}`. Your messages are refined with the prompt for your messages. So with only your messages refined, the buttons could be grayed out when that prompt was fine, or look ready when it was missing `{{message}}`. They now check the prompt that will be used.
 
 ---
 
@@ -496,11 +515,11 @@ _2026-10-01_
 - **The row of tabs stays at the top.** When you scroll down a tab, the row of tabs (Prompt, Context, Model, Limits, Log, Setup) stays at the top of the drawer, so you can switch tabs without scrolling back up. It goes back to its own place when you scroll back to the top.
 - **What is Jev? and What is Span? only show with two models.** With one model there is no second model to read about.
 - **The buttons above the tabs are in two groups**, **Replies** and **Your messages**, in two even columns. The automatic switch is now in the **Replies** group and reads **Refine every new reply automatically**.
-- **Refine what I am typing is greyed out with the other buttons** while the panel waits to be told which chat you are in. It used to stay lit, so the buttons above the tabs were not all in the same state.
+- **Refine what I am typing is grayed out with the other buttons** while the panel waits to be told which chat you are in. It used to stay lit, so the buttons above the tabs were not all in the same state.
 - **Easier to use on a phone and with a mouse.** On a phone, the **?** buttons, the fold arrows on prompt blocks and the links are at least 32 pixels, and a switch answers a tap just around it. With a mouse, the switches, lists, two-way choices and links light up when you point at them.
 - **Shorter descriptions.** About half of the descriptions under the **?** buttons are shorter and plainer. Some docs pages are reworded to be clearer.
 - **Pop-ups appear with no animation.** The before-and-after card, the dim behind it and the full-size editor used to rise, grow or fade in. They now appear at once. The description under each **?** still fades in and out.
-- **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practised ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
+- **The built-in reply prompts catch more stock patterns.** Their list of phrases now also names movement graded instead of shown, such as "deliberate" or "with practiced ease", feelings that flood or wash over somebody, feelings stamped as real, weather that matches the mood on cue, the narrator ruling on a line after it is said, and corrections that climb, such as "more than cold, frozen". The Prompt tab says the built-in prompts have changed. Your own prompt is not touched until you load a built-in one.
 
 ### Fixed
 
@@ -584,7 +603,7 @@ _2026-09-26_
 ### Changed
 
 - **Refine when a check reaches is 40 by default, not 50.** At 50, a reply with a problem the second model was not sure of was left alone. A clean reply still scores well under 40. With two models on, and the line still at 50, a line above the tabs offers the change. Press **Take it**, or **Keep mine**.
-- **The built-in checks are rewritten for how the second model scores them.** Each one names what to look for on the page, with examples. The check for the negation trick now names both forms, so a line about an action, such as "she didn't just leave, she ran", is caught, not only "it wasn't a request, it was a command". The two checks that asked for a judgement, about feelings the actions already show and about strained comparisons, are gone. Two new ones match rules in the built-in reply prompts: an action followed by a comment on how it came out, and an action started then taken back. With two models on, and the checks you started with, a line above the tabs offers the new ones. Press **Take it**, or **Keep mine**.
+- **The built-in checks are rewritten for how the second model scores them.** Each one names what to look for on the page, with examples. The check for the negation trick now names both forms, so a line about an action, such as "she didn't just leave, she ran", is caught, not only "it wasn't a request, it was a command". The two checks that asked for a judgment, about feelings the actions already show and about strained comparisons, are gone. Two new ones match rules in the built-in reply prompts: an action followed by a comment on how it came out, and an action started then taken back. With two models on, and the checks you started with, a line above the tabs offers the new ones. Press **Take it**, or **Keep mine**.
 
 ### Fixed
 
@@ -697,7 +716,7 @@ _2026-09-25_
 
 ### Fixed
 
-- **Worn Out counted colour tags as a worn-out phrase.** A reply with dialogue in a `<font color>` tag gave phrases like "font color font he said". The quote marks inside the tag also made the dialogue check miss a spoken line. HTML tags are now taken out before anything is counted. Reported by a Discord user.
+- **Worn Out counted color tags as a worn-out phrase.** A reply with dialogue in a `<font color>` tag gave phrases like "font color font he said". The quote marks inside the tag also made the dialogue check miss a spoken line. HTML tags are now taken out before anything is counted. Reported by a Discord user.
 - **Worn Out broke accented words and skipped other alphabets.** Only the letters a to z were read as letters. So "café" was counted as "caf", and a chat in Russian or Greek was never counted at all. Letters in any alphabet are now read as letters. The check that catches a softened rewrite reads them the same way, including words you add to it.
 - **Worn Out counted a reply's own thinking.** Reasoning written in the message was counted along with the story. It is now left out.
 - **A refine was dropped when the thinking was moved out of the reply.** Refine checks that a reply did not change while it was being rewritten. Moving the thinking into the Reasoning box while a refine ran counted as a change, so the refine was dropped. Now a change to the thinking alone is allowed. The refine is saved without the thinking that was moved out.
@@ -746,7 +765,7 @@ _2026-09-25_
 ### Fixed
 
 - **Passes and phrases typed into their boxes did nothing.** **The passes, in order** and **Phrases to leave alone** saved what you typed as one piece of text, and the refine only reads a list. So typed passes never ran, and typed phrases were still reported. Both now save a list, one line to an entry, and anything already saved as text is read back as a list.
-- **A group chat labelled every reply in the run-up with the chat's first character.** Each reply is now labelled with the character who wrote it. The card sent with a reply is also the card of the character who wrote it, not always the chat's first one.
+- **A group chat labeled every reply in the run-up with the chat's first character.** Each reply is now labeled with the character who wrote it. The card sent with a reply is also the card of the character who wrote it, not always the chat's first one.
 - **A refine you start was said twice in the Log.** It wrote "refined a reply in" and "refined a reply on request in" for the same reply, and could show two toasts. It now says it once.
 - **Show me the request left out the worn-out phrases.** It never worked out `{{overused}}`, so the **Worn Out** block was always empty there and left out, while a real refine sent it. The preview now works the phrases out the same way a refine does.
 - **Show me the request showed the wrong prompt with several passes on.** It built the prompt on the Prompt tab, which a refine with several passes never sends. It now shows the first pass as it would go out, and names every pass in order.
@@ -787,7 +806,7 @@ _2026-09-24_
 
 ### Fixed
 
-- **Fixed again: a built-in prompt stays locked.** 1.14.0 fixed this for switching tabs and lists, and missed one case. Picking one of your own presets under **For replies** also changed **For your messages**. It loaded the prompt for your messages saved in that preset, and it named your preset on that list too. So the prompt for your messages was no longer greyed out, even when it was a built-in one, and could be typed over. Now picking a preset names it only on the list you are on, and loads only that list's prompt. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
+- **Fixed again: a built-in prompt stays locked.** 1.14.0 fixed this for switching tabs and lists, and missed one case. Picking one of your own presets under **For replies** also changed **For your messages**. It loaded the prompt for your messages saved in that preset, and it named your preset on that list too. So the prompt for your messages was no longer grayed out, even when it was a built-in one, and could be typed over. Now picking a preset names it only on the list you are on, and loads only that list's prompt. **Put it back** shows on that list only. See [Presets](docs/prompt.md#presets).
 - **Two preset saves close together could leave the older one in your account.** Saves of your presets and model setups could finish out of order, so the next load from your account brought back the older copy. They are now written one at a time, in the order you made them, the same as your settings.
 - **The panel could miss your account's settings for a whole visit.** If it opened before the extension's server side had started, its request for your account's copy got no answer, and it was not asked again. The panel then ran on this browser's copy, which can be older, and the next change you made saved that older copy to your account. Now the panel asks again as soon as the server side is ready. See [How settings are saved](docs/settings.md#how-settings-are-saved).
 
@@ -820,7 +839,7 @@ _2026-09-24_
 ### Fixed
 
 - **An older prompt could come back.** Opening Lumiverse on a device saved that device's copy of your settings to your account before your account's copy was read. A phone opened after you changed a prompt on a computer put the old prompt back, on every device. Now only a change you make is saved to your account, changes are saved in the order you made them, and a tab you come back to after a while loads your settings from your account again. See [How settings are saved](docs/settings.md#how-settings-are-saved).
-- **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay greyed out until a chat is open.
+- **The refine buttons lit up on the home screen.** A reply or a refine finishing in a chat that was not open, such as one you had just left or one in another tab, made the panel act as if you were in that chat. The buttons now stay grayed out until a chat is open.
 - **A deleted block stuck and then jumped shut.** The space it leaves now starts closing straight away. The same goes for every row that closes when a switch turns it off.
 
 ### Changed
@@ -934,7 +953,7 @@ _2026-09-19_
 
 - **Every part's switch in a built-in prompt stays live.** Loading one locked the whole card, switches included, and two of the parts come switched off. **What Has Happened** is one of them, so putting your memories into a built-in prompt meant saving a copy under your own name to reach a switch that was sitting right there. A switch chooses which parts go to the model, and it does not rewrite a word of what they say, so it is not what the lock is for.
 
-- **Back to the default greys the boxes out again.** Pressing it put the built-in words back and left the boxes open to type in, which read as a prompt of your own and was not one. The picker is what the lock reads, and it was being set after the card had already been drawn.
+- **Back to the default grays the boxes out again.** Pressing it put the built-in words back and left the boxes open to type in, which read as a prompt of your own and was not one. The picker is what the lock reads, and it was being set after the card had already been drawn.
 
 - **The automatic switch keeps its place while you search.** It sat in the same row as the buttons above it, so where it landed depended on how much room those buttons had left, and a search that found nothing moved it. It now has a line of its own under them.
 
@@ -990,7 +1009,7 @@ _2026-09-18_
 
   Selecting the whole message is refused rather than emptying it. **Put it back** works on a snip exactly as it works on a refine.
 
-- **The before and the after, side by side.** Suggested by a Discord user. Every card showing what a refine changed marked the two versions up as one piece of text, with what was taken out struck through and what was put in next to it. That is the quicker read when a rewrite moved a word here and there, and the harder one when whole sentences were replaced and the result is more colour than writing.
+- **The before and the after, side by side.** Suggested by a Discord user. Every card showing what a refine changed marked the two versions up as one piece of text, with what was taken out struck through and what was put in next to it. That is the quicker read when a rewrite moved a word here and there, and the harder one when whole sentences were replaced and the result is more color than writing.
 
   **Read them side by side** puts the original in one column and the rewrite in the other. Each column reads as the whole text it stands for, and each still carries its own marks: what was taken out on the left, what was put in on the right. **Read them together** puts it back.
 
@@ -1050,7 +1069,7 @@ _2026-09-18_
 
   A refine that finishes closes the eye on one long blink. One you stop closes it quickly and without the blink, since a blink is what an eye does when it has read something.
 
-- **The buttons in the chat stand in Lumiverse's own rows, dressed as its own buttons.** The one under a message sat in a row of its own, centred under the text, with the app's Copy, Edit and the rest in their row above it. Two rows of buttons on one message, one of them holding a single button, and nothing about the lower one said it belonged to the same message as the upper one.
+- **The buttons in the chat stand in Lumiverse's own rows, dressed as its own buttons.** The one under a message sat in a row of its own, centered under the text, with the app's Copy, Edit and the rest in their row above it. Two rows of buttons on one message, one of them holding a single button, and nothing about the lower one said it belonged to the same message as the upper one.
 
   Every display mode draws a row of buttons on a message, in a different place and under a different name, so the row is found rather than assumed. The buttons go in it. A display mode that draws no row at all gets the old row under the message, which is what that row was for.
 
@@ -1102,9 +1121,9 @@ _2026-09-14_
 
 ### Added
 
-- **Four more reasoning formats are recognised, so the working inside them is no longer rewritten and saved over the reply.** Harmony, which gpt-oss writes, Gemma 4, Cohere Command A Reasoning, and Seed-OSS.
+- **Four more reasoning formats are recognized, so the working inside them is no longer rewritten and saved over the reply.** Harmony, which gpt-oss writes, Gemma 4, Cohere Command A Reasoning, and Seed-OSS.
 
-  None of these could be reached by adding a name under **Extra reasoning tag names**. The three wrappers already recognised are matched by tag name, with the same name closing the block. In all four of these the tag is not what names the reasoning: the word sits in the content, and the block closes on a different token again. Harmony has no closer of its own at all, and runs to the next control token.
+  None of these could be reached by adding a name under **Extra reasoning tag names**. The three wrappers already recognized are matched by tag name, with the same name closing the block. In all four of these the tag is not what names the reasoning: the word sits in the content, and the block closes on a different token again. Harmony has no closer of its own at all, and runs to the next control token.
 
   The `final` channel is the reply, not working, and is refined like any other passage. A pattern that had taken it would have deleted the answer rather than the reasoning in front of it.
 
@@ -1252,7 +1271,7 @@ A prompt you already have is yours and is not touched by any of this. To take th
 ### Fixed
 
 - **Dragging the tabs up and down moved them.** The titles shifted by a pixel and the line under the strip looked like it thickened. A strip that scrolls sideways scrolls up and down too unless it is told not to, and the tabs were pulled a pixel down over that line, so the strip was one pixel taller than it could show. Dragging scrolled that pixel and stacked the selected tab's underline onto the line. The line is gone with the redraw above, and the strip is locked to sideways now.
-- **A token count Lumiverse called a guess was reported as a count.** It counts with a real tokeniser where it has one for the model and says so when it has none and fell back to characters over four. That flag was not read, so a guess came back through the panel as an exact figure, and every price on the Model tab is worked out from it. The flag is read now: a guess says roughly, the same as a build with no counter at all.
+- **A token count Lumiverse called a guess was reported as a count.** It counts with a real tokenizer where it has one for the model and says so when it has none and fell back to characters over four. That flag was not read, so a guess came back through the panel as an exact figure, and every price on the Model tab is worked out from it. The flag is read now: a guess says roughly, the same as a build with no counter at all.
 - **The `{{overused}}` macro never showed what it puts in.** The macro list described it and left you to run a refine to find out what the shape was. It now shows a line the way `{{protect_notes}}` shows its wording, and [How the prompt is built](docs/prompt.md) has the block as it arrives, counts and all.
 - **Refining part of a reply was documented inside the floating button's paragraph.** It has three ways in and none of them is the floating button, so it has its own paragraph in [Settings](docs/settings.md) now, and the README says it exists.
 
@@ -1262,7 +1281,7 @@ _2026-09-12_
 
 ### Fixed
 
-- **The run-up called you Co-author instead of using your character's name.** Every one of your messages in **See what gets sent** was labelled that way, while the character you are writing with got their name off the card. A job title is not anybody in the story, and a model reading it has to work out who is meant. Both sides are named now, so the run-up reads the way the chat page does. A chat with no persona set, or a build that will not resolve one, falls back to **You** rather than labelling a blank.
+- **The run-up called you Co-author instead of using your character's name.** Every one of your messages in **See what gets sent** was labeled that way, while the character you are writing with got their name off the card. A job title is not anybody in the story, and a model reading it has to work out who is meant. Both sides are named now, so the run-up reads the way the chat page does. A chat with no persona set, or a build that will not resolve one, falls back to **You** rather than labeling a blank.
 
 ### Added
 
@@ -1280,7 +1299,7 @@ _2026-09-11_
 
 - **Refining the same words twice is refused everywhere now, not only on the automatic pass.** The setting is **Refine something that has been refined before**, still off by default, and it covers the buttons and your own messages as well. Pressing refine on a reply still holding its refine used to go ahead and buy a second opinion on a passage nobody had changed. Swiping, regenerating, deleting a swipe or editing puts different words behind the message, and those are refined either way. The setting no longer hides itself when the automatic pass is off, because it applies whether or not that is running.
 - **The phrase list the prompts cut from is half again as long.** It covered bodies and a few sentence shapes. It now covers feeling handed over in a container, faces and voices running stock business, the room doing the characters' work, pauses named instead of filled, and softened double negatives, alongside what it already had. Named as shapes wherever a shape catches more than an example does.
-- **The Speech block knows about register.** Lines that announce themselves before arriving, lines that only grade what was just said, counselling talk from characters who do not counsel for a living, and a soft name dropped in to take the edge off. None of it touches how a character is allowed to sound: somebody who speaks badly goes on speaking badly, and a character who already talks that way keeps it.
+- **The Speech block knows about register.** Lines that announce themselves before arriving, lines that only grade what was just said, counseling talk from characters who do not counsel for a living, and a soft name dropped in to take the edge off. None of it touches how a character is allowed to sound: somebody who speaks badly goes on speaking badly, and a character who already talks that way keeps it.
 
 - **The prompts that come with it now name you and the user plainly.** They called the person writing with you your co-author, which put a word in the prompt that means nothing to a model and reads as a role it has to work out. The user is the user. Their character is **The User's Character**, yours is **Your Character**, and both are written with they and them throughout, so nothing in the prompt assumes a gender for either.
 - **The rhetorical framing is gone.** Two prompts opened on a question asked for effect and four descriptions repeated it. A rule reads as a rule; the standard and the test say what they want outright now.
@@ -1293,11 +1312,11 @@ _2026-09-11_
 
 ### Fixed
 
-- **Refine what I am typing stayed lit on the home screen.** The two buttons beside it grey out when no chat is open, and this one did not, so the odd one out read as the one that still worked. There is no input box out there to read, so pressing it could only ever fail. It greys with the others now and its tooltip says why, and the entry in the floating button's menu comes off on the same terms.
+- **Refine what I am typing stayed lit on the home screen.** The two buttons beside it gray out when no chat is open, and this one did not, so the odd one out read as the one that still worked. There is no input box out there to read, so pressing it could only ever fail. It grays with the others now and its tooltip says why, and the entry in the floating button's menu comes off on the same terms.
 
 ### Changed
 
-- **Every cost figure now says what it is worth.** A line under the price boxes on the Model tab, and only once a price is typed. The tokens are counted from the prompt this extension builds rather than taken from your provider, so their tokeniser may disagree and whatever they wrap around the prompt is missing from the figure. It also prices every token sent at the full rate, so on a model with prompt caching switched on a refine usually costs less than the panel says, sometimes a lot less.
+- **Every cost figure now says what it is worth.** A line under the price boxes on the Model tab, and only once a price is typed. The tokens are counted from the prompt this extension builds rather than taken from your provider, so their tokenizer may disagree and whatever they wrap around the prompt is missing from the figure. It also prices every token sent at the full rate, so on a model with prompt caching switched on a refine usually costs less than the panel says, sometimes a lot less.
 
 ## 1.4.0
 
@@ -1317,7 +1336,7 @@ _2026-09-11_
 
 ### Fixed
 
-- **Picking a model setup for a prompt that comes with the extension said nothing about where the pick was going.** The eight built-in prompts are fixed, so **Update selected** is greyed out on them and there is nowhere to write the link. **Save as new** does write it, onto your copy, which is the way to do it, but nothing said that: the box took the pick and then switching the preset list put it back to what the next preset carried. The card now says the copy is what keeps it, and only while a built-in prompt is the one selected.
+- **Picking a model setup for a prompt that comes with the extension said nothing about where the pick was going.** The eight built-in prompts are fixed, so **Update selected** is grayed out on them and there is nowhere to write the link. **Save as new** does write it, onto your copy, which is the way to do it, but nothing said that: the box took the pick and then switching the preset list put it back to what the next preset carried. The card now says the copy is what keeps it, and only while a built-in prompt is the one selected.
 - **A name clash with a built-in prompt counted wrong.** Saving a preset under a name one of them already has is refused, and the refusal said there were two of them. There are eight.
 
 ### Added
@@ -1332,7 +1351,7 @@ _2026-09-11_
 - **This version's settings travel in an export, and so does the button's size.** Six of them did not: the passes, the mode, and the four for worn phrases. An export ran, a file came down, and the settings were not in it, with nothing to say so, which turns restoring a backup on another device into finding out later. **How big it is** for the floating button was missing too, and had been for longer. A check holds every setting to it now, so one added later is either in a part or named as belonging to this screen.
 - **The words your story is made of are not counted as a habit.** A place, a job, an institution, a thing the chat is about, all repeat because the chat is about them. The phrases are checked against your character card, and against your lorebook where a block was already asking for it, and anything written into the story is left out of the report. Telling somebody their own setting is a habit is telling them to stop writing their story.
 - **Eight more shapes in the built-in prompts.** Shapes rather than particular phrases, because a model reaches for these whatever the scene is: a thing said by what it is not and then corrected, the same thing twice with the weaker one kept, three of anything in a row, a pause named instead of filled, actions strung onto one sentence with "as", a sound that escapes somebody, a sentence opened on a participle, and an action given and then graded.
-- **It can find the phrases this chat has worn out.** A refine judges one reply at a time, so a phrase reads as fine every time it is met; used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. **Find phrases this chat has worn out** on the Limits tab fills `{{overused}}` with them, so a block can name them and ask for something else. Counted across replies rather than within one, because five times in a single reply is that reply's choice. Dialogue is left out, since a character repeating a phrase is characterisation. So are your own messages, the character's name, runs of only common words, and anything in backticks. The longest phrase wins, so a finding is not also reported as the shorter runs inside it. **Phrases to leave alone** takes one per line for the times repetition is the point. It reads replies the refine already has, so it costs no extra call, and it sends it off.
+- **It can find the phrases this chat has worn out.** A refine judges one reply at a time, so a phrase reads as fine every time it is met; used in eleven of the last fifteen replies it is the model's crutch, and nobody notices because nobody reads fifteen replies at once. **Find phrases this chat has worn out** on the Limits tab fills `{{overused}}` with them, so a block can name them and ask for something else. Counted across replies rather than within one, because five times in a single reply is that reply's choice. Dialogue is left out, since a character repeating a phrase is characterization. So are your own messages, the character's name, runs of only common words, and anything in backticks. The longest phrase wins, so a finding is not also reported as the shorter runs inside it. **Phrases to leave alone** takes one per line for the times repetition is the point. It reads replies the refine already has, so it costs no extra call, and it sends it off.
 - **Refine part of a reply instead of all of it.** Select a sentence or a paragraph in a message, then press **Refine the part I selected**. It appears on the panel beside the other buttons, in the floating button's menu, and in the chat input's Extras menu on the same terms as the other rows there. The panel one is there whatever the button and the row are doing, so nobody who switched those off is shut out of it. The rest of the reply is left exactly as it was. The model is given the part and nothing else, so every check on the answer, its length included, is measured against the part rather than the reply around it. The entry is only in the menu while something is selected. Selecting inside your own message works too and uses your own prompt list, the same as pressing the button on one does, and the greeting is refused the same as ever. A selection that grew out of italics takes the whole italic run with it, since leaving one marker behind would turn the rest of the reply into emphasis.
 - **The length limits leave room on a short passage.** **How much longer** and **how much shorter** are shares of what was sent, and a share of one sentence is a handful of characters: sixty per cent of "it was fine" is six, which turns down every rewrite of it that is not nearly the same length. Each limit now gives the share or a floor in characters, whichever is larger. A reply long enough for the share to matter is judged by the share exactly as before. The two floors are not the same number, because a short passage coming back longer is the rewrite working and one coming back much shorter is a model answering with a stub.
 - **`{{whole_reply}}` shows the model what surrounds the part it was given.** The reply as it stands, with the part being rewritten wrapped in `<<<` and `>>>`, for a prompt that wants a fragment read in context. Empty on an ordinary refine, which leaves the block carrying it out of the prompt rather than sending an empty heading.
@@ -1356,7 +1375,7 @@ _2026-09-10_
 
 ### Added
 
-- **`{{memories}}` puts what Lumiverse remembers of the chat into the prompt.** Everything from further back than the run-up, and Lumiverse's own answer rather than one assembled here: the same pieces it would have retrieved, as many as your chat memory settings ask for, written out with your own header and chunk templates. Every built-in prompt carries it in a block of its own, **What has happened before now**, under the setting and above the pages before this one. That block starts switched off, because its size is decided by your chat memory settings rather than by anything on the Prompt tab and it would be sent on every refine; switch it on there when you want it. It needs no new permission, and a chat with memory switched off or nothing vectorised sends no block at all rather than an empty heading.
+- **`{{memories}}` puts what Lumiverse remembers of the chat into the prompt.** Everything from further back than the run-up, and Lumiverse's own answer rather than one assembled here: the same pieces it would have retrieved, as many as your chat memory settings ask for, written out with your own header and chunk templates. Every built-in prompt carries it in a block of its own, **What has happened before now**, under the setting and above the pages before this one. That block starts switched off, because its size is decided by your chat memory settings rather than by anything on the Prompt tab and it would be sent on every refine; switch it on there when you want it. It needs no new permission, and a chat with memory switched off or nothing vectorized sends no block at all rather than an empty heading.
 - **Refine a reply that has been refined before**, off by default, on the Limits tab under the automatic pass. Off means "still holding the refine it was given", not "has an id this pass has seen": a reply you swiped, regenerated, deleted a swipe from or edited is holding different words, and different words are a reply the pass has never seen, so it is refined either way. That is what keeps the pass working alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry), since every reply Auto Retry re-rolls is a new one. On, the same reply goes through again even when nothing about it changed. Either way a build that announces one generation twice buys one refine, not two, and pressing a button always refines what you pressed it on.
 - **It waits out a provider that will not take the call.** A "too many requests", a shared key at its limit, or a local server answering 503 while it loads a model is not a bad answer, because there was no answer and nothing was spent. **Wait out a provider that will not take the call** on the Limits tab does this twice by default, waiting longer each time, and where the provider says how long to wait, that is what it waits. It never waits on a wrong key or a prompt too long for the model, since waiting cannot fix either. The status line counts down while it waits, and Stop ends the wait as well as the call.
 - **Add the refine as a reroll instead of writing over the reply**, on the Limits tab, off by default. On, the rewrite goes in beside the reply as another reroll and the original stays one swipe back. That is Lumiverse's own way back, it survives a reload, and the arrows for it are already on the message, where **Put it back** is held in memory and gone the moment you close the tab. **Put it back** then takes that reroll off again rather than writing the original over it, and it refuses where you have rolled another one since. A build that does not give a message rerolls writes over the reply as before.
@@ -1376,8 +1395,8 @@ _2026-09-06_
 
 ### Added
 
-- **The request is measured in tokens, and priced.** **Show me the request** gives the whole request in tokens, with Lumiverse's own tokeniser where it will answer and an estimate where it will not, saying which of the two you are reading. **Where the tokens go** breaks it down block by block, largest first with a share each, which counting the messages cannot do because blocks with the same role are joined before they are sent. Put your provider's input and output prices on the Model tab and the same card says what that request would cost and what a hundred replies at that size come to. Both prices start at 0, and with both at 0 no cost is shown anywhere. Fill in one and the line says which half of the sum it is pricing. Price lists write these as `$0.075/M`, so type the number on its own or paste the line and the number is taken out of it, and a saved model setup carries the prices of the model it names. No currency is shown either, because nothing here knows which one you are billed in.
-- **Every built-in prompt holds the point of view and the strength of what it is given.** A reply written in first person, present tense, from inside one head could come back in polished third with another character's thoughts in it, and nothing about that read as an error. And a model rewriting roleplay softens it: the heat comes down, the violence goes vague, the crude word turns polite. Limits could already refuse a rewrite that sanitised a reply, but that is a call already paid for, so the prompts ask first. Both are said in what the passage keeps rather than in what the model is forbidden.
+- **The request is measured in tokens, and priced.** **Show me the request** gives the whole request in tokens, with Lumiverse's own tokenizer where it will answer and an estimate where it will not, saying which of the two you are reading. **Where the tokens go** breaks it down block by block, largest first with a share each, which counting the messages cannot do because blocks with the same role are joined before they are sent. Put your provider's input and output prices on the Model tab and the same card says what that request would cost and what a hundred replies at that size come to. Both prices start at 0, and with both at 0 no cost is shown anywhere. Fill in one and the line says which half of the sum it is pricing. Price lists write these as `$0.075/M`, so type the number on its own or paste the line and the number is taken out of it, and a saved model setup carries the prices of the model it names. No currency is shown either, because nothing here knows which one you are billed in.
+- **Every built-in prompt holds the point of view and the strength of what it is given.** A reply written in first person, present tense, from inside one head could come back in polished third with another character's thoughts in it, and nothing about that read as an error. And a model rewriting roleplay softens it: the heat comes down, the violence goes vague, the crude word turns polite. Limits could already refuse a rewrite that sanitized a reply, but that is a call already paid for, so the prompts ask first. Both are said in what the passage keeps rather than in what the model is forbidden.
 - **There is one prompt, and it is the one on the Prompt tab.** A second copy sat in the backend to fall back on before your settings had crossed over, and it had drifted: four blocks fewer, including the one that keeps markup away from the model, and an opening paragraph the panel stopped using. A refine that ran on it would have reported your prompt and sent that. The copy is gone, and a refine asked for in the moment before your settings arrive says so and sends nothing.
 - **The built-in prompts stop using the phrases they exist to cut.** Two opened on "you are the second pair of eyes", which is both the stock way to open a prompt and a stock phrase. "A beat" and "a fragment lands" used writing-workshop metaphors in the same breath as asking for plain writing, and "their hand" for the way somebody writes said nothing to anyone reading the block list. A check holds them to it, built from what was actually taken out rather than a guess at what might creep in.
 - **The preset menu offers the four for the list you are editing.** All eight were listed under two headings, so loading a **For your messages** one while editing replies changed the prompt you were not looking at and left the one in front of you alone, with nothing saying so. Your own are still offered whichever list you are on, since one of yours can carry either.

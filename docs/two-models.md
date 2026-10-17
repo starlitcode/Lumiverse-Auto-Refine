@@ -441,7 +441,7 @@ For example, a check that says "says what something was not before saying what i
 
 Write each check so that:
 
-- **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgement. Scores for a judgement change more from one reply to the next.
+- **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgment. Scores for a judgment change more from one reply to the next.
 - **It gives examples, one for each form.** Examples show which pattern you mean. With one example, another form of the same habit can score low.
 - **It asks about one thing.** A statement that joins two patterns with "and" or "or" is two checks. The second model scores the whole statement, so a reply with only one of the two can score low.
 - **A high score means there is a problem.** Write each check so that "true" means the reply needs a refine. A check can be written as a statement or as a question. TypeSafe, who make Jev, say both work as well. The built-in checks are statements.

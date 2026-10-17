@@ -91,7 +91,7 @@ function host(
     loreFail?: string;
     // The chat memory, and the four ways it can come back with nothing: the
     // build has no such call, the reader switched memory off, the chat has
-    // nothing vectorised, or the call threw.
+    // nothing vectorized, or the call threw.
     noMemories?: boolean;
     memoryOff?: boolean;
     noMemory?: boolean;
@@ -287,7 +287,7 @@ function host(
           .replace(/\{\{description\}\}/g, known ? card.description : "")
           .replace(/\{\{personality\}\}/g, known ? CARD.personality : "")
           .replace(/\{\{scenario\}\}/g, known ? CARD.scenario : "")
-          .replace(/\{\{persona\}\}/g, known ? "A traveller who arrived at night." : "")
+          .replace(/\{\{persona\}\}/g, known ? "A traveler who arrived at night." : "")
           // The name the reader's own character goes by, which is what labels
           // their side of the run-up. noPersona is a chat with none set.
           .replace(/\{\{user\}\}/g, known && !opts.noPersona ? "Tam" : "")
@@ -2709,7 +2709,7 @@ describe("what the pass costs", () => {
     expect(h.asked[0].connection_id).toBeUndefined();
   });
 
-  // Lumiverse counts with a real tokeniser where it has one for the model and
+  // Lumiverse counts with a real tokenizer where it has one for the model and
   // says so when it does not. Every price on the panel is worked out from that
   // number, so a guess taken for a count is a price that looks exact and is not.
   const used = async (opts: any) => {
@@ -3093,7 +3093,7 @@ describe("what the model is told about the scene", () => {
     expect(said(h)).toContain("A ferry pilot who has crossed the same water");
   });
 
-  test("and a chat with no persona set falls back rather than labelling a blank", async () => {
+  test("and a chat with no persona set falls back rather than labeling a blank", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {}, chat(), { noPersona: true });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
@@ -4289,10 +4289,10 @@ describe("the working a reasoning prompt asks for", () => {
   });
 });
 
-// A reasoning block this fails to recognise is handed to the refiner as prose,
+// A reasoning block this fails to recognize is handed to the refiner as prose,
 // rewritten, and saved over the reply. That is a worse failure than missing a
 // check, which is why the list is the reader's to extend.
-describe("thinking the extension has to recognise", () => {
+describe("thinking the extension has to recognize", () => {
   const withHead = (head: string): Msg[] => [
     { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
     { id: "m1", role: "user", content: "i walk through it" },
@@ -5025,7 +5025,7 @@ describe("a rewrite that swapped the word for a softer one", () => {
   });
 });
 
-// A judgement call over prose is only as good as what it leaves alone, so this
+// A judgment call over prose is only as good as what it leaves alone, so this
 // runs both directions. The quiet half is the one that matters: a check that
 // fires on ordinary writing gets switched off, and then it catches nothing.
 //
@@ -5116,7 +5116,7 @@ describe("the swap check against prose that only looks like softening", () => {
   }
 });
 
-describe("a rewrite that sanitised the reply", () => {
+describe("a rewrite that sanitized the reply", () => {
   const bloody = (): Msg[] => [
     { id: "m0", role: "assistant", content: "The gate stands open." },
     { id: "m1", role: "user", content: "i go in" },
@@ -5175,7 +5175,7 @@ describe("a rewrite that sanitised the reply", () => {
   });
 
   // Prose that never had the register cannot be softened out of it, and a
-  // single word going is an edit rather than sanitising.
+  // single word going is an edit rather than sanitizing.
   test("a reply with almost none of it is left to the other checks", async () => {
     const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -5937,7 +5937,7 @@ describe("a provider that will not take the call", () => {
 // This is the one macro whose answer comes from a call rather than from the
 // chat in front of it, so it is also the one with the most ways to come back
 // with nothing: a build without the call, a reader who switched memory off, a
-// chat with nothing vectorised yet, and the call throwing. Every one of those
+// chat with nothing vectorized yet, and the call throwing. Every one of those
 // has to leave the block out and let the refine go ahead, because a heading
 // wrapped around nothing reads to a model as "nothing has happened".
 describe("what Lumiverse remembers of the chat", () => {
@@ -5981,7 +5981,7 @@ describe("what Lumiverse remembers of the chat", () => {
     expect(said(h)).not.toContain("never read this");
   });
 
-  test("a chat with nothing vectorised sends no block either", async () => {
+  test("a chat with nothing vectorized sends no block either", async () => {
     const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], withMemory(), chat(), {
       noMemory: true,
     });
@@ -6272,11 +6272,11 @@ describe("refining what you selected", () => {
     }
   });
 
-  // Speech in its own colour, the way a model or a preset often writes it.
-  const coloured = 'Mara wiped the counter. <font color="#c9a227">"Sit down, the soup is nearly ready."</font> Then she turned the flame low.';
+  // Speech in its own color, the way a model or a preset often writes it.
+  const colored = 'Mara wiped the counter. <font color="#c9a227">"Sit down, the soup is nearly ready."</font> Then she turned the flame low.';
 
-  test("a selection inside coloured speech leaves the colour tags where they are", async () => {
-    const h = await armed(["<REFINED>the soup needs one more minute</REFINED>"], {}, reply(coloured));
+  test("a selection inside colored speech leaves the color tags where they are", async () => {
+    const h = await armed(["<REFINED>the soup needs one more minute</REFINED>"], {}, reply(colored));
     await ask(h, "the soup is nearly ready");
     await wait(60);
     expect(h.writes[0].content).toBe(
@@ -6284,8 +6284,8 @@ describe("refining what you selected", () => {
     );
   });
 
-  test("a selection from coloured speech into the narration takes the whole colour pair", async () => {
-    const h = await armed(['<REFINED>[[AR1]]"Sit, it is nearly done."[[AR2]] She lowered the flame.</REFINED>'], {}, reply(coloured));
+  test("a selection from colored speech into the narration takes the whole color pair", async () => {
+    const h = await armed(['<REFINED>[[AR1]]"Sit, it is nearly done."[[AR2]] She lowered the flame.</REFINED>'], {}, reply(colored));
     await ask(h, 'nearly ready." Then she turned the flame low.');
     await wait(60);
     const out = h.writes[0].content;
@@ -6754,10 +6754,10 @@ describe("phrases this chat has worn out", () => {
     expect(wornSent(h)).toContain("shiver ran down her spine");
   });
 
-  // Colour tags are formatting. Their quote marks also read as a line of speech
+  // Color tags are formatting. Their quote marks also read as a line of speech
   // opening and closing, which let a spoken line through as narration.
-  test("colour tags and the words around them are not counted as a phrase", async () => {
-    const coloured = [
+  test("color tags and the words around them are not counted as a phrase", async () => {
+    const colored = [
       '<font color="#aa8844">"Mind the step."</font> Rook said, and lifted the lantern.',
       '<font color="#aa8844">"Nearly there."</font> Rook said, and lifted the lantern.',
       '<font color="#aa8844">"Hold the rope."</font> Rook said, and lifted the lantern.',
@@ -6766,7 +6766,7 @@ describe("phrases this chat has worn out", () => {
     const h = await armed(
       ["<REFINED>The rope held and the boat came in.</REFINED>"],
       { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
-      chatWith(coloured),
+      chatWith(colored),
     );
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
     await wait(60);
@@ -8087,12 +8087,12 @@ describe("a reroll Auto Retry added", () => {
 // The panel's pop-ups are Lumiverse's own notifications. Lumiverse takes them
 // only from the server side, so the panel sends its words to the backend.
 describe("notifications the panel asks for", () => {
-  test("are shown as Lumiverse's own, in the colour asked for, to the account that asked", async () => {
+  test("are shown as Lumiverse's own, in the color asked for, to the account that asked", async () => {
     const h = await armed([]);
     await h.front({ type: "notify", kind: "warning", text: "A refine is already running." }, "u7");
     expect(h.notes).toEqual([{ kind: "warning", text: "A refine is already running.", opts: { userId: "u7" } }]);
   });
-  test("an unknown colour is shown as information", async () => {
+  test("an unknown color is shown as information", async () => {
     const h = await armed([]);
     await h.front({ type: "notify", kind: "shout", text: "Copied." });
     expect(h.notes.map((n: any) => n.kind)).toEqual(["info"]);
@@ -8101,5 +8101,19 @@ describe("notifications the panel asks for", () => {
     const h = await armed([]);
     await h.front({ type: "notify", kind: "success", text: "   " });
     expect(h.notes).toEqual([]);
+  });
+});
+
+// A model can write British spelling. The refusal patterns take both, so a
+// refusal spelled "fulfil" is caught the same as one spelled "fulfill".
+describe("a refusal in British spelling", () => {
+  test("is caught, and nothing is saved", async () => {
+    const no = "<REFINED>I am not going to fulfil that request.</REFINED>";
+    const h = await armed([no, no, no, no]);
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(h.writes.length).toBe(0);
+    const why = (h.sent.filter((m: any) => m.type === "refine_result").pop() || {}).why;
+    expect(why).toMatch(/declined to rewrite/);
   });
 });

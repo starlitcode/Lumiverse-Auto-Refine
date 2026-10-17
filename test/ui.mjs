@@ -363,8 +363,8 @@ async function repaired(page) {
 }
 
 // Every repair, measured against what the line looked like before it. A panel
-// that repaints healthy colours is overriding a theme it should be inheriting,
-// and this is how that shows: the inline colour is lifted off, the line is
+// that repaints healthy colors is overriding a theme it should be inheriting,
+// and this is how that shows: the inline color is lifted off, the line is
 // measured as the theme drew it, and anything that was already above its own
 // floor should never have been touched.
 //
@@ -426,7 +426,7 @@ async function overreached(page) {
 //
 // worstText walks text nodes, and the button has none: its mark is an SVG drawn
 // in currentColor. So the one part of this extension that sits over somebody
-// else's chat, in their theme, has never been measured at all. A colour change
+// else's chat, in their theme, has never been measured at all. A color change
 // could have taken it to nothing and every check would have stayed green.
 //
 // Held to 3, which is what the standard asks of a graphic rather than the 4.5
@@ -639,7 +639,7 @@ console.log("\na theme's own custom CSS");
 // class selectors aim at Lumiverse's hashed class names, which carry an
 // underscore on each side, and none of them may reach the panel. Its element
 // rules reach every box on the page, Lumiverse's and the panel's alike, so a
-// box painted light with no text colour of its own still has to read.
+// box painted light with no text color of its own still has to read.
 const THEME_CLASSES =
   '[class*="_card_"],[class*="_btn_"],[class*="_button_"],[class*="_toggle_"],[class*="_switch_"],' +
   '[class*="_container_"],[class*="_label_"],[class*="_row_"],[class*="_header_"],[class*="_input_"],' +
@@ -689,7 +689,7 @@ for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, t
     });
   }
 }
-// A theme that changes Lumiverse's input colour changes every box here too.
+// A theme that changes Lumiverse's input color changes every box here too.
 for (const tab of ["Setup", "Model", "Prompt", "Context", "Limits"]) {
   await inTab(browser, { css: ":root{--lumiverse-input-bg:rgb(12,34,56)}", saved: { judgeMode: "two" } }, async (page) => {
     await goTab(page, tab);
@@ -701,11 +701,11 @@ for (const tab of ["Setup", "Model", "Prompt", "Context", "Limits"]) {
     );
     return { n: boxes.length, other: boxes.map((e) => getComputedStyle(e).backgroundColor).filter((c) => c !== "rgb(12, 34, 56)") };
   }, ["#drawer"]);
-    ok(tab + ": every box takes Lumiverse's input colour", out.n > 0 && out.other.length === 0, JSON.stringify(out));
+    ok(tab + ": every box takes Lumiverse's input color", out.n > 0 && out.other.length === 0, JSON.stringify(out));
   });
 }
 
-console.log("\ncolour on somebody else's theme");
+console.log("\ncolor on somebody else's theme");
 {
   await inTab(browser, {}, async (page) => {
     const over = await overreached(page);
@@ -739,8 +739,8 @@ console.log("\ncolour on somebody else's theme");
   });
 
   // The repair has to land on the frame the reader sees. Doing it a frame late
-  // paints the panel once in the theme's colours and once in the repaired ones,
-  // which is the flicker on every press, and the tabs carry a colour transition
+  // paints the panel once in the theme's colors and once in the repaired ones,
+  // which is the flicker on every press, and the tabs carry a color transition
   // so theirs faded across it.
   await inTab(browser, { css: cruel }, async (page) => {
     const out = await page.evaluate(async () => {
@@ -759,7 +759,7 @@ console.log("\ncolour on somebody else's theme");
       let moved = 0;
       for (let i = 0; i < Math.min(atOnce.length, later.length); i++)
         if (atOnce[i] !== later[i]) moved++;
-      return { moved, count: atOnce.length, colours: runs.filter((p) => p === "color").length };
+      return { moved, count: atOnce.length, colors: runs.filter((p) => p === "color").length };
     });
     ok(
       "and there is something on the panel for it to repair, or this proves nothing",
@@ -769,12 +769,12 @@ console.log("\ncolour on somebody else's theme");
     ok(
       "the repair is on the first frame, so a press does not repaint twice",
       out.moved === 0,
-      out.moved + " of " + out.count + " changed colour after the frame",
+      out.moved + " of " + out.count + " changed color after the frame",
     );
     ok(
-      "and nothing fades from one colour to the other",
-      out.colours === 0,
-      out.colours + " colour transitions ran",
+      "and nothing fades from one color to the other",
+      out.colors === 0,
+      out.colors + " color transitions ran",
     );
   });
 
@@ -879,9 +879,9 @@ console.log("\ncolour on somebody else's theme");
 
   // A description open at the moment the theme changes. It hangs off the page
   // rather than off the panel, so the walk that re-measures the panel does not
-  // reach it, and it would sit there in the colours of the theme that has gone.
+  // reach it, and it would sit there in the colors of the theme that has gone.
   // Opened on a theme that has made its own text invisible, so the sweep really
-  // does write a colour onto it, and then swapped to light underneath. Starting
+  // does write a color onto it, and then swapped to light underneath. Starting
   // on a theme that needs no repair proves nothing: there would be nothing left
   // behind to be wrong.
   await inTab(browser, { css: cruel, viewport: { width: 420, height: 900 }, touch: true }, async (page) => {
@@ -913,7 +913,7 @@ console.log("\ncolour on somebody else's theme");
       if (!pop) return { open: false };
       const cs = getComputedStyle(pop);
       const fg = parse(cs.color);
-      // The surface is a flat tint laid as a gradient over a solid colour, so
+      // The surface is a flat tint laid as a gradient over a solid color, so
       // backgroundColor alone reports the solid underneath and not what was
       // painted. The first stop is the whole tint.
       const stop = (cs.backgroundImage || "").match(/rgba?\([^)]*\)/);
@@ -1066,7 +1066,7 @@ console.log("\nthe prompt layout editor");
         !!document.querySelector("#drawer .arf-bad") &&
         /\{\{message\}\}/.test(document.querySelector("#drawer .arf-body").textContent),
     );
-    ok("a prompt with no {{message}} says so in the danger colour", shouted);
+    ok("a prompt with no {{message}} says so in the danger color", shouted);
   });
   ok("no errors while editing the layout", errors.length === 0, errors.join("\n         "));
 }
@@ -3214,7 +3214,7 @@ console.log("\na preset that names a model setup");
     });
     ok("the preset card offers the saved setups", !!offered && offered.indexOf("Careful model") >= 0, JSON.stringify(offered));
 
-    // A built-in prompt cannot hold the setup: Update selected is greyed out on
+    // A built-in prompt cannot hold the setup: Update selected is grayed out on
     // one, and switching the picker puts the box back to what the next preset
     // carries. So picking a setup with one selected has to say where the pick is
     // going, or it looks like it took and then goes without a word.
@@ -3242,7 +3242,7 @@ console.log("\na preset that names a model setup");
     const cannotUpdate = await page.evaluate(
       () => document.querySelector('#drawer [data-arf-preset="update"]').disabled,
     );
-    ok("and Update selected is greyed out on it, which is why", cannotUpdate === true);
+    ok("and Update selected is grayed out on it, which is why", cannotUpdate === true);
 
     // The pick survives into Save as new, which is the whole point of the line
     // above: the copy is what carries it.
@@ -4284,7 +4284,7 @@ console.log("\nswitches, not tick boxes");
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Limits");
     const look = await page.evaluate(async () => {
-      // Long enough for the slide and the colour change to have finished. A
+      // Long enough for the slide and the color change to have finished. A
       // computed style read mid-transition is the value it is passing through,
       // not the one it is going to, so reading straight away compares two
       // points on the same animation.
@@ -4322,7 +4322,7 @@ console.log("\nswitches, not tick boxes");
         w: shut.w,
         h: shut.h,
         radius: shut.radius,
-        // The knob slides, and the track changes colour.
+        // The knob slides, and the track changes color.
         knobShut: knobShut.left,
         knobOpen: knobOpen.left,
         bgShut: shut.bg,
@@ -4405,7 +4405,7 @@ console.log("\nthe checks are yours to switch off");
     const before = await onScreen(page, "softenPct");
     const folded = await page.evaluate(() => {
       const head = Array.from(document.querySelectorAll("#drawer .arf-fold")).find((h) =>
-        /What counts as sanitising/.test(h.textContent),
+        /What counts as sanitizing/.test(h.textContent),
       );
       if (head) head.click();
       return { hasFold: !!head };
@@ -4659,18 +4659,130 @@ console.log("\nrows that hang off a switch open and close smoothly");
   }
 }
 
-console.log("\ncut and added words keep their colour when the view is switched");
+console.log("\nthe color editor in use");
 {
-  // A colour the reader picked is shown exactly as picked, even where it is
+  // Used the way a person uses it. A theme change while it is open shows the
+  // new theme color, another setting changed while it is open leaves it open,
+  // a real drag moves the color, and typing a code key by key never shows the
+  // color of a code that is only half typed.
+  const THEMED = ":root{--lumiverse-danger:rgb(200,30,40);--lumiverse-success:rgb(20,160,60)}";
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { css: THEMED, viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      const row = '#drawer [data-arf-row="cutColor"]';
+      const state = () => page.evaluate((row) => {
+        const r = document.querySelector(row);
+        const ed = r.querySelector(".arf-coloredit");
+        return {
+          open: !!ed && !ed.hidden && ed.getClientRects().length > 0,
+          code: r.querySelector('[data-arf-field="cutColor"]').value,
+          swatch: getComputedStyle(r.querySelector("[data-arf-colorswatch]")).backgroundColor,
+          sliders: Array.from(r.querySelectorAll("[data-arf-colorpart]")).map((x) => x.value).join(),
+        };
+      }, row);
+      await page.click(row + " [data-arf-colorswatch]");
+      await page.waitForTimeout(500);
+
+      await page.addStyleTag({ content: ":root{--lumiverse-danger:rgb(10,90,200)}" });
+      await page.waitForTimeout(1500);
+      const themed = await state();
+      ok(label + ": a theme change while it is open shows the new theme color",
+        themed.open && themed.code === "#0a5ac8" && themed.swatch === "rgb(10, 90, 200)" && themed.sliders === "215,90,41", JSON.stringify(themed));
+
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="reduceMotion"] input[type=checkbox]').click());
+      await page.waitForTimeout(600);
+      ok(label + ": changing another setting leaves it open", (await state()).open, JSON.stringify(await state()));
+
+      // A real drag on the Hue knob, by mouse or by finger.
+      const hue = page.locator(row + ' [data-arf-colorpart="h"]');
+      await hue.scrollIntoViewIfNeeded();
+      const box = await hue.boundingBox();
+      const x0 = box.x + box.width * (215 / 360), y0 = box.y + box.height / 2;
+      if (touch) {
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y: y0 }] });
+        for (let i = 1; i <= 5; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x0 - i * 20, y: y0 }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      } else {
+        await page.mouse.move(x0, y0);
+        await page.mouse.down();
+        for (let i = 1; i <= 5; i++) await page.mouse.move(x0 - i * 20, y0);
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(400);
+      const dragged = await state();
+      const savedHue = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").cutColor);
+      ok(label + ": dragging the Hue knob changes the color and saves it",
+        Number(dragged.sliders.split(",")[0]) < 200 && /^#[0-9a-f]{6}$/.test(String(savedHue)) && savedHue === dragged.code, JSON.stringify({ dragged, savedHue }));
+
+      // Typing #ff0040 one key at a time. Halfway, #ff0 is a short code for
+      // yellow, which must never be shown.
+      const before = (await state()).swatch;
+      const seen = [];
+      const code = page.locator(row + ' [data-arf-field="cutColor"]');
+      await code.click();
+      await code.fill("");
+      for (const ch of "#ff0040") {
+        await page.keyboard.type(ch);
+        await page.waitForTimeout(30);
+        seen.push((await state()).swatch);
+      }
+      ok(label + ": a half-typed code never changes the color",
+        seen.slice(0, -1).every((c) => c === before) && seen[seen.length - 1] === "rgb(255, 0, 64)", JSON.stringify({ before, seen }));
+      await code.fill("#0f8");
+      await page.keyboard.press("Enter");
+      await code.blur();
+      await page.waitForTimeout(300);
+      ok(label + ": a short code is still used when typing ends", (await state()).swatch === "rgb(0, 255, 136)", JSON.stringify(await state()));
+    });
+  }
+}
+
+console.log("\ncolors saved under the old setting names");
+{
+  // The two word colors were saved as cutColour and addColour before the panel
+  // moved to American spelling. A color saved that way is still the one used,
+  // and it is saved again under the new name.
+  const old = { enabled: true, popup: true, ["cut" + "Colour"]: "#4c1d95", ["add" + "Colour"]: "#5b0a4a" };
+  await inTab(browser, { saved: old }, async (page) => {
+    await goTab(page, "Setup");
+    await settle(page);
+    const out = await page.evaluate(async () => {
+      const swatch = document.querySelector('#drawer [data-arf-colorswatch="cutColor"]');
+      // Read now. The change below redraws the panel and takes this one away.
+      const shown = swatch ? getComputedStyle(swatch).backgroundColor : null;
+      // A change saves the settings, so what is stored can be read back.
+      const box = document.querySelector('#drawer input[type="checkbox"]');
+      box.click();
+      box.click();
+      await new Promise((r) => setTimeout(r, 900));
+      const kept = JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}");
+      return {
+        swatch: shown,
+        cut: kept.cutColor,
+        add: kept.addColor,
+        oldLeft: Object.keys(kept).filter((k) => /Colour$/.test(k)),
+      };
+    });
+    ok("a color saved under the old name is the one shown", out.swatch === "rgb(76, 29, 149)", JSON.stringify(out));
+    ok("and it is saved again under the new names", out.cut === "#4c1d95" && out.add === "#5b0a4a", JSON.stringify(out));
+    ok("with the old names gone", out.oldLeft.length === 0, JSON.stringify(out));
+  });
+}
+
+console.log("\ncut and added words keep their color when the view is switched");
+{
+  // A color the reader picked is shown exactly as picked, even where it is
   // hard to read on the card, and switching between the two views keeps it.
-  // With no colour picked, the theme's colour is used, and one too faint for
+  // With no color picked, the theme's color is used, and one too faint for
   // the card is made readable, before and after a switch alike. #4c1d95 is a
   // dark violet that is hard to read on this purple card.
   const PURPLE = ":root{--lumiverse-bg:rgb(26,10,40);--lumiverse-bg-elevated:rgba(70,20,100,.9);--lumiverse-card-bg-solid:rgb(40,12,60);--lumiverse-primary:rgb(233,200,255)}";
   const FAINT = PURPLE.replace("}", ";--lumiverse-danger:rgb(76,29,149);--lumiverse-success:rgb(91,10,74)}");
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const own of [true, false]) {
-      const saved = own ? { enabled: true, popup: true, cutColour: "#4c1d95", addColour: "#5b0a4a" } : { enabled: true, popup: true };
+      const saved = own ? { enabled: true, popup: true, cutColor: "#4c1d95", addColor: "#5b0a4a" } : { enabled: true, popup: true };
       await inTab(browser, { css: own ? PURPLE : FAINT, viewport, touch, saved }, async (page) => {
         await goTab(page, "Setup");
         await settle(page);
@@ -4683,19 +4795,19 @@ console.log("\ncut and added words keep their colour when the view is switched")
           return { cut: of(".arf-cut"), add: of(".arf-add") };
         });
         const switchView = () => page.evaluate(() => document.querySelector(".arf-pop:not(.arf-leaving) [data-arf-diff-switch]").click());
-        const say = label + (own ? ", your own colours" : ", the theme's colours") + ": ";
+        const say = label + (own ? ", your own colors" : ", the theme's colors") + ": ";
         const first = await look();
         if (own)
           ok(say + "they are shown exactly as picked", !!first && first.cut.length > 0 && first.cut.every((c) => c === "rgb(76, 29, 149)") && first.add.every((c) => c === "rgb(91, 10, 74)"), JSON.stringify(first));
         else
-          ok(say + "a theme colour too faint for the card is made readable", !!first && first.cut.length > 0 && first.cut.every((c) => c !== "rgb(76, 29, 149)") && first.add.every((c) => c !== "rgb(91, 10, 74)"), JSON.stringify(first));
-        ok(say + "every cut word has the same colour", !!first && new Set(first.cut).size === 1, JSON.stringify(first && first.cut));
+          ok(say + "a theme color too faint for the card is made readable", !!first && first.cut.length > 0 && first.cut.every((c) => c !== "rgb(76, 29, 149)") && first.add.every((c) => c !== "rgb(91, 10, 74)"), JSON.stringify(first));
+        ok(say + "every cut word has the same color", !!first && new Set(first.cut).size === 1, JSON.stringify(first && first.cut));
         await switchView();
         await page.waitForTimeout(100);
         const other = await look();
-        ok(say + "switching the view keeps the cut words' colour",
+        ok(say + "switching the view keeps the cut words' color",
           !!other && other.cut.length > 0 && other.cut.every((c) => c === first.cut[0]), JSON.stringify(other && other.cut) + " was " + first.cut[0]);
-        ok(say + "and the added words' colour", !!other && other.add.length > 0 && other.add.every((c) => c === first.add[0]), JSON.stringify(other && other.add) + " was " + first.add[0]);
+        ok(say + "and the added words' color", !!other && other.add.length > 0 && other.add.every((c) => c === first.add[0]), JSON.stringify(other && other.add) + " was " + first.add[0]);
         await switchView();
         await page.waitForTimeout(100);
         const back = await look();
@@ -4705,9 +4817,9 @@ console.log("\ncut and added words keep their colour when the view is switched")
   }
 }
 
-console.log("\nfolds and the colour editor open and close smoothly");
+console.log("\nfolds and the color editor open and close smoothly");
 {
-  // A fold, such as Sampler values or Older refines, and the colour editor
+  // A fold, such as Sampler values or Older refines, and the color editor
   // open and close over several frames, so what is under them moves with
   // them. Pressed again while moving, they turn round from where they are.
   // Measured by the height of the box holding each one, which a scroll does
@@ -4752,7 +4864,7 @@ console.log("\nfolds and the colour editor open and close smoothly");
   };
   const CASES = [
     ["Sampler values", "Model", "text:Sampler values", "parent", {}],
-    ["the colour editor", "Setup", '#drawer [data-arf-colourswatch="cutColour"]', '#drawer [data-arf-row="cutColour"]', {}],
+    ["the color editor", "Setup", '#drawer [data-arf-colorswatch="cutColor"]', '#drawer [data-arf-row="cutColor"]', {}],
   ];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const zoom of [1, 0.9, 1.25]) {
@@ -5114,7 +5226,7 @@ console.log("\nthe mark stays readable on the button it sits on");
 {
   // The one part of this extension that sits over somebody else's chat, in
   // their theme. worstText walks text nodes and the button has none, so until
-  // now nothing measured it at all: a colour change could have taken the mark
+  // now nothing measured it at all: a color change could have taken the mark
   // to nothing and every check would have stayed green.
   const themes = [
     ["the stock theme", ""],
@@ -6054,7 +6166,7 @@ console.log("\ntaking more than one file at a time");
 
 console.log("\nthe three buttons agree about the home screen");
 {
-  // The two beside it were greyed off a chat and this one stayed lit, which
+  // The two beside it were grayed off a chat and this one stayed lit, which
   // read as the one that still worked. There is no input box out there to read,
   // so pressing it could only ever fail.
   await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
@@ -6094,8 +6206,8 @@ console.log("\nthe three buttons agree about the home screen");
 
     await tellChat(null);
     const home = await state();
-    ok("off a chat, refine the latest is greyed", home.latest.off, JSON.stringify(home.latest));
-    ok("and refine every reply here is greyed", home.every.off, JSON.stringify(home.every));
+    ok("off a chat, refine the latest is grayed", home.latest.off, JSON.stringify(home.latest));
+    ok("and refine every reply here is grayed", home.every.off, JSON.stringify(home.every));
     ok("and so is refine what I am typing", home.draft.off, JSON.stringify(home.draft));
     ok("which says why rather than just going dim",
       /no chat/i.test(home.draft.why || ""), home.draft.why);
@@ -6128,8 +6240,8 @@ console.log("\nthe three buttons agree about the home screen");
           page.evaluate(() => {
             const off = (sel) => { const n = document.querySelector("#drawer " + sel); return n ? !!n.disabled : null; };
             const d = document.querySelector('#drawer [data-arf-draft="1"]');
-            // Greyed for the right reason. A reply finishing also marks a
-            // refine as starting, and a busy panel greys the buttons too.
+            // Grayed for the right reason. A reply finishing also marks a
+            // refine as starting, and a busy panel grays the buttons too.
             return { latest: off('[data-arf-now="1"]'), draft: off('[data-arf-draft="1"]'), noChat: /no chat/i.test((d && d.title) || "") };
           });
         await page.evaluate(() => {
@@ -6145,13 +6257,13 @@ console.log("\nthe three buttons agree about the home screen");
         await settle(page);
         if (!believed) {
           const now = await state();
-          ok("on the home screen, " + what + " in a chat that is not open leaves the buttons greyed", now.latest === true && now.draft === true && now.noChat, JSON.stringify(now));
+          ok("on the home screen, " + what + " in a chat that is not open leaves the buttons grayed", now.latest === true && now.draft === true && now.noChat, JSON.stringify(now));
         }
         // Past a tick of the address watch, which is what puts it right when
         // the event was taken.
         await page.waitForTimeout(900);
         const got = await state();
-        ok("and a moment later they are still greyed, after " + what, got.latest === true && got.draft === true && got.noChat, JSON.stringify(got));
+        ok("and a moment later they are still grayed, after " + what, got.latest === true && got.draft === true && got.noChat, JSON.stringify(got));
       },
     );
   }
@@ -6224,7 +6336,7 @@ console.log("\nstopping a refine without a floating button");
 {
   // Stopping cannot live on the floating button alone: switched off, there
   // would be no way to call a refine off at all, and a panel that answers a
-  // running refine by greying both its buttons out says wait rather than
+  // running refine by graying both its buttons out says wait rather than
   // saying there is a way
   // out of this.
   const running = async (page) => {
@@ -6342,7 +6454,7 @@ console.log("\na long reply is still marked");
   // share are kept plain, so the plain and taken-out words read back as the
   // reply before, and the plain and put-in words as the reply after.
   const make = (paras, words) => {
-    const pick = ["lamp", "harbour", "rope", "ledger", "gull", "tide", "keeper", "salt", "window", "stair"];
+    const pick = ["lamp", "harbor", "rope", "ledger", "gull", "tide", "keeper", "salt", "window", "stair"];
     const out = [];
     for (let p = 0; p < paras; p++) {
       const line = [];
@@ -6431,16 +6543,16 @@ console.log("\nthe card that comes up on the page");
         plain: plain,
         struck: cutStyle ? cutStyle.textDecorationLine : "",
         addStruck: addStyle ? addStyle.textDecorationLine : "",
-        cutColour: cutStyle ? cutStyle.color : "",
-        addColour: addStyle ? addStyle.color : "",
+        cutColor: cutStyle ? cutStyle.color : "",
+        addColor: addStyle ? addStyle.color : "",
       };
     });
     ok("words taken out are marked", /electric shock/.test(marks.cut), JSON.stringify(marks.cut));
     ok("and struck through", /line-through/.test(marks.struck), marks.struck);
     ok("words put in are marked", /locked rigid/.test(marks.add), JSON.stringify(marks.add));
     ok("and not struck through", !/line-through/.test(marks.addStruck), marks.addStruck);
-    ok("the two are not the same colour", marks.cutColour !== marks.addColour,
-      marks.cutColour + " vs " + marks.addColour);
+    ok("the two are not the same color", marks.cutColor !== marks.addColor,
+      marks.cutColor + " vs " + marks.addColor);
     // "It" and "him" survive the rewrite in the fixture below, unmarked.
     ok("and what did not change is left plain", marks.plain.trim().length > 0, JSON.stringify(marks.plain));
 
@@ -6986,11 +7098,11 @@ console.log("\nlight and dark, after every change");
   }
 }
 
-console.log("\nthe theme engine's own colours, light and dark");
+console.log("\nthe theme engine's own colors, light and dark");
 {
-  // The colours Lumiverse's own theme engine writes for a purple accent, kept
+  // The colors Lumiverse's own theme engine writes for a purple accent, kept
   // in lumiverse-themes.json. A hand-written test theme tends to set every
-  // colour to suit itself, which the engine does not do: it leaves a few at
+  // color to suit itself, which the engine does not do: it leaves a few at
   // their stock dark values on a light theme. Every tab is read on both, with
   // and without a pattern behind the panel.
   const ENGINE = JSON.parse(readFileSync(join(root, "test", "lumiverse-themes.json"), "utf8"));
@@ -7147,11 +7259,11 @@ console.log("\nyour own messages are held up by their own prompt");
         const what = label + ", only your messages refined, " + which;
         if (ready) {
           ok(what + ": the floating button is ready", !out.idle, JSON.stringify(out));
-          ok(what + ": the panel button is not greyed out", !out.panelButtonOff, JSON.stringify(out));
+          ok(what + ": the panel button is not grayed out", !out.panelButtonOff, JSON.stringify(out));
           ok(what + ": a tap refines your latest message", out.sent === 1, JSON.stringify(out));
         } else {
           ok(what + ": the floating button says why it is not ready", out.idle && /prompt for your messages/.test(out.title), JSON.stringify(out));
-          ok(what + ": the panel button is greyed out", out.panelButtonOff, JSON.stringify(out));
+          ok(what + ": the panel button is grayed out", out.panelButtonOff, JSON.stringify(out));
           ok(what + ": a tap sends nothing", out.sent === 0, JSON.stringify(out));
         }
       });
@@ -7561,7 +7673,7 @@ console.log("\nswitching without the panel jumping");
   // A switch that rebuilds the panel takes its own knob down with it, so the
   // slide never runs, and the page lands wherever the rebuild left it. Both
   // read as the panel flinching under the finger. The Prompt tab is where it
-  // was worst: the whole prompt is there, several boxes of it, and greying one
+  // was worst: the whole prompt is there, several boxes of it, and graying one
   // block out was tearing all of it down.
   await inTab(browser, { viewport: { width: 420, height: 520 } }, async (page) => {
     await goTab(page, "Prompt");
@@ -7594,7 +7706,7 @@ console.log("\nswitching without the panel jumping");
     });
     ok("the switch is the same one, so its knob has something to slide", now.sameSwitch);
     ok("the prompt boxes are left standing", now.sameText);
-    ok("the block greys out on the spot", now.off && now.hushed);
+    ok("the block grays out on the spot", now.off && now.hushed);
     ok("and the page has not moved", now.at === before.at, before.at + " -> " + now.at);
 
     // The count on the card, the warning about {{message}} and the header all
@@ -8628,7 +8740,7 @@ console.log("\nlists with headings on them");
 {
   // A dropdown of the built-in prompts and however many of your own is a
   // column nobody reads. A heading is a real optgroup rather than an entry that
-  // does nothing: the browser draws it greyed and refuses to select it, which
+  // does nothing: the browser draws it grayed and refuses to select it, which
   // is what makes it a heading.
   const shape = (page, field) =>
     page.evaluate((f) => {
@@ -10705,7 +10817,7 @@ console.log("\ntokens and what they cost");
 {
   // The preview used to report messages and characters, which is two numbers
   // nobody is billed in. The count comes down with the request from the side
-  // the tokeniser lives on, and the panel says which of a count and a guess it
+  // the tokenizer lives on, and the panel says which of a count and a guess it
   // is holding.
   const answer = (page, tokens) =>
     page.evaluate((tok) => {
@@ -11477,7 +11589,7 @@ console.log("\nthe buttons in Lumiverse's own slots");
         ).length,
         wears: ours ? ours.getAttribute("class") : "",
         // The first of the host's, not the last: the last is a delete and
-        // carries a warning colour that has nothing to do with a refine.
+        // carries a warning color that has nothing to do with a refine.
         theirWears: theirs.getAttribute("class"),
         danger: /danger/i.test(ours ? ours.getAttribute("class") || "" : ""),
         box: ours
@@ -13250,14 +13362,14 @@ console.log("\na pattern behind the panel");
     const plain = await page.evaluate(() => document.querySelector("#drawer").hasAttribute("data-arf-pattern"));
     ok("by default there is no pattern", plain === false);
   });
-  // The solid colour comes from the theme. Lumiverse's own "solid card"
-  // colour is a fixed grey, and a purple theme turned grey-black under it.
+  // The solid color comes from the theme. Lumiverse's own "solid card"
+  // color is a fixed gray, and a purple theme turned gray-black under it.
   const THEMED = ":root{--lumiverse-bg-elevated:rgb(40,0,60);--lumiverse-card-bg-solid:rgb(24,20,34)}";
   await inTab(browser, { css: THEMED, saved: { enabled: true, panelPattern: "dots" } }, async (page) => {
     await goTab(page, "Setup");
     await settle(page);
-    const colour = await page.evaluate(() => getComputedStyle(document.querySelector("#drawer .arf-card")).backgroundColor);
-    ok("with a pattern, the cards take the theme's colour, not a fixed grey", colour === "rgb(40, 0, 60)", colour);
+    const color = await page.evaluate(() => getComputedStyle(document.querySelector("#drawer .arf-card")).backgroundColor);
+    ok("with a pattern, the cards take the theme's color, not a fixed gray", color === "rgb(40, 0, 60)", color);
   });
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
     for (const kind of ["diamonds", "stripes", "dots", "hearts", "stars"]) {
@@ -13280,7 +13392,7 @@ console.log("\na pattern behind the panel");
               getComputedStyle(root, "::before"),
             ),
             // Solid enough that nothing reads through: opaque, or a theme
-            // colour that is at most a little see-through.
+            // color that is at most a little see-through.
             cardSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(card).backgroundColor),
             tabsSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(tabs).backgroundColor),
             sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
@@ -13294,13 +13406,13 @@ console.log("\na pattern behind the panel");
   }
 }
 
-console.log("\nyour own colours for cut and added words");
+console.log("\nyour own colors for cut and added words");
 {
-  // By default, cut words take the theme's danger colour and added words its
-  // success colour. The swatch opens Auto Refine's own colour editor, the same
-  // on a phone and a laptop: a box for a colour code, sliders for hue,
-  // saturation and lightness, the theme's colours to pick from, and a
-  // preview. Use the theme's colour puts the theme's back. Only a colour
+  // By default, cut words take the theme's danger color and added words its
+  // success color. The swatch opens Auto Refine's own color editor, the same
+  // on a phone and a laptop: a box for a color code, sliders for hue,
+  // saturation and lightness, the theme's colors to pick from, and a
+  // preview. Use the theme's color puts the theme's back. Only a color
   // written as #rrggbb reaches the page.
   const THEMED = ":root{--lumiverse-danger:rgb(200,30,40);--lumiverse-success:rgb(20,160,60);--lumiverse-warning:rgb(240,160,10)}";
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
@@ -13311,10 +13423,10 @@ console.log("\nyour own colours for cut and added words");
         page.evaluate((key) => {
           const ink = (cls) => { const w = document.createElement("span"); w.className = cls; document.body.appendChild(w); const c = getComputedStyle(w).color; w.remove(); return c; };
           const row = document.querySelector('#drawer [data-arf-row="' + key + '"]');
-          const edit = row.querySelector(".arf-colouredit");
+          const edit = row.querySelector(".arf-coloredit");
           const code = row.querySelector('[data-arf-field="' + key + '"]');
-          const swatch = row.querySelector("[data-arf-colourswatch]");
-          const back = row.querySelector("[data-arf-colourback]");
+          const swatch = row.querySelector("[data-arf-colorswatch]");
+          const back = row.querySelector("[data-arf-colorback]");
           const tall = (n) => (n && n.getClientRects().length ? Math.round(n.getBoundingClientRect().height) : 0);
           return {
             cut: ink("arf-cut"),
@@ -13322,14 +13434,14 @@ console.log("\nyour own colours for cut and added words");
             code: code ? code.value : null,
             swatch: swatch ? getComputedStyle(swatch).backgroundColor : null,
             open: !!edit && !edit.hidden && edit.getClientRects().length > 0,
-            bad: (row.querySelector("[data-arf-colourbad]") || {}).textContent || "",
+            bad: (row.querySelector("[data-arf-colorbad]") || {}).textContent || "",
             backShown: !!back && !back.hidden && back.getClientRects().length > 0,
-            sliders: Array.from(row.querySelectorAll("[data-arf-colourpart]")).map((r) => r.value),
+            sliders: Array.from(row.querySelectorAll("[data-arf-colorpart]")).map((r) => r.value),
             heights: {
               swatch: tall(swatch),
               code: tall(code),
-              slider: Math.min(...Array.from(row.querySelectorAll("[data-arf-colourpart]")).map(tall)),
-              pick: tall(row.querySelector("[data-arf-colourpick]")),
+              slider: Math.min(...Array.from(row.querySelectorAll("[data-arf-colorpart]")).map(tall)),
+              pick: tall(row.querySelector("[data-arf-colorpick]")),
             },
             sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
           };
@@ -13344,80 +13456,97 @@ console.log("\nyour own colours for cut and added words");
           code.blur();
         }, { key, value });
 
-      const first = await read("cutColour");
-      ok(label + ": by default, cut words take the theme's danger colour", first.cut === "rgb(200, 30, 40)", JSON.stringify(first));
-      ok(label + ": and added words its success colour", first.add === "rgb(20, 160, 60)", JSON.stringify(first));
-      ok(label + ": the swatch and the code show the theme's colour", first.swatch === "rgb(200, 30, 40)" && first.code === "#c81e28", JSON.stringify(first));
+      const first = await read("cutColor");
+      ok(label + ": by default, cut words take the theme's danger color", first.cut === "rgb(200, 30, 40)", JSON.stringify(first));
+      ok(label + ": and added words its success color", first.add === "rgb(20, 160, 60)", JSON.stringify(first));
+      ok(label + ": the swatch and the code show the theme's color", first.swatch === "rgb(200, 30, 40)" && first.code === "#c81e28", JSON.stringify(first));
       ok(label + ": the editor starts shut, with nothing to put back", !first.open && !first.backShown, JSON.stringify(first));
 
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colorswatch="cutColor"]').click());
       await page.waitForTimeout(350);
-      const opened = await read("cutColour");
+      const opened = await read("cutColor");
       ok(label + ": the swatch opens the editor", opened.open, JSON.stringify(opened));
-      ok(label + ": the sliders start on the theme's colour", opened.sliders.join() === "356,74,45", JSON.stringify(opened.sliders));
+      ok(label + ": the sliders start on the theme's color", opened.sliders.join() === "356,74,45", JSON.stringify(opened.sliders));
       if (touch)
         ok(label + ": the swatch, the code box, the sliders and the picks are tall enough to tap",
           opened.heights.swatch >= 32 && opened.heights.code >= 32 && opened.heights.slider >= 32 && opened.heights.pick >= 32, JSON.stringify(opened.heights));
       ok(label + ": nothing runs off the side", !opened.sideways, "");
 
-      await typeCode("cutColour", "ff0040");
+      await typeCode("cutColor", "ff0040");
       await settle(page);
-      const typed = await read("cutColour");
+      const typed = await read("cutColor");
       ok(label + ": a code typed without # is used", typed.cut === "rgb(255, 0, 64)" && typed.swatch === "rgb(255, 0, 64)" && typed.backShown, JSON.stringify(typed));
-      await typeCode("cutColour", "#0f8");
+      await typeCode("cutColor", "#0f8");
       await settle(page);
-      ok(label + ": the short form is used too", (await read("cutColour")).cut === "rgb(0, 255, 136)", "");
-      await typeCode("cutColour", "not a colour");
+      ok(label + ": the short form is used too", (await read("cutColor")).cut === "rgb(0, 255, 136)", "");
+      await typeCode("cutColor", "not a color");
       await settle(page);
-      const wrong = await read("cutColour");
-      ok(label + ": a code that is not a colour says so, and the colour stays", /colour code/.test(wrong.bad) && wrong.cut === "rgb(0, 255, 136)" && wrong.code === "#00ff88", JSON.stringify(wrong));
+      const wrong = await read("cutColor");
+      ok(label + ": a code that is not a color says so, and the color stays", /color code/.test(wrong.bad) && wrong.cut === "rgb(0, 255, 136)" && wrong.code === "#00ff88", JSON.stringify(wrong));
 
       await page.evaluate(() => {
-        const l = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-colourpart="l"]');
+        const l = document.querySelector('#drawer [data-arf-row="cutColor"] [data-arf-colorpart="l"]');
         l.value = "30";
         l.dispatchEvent(new Event("input", { bubbles: true }));
         l.dispatchEvent(new Event("change", { bubbles: true }));
       });
       await settle(page);
-      const darker = await read("cutColour");
-      ok(label + ": the Lightness slider changes the colour", darker.cut === "rgb(0, 153, 82)" && darker.code === "#009952", JSON.stringify(darker));
+      const darker = await read("cutColor");
+      ok(label + ": the Lightness slider changes the color", darker.cut === "rgb(0, 153, 82)" && darker.code === "#009952", JSON.stringify(darker));
 
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-colourpick="warning"]').click());
+      const picks = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColor"] [data-arf-colorpick]')).map((b) => b.getAttribute("data-arf-colorpick")).join());
+      ok(label + ": the theme's danger and success colors are the two picks", picks === "danger,success", picks);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="cutColor"] [data-arf-colorpick="success"]').click());
       await settle(page);
-      ok(label + ": a pick from the theme is used", (await read("cutColour")).cut === "rgb(240, 160, 10)", "");
-      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").cutColour);
-      ok(label + ": it is saved", saved === "#f0a00a", String(saved));
+      ok(label + ": a pick from the theme is used", (await read("cutColor")).cut === "rgb(20, 160, 60)", "");
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").cutColor);
+      ok(label + ": it is saved", saved === "#14a03c", String(saved));
+      // Each track shows what its slider reaches, and each knob is filled with
+      // the color in use, so both follow a new color.
+      const look = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColor"] [data-arf-colorpart]')).map((r) => ({
+          part: r.getAttribute("data-arf-colorpart"),
+          track: r.style.getPropertyValue("--arf-track"),
+          thumb: r.style.getPropertyValue("--arf-thumb"),
+          drawn: getComputedStyle(r).appearance || getComputedStyle(r).webkitAppearance,
+        })));
+      ok(label + ": every knob is filled with the color in use", look.length === 3 && look.every((x) => x.thumb === "#14a03c"), JSON.stringify(look));
+      ok(label + ": Hue's track runs through every hue", /^linear-gradient\(to right,hsl\(0,.*hsl\(360,/.test(look[0].track), look[0].track);
+      ok(label + ": Saturation's runs from gray to the full color", /hsl\(\d+,0%,.*hsl\(\d+,100%,/.test(look[1].track), look[1].track);
+      ok(label + ": Lightness's runs from black through the color to white", /,0%\),.*,50%\),.*,100%\)\)$/.test(look[2].track), look[2].track);
+      ok(label + ": the sliders draw their own look", look.every((x) => x.drawn === "none"), JSON.stringify(look.map((x) => x.drawn)));
 
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourback="cutColour"]').click());
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colorback="cutColor"]').click());
       await settle(page);
-      const back = await read("cutColour");
-      ok(label + ": Use the theme's colour puts the theme's colour back", back.cut === "rgb(200, 30, 40)" && back.code === "#c81e28" && !back.backShown, JSON.stringify(back));
+      const back = await read("cutColor");
+      ok(label + ": Use the theme's color puts the theme's color back", back.cut === "rgb(200, 30, 40)" && back.code === "#c81e28" && !back.backShown, JSON.stringify(back));
 
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colorswatch="cutColor"]').click());
       await page.waitForTimeout(400);
-      ok(label + ": the swatch shuts the editor again", !(await read("cutColour")).open, "");
+      ok(label + ": the swatch shuts the editor again", !(await read("cutColor")).open, "");
     });
   }
   // The sliders keep their own place. A slider at its far end stays there,
   // and moving one does not move the others.
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    await inTab(browser, { viewport, touch, saved: { enabled: true, cutColour: "#ff0040" } }, async (page) => {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, cutColor: "#ff0040" } }, async (page) => {
       await goTab(page, "Setup");
       await settle(page);
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colorswatch="cutColor"]').click());
       await page.waitForTimeout(350);
       const slide = (part, value) =>
         page.evaluate(({ part, value }) => {
-          const r = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-colourpart="' + part + '"]');
+          const r = document.querySelector('#drawer [data-arf-row="cutColor"] [data-arf-colorpart="' + part + '"]');
           r.value = String(value);
           r.dispatchEvent(new Event("input", { bubbles: true }));
           r.dispatchEvent(new Event("change", { bubbles: true }));
           r.blur();
         }, { part, value });
       const sliders = () =>
-        page.evaluate(() => Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColour"] [data-arf-colourpart]')).map((r) => r.value).join());
+        page.evaluate(() => Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColor"] [data-arf-colorpart]')).map((r) => r.value).join());
       const values = () =>
-        page.evaluate(() => Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColour"] .arf-colourvalue')).map((r) => r.textContent).join());
+        page.evaluate(() => Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColor"] .arf-colorvalue')).map((r) => r.textContent).join());
       await slide("h", 360);
       await settle(page);
       ok(label + ": Hue moved all the way up stays at the top", (await sliders()).split(",")[0] === "360" && (await values()).split(",")[0] === "360", await sliders());
@@ -13434,47 +13563,47 @@ console.log("\nyour own colours for cut and added words");
       ok(label + ": Saturation at 0 and back keeps the hue", (await sliders()).startsWith("200,80,"), await sliders());
     });
   }
-  // The preview shows the colour in use. A colour you pick is shown exactly,
-  // even one too dark to read. The theme's own colour, when it is too faint
+  // The preview shows the color in use. A color you pick is shown exactly,
+  // even one too dark to read. The theme's own color, when it is too faint
   // for the panel, is made readable, and that repair goes as soon as you pick
-  // a colour of your own. The theme's danger here is #200008, which cannot be
+  // a color of your own. The theme's danger here is #200008, which cannot be
   // read on the stub's dark panel.
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     await inTab(browser, { css: ":root{--lumiverse-danger:rgb(32,0,8)}", viewport, touch, saved: { enabled: true } }, async (page) => {
       await goTab(page, "Setup");
       await settle(page);
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-colourswatch="cutColour"]').click());
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-colorswatch="cutColor"]').click());
       await page.waitForTimeout(350);
       await settle(page);
       const sample = () =>
         page.evaluate(() => {
-          const w = document.querySelector('#drawer [data-arf-row="cutColour"] .arf-colouredit .arf-cut');
-          return { colour: getComputedStyle(w).color, painted: w.getAttribute("data-arf-painted") };
+          const w = document.querySelector('#drawer [data-arf-row="cutColor"] .arf-coloredit .arf-cut');
+          return { color: getComputedStyle(w).color, painted: w.getAttribute("data-arf-painted") };
         });
       const type = (value) =>
         page.evaluate((value) => {
-          const code = document.querySelector('#drawer [data-arf-row="cutColour"] [data-arf-field="cutColour"]');
+          const code = document.querySelector('#drawer [data-arf-row="cutColor"] [data-arf-field="cutColor"]');
           code.value = value;
           code.dispatchEvent(new Event("input", { bubbles: true }));
           code.dispatchEvent(new Event("change", { bubbles: true }));
         }, value);
       const themed = await sample();
-      ok(label + ": the theme's colour, too dark for the panel, is made readable in the preview", themed.painted === "ink" && themed.colour !== "rgb(32, 0, 8)", JSON.stringify(themed));
+      ok(label + ": the theme's color, too dark for the panel, is made readable in the preview", themed.painted === "ink" && themed.color !== "rgb(32, 0, 8)", JSON.stringify(themed));
       await type("#00ff88");
       await settle(page);
       const bright = await sample();
-      ok(label + ": a colour you pick replaces it in the preview, exactly", bright.colour === "rgb(0, 255, 136)" && bright.painted == null, JSON.stringify(bright));
+      ok(label + ": a color you pick replaces it in the preview, exactly", bright.color === "rgb(0, 255, 136)" && bright.painted == null, JSON.stringify(bright));
       await type("#200008");
       await settle(page);
       const dark = await sample();
-      ok(label + ": a colour you pick is shown exactly, even one too dark to read", dark.colour === "rgb(32, 0, 8)" && dark.painted == null, JSON.stringify(dark));
+      ok(label + ": a color you pick is shown exactly, even one too dark to read", dark.color === "rgb(32, 0, 8)" && dark.painted == null, JSON.stringify(dark));
     });
   }
-  // A setting that is not a colour, such as one from somebody else's file,
+  // A setting that is not a color, such as one from somebody else's file,
   // never reaches the page.
-  await inTab(browser, { saved: { enabled: true, cutColour: "url(https://example.com/x.png)" } }, async (page) => {
+  await inTab(browser, { saved: { enabled: true, cutColor: "url(https://example.com/x.png)" } }, async (page) => {
     const v = await page.evaluate(() => document.documentElement.style.getPropertyValue("--arf-cut-ink"));
-    ok("a setting that is not a #rrggbb colour is not used", v === "", JSON.stringify(v));
+    ok("a setting that is not a #rrggbb color is not used", v === "", JSON.stringify(v));
   });
 }
 
@@ -14037,7 +14166,7 @@ await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
     draft: document.querySelector("#drawer [data-arf-draft]").disabled,
     now: document.querySelector("#drawer [data-arf-now]").disabled,
   }));
-  ok("the draft button is greyed out with the rest", got.draft && got.now, JSON.stringify(got));
+  ok("the draft button is grayed out with the rest", got.draft && got.now, JSON.stringify(got));
 });
 
 console.log("\nthe buttons above the tabs on a phone and a laptop");
@@ -14121,7 +14250,7 @@ console.log("\nthe tabs stay at the top");
   // The drawer scrolls on its own, as it does in Lumiverse. The tab strip has
   // to stay at the top of it while the tab scrolls, and be back in its own
   // place once the tab is scrolled back up. The search box scrolls away with
-  // the rest. The strip is solid at all times, so it never changes colour as
+  // the rest. The strip is solid at all times, so it never changes color as
   // you scroll. Held at the top it gains a shadow along its lower edge.
   const SCROLLS = "#drawer{height:520px;overflow-y:auto}";
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 760 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
@@ -14135,7 +14264,7 @@ console.log("\nthe tabs stay at the top");
         const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
         const pad = Math.round(parseFloat(getComputedStyle(drawer).paddingTop) || 0);
         const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
-        // Solid enough that nothing reads through: opaque, or a theme colour
+        // Solid enough that nothing reads through: opaque, or a theme color
         // that is at most a little see-through.
         const solid = () => ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(strip()).backgroundColor);
         const shadow = () => getComputedStyle(strip()).boxShadow !== "none";
@@ -14160,21 +14289,21 @@ console.log("\nthe tabs stay at the top");
         const heldStrip = getComputedStyle(strip()).backgroundColor;
         drawer.scrollTop = 0;
         await frame();
-        // While it scrolls back, the colour does not change at all.
+        // While it scrolls back, the color does not change at all.
         const goingStrip = getComputedStyle(strip()).backgroundColor;
         await new Promise((r) => setTimeout(r, 400));
         const back = where();
         const backStuck = bar().classList.contains("arf-stuck");
         const backShadow = shadow();
         const backStrip = getComputedStyle(strip()).backgroundColor;
-        return { pad, rest, restHolder: clear(restHolder), restStuck, restSolid, restShadow, restStrip, room, atTop, hasTabs, covers, heldSolid, heldShadow, heldStuck, back, backStuck, backShadow, sameColour: heldStrip === restStrip && goingStrip === restStrip && backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
+        return { pad, rest, restHolder: clear(restHolder), restStuck, restSolid, restShadow, restStrip, room, atTop, hasTabs, covers, heldSolid, heldShadow, heldStuck, back, backStuck, backShadow, sameColor: heldStrip === restStrip && goingStrip === restStrip && backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
       });
       ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
       ok(label + ": at rest nothing is drawn behind the strip, and the strip is solid with no shadow", got.restHolder && !got.restStuck && got.restSolid && !got.restShadow, JSON.stringify(got));
       ok(label + ": scrolled down, the strip sits at the top of the drawer", got.atTop === got.pad, JSON.stringify(got));
       ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
       ok(label + ": held there, the strip is solid with a shadow, so nothing shows through it", got.heldStuck && got.heldSolid && got.heldShadow && got.covers, JSON.stringify(got));
-      ok(label + ": the strip keeps one colour the whole way, held, scrolling back and at rest", got.sameColour, JSON.stringify(got));
+      ok(label + ": the strip keeps one color the whole way, held, scrolling back and at rest", got.sameColor, JSON.stringify(got));
       ok(label + ": scrolled back up, it is in its own place with no shadow", got.back === got.rest && got.rest > 0 && !got.backStuck && !got.backShadow, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
     });
@@ -14395,7 +14524,7 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
   const TWO = `
   <div data-message-id="msg-mine"><p>i open the shutters</p>
     <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-mine:minimal:footer" style="display:contents"></span></div>
-  <div data-message-id="msg-reply"><p>Grey light came into the room and found the empty chair.</p>
+  <div data-message-id="msg-reply"><p>Gray light came into the room and found the empty chair.</p>
     <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-reply:minimal:footer" style="display:contents"></span></div>`;
   for (const [side, wantMine, wantReply] of [["replies", false, true], ["mine", true, false], ["both", true, true]]) {
     await inTab(browser, { saved: { enabled: true, messageButton: true, widgetOn: true, inputRefine: true, refineSide: side } }, async (page) => {

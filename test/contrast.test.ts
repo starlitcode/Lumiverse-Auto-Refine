@@ -1,6 +1,6 @@
 // Keeping panel text readable on a theme nobody here has seen.
 //
-// Every colour on the tab comes from the reader's Lumiverse theme, and a theme
+// Every color on the tab comes from the reader's Lumiverse theme, and a theme
 // can set its accent to anything. The panel measures what it has been handed
 // and repaints only what fails, so this maths decides whether a label is legible
 // or a blank strip where a label should be.
@@ -48,14 +48,14 @@ describe("reading what the browser reports", () => {
 
   // getComputedStyle only ever hands back rgb() or rgba(), so anything else
   // came from somewhere unexpected and must not be acted on: repainting from a
-  // colour nobody measured is worse than leaving the theme alone.
+  // color nobody measured is worse than leaving the theme alone.
   test("anything else comes back as unknown rather than as a guess", () => {
     for (const v of ["transparent", "#ffffff", "red", "", "rgb(1 2)", null, undefined])
       expect(parseColor(v)).toBe(null);
   });
 });
 
-describe("one colour over another", () => {
+describe("one color over another", () => {
   test("an opaque top is the top", () => {
     expect(blendColor(rgb(10, 20, 30), rgb(200, 200, 200))).toEqual(rgb(10, 20, 30));
   });
@@ -74,12 +74,12 @@ describe("one colour over another", () => {
   });
 });
 
-describe("how far apart two colours are", () => {
+describe("how far apart two colors are", () => {
   test("black on white is the widest there is", () => {
     expect(contrastRatio(rgb(0, 0, 0), rgb(255, 255, 255))).toBeCloseTo(21, 1);
   });
 
-  test("a colour against itself is the narrowest", () => {
+  test("a color against itself is the narrowest", () => {
     expect(contrastRatio(rgb(70, 70, 70), rgb(70, 70, 70))).toBeCloseTo(1, 5);
   });
 
@@ -97,7 +97,7 @@ describe("how far apart two colours are", () => {
 
 describe("picking ink that can be read", () => {
   // The case the whole repair exists for: a theme that sets its text to
-  // something close to its own panel colour.
+  // something close to its own panel color.
   test("a panel close to its own text gets ink that clears the floor", () => {
     for (const back of [
       rgb(24, 20, 34),
@@ -114,7 +114,7 @@ describe("picking ink that can be read", () => {
   });
 
   // What it says it achieved is what it achieved. The sweep decides whether to
-  // repaint again from this number, so a ratio that does not match the colour
+  // repaint again from this number, so a ratio that does not match the color
   // beside it sends the panel round a second time or leaves a label short.
   //
   // It answers in three forms: a solid hex when the softened ink falls below
@@ -129,7 +129,7 @@ describe("picking ink that can be read", () => {
     return blendColor(read, rgb(0, 0, 0));
   };
 
-  test("the ratio it reports is the ratio the colour it picked achieves", () => {
+  test("the ratio it reports is the ratio the color it picked achieves", () => {
     for (const back of [rgb(24, 20, 34), rgb(255, 255, 255), rgb(120, 120, 120), rgb(147, 112, 219)]) {
       const got = betterInk(back, TEXT_FLOOR);
       const ink = got.color.indexOf("rgba") === 0 ? blendColor(parseColor(got.color), back) : inkOf(got.color);
@@ -137,7 +137,7 @@ describe("picking ink that can be read", () => {
     }
   });
 
-  // There is no background this cannot rescue. The hardest is the grey where
+  // There is no background this cannot rescue. The hardest is the gray where
   // black and white are equally far away, and even there the better of the two
   // reaches about 4.58, which clears the text floor. So a label left unreadable
   // is a bug in what measured the background, never in what was available.

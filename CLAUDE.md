@@ -4,7 +4,7 @@ Auto Refine is a Lumiverse extension built on Spindle. Its sister extension is
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry), and the two are
 kept in step: a fix to something they share, such as how a switch or a field row
 behaves, goes into both. Treat them as twins: the same thing has the same name,
-the same wording and the same behaviour in both, such as **Extra thinking tag
+the same wording and the same behavior in both, such as **Extra thinking tag
 names**, the thinking formats, the put-back and replaced-reply storage, and the
 motion of bulk buttons.
 
@@ -61,7 +61,7 @@ Two skills are available. Load them before starting work.
 - `bun run test:ui:only "name"` runs only the browser check sections whose title
   holds that name. The full suite takes several minutes. Run the full suite
   before anything goes to `stable`.
-- `test/lumiverse-themes.json` holds the colours Lumiverse's own theme engine
+- `test/lumiverse-themes.json` holds the colors Lumiverse's own theme engine
   writes, dark and light. `bun scripts/engine-themes.ts` writes it again from a
   Lumiverse clone, which `setup.sh` puts in `~/lumiverse-src`.
 - A double check covers more than the code just changed. It also covers the
@@ -173,7 +173,7 @@ Two skills are available. Load them before starting work.
 
 ## Thinking formats
 
-- Both extensions recognise the same thinking formats. A new one goes into both,
+- Both extensions recognize the same thinking formats. A new one goes into both,
   with a test for it closed and a test for it opened with no closer, and a row
   in both docs tables (`docs/detection.md` in Auto Retry, `docs/prompt.md` in
   Auto Refine).
@@ -186,6 +186,12 @@ Two skills are available. Load them before starting work.
 This covers code comments, docs, the changelog, the README, and every word
 shown in Lumiverse.
 
+- American spelling everywhere: color, gray, behavior, recognize, judgment,
+  canceled, labeled, center. Never British spelling, in code, comments, tests,
+  docs, the changelog, commit messages or panel text. Two exceptions, each
+  with a comment saying why: a pattern that has to match what a model writes
+  takes both spellings, such as `fulfill?`, and the old name of a saved
+  setting is read once to move it to its new name.
 - No em dashes, and no en dash used as one.
 - No clichés, no metaphors, no grand phrasing.
 - Never the word "ship", in any form.
@@ -203,14 +209,14 @@ shown in Lumiverse.
   code does. Advice that helps a user is fine.
 - No announcements in comments. A comment never says what is new or what
   something used to do.
-- Keep the panel and GitHub pages organised: short sections with headings,
+- Keep the panel and GitHub pages organized: short sections with headings,
   and detail in `docs/` rather than in the README.
 - Every host call and every outside call handles failure and says what went
   wrong in words a user understands.
 
 ## The changelog
 
-- Only released behaviour. A bug that was made and fixed between two releases
+- Only released behavior. A bug that was made and fixed between two releases
   never reached anyone and is not listed.
 - Before writing "Fixed" or "Changed", check the thing existed in the last
   announced version. Something added in this version is described as it is
@@ -249,7 +255,7 @@ No credits in the Discord post. They stay in the changelog.
 
 Keep the post short, but give each line enough to be understood. Each line
 says what changed and what the user will notice, in two plain sentences, three
-at most. Leave out background, lists of colours or options, and other detail
+at most. Leave out background, lists of colors or options, and other detail
 the changelog already explains.
 
 Write the Discord post each time a version is pushed to `stable`, and give it

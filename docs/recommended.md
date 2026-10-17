@@ -24,7 +24,7 @@ Thinking costs time and tokens on every refine. A reasoning model reads the whol
 **Turn thinking on when:**
 
 - the model you use is a reasoning model and cannot turn thinking off
-- your own rules need judgement, such as "keep each character's voice", more than a list does
+- your own rules need judgment, such as "keep each character's voice", more than a list does
 - a refine without thinking keeps missing things your rules name
 
 **Match the prompt to the setting.**

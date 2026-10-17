@@ -51,13 +51,13 @@ A rewrite is dropped when it is:
 
 A softened rewrite is not a refusal, is the right length, and keeps every protected token. It only looks wrong next to the original, so the other checks cannot see it.
 
-**Refuse a rewrite that sanitised the reply** counts the strong words in each version: the explicit and violent ones. If the rewrite dropped most of them, it is refused and your reply is left as it was.
+**Refuse a rewrite that sanitized the reply** counts the strong words in each version: the explicit and violent ones. If the rewrite dropped most of them, it is refused and your reply is left as it was.
 
 It is built to avoid false alarms:
 
 - The built-in list only holds words that are hard to use innocently. Everyday words like hit, skin or pain are left out, because they are normal description.
 - The reply needs at least three strong words before the check can fire.
-- **How much of it may go** sets how many may be dropped, 60% by default, so losing one or two counts as an ordinary edit.
+- **Strong words a rewrite can lose (%)** sets how many may be dropped, 60% by default, so losing one or two counts as an ordinary edit.
 
 Because the list is narrow, it misses some real softening. That is on purpose. A missed one leaves your reply as it was. A false one would throw away a good rewrite. **Words of your own to watch** is for the words that matter in your own writing.
 

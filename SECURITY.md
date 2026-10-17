@@ -6,7 +6,7 @@ How to report a security problem in Auto Refine. For what the extension touches 
 
 **Something sensitive, or anything you can see being abused: open a [security advisory](https://github.com/starlitcode/Lumiverse-Auto-Refine/security/advisories/new), or message me on Discord.** I am `.moonsight.` in the Lumiverse server. Either way, wait for my reply before posting it anywhere public.
 
-**Anything else: [open an issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues).** Ordinary bugs, odd behaviour, and anything you are happy to have read by everyone belong there.
+**Anything else: [open an issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues).** Ordinary bugs, odd behavior, and anything you are happy to have read by everyone belong there.
 
 **A permission being used for more than [Privacy](docs/privacy.md) says: an advisory or Discord.** That page states what each permission is for and what the extension does not do with it. If you find it doing something that page does not describe, that is a security report, not a bug report, whether or not it looks harmful.
 
