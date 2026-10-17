@@ -10395,17 +10395,24 @@ console.log("\na built-in prompt cannot be typed into");
           const before = { text: first ? first.textContent : null, shown: shown(first),
             inside: !!r && r.left >= drawer.left - 1 && r.right <= drawer.right + 1 };
           const area = document.querySelector('#drawer textarea[data-arf-field="passNames"]');
+          area.value = "Nowhere\nBare";
+          area.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((res) => setTimeout(res, 600));
+          const none = { text: note() ? note().textContent : null, shown: shown(note()) };
           area.value = "One\nTwo";
           area.dispatchEvent(new Event("input", { bubbles: true }));
           await new Promise((res) => setTimeout(res, 600));
           const after = { shown: shown(note()) };
-          return { before, after, sideways: document.documentElement.scrollWidth > innerWidth + 1 };
+          return { before, none, after, sideways: document.documentElement.scrollWidth > innerWidth + 1 };
         });
         const t = String(out.before.text || "");
         ok(label + ": a name no preset has is named as skipped", /No preset is called Nowhere, so it is skipped\./.test(t), t);
         ok(label + ": so is a preset with no {{message}} block", /Bare has no block with \{\{message\}\}, so it is skipped\./.test(t), t);
         ok(label + ": and a pass past the sixth", /Only six passes run\. Seven is skipped\./.test(t), t);
         ok(label + ": the line is shown inside the panel", out.before.shown && out.before.inside && !out.sideways, JSON.stringify(out));
+        ok(label + ": while some passes run, it does not say none do", !/No pass runs/.test(t), t);
+        ok(label + ": with every name skipped, it says replies run once",
+          out.none.shown && /No pass runs, so replies run once, with your prompt for replies\./.test(String(out.none.text)), JSON.stringify(out.none));
         ok(label + ": and goes once the list is fixed", out.after.shown === false, JSON.stringify(out.after));
       },
     );
@@ -10460,6 +10467,16 @@ console.log("\na built-in prompt cannot be typed into");
         ok(label + ": a built-in prompt for replies is named as skipped",
           /A judge is a prompt for replies, so it is skipped here\./.test(String(out.note)), String(out.note));
         ok(label + ": and so is a name no preset has", /No preset is called Nowhere/.test(String(out.note)), String(out.note));
+        const none = await page.evaluate(async () => {
+          const area = document.querySelector('#drawer textarea[data-arf-field="passNamesYours"]');
+          area.value = "A judge\nNowhere";
+          area.dispatchEvent(new Event("input", { bubbles: true }));
+          await new Promise((res) => setTimeout(res, 600));
+          const note = document.querySelector('#drawer [data-arf-passnote="passNamesYours"]');
+          return note ? note.textContent : null;
+        });
+        ok(label + ": with every name skipped, it says your messages run once",
+          /No pass runs, so your messages run once, with your prompt for them\./.test(String(none)), String(none));
         ok(label + ": the box fits the panel", out.inside && !out.sideways, JSON.stringify(out));
       },
     );

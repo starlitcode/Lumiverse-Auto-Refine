@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.42.1";
+const VERSION = "1.42.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -3129,7 +3129,7 @@ const LIMIT_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "passMode", is: "many" },
     under: true,
-    hint: "One preset name per line, up to six, run top to bottom. Each pass is one model call.",
+    hint: "Preset names, one per line, up to six, run top to bottom. Each pass is one model call. Empty runs replies once, with your prompt for replies.",
   },
   {
     key: "passNamesYours",
@@ -3137,7 +3137,7 @@ const LIMIT_FIELDS: Field[] = [
     type: "lines",
     needs: { key: "passMode", is: "many" },
     under: true,
-    hint: "Optional. Preset names, one per line, up to six, run on your own messages with each preset's prompt for them. Empty runs your messages once.",
+    hint: "Optional. Preset names, one per line, up to six, run on your own messages with each preset's prompt for them. Empty runs your messages once, with your prompt for them.",
   },
   {
     key: "passOwnModel",
@@ -3892,6 +3892,9 @@ export function setup(ctx: Ctx, overrides?: any) {
     const extra = runs.slice(PASSES_MOST);
     if (extra.length)
       out.push("Only six passes run. " + list(extra) + (extra.length === 1 ? " is skipped." : " are skipped."));
+    // Every name skipped is the same as an empty list, which runs once.
+    if (out.length && !runs.length)
+      out.push(yours ? "No pass runs, so your messages run once, with your prompt for them." : "No pass runs, so replies run once, with your prompt for replies.");
     return out.join(" ");
   }
 

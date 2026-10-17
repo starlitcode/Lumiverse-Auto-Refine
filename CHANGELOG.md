@@ -6,6 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.42.2
+
+_2026-10-17_
+
+### Fixed
+
+- **The passes hint for replies left out what an empty list does.** The hint under **The passes, in order** now says that an empty list runs replies once, with your prompt for replies. The hint for your own messages already said this for them.
+- **A list where every pass is skipped did not say what runs instead.** The line under each passes box now ends with "No pass runs" and says the message runs once with its usual prompt.
+
+---
+
 ## 1.42.1
 
 _2026-10-17_

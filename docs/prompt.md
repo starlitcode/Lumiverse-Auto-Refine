@@ -291,6 +291,8 @@ A refine is one model call by default. **How many passes a refine makes**, on th
 
 **The passes, in order** takes one preset name per line, top to bottom. It can be one of yours or a built-in prompt. Yours wins when the names match. A pass uses the preset by name, so editing a preset changes every pass that uses it.
 
+If the list is empty, or every name in it is skipped, a reply runs once, with your prompt for replies on the Prompt tab. Your own messages work the same way with their own list.
+
 The built-in prompts are whole refines, so running two in a row does the same work twice. Build a chain from presets of your own that each do one thing.
 
 **What it costs:** one call per pass. A refine with a built-in prompt is about 1,600 tokens in, so six passes is nearer ten thousand. The Log adds all the passes up.
