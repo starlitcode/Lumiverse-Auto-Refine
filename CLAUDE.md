@@ -327,6 +327,8 @@ only where it is needed, and leaves it out where it is not.
   screen says so.
 - Before adding a notification, check whether the panel, a card or the status
   line already shows the same thing. If it does, leave the notification out.
+- Copying and pasting send no notification. The phone or computer shows its
+  own. Only a copy that fails warns, since nothing else says so.
 
 ## Talking to the owner
 

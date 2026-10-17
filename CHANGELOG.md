@@ -10,7 +10,13 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-10-17_
 
+### Changed
+
+- **Copying shows no notification.** The copy buttons no longer show a "Copied." notification, since your phone or computer shows its own. This covers the macro buttons, **Copy it** on the preview and on the bug report, the big editor and the selection bar.
+
 ### Fixed
+
+- **A copy that failed still said "Copied."** When the browser did not allow copying, the notification said it had copied anyway. Now a copy that fails shows "Could not copy here. Select the text and copy it by hand."
 
 - **The passes hint for replies left out what an empty list does.** The hint under **The passes, in order** now says that an empty list runs replies once, with your prompt for replies. The hint for your own messages already said this for them.
 - **A list where every pass is skipped did not say what runs instead.** The line under each passes box now ends with "No pass runs" and says the message runs once with its usual prompt.

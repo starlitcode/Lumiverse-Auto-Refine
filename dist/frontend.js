@@ -10469,7 +10469,6 @@ export function setup(ctx, overrides) {
                 tag.setAttribute("aria-label", "Copy " + m.tag);
                 tag.addEventListener("click", () => {
                     copyText(m.tag);
-                    toast("Copied " + m.tag, true, "success");
                 });
                 row.appendChild(tag);
                 if (!m.ours)
@@ -10576,7 +10575,6 @@ export function setup(ctx, overrides) {
             copy.addEventListener("click", () => {
                 // Takes what is on screen, so the raw view copies the raw thing.
                 copyText(previewRaw ? previewAsRaw(preview) : previewAsText(preview));
-                toast("Copied.", true, "success");
             });
             row.appendChild(copy);
             // A request is longer than a drawer is wide. This is the same text at the
@@ -11724,7 +11722,6 @@ export function setup(ctx, overrides) {
         const copy = button("Copy it", true);
         copy.addEventListener("click", () => {
             copyText(debugText());
-            toast("Copied.", true, "success");
             log("copied debug info", true);
         });
         const read = button("Read and edit it first", false);
@@ -11734,7 +11731,6 @@ export function setup(ctx, overrides) {
             // and take out anything they would rather not post.
             openBig("Debug info", debugText(), (text) => {
                 copyText(text);
-                toast("Copied.", true, "success");
                 log("copied debug info", true);
             });
         });
@@ -11904,16 +11900,23 @@ export function setup(ctx, overrides) {
             lines.push("", "Nothing is switched on under What it carries.");
         return lines.join("\n");
     }
+    // A copy that works says nothing, since the phone or computer shows its own
+    // notice for that. A copy that fails is the one case the reader cannot see,
+    // so it is the only one with a notification.
     function copyText(text) {
+        const failed = () => {
+            if (!fallbackCopy(text))
+                toast("Could not copy here. Select the text and copy it by hand.", true, "warning");
+        };
         try {
             const nav = globalThis.navigator;
             if (nav && nav.clipboard && typeof nav.clipboard.writeText === "function") {
-                nav.clipboard.writeText(text).catch(() => fallbackCopy(text));
+                nav.clipboard.writeText(text).catch(failed);
                 return;
             }
         }
         catch (_) { }
-        fallbackCopy(text);
+        failed();
     }
     // For a page without the clipboard API, or one that refuses it because the
     // click was not close enough to a user gesture.
@@ -11924,13 +11927,17 @@ export function setup(ctx, overrides) {
             ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;opacity:0";
             document.body.appendChild(ta);
             ta.select();
+            let ok = false;
             try {
-                document.execCommand("copy");
+                ok = !!document.execCommand("copy");
             }
             catch (_) { }
             document.body.removeChild(ta);
+            return ok;
         }
-        catch (_) { }
+        catch (_) {
+            return false;
+        }
     }
     // ---- Setup ----
     // What the host is letting it do, and what each refusal costs. Refusing one
@@ -13379,7 +13386,6 @@ export function setup(ctx, overrides) {
         const copy = button("Copy", false);
         copy.addEventListener("click", () => {
             copyText(ta.value);
-            toast("Copied.", true, "success");
         });
         row.appendChild(copy);
         const cancel = button(done ? "Cancel" : "Close", false);
@@ -16445,7 +16451,6 @@ export function setup(ctx, overrides) {
             if (!one)
                 return;
             copyText(one.text);
-            toast("Copied.", true, "success");
         });
         document.body.appendChild(bar);
         try {

@@ -13450,6 +13450,47 @@ console.log("\na pattern behind the panel");
   }
 }
 
+console.log("\ncopying sends no notification");
+{
+  // A copy that works says nothing: the phone or computer shows its own notice.
+  // A copy that fails warns, since nothing else on screen says so.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Log");
+      await settle(page);
+      const out = await page.evaluate(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const press = () => {
+          const b = [...document.querySelectorAll("#drawer button")].find((x) => x.textContent.trim() === "Copy it");
+          if (b) b.click();
+          return !!b;
+        };
+        let copied = null;
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { writeText: (t) => { copied = t; return Promise.resolve(); } },
+        });
+        window.__toasts = [];
+        const found = press();
+        await wait(200);
+        const works = { found, copied: typeof copied === "string" && copied.length > 0, toasts: window.__toasts.slice() };
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { writeText: () => Promise.reject(new Error("blocked")) },
+        });
+        document.execCommand = () => false;
+        window.__toasts = [];
+        press();
+        await wait(200);
+        return { works, fails: window.__toasts.slice() };
+      });
+      ok(label + ": the Copy it button is there", out.works.found, JSON.stringify(out));
+      ok(label + ": a copy that works sends no notification", out.works.copied && out.works.toasts.length === 0, JSON.stringify(out.works));
+      ok(label + ": a copy that fails warns once", out.fails.length === 1 && /^Could not copy here\./.test(out.fails[0]), JSON.stringify(out.fails));
+    });
+  }
+}
+
 console.log("\nyour own colors for cut and added words");
 {
   // By default, cut words take the theme's danger color and added words its
