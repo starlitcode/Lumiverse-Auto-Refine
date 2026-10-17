@@ -53,7 +53,34 @@ const SOURCE = readFileSync(bundle, "utf8") + "\nwindow.__setup = setup;\n";
 // Lumiverse's stock theme. A reader's theme overrides these, which is the whole
 // reason the readability sweep exists, so the checks below run against this and
 // against palettes built to break it.
-const THEME = `:root{
+// Lumiverse's own page-wide rules, from its reset.css and global.css. Every
+// part of the extension sits under these in Lumiverse, so every check does
+// too. A rule here can outrank one of the extension's: its slider rules beat a
+// selector of one class, and phones get a 16px floor on every text box.
+const HOST_CSS = `
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+img,picture,video,canvas,svg{display:block;max-width:100%;-webkit-user-select:none;user-select:none}
+input,button,textarea,select{font:inherit;color:inherit}
+@media screen and (max-width:600px){input,textarea,select{font-size:max(16px,1em)!important}}
+button,a,[role="button"]{-webkit-user-select:none;user-select:none}
+button{cursor:pointer;border:none;background:none}
+a{color:inherit;text-decoration:none}
+ul,ol{list-style:none}
+input[type="range"]{-webkit-appearance:none;appearance:none;min-height:44px;background:transparent;cursor:pointer;touch-action:none}
+input[type="range"]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--lumiverse-fill-medium,rgba(0,0,0,.15))}
+input[type="range"]::-moz-range-track{height:4px;border-radius:2px;background:var(--lumiverse-fill-medium,rgba(0,0,0,.15));border:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--lumiverse-primary,#8c82ff);border:2px solid var(--lumiverse-bg,#1c1826);box-shadow:0 0 0 1px var(--lumiverse-primary-020,rgba(140,130,255,.2)),0 1px 4px rgba(0,0,0,.3);margin-top:-9px;cursor:pointer}
+input[type="range"]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--lumiverse-primary,#8c82ff);border:2px solid var(--lumiverse-bg,#1c1826);box-shadow:0 0 0 1px var(--lumiverse-primary-020,rgba(140,130,255,.2)),0 1px 4px rgba(0,0,0,.3);cursor:pointer}
+select{background-color:var(--lumiverse-bg-deep,#0a0812);color:var(--lumiverse-text,rgba(255,255,255,.9))}
+select option{background-color:var(--lumiverse-bg-deep,#0a0812);color:var(--lumiverse-text,rgba(255,255,255,.9))}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--lumiverse-primary-020);border-radius:3px}
+:focus-visible{outline:1.5px solid var(--lumiverse-primary-050);outline-offset:2px}
+input:focus-visible,textarea:focus-visible,select:focus-visible,[contenteditable]:focus-visible{outline:none;border-color:var(--lumiverse-primary-050)}
+`;
+
+const THEME = HOST_CSS + `:root{
 --lumiverse-primary:rgba(147,112,219,.9);--lumiverse-primary-hover:rgba(167,132,239,.95);
 --lumiverse-primary-text:rgba(186,135,255,.95);--lumiverse-secondary:rgba(128,128,128,.15);
 --lumiverse-secondary-hover:rgba(128,128,128,.25);--lumiverse-secondary-border:rgba(128,128,128,.25);
@@ -13516,6 +13543,40 @@ console.log("\nyour own colors for cut and added words");
       ok(label + ": Saturation's runs from gray to the full color", /hsl\(\d+,0%,.*hsl\(\d+,100%,/.test(look[1].track), look[1].track);
       ok(label + ": Lightness's runs from black through the color to white", /,0%\),.*,50%\),.*,100%\)\)$/.test(look[2].track), look[2].track);
       ok(label + ": the sliders draw their own look", look.every((x) => x.drawn === "none"), JSON.stringify(look.map((x) => x.drawn)));
+      // What is on the screen, read from a screenshot rather than from the
+      // variables set above, since Lumiverse's own slider rules can cover them.
+      const box = await page.evaluate(() => {
+        const r = document.querySelector('#drawer [data-arf-row="cutColor"] [data-arf-colorpart="h"]');
+        r.scrollIntoView({ block: "center" });
+        const b = r.getBoundingClientRect();
+        return { x: b.left, y: b.top, w: b.width, h: b.height, v: Number(r.value), max: Number(r.max) };
+      });
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(250);
+      const shot = (await page.screenshot({ clip: { x: box.x, y: box.y, width: box.w, height: box.h } })).toString("base64");
+      const px = await page.evaluate(async ({ shot, box }) => {
+        const img = new Image();
+        img.src = "data:image/png;base64," + shot;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext("2d");
+        g.drawImage(img, 0, 0);
+        const scale = img.width / box.w;
+        const at = (x, y) => Array.from(g.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data.slice(0, 3));
+        const knob = 22;
+        const knobX = knob / 2 + (box.v / box.max) * (box.w - knob);
+        return {
+          knob: at(knobX, box.h / 2),
+          // Red at the start of the Hue track, well clear of the knob.
+          trackStart: at(4, box.h / 2),
+        };
+      }, { shot, box });
+      const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 12);
+      ok(label + ": on screen, the knob is the color in use", near(px.knob, [20, 160, 60]), JSON.stringify(px));
+      ok(label + ": on screen, the Hue track starts red", px.trackStart[0] > 120 && px.trackStart[1] < 90 && px.trackStart[2] < 90, JSON.stringify(px));
+      ok(label + ": the slider is its own height, not Lumiverse's 44 pixels", box.h < 44, JSON.stringify(box));
 
       await page.evaluate(() => document.querySelector('#drawer [data-arf-colorback="cutColor"]').click());
       await settle(page);

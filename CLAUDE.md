@@ -61,6 +61,14 @@ Two skills are available. Load them before starting work.
 - `bun run test:ui:only "name"` runs only the browser check sections whose title
   holds that name. The full suite takes several minutes. Run the full suite
   before anything goes to `stable`.
+- The browser checks load Lumiverse's own page-wide CSS, `HOST_CSS` in
+  `test/ui.mjs`, copied from `frontend/src/theme/reset.css` and `global.css`
+  in `~/lumiverse-src`. Lumiverse styles some elements everywhere, such as
+  sliders, and text boxes on a phone. A rule for one of those needs a
+  selector that outranks Lumiverse's. When the Lumiverse copy changes,
+  compare `HOST_CSS` with those two files.
+- A check of how something looks reads what is drawn, from a screenshot,
+  not the value the code set. A slider's track and knob are the usual case.
 - `test/lumiverse-themes.json` holds the colors Lumiverse's own theme engine
   writes, dark and light. `bun scripts/engine-themes.ts` writes it again from a
   Lumiverse clone, which `setup.sh` puts in `~/lumiverse-src`.

@@ -5933,39 +5933,43 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-colorline{display:grid;grid-template-columns:76px minmax(0,1fr) 40px;align-items:center;gap:8px}" +
     ".arf-colorname{font-size:12px;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
     ".arf-colorvalue{font-size:12px;text-align:right;color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
+    // Lumiverse styles every slider on the page with input[type="range"] and
+    // its track and thumb, a thin track, a knob in the accent color and a 44px
+    // height. Each selector here names the element, the class and the type,
+    // so it outranks those rules and the editor's own look is the one drawn.
     // The three sliders draw their own track and knob. Each track shows the
     // colors that slider can reach from the color in use, and the knob is
     // filled with that color, so where it sits reads at a glance. The track
     // and the knob come from --arf-track and --arf-thumb, set as the color
     // changes. The knob's ring and shadow keep it clear on light and dark
     // themes alike.
-    ".arf-colorrange{-webkit-appearance:none;appearance:none;width:100%;min-width:0;height:28px;margin:0;background:transparent;cursor:pointer}" +
-    ".arf-colorrange:focus{outline:none}" +
-    ".arf-colorrange::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:var(--arf-track,var(--lumiverse-fill,rgba(255,255,255,.12)));" +
+    "input.arf-colorrange[type=range]{-webkit-appearance:none;appearance:none;width:100%;min-width:0;height:28px;min-height:0;margin:0;background:transparent;cursor:pointer}" +
+    "input.arf-colorrange[type=range]:focus{outline:none}" +
+    "input.arf-colorrange[type=range]::-webkit-slider-runnable-track{height:12px;border-radius:999px;background:var(--arf-track,var(--lumiverse-fill,rgba(255,255,255,.12)));" +
     "box-shadow:inset 0 0 0 1px rgba(0,0,0,.25),inset 0 1px 2px rgba(0,0,0,.25)}" +
-    ".arf-colorrange::-moz-range-track{height:12px;border-radius:999px;background:var(--arf-track,var(--lumiverse-fill,rgba(255,255,255,.12)));" +
+    "input.arf-colorrange[type=range]::-moz-range-track{height:12px;border-radius:999px;background:var(--arf-track,var(--lumiverse-fill,rgba(255,255,255,.12)));" +
     "box-shadow:inset 0 0 0 1px rgba(0,0,0,.25),inset 0 1px 2px rgba(0,0,0,.25)}" +
-    ".arf-colorrange::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;margin-top:-5px;border-radius:50%;" +
+    "input.arf-colorrange[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;margin-top:-5px;border-radius:50%;" +
     "background:var(--arf-thumb,#fff);border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4);" +
     "transition:box-shadow 160ms ease-out}" +
-    ".arf-colorrange::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--arf-thumb,#fff);border:3px solid #fff;" +
+    "input.arf-colorrange[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--arf-thumb,#fff);border:3px solid #fff;" +
     "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4);transition:box-shadow 160ms ease-out}" +
     // A soft ring in the theme's accent while the knob is held or focused,
     // so it is clear which slider is moving.
-    ".arf-colorrange:focus-visible::-webkit-slider-thumb,.arf-colorrange:active::-webkit-slider-thumb{" +
+    "input.arf-colorrange[type=range]:focus-visible::-webkit-slider-thumb,input.arf-colorrange[type=range]:active::-webkit-slider-thumb{" +
     "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(147,112,219,.35);" +
     "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px color-mix(in srgb,var(--lumiverse-primary,#9370db) 35%,transparent)}" +
-    ".arf-colorrange:focus-visible::-moz-range-thumb,.arf-colorrange:active::-moz-range-thumb{" +
+    "input.arf-colorrange[type=range]:focus-visible::-moz-range-thumb,input.arf-colorrange[type=range]:active::-moz-range-thumb{" +
     "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(147,112,219,.35);" +
     "box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4),0 0 0 6px color-mix(in srgb,var(--lumiverse-primary,#9370db) 35%,transparent)}" +
     // One rule for each engine. A rule naming the other engine's knob is
     // thrown away whole by a browser that does not know it.
-    "html[data-arf-still] .arf-colorrange::-webkit-slider-thumb{transition:none}" +
-    "html[data-arf-still] .arf-colorrange::-moz-range-thumb{transition:none}" +
-    "@media (prefers-reduced-motion: reduce){.arf-colorrange::-webkit-slider-thumb{transition:none}" +
-    ".arf-colorrange::-moz-range-thumb{transition:none}}" +
+    "html[data-arf-still] input.arf-colorrange[type=range]::-webkit-slider-thumb{transition:none}" +
+    "html[data-arf-still] input.arf-colorrange[type=range]::-moz-range-thumb{transition:none}" +
+    "@media (prefers-reduced-motion: reduce){input.arf-colorrange[type=range]::-webkit-slider-thumb{transition:none}" +
+    "input.arf-colorrange[type=range]::-moz-range-thumb{transition:none}}" +
     ".arf-colordot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}" +
-    "@media (pointer: coarse){.arf-swatch{width:52px;height:36px}.arf-colorrange{height:36px}" +
+    "@media (pointer: coarse){.arf-swatch{width:52px;height:36px}input.arf-colorrange[type=range]{height:36px;min-height:0}" +
     ".arf-colorcode{height:36px}}" +
     // Drawn at full strength, so it is the theme's color exactly. The line
     // through it is what sets it apart from added words.
