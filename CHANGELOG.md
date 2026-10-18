@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.45.1
+
+_2026-10-18_
+
+### Fixed
+
+- **The before and after showed the thinking.** The thinking at the start of a reply is held back from the refine and put back as it was. The card still showed it, with its tags taken out, so it read as part of the reply. Every before and after now leaves it out, in both views, and a line above the marked text says so. **Read it in full** still shows it.
+
+### Fixed again
+
+- **A plan written in front of the thinking was refined with the reply.** 1.44.1 fixed a thinking format quoted inside the thinking, but missed a model that writes a summary of its plan in plain text, then its thinking block, then the reply. When a thinking block stands on lines of its own with text after it, everything up to the end of that block is now held back. A thought tagged inside a sentence stays part of the reply.
+
+---
+
 ## 1.45.0
 
 _2026-10-18_

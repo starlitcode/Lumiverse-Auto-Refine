@@ -4346,6 +4346,49 @@ describe("thinking the extension has to recognize", () => {
     expect(h.body("m2")).toBe("<think>\nShe is cold, so lead with that, and then the door");
   });
 
+  // A model can write a plan in plain text, then its thinking block on lines
+  // of its own, then the reply. The plan and the block are both working.
+  describe("a written plan in front of a thinking block", () => {
+    const plan =
+      "**Planning the turn**\n\nThe gate scene picks up where the last one stopped. Keep it short and end on the cold.\n\nHere is the result:\n\n";
+    const block = "<reasoning>\n- where: the gate\n- mood: wary\n</reasoning>";
+    const shapes: Array<[string, string]> = [
+      ["a plain block", plan + block + "\n\n"],
+      ["a block wrapped in backticks", plan + "`" + block + "`\n\n"],
+      ["a block in square brackets", plan + "[reasoning]\n- where: the gate\n[/reasoning]\n\n"],
+    ];
+    for (const [label, head] of shapes) {
+      test(label + ": only the reply is sent, and the rest is put back", async () => {
+        const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead(head));
+        await h.ended({ chatId: "c1", messageId: "m2" });
+        await wait(50);
+        expect(said(h)).not.toContain("Planning the turn");
+        expect(said(h)).not.toContain("mood: wary");
+        expect(h.body("m2")).toBe(head + "She stepped through and the cold hit her.");
+      });
+    }
+
+    test("the card is told which part was held back, so it can leave it out", async () => {
+      const head = plan + block + "\n\n";
+      const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead(head));
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      const done = h.sent.find((m: any) => m.type === "refined");
+      expect(done.held).toBe(head);
+      expect(done.before.indexOf(done.held)).toBe(0);
+      expect(done.after.indexOf(done.held)).toBe(0);
+    });
+
+    test("a thought tagged inside a sentence stays part of the reply", async () => {
+      const msgs = withHead("");
+      msgs[2].content = "She stepped through. <thought>Too cold.</thought> She kept going anyway, suddenly.";
+      const h = await armed(["<REFINED>She stepped through. <thought>Too cold.</thought> She kept going.</REFINED>"], {}, msgs);
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(said(h)).toContain("She stepped through.");
+    });
+  });
+
   // Mistral's own thinking format, which uses square brackets and capitals.
   test("Mistral's [THINK] working is kept out of what the model is shown", async () => {
     const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead("[THINK]lead with the cold, then the gate[/THINK]\n\n"));

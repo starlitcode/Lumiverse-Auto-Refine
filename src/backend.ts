@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.45.0';
+const VERSION = '1.45.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -1195,6 +1195,24 @@ function stripControlTokens(text: string): string {
 // Splits a message into the model's working, the prose to refine, and the
 // markers that close the turn. Only the middle is sent to be rewritten; the
 // other two are put back exactly as they were.
+// Where a thinking block ends when plain text comes before it, or -1. The
+// block has to stand on lines of its own and have more text after it. A
+// character's thought tagged inside a sentence is part of the reply, and a
+// block at the very start is an ordinary one. Example tags are already hidden
+// when this runs, so a pair quoted inside the block is not its end.
+function planThenBlockEnd(t: string, alt: string): number {
+  if (t.indexOf('</') < 0 && t.indexOf('[/') < 0) return -1;
+  const block = new RegExp(
+    '(^|\\n)[ \\t`>*_]*(?:<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\2\\s*>|\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\3\\s*\\])[ \\t`*_]*(?=\\r?\\n|$)',
+    'i',
+  );
+  const hit = block.exec(t);
+  if (!hit) return -1;
+  if (!t.slice(0, hit.index).trim()) return -1;
+  const end = hit.index + hit[0].length;
+  return t.slice(end).trim() ? end : -1;
+}
+
 function splitThinking(text: string): { head: string; body: string; tail: string } {
   const src = hideExampleTags(String(text), thinkNames());
   let head = '';
@@ -1230,6 +1248,14 @@ function splitThinking(text: string): { head: string; body: string; tail: string
     const opener = new RegExp('^\\s*(?:<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\])', 'i');
     const closer = new RegExp('<\\|?\\/(?:' + alt + ')\\s*\\|?>|\\[\\/(?:' + alt + ')\\s*\\]', 'i');
     if ((opener.test(src) && !closer.test(src)) || openPairRunsOut(src)) head = src;
+  }
+  // A written plan in front of a thinking block. A model can write a summary of
+  // its plan in plain text, then its thinking block, then the reply. A reply
+  // does not open with prose and then think, so the plan and the block are both
+  // working, held back and put back as they were.
+  if (!head && protectThinking) {
+    const end = planThenBlockEnd(src, thinkNames().join('|'));
+    if (end >= 0) head = src.slice(0, end) + (/^\s*/.exec(src.slice(end)) as RegExpExecArray)[0];
   }
   // No working in front of the reply, but the markers that open the turn and
   // introduce the answer are still not prose and still must not be rewritten.
@@ -4864,6 +4890,8 @@ async function refineRun(
       messageId: m.id,
       before: original,
       after: whole,
+      // The thinking held back from the refine, so the card can leave it out.
+      held: splitThinking(original).head,
       notes: notes,
     });
     return { ok: false, why: 'waiting for you to say yes', notes: notes };
@@ -5104,6 +5132,8 @@ async function saveRefined(
       messageId: m.id,
       before: original,
       after: next,
+      // The thinking held back from the refine, so the card can leave it out.
+      held: splitThinking(original).head,
       canUndo: keepOriginal,
       kind: kind === 'snip' ? 'snip' : 'refine',
       // Whether this went in beside the reply rather than over it. The panel
@@ -6961,7 +6991,14 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         type: 'undoable_list',
         requestId: payload.requestId,
         list: keepOriginal
-          ? keptFor(userId).map((v) => ({ chatId: v.chatId, messageId: v.messageId, before: v.text, after: v.after, at: v.at }))
+          ? keptFor(userId).map((v) => ({
+              chatId: v.chatId,
+              messageId: v.messageId,
+              before: v.text,
+              after: v.after,
+              at: v.at,
+              held: splitThinking(v.text).head,
+            }))
           : [],
       });
       return;

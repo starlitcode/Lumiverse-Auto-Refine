@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.45.0";
+const VERSION = "1.45.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -4704,7 +4704,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // the message together, not one per chat: a second refine in the same chat
   // must not take away the way back from the first. The backend
   // keeps the text for thirty of them, so the panel keeps the same number.
-  const undoable = new Map<string, { chatId: any; messageId: any; before: string; after: string; at: number }>();
+  const undoable = new Map<string, { chatId: any; messageId: any; before: string; after: string; at: number; held?: string }>();
   const UNDO_MAX = 30;
   // How many a chat keeps. A chat that refines every reply would otherwise
   // fill the card above the tabs with every refine of the session. The oldest
@@ -8551,7 +8551,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // What the tab is mostly for. After a refine you want to see what it did to
   // your writing and be able to disagree, so this sits above the tabs and is
   // there whichever one you left open.
-  type Undo = { chatId: any; messageId: any; before: string; after: string; at: number };
+  // held is the thinking at the front of the message, which the backend held
+  // back from the refine and put back as it was. The card leaves it out.
+  type Undo = { chatId: any; messageId: any; before: string; after: string; at: number; held?: string };
 
   // Every refine in this chat that can still be put back, newest first. It used
   // to show one, which meant a second refine took away the way back from the
@@ -8560,7 +8562,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // can draw a modal: without this, a Lumiverse with no showModal dropped the
   // whole refine on the floor and said nothing, which reads as the button not
   // working.
-  let pending: { chatId: any; messageId: any; before: string; after: string; at: number } | null =
+  let pending: { chatId: any; messageId: any; before: string; after: string; at: number; held?: string } | null =
     null;
 
   function takePending(yes: boolean) {
@@ -8599,7 +8601,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Marked the same way as every other before and after, with the switch
     // between the two views.
     wrap.appendChild(changedHead("What changed"));
-    wrap.appendChild(diffWell(one.before, one.after));
+    wrap.appendChild(diffWell(one.before, one.after, one.held));
     const row = el("div", "arf-row");
     const yes = button("Accept it", true);
     yes.setAttribute("data-arf-pending", "accept");
@@ -8845,7 +8847,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   // so the switch can draw it again. Pressing the switch on one redraws all of
   // them. Without this the card you pressed changes and the others stay as
   // they were, which reads as a button that only half worked.
-  const diffTexts = new WeakMap<Element, { before: string; after: string }>();
+  const diffTexts = new WeakMap<Element, { before: string; after: string; held: string }>();
 
   // Where a before-and-after can be: the page, and this tab's panel. Lumiverse
   // takes the panel out of the page while the drawer is shut or on another
@@ -8870,7 +8872,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const wrap = all[i] as HTMLElement;
         const texts = diffTexts.get(wrap);
         if (!texts) continue;
-        fillDiff(wrap, texts.before, texts.after);
+        fillDiff(wrap, texts.before, texts.after, texts.held);
         clearInk(wrap);
         sweepReadable(wrap);
       }
@@ -8909,10 +8911,15 @@ export function setup(ctx: Ctx, overrides?: any) {
     return String(t == null ? "" : t).replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/gi, "");
   }
 
-  function fillDiff(wrap: HTMLElement, rawBefore: string, rawAfter: string) {
+  // The thinking at the front, which the refine held back and put back as it
+  // was, is left off both sides. Only when both start with it, so a card from
+  // a refine that did change it still shows the change.
+  function fillDiff(wrap: HTMLElement, rawBefore: string, rawAfter: string, held: string = "") {
     wrap.innerHTML = "";
-    const before = forReading(rawBefore);
-    const after = forReading(rawAfter);
+    const off = !!held.trim() && rawBefore.indexOf(held) === 0 && rawAfter.indexOf(held) === 0;
+    if (off) wrap.appendChild(el("div", "arf-note", "The thinking is left out here. It was not sent to the model and did not change."));
+    const before = forReading(off ? rawBefore.slice(held.length) : rawBefore);
+    const after = forReading(off ? rawAfter.slice(held.length) : rawAfter);
     const side = !!cfg.sideBySide;
     wrap.setAttribute("data-arf-diff-mode", side ? "side" : "inline");
     const a = words(before);
@@ -8953,11 +8960,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       well.appendChild(el("span", p.how === -1 ? "arf-cut" : p.how === 1 ? "arf-add" : "", p.text));
   }
 
-  function diffWell(before: string, after: string): HTMLElement {
+  function diffWell(before: string, after: string, held?: string): HTMLElement {
     const wrap = el("div", "arf-diff");
     wrap.setAttribute("data-arf-diff", "1");
-    fillDiff(wrap, before, after);
-    diffTexts.set(wrap, { before: before, after: after });
+    fillDiff(wrap, before, after, held || "");
+    diffTexts.set(wrap, { before: before, after: after, held: held || "" });
     return wrap;
   }
 
@@ -9038,7 +9045,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function buildUndoRow(one: Undo): HTMLElement {
     const box = el("div", "arf-col");
     box.appendChild(changedHead("What changed"));
-    box.appendChild(diffWell(one.before, one.after));
+    box.appendChild(diffWell(one.before, one.after, one.held));
     const row = el("div", "arf-row");
     const back = button("Put it back", false);
     back.addEventListener("click", () => {
@@ -9518,6 +9525,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       title: "Refined",
       before: one.before,
       after: one.after,
+      held: one.held,
       back: () => askUndo(one.chatId, one.messageId),
     });
   }
@@ -9549,6 +9557,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     title: string;
     before: string;
     after: string;
+    held?: string;
     back?: () => void;
     // The two buttons, the first drawn filled. A finished refine has Keep it
     // and Put it back. The question before a refine is saved brings its own.
@@ -9608,7 +9617,7 @@ export function setup(ctx: Ctx, overrides?: any) {
 
       const body = el("div", "arf-pop-body");
       body.appendChild(changedHead("What changed"));
-      body.appendChild(diffWell(spec.before, spec.after));
+      body.appendChild(diffWell(spec.before, spec.after, spec.held));
       // This card lands on top of the one that was showing the model's working,
       // which is a second of reading for something worth more than that. Said
       // rather than left to be missed twice.
@@ -17714,6 +17723,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                   before: String(msg.before || ""),
                   after: String(msg.after || ""),
                   at: Date.now(),
+                  held: String(msg.held || ""),
                 });
                 while (undoable.size > UNDO_MAX)
                   undoable.delete(undoable.keys().next().value as string);
@@ -18009,6 +18019,7 @@ export function setup(ctx: Ctx, overrides?: any) {
                 before: String(one.before == null ? "" : one.before),
                 after: String(one.after == null ? "" : one.after),
                 at: Number(one.at) || 0,
+                held: String(one.held == null ? "" : one.held),
               });
               added++;
             }
@@ -18079,6 +18090,7 @@ export function setup(ctx: Ctx, overrides?: any) {
               before: String(msg.before || ""),
               after: String(msg.after || ""),
               at: Date.now(),
+              held: String(msg.held || ""),
             };
                   setBadge("1");
             log("a refine is waiting for you", true);
@@ -18253,6 +18265,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       title: "Save this refine?",
       before: String(msg.before || ""),
       after: String(msg.after || ""),
+      held: String(msg.held || ""),
       always: true,
       first: { label: "Accept it", mark: "data-arf-ask-accept", act: () => takePending(true) },
       second: { label: "Turn it down", mark: "data-arf-ask-decline", act: () => takePending(false) },

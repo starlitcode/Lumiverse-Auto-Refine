@@ -446,6 +446,8 @@ Six more are recognized as formats of their own, because their closing token has
 
 **A thinking format quoted inside the thinking** does not end it. Some models write out the format they were given, tags and all, while they are still thinking. A tag inside a code block or backticks is ignored. So is a whole pair of tags inside the thinking. The thinking ends at the closer that matches its own opener.
 
+**A written plan in front of a thinking block** is thinking too. Some models write a summary of their plan in plain text, then their thinking block, then the reply. When a thinking block stands on lines of its own with text after it, everything up to the end of that block is thinking. A thought tagged inside a sentence, such as `She looked away. <thought>Too late.</thought>`, stays part of the reply.
+
 **Extra thinking tag names** is for a model that uses a tag not listed above. Write only the name, with no brackets or pipes. It applies to the three tag-name forms.
 
 Most cloud providers send reasoning separately, not inside the reply, so none of this is needed there. It matters for local backends.

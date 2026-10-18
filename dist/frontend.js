@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.45.0";
+const VERSION = "1.45.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -8438,7 +8438,7 @@ export function setup(ctx, overrides) {
         // Marked the same way as every other before and after, with the switch
         // between the two views.
         wrap.appendChild(changedHead("What changed"));
-        wrap.appendChild(diffWell(one.before, one.after));
+        wrap.appendChild(diffWell(one.before, one.after, one.held));
         const row = el("div", "arf-row");
         const yes = button("Accept it", true);
         yes.setAttribute("data-arf-pending", "accept");
@@ -8700,7 +8700,7 @@ export function setup(ctx, overrides) {
                 const texts = diffTexts.get(wrap);
                 if (!texts)
                     continue;
-                fillDiff(wrap, texts.before, texts.after);
+                fillDiff(wrap, texts.before, texts.after, texts.held);
                 clearInk(wrap);
                 sweepReadable(wrap);
             }
@@ -8738,10 +8738,16 @@ export function setup(ctx, overrides) {
     function forReading(t) {
         return String(t == null ? "" : t).replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/gi, "");
     }
-    function fillDiff(wrap, rawBefore, rawAfter) {
+    // The thinking at the front, which the refine held back and put back as it
+    // was, is left off both sides. Only when both start with it, so a card from
+    // a refine that did change it still shows the change.
+    function fillDiff(wrap, rawBefore, rawAfter, held = "") {
         wrap.innerHTML = "";
-        const before = forReading(rawBefore);
-        const after = forReading(rawAfter);
+        const off = !!held.trim() && rawBefore.indexOf(held) === 0 && rawAfter.indexOf(held) === 0;
+        if (off)
+            wrap.appendChild(el("div", "arf-note", "The thinking is left out here. It was not sent to the model and did not change."));
+        const before = forReading(off ? rawBefore.slice(held.length) : rawBefore);
+        const after = forReading(off ? rawAfter.slice(held.length) : rawAfter);
         const side = !!cfg.sideBySide;
         wrap.setAttribute("data-arf-diff-mode", side ? "side" : "inline");
         const a = words(before);
@@ -8780,11 +8786,11 @@ export function setup(ctx, overrides) {
         for (const p of parts)
             well.appendChild(el("span", p.how === -1 ? "arf-cut" : p.how === 1 ? "arf-add" : "", p.text));
     }
-    function diffWell(before, after) {
+    function diffWell(before, after, held) {
         const wrap = el("div", "arf-diff");
         wrap.setAttribute("data-arf-diff", "1");
-        fillDiff(wrap, before, after);
-        diffTexts.set(wrap, { before: before, after: after });
+        fillDiff(wrap, before, after, held || "");
+        diffTexts.set(wrap, { before: before, after: after, held: held || "" });
         return wrap;
     }
     function switchLabel() {
@@ -8851,7 +8857,7 @@ export function setup(ctx, overrides) {
     function buildUndoRow(one) {
         const box = el("div", "arf-col");
         box.appendChild(changedHead("What changed"));
-        box.appendChild(diffWell(one.before, one.after));
+        box.appendChild(diffWell(one.before, one.after, one.held));
         const row = el("div", "arf-row");
         const back = button("Put it back", false);
         back.addEventListener("click", () => {
@@ -9341,6 +9347,7 @@ export function setup(ctx, overrides) {
             title: "Refined",
             before: one.before,
             after: one.after,
+            held: one.held,
             back: () => askUndo(one.chatId, one.messageId),
         });
     }
@@ -9414,7 +9421,7 @@ export function setup(ctx, overrides) {
             box.appendChild(top);
             const body = el("div", "arf-pop-body");
             body.appendChild(changedHead("What changed"));
-            body.appendChild(diffWell(spec.before, spec.after));
+            body.appendChild(diffWell(spec.before, spec.after, spec.held));
             // This card lands on top of the one that was showing the model's working,
             // which is a second of reading for something worth more than that. Said
             // rather than left to be missed twice.
@@ -17263,6 +17270,7 @@ export function setup(ctx, overrides) {
                                 before: String(msg.before || ""),
                                 after: String(msg.after || ""),
                                 at: Date.now(),
+                                held: String(msg.held || ""),
                             });
                             while (undoable.size > UNDO_MAX)
                                 undoable.delete(undoable.keys().next().value);
@@ -17569,6 +17577,7 @@ export function setup(ctx, overrides) {
                                 before: String(one.before == null ? "" : one.before),
                                 after: String(one.after == null ? "" : one.after),
                                 at: Number(one.at) || 0,
+                                held: String(one.held == null ? "" : one.held),
                             });
                             added++;
                         }
@@ -17650,6 +17659,7 @@ export function setup(ctx, overrides) {
                             before: String(msg.before || ""),
                             after: String(msg.after || ""),
                             at: Date.now(),
+                            held: String(msg.held || ""),
                         };
                         setBadge("1");
                         log("a refine is waiting for you", true);
@@ -17834,6 +17844,7 @@ export function setup(ctx, overrides) {
             title: "Save this refine?",
             before: String(msg.before || ""),
             after: String(msg.after || ""),
+            held: String(msg.held || ""),
             always: true,
             first: { label: "Accept it", mark: "data-arf-ask-accept", act: () => takePending(true) },
             second: { label: "Turn it down", mark: "data-arf-ask-decline", act: () => takePending(false) },

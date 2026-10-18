@@ -6558,6 +6558,95 @@ console.log("\na long reply is still marked");
   }
 }
 
+console.log("\nthinking held back from a refine is left off the card");
+{
+  // The backend holds the thinking at the front of a message back from the
+  // refine and says which part it was. Shown on the card, with its tags taken
+  // out for reading, it looked like part of the reply the refine had read.
+  const held = "<reasoning>\n# One\nWary mood at the gate, keep it short.\n</reasoning>\n";
+  const land = async (page) => {
+    await page.evaluate((held) => {
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m2",
+        canUndo: true,
+        held,
+        before: held + "She stepped through and, suddenly, the cold just hit her.",
+        after: held + "She stepped through and the cold hit her.",
+      });
+    }, held);
+    await settle(page);
+  };
+  const read = (page) => page.evaluate(() =>
+    Array.from(document.querySelectorAll("[data-arf-diff]")).map((n) => ({
+      mode: n.getAttribute("data-arf-diff-mode"),
+      text: n.textContent,
+    })));
+  for (const side of [false, true]) {
+    const view = side ? "side by side" : "read together";
+    await inTab(browser, { saved: { sideBySide: side } }, async (page) => {
+      await land(page);
+      const all = await read(page);
+      ok(view + ": there is a before and after on screen", all.length > 0, JSON.stringify(all));
+      ok(view + ": every one of them leaves the thinking out",
+        all.length > 0 && all.every((d) => !/Wary mood/.test(d.text)), JSON.stringify(all).slice(0, 300));
+      ok(view + ": and still shows the reply",
+        all.length > 0 && all.every((d) => /stepped through/.test(d.text)), JSON.stringify(all).slice(0, 300));
+      ok(view + ": and says the thinking is left out",
+        all.length > 0 && all.every((d) => /thinking is left out/.test(d.text)), JSON.stringify(all).slice(0, 300));
+      // The switch draws the card again from what it holds, so the thinking
+      // stays out after it too.
+      await page.evaluate(() => document.querySelector("[data-arf-diff-switch]").click());
+      await settle(page);
+      const flipped = await read(page);
+      ok(view + ": the other view leaves it out as well",
+        flipped.length > 0 && flipped.every((d) => !/Wary mood/.test(d.text) && /stepped through/.test(d.text)),
+        JSON.stringify(flipped).slice(0, 300));
+    });
+  }
+
+  // The note above the marked text fits on a phone.
+  await inTab(browser, { viewport: { width: 360, height: 740 }, touch: true }, async (page) => {
+    await land(page);
+    const fit = await page.evaluate(() => {
+      const note = document.querySelector("[data-arf-pop] [data-arf-diff] .arf-note");
+      const box = document.querySelector("[data-arf-pop]").getBoundingClientRect();
+      const r = note && note.getBoundingClientRect();
+      return {
+        note: !!note,
+        inside: !!r && r.left >= box.left - 1 && r.right <= box.right + 1,
+        sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+      };
+    });
+    ok("phone: the note fits inside the card, with no sideways scroll",
+      fit.note && fit.inside && !fit.sideways, JSON.stringify(fit));
+  });
+
+  // The put-back list read back from the backend, as after a reload.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    await page.evaluate((held) => {
+      window.__fromBackend({
+        type: "undoable_list",
+        list: [{ chatId: "c1", messageId: "m2", at: Date.now() - 30000, held,
+          before: held + "She stepped through and, suddenly, the cold just hit her.",
+          after: held + "She stepped through and the cold hit her." }],
+      });
+    }, held);
+    await goTab(page, "Log");
+    await settle(page);
+    const all = await read(page);
+    ok("the put-back list leaves the thinking out too",
+      all.length > 0 && all.every((d) => !/Wary mood/.test(d.text) && /stepped through/.test(d.text)),
+      JSON.stringify(all).slice(0, 300));
+  });
+}
+
 console.log("\nthe card that comes up on the page");
 {
   // A refine changes writing somebody was reading. The panel is behind a tab
