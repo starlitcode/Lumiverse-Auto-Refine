@@ -4346,6 +4346,31 @@ describe("thinking the extension has to recognize", () => {
     expect(h.body("m2")).toBe("<think>\nShe is cold, so lead with that, and then the door");
   });
 
+  // Mistral's own thinking format, which uses square brackets and capitals.
+  test("Mistral's [THINK] working is kept out of what the model is shown", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead("[THINK]lead with the cold, then the gate[/THINK]\n\n"));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("then the gate");
+    expect(h.body("m2")).toBe("[THINK]lead with the cold, then the gate[/THINK]\n\nShe stepped through and the cold hit her.");
+  });
+
+  test("a reply that is only [THINK] working with no closer is not refined", async () => {
+    const msgs = withHead("");
+    msgs[2].content = "[THINK]She is cold, so lead with that, and then the gate";
+    const h = await armed(["<REFINED>Something new.</REFINED>"], {}, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("[THINK] working in the refiner's own answer is not saved", async () => {
+    const h = await armed(["<REFINED>[THINK]trim the adverbs[/THINK]She stepped through and the cold hit her.</REFINED>"]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
   // A model can quote the thinking format it was given, tags and all, while it
   // is still thinking. The closer in the quote is an example. The thinking ends
   // at the closer that matches its own opener, so none of the plan after the

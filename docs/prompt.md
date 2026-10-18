@@ -419,7 +419,7 @@ Three forms are recognized by tag name:
 | Form | Example |
 | --- | --- |
 | Angle brackets | `<think>` … `</think>` |
-| Square brackets | `[thinking]` … `[/thinking]` |
+| Square brackets | `[thinking]` … `[/thinking]`, and Mistral's `[THINK]` … `[/THINK]` |
 | Pipes | `<\|think\|>` … `<\|/think\|>`, and `<\|think>` … `<think\|>` |
 
 Six more are recognized as formats of their own, because their closing token has a different name:
