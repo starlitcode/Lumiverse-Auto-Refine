@@ -444,6 +444,8 @@ Six more are recognized as formats of their own, because their closing token has
 - They are read again at most once a minute.
 - A Prefix and Suffix set only in the global Reasoning settings, with nothing saved on a connection, cannot be read by an extension. For those, add the tag name to **Extra thinking tag names**.
 
+**A thinking format quoted inside the thinking** does not end it. Some models write out the format they were given, tags and all, while they are still thinking. A tag inside a code block or backticks is ignored. So is a whole pair of tags inside the thinking. The thinking ends at the closer that matches its own opener.
+
 **Extra thinking tag names** is for a model that uses a tag not listed above. Write only the name, with no brackets or pipes. It applies to the three tag-name forms.
 
 Most cloud providers send reasoning separately, not inside the reply, so none of this is needed there. It matters for local backends.

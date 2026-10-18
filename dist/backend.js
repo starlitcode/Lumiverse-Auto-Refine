@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.44.0';
+const VERSION = '1.44.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -950,6 +950,85 @@ function closerOnlyEnd(text) {
 function thinkWraps() {
     return thinkShapes().map((s) => new RegExp('^' + LEAD + '(?:' + s.pattern + ')' + LEAD, 'i'));
 }
+// A thinking tag written as an example is not the end of the thinking. A model
+// that quotes the format it was given, in a code block or as a pair of its
+// own, writes a closer that the first-closer rule would take as the real one,
+// and the rest of its thinking would then be read as the reply. Before the
+// thinking is looked for, the "<" and "[" of every such tag are swapped for
+// characters no pattern looks for, and swapped back afterwards, so the text
+// itself never changes. What counts as an example:
+// - a tag inside a closed code block or inside backticks
+// - a whole pair of tags inside another pair that is still open
+// - a whole pair in front of a closer that has no opener, since that closer
+//   ends working whose opener was in the prompt. Not when the text starts on
+//   an opener, which is an ordinary block with a stray closer later on.
+const HIDDEN_LT = '\uE000';
+const HIDDEN_SQ = '\uE001';
+function hideExampleTags(text, names) {
+    const src = String(text);
+    if (!names.length || src.indexOf(HIDDEN_LT) >= 0 || src.indexOf(HIDDEN_SQ) >= 0)
+        return src;
+    const out = src.split('');
+    const hide = (from, to) => {
+        for (let i = from; i < to; i++) {
+            if (out[i] === '<')
+                out[i] = HIDDEN_LT;
+            else if (out[i] === '[')
+                out[i] = HIDDEN_SQ;
+        }
+    };
+    const code = /(`{3,}|~{3,})[\s\S]*?\1|`[^`\n]+`/g;
+    for (let m = code.exec(src); m; m = code.exec(src))
+        hide(m.index, m.index + m[0].length);
+    const alt = names.join('|');
+    const tag = new RegExp('<(\\/?)(' + alt + ')(?:\\s[^>]*)?>|\\[(\\/?)(' + alt + ')(?:\\s[^\\]]*)?\\]', 'gi');
+    const seen = out.join('');
+    const open = [];
+    const pairs = [];
+    let orphan = -1;
+    let first = -1;
+    let firstOpens = false;
+    for (let m = tag.exec(seen); m; m = tag.exec(seen)) {
+        const end = m.index + m[0].length;
+        const closes = !!(m[1] || m[3]);
+        const name = String(m[2] || m[4]).toLowerCase();
+        if (first < 0) {
+            first = m.index;
+            firstOpens = !closes;
+        }
+        if (!closes) {
+            open.push({ name: name, at: m.index, end: end });
+            continue;
+        }
+        let k = open.length - 1;
+        while (k >= 0 && open[k].name !== name)
+            k--;
+        if (k < 0) {
+            if (orphan < 0)
+                orphan = m.index;
+            continue;
+        }
+        const o = open[k];
+        open.length = k;
+        if (k > 0) {
+            hide(o.at, o.end);
+            hide(m.index, end);
+        }
+        else
+            pairs.push({ at: o.at, end: o.end, closeAt: m.index, closeEnd: end });
+    }
+    const startsOpen = firstOpens && seen.slice(0, first).trim() === '';
+    if (orphan >= 0 && !startsOpen)
+        for (const p of pairs)
+            if (p.closeEnd <= orphan) {
+                hide(p.at, p.end);
+                hide(p.closeAt, p.closeEnd);
+            }
+    return out.join('');
+}
+function showExampleTags(text) {
+    return String(text).split(HIDDEN_LT).join('<').split(HIDDEN_SQ).join('[');
+}
 // The same wrappers, taken out of the model's own answer wherever they sit.
 //
 // Different job from splitThinking, which holds back the working already in the
@@ -963,7 +1042,7 @@ function stripThinkingFrom(text) {
     if (!stripAnswerThinking)
         return text;
     const alt = thinkNames().join('|');
-    let t = String(text);
+    let t = hideExampleTags(String(text), thinkNames());
     try {
         // Working whose opener was in the refiner's prompt: everything up to the
         // first closer goes.
@@ -988,7 +1067,7 @@ function stripThinkingFrom(text) {
     catch (_) {
         return text;
     }
-    return t.trim();
+    return showExampleTags(t).trim();
 }
 // The markers a backend wraps a turn in. They are not reasoning and they are
 // not anybody's writing, so they come off whatever the two reasoning switches
@@ -1035,7 +1114,7 @@ function stripControlTokens(text) {
 // markers that close the turn. Only the middle is sent to be rewritten; the
 // other two are put back exactly as they were.
 function splitThinking(text) {
-    const src = String(text);
+    const src = hideExampleTags(String(text), thinkNames());
     let head = '';
     // The wrapper is matched against the whole message, before anything is taken
     // off the end. Harmony closes a block on the same token that ends a turn, so
@@ -1083,9 +1162,9 @@ function splitThinking(text) {
     const endHit = TAIL_RE.exec(rest);
     const tail = endHit ? endHit[0] : '';
     return {
-        head: head,
-        body: tail ? rest.slice(0, rest.length - tail.length) : rest,
-        tail: tail,
+        head: showExampleTags(head),
+        body: showExampleTags(tail ? rest.slice(0, rest.length - tail.length) : rest),
+        tail: showExampleTags(tail),
     };
 }
 // Ours, turned into something the host's resolver will not touch and nothing in

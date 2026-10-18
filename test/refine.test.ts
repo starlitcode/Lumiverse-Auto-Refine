@@ -4346,6 +4346,51 @@ describe("thinking the extension has to recognize", () => {
     expect(h.body("m2")).toBe("<think>\nShe is cold, so lead with that, and then the door");
   });
 
+  // A model can quote the thinking format it was given, tags and all, while it
+  // is still thinking. The closer in the quote is an example. The thinking ends
+  // at the closer that matches its own opener, so none of the plan after the
+  // quote is handed to the refiner.
+  describe("a thinking format quoted inside the thinking", () => {
+    const plan = "\n\n# Part one\nopen on the bell tower\n\n# Part two\nend on the gate\n</think>\n\n";
+    const shapes: Array<[string, string]> = [
+      ["in a code block", "<think>\nThe format to avoid:\n```html\n<think>\nnotes go here\n</think>\n```"],
+      ["with no code block", "<think>\nThe format to avoid is <think> notes go here </think> on its own line."],
+      ["in backticks", "<think>\nI must not write `</think>` early."],
+    ];
+    for (const [label, start] of shapes) {
+      test(label + ", the plan after the quote is kept out", async () => {
+        const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead(start + plan));
+        await h.ended({ chatId: "c1", messageId: "m2" });
+        await wait(50);
+        expect(said(h)).not.toContain("end on the gate");
+        expect(said(h)).not.toContain("open on the bell tower");
+        expect(h.body("m2")).toBe(start + plan + "She stepped through and the cold hit her.");
+      });
+    }
+
+    test("with the opener in the prompt, the quote does not stop the closer being found", async () => {
+      const head = "The format to avoid:\n```\n<think>\nnotes go here\n</think>\n```" + plan;
+      const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead(head));
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(said(h)).not.toContain("end on the gate");
+      expect(h.body("m2")).toBe(head + "She stepped through and the cold hit her.");
+    });
+
+    test("a tag the reply only mentions in backticks stays in the reply", async () => {
+      const msgs = withHead("<think>plan the edit</think>\n\n");
+      msgs[2].content = "<think>plan the edit</think>\n\nThe sign read `</think>` and nothing else, suddenly.";
+      const h = await armed(["<REFINED>Something new.</REFINED>"], {}, msgs);
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      // The whole reply is sent, the part after the backticks included, and the
+      // thinking in front of it is not.
+      expect(said(h)).toContain("The sign read");
+      expect(said(h)).toContain("nothing else, suddenly");
+      expect(said(h)).not.toContain("plan the edit");
+    });
+  });
+
   test("but a closer with an opener in front of it is left to the usual rule", async () => {
     const h = await armed(
       ["<REFINED>She stepped through and the cold hit her.</REFINED>"],

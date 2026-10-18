@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.44.1
+
+_2026-10-18_
+
+### Fixed
+
+- **Thinking that quoted its own format was refined as part of the reply.** Some models write out the thinking format they were given, tags and all, while they are still thinking. The closing tag in that quote was taken as the end of the thinking, so the rest of the thinking was sent to be rewritten with the reply. A tag inside a code block or backticks, or a whole pair of tags inside the thinking, no longer ends it.
+
+---
+
 ## 1.44.0
 
 _2026-10-17_
