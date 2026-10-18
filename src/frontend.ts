@@ -3214,7 +3214,7 @@ const LIMIT_FIELDS: Field[] = [
     key: "toast",
     label: "Lumiverse notification when a refine finishes",
     type: "bool",
-    hint: "Off by default. A short Lumiverse notification each time a refine finishes. With the card above on too, the card can cover it, depending on Lumiverse's Toast position.",
+    hint: "Off by default. A short Lumiverse notification each time a refine finishes. The before and after card can cover it, depending on Lumiverse's Toast position.",
   },
 ];
 for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])
