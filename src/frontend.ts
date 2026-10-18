@@ -5552,10 +5552,10 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // One of Lumiverse's own notifications. Lumiverse takes them only from an
   // extension's server side, so the words are sent there to be shown. `force`
-  // shows it even with Show a brief message off, for anything that is not a
-  // routine "it worked". `kind` sets the color: success is green, info blue,
-  // warning yellow and error red. Left out, a forced one is info and a routine
-  // one is success.
+  // shows it even with Lumiverse notification when a refine finishes off, for
+  // anything that is not a routine "it worked". `kind` sets the color: success
+  // is green, info blue, warning yellow and error red. Left out, a forced one
+  // is info and a routine one is success.
   //
   // A backend that is not answering cannot show one, so anything about that is
   // also said in the Log and on the status line.

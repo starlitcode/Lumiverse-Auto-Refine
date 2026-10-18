@@ -262,6 +262,9 @@ A code block, in this shape and nothing else:
 
 No credits in the Discord post. They stay in the changelog.
 
+The Discord post never mentions minors, age, or changes to the safety wording
+and the **Made for adults** section. Those stay in the docs and the changelog.
+
 Keep the post short, but give each line enough to be understood. Each line
 says what changed and what the user will notice, in two plain sentences, three
 at most. Leave out background, lists of colors or options, and other detail
