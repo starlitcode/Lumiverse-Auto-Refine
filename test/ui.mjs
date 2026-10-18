@@ -7415,10 +7415,9 @@ console.log("\nthe working, read as prose");
     ok("working with no closing tag still reads", /simile is doing no work/.test(cut) && !/[<>]/.test(cut), cut);
   });
 
-  // A prompt that asks for no working still gets an answer, and that answer is
-  // the rewrite. Taking it would put the rewrite itself under What the model
-  // worked out, which is neither what the card says nor what anybody is looking
-  // for there.
+  // A prompt that asks for no working still gets an answer. The rewrite in it
+  // is on the card, so it is never shown as the model's notes. Its words
+  // outside the rewrite are, since they can be the only place it says why.
   await inTab(browser, { saved: { blocks: [{ id: "rules", name: "Only rules", on: true, role: "system", text: "cut filler {{message}}" }] } }, async (page) => {
     await page.evaluate(() => {
       window.__fromBackend({
@@ -7444,13 +7443,34 @@ console.log("\nthe working, read as prose");
         card: document.querySelector('[data-arf-card="What the model worked out"]').textContent,
       };
     });
-    ok("an answer with no working in it keeps nothing", said.well === null, String(said.well));
-    ok(
-      "and the card says why rather than showing the rewrite",
-      /does not ask the model for its working/.test(said.card),
-      said.card.slice(0, 120),
-    );
+    ok("the rewrite is not kept as the model's notes", !/turned away/.test(String(said.well)), String(said.well));
+    ok("but its words outside the rewrite are", /Here you go/.test(String(said.well)), String(said.well));
   });
+
+  // Handed back unchanged by a prompt that asks for no working. The reason is
+  // written outside the rewrite, and the line saying so points at where it is.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { blocks: [{ id: "rules", name: "Only rules", on: true, role: "system", text: "cut filler {{message}}" }] } }, async (page) => {
+      await page.evaluate(() => {
+        window.__fromBackend({
+          type: "refine_skipped",
+          chatId: "c1",
+          messageId: "m1",
+          same: true,
+          why: "the model handed it back unchanged and said why. Its words are on the Log tab, under What the model worked out",
+          notes: "The stars around this line are the character's own emphasis, so I left it.\n<REFINED>*Run,* he said.</REFINED>",
+        });
+      });
+      await goTab(page, "Log");
+      const out = await page.evaluate(() => {
+        const well = document.querySelector("#drawer [data-arf-kept]");
+        return { well: well ? well.textContent : null, sideways: document.documentElement.scrollWidth > innerWidth + 1 };
+      });
+      ok(label + ": a passage handed back unchanged shows the model's reason in the Log",
+        /character's own emphasis/.test(String(out.well)) && !/he said/.test(String(out.well)), JSON.stringify(out));
+      ok(label + ": and nothing runs off the side", !out.sideways, "");
+    });
+  }
 }
 
 console.log("\nthe working the Log keeps");

@@ -2904,7 +2904,7 @@ function judge(answer: any, original: string, tags: boolean = true): Verdict {
   // declining to edit it and saying why, which the prompts ask for. "It already
   // read well" would put words in its mouth, so the reason points at its own.
   if (out.same && got.outside)
-    out.why = 'the model handed it back unchanged and said why in its notes';
+    out.why = 'the model handed it back unchanged and said why. Its words are on the Log tab, under What the model worked out';
   return out;
 }
 

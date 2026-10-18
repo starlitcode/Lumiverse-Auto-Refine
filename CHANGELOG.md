@@ -12,6 +12,7 @@ _2026-10-18_
 
 ### Fixed
 
+- **A passage handed back unchanged said "said why in its notes", but the notes could not be found.** With a prompt that asks for no working, such as the two that do not think, the model's reason was thrown away. Its words outside the rewrite are now kept on the **Log** tab, under **What the model worked out**, and the message says where they are.
 - **Thinking that quoted its own format was refined as part of the reply.** Some models write out the thinking format they were given, tags and all, while they are still thinking. The closing tag in that quote was taken as the end of the thinking, so the rest of the thinking was sent to be rewritten with the reply. A tag inside a code block or backticks, or a whole pair of tags inside the thinking, no longer ends it.
 
 ---

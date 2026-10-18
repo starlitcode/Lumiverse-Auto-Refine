@@ -4870,16 +4870,20 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The whole answer, when the message carries one. Every ending sends it, and
   // it is the better copy of what the stream was showing a trimmed tail of.
   //
-  // Only if there is working in it. A prompt that asks for none still gets an
-  // answer, and that answer is the rewrite: taking it would put the rewrite
-  // itself under What the model worked out, which is neither what the card says
-  // nor what anybody is looking for there. The streamed notes are the working
-  // already, cut out of the tags by the backend, so they are taken where they
-  // arrive rather than here.
+  // A prompt that asks for no working still gets words from the model outside
+  // its rewrite, such as why it handed a passage back unchanged. Those are kept
+  // too, or a refine dropped for that reason points at notes nobody can find.
+  // The rewrite itself is taken out: it is on the card, marked against what it
+  // replaced, and is not what anybody is looking for under What the model
+  // worked out.
   function tookNotes(msg: any) {
     if (!msg || typeof msg.notes !== "string" || !msg.notes.trim()) return;
-    if (!NOTES_TAG.test(msg.notes)) return;
-    liveNotes = msg.notes;
+    if (NOTES_TAG.test(msg.notes)) {
+      liveNotes = msg.notes;
+      return;
+    }
+    const said = msg.notes.replace(/<\s*REFINED\s*>[\s\S]*?(?:<\s*\/\s*REFINED\s*>|$)/gi, "").trim();
+    if (said) liveNotes = said;
   }
 
   // The working as it reads, rather than as it was written.
@@ -12110,7 +12114,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         note(
           asksForWorking()
             ? "Nothing yet. The working from the last refine that finishes is shown here, and a refine you stop leaves what is already here alone."
-            : "The prompt you are on does not ask the model for its working, so there is none to keep. The two for a model that thinks ask for it.",
+            : "Nothing yet. The prompt you are on does not ask the model for its working, but anything it writes outside its rewrite shows here, such as why it left a passage as it was.",
         ),
       );
       return wrap;
