@@ -6333,8 +6333,9 @@ console.log("\nthe run through the chat");
 {
   // One button, in one place. It was moved next to Refine the latest reply and
   // left behind in This chat as well, so the panel offered the same thing twice
-  // on two different tabs.
-  await inTab(browser, {}, async (page) => {
+  // on two different tabs. The notification at the end of a run is a switch,
+  // off by default, so it is turned on here.
+  await inTab(browser, { saved: { toast: true } }, async (page) => {
     await page.evaluate(() => {
       const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
       window.__fromBackend({
@@ -10172,7 +10173,7 @@ console.log("\nthe macro list");
     const listed = await page.evaluate(() => ({
       desc: !!document.querySelector('#drawer [data-arf-row="macro:{{charGroupFocusedDescription}}"]'),
       pers: !!document.querySelector('#drawer [data-arf-row="macro:{{charGroupFocusedPersonality}}"]'),
-      says: /Every Lumiverse macro works, not only the ones listed/.test(document.getElementById("drawer").textContent),
+      says: /any Lumiverse macro works/.test(document.getElementById("drawer").textContent),
       note: /This list is not every macro/.test(document.getElementById("drawer").textContent),
     }));
     ok("the focused group description and personality are listed", listed.desc && listed.pers, JSON.stringify(listed));
