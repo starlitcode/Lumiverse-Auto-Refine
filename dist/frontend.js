@@ -3012,7 +3012,7 @@ const LIMIT_FIELDS = [
         key: "toast",
         label: "Lumiverse notification when a refine finishes",
         type: "bool",
-        hint: "Off by default. A short Lumiverse notification each time a refine finishes. Turn off the card above to use this instead.",
+        hint: "Off by default. A short Lumiverse notification each time a refine finishes. It can be on with the card above or in place of it.",
     },
 ];
 for (const f of [...SHIELD_FIELDS, ...GUARD_FIELDS, ...WIDGET_FIELDS, ...JUDGE_FIELDS, ...COST_FIELDS, ...LIMIT_FIELDS])

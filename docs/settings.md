@@ -224,7 +224,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 
 - **Show the before and after on screen** puts a card on the page with the before, the after, and a button to put it back. It is on by default.
 - **Read them side by side** or **Read them together** switches every before-and-after on screen between two columns and one text with the changes colored. The next card opens the way you left it. On a narrow screen, the columns stack.
-- **Lumiverse notification when a refine finishes** sends a short Lumiverse notification when a reply is refined, and one when a run through the whole chat ends. It is off by default. Turn it on, and turn off **Show the before and after on screen**, to get a small notification in place of the card. Messages about a problem, such as a refine that could not run, show either way.
+- **Lumiverse notification when a refine finishes** sends a short Lumiverse notification when a reply is refined, and one when a run through the whole chat ends. It is off by default. It does not change **Show the before and after on screen**. Turn on both to get the card and the notification, or turn off the card to get only the notification. Messages about a problem, such as a refine that could not run, show either way.
 - The sound is off by default. With no file chosen, it is a short built-in sound.
 
 **Ways to reach it** are four optional ways in, all off by default.
