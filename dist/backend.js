@@ -3073,6 +3073,10 @@ function leakVerdict(text) {
 // repeated hundreds of times, or words on one line with no punctuation running
 // on to the end. A chant, a stammer or a long laugh is short, or the scene
 // carries on after it, so it is left alone.
+//
+// Repetition set apart as written on purpose is also left alone, wherever it
+// is (see repeatOnPurpose). A model stuck in a loop runs until it is cut off,
+// so it does not close a quotation mark or an asterisk it opened.
 const LOOP_MIN_REPEATS = 10;
 const LOOP_MIN_WORDS = 60;
 const LOOP_MAX_UNIT = 12;
@@ -3084,32 +3088,38 @@ function loopVerdict(visible) {
     const chars = new RegExp('([^\\s]{2,4}?)\\1{' + (LOOP_CHAR_REPEATS - 1) + ',}', 'gu');
     for (const hit of plain.matchAll(chars)) {
         const unit = hit[1];
-        // Two different characters at least, and a letter or a digit: a divider
-        // such as "=-=-=-" has neither.
+        // Two different characters at least: one letter held long, as in a
+        // scream, is the one-character check's to judge.
         if (!/[\p{L}\p{N}]/u.test(unit) || new Set(Array.from(unit)).size < 2)
             continue;
-        // A laugh written "hahaha" is letters only, and a character laughs on
-        // purpose.
         if (/^\p{L}+$/u.test(unit) && hit[0].length / unit.length < LOOP_LETTER_REPEATS)
+            continue;
+        const at = hit.index || 0;
+        if (repeatOnPurpose(plain, at, at + hit[0].length, false))
             continue;
         return true;
     }
-    // Only words in the Latin, Greek or Cyrillic alphabets count toward a
-    // run-on, since Thai and some other languages are written without
-    // punctuation.
     let run = 0;
     for (const t of plain.split(/[ \t]+|(\n)/)) {
         if (!t)
             continue;
-        run = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+(?:['’-][\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+)*$/u.test(t) ? run + 1 : 0;
+        run = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+(?:['\u2019-][\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+)*$/u.test(t) ? run + 1 : 0;
     }
     if (run >= LOOP_RUN_ON)
         return true;
-    const words = plain
-        .toLowerCase()
-        .split(/\s+/)
-        .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
-        .filter(Boolean);
+    // Each word with where it starts and ends, so a loop can be placed in the
+    // text. A mark on its own, such as a lone quotation mark, is not a word.
+    const words = [];
+    const starts = [];
+    const ends = [];
+    for (const m of plain.matchAll(/\S+/g)) {
+        const w = m[0].toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        if (!w)
+            continue;
+        words.push(w);
+        starts.push(m.index || 0);
+        ends.push((m.index || 0) + m[0].length);
+    }
     if (words.length < LOOP_MIN_WORDS)
         return false;
     const same = (at, unit) => {
@@ -3141,10 +3151,51 @@ function loopVerdict(visible) {
                 reps++;
                 at -= n;
             }
-            if (reps >= LOOP_MIN_REPEATS && reps * n >= LOOP_MIN_WORDS)
-                return true;
+            if (reps < LOOP_MIN_REPEATS || reps * n < LOOP_MIN_WORDS)
+                continue;
+            // Back to where the repeating starts, which can be partway into a
+            // repeat when the answer ends partway into one.
+            while (at > 0 && words[at - 1] === words[at - 1 + n])
+                at--;
+            // From the first letter of the loop to the last, so a quotation mark or
+            // an asterisk around it counts as outside it.
+            const from = starts[at] + (plain.slice(starts[at]).match(/^[^\p{L}\p{N}]*/u) || [''])[0].length;
+            const last = words.length - 1;
+            const to = ends[last] - (plain.slice(starts[last], ends[last]).match(/[^\p{L}\p{N}]*$/u) || [''])[0].length;
+            if (repeatOnPurpose(plain, from, to, true))
+                continue;
+            return true;
         }
     }
+    return false;
+}
+// Whether repetition from `start` to `end` is set apart as written on
+// purpose:
+// - inside quotation marks or asterisks opened on its line before it and
+//   closed again right after it, as in a crowd's chant or a held laugh
+// - in a quoted block that starts with ">"
+// - for words, after a colon, on its own line or on the line above, as in
+//   "She wrote on the board:" and the lines after it. A pattern such as
+//   "1.1.1." after a colon is still a breakdown, so `afterColon` is false for
+//   those.
+function repeatOnPurpose(text, start, end, afterColon) {
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    const before = text.slice(lineStart, start);
+    if (/^[ \t]*>/.test(before))
+        return true;
+    if (afterColon && /:[ \t]*$/.test(before))
+        return true;
+    if (afterColon && !before.trim() && /:[ \t]*\n\s*$/.test(text.slice(0, lineStart)))
+        return true;
+    // The first mark after the repetition. It skips the rest of a repeat cut
+    // short, such as the last "a" of a laugh, and the punctuation that ends it.
+    const closer = text.slice(end).replace(/^[\p{L}\p{N}]*[\s.,;!?\u2026~-]*/u, '').charAt(0);
+    if (spanIsQuoted(text, start) && /["\u201d\u00bb]/.test(closer))
+        return true;
+    if ((before.match(/\*/g) || []).length % 2 === 1 && closer === '*')
+        return true;
+    if ((before.match(/_/g) || []).length % 2 === 1 && closer === '_')
+        return true;
     return false;
 }
 // Why a rewrite is broken, or '' when it is not. raw is the answer before its

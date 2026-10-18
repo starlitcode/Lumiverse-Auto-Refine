@@ -55,7 +55,14 @@ A model can break down while it rewrites, the same ways a reply can break. **Ref
 - **got stuck repeating or rambling**: a word or phrase repeated over and over to the end, a short pattern such as `1.1.1.1.` repeated hundreds of times, or 150 words on one line with no punctuation
 - **ran into the prompt's own format**: a marker such as `[/INST]` or `<<SYS>>`, a heading such as `### Instruction:`, the start of the next turn, or a character card's data
 
-It is on by default. Each one only counts when the rewrite has it and your reply did not. So a reply that already had a passage in Russian, or a chant that repeats, can still be refined. A passage in another alphabet is also left alone when it is set apart as written on purpose: in quotation marks or asterisks, in a quoted block, or after a colon. Code is never checked.
+It is on by default. Each one only counts when the rewrite has it and your reply did not. So a reply that already had a passage in Russian, or a chant that repeats, can still be refined.
+
+Writing set apart on purpose is also left alone:
+
+- a passage in another alphabet in quotation marks or asterisks, in a quoted block, or after a colon
+- repetition in quotation marks or asterisks that close again after it, in a quoted block, or after a colon, such as a crowd's chant or the same line written out many times
+
+A model stuck in a loop does not close a quotation mark or an asterisk it opened, so a loop inside dialogue that never closes still counts. Code is never checked.
 
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) uses the same checks and the same numbers on a reply.
 

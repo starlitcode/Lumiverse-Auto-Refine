@@ -8215,6 +8215,28 @@ describe("a broken rewrite", () => {
     expect(h.body("m2")).toBe(answer);
   });
 
+  const onPurpose: Array<[string, string]> = [
+    ["a crowd's chant in quotation marks that close", scene + "The crowd on the bank roared, \"" + "Bring her home! ".repeat(25).trim() + "\""],
+    ["lines written out after a colon", scene + "In the ledger Oriel wrote:\n\n" + "One boat crossed after dark and did not pay.\n".repeat(15)],
+    ["a held laugh in asterisks that close", scene + "*Ha" + "ha".repeat(200) + "*"],
+  ];
+  for (const [label, answer] of onPurpose) {
+    test("saved: repetition written on purpose, " + label, async () => {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(answer.trim());
+    });
+  }
+
+  test("refused: a loop inside dialogue that never closes", async () => {
+    const h = await armed(["<REFINED>" + scene + "\"Bring her home, " + "bring her home, ".repeat(25) + "</REFINED>"], loose, reply());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(scene);
+    expect(h.skipped().some((w: string) => /stuck repeating/.test(w))).toBe(true);
+  });
+
   test("saved with the check off", async () => {
     const answer = scene + "[/INST] [Character(\"Wren\")][Job(\"ferry pilot\")]";
     const h = await armed(["<REFINED>" + answer + "</REFINED>"], { ...loose, guardBroken: false }, reply());

@@ -12,7 +12,7 @@ _2026-10-18_
 
 ### Added
 
-- **Refuse a broken rewrite.** A new switch on the **Limits** tab, on by default. It throws a rewrite away when it came back garbled, got stuck repeating or rambling, or ran into the prompt's own format, such as `[/INST]` or the start of the next turn. Each only counts when the rewrite has it and your reply did not. **Ask again when a check fails** asks again after a broken rewrite. See [A broken rewrite](docs/guardrails.md#a-broken-rewrite).
+- **Refuse a broken rewrite.** A new switch on the **Limits** tab, on by default. It throws a rewrite away when it came back garbled, got stuck repeating or rambling, or ran into the prompt's own format, such as `[/INST]` or the start of the next turn. Each only counts when the rewrite has it and your reply did not. Repetition set apart on purpose, such as a chant in quotation marks that close, is left alone. **Ask again when a check fails** asks again after a broken rewrite. See [A broken rewrite](docs/guardrails.md#a-broken-rewrite).
 
 ### Fixed
 
