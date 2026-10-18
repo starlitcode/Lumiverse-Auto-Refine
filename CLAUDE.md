@@ -373,7 +373,8 @@ The owner has a learning disability. Contradictions are confusing.
   Never write that Lumiverse is built for adults.
 - The README says this in one short **Made for adults** section near the end,
   above Credits: who the extension is for, that it is not for sexual content
-  involving minors, when help is refused to someone under 18, and one link to
+  involving minors, that the owner does not help anyone under 18 with
+  anything, and one link to
   the details. Nothing more. The details live in the docs: **About age** in
   Auto Retry's `docs/detection.md`, and **The one thing they do not edit** in
   Auto Refine's `docs/prompt.md`.

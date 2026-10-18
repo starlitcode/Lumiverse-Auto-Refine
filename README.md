@@ -140,7 +140,7 @@ It asks for seven permissions:
 
 ## Made for adults
 
-Auto Refine is for adults, 18 and older. It is not for sexual content involving minors, and I do not support anyone using it for that. If someone under 18 asks me for help and their prompts ask for sexual content, I will not help with it. [The one thing they do not edit](docs/prompt.md#the-one-thing-they-do-not-edit) says exactly how the built-in prompts handle it.
+Auto Refine is for adults, 18 and older. It is not for sexual content involving minors, and I do not support anyone using it for that. I do not help anyone who tells me they are under 18, with anything. [The one thing they do not edit](docs/prompt.md#the-one-thing-they-do-not-edit) says exactly how the built-in prompts handle it.
 
 ## Credits
 
