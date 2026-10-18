@@ -2961,7 +2961,7 @@ function garbledVerdict(visible) {
 // as Latin-1, followed by a character that a following byte turns into.
 const SOUP_MIN_HITS = 8;
 const SOUP_MIN_SHARE = 0.02;
-const SOUP_PAIR = /[ÂÃÄÅÐÑâãäåæçèé][\u0080-¿ŒœŠšŸŽžƒˆ˜–—‘-„†-•…‰‹›€™]/g;
+const SOUP_PAIR = /[Â-ÅÐÑâ-é][\u0080-¿ŒœŠšŸŽžƒˆ˜–—‘-„†-•…‰‹›€™]/g;
 const SOUP_CHAR = /[�\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 function soupVerdict(visible) {
     const text = withoutCode(visible);
