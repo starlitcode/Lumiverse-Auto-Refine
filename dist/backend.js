@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.44.1';
+const VERSION = '1.45.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -2562,8 +2562,8 @@ let passList = [];
 // messages. Empty runs your messages once, with their own prompt.
 let passListYours = [];
 // Which failures a second ask could plausibly fix. A refusal, a preamble, a
-// softened rewrite and an answer cut off mid-write are all the model having a
-// bad turn. A rewrite refused for its length is the model meaning it, and one
+// softened rewrite, an answer cut off mid-write and a broken rewrite are all
+// the model having a bad turn. A rewrite refused for its length is the model meaning it, and one
 // that dropped a protection token has already been re-read once; asking again
 // buys the same answer at the same price.
 // An answer that came back word for word the same is not in here. The prompt
@@ -2573,7 +2573,7 @@ let passListYours = [];
 // wording, which is what a reader sees and what a rewording would
 // change the meaning of.
 function worthRetrying(why) {
-    return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished/i.test(String(why || ''));
+    return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished|own format|stuck repeating|came back garbled/i.test(String(why || ''));
 }
 // ---- the note that goes with an ask made again ----
 // Off by default. On, an ask made again after a refusal, a softened rewrite or
@@ -2764,6 +2764,13 @@ function judgeInner(answer, original) {
     // character cap.
     if (guardRefusal && text.length < 600 && looksLikeRefusal(text))
         return { ok: false, text: '', why: 'the model declined to rewrite it' };
+    // Before the softening checks: a broken rewrite loses strong words too, and
+    // the reason should name what really went wrong.
+    if (guardBroken) {
+        const broken = brokenWhy(orig, stripThinkingFrom(raw), text);
+        if (broken)
+            return { ok: false, text: '', why: broken };
+    }
     const soft = softenedAway(orig, text);
     if (soft.length)
         return {
@@ -2822,6 +2829,335 @@ function judgeInner(answer, original) {
             why: 'the rewrite was ' + Math.round(-grew) + '% shorter, over the limit you set',
         };
     return { ok: true, text: text, why: '' };
+}
+// ---- a broken rewrite ----
+// A model can break down while it rewrites, the same ways it breaks down while
+// it writes a reply. Auto Retry has the same checks and the same numbers for a
+// reply. Each one here only counts when the rewrite has it and the passage did
+// not, so writing that was already that way is never the reason.
+//
+// On by default. A broken rewrite saved over a reply is a reply lost.
+let guardBroken = true;
+// Text with code taken out. A block of code or inline code is written on
+// purpose, whatever is in it.
+function withoutCode(text) {
+    return String(text == null ? '' : text)
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/`[^`\n]*`/g, ' ');
+}
+const GARBLE_SCRIPTS = [
+    ['latin', /\p{Script=Latin}/u],
+    ['cyrillic', /\p{Script=Cyrillic}/u],
+    ['greek', /\p{Script=Greek}/u],
+    ['cjk', /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u],
+    ['hangul', /\p{Script=Hangul}/u],
+    ['devanagari', /\p{Script=Devanagari}/u],
+    ['arabic', /\p{Script=Arabic}/u],
+    ['hebrew', /\p{Script=Hebrew}/u],
+    ['thai', /\p{Script=Thai}/u],
+];
+function scriptOf(ch) {
+    for (const [name, re] of GARBLE_SCRIPTS)
+        if (re.test(ch))
+            return name;
+    return '';
+}
+// A jumble: English words run together with scraps of other alphabets, and
+// capitals in the middle of words. Three signs are counted: two alphabets in
+// one word, a small letter followed by capitals, and a word or two of another
+// alphabet between English words. Any GARBLE_WINDOW words holding
+// GARBLE_MIN_SIGNS of them, of at least two kinds, count. One kind alone turns
+// up in good writing. Only a passage in the Latin alphabet, or one that starts
+// in it, is judged, since these signs mean nothing in Chinese or Japanese.
+const GARBLE_WINDOW = 80;
+const GARBLE_MIN_SIGNS = 5;
+const GARBLE_MIN_WORDS = 30;
+const GARBLE_MIN_LATIN = 0.7;
+const GARBLE_START_LETTERS = 300;
+const GARBLE_START_LATIN = 0.85;
+// The names of Apple's systems are the one common word shape that matches the
+// caps sign.
+const GARBLE_CAPS_FINE = /^(?:i|ipad|mac|tv|watch|vision)OS$/i;
+function startsLatin(text) {
+    let seen = 0;
+    let latin = 0;
+    for (const ch of Array.from(text)) {
+        const s = scriptOf(ch);
+        if (!s)
+            continue;
+        seen++;
+        if (s === 'latin')
+            latin++;
+        if (seen >= GARBLE_START_LETTERS)
+            break;
+    }
+    return seen >= GARBLE_START_LETTERS && latin / seen >= GARBLE_START_LATIN;
+}
+function garbledVerdict(visible) {
+    const text = withoutCode(visible).replace(/\bhttps?:\/\/\S+/gi, ' ');
+    const words = [];
+    const letters = new Map();
+    for (const raw of text.split(/\s+/)) {
+        const core = raw.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '');
+        if (!core)
+            continue;
+        const scripts = new Set();
+        for (const ch of Array.from(core)) {
+            const s = scriptOf(ch);
+            if (!s)
+                continue;
+            scripts.add(s);
+            letters.set(s, (letters.get(s) || 0) + 1);
+        }
+        if (scripts.size)
+            words.push({ scripts, core, size: Array.from(core).length });
+    }
+    if (words.length < GARBLE_MIN_WORDS)
+        return false;
+    let all = 0;
+    letters.forEach((n) => (all += n));
+    if (!all)
+        return false;
+    if ((letters.get('latin') || 0) / all < GARBLE_MIN_LATIN && !startsLatin(text))
+        return false;
+    const signs = words.map((w) => {
+        if (w.scripts.size > 1)
+            return w.size >= 4 ? 'mixed' : '';
+        if (w.scripts.has('latin') && !GARBLE_CAPS_FINE.test(w.core) && /\p{Ll}(?:\p{Lu}{2,}|\p{Lu}$)/u.test(w.core))
+            return 'caps';
+        return '';
+    });
+    const latin = (i) => i >= 0 && i < words.length && words[i].scripts.size === 1 && words[i].scripts.has('latin');
+    const foreign = (i) => i >= 0 && i < words.length && words[i].scripts.size === 1 && !words[i].scripts.has('latin');
+    for (let i = 0; i < words.length; i++) {
+        if (!foreign(i) || foreign(i - 1))
+            continue;
+        const end = foreign(i + 1) ? i + 1 : i;
+        if (foreign(end + 1))
+            continue;
+        if (latin(i - 1) && latin(end + 1) && !signs[i] && words[i].size >= 2)
+            signs[i] = 'island';
+    }
+    for (let start = 0; start < words.length; start += GARBLE_WINDOW / 4) {
+        const kinds = new Set();
+        let count = 0;
+        for (let i = start; i < Math.min(words.length, start + GARBLE_WINDOW); i++) {
+            if (!signs[i])
+                continue;
+            count++;
+            kinds.add(signs[i]);
+        }
+        if (count >= GARBLE_MIN_SIGNS && kinds.size >= 2)
+            return true;
+        if (start + GARBLE_WINDOW >= words.length)
+            break;
+    }
+    return false;
+}
+// Broken characters: text decoded with the wrong encoding, such as "Ã©" for
+// "é" or "â€™" for an apostrophe, the replacement character, and control
+// characters. At least SOUP_MIN_HITS of them, and SOUP_MIN_SHARE of the text.
+// The pairs are a lead letter that starts a two- or three-byte character, read
+// as Latin-1, followed by a character that a following byte turns into.
+const SOUP_MIN_HITS = 8;
+const SOUP_MIN_SHARE = 0.02;
+const SOUP_PAIR = /[ÂÃÄÅÐÑâãäåæçèé][\u0080-¿ŒœŠšŸŽžƒˆ˜–—‘-„†-•…‰‹›€™]/g;
+const SOUP_CHAR = /[�\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+function soupVerdict(visible) {
+    const text = withoutCode(visible);
+    const hits = (text.match(SOUP_PAIR) || []).length + (text.match(SOUP_CHAR) || []).length;
+    if (hits < SOUP_MIN_HITS)
+        return false;
+    const size = text.replace(/\s+/g, '').length;
+    return size > 0 && hits / size >= SOUP_MIN_SHARE;
+}
+// Text in the Latin alphabet that switches to another alphabet and never comes
+// back. Counted in letters, since Chinese and Japanese put no spaces between
+// words. A passage set apart as written on purpose is left alone: inside
+// quotation marks or asterisks, in a quoted block, or after a colon.
+const SWITCH_MIN_TAIL = 60;
+const SWITCH_MIN_BEFORE = 200;
+const SWITCH_TAIL_SHARE = 0.9;
+const SWITCH_BEFORE_LATIN = 0.85;
+function switchVerdict(visible) {
+    const text = withoutCode(visible);
+    const letters = [];
+    for (let i = 0; i < text.length; i++) {
+        const c = text.codePointAt(i);
+        const ch = String.fromCodePoint(c);
+        if (c > 0xffff)
+            i++;
+        if (!/\p{L}/u.test(ch))
+            continue;
+        const s = scriptOf(ch);
+        if (s)
+            letters.push({ at: i - (c > 0xffff ? 1 : 0), latin: s === 'latin' });
+    }
+    // The longest run at the end that is almost all another alphabet.
+    let other = 0;
+    let start = -1;
+    for (let k = letters.length - 1; k >= 0; k--) {
+        if (!letters[k].latin)
+            other++;
+        const size = letters.length - k;
+        if (other / size >= SWITCH_TAIL_SHARE && !letters[k].latin)
+            start = k;
+        else if (other / size < 0.6)
+            break;
+    }
+    if (start < 0 || letters.length - start < SWITCH_MIN_TAIL)
+        return false;
+    if (start < SWITCH_MIN_BEFORE)
+        return false;
+    let latin = 0;
+    for (let k = 0; k < start; k++)
+        if (letters[k].latin)
+            latin++;
+    if (latin / start < SWITCH_BEFORE_LATIN)
+        return false;
+    return !spanIsQuoted(text, letters[start].at) && !spanIsSetApart(text, letters[start].at);
+}
+// Whether text from `start` on sits inside quotation marks opened earlier on
+// its line.
+function spanIsQuoted(text, start) {
+    const QUOTES = '"“”«»';
+    let marks = 0;
+    for (let i = start - 1; i >= 0; i--) {
+        const c = text[i];
+        if (c === '\n')
+            break;
+        if (QUOTES.indexOf(c) >= 0)
+            marks++;
+    }
+    return marks % 2 === 1;
+}
+// Whether text from `start` on is set apart from the line before it: a quoted
+// block, italics left open on its line, or a colon just before it, on its own
+// line or at the end of the line above.
+function spanIsSetApart(text, start) {
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    const before = text.slice(lineStart, start);
+    if (/^[ \t]*>/.test(before))
+        return true;
+    if ((before.match(/\*/g) || []).length % 2 === 1)
+        return true;
+    if (/^[ \t]*_/.test(before) || /[\s(]_[^_\s]*$/.test(before))
+        return true;
+    return /:[ \t]*$/.test(text.slice(0, start).replace(/[^\p{L}\p{N}:]*$/u, ''));
+}
+// The prompt's own format written into the rewrite: an instruction or system
+// marker, an instruction heading, the start of the next turn, or a character
+// card's data. Turn markers are checked before they are taken off, and count
+// only after some of the rewrite, since a turn marker at the very start is
+// only the answer's own opening.
+const LEAK_MARKS = [
+    /\[\/?INST\]/,
+    /<<\/?SYS>>/,
+    /^[ \t]*#{2,4}[ \t]*(?:Instruction|Response|Input)[ \t]*:/im,
+];
+const LEAK_TURNS = /<\|im_start\|>[ \t]*(?:user|system)\b|<\|start_header_id\|>[ \t]*(?:user|system)[ \t]*<\|end_header_id\|>|<start_of_turn>[ \t]*user\b/i;
+// A W++ or Boostyle line from a character card, such as [Character("Mara")].
+// Two of them, since one could be a coded note a character writes.
+const LEAK_CARD = /\[[ \t]*[A-Za-z][A-Za-z ]{0,24}\([ \t]*"[^"\n]{1,120}"/g;
+function leakVerdict(text) {
+    const plain = withoutCode(text);
+    for (const mark of LEAK_MARKS)
+        if (mark.test(plain))
+            return true;
+    if ((plain.match(LEAK_CARD) || []).length >= 2)
+        return true;
+    const turn = LEAK_TURNS.exec(plain);
+    return !!turn && plain.slice(0, turn.index).trim().length > 0;
+}
+// A word or phrase repeated over and over until the text ends, a short pattern
+// repeated hundreds of times, or words on one line with no punctuation running
+// on to the end. A chant, a stammer or a long laugh is short, or the scene
+// carries on after it, so it is left alone.
+const LOOP_MIN_REPEATS = 10;
+const LOOP_MIN_WORDS = 60;
+const LOOP_MAX_UNIT = 12;
+const LOOP_CHAR_REPEATS = 60;
+const LOOP_LETTER_REPEATS = 150;
+const LOOP_RUN_ON = 150;
+function loopVerdict(visible) {
+    const plain = withoutCode(visible);
+    const chars = new RegExp('([^\\s]{2,4}?)\\1{' + (LOOP_CHAR_REPEATS - 1) + ',}', 'gu');
+    for (const hit of plain.matchAll(chars)) {
+        const unit = hit[1];
+        // Two different characters at least, and a letter or a digit: a divider
+        // such as "=-=-=-" has neither.
+        if (!/[\p{L}\p{N}]/u.test(unit) || new Set(Array.from(unit)).size < 2)
+            continue;
+        // A laugh written "hahaha" is letters only, and a character laughs on
+        // purpose.
+        if (/^\p{L}+$/u.test(unit) && hit[0].length / unit.length < LOOP_LETTER_REPEATS)
+            continue;
+        return true;
+    }
+    // Only words in the Latin, Greek or Cyrillic alphabets count toward a
+    // run-on, since Thai and some other languages are written without
+    // punctuation.
+    let run = 0;
+    for (const t of plain.split(/[ \t]+|(\n)/)) {
+        if (!t)
+            continue;
+        run = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+(?:['’-][\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+)*$/u.test(t) ? run + 1 : 0;
+    }
+    if (run >= LOOP_RUN_ON)
+        return true;
+    const words = plain
+        .toLowerCase()
+        .split(/\s+/)
+        .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+        .filter(Boolean);
+    if (words.length < LOOP_MIN_WORDS)
+        return false;
+    const same = (at, unit) => {
+        for (let k = 0; k < unit.length; k++)
+            if (words[at + k] !== unit[k])
+                return false;
+        return true;
+    };
+    for (let n = 1; n <= LOOP_MAX_UNIT; n++) {
+        for (let cut = 0; cut < n; cut++) {
+            const end = words.length - cut;
+            if (end - n < 0)
+                break;
+            const unit = words.slice(end - n, end);
+            // The words after the last whole repeat have to be the start of another.
+            // The very last word can stop partway, where the answer was cut off.
+            let tailOk = true;
+            for (let k = 0; k < cut; k++) {
+                const w = words[end + k];
+                const last = end + k === words.length - 1;
+                if (w !== unit[k] && !(last && unit[k].startsWith(w)))
+                    tailOk = false;
+            }
+            if (!tailOk)
+                continue;
+            let reps = 1;
+            let at = end - n;
+            while (at - n >= 0 && same(at - n, unit)) {
+                reps++;
+                at -= n;
+            }
+            if (reps >= LOOP_MIN_REPEATS && reps * n >= LOOP_MIN_WORDS)
+                return true;
+        }
+    }
+    return false;
+}
+// Why a rewrite is broken, or '' when it is not. raw is the answer before its
+// turn markers come off, text the rewrite as it would be saved.
+function brokenWhy(orig, raw, text) {
+    if (leakVerdict(raw) && !leakVerdict(orig))
+        return 'the rewrite ran into the prompt\'s own format, such as [/INST] or the start of the next turn';
+    if (loopVerdict(text) && !loopVerdict(orig))
+        return 'the rewrite got stuck repeating or rambling';
+    const garbled = (t) => garbledVerdict(t) || soupVerdict(t) || switchVerdict(t);
+    if (garbled(text) && !garbled(orig))
+        return 'the rewrite came back garbled';
+    return '';
 }
 // ---- what the model is told about the scene ----
 // A rewrite with no idea who is speaking or what just happened is the reason
@@ -5733,6 +6069,7 @@ function applyRules(s) {
     guardPreamble = s.guardPreamble !== false;
     guardSoften = s.guardSoften !== false;
     guardStars = s.guardStars === true;
+    guardBroken = s.guardBroken !== false;
     softenPct = Number(s.softenPct);
     softenPct = Number.isFinite(softenPct) ? softenPct : 60;
     setStrong(s.softenWords);

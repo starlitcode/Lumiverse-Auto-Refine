@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.44.1";
+const VERSION = "1.45.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -322,6 +322,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "guardPreamble",
       "guardSoften",
       "guardStars",
+      "guardBroken",
       "softenPct",
       "softenWords",
       "softenSwaps",
@@ -831,6 +832,9 @@ const CONFIG = {
   guardSoften: true,
   // Off by default: cutting a sentence that held an *action* also trips it.
   guardStars: false,
+  // A rewrite that came back garbled, stuck in a loop, or running into the
+  // prompt's own format. On, since none of these is ever worth saving.
+  guardBroken: true,
   softenPct: 60,
   softenWords: "",
   softenSwaps: "",
@@ -2349,6 +2353,12 @@ const GUARD_FIELDS: Field[] = [
     label: "Refuse a rewrite that loses * marks",
     type: "bool",
     hint: "Off by default. Refuses a rewrite with fewer * marks than the reply, so an action or a stressed word written between two * marks keeps them.",
+  },
+  {
+    key: "guardBroken",
+    label: "Refuse a broken rewrite",
+    type: "bool",
+    hint: "On by default. Refuses a rewrite that came back garbled, repeats itself to the end, or runs into the prompt's own format, such as [/INST].",
   },
   {
     key: "retryRefine",

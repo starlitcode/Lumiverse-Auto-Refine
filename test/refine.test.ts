@@ -8162,3 +8162,77 @@ describe("a refusal in British spelling", () => {
     expect(why).toMatch(/declined to rewrite/);
   });
 });
+
+// A rewrite from a model that broke down while it wrote. Each check counts
+// only what the rewrite has and the reply did not. The length limits are off
+// here, so only this check decides.
+describe("a broken rewrite", () => {
+  const scene =
+    "Wren pushed the ferry off the bank and let the current take it. The lamp on the far side was lit, " +
+    "and Oriel stood under it with a ledger, counting. The water was high from the rain and the rope " +
+    "creaked on its pulley. Halfway across, Wren cut the engine and listened. Nothing but the river and " +
+    "a dog somewhere upstream. She started the engine again and steered for the light. ";
+  const reply = (content = scene): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content },
+  ];
+  const loose = { maxGrowthPct: 0, minShrinkPct: 0 };
+  const jumble =
+    "然后system拒绝了道路data处理 ferryQ 心理model训练集准确率 lampFRS 桥已经断了 riverTL 没有人知道 rope路径 " +
+    "ledgerRMB 数据集验证结果为 bankLWN 他们的mapping继续 engineQ 水还在不断上涨 pulleyTRV 天也越来越黑 lightFRN 结果 ";
+  const cases: Array<[string, string, RegExp]> = [
+    ["a jumble of languages", scene + jumble.repeat(3), /came back garbled/],
+    ["broken characters", scene.replace(/ the /g, " thÃ© â€™ "), /came back garbled/],
+    ["a switch to Russian for the rest of it", scene + "Затем дорога ушла вниз к реке, и никто не знал, куда идти дальше, потому что мост был сломан.", /came back garbled/],
+    ["an instruction marker and card data", scene + "[/INST] [Character(\"Wren\")][Job(\"ferry pilot\")]", /prompt's own format/],
+    ["the start of the next turn", scene + "\n<|im_start|>user\nI wave at the lamp.", /prompt's own format/],
+    ["a phrase repeated to the end", scene + "the river and the river and ".repeat(16), /stuck repeating/],
+  ];
+  for (const [label, answer, why] of cases) {
+    test("refused: " + label, async () => {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(scene);
+      expect(h.skipped().some((w: string) => why.test(w))).toBe(true);
+    });
+  }
+
+  test("saved: the same broken text when the reply already had it", async () => {
+    const already = scene + "the river and the river and ".repeat(16);
+    const h = await armed(["<REFINED>" + already.replace("Wren pushed", "Wren shoved") + "</REFINED>"], loose, reply(already));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(already.replace("Wren pushed", "Wren shoved").trim());
+  });
+
+  test("saved: a letter in Russian after a colon, which is written on purpose", async () => {
+    const answer = scene + "The note read:\n\nЗатем дорога ушла вниз к реке, и никто не знал, куда идти дальше, потому что мост был сломан.";
+    const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(answer);
+  });
+
+  test("saved with the check off", async () => {
+    const answer = scene + "[/INST] [Character(\"Wren\")][Job(\"ferry pilot\")]";
+    const h = await armed(["<REFINED>" + answer + "</REFINED>"], { ...loose, guardBroken: false }, reply());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(answer);
+  });
+
+  test("asked again when Ask again is on", async () => {
+    const good = scene.replace("Wren pushed", "Wren shoved").trim();
+    const h = await armed(
+      ["<REFINED>" + scene + "the river and the river and ".repeat(16) + "</REFINED>", "<REFINED>" + good + "</REFINED>"],
+      { ...loose, retryRefine: 1 },
+      reply(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe(good);
+  });
+});

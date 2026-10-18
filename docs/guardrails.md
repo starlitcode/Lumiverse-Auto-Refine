@@ -47,6 +47,18 @@ A rewrite is dropped when it is:
 - **A refusal.** The model declined the job. Saving it would replace your scene with an apology.
 - **Empty**, or the same text back. Neither is a rewrite.
 
+## A broken rewrite
+
+A model can break down while it rewrites, the same ways a reply can break. **Refuse a broken rewrite** throws the rewrite away when it:
+
+- **came back garbled**: words from several languages run together, broken characters such as `cafÃ©` for `café`, or a switch to another alphabet that runs to the end
+- **got stuck repeating or rambling**: a word or phrase repeated over and over to the end, a short pattern such as `1.1.1.1.` repeated hundreds of times, or 150 words on one line with no punctuation
+- **ran into the prompt's own format**: a marker such as `[/INST]` or `<<SYS>>`, a heading such as `### Instruction:`, the start of the next turn, or a character card's data
+
+It is on by default. Each one only counts when the rewrite has it and your reply did not. So a reply that already had a passage in Russian, or a chant that repeats, can still be refined. A passage in another alphabet is also left alone when it is set apart as written on purpose: in quotation marks or asterisks, in a quoted block, or after a colon. Code is never checked.
+
+[Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) uses the same checks and the same numbers on a reply.
+
 ## The rewrite softened the reply
 
 A softened rewrite is not a refusal, is the right length, and keeps every protected token. It only looks wrong next to the original, so the other checks cannot see it.
@@ -85,7 +97,7 @@ What it cannot catch:
 
 **Ask again when a check fails** is 0 by default. A failed check is often a one-off, and the same request can come back fine.
 
-- Only failures that a second try could fix are retried.
+- Only failures that a second try could fix are retried: a refusal, a preamble, a softened rewrite, an empty answer, an answer cut off mid-write, and a broken rewrite.
 - A rewrite refused for its length is not retried, because the model meant it and would give the same answer.
 - A call that errored is not repeated. The exception is an error from the provider's filter, such as "content_filter". That is a refusal sent as an error, so it is asked again like a refusal.
 - A call you stopped is never repeated.
