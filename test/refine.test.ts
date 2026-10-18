@@ -4368,6 +4368,29 @@ describe("thinking the extension has to recognize", () => {
       });
     }
 
+    // Every other format, with the plan in front. Only the reply is sent.
+    const formats: Array<[string, string]> = [
+      ["pipes", "<|think|>\n- mood: wary\n<|/think|>\n\n"],
+      ["Harmony", "<|channel|>analysis<|message|>mood: wary<|end|><|start|>assistant<|channel|>final<|message|>"],
+      ["Gemma 4", "<|channel>thought\nmood: wary\n<channel|>"],
+      ["Cohere", "<|START_THINKING|>mood: wary<|END_THINKING|><|START_RESPONSE|>"],
+      ["Seed-OSS", "<seed:think>mood: wary</seed:think>\n"],
+      ["begin and end of thought", "<|begin_of_thought|>mood: wary<|end_of_thought|>\n"],
+      ["Kimi", "\u25c1think\u25b7mood: wary\u25c1/think\u25b7\n"],
+    ];
+    for (const [label, fmt] of formats) {
+      test(label + ": the plan in front is held back with the block", async () => {
+        const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead(plan + fmt));
+        await h.ended({ chatId: "c1", messageId: "m2" });
+        await wait(50);
+        expect(said(h)).not.toContain("Planning the turn");
+        expect(said(h)).not.toContain("mood: wary");
+        expect(said(h)).not.toContain("<|");
+        expect(h.body("m2").indexOf(plan + fmt)).toBe(0);
+        expect(h.body("m2")).toContain("She stepped through and the cold hit her.");
+      });
+    }
+
     test("the card is told which part was held back, so it can leave it out", async () => {
       const head = plan + block + "\n\n";
       const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, withHead(head));
@@ -4708,6 +4731,22 @@ describe("reasoning formats that are not a matched pair of tags", () => {
     expect(said(h)).not.toContain(WORKING);
     expect(h.body("m2")).toContain("@@plan@@\n" + WORKING + "\n@@done@@");
     expect(h.body("m2")).toContain("She stepped through and the cold hit her.");
+  });
+
+  test("and a plan written in front of them is held back with them", async () => {
+    const plan = "**Planning the turn**\n\nEnd on the cold.\n\n";
+    const raw = plan + "@@plan@@\n" + WORKING + "\n@@done@@\n" + REPLY;
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withRaw(raw),
+      { bound: [["@@plan@@\n", "\n@@done@@"]] },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("Planning the turn");
+    expect(said(h)).not.toContain(WORKING);
+    expect(h.body("m2").indexOf(plan + "@@plan@@")).toBe(0);
   });
 
   test("and a marker too short to be safe is left alone", async () => {

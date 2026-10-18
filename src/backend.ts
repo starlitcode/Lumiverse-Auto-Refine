@@ -960,13 +960,15 @@ function thinkPairs(): Array<{ needs: string; open: string; close: string }> {
   return THINK_PAIRS.concat(boundPairs);
 }
 
-function thinkShapes(): Array<{ needs: string; pattern: string }> {
+// `word` marks the formats a writer also uses inside a sentence, such as
+// <thought> for a character's thought.
+function thinkShapes(): Array<{ needs: string; pattern: string; word?: boolean }> {
   const alt = thinkNames().join('|');
   return [
     // <think> ... </think>, attributes allowed on the opener.
-    { needs: '</', pattern: '<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>' },
+    { needs: '</', pattern: '<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\1\\s*>', word: true },
     // [thinking] ... [/thinking]
-    { needs: '[/', pattern: '\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]' },
+    { needs: '[/', pattern: '\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\1\\s*\\]', word: true },
     // <|think|> ... <|/think|>, and the variants that put the pipe the other
     // way round. Builds disagree about which way it goes, so either closes
     // either.
@@ -1195,22 +1197,32 @@ function stripControlTokens(text: string): string {
 // Splits a message into the model's working, the prose to refine, and the
 // markers that close the turn. Only the middle is sent to be rewritten; the
 // other two are put back exactly as they were.
-// Where a thinking block ends when plain text comes before it, or -1. The
-// block has to stand on lines of its own and have more text after it. A
-// character's thought tagged inside a sentence is part of the reply, and a
-// block at the very start is an ordinary one. Example tags are already hidden
-// when this runs, so a pair quoted inside the block is not its end.
-function planThenBlockEnd(t: string, alt: string): number {
-  if (t.indexOf('</') < 0 && t.indexOf('[/') < 0) return -1;
-  const block = new RegExp(
-    '(^|\\n)[ \\t`>*_]*(?:<(' + alt + ')(?:\\s[^>]*)?>[\\s\\S]*?<\\/\\2\\s*>|\\[(' + alt + ')(?:\\s[^\\]]*)?\\][\\s\\S]*?\\[\\/\\3\\s*\\])[ \\t`*_]*(?=\\r?\\n|$)',
-    'i',
-  );
-  const hit = block.exec(t);
-  if (!hit) return -1;
-  if (!t.slice(0, hit.index).trim()) return -1;
-  const end = hit.index + hit[0].length;
-  return t.slice(end).trim() ? end : -1;
+// Where a thinking block ends when plain text comes before it, or -1. A
+// model can write a summary of its plan, then the block, then the reply. The
+// block has to start a line and have more text after it. A block in a word
+// format also has to end its line, so a character's thought tagged inside a
+// sentence is part of the reply. A block at the very start is an ordinary
+// one. Example tags are already hidden when this runs, so a pair quoted inside
+// the block is not its end.
+function planThenBlockEnd(t: string): number {
+  const low = t.toLowerCase();
+  let at = -1;
+  let end = -1;
+  for (const shape of thinkShapes()) {
+    if (low.indexOf(shape.needs.toLowerCase()) < 0) continue;
+    const block = new RegExp(
+      '(?:^|\\n)[ \\t`>*_]*(?:' + shape.pattern + ')' + (shape.word ? '[ \\t`*_]*(?=\\r?\\n|$)' : ''),
+      'i',
+    );
+    const hit = block.exec(t);
+    if (!hit || (at >= 0 && hit.index >= at)) continue;
+    if (!t.slice(0, hit.index).trim()) continue;
+    const stop = hit.index + hit[0].length;
+    if (!t.slice(stop).trim()) continue;
+    at = hit.index;
+    end = stop;
+  }
+  return end;
 }
 
 function splitThinking(text: string): { head: string; body: string; tail: string } {
@@ -1254,8 +1266,10 @@ function splitThinking(text: string): { head: string; body: string; tail: string
   // does not open with prose and then think, so the plan and the block are both
   // working, held back and put back as they were.
   if (!head && protectThinking) {
-    const end = planThenBlockEnd(src, thinkNames().join('|'));
-    if (end >= 0) head = src.slice(0, end) + (/^\s*/.exec(src.slice(end)) as RegExpExecArray)[0];
+    const end = planThenBlockEnd(src);
+    // The markers that introduce the reply after the block go with it, as
+    // they do for a block at the start.
+    if (end >= 0) head = src.slice(0, end) + (LEAD_RE.exec(src.slice(end)) as RegExpExecArray)[0];
   }
   // No working in front of the reply, but the markers that open the turn and
   // introduce the answer are still not prose and still must not be rewritten.

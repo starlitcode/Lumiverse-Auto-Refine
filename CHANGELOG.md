@@ -16,7 +16,7 @@ _2026-10-18_
 
 ### Fixed again
 
-- **A plan written in front of the thinking was refined with the reply.** 1.44.1 fixed a thinking format quoted inside the thinking, but missed a model that writes a summary of its plan in plain text, then its thinking block, then the reply. When a thinking block stands on lines of its own with text after it, everything up to the end of that block is now held back. A thought tagged inside a sentence stays part of the reply.
+- **A plan written in front of the thinking was refined with the reply.** 1.44.1 fixed a thinking format quoted inside the thinking, but missed a model that writes a summary of its plan in plain text, then its thinking block, then the reply. When a thinking block starts a line and has text after it, everything up to the end of that block is now held back. This works for every thinking format, and for your own markers from a connection. A thought tagged inside a sentence stays part of the reply.
 
 ---
 
