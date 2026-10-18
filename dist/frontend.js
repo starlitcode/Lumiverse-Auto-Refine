@@ -8466,7 +8466,11 @@ export function setup(ctx, overrides) {
                 outer.appendChild(note("The last " + UNDO_PER_CHAT + " refines in a chat are kept here. The oldest goes when a new one comes in."));
                 for (let i = 1; i < list.length; i++) {
                     const one = list[i];
-                    const first = one.after.replace(/\s+/g, " ").trim();
+                    // The words of the reply, past the thinking that was held back
+                    // and without tags, as the before and after shows them.
+                    const held = one.held || "";
+                    const reply = held.trim() && one.after.indexOf(held) === 0 ? one.after.slice(held.length) : one.after;
+                    const first = forReading(reply).replace(/\s+/g, " ").trim();
                     const words = first.length > 48 ? first.slice(0, 48).trim() + "..." : first;
                     outer.appendChild(fold(new Date(one.at).toTimeString().slice(0, 5) + ": " + words, (body) => {
                         body.appendChild(buildUndoRow(one));

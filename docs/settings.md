@@ -57,7 +57,7 @@ Below them:
 
 - **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
   - Every before and after shows the words as they read in the chat. Markup tags, such as a color tag, are left out of it. **Read it in full** shows the text exactly as written.
-  - The thinking at the start of a reply is left out of every before and after, since it was not sent to the model and did not change. A line above the marked text says so. **Read it in full** shows it.
+  - The thinking at the start of a reply is left out of every before and after, and out of the short preview of an older refine, since it was not sent to the model and did not change. A line above the marked text says so. **Read it in full** shows it.
   - The list comes back after a reload, or when you leave the app and come back. Your server holds it in memory.
   - An update or a restart of Lumiverse clears it, unless **Keep them through an update** is on, on the Limits tab.
   - The refined replies stay in your chat either way.

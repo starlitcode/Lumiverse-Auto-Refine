@@ -6645,6 +6645,38 @@ console.log("\nthinking held back from a refine is left off the card");
       all.length > 0 && all.every((d) => !/Wary mood/.test(d.text) && /stepped through/.test(d.text)),
       JSON.stringify(all).slice(0, 300));
   });
+
+  // An older refine is named in the list by its time and its first words.
+  // Those words are the reply's, not the thinking's, and carry no tags.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    await page.evaluate((held) => {
+      const now = Date.now();
+      window.__fromBackend({
+        type: "undoable_list",
+        list: [
+          { chatId: "c1", messageId: "m2", at: now - 60000, held,
+            before: held + "She stepped through and, suddenly, the cold just hit her.",
+            after: held + "She stepped through and the cold hit her." },
+          { chatId: "c1", messageId: "m3", at: now - 30000,
+            before: "The bell rang twice, and then, after a while, it rang again.",
+            after: "The bell rang twice, then again." },
+        ],
+      });
+    }, held);
+    await goTab(page, "Log");
+    await settle(page);
+    const names = await page.evaluate(() => {
+      const card = document.querySelector("[data-arf-last]");
+      return card ? card.textContent : "";
+    });
+    ok("an older refine is named by the reply's first words", /: She stepped through/.test(names), names.slice(0, 300));
+    ok("and not by its thinking or a tag", !/Wary mood|<reasoning>|# One/.test(names), names.slice(0, 300));
+  });
 }
 
 console.log("\nthe card that comes up on the page");

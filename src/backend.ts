@@ -3159,8 +3159,8 @@ function garbledVerdict(visible: string): boolean {
 const SOUP_MIN_HITS = 8;
 const SOUP_MIN_SHARE = 0.02;
 const SOUP_PAIR =
-  /[Â-ÅÐÑâ-é][\u0080-¿ŒœŠšŸŽžƒˆ˜–—‘-„†-•…‰‹›€™]/g;
-const SOUP_CHAR = /[�\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+  /[\u00C2-\u00C5\u00D0\u00D1\u00E2-\u00E9][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]/g;
+const SOUP_CHAR = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 
 function soupVerdict(visible: string): boolean {
   const text = withoutCode(visible);
@@ -3210,7 +3210,7 @@ function switchVerdict(visible: string): boolean {
 // Whether text from `start` on sits inside quotation marks opened earlier on
 // its line.
 function spanIsQuoted(text: string, start: number): boolean {
-  const QUOTES = '"“”«»';
+  const QUOTES = '"\u201c\u201d\u00ab\u00bb';
   let marks = 0;
   for (let i = start - 1; i >= 0; i--) {
     const c = text[i];

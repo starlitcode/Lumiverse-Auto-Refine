@@ -12,7 +12,7 @@ _2026-10-18_
 
 ### Fixed
 
-- **The before and after showed the thinking.** The thinking at the start of a reply is held back from the refine and put back as it was. The card still showed it, with its tags taken out, so it read as part of the reply. Every before and after now leaves it out, in both views, and a line above the marked text says so. **Read it in full** still shows it.
+- **The before and after showed the thinking.** The thinking at the start of a reply is held back from the refine and put back as it was. The card still showed it, with its tags taken out, so it read as part of the reply. Every before and after now leaves it out, in both views, and a line above the marked text says so. The short preview of an older refine in the put-back list starts at the reply too, with no tags. **Read it in full** still shows it.
 
 ### Fixed again
 
