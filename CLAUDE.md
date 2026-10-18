@@ -204,6 +204,7 @@ shown in Lumiverse.
 - No clichés, no metaphors, no grand phrasing.
 - Never the word "ship", in any form.
 - No contractions in docs, the changelog, the README or text shown in the panel.
+  The one exception is `docs/safety.md` in Auto Retry, which uses them.
 - Comments describe the code as it is and why. They are not change notes.
 - A hint under a field is one line, two at most. Detail goes in `docs/`.
 - Write plainly and literally, for readers with a learning disability,
@@ -370,8 +371,9 @@ The owner has a learning disability. Contradictions are confusing.
 - The extensions are made for adults, 18 and older. Lumiverse itself is not
   an adult app: anyone can use it, and it has no adult content of its own.
   Never write that Lumiverse is built for adults.
-- `docs/safety.md` is in the owner's own voice: human, honest and a little
-  blunt, in short sentences. It still follows the writing rules above.
+- `docs/safety.md` in Auto Retry is in the owner's own voice: human, honest
+  and a little blunt, in short sentences, with contractions. Every other
+  writing rule above still applies to it.
 - Refusal and false-positive handling stays broad: the owner wants every false
   refusal caught for users. Wording in prompts, comments and docs must never read
   as condoning sexual content involving minors. The README states this plainly.
