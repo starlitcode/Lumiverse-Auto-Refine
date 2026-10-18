@@ -46,7 +46,7 @@ A prompt comes with it, so switching it on is all the setup you need. Everything
 
 ## Made for adults
 
-Auto Refine is made for adults, 18 and older. Lumiverse itself can be used by anyone, and it has no adult content of its own. This extension is not meant for anyone under 18.
+Auto Refine is made for adults, 18 and older. Lumiverse itself can be used by anyone, and it has no adult content of its own. This extension is not meant for anyone under 18. If someone under 18 asks me for help and their prompts ask for sexual content, I will not help with it.
 
 ## Not for sexual content involving minors
 
