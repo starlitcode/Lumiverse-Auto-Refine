@@ -10,9 +10,12 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-10-19_
 
+### Fixed again
+
+- **A selection in a refined reply was refused.** 1.41.2 fixed "what you selected is not in that reply any more" for selections across markup, such as tags and `&amp;`. It missed quotes. Refine models often write curly quotes and apostrophes, such as `’`. Lumiverse shows them as straight ones, such as `'`. Your selection held the straight ones and the reply held the curly ones, so they did not match. This happened most after a reply had been refined once. They now match either way, and the quotes in the reply are kept as they were.
+
 ### Fixed
 
-- **A selection in a refined reply was refused.** Refining or taking out part of a reply said "what you selected is not in that reply any more". This happened most after the reply had been refined once. Refine models often write curly quotes and apostrophes, such as `’`. Lumiverse shows them as straight ones, such as `'`. Your selection held the straight ones and the reply held the curly ones, so they did not match. They now match either way, and the quotes in the reply are kept as they were.
 - **An empty code block showed as the model's notes.** Some models put their whole answer in a code block, such as one marked `xml`. Once the tags were taken out, the block was empty, and the Log tab showed it as the model's notes. An empty code block is no longer kept as a note. Words the model writes next to it are still kept.
 
 ### Changed
