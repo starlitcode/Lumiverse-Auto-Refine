@@ -191,6 +191,7 @@ Then give the rewrite between <REFINED> and </REFINED>.
 ```
 
 - Everything outside `<REFINED>` and `</REFINED>`, including `<REFINE_NOTES>`, is kept on the **Log** tab under **What the model worked out**. This is true for every prompt, including one that asks for no working. So when a model hands a passage back unchanged and says why, its reason is there.
+- A model can put its whole answer in a code block, such as one marked `xml`. Once the tags are taken out, that block is empty. An empty code block is not kept as a note.
 - The tag names are yours. The extension only looks for `<REFINED>`. You can ask for a paragraph instead of tags.
 - What the rewrite changed in your writing is shown on the card that appears when it is saved, marked word by word.
 

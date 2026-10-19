@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.45.2';
+const VERSION = '1.45.3';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -496,10 +496,19 @@ const OUT_OPEN = new RegExp('<' + OUT_TAG + '[^>]*>', 'i');
 //
 // Nothing downstream reads this but the panel.
 const NOTES_MAX = 20000;
+// A model can put its whole answer in a code block, such as ```xml. With the
+// tags taken out, the block is left empty, and an empty block is not a note.
+// Empty blocks go, and so do fence lines with nothing else around them.
+const EMPTY_FENCE = /(^|\n)[ \t]*(`{3,}|~{3,})[\w-]*[ \t]*\n\s*\2[ \t]*(?=\n|$)/g;
+const FENCE_LINE = /^[ \t]*(?:`{3,}|~{3,})[\w-]*[ \t]*$/gm;
+function aroundTags(text) {
+    const left = text.replace(EMPTY_FENCE, '$1').trim();
+    return left.replace(FENCE_LINE, '').trim() ? left : '';
+}
 function unwrapOutput(answer) {
     const hit = OUT_RE.exec(answer);
     if (hit && typeof hit[1] === 'string') {
-        const around = (answer.slice(0, hit.index) + '\n' + answer.slice(hit.index + hit[0].length)).trim();
+        const around = aroundTags(answer.slice(0, hit.index) + '\n' + answer.slice(hit.index + hit[0].length));
         return {
             text: hit[1].trim(),
             tagged: true,
@@ -1598,10 +1607,23 @@ function entityChar(body) {
     }
     return ENTITIES[body] || '';
 }
+// Lumiverse draws every curly quote and apostrophe as a straight one, so a
+// reply stored with ’ shows ' on screen, and a selection holds what the screen
+// shows. Both sides are compared with the same straight quotes. The sets match
+// the ones Lumiverse straightens: double quotes and guillemets to ", single
+// quotes to '.
+function straightQuote(ch) {
+    if (/[“”„‟«»]/.test(ch))
+        return '"';
+    if (/[‘’‚‛]/.test(ch))
+        return "'";
+    return ch;
+}
 // Whitespace does not survive the trip identically: block elements join with one
 // newline in a DOM range and with a blank line in the source. Both sides are
 // compared with runs of whitespace flattened to one space, and the flattened
-// form keeps its own map back so a match can still be located exactly.
+// form keeps its own map back so a match can still be located exactly. Quotes
+// are straightened here too, one character for one, so the map stays exact.
 function loosen(s) {
     const out = [];
     const at = [];
@@ -1616,7 +1638,7 @@ function loosen(s) {
             at.push(k);
         }
         gap = false;
-        out.push(s[k]);
+        out.push(straightQuote(s[k]));
         at.push(k);
     }
     return { text: out.join(''), at: at };

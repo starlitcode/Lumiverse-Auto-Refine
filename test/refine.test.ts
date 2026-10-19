@@ -3833,6 +3833,31 @@ describe("the answer it asks for", () => {
     expect(notes.length).toBeGreaterThan(0);
     expect(notes[0].notes).toContain("Left the dialogue alone");
   });
+
+  // A model can put its whole answer in a code block. With the tags taken
+  // out, the block is empty, and an empty block is not a note.
+  test("an empty code block left around the tags is not carried back as a note", async () => {
+    for (const fence of ["```xml", "```", "~~~text"]) {
+      const close = fence.slice(0, 3);
+      const h = await armed([fence + "\n<refined>She stepped through and the cold hit her.</refined>\n" + close]);
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+      const notes = h.sent.filter((m: any) => m && typeof m.notes === "string" && m.notes);
+      expect([fence, notes.length]).toEqual([fence, 0]);
+    }
+  });
+
+  test("but words said next to it are still carried back", async () => {
+    const h = await armed([
+      "Cut one filler word.\n```xml\n<refined>She stepped through and the cold hit her.</refined>\n```",
+    ]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const notes = h.sent.filter((m: any) => m && typeof m.notes === "string" && m.notes);
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0].notes).toBe("Cut one filler word.");
+  });
 });
 
 describe("when something goes wrong inside", () => {
@@ -6470,6 +6495,35 @@ describe("refining what you selected", () => {
     expect(out.split("<font").length).toBe(out.split("</font>").length);
   });
 
+  // Lumiverse draws every curly quote and apostrophe as a straight one. A
+  // refine model often writes curly ones, so after a refine the screen shows '
+  // where the reply holds ’, and the selection holds what the screen shows.
+  test("a selection with straight quotes is found in a reply that holds curly ones", async () => {
+    const body = "Tamsin’s hands went still. “Not yet,” she said, and looked at the door.";
+    const h = await armed(["<REFINED>Tamsin’s hands stopped.</REFINED>"], {}, reply(body));
+    await ask(h, "Tamsin's hands went still.");
+    await wait(60);
+    const said = (h.sent.filter((m: any) => m.type === "refine_result").pop() || {}).why;
+    expect(said).toBe("");
+    expect(h.body("m2")).toBe("Tamsin’s hands stopped. “Not yet,” she said, and looked at the door.");
+  });
+
+  test("and speech in curly quotes is found from straight ones, with the quotes kept", async () => {
+    const body = "Tamsin’s hands went still. “Not yet,” she said, and looked at the door.";
+    const h = await armed(["<REFINED>“Wait,” she said</REFINED>"], {}, reply(body));
+    await ask(h, '"Not yet," she said', "Tamsin's hands went still. ");
+    await wait(60);
+    expect(h.body("m2")).toBe("Tamsin’s hands went still. “Wait,” she said, and looked at the door.");
+  });
+
+  test("a phrase used twice is still told apart when the quotes differ", async () => {
+    const body = "She’s late. He waited. She’s late, he said again.";
+    const h = await armed(["<REFINED>She is late</REFINED>"], {}, reply(body));
+    await ask(h, "She's late", "She's late. He waited. ");
+    await wait(60);
+    expect(h.body("m2")).toBe("She’s late. He waited. She is late, he said again.");
+  });
+
   test("a selection ending on &amp; takes the whole of it", async () => {
     const h = await armed(["<REFINED>Salt and [[AR1]]</REFINED>"], {}, reply("Salt &amp; pepper went on the eggs."));
     await ask(h, "Salt &");
@@ -7858,6 +7912,13 @@ describe("taking out what you selected", () => {
   test("the selection goes and the rest of the message stays", async () => {
     const h = await armed([], {}, reply("She set the crate down. The lock had been changed. Nobody was in."));
     await cut(h, "The lock had been changed.");
+    await wait(50);
+    expect(h.body("m2")).toBe("She set the crate down. Nobody was in.");
+  });
+
+  test("a selection with straight quotes comes out of a reply that holds curly ones", async () => {
+    const h = await armed([], {}, reply("She set the crate down. The lock’d been changed. Nobody was in."));
+    await cut(h, "The lock'd been changed.");
     await wait(50);
     expect(h.body("m2")).toBe("She set the crate down. Nobody was in.");
   });

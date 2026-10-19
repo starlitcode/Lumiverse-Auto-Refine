@@ -304,6 +304,8 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 
 It rewrites only what you selected. It works in your own messages too, with their prompt.
 
+Lumiverse shows curly quotes and apostrophes as straight ones. Your selection is matched either way, so a reply that a refine filled with curly quotes can still be selected and refined again.
+
 **Take out what I selected** appears in the same places. It deletes the selection without calling a model, so it costs nothing.
 
 - It tidies the gap. It leaves one space where a phrase was cut, and one blank line where a paragraph was.
