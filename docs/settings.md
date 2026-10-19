@@ -255,6 +255,8 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - When you select part of a message, a small bar comes up by the selection, with **Refine it**, **Take it out** and **Copy**.
 - The bar also comes up on a laptop. A right-click is left to Lumiverse.
 - While you drag the selection, the bar moves with it. Its buttons can be pressed once the selection stops.
+- You can select forwards or backwards. While you drag, the bar sits by the end you are moving: below the last line when you drag forwards, above the first line when you drag backwards. On a phone, once you stop, it sits below the selection, clear of the phone's own copy menu.
+- Only the reply's own text counts. A drag that runs a little past it into blank space is trimmed to the text. Selecting the character's name, or the line with the message's number and date, never brings up the bar.
 - The bar follows the same rules as the buttons on a message. On the greeting, it only works with **Refine the greeting** on.
 
 Both chat buttons copy the look of the Lumiverse button next to them, so your theme and your own CSS apply to them. While a refine runs, each turns into **Stop this refine**.

@@ -12,6 +12,9 @@ _2026-10-19_
 
 ### Fixed
 
+- **Selecting a name or a date could offer an earlier selection.** With **Hold to select text in messages** on, selecting something outside a reply, such as the character's name or the line with the message's number and date, left the last selection in place. The bar could come up for it, and **Refine it** refined text that was no longer selected. A selection outside a reply now clears the last one, and never brings up the bar.
+- **A selection that ran past the reply was not picked up.** A drag that went a little past the reply's text, into blank space above or below it, brought up no bar. It is now trimmed to the reply's text, in either direction.
+- **The bar sat away from a selection made backwards.** It always sat below the last line, far from the end being dragged when you selected from the end back to the start. It now sits by the end you are moving. On a phone, once you stop, it sits below the selection, clear of the phone's own copy menu.
 - **The chats you switched Auto Refine off in did not follow your account.** The list was kept in one browser only. On another browser or device, Auto Refine was on again in those chats, and the automatic pass could refine replies there. The list is now saved to your account, so every browser has the same chats switched off. The first browser to open after updating sends its list up, so nothing is lost.
 - **A character card written on purpose was refused as a broken rewrite.** **Refuse a broken rewrite** threw away a rewrite that wrote out a character card, or a prompt format such as `[INST]`, on purpose. Card data or a marker at the very start of the rewrite, or after a colon such as "Here is the card:", is now left alone, along with the rest of that example. Card data or a marker that runs on after the story still counts.
 

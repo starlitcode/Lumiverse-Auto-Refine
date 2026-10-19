@@ -12533,6 +12533,105 @@ for (const [label, viewport, touch, zoom] of [
   });
 }
 
+// A selection is the reply's text: the element Lumiverse marks
+// MessageContent. A drag that slips past the text into blank space, in either
+// direction, is trimmed to the text and still brings up the bar. A drag that
+// takes in the character's name or the line with the number and date never
+// does, and a selection that cannot be used clears the one before it, so the
+// bar and the panel never offer text that is no longer selected. The bar sits
+// by the end being moved, forwards or backwards.
+console.log("\nthe bar reads the reply's text, both ways, and leaves the name alone");
+{
+  const HTML = `
+  <div class="_bubble_86318_171">
+    <div id="nm">Wren</div>
+    <div id="info">#0 · Oct 19, 6:59 AM</div>
+    <span data-spindle-mount="message_header" data-spindle-scope="message:msg-one:minimal:header" style="display:contents"></span>
+    <div id="gapAbove" style="height:24px"></div>
+    <div data-component="MessageContent"><div class="_prose_1rr8k_181">
+      <p id="d1">Wren set the crate down on the step and wiped both hands on her jeans.</p>
+      <p id="d2">The lock had been changed again, and the new key was not on her ring.</p>
+      <p id="d3">She tried the handle twice anyway, then sat down on the crate to wait.</p>
+    </div></div>
+    <div id="gapBelow" style="height:24px"></div>
+    <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
+  </div>`;
+  // [label, anchor, anchor offset, focus, focus offset, whether the bar
+  // comes up, what Refine it sends]
+  const CASES = [
+    ["forwards inside the reply", "d1", 5, "d2", 20, true, "set the crate down on the step and wiped both hands on her jeans.\n\nThe lock had been ch"],
+    ["backwards inside the reply", "d3", 30, "d2", 4, true, "lock had been changed again, and the new key was not on her ring.\n\nShe tried the handle twice any"],
+    ["forwards, past the text into blank space", "d3", 4, "gapBelow", 0, true, "tried the handle twice anyway, then sat down on the crate to wait."],
+    ["backwards, past the text into blank space", "d1", 9, "gapAbove", 0, true, "Wren set "],
+    ["the character's name", "nm", 0, "nm", 4, false, null],
+    ["the number and date", "info", 0, "info", 9, false, null],
+    ["the name and the first words of the reply", "nm", 0, "d1", 9, false, null],
+  ];
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 860 }, false]]) {
+    for (const [what, a, ao, f, fo, wantOn, wantText] of CASES) {
+      await inTab(browser, { viewport, touch, saved: { enabled: true, freeSelect: true, messageButton: true } }, async (page) => {
+        const out = await page.evaluate(async ({ html, a, ao, f, fo }) => {
+          const wrap = document.createElement("div");
+          wrap.innerHTML = html;
+          wrap.style.padding = "100vh 0";
+          document.body.appendChild(wrap);
+          for (const h of window.__handlers.CHAT_CHANGED || []) h({ chatId: "c1" });
+          for (const h of window.__handlers.CHARACTER_MESSAGE_RENDERED || []) h({ chatId: "c1", messageId: "msg-one" });
+          await new Promise((r) => setTimeout(r, 120));
+          document.getElementById("d2").scrollIntoView({ block: "center" });
+          const node = (id) => { const e = document.getElementById(id); return e.firstChild && e.firstChild.nodeType === 3 ? e.firstChild : e; };
+          // A good selection first, so a stale one would show.
+          getSelection().removeAllRanges();
+          getSelection().setBaseAndExtent(node("d1"), 0, node("d1"), 4);
+          document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+          await new Promise((r) => setTimeout(r, 120));
+          getSelection().removeAllRanges();
+          getSelection().setBaseAndExtent(node(a), ao, node(f), fo);
+          // Still moving: the bar follows the end being dragged.
+          await new Promise((r) => setTimeout(r, 120));
+          const b0 = document.querySelector("[data-arf-selbar]");
+          const moving = b0 && b0.hasAttribute("data-arf-on") ? b0.getBoundingClientRect() : null;
+          document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+          await new Promise((r) => setTimeout(r, 500));
+          const b = document.querySelector("[data-arf-selbar]");
+          const on = !!b && b.hasAttribute("data-arf-on");
+          const rects = Array.from(document.querySelectorAll("#d1,#d2,#d3")).map((p) => p.getBoundingClientRect());
+          const sr = getSelection().rangeCount ? Array.from(getSelection().getRangeAt(0).getClientRects()).filter((r) => r.height > 0) : [];
+          const br = on ? b.getBoundingClientRect() : null;
+          window.__sent.length = 0;
+          if (on) b.querySelector('[data-arf-selbar-act="refine"]').click();
+          else {
+            const part = document.querySelector("#drawer [data-arf-part]");
+            if (part) part.click();
+          }
+          await new Promise((r) => setTimeout(r, 80));
+          const fired = window.__sent.find((m) => m && m.type === "refine_selection");
+          return {
+            on, picked: fired ? fired.picked : null,
+            bar: br && { top: br.top, bottom: br.bottom },
+            moving: moving && { top: moving.top, bottom: moving.bottom },
+            selTop: sr.length ? sr[0].top : null, selBottom: sr.length ? sr[sr.length - 1].bottom : null,
+            textTop: rects[0].top,
+          };
+        }, { html: HTML, a, ao, f, fo });
+        const name = label + ", " + what;
+        ok(name + (wantOn ? ": the bar comes up" : ": no bar comes up"), out.on === wantOn, JSON.stringify(out));
+        if (wantOn) ok(name + ": and it sends the reply's text it covers", out.picked === wantText, JSON.stringify(out.picked));
+        else ok(name + ": and nothing earlier is refined in its place", out.picked === null, JSON.stringify(out.picked));
+        if (what === "backwards inside the reply") {
+          ok(name + ": while it is dragged, the bar is above it, by the end being moved",
+            !!out.moving && out.selTop != null && out.moving.bottom <= out.selTop + 1, JSON.stringify(out));
+          if (touch) ok(name + ": once it stops, the bar settles below it, clear of the phone's own menu",
+            !!out.bar && out.selBottom != null && out.bar.top >= out.selBottom - 1, JSON.stringify(out));
+          else ok(name + ": and it stays by that end", !!out.bar && out.bar.bottom <= out.selTop + 1, JSON.stringify(out));
+        }
+        if (what === "forwards inside the reply")
+          ok(name + ": the bar is below it, by the end being moved", !!out.bar && out.selBottom != null && out.bar.top >= out.selBottom - 1, JSON.stringify(out));
+      });
+    }
+  }
+}
+
 console.log("\nthe selection listeners come off with the panel");
 {
   // Watching for a selection means listening on the document, not on anything

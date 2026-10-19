@@ -16321,6 +16321,91 @@ export function setup(ctx, overrides) {
             return null;
         }
     }
+    // The part of the selection that is in one reply, or null. The reply's text
+    // is the element Lumiverse marks MessageContent. The name, the line with the
+    // number and date, the thinking and the buttons are all outside it.
+    //
+    // A drag often runs a little past the text, into blank space above or
+    // below it, in either direction. That blank part is trimmed off. A drag
+    // that takes in any words outside the reply, or reaches into two replies,
+    // gives null, so selecting a name or a date never brings up the bar.
+    function pickedRange(sel) {
+        try {
+            if (!sel || !sel.rangeCount || sel.isCollapsed)
+                return null;
+            const whole = sel.getRangeAt(0);
+            const atStart = messageUnder(whole.startContainer);
+            const atEnd = messageUnder(whole.endContainer);
+            let found = atStart && atEnd && atStart.id === atEnd.id ? atStart : null;
+            let range = whole;
+            let cutStart = false;
+            let cutEnd = false;
+            if (!found) {
+                const hit = [];
+                for (const body of Array.from(document.querySelectorAll('[data-component="MessageContent"]'))) {
+                    if (!whole.intersectsNode(body))
+                        continue;
+                    const m = messageUnder(body);
+                    if (m && !hit.some((h) => h.id === m.id))
+                        hit.push(m);
+                }
+                if (hit.length !== 1)
+                    return null;
+                found = hit[0];
+                range = whole.cloneRange();
+                cutStart = !found.body.contains(whole.startContainer);
+                cutEnd = !found.body.contains(whole.endContainer);
+                if (cutStart)
+                    range.setStart(found.body, 0);
+                if (cutEnd)
+                    range.setEnd(found.body, found.body.childNodes.length);
+                // Only blank space may be trimmed off. A drag that takes in words
+                // outside the reply, such as the character's name or the line with the
+                // message's number and date, is somebody selecting those, not the reply.
+                const outside = document.createRange();
+                outside.setStart(whole.startContainer, whole.startOffset);
+                outside.setEnd(range.startContainer, range.startOffset);
+                if (String(outside.toString()).trim())
+                    return null;
+                outside.setStart(range.endContainer, range.endOffset);
+                outside.setEnd(whole.endContainer, whole.endOffset);
+                if (String(outside.toString()).trim())
+                    return null;
+            }
+            // The selection's own text, with the spacing the page shows, which is
+            // what the backend matches against the reply. A range's text has the
+            // markup's spacing instead. What was trimmed off is blank, so only the
+            // blank at that side is taken off.
+            let text = String(sel.toString());
+            if (cutStart)
+                text = text.replace(/^\s+/, "");
+            if (cutEnd)
+                text = text.replace(/\s+$/, "");
+            if (!text.trim())
+                return null;
+            return { found: found, range: range, text: text };
+        }
+        catch (_) {
+            return null;
+        }
+    }
+    // Whether the selection was made from its end back to its start, so the end
+    // being moved is the first one on the page.
+    function pickedBackward(sel) {
+        try {
+            if (!sel || !sel.anchorNode || !sel.focusNode)
+                return false;
+            if (sel.anchorNode === sel.focusNode)
+                return sel.focusOffset < sel.anchorOffset;
+            const r = document.createRange();
+            r.setStart(sel.anchorNode, sel.anchorOffset);
+            r.setEnd(sel.focusNode, sel.focusOffset);
+            return r.collapsed;
+        }
+        catch (_) {
+            return false;
+        }
+    }
     // Read after the gesture rather than during it. A drag across a paragraph
     // fires many times on the way and only the end of it is a selection anybody
     // meant to make.
@@ -16352,10 +16437,13 @@ export function setup(ctx, overrides) {
             if (settled && pickOwed)
                 pickRedraw(true);
             const sel = typeof getSelection === "function" ? getSelection() : null;
-            const text = sel ? String(sel.toString()) : "";
-            // A collapsed selection is a click, which is how somebody puts a selection
-            // away. Cleared here so the entry for it goes with it.
-            if (!sel || !text.trim() || sel.isCollapsed) {
+            // The part in one reply. Nothing, which is a click putting a selection
+            // away, a selection outside every reply, or one across two replies,
+            // clears the last one, so a way in is never offered for text that is no
+            // longer selected. Outside a reply includes the model's own working: the
+            // host draws that in a box of its own, outside the body.
+            const got = pickedRange(sel);
+            if (!got) {
                 if (pickedRun) {
                     pickedRun = null;
                     pickRedraw(settled);
@@ -16363,17 +16451,8 @@ export function setup(ctx, overrides) {
                 syncSelBarSoon(settled);
                 return;
             }
-            const found = messageUnder(sel.anchorNode);
-            // Outside a message body, which includes the model's own working: the host
-            // draws that in a box of its own, outside the body, so it is not something
-            // this can be pointed at.
-            if (!found)
-                return;
-            // Both ends in the same message, or what was picked is not one run of that
-            // reply and there is nothing sensible to send.
-            const ended = messageUnder(sel.focusNode);
-            if (!ended || ended.id !== found.id)
-                return;
+            const found = got.found;
+            const text = got.text;
             let ahead = "";
             try {
                 // Measured to where the selection starts on the page. The anchor is
@@ -16381,13 +16460,9 @@ export function setup(ctx, overrides) {
                 // end back to its start, as dragging the start handle on a phone
                 // makes. Measured to that, the text in front held the selection
                 // itself, and the backend went looking for a second copy of it.
-                const picked = sel.rangeCount ? sel.getRangeAt(0) : null;
                 const run = document.createRange();
                 run.selectNodeContents(found.body);
-                if (picked)
-                    run.setEnd(picked.startContainer, picked.startOffset);
-                else
-                    run.setEnd(sel.anchorNode, sel.anchorOffset);
+                run.setEnd(got.range.startContainer, got.range.startOffset);
                 ahead = String(run.toString());
             }
             catch (_) {
@@ -16458,9 +16533,14 @@ export function setup(ctx, overrides) {
         }
     }
     catch (_) { }
-    // The bar by a selection. Below the selection, or above it when there is no
-    // room below, and kept inside the screen. Positions are read in screen
-    // pixels and written in CSS pixels, as Lumiverse's UI Scale zooms the page.
+    // The bar by a selection, kept inside the screen. Positions are read in
+    // screen pixels and written in CSS pixels, as Lumiverse's UI Scale zooms the
+    // page.
+    //
+    // It sits by the end being moved: below the last line for a selection made
+    // forwards, above the first line for one made backwards, and across from
+    // that end. On a touch screen, once the drag stops, it settles below the
+    // selection, clear of the phone's own copy menu, which comes up above it.
     let selBar = null;
     let selBarFrame = 0;
     let selBarSnap = null;
@@ -16541,9 +16621,10 @@ export function setup(ctx, overrides) {
             if (!cfg.freeSelect || !pickedHere())
                 return hideSelBar();
             const sel = getSelection();
-            if (!sel || sel.isCollapsed || !sel.rangeCount)
+            const got = pickedRange(sel);
+            if (!got)
                 return hideSelBar();
-            const rects = Array.from(sel.getRangeAt(0).getClientRects()).filter((r) => r.width > 0 || r.height > 0);
+            const rects = Array.from(got.range.getClientRects()).filter((r) => r.width > 0 || r.height > 0);
             if (!rects.length)
                 return hideSelBar();
             if (!selBar || !selBar.isConnected)
@@ -16570,12 +16651,21 @@ export function setup(ctx, overrides) {
             // Scrolled out of sight, the selection has nothing on screen to sit by.
             if (last.bottom < 0 || first.top > screenH)
                 return hideSelBar();
-            let top = last.bottom + gap;
-            if (top + h > screenH - 8)
-                top = first.top - gap - h;
+            const backward = pickedBackward(sel);
+            const above = backward && (selMoving || !coarse);
+            const below = () => last.bottom + gap;
+            const over = () => first.top - 10 - h;
+            let top = above ? over() : below();
+            if (above && top < 8)
+                top = below();
+            if (!above && top + h > screenH - 8)
+                top = over();
             if (top < 8)
-                top = Math.min(screenH - h - 8, last.bottom + gap);
-            let left = last.left + last.width / 2 - w / 2;
+                top = Math.min(screenH - h - 8, below());
+            // Across from the end being moved: the end of the last line, or the
+            // start of the first.
+            const x = backward ? first.left : last.right;
+            let left = x - w / 2;
             left = Math.max(8, Math.min(left, screenW - w - 8));
             // Placed with a transform, so it glides from one place to the next.
             // The first time it comes up it is put in place first and then faded
