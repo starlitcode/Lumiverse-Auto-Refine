@@ -4248,6 +4248,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       loadFromAccount();
       loadPresetsFromAccount();
       loadSetupsFromAccount();
+      loadStateFromAccount();
     } catch (_) {}
   }
   try {
@@ -5551,6 +5552,51 @@ export function setup(ctx: Ctx, overrides?: any) {
         localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(keep));
     } catch (_) {}
     send({ type: "set_chats_off", chats: chatsOff.slice() });
+    saveStateToAccount();
+  }
+
+  // ---- the chats switched off, on the account ----
+  // Held on the account as well as in this browser, so another browser or a
+  // phone opens with the same chats switched off. Refining a chat somebody
+  // switched off costs them a call they did not want.
+  //
+  // This browser's copy is used until the account answers, and the account's
+  // copy then replaces it. Nothing is written to the account before that
+  // answer, so a new browser cannot put its empty copy over the account's.
+  // An account with nothing saved yet takes this browser's copy, so updating
+  // loses nothing.
+  let stateLoaded = false;
+  let stateAsk = "";
+  function saveStateToAccount() {
+    if (!stateLoaded) return;
+    send({ type: "save_state", state: { chatsOff: chatsOff.filter((c) => !cardless.has(c)) } });
+  }
+  function loadStateFromAccount() {
+    stateAsk = "arf-state-" + newId();
+    send({ type: "load_state", requestId: stateAsk });
+  }
+  function tookAccountState(msg: any): void {
+    if (!msg || msg.requestId !== stateAsk) return;
+    stateAsk = "";
+    const st = msg.state && typeof msg.state === "object" ? msg.state : null;
+    if (st && Array.isArray(st.chatsOff)) {
+      // A temporary chat switched off in this browser stays off while it is
+      // open. It was never written down, so the account cannot know it.
+      const open = chatsOff.filter((c) => cardless.has(c));
+      const fromAccount = st.chatsOff.map((x: any) => String(x)).slice(-500);
+      chatsOff = fromAccount.concat(open.filter((c) => fromAccount.indexOf(c) < 0));
+      try {
+        if (typeof localStorage !== "undefined") localStorage.setItem(CHATS_OFF_KEY, JSON.stringify(fromAccount));
+      } catch (_) {}
+      send({ type: "set_chats_off", chats: chatsOff.slice() });
+      stateLoaded = true;
+      paint();
+      log("chats switched off read from the account");
+      return;
+    }
+    stateLoaded = true;
+    saveStateToAccount();
+    log("chats switched off sent up to the account");
   }
 
   function setChatOff(id: any, off: boolean) {
@@ -17372,6 +17418,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (accountAsk) loadFromAccount();
             if (presetAsk) loadPresetsFromAccount();
             if (setupAsk) loadSetupsFromAccount();
+            if (stateAsk) loadStateFromAccount();
             askPermissions();
             askBackendVersion();
             reaskRoles();
@@ -17777,6 +17824,10 @@ export function setup(ctx: Ctx, overrides?: any) {
           }
           if (msg.type === "loaded_setups") {
             tookAccountSetups(msg);
+            return;
+          }
+          if (msg.type === "loaded_state") {
+            tookAccountState(msg);
             return;
           }
           if (msg.type === "account_save_failed") {
@@ -18321,6 +18372,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   loadFromAccount();
   loadPresetsFromAccount();
   loadSetupsFromAccount();
+  loadStateFromAccount();
   send({ type: "list_connections", requestId: newId() });
   log("ready v" + VERSION);
   paint();

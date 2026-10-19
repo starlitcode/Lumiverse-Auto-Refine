@@ -83,6 +83,13 @@ Two skills are available. Load them before starting work.
   - How the two extensions work together, such as the event Auto Retry sends
     when it adds a reroll.
   - How it behaves with another extension's panel, widget or pop-up open.
+- Anything a person sets, picks to switch off, or has already answered
+  follows the account, written with `spindle.userStorage` under their user
+  id: settings, presets, prompts, the chats switched off, and the marks for
+  notices already read. Only what belongs to one screen stays in the browser,
+  such as where the panel sits. The browser's copy is used until the
+  account answers, then the account's copy replaces it, and nothing is
+  written to the account before that answer.
 - Nothing reads, writes or presses inside another extension's part of the
   page. Lumiverse marks every such part with `data-spindle-extension-root`,
   `data-spindle-ext` or `data-spindle-modal`, and `OTHER_UI` holds those

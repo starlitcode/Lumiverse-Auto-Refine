@@ -218,7 +218,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 
 **This chat** switches Auto Refine off in the chat you are in, and leaves other chats alone.
 
-- It is saved in your browser, as a list of chat ids.
+- It is saved to your account and in your browser, as a list of chat ids, so every browser and device you use has the same chats switched off.
 - In a **temporary chat**, one with no character card, the switch works while the chat is open but is not saved, because the next temporary chat has a different id.
 
 **When a refine finishes** chooses how you are told.

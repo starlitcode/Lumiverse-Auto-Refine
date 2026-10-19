@@ -12,6 +12,7 @@ _2026-10-19_
 
 ### Fixed
 
+- **The chats you switched Auto Refine off in did not follow your account.** The list was kept in one browser only. On another browser or device, Auto Refine was on again in those chats, and the automatic pass could refine replies there. The list is now saved to your account, so every browser has the same chats switched off. The first browser to open after updating sends its list up, so nothing is lost.
 - **A character card written on purpose was refused as a broken rewrite.** **Refuse a broken rewrite** threw away a rewrite that wrote out a character card, or a prompt format such as `[INST]`, on purpose. Card data or a marker at the very start of the rewrite, or after a colon such as "Here is the card:", is now left alone, along with the rest of that example. Card data or a marker that runs on after the story still counts.
 
 ---

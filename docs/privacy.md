@@ -85,7 +85,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 ## What it keeps
 
 - **Your settings**, in your browser and in Lumiverse's storage for your account, so they follow you to other devices.
-- **The chats you switched it off in**, in your browser. Only the chat ids are kept. Chat titles and text are not.
+- **The chats you switched it off in**, in your browser and your account, so every browser and device you use has the same chats switched off. Only the chat ids are kept. Chat titles and text are not.
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
 - **Your keys for the second model**, one for each host you saved one for, in Lumiverse's secure store for your account and nowhere else.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.

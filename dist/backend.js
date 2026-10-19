@@ -317,6 +317,9 @@ const settingsWrites = new Map();
 // one never waits on a save of another.
 const presetWrites = new Map();
 const setupWrites = new Map();
+const stateWrites = new Map();
+// The chats switched off, which follow the account apart from the settings.
+const STATE_FILE = 'state.json';
 function inTurn(queue, userId, job) {
     const k = String(userId == null ? '' : userId);
     const before = queue.get(k) || Promise.resolve();
@@ -6577,6 +6580,29 @@ async function onPanel(payload, userId) {
                     replyTo(userId, { type: 'account_save_failed', what: 'model setups' });
                 }
             });
+            return;
+        }
+        if (payload.type === 'save_state' && payload.state && typeof payload.state === 'object') {
+            await inTurn(stateWrites, userId, async () => {
+                try {
+                    await writeUserJson(STATE_FILE, payload.state, userId);
+                }
+                catch (e) {
+                    say('warn', 'the chats switched off could not be saved to the account: ' + ((e && e.message) || String(e)));
+                    replyTo(userId, { type: 'account_save_failed', what: 'chats switched off' });
+                }
+            });
+            return;
+        }
+        if (payload.type === 'load_state') {
+            let saved = null;
+            try {
+                saved = await readUserJson(STATE_FILE, userId);
+            }
+            catch (_) {
+                saved = null;
+            }
+            replyTo(userId, { type: 'loaded_state', requestId: payload.requestId, state: saved });
             return;
         }
         if (payload.type === 'load_setups') {

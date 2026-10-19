@@ -3674,6 +3674,44 @@ console.log("\nsettings that follow the account");
     ok("an answer to a question nobody asked is ignored", ignored === 45, String(ignored));
   });
 
+  // The chats switched off follow the account too. This browser holds another
+  // list, as one shared by two accounts can. Nothing goes up before the
+  // account answers, and the account's list then replaces this browser's and
+  // is told to the backend, which runs the automatic pass.
+  await inTab(browser, { storage: { "lv-auto-refine:chats-off:v1": JSON.stringify(["chat-other-account"]) } }, async (page) => {
+    const early = await page.evaluate(() => window.__sent.filter((m) => m.type === "save_state").length);
+    ok("nothing about the chats switched off goes up before the account answers", early === 0, String(early));
+    const asked = await page.evaluate(() => {
+      const ask = window.__sent.filter((m) => m.type === "load_state").pop();
+      if (!ask) return false;
+      window.__sent.length = 0;
+      window.__fromBackend({ type: "loaded_state", requestId: ask.requestId, state: { chatsOff: ["chat-quiet"] } });
+      return true;
+    });
+    ok("it asks the account for the chats switched off on load", asked);
+    await settle(page);
+    const got = await page.evaluate(() => ({
+      local: JSON.parse(localStorage.getItem("lv-auto-refine:chats-off:v1") || "[]"),
+      told: (window.__sent.filter((m) => m.type === "set_chats_off").pop() || {}).chats || [],
+      up: window.__sent.filter((m) => m.type === "save_state").length,
+    }));
+    ok("the account's chats switched off replace this browser's", got.local.join() === "chat-quiet", JSON.stringify(got));
+    ok("and the backend is told to leave them alone", got.told.join() === "chat-quiet", JSON.stringify(got));
+    ok("and this browser's list is never sent up over them", got.up === 0, JSON.stringify(got));
+  });
+
+  // An account with no list yet takes this browser's, so updating loses nothing.
+  await inTab(browser, { storage: { "lv-auto-refine:chats-off:v1": JSON.stringify(["chat-test"]) } }, async (page) => {
+    await page.evaluate(() => {
+      const ask = window.__sent.filter((m) => m.type === "load_state").pop();
+      window.__sent.length = 0;
+      if (ask) window.__fromBackend({ type: "loaded_state", requestId: ask.requestId, state: null });
+    });
+    await settle(page);
+    const up = await page.evaluate(() => window.__sent.filter((m) => m.type === "save_state").pop());
+    ok("an account with no list takes this browser's", !!up && up.state.chatsOff.join() === "chat-test", JSON.stringify(up));
+  });
+
   // Nothing in the account, something in this browser: this browser's copy goes
   // up rather than staying where only this browser can see it.
   await inTab(browser, { saved: { contextMessages: 7 } }, async (page) => {

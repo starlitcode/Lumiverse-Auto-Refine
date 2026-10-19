@@ -4100,6 +4100,31 @@ describe("settings that follow the account", () => {
     expect(h.perUser["u1:setups.json"][0].at).toBe(2);
   });
 
+  test("and for the chats switched off", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    h.slowWrites(40, 0);
+    const older = h.front({ type: "save_state", state: { chatsOff: ["chat-a"] } });
+    const newer = h.front({ type: "save_state", state: { chatsOff: [] } });
+    await Promise.all([older, newer]);
+    await wait(60);
+    expect(h.perUser["u1:state.json"].chatsOff).toEqual([]);
+  });
+
+  // Each account reads back only its own chats switched off, so two accounts
+  // on one server never leave each other's chats alone or refine them.
+  test("the chats switched off follow each account on its own", async () => {
+    const h = host(chat(), ["<refined>x</refined>"]);
+    await h.front({ type: "save_state", state: { chatsOff: ["chat-a"] } }, "a");
+    await h.front({ type: "save_state", state: { chatsOff: ["chat-b"] } }, "b");
+    await h.front({ type: "load_state", requestId: "ra" }, "a");
+    await h.front({ type: "load_state", requestId: "rb" }, "b");
+    await h.front({ type: "load_state", requestId: "rc" }, "c");
+    const back = (id: string) => h.sent.find((m: any) => m.type === "loaded_state" && m.requestId === id);
+    expect(back("ra").state.chatsOff).toEqual(["chat-a"]);
+    expect(back("rb").state.chatsOff).toEqual(["chat-b"]);
+    expect(back("rc").state).toBe(null);
+  });
+
   // Settings that look saved and are not is the worst shape this can take.
   // Both stores down. One down alone is not a failure: the write falls through
   // to the other rather than being lost, which is the point of the fallback.
