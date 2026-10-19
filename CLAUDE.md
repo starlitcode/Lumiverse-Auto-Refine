@@ -292,6 +292,13 @@ Every change to the panel or the page has to work on a phone and on a laptop.
   style is in CSS pixels. Convert before writing one back, as `cssHeight`
   does, or a row opens to the wrong height and jumps at the end. Browser
   checks for size and motion run at zoom 1, 1.25 and 0.85.
+- A box fitted to a measured height leaves one pixel spare. Heights are read
+  as rounded whole numbers, and with UI Scale on the real height can have a
+  fraction in it. A box fitted exactly can then overflow by less than a pixel
+  and scroll, with a second scroll bar. A check for this sets `scrollTop` very
+  high and reads it back as 0, at every UI Scale step from 50% to 150%. It
+  never compares `scrollHeight` with `clientHeight`, which can read as equal
+  while the box still scrolls.
 
 ## Motion
 
