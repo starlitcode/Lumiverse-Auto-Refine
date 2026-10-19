@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.45.1';
+const VERSION = '1.45.2';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -3234,7 +3234,8 @@ function spanIsSetApart(text: string, start: number): boolean {
 
 // The prompt's own format written into the rewrite: an instruction or system
 // marker, an instruction heading, the start of the next turn, or a character
-// card's data. Turn markers are checked before they are taken off, and count
+// card's data. A marker or card data that opens the text or follows a colon
+// is shown on purpose (see shownOnPurpose). Turn markers are checked before they are taken off, and count
 // only after some of the rewrite, since a turn marker at the very start is
 // only the answer's own opening.
 const LEAK_MARKS: RegExp[] = [
@@ -3247,10 +3248,35 @@ const LEAK_TURNS = /<\|im_start\|>[ \t]*(?:user|system)\b|<\|start_header_id\|>[
 // Two of them, since one could be a coded note a character writes.
 const LEAK_CARD = /\[[ \t]*[A-Za-z][A-Za-z ]{0,24}\([ \t]*"[^"\n]{1,120}"/g;
 
+// Whether what starts at `at` is shown on purpose: it opens the text, or it
+// comes after a colon, as in "Here is the card:" or "The format looks like
+// this:". A passage that is a character card, or explains a prompt format,
+// is written that way. A leak runs on after the story instead.
+function shownOnPurpose(text: string, at: number): boolean {
+  const before = text.slice(0, at);
+  return !before.trim() || /:[\s*_"'\u201c]*$/.test(before);
+}
+
 function leakVerdict(text: string): boolean {
   const plain = withoutCode(text);
-  for (const mark of LEAK_MARKS) if (mark.test(plain)) return true;
-  if ((plain.match(LEAK_CARD) || []).length >= 2) return true;
+  // Every marker, in order. One shown on purpose makes an example, and the
+  // other markers in its paragraph are part of it, as in a template written
+  // out line by line. A marker in a later paragraph is judged on its own.
+  const hits: number[] = [];
+  for (const mark of LEAK_MARKS) {
+    const all = new RegExp(mark.source, mark.flags.indexOf('g') < 0 ? mark.flags + 'g' : mark.flags);
+    for (const hit of plain.matchAll(all)) hits.push(hit.index || 0);
+  }
+  hits.sort((a, b) => a - b);
+  let example = -1;
+  for (const at of hits) {
+    if (at < example) continue;
+    if (!shownOnPurpose(plain, at)) return true;
+    const end = plain.indexOf('\n\n', at);
+    example = end < 0 ? plain.length : end;
+  }
+  const cards = Array.from(plain.matchAll(LEAK_CARD));
+  if (cards.length >= 2 && !shownOnPurpose(plain, cards[0].index || 0)) return true;
   const turn = LEAK_TURNS.exec(plain);
   return !!turn && plain.slice(0, turn.index).trim().length > 0;
 }

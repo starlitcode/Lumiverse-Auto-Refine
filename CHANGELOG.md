@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.45.2
+
+_2026-10-19_
+
+### Fixed
+
+- **A character card written on purpose was refused as a broken rewrite.** **Refuse a broken rewrite** threw away a rewrite that wrote out a character card, or a prompt format such as `[INST]`, on purpose. Card data or a marker at the very start of the rewrite, or after a colon such as "Here is the card:", is now left alone, along with the rest of that example. Card data or a marker that runs on after the story still counts.
+
+---
+
 ## 1.45.1
 
 _2026-10-18_

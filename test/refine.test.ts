@@ -8344,6 +8344,29 @@ describe("a broken rewrite", () => {
     expect(h.skipped().some((w: string) => /stuck repeating/.test(w))).toBe(true);
   });
 
+  // A rewrite that writes a character card or a prompt format on purpose, at
+  // its start or after a colon, is kept, even when the message did not have
+  // one. Here the message described them in words.
+  const meant: Array<[string, string, string]> = [
+    ["a character card",
+      "Wren is a ferry pilot, blunt and wary.",
+      "[Character(\"Wren\")]\n[Job(\"ferry pilot\")]\n[Mind(\"blunt\" + \"wary\")]"],
+    ["a character card after a colon",
+      "Here is the card for Wren: a ferry pilot, blunt and wary.",
+      "Here is the card for Wren:\n\n[Character(\"Wren\")]\n[Job(\"ferry pilot\")]\n[Mind(\"blunt\" + \"wary\")]"],
+    ["a template after a colon",
+      "The template has an instruction heading, then a response heading.",
+      "The template looks like this:\n### Instruction:\nWrite the crossing.\n### Response:"],
+  ];
+  for (const [label, original, answer] of meant) {
+    test("saved: " + label + ", written on purpose", async () => {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply(original));
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(answer);
+    });
+  }
+
   test("saved with the check off", async () => {
     const answer = scene + "[/INST] [Character(\"Wren\")][Job(\"ferry pilot\")]";
     const h = await armed(["<REFINED>" + answer + "</REFINED>"], { ...loose, guardBroken: false }, reply());

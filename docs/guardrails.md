@@ -60,6 +60,7 @@ It is on by default. Each one only counts when the rewrite has it and your reply
 Writing set apart on purpose is also left alone:
 
 - a passage in another alphabet in quotation marks or asterisks, in a quoted block, or after a colon
+- a character card or a prompt format written out on purpose: at the very start of the rewrite, or after a colon, such as "Here is the card:"
 - repetition in quotation marks or asterisks that close again after it, in a quoted block, or after a colon, such as a crowd's chant or the same line written out many times
 
 A model stuck in a loop does not close a quotation mark or an asterisk it opened, so a loop inside dialogue that never closes still counts. Code is never checked.
