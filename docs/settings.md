@@ -191,7 +191,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Right now** shows what is happening: asking, thinking, writing (with a character count), checking, or waiting.
   - A clock runs while it works. After eight seconds it also shows how long is left before the timeout.
   - Below, it shows what the last refine used, in input and output tokens, and what it cost if you set prices. This includes dropped rewrites and retries, because those were paid for too.
-- **What the model worked out** keeps the model's notes from the last refine that finished. It has **Copy**, **Expand** and **Clear**. Stopping a refine leaves the last notes alone.
+- **What the model said outside the rewrite** keeps the model's notes from the last refine that finished. It has **Copy**, **Expand** and **Clear**. Stopping a refine leaves the last notes alone.
 - **What it has been doing** lists what it did, newest first.
   - **Show in this list**, under it, chooses which kinds of line are shown. Untick one to hide it:
     - **What the second model decided**: one line for each reply the second model reads.

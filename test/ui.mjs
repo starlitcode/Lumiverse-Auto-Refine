@@ -7599,7 +7599,7 @@ console.log("\nthe working, read as prose");
       const well = document.querySelector("[data-arf-kept]");
       return {
         well: well ? well.textContent : null,
-        card: document.querySelector('[data-arf-card="What the model worked out"]').textContent,
+        card: document.querySelector('[data-arf-card="What the model said outside the rewrite"]').textContent,
       };
     });
     ok("the rewrite is not kept as the model's notes", !/turned away/.test(String(said.well)), String(said.well));
@@ -7616,7 +7616,7 @@ console.log("\nthe working, read as prose");
           chatId: "c1",
           messageId: "m1",
           same: true,
-          why: "the model handed it back unchanged and said why. Its words are on the Log tab, under What the model worked out",
+          why: "the model handed it back unchanged and said why. Its words are on the Log tab, under What the model said outside the rewrite",
           notes: "The stars around this line are the character's own emphasis, so I left it.\n<REFINED>*Run,* he said.</REFINED>",
         });
       });
@@ -7640,7 +7640,7 @@ console.log("\nthe working the Log keeps");
     feed(page, { type: "refine_progress", stage: "writing", chars: 40, notes: notes });
   const kept = (page) =>
     page.evaluate(() => {
-      const card = document.querySelector('#drawer [data-arf-card="What the model worked out"]');
+      const card = document.querySelector('#drawer [data-arf-card="What the model said outside the rewrite"]');
       return card ? card.textContent : "";
     });
 
@@ -7665,7 +7665,7 @@ console.log("\nthe working the Log keeps");
     // Working runs long and a drawer is narrow, so it opens at the size of the
     // screen the same way the request preview does.
     const opened = await page.evaluate(() => {
-      const card = document.querySelector('#drawer [data-arf-card="What the model worked out"]');
+      const card = document.querySelector('#drawer [data-arf-card="What the model said outside the rewrite"]');
       const big = [...card.querySelectorAll("button")].find((b) => b.textContent.trim() === "Expand");
       if (!big) return { there: false };
       big.click();
@@ -7722,6 +7722,28 @@ console.log("\nthe working the Log keeps");
     ok("a dropped rewrite keeps its working too", /could sit in any story/.test(said));
     ok("and says what happened to it", /grew by half/.test(said));
   });
+
+  // The card's name is long. On a phone it wraps beside its pill rather than
+  // running under it or off the side.
+  for (const [label, viewport, touch] of [["phone", { width: 360, height: 740 }, true], ["laptop", { width: 1280, height: 860 }, false]]) {
+    await inTab(browser, { viewport, touch }, async (page) => {
+      await goTab(page, "Log");
+      await working(page);
+      await feed(page, { type: "refined", chatId: "c1", messageId: "m1", canUndo: true, before: "a", after: "b" });
+      await settle(page);
+      const fit = await page.evaluate(() => {
+        const card = document.querySelector('#drawer [data-arf-card="What the model said outside the rewrite"]');
+        if (!card) return null;
+        const name = card.querySelector(".arf-cardh .arf-grow").getBoundingClientRect();
+        const pill = card.querySelector(".arf-cardh .arf-pill").getBoundingClientRect();
+        const box = card.getBoundingClientRect();
+        const apart = name.right <= pill.left + 0.5 || name.bottom <= pill.top + 0.5;
+        return { apart, inside: pill.right <= box.right + 0.5 && name.left >= box.left - 0.5, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 };
+      });
+      ok(label + ": the card's name and its pill do not overlap", !!fit && fit.apart, fit);
+      ok(label + ": both stay inside the card, with no sideways scroll", !!fit && fit.inside && !fit.sideways, fit);
+    });
+  }
 }
 
 console.log("\nthe card is handed over, never swapped");
@@ -8572,7 +8594,7 @@ console.log("\nrefining the draft from the panel");
     await draftRun(page, { ok: true, after: "I walk through it.", notes: WORKING });
     await goTab(page, "Log");
     const got = await kept(page);
-    ok("a draft refine's working lands under What the model worked out",
+    ok("a draft refine's working lands under What the model said outside the rewrite",
       !!got && /simile is doing no work/.test(got.text), got);
     ok("read as prose, with its tags off, the same as a reply's",
       !!got && !/[<>]/.test(got.text), got && got.text);

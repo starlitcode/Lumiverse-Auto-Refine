@@ -2806,7 +2806,7 @@ function judge(answer, original, tags = true) {
     // declining to edit it and saying why, which the prompts ask for. "It already
     // read well" would put words in its mouth, so the reason points at its own.
     if (out.same && got.outside)
-        out.why = 'the model handed it back unchanged and said why. Its words are on the Log tab, under What the model worked out';
+        out.why = 'the model handed it back unchanged and said why. Its words are on the Log tab, under What the model said outside the rewrite';
     return out;
 }
 function judgeInner(answer, original) {

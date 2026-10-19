@@ -165,7 +165,7 @@ the rewritten message
 
 - The scores come before the rewrite, so they decide what changes. They do not grade the rewrite afterwards.
 - `<REFINE_NOTES>` is outside `<REFINED>`, so it can never reach your chat.
-- The notes are kept on the **Log** tab, under **What the model worked out**. Only a refine that finishes replaces them. Stopping one keeps the last notes.
+- The notes are kept on the **Log** tab, under **What the model said outside the rewrite**. Only a refine that finishes replaces them. Stopping one keeps the last notes.
 - A score is only the model's judgment. The quoted line is the part to trust.
 
 **The two plain prompts ask for the rewrite and nothing else.** A model that does not reason tends to fill a notes tag with a summary and then do something else, which only adds cost.
@@ -190,7 +190,7 @@ Before the rewrite, list what you changed:
 Then give the rewrite between <REFINED> and </REFINED>.
 ```
 
-- Everything outside `<REFINED>` and `</REFINED>`, including `<REFINE_NOTES>`, is kept on the **Log** tab under **What the model worked out**. This is true for every prompt, including one that asks for no working. So when a model hands a passage back unchanged and says why, its reason is there.
+- Everything outside `<REFINED>` and `</REFINED>`, including `<REFINE_NOTES>`, is kept on the **Log** tab under **What the model said outside the rewrite**. This is true for every prompt, including one that asks for no working. So when a model hands a passage back unchanged and says why, its reason is there.
 - A model can put its whole answer in a code block, such as one marked `xml`. Once the tags are taken out, that block is empty. An empty code block is not kept as a note.
 - The tag names are yours. The extension only looks for `<REFINED>`. You can ask for a paragraph instead of tags.
 - What the rewrite changed in your writing is shown on the card that appears when it is saved, marked word by word.
@@ -238,7 +238,7 @@ It is written as what is allowed, adults 18 and older, rather than as a list of 
 What it does and does not do:
 
 - **It is text in the prompt, and nothing more.** The model reads it like any other line. The extension's code does not read your story for this, keeps no list of words about it, and does not block, change or delete anything on its own.
-- **When the model follows it, nothing is saved.** Your reply stays exactly as it was. The Log says the model handed it back unchanged and said why, and its words are under **What the model worked out**.
+- **When the model follows it, nothing is saved.** Your reply stays exactly as it was. The Log says the model handed it back unchanged and said why, and its words are under **What the model said outside the rewrite**.
 - **A character of any age in a scene with nothing sexual in it is edited like anyone else.** Age alone is not the exception. Nothing else is excepted.
 - **A prompt of your own carries only what you put in it.** A preset you save from one of the four keeps the paragraph, where you can read it. One you write yourself does not have it.
 

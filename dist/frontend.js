@@ -9479,7 +9479,7 @@ export function setup(ctx, overrides) {
             // which is a second of reading for something worth more than that. Said
             // rather than left to be missed twice.
             if (keptNotes)
-                body.appendChild(el("div", "arf-note", "Its working is on the Log tab, under What the model worked out."));
+                body.appendChild(el("div", "arf-note", "Its notes are on the Log tab, under What the model said outside the rewrite."));
             box.appendChild(body);
             const row = el("div", "arf-row arf-pop-row");
             // Keeping is not the same as forgetting: the refine stays in the Log,
@@ -11727,13 +11727,13 @@ export function setup(ctx, overrides) {
         wrap.appendChild(rowB);
         return wrap;
     }
-    // What the model worked out on the way to the last refine that finished.
+    // What the model wrote outside the rewrite in the last refine that finished.
     //
     // The card on the page shows this while it is being written and then the
     // before and after lands on top of it, which is a second of reading for
     // something worth more than a second. This is where it waits afterwards.
     function buildNotesCard() {
-        const wrap = card("What the model worked out", undefined, keptNotes ? (keptNotes.ok ? "saved" : "dropped") : undefined);
+        const wrap = card("What the model said outside the rewrite", undefined, keptNotes ? (keptNotes.ok ? "saved" : "dropped") : undefined);
         if (!keptNotes) {
             wrap.appendChild(note(asksForWorking()
                 ? "Nothing yet. The working from the last refine that finishes is shown here, and a refine you stop leaves what is already here alone."
@@ -11763,7 +11763,7 @@ export function setup(ctx, overrides) {
         big.setAttribute("aria-label", "Read the working at full size");
         big.setAttribute("data-arf-btn", "Expand");
         big.addEventListener("click", () => {
-            openBig("What the model worked out", keptNotes ? readable(keptNotes.text) : "");
+            openBig("What the model said outside the rewrite", keptNotes ? readable(keptNotes.text) : "");
         });
         const clear = button("Clear", false);
         clear.addEventListener("click", () => {
