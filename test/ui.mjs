@@ -2755,7 +2755,7 @@ console.log("\none model or two");
     await settle(page);
     const onOr = await versions();
     ok("a preview picked on TypeSafe shows as the latest on OpenRouter", onOr.values.indexOf("preview") < 0 && onOr.chosen === "latest", JSON.stringify(onOr));
-    ok("OpenRouter has no exact Jev, so it offers only the latest", onOr.values.join() === "latest", JSON.stringify(onOr));
+    ok("OpenRouter offers the latest and Jev 1.14 exactly, with no preview", onOr.values.join() === "latest,exact", JSON.stringify(onOr));
     await pick("judgeHost", "typesafe");
     await settle(page);
     const again = await versions();

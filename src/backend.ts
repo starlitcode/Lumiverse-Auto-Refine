@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.45.4';
+const VERSION = '1.46.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -5329,19 +5329,19 @@ type JevKind = 'decisions' | 'chat' | 'responses' | 'messages' | 'scores' | 'pre
 // model is the newest Jev exactly, on the hosts that serve it. An older one is
 // reached by typing its name in the Model name box.
 const JEV_HOSTS: Record<string, { url: string; model?: string; latest: string; preview?: string; kind: JevKind }> = {
-  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', latest: '~typesafe/jev-latest', kind: 'decisions' },
+  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.14', latest: '~typesafe/jev-latest', kind: 'decisions' },
   nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.14', latest: 'typesafe/jev-latest', kind: 'decisions' },
   typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.14.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
 };
 
 // Each host's names for the kinds of Span. OpenRouter serves Span-01 Lite,
-// which is free, and Span-01. Respan's own API serves Span-02, which takes
-// Jev's request, as its one model for both kinds.
+// which is free, and Span-02. Respan's own API serves Span-02 as its one model
+// for both kinds.
 type SpanTier = 'free' | 'full';
 const SPAN_HOSTS: Record<string, { url: string; models: Partial<Record<SpanTier, string>>; kind: JevKind }> = {
   openrouter: {
     url: 'https://openrouter.ai/api/alpha/decisions',
-    models: { free: 'respan/span-01-lite', full: 'respan/span-01' },
+    models: { free: 'respan/span-01-lite', full: 'respan/span-02' },
     kind: 'decisions',
   },
   respan: {
@@ -5367,12 +5367,17 @@ const MERCURY_HOSTS: Record<string, SizedHost> = {
 
 // D1, from Liquid AI, and Solar Decide, from Upstage. Both take the same
 // decisions request as Jev, on OpenRouter and on their maker's own API.
-// Liquid's own API names D1 `d1:free`. NanoGPT serves D1 too, on the same
-// decisions route it uses for Jev.
-const D1_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
-  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'liquid/d1', kind: 'decisions' },
-  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'liquid/d1', kind: 'decisions' },
-  liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', model: 'd1:free', kind: 'decisions' },
+// D1 comes in two: D1, and D1 Ultra, Liquid AI's largest. Liquid's own API
+// names D1 `d1:free`. NanoGPT serves D1 too, on the same decisions route it
+// uses for Jev, and has no D1 Ultra.
+const D1_HOSTS: Record<string, SizedHost> = {
+  openrouter: {
+    url: 'https://openrouter.ai/api/alpha/decisions',
+    models: { full: 'liquid/d1', ultra: 'liquid/d1-ultra' },
+    kind: 'decisions',
+  },
+  nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { full: 'liquid/d1' }, kind: 'decisions' },
+  liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', models: { full: 'd1:free', ultra: 'd1-ultra' }, kind: 'decisions' },
 };
 // Solar Decide comes in two: Solar Decide, and Solar Decide Flash, which is
 // faster. Upstage's own API has no Flash yet, so asking it for Flash gets
@@ -5424,17 +5429,32 @@ const CLEF_HOSTS: Record<string, SizedHost> = {
     kind: 'decisions',
   },
 };
-// Decider, from Perplexity. It takes Jev's request on OpenRouter, NanoGPT and
-// Perplexity's own API. OpenRouter also has a name that always points at the
-// newest Decider.
+// Decider, from Perplexity, and Decider Flash, which is smaller and faster.
+// Both take Jev's request on OpenRouter and Perplexity's own API, each as a
+// version that stays put and as a name that always points at the newest.
+// NanoGPT serves only the older Decider V1.1 27B.
 const DECIDER_HOSTS: Record<string, SizedHost> = {
   openrouter: {
     url: 'https://openrouter.ai/api/alpha/decisions',
-    models: { exact: 'perplexity/pplx-decider-v1.1-27b', latest: '~perplexity/pplx-decider-latest' },
+    models: {
+      exact: 'perplexity/pplx-decider-v1.2',
+      latest: '~perplexity/pplx-decider-latest',
+      flash: 'perplexity/pplx-decider-flash-v1.2',
+      flashLatest: '~perplexity/pplx-decider-flash-latest',
+    },
     kind: 'decisions',
   },
   nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { exact: 'perplexity/pplx-decider-v1.1-27b' }, kind: 'decisions' },
-  perplexity: { url: 'https://api.perplexity.ai/v1/decisions', models: { exact: 'pplx-decider-v1.1-27b' }, kind: 'decisions' },
+  perplexity: {
+    url: 'https://api.perplexity.ai/v1/decisions',
+    models: {
+      exact: 'pplx-decider-v1.2',
+      latest: 'pplx-decider-latest',
+      flash: 'pplx-decider-flash-v1.2',
+      flashLatest: 'pplx-decider-flash-latest',
+    },
+    kind: 'decisions',
+  },
 };
 // Microsoft-Decision-1, from Microsoft. OpenRouter takes Jev's request for it.
 // It reads up to 32,768 tokens.
@@ -5594,7 +5614,17 @@ const SIZE_PICKS: Record<string, SizePick> = {
   decider: {
     setting: 'deciderVersion',
     standard: 'exact',
-    sizes: { exact: { name: 'Decider', line: 'deciderOver' }, latest: { name: 'Decider', line: 'deciderOver' } },
+    sizes: {
+      exact: { name: 'Decider', line: 'deciderOver' },
+      latest: { name: 'Decider', line: 'deciderOver' },
+      flash: { name: 'Decider Flash', line: 'deciderFlashOver' },
+      flashLatest: { name: 'Decider Flash', line: 'deciderFlashOver' },
+    },
+  },
+  d1: {
+    setting: 'd1Size',
+    standard: 'full',
+    sizes: { full: { name: 'D1', line: 'd1Over' }, ultra: { name: 'D1 Ultra', line: 'd1UltraOver' } },
   },
   clef: {
     setting: 'clefTier',
@@ -5680,7 +5710,7 @@ interface JevVerdict {
 interface SecondModel {
   name: string;
   // Reads a conversation rather than named fields, so its state is the reply
-  // as a turn. See spanTurns.
+  // as a turn, for a model named in READS_TURNS. See spanTurns.
   turns?: boolean;
   // Reads only `state.text`, so the named fields go in it as JSON text, and
   // the names the checks use, such as `reply`, are still in it.
@@ -5717,7 +5747,7 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   d1: {
     name: 'D1',
     hosts: D1_HOSTS,
-    model: (host) => ownNames.d1 || D1_HOSTS[host].model,
+    model: (host) => ownNames.d1 || sizedName(D1_HOSTS[host]),
   },
   solar: {
     name: 'Solar Decide',
@@ -5925,9 +5955,9 @@ function jevTimeout<T>(work: Promise<T>): Promise<T> {
   return Promise.race([work, late]).finally(() => clearTimeout(timer));
 }
 
-// Span reads a conversation, not named fields. On Respan's own API and on
-// OpenRouter alike, the reply goes in as the assistant's turn, and the reply
-// before it, when it is sent, as the one turn ahead of it. The checks name
+// Span-01 reads a conversation, not named fields. The reply goes in as the
+// assistant's turn, and the reply before it, when it is sent, as the one turn
+// ahead of it. Respan's scores address takes the same turns. The checks name
 // the reply in backticks, the way Jev's state does, so for Span the names are
 // put in words: the reply, the previous reply, and the list of worn phrases
 // written out after the words that name it.
@@ -5974,7 +6004,10 @@ function predicatesRequest(model: string, stateText: string, questions: Record<s
 }
 
 // A decisions request for a model that reads a conversation, which is how
-// OpenRouter takes Span. It turns away any other state with a 400.
+// OpenRouter takes Span-01 and Span-01 Lite. It turns away any other state
+// with a 400. Span-02 reads named fields, the same as Jev, so a Span model
+// named anything but Span-01 is sent Jev's request.
+const READS_TURNS = /span-01/i;
 function turnsRequest(model: string, state: Record<string, string>, questions: Record<string, any>): any {
   const asked: Record<string, any> = {};
   for (const id of Object.keys(questions))
@@ -6053,7 +6086,7 @@ async function askJevOnce(
             ? scoresRequest(where.model, state, questions)
             : where.kind === 'predicates'
               ? predicatesRequest(where.model, stateText, questions)
-              : secondModel().turns
+              : secondModel().turns && READS_TURNS.test(where.model)
               ? turnsRequest(where.model, state, questions)
               : secondModel().text
               ? { model: where.model, state: { text: stateText }, questions: questions }

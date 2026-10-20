@@ -9,14 +9,14 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
 | **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
-| **Span** | Respan | Span-01 Lite is free on OpenRouter. Span-01 is paid. Span-02, on Respan's own API, is paid, per call. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1), [Introducing Span-02](https://www.respan.ai/blog/introducing-span-2) |
+| **Span** | Respan | Span-01 Lite is free on OpenRouter. Span-02 is paid, per call. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1), [Introducing Span-02](https://www.respan.ai/blog/introducing-span-2) |
 | **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Inception: Decisions](https://docs.inceptionlabs.ai/capabilities/decisions) |
-| **D1** | Liquid AI | Paid on OpenRouter. On Liquid's own API it is called `d1:free`. | [Introducing d1](https://www.liquid.ai/blog/d1-decision-model) |
+| **D1**, and **D1 Ultra** | Liquid AI | Paid on OpenRouter. On Liquid's own API, D1 is called `d1:free`. | [Introducing d1](https://www.liquid.ai/blog/d1-decision-model) |
 | **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide) |
 | **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
 | **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
 | **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Introducing Clef](https://blog.cloudflare.com/clef-decision-models) |
-| **Decider** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
+| **Decider**, and **Decider Flash** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
 | **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
 | **Drex** | Nace.AI | Paid, per call | [Nace.AI: Drex](https://www.nace.ai/drex) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
@@ -54,18 +54,17 @@ A key is kept for each host:
 
 - **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
 - **The preview Jev**, only when the host is TypeSafe. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest.
-- **Jev 1.14 exactly**, only when the host is TypeSafe or NanoGPT. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
+- **Jev 1.14 exactly**, when the host is OpenRouter, TypeSafe or NanoGPT. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
 
 The name each host is sent:
 
 | Host | The latest Jev | The preview Jev | Jev 1.14 exactly |
 | --- | --- | --- | --- |
-| OpenRouter | `~typesafe/jev-latest` | not offered | not offered |
+| OpenRouter | `~typesafe/jev-latest` | not offered | `typesafe/jev-1.14` |
 | TypeSafe | `jev-latest` | `jev-preview` | `jev-1.14.0` |
 | NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.14` |
 
 - OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them.
-- OpenRouter has no name for Jev 1.14 exactly, so that is not in the list for OpenRouter.
 - A choice that is not in the list for the host sends the latest. Change back to a host that has it, and it is picked again.
 - **Jev 1.14 exactly** is the newest Jev. When a newer one comes out, this choice moves to it. To keep an older Jev, type its name in **Model name**, such as `jev-1.13.0` on TypeSafe or `typesafe/jev-1.13` on NanoGPT and OpenRouter. It works for as long as the host serves it.
 
@@ -76,23 +75,26 @@ The name each host is sent:
 **Which Span** shows when Span is picked and the host is OpenRouter. It has these choices:
 
 - **Span-01 Lite, free**, the default. It costs nothing at the moment. OpenRouter sets its price.
-- **Span-01**, the full model. It is paid.
+- **Span-02**, the newest Span. It is paid, per call.
 
 The name each host is sent:
 
-| Host | Span-01 Lite, free | Span-01 |
+| Host | Span-01 Lite, free | Span-02 |
 | --- | --- | --- |
-| OpenRouter | `respan/span-01-lite` | `respan/span-01` |
+| OpenRouter | `respan/span-01-lite` | `respan/span-02` |
 | Respan | `span-02` | `span-02` |
 
-**Respan's own API** serves Span-02, the newest Span, so **Which Span** is not shown there. Span-02 is on Respan's own API only.
+**Respan's own decisions address** serves Span-02 only, so **Which Span** is not shown there.
 
-Span reads a conversation, not named fields. It takes the same kind of request as Jev, with the reply sent as a conversation. The panel does this for you:
+Span-02 takes the same request as Jev, so nothing about the checks changes. It reads up to 131,072 tokens on OpenRouter.
+
+Span-01 Lite reads a conversation, not named fields. The panel does this for you:
 
 - The reply is sent as the assistant's turn of a conversation.
 - The word `reply` in backticks is written out as "the reply" in each check.
 - With **Also compare with the reply before it** on, that reply is sent as the turn before, and `previous_reply` is written out as "the previous reply". See [Comparing with the reply before it](#comparing-with-the-reply-before-it).
 - A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
+- Span-01, the full model, is still on OpenRouter as `respan/span-01`. Type it in **Model name** to use it. It is sent the conversation too.
 - To use Span-01 on Respan's own API, pick **Another address**, with the address `https://api.respan.ai/api/v1/scores` and the model name `span-01-pro`. That address takes a scores request: each check is sent as a behavior, and the chance the behavior is present is the score.
 
 ## Sizes and kinds
@@ -104,10 +106,11 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | Mercury Decide | **Which Mercury Decide** | free, or without the free limits |
 | Solar Decide | **Which Solar Decide** | Solar Decide, or Solar Decide Flash |
 | Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
-| Decider | **Which Decider** | Decider V1.1 27B, or Decider Latest |
+| Decider | **Which Decider** | Decider V1.2, Decider Latest, Decider Flash V1.2, or Decider Flash Latest |
+| D1 | **Which D1** | D1, or D1 Ultra |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
-- The free and paid kinds of Mercury Decide are the same model, so they share one line. The two kinds of Decider share one line too.
+- The free and paid kinds of Mercury Decide are the same model, so they share one line. Decider V1.2 and Decider Latest share one line, and so do the two kinds of Decider Flash.
 - A host only offers the sizes it serves. If the size you picked is not served on the host you change to, the standard size is used there, with its line. Change back and your size is picked again.
 - One **Model name** box serves every size of a model. It shows the name for the one picked. A name typed in it is sent whichever size is picked.
 
@@ -129,14 +132,20 @@ Mercury Decide is reached on OpenRouter. It takes the same request as Jev, so no
 
 ## D1
 
-D1 is Liquid AI's decision model. It takes the same request as Jev. It reads up to 65,536 tokens on OpenRouter.
+D1 is Liquid AI's decision model. It takes the same request as Jev.
 
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `liquid/d1` |
-| NanoGPT | `liquid/d1` |
-| Liquid AI | `d1:free` |
+**Which D1** picks one of two:
 
+- **D1**, the default. It reads up to 65,536 tokens on OpenRouter.
+- **D1 Ultra, the largest**. It also reads pictures. It reads up to 32,768 tokens on OpenRouter, so a long reply with the one before it can be too much for it. The host then refuses the call, and the reply is refined the same as when any second model cannot answer.
+
+| Host | D1 | D1 Ultra |
+| --- | --- | --- |
+| OpenRouter | `liquid/d1` | `liquid/d1-ultra` |
+| NanoGPT | `liquid/d1` | |
+| Liquid AI | `d1:free` | `d1-ultra` |
+
+- NanoGPT has no D1 Ultra, so D1 is used there.
 - On OpenRouter and NanoGPT it is paid, per call. Each host's own page shows the price.
 - NanoGPT lists D1, but its docs for the decisions route only name Jev so far. If **Test** fails on NanoGPT, use OpenRouter or Liquid AI.
 - On Liquid's own API, the key comes from your Liquid account, at [console.liquid.ai](https://console.liquid.ai), under **API Keys**. Liquid's keys start with `liquid_`.
@@ -230,23 +239,26 @@ Clef, Clef Flash and Clef Omni are Cloudflare's decision models. All three take 
 
 ## Decider
 
-Decider is Perplexity's decision model. It takes the same request as Jev, on OpenRouter, NanoGPT and Perplexity's own API. It reads up to 262,144 tokens.
+Decider is Perplexity's decision model. Decider Flash is a smaller one that is faster and costs less. Both take the same request as Jev, on OpenRouter, NanoGPT and Perplexity's own API. Both read up to 262,144 tokens.
 
 **Which Decider** shows when Decider is picked:
 
-- **Decider V1.1 27B**, the default. Every host serves it.
-- **Decider Latest, always the newest**. It is only offered on OpenRouter, which has a name that always points at Perplexity's newest Decider. On another host, Decider V1.1 27B is used.
+- **Decider V1.2**, the default. Its answers stay steady.
+- **Decider Latest, always the newest**. It moves to each new Decider by itself.
+- **Decider Flash V1.2, smaller and faster**.
+- **Decider Flash Latest, always the newest**.
 
-| Host | Decider V1.1 27B | Decider Latest |
-| --- | --- | --- |
-| OpenRouter | `perplexity/pplx-decider-v1.1-27b` | `~perplexity/pplx-decider-latest` |
-| NanoGPT | `perplexity/pplx-decider-v1.1-27b` | |
-| Perplexity | `pplx-decider-v1.1-27b` | |
+| Host | Decider V1.2 | Decider Latest | Decider Flash V1.2 | Decider Flash Latest |
+| --- | --- | --- | --- | --- |
+| OpenRouter | `perplexity/pplx-decider-v1.2` | `~perplexity/pplx-decider-latest` | `perplexity/pplx-decider-flash-v1.2` | `~perplexity/pplx-decider-flash-latest` |
+| NanoGPT | `perplexity/pplx-decider-v1.1-27b` | | | |
+| Perplexity | `pplx-decider-v1.2` | `pplx-decider-latest` | `pplx-decider-flash-v1.2` | `pplx-decider-flash-latest` |
 
-- Both kinds use the same **Refine when a check reaches**.
+- NanoGPT lists only the older Decider V1.1 27B, so it is sent whichever Decider is picked there.
+- Decider V1.2 and Decider Latest use the same **Refine when a check reaches**. Decider Flash has its own.
 
 - On Perplexity's own API, the key comes from your Perplexity account, under **API Keys**.
-- The older Decider V1 27B is `pplx-decider-v1-27b` on Perplexity and `perplexity/pplx-decider-v1-27b` on OpenRouter. Type it in **Model name** to use it.
+- Perplexity says a request for an older Decider, such as `pplx-decider-v1.1-27b` or `pplx-decider-v1-27b`, is answered by Decider V1.2 on its own API.
 - It is paid, per call. Each host's own page shows the price.
 
 ## Microsoft-Decision-1
@@ -373,16 +385,16 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `respan/span-01-lite`, `respan/span-01`, `inception/mercury-decide:free`, `liquid/d1`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `~perplexity/pplx-decider-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b` or `subq/subq-snap-preview` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
 | Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
-| Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` |
+| Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` or `d1-ultra` |
 | Upstage | `https://api.upstage.ai/v1/systemone` | `solar-decide` |
 | OpenAI | `https://api.openai.com/v1/decisions` | `gpt-6-luna` |
 | Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` or `clef-omni` with the address ending in that name |
-| Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.1-27b` |
+| Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.2`, `pplx-decider-latest`, `pplx-decider-flash-v1.2` or `pplx-decider-flash-latest` |
 | SubQ | `https://api.subq.ai/v1/systemone` | `subq-snap-preview` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.

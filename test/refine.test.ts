@@ -795,9 +795,9 @@ describe("two models: Jev reads the reply first", () => {
   // Which Jev answers, per host. The latest is each host's own alias where it
   // has published one, and the exact version is pinned. Settings saved with
   // "A name I type" picked send the name typed under it, and the exact Jev
-  // when it was empty. A host with no exact Jev of its own is sent its latest.
+  // when it was empty. A host with no preview Jev of its own is sent its latest.
   for (const [host, version, name, url, model] of [
-    ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "~typesafe/jev-latest"],
+    ["openrouter", "exact", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.14"],
     ["typesafe", "latest", "", "https://api.typesafe.ai/v1/systemone", "jev-latest"],
     ["typesafe", "exact", "", "https://api.typesafe.ai/v1/systemone", "jev-1.14.0"],
     ["typesafe", "preview", "", "https://api.typesafe.ai/v1/systemone", "jev-preview"],
@@ -806,7 +806,7 @@ describe("two models: Jev reads the reply first", () => {
     ["nanogpt", "latest", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-latest"],
     ["nanogpt", "exact", "", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-1.14"],
     ["nanogpt", "own", "typesafe/jev-renamed", "https://nano-gpt.com/api/v1/decisions", "typesafe/jev-renamed"],
-    ["openrouter", "own", "", "https://openrouter.ai/api/alpha/decisions", "~typesafe/jev-latest"],
+    ["openrouter", "own", "", "https://openrouter.ai/api/alpha/decisions", "typesafe/jev-1.14"],
   ]) {
     test(host + ", " + version + (name ? " " + name : "") + ": " + model, async () => {
       const h = await keyed({ judgeHost: host, judgeVersion: version, judgeName: name }, { jev: says([10]) });
@@ -1619,14 +1619,12 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   // ---- Span, the other second model ----
-  // On OpenRouter Span takes the same decisions request as Jev, so only the
-  // model name changes. Each kind of Span by the name OpenRouter gives it.
+  // On OpenRouter the free Span is Span-01 Lite, which reads a conversation.
   // A saved "lite" was Span-01 Lite without the free limits, which is the
-  // free one now.
+  // free one now. The paid one is Span-02, below.
   for (const [tier, model] of [
     ["free", "respan/span-01-lite"],
     ["lite", "respan/span-01-lite"],
-    ["full", "respan/span-01"],
   ]) {
     test("Span on OpenRouter, " + tier + ": " + model, async () => {
       const h = await keyed({ judgeWho: "span", spanTier: tier }, { jev: says([10]) });
@@ -1638,6 +1636,23 @@ describe("two models: Jev reads the reply first", () => {
       // named fields with a 400. The checks are put in words to match.
       expect(h.jevCalls[0].body.state).toEqual({ input: [], output: { role: "assistant", content: REPLY } });
       expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "The reply repeats itself." });
+    });
+  }
+
+  // Span-02 reads named fields, the same as Jev, on OpenRouter and on
+  // Respan's own API.
+  for (const [host, url, model] of [
+    ["openrouter", "https://openrouter.ai/api/alpha/decisions", "respan/span-02"],
+    ["respan", "https://api.respan.ai/api/v1/decisions", "span-02"],
+  ]) {
+    test("Span-02 on " + host + ": " + model + ", asked the way Jev is", async () => {
+      const h = await keyed({ judgeWho: "span", judgeHost: host, spanTier: "full" }, { jev: says([10]) });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(50);
+      expect(h.jevCalls[0].url).toBe(url);
+      expect(h.jevCalls[0].body.model).toBe(model);
+      expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
+      expect(h.jevCalls[0].body.questions.check_1).toEqual({ type: "noul", instructions: "`reply` repeats itself." });
     });
   }
 
@@ -1688,17 +1703,29 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "cloudflare", "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/run/@cf/cloudflare/clef-omni", "clef-omni", { clefTier: "omni" }],
     ["clef", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "cloudflare/clef-omni", { clefTier: "omni" }],
     ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b"],
+    ["d1", "openrouter", "https://openrouter.ai/api/alpha/decisions", "liquid/d1"],
+    ["d1", "liquid", "https://api.liquid.ai/decisions/v1/systemone", "d1:free"],
+    ["d1", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "liquid/d1"],
+    ["d1", "openrouter", "https://openrouter.ai/api/alpha/decisions", "liquid/d1-ultra", { d1Size: "ultra" }],
+    ["d1", "liquid", "https://api.liquid.ai/decisions/v1/systemone", "d1-ultra", { d1Size: "ultra" }],
+    // NanoGPT serves D1 only, so Ultra picked there sends D1.
+    ["d1", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "liquid/d1", { d1Size: "ultra" }],
     ["microsoft", "openrouter", "https://openrouter.ai/api/alpha/decisions", "microsoft/microsoft-decision-1"],
     ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-v2.0"],
     ["subq", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "subq/subq-snap-preview"],
     ["subq", "subq", "https://api.subq.ai/v1/systemone", "subq-snap-preview"],
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
-    ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.1-27b"],
-    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b"],
+    ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.2"],
+    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.2"],
     ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "~perplexity/pplx-decider-latest", { deciderVersion: "latest" }],
-    // Only OpenRouter has a name for the newest Decider, so it is V1.1 27B elsewhere.
+    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-latest", { deciderVersion: "latest" }],
+    ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-flash-v1.2", { deciderVersion: "flash" }],
+    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-flash-v1.2", { deciderVersion: "flash" }],
+    ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "~perplexity/pplx-decider-flash-latest", { deciderVersion: "flashLatest" }],
+    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-flash-latest", { deciderVersion: "flashLatest" }],
+    // NanoGPT serves only V1.1 27B, so every Decider picked there sends it.
     ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b", { deciderVersion: "latest" }],
-    ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.1-27b", { deciderVersion: "latest" }],
+    ["decider", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "perplexity/pplx-decider-v1.1-27b", { deciderVersion: "flash" }],
     ["solar", "openrouter", "https://openrouter.ai/api/alpha/decisions", "upstage/solar-decide-flash", { solarTier: "flash" }],
     // Upstage serves Solar Decide only, so Flash picked there sends Solar Decide.
     ["solar", "upstage", "https://api.upstage.ai/v1/systemone", "solar-decide", { solarTier: "flash" }],
@@ -1852,6 +1879,7 @@ describe("two models: Jev reads the reply first", () => {
 
   for (const [who, key, pick] of [
     ["d1", "d1Over"],
+    ["d1", "d1UltraOver", { d1Size: "ultra" }],
     ["solar", "solarOver"],
     ["kev", "kevOver"],
     ["luna", "lunaOver"],
@@ -1859,6 +1887,9 @@ describe("two models: Jev reads the reply first", () => {
     ["clef", "clefFlashOver", { clefTier: "flash" }],
     ["clef", "clefOmniOver", { clefTier: "omni" }],
     ["decider", "deciderOver"],
+    ["decider", "deciderOver", { deciderVersion: "latest" }],
+    ["decider", "deciderFlashOver", { deciderVersion: "flash" }],
+    ["decider", "deciderFlashOver", { deciderVersion: "flashLatest" }],
     ["microsoft", "microsoftOver"],
     ["drex", "drexOver"],
     ["classify", "classifyOver"],
@@ -1870,7 +1901,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
@@ -1986,7 +2017,7 @@ describe("two models: Jev reads the reply first", () => {
   test("a host a new model is not on, left picked, sends it to OpenRouter", async () => {
     for (const [who, host, model] of [
       ["luna", "cloudflare", "openai/gpt-6-luna-decisions"],
-      ["decider", "openai", "perplexity/pplx-decider-v1.1-27b"],
+      ["decider", "openai", "perplexity/pplx-decider-v1.2"],
       ["clef", "perplexity", "cloudflare/clef"],
       ["d1", "perplexity", "liquid/d1"],
     ]) {
@@ -2128,7 +2159,7 @@ describe("two models: Jev reads the reply first", () => {
       await wait(50);
       expect(h.jevCalls[0].url).toBe("https://api.respan.ai/api/v1/decisions");
       expect(h.jevCalls[0].body.model).toBe("span-02");
-      expect(h.jevCalls[0].body.questions).toBeDefined();
+      expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY });
     });
   }
 

@@ -6,6 +6,27 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.46.0
+
+_2026-10-20_
+
+### Added
+
+- **Decider Flash.** Perplexity's smaller, faster Decider. **Which Decider** now has **Decider Flash V1.2** and **Decider Flash Latest, always the newest**, on OpenRouter and Perplexity's own API. Decider Flash has its own **Refine when a check reaches**, 30 by default.
+- **D1 Ultra.** Liquid AI's largest decision model. **Which D1** shows when D1 is picked, with **D1** and **D1 Ultra, the largest**, on OpenRouter and Liquid AI's own API. D1 Ultra has its own **Refine when a check reaches**, 30 by default. It reads up to 32,768 tokens on OpenRouter.
+- **Decider Latest on Perplexity's own API.** It was only offered on OpenRouter.
+- **Jev 1.14 exactly on OpenRouter.** OpenRouter now has a name for it, `typesafe/jev-1.14`.
+
+### Changed
+
+- **Span-02 replaces Span-01 on OpenRouter.** **Which Span** now offers **Span-01 Lite, free** and **Span-02**. If you had Span-01 picked, Span-02 is sent instead. To keep Span-01, type `respan/span-01` in **Model name**.
+- **Span-02 is sent the same request as Jev.** It reads named fields, as Respan's docs show, on OpenRouter and on Respan's own API. Span-01 and Span-01 Lite are still sent the reply as a conversation.
+- **Decider V1.2 replaces Decider V1.1 27B** on OpenRouter and Perplexity's own API. NanoGPT lists only V1.1 27B, so it is still sent there. Perplexity answers a request for an older Decider with V1.2.
+
+See [Two models](docs/two-models.md).
+
+---
+
 ## 1.45.4
 
 _2026-10-19_

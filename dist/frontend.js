@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.45.4";
+const VERSION = "1.46.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -90,15 +90,29 @@ const SIZE_PICKS = {
             { value: "flash", label: "Solar Decide Flash, faster", name: "Solar Decide Flash", line: "solarFlashOver" },
         ],
     },
-    // Perplexity's newest Decider has a name of its own only on OpenRouter, so
-    // V1.1 27B, which every host serves, is the standard.
+    // Decider and Decider Flash, each as a version that stays put and as a
+    // name that always points at the newest. NanoGPT serves only the older
+    // V1.1 27B, under the standard choice.
     decider: {
         key: "deciderVersion",
         title: "Which Decider",
         standard: "exact",
         sizes: [
-            { value: "exact", label: "Decider V1.1 27B", name: "Decider", line: "deciderOver" },
+            { value: "exact", label: "Decider V1.2", name: "Decider", line: "deciderOver" },
             { value: "latest", label: "Decider Latest, always the newest", name: "Decider", line: "deciderOver" },
+            { value: "flash", label: "Decider Flash V1.2, smaller and faster", name: "Decider Flash", line: "deciderFlashOver" },
+            { value: "flashLatest", label: "Decider Flash Latest, always the newest", name: "Decider Flash", line: "deciderFlashOver" },
+        ],
+    },
+    // D1 and D1 Ultra, Liquid AI's largest, which also reads pictures. NanoGPT
+    // serves only D1.
+    d1: {
+        key: "d1Size",
+        title: "Which D1",
+        standard: "full",
+        sizes: [
+            { value: "full", label: "D1", name: "D1", line: "d1Over" },
+            { value: "ultra", label: "D1 Ultra, the largest", name: "D1 Ultra", line: "d1UltraOver" },
         ],
     },
     clef: {
@@ -157,20 +171,25 @@ function sizeServed(c, who, size) {
 // The name each host gives each second model. Shown in the Model name box as
 // the name used when the box is empty. The backend holds the same names, and a
 // test checks the two agree. Jev's are per choice under Which Jev, and a host
-// with no preview or no exact Jev of its own is sent its latest. Span's are per
-// kind of Span. Respan's own API serves Span-02 for both kinds.
+// with no preview Jev of its own is sent its latest. Span's are per kind of
+// Span: on OpenRouter, Span-01 Lite is the free one and Span-02 the paid one.
+// Respan's own API serves Span-02 for both kinds.
 const BUILT_IN_MODEL_NAMES = {
     jev: {
-        openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "~typesafe/jev-latest" },
+        openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "typesafe/jev-1.14" },
         nanogpt: { latest: "typesafe/jev-latest", preview: "typesafe/jev-latest", exact: "typesafe/jev-1.14" },
         typesafe: { latest: "jev-latest", preview: "jev-preview", exact: "jev-1.14.0" },
     },
     span: {
-        openrouter: { free: "respan/span-01-lite", full: "respan/span-01" },
+        openrouter: { free: "respan/span-01-lite", full: "respan/span-02" },
         respan: { free: "span-02", full: "span-02" },
     },
     mercury: { openrouter: { free: "inception/mercury-decide:free", paid: "inception/mercury-decide" } },
-    d1: { openrouter: "liquid/d1", nanogpt: "liquid/d1", liquid: "d1:free" },
+    d1: {
+        openrouter: { full: "liquid/d1", ultra: "liquid/d1-ultra" },
+        nanogpt: { full: "liquid/d1" },
+        liquid: { full: "d1:free", ultra: "d1-ultra" },
+    },
     solar: {
         openrouter: { full: "upstage/solar-decide", flash: "upstage/solar-decide-flash" },
         upstage: { full: "solar-decide" },
@@ -183,9 +202,19 @@ const BUILT_IN_MODEL_NAMES = {
         cloudflare: { full: "clef", flash: "clef-flash", omni: "clef-omni" },
     },
     decider: {
-        openrouter: { exact: "perplexity/pplx-decider-v1.1-27b", latest: "~perplexity/pplx-decider-latest" },
+        openrouter: {
+            exact: "perplexity/pplx-decider-v1.2",
+            latest: "~perplexity/pplx-decider-latest",
+            flash: "perplexity/pplx-decider-flash-v1.2",
+            flashLatest: "~perplexity/pplx-decider-flash-latest",
+        },
         nanogpt: { exact: "perplexity/pplx-decider-v1.1-27b" },
-        perplexity: { exact: "pplx-decider-v1.1-27b" },
+        perplexity: {
+            exact: "pplx-decider-v1.2",
+            latest: "pplx-decider-latest",
+            flash: "pplx-decider-flash-v1.2",
+            flashLatest: "pplx-decider-flash-latest",
+        },
     },
     microsoft: { openrouter: "microsoft/microsoft-decision-1" },
     drex: { openrouter: "nace-ai/drex-v2.0" },
@@ -346,7 +375,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -852,6 +881,7 @@ const CONFIG = {
     clefTier: "full",
     solarTier: "full",
     deciderVersion: "exact",
+    d1Size: "full",
     // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
     judgeUrl: "",
@@ -885,6 +915,7 @@ const CONFIG = {
     spanOver: 30,
     mercuryOver: 30,
     d1Over: 30,
+    d1UltraOver: 30,
     solarOver: 30,
     kevOver: 30,
     lunaOver: 30,
@@ -892,6 +923,7 @@ const CONFIG = {
     clefFlashOver: 30,
     clefOmniOver: 30,
     deciderOver: 30,
+    deciderFlashOver: 30,
     microsoftOver: 30,
     drexOver: 30,
     classifyOver: 30,
@@ -2458,12 +2490,12 @@ const JUDGE_FIELDS = [
         type: "pick",
         options: [
             { value: "free", label: "Span-01 Lite, free" },
-            { value: "full", label: "Span-01" },
+            { value: "full", label: "Span-02" },
         ],
         needs: { key: "judgeWho", is: "span" },
         also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] },
         under: true,
-        hint: "The free one costs nothing. Respan's own API serves Span-02 instead.",
+        hint: "Span-01 Lite costs nothing. Respan's own API serves Span-02 for both.",
     },
     // Which Clef, Which Solar Decide and the rest, one for each model in
     // SIZE_PICKS. A size is offered on the hosts that serve it.
@@ -2487,7 +2519,7 @@ const JUDGE_FIELDS = [
         options: [
             { value: "latest", label: "The latest Jev" },
             { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
-            { value: "exact", label: "Jev 1.14 exactly", needs: { key: "judgeHost", is: ["nanogpt", "typesafe"] } },
+            { value: "exact", label: "Jev 1.14 exactly", needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] } },
         ],
         needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
         also: { key: "judgeWho", is: "jev" },
@@ -2541,7 +2573,7 @@ const JUDGE_FIELDS = [
             kev: "jaredpalmer/kev-4b",
             luna: "openai/gpt-6-luna-decisions",
             clef: "cloudflare/clef",
-            decider: "perplexity/pplx-decider-v1.1-27b",
+            decider: "perplexity/pplx-decider-v1.2",
             microsoft: "microsoft/microsoft-decision-1",
             drex: "nace-ai/drex-v2.0",
             classify: "scaledown/classify-1",
@@ -2617,7 +2649,20 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "d1" },
+        when: (c) => lineInUse(c, "d1Over"),
         hint: "For D1. A percentage, " + CONFIG.d1Over + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "d1UltraOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "d1" },
+        when: (c) => lineInUse(c, "d1UltraOver"),
+        hint: "For D1 Ultra. A percentage, " + CONFIG.d1UltraOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "solarOver",
@@ -2698,7 +2743,20 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "decider" },
+        when: (c) => lineInUse(c, "deciderOver"),
         hint: "For Decider. A percentage, " + CONFIG.deciderOver + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "deciderFlashOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "decider" },
+        when: (c) => lineInUse(c, "deciderFlashOver"),
+        hint: "For Decider Flash. A percentage, " + CONFIG.deciderFlashOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "microsoftOver",
