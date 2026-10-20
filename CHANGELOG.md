@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.45.4
+
+_2026-10-19_
+
+### Fixed
+
+- **Some broken rewrites were saved.** **Refuse a broken rewrite** missed three kinds:
+  - A rewrite whose words run together with no spaces, such as `shesatbythewindowandwaited`. One long word, a held sound such as `nooooooo`, web addresses, and German or Dutch are left alone.
+  - A rewrite with a model's own marks for a space and a line break printed in it, `Ġ` and `Ċ`, as in `HeĠsatĠdown`. Maltese, which writes them as letters, is left alone.
+  - One word repeated to the end, such as `and, and, and,`. A loop needed 60 words. It now needs 30, so one word repeated 30 times counts, and a phrase of three words still needs 10 repeats.
+
+  As before, each one only counts when your reply did not already have it. See [A broken rewrite](docs/guardrails.md#a-broken-rewrite).
+
+---
+
 ## 1.45.3
 
 _2026-10-19_

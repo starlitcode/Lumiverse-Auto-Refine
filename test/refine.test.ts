@@ -8381,6 +8381,17 @@ describe("a broken rewrite", () => {
     ["an instruction marker and card data", scene + "[/INST] [Character(\"Wren\")][Job(\"ferry pilot\")]", /prompt's own format/],
     ["the start of the next turn", scene + "\n<|im_start|>user\nI wave at the lamp.", /prompt's own format/],
     ["a phrase repeated to the end", scene + "the river and the river and ".repeat(16), /stuck repeating/],
+    ["one word and a comma repeated to the end", scene + "The cold, wet, tired, " + "and, ".repeat(40) + "and,", /stuck repeating/],
+    [
+      "a tokenizer's marks for a space and a line break",
+      scene + "She\u0120cut\u0120the\u0120engine.\u010A\"Quiet.\"\u0120Oriel\u0120closed\u0120the\u0120ledger\u0120and\u0120waited.",
+      /came back garbled/,
+    ],
+    [
+      "words run together with no spaces",
+      scene + "Wrenkepthereyesonthelampandsaidnothing, and Orielcountedthecoinsasecondtimeforluck, thenshutthebookquietly.",
+      /came back garbled/,
+    ],
   ];
   for (const [label, answer, why] of cases) {
     test("refused: " + label, async () => {
@@ -8402,6 +8413,14 @@ describe("a broken rewrite", () => {
 
   test("saved: a letter in Russian after a colon, which is written on purpose", async () => {
     const answer = scene + "The note read:\n\nЗатем дорога ушла вниз к реке, и никто не знал, куда идти дальше, потому что мост был сломан.";
+    const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe(answer);
+  });
+
+  test("saved: one well-known long word and a held scream", async () => {
+    const answer = scene + "\"Supercalifragilisticexpialidocious,\" Oriel sang, and Wren shouted \"Noooooooooooooooooooooooooooo!\"";
     const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);

@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.45.3';
+const VERSION = '1.45.4';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3021,17 +3021,42 @@ function garbledVerdict(visible) {
     return false;
 }
 // Broken characters: text decoded with the wrong encoding, such as "Ã©" for
-// "é" or "â€™" for an apostrophe, the replacement character, and control
-// characters. At least SOUP_MIN_HITS of them, and SOUP_MIN_SHARE of the text.
+// "é" or "â€™" for an apostrophe, the replacement character, control
+// characters, and a tokenizer's marks for a space or a line break. At least
+// SOUP_MIN_HITS of them, and SOUP_MIN_SHARE of the text.
 // The pairs are a lead letter that starts a two- or three-byte character, read
 // as Latin-1, followed by a character that a following byte turns into.
 const SOUP_MIN_HITS = 8;
 const SOUP_MIN_SHARE = 0.02;
 const SOUP_PAIR = /[\u00C2-\u00C5\u00D0\u00D1\u00E2-\u00E9][\u0080-\u00BF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]/g;
 const SOUP_CHAR = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+// A model's own word marks printed as text. Some tokenizers store a space as
+// "Ġ" and a line break as "Ċ", and a broken backend can print those in place
+// of the space or the break, as in "HeĠsaidĠyes.ĊShe". Maltese writes Ġ and Ċ
+// as letters at the start of a word: after a space, a hyphen as in "Il-Ġ", or
+// an opening bracket or quotation mark. Those are not counted, and neither is
+// one with a space after it.
+function wordMarks(text) {
+    let n = 0;
+    for (const m of text.matchAll(/[\u0120\u010A]/g)) {
+        const at = m.index || 0;
+        const before = text.charAt(at - 1);
+        const after = text.charAt(at + 1);
+        if (!before || /\s/.test(before) || !after || /\s/.test(after))
+            continue;
+        if (/[-([{\u201c\u2018]/.test(before))
+            continue;
+        if (/["'*_]/.test(before) && (at < 2 || /\s/.test(text.charAt(at - 2))))
+            continue;
+        n++;
+    }
+    return n;
+}
 function soupVerdict(visible) {
     const text = withoutCode(visible);
-    const hits = (text.match(SOUP_PAIR) || []).length + (text.match(SOUP_CHAR) || []).length;
+    const hits = (text.match(SOUP_PAIR) || []).length +
+        (text.match(SOUP_CHAR) || []).length +
+        wordMarks(text);
     if (hits < SOUP_MIN_HITS)
         return false;
     const size = text.replace(/\s+/g, '').length;
@@ -3111,6 +3136,66 @@ function spanIsSetApart(text, start) {
         return true;
     return /:[ \t]*$/.test(text.slice(0, start).replace(/[^\p{L}\p{N}:]*$/u, ''));
 }
+// Words run together with no spaces, as in "shesaidshewasstillwaiting". A
+// model breaking down can drop its spaces for whole sentences. A run counts
+// when it is GLUED_MIN or more plain letters, a to z, with GLUED_DISTINCT or
+// more different letters in it. That leaves out a held sound such as
+// "nooooooo", a short keysmash, and words with accents, such as German
+// compounds with ä or ü. Web addresses, handles, hashtags and email addresses
+// are left out first, and a few well-known long words are allowed.
+//
+// One long English word can turn up in good writing, so one run is not
+// enough. Text counts when GLUED_WINDOW words in a row hold three runs, or two
+// runs where one is GLUED_LONG letters or more.
+//
+// Only English is judged. German and Dutch write long words on purpose. Text
+// of GLUED_LANG_WORDS words or more is English here when at least
+// GLUED_ENGLISH of its words are among the most common English ones. Shorter
+// text is judged either way, since text whose words all run together has few
+// words to count.
+const GLUED_MIN = 18;
+const GLUED_LONG = 30;
+const GLUED_DISTINCT = 10;
+const GLUED_WINDOW = 80;
+const GLUED_LANG_WORDS = 40;
+const GLUED_ENGLISH = 0.06;
+const GLUED_COMMON = new Set('the and a an to of in i you he she it was her his him that with for on at but not is as my me so we they be had have this just'.split(' '));
+const GLUED_KNOWN = /^(?:supercalifragilisticexpialidocious|pneumonoultramicroscopicsilicovolcanoconiosis|antidisestablishmentarianism|floccinaucinihilipilification|hippopotomonstrosesquippedaliophobia|incomprehensibilities|uncharacteristically|counterrevolutionary|internationalization|institutionalization)$/i;
+function gluedVerdict(visible) {
+    const text = withoutCode(visible).replace(/\bhttps?:\/\/\S+|\bwww\.\S+|\S+@\S+\.\S+|[@#][\w.-]+/gi, ' ');
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length >= GLUED_LANG_WORDS) {
+        let common = 0;
+        for (const w of words)
+            if (GLUED_COMMON.has(w.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '')))
+                common++;
+        if (common / words.length < GLUED_ENGLISH)
+            return false;
+    }
+    const runs = [];
+    words.forEach((word, at) => {
+        // Every run of letters, so a letter with an accent splits nothing: a run
+        // holding one is not English and is passed over whole.
+        for (const m of word.matchAll(/\p{L}+/gu)) {
+            const run = m[0];
+            if (!/^[A-Za-z]+$/.test(run))
+                continue;
+            if (run.length < GLUED_MIN || run === run.toUpperCase() || GLUED_KNOWN.test(run))
+                continue;
+            if (new Set(run.toLowerCase()).size < GLUED_DISTINCT)
+                continue;
+            runs.push({ at: at, size: run.length });
+        }
+    });
+    for (let k = 0; k < runs.length; k++) {
+        const near = runs.filter((r) => r.at >= runs[k].at && r.at < runs[k].at + GLUED_WINDOW);
+        if (near.length >= 3)
+            return true;
+        if (near.length >= 2 && near.some((r) => r.size >= GLUED_LONG))
+            return true;
+    }
+    return false;
+}
 // The prompt's own format written into the rewrite: an instruction or system
 // marker, an instruction heading, the start of the next turn, or a character
 // card's data. A marker or card data that opens the text or follows a colon
@@ -3170,7 +3255,9 @@ function leakVerdict(text) {
 // is (see repeatOnPurpose). A model stuck in a loop runs until it is cut off,
 // so it does not close a quotation mark or an asterisk it opened.
 const LOOP_MIN_REPEATS = 10;
-const LOOP_MIN_WORDS = 60;
+// The loop's size in words, counting every repeat. A one-word loop such as
+// "and, and, and," needs this many repeats, and a three-word one needs ten.
+const LOOP_MIN_WORDS = 30;
 const LOOP_MAX_UNIT = 12;
 const LOOP_CHAR_REPEATS = 60;
 const LOOP_LETTER_REPEATS = 150;
@@ -3297,7 +3384,7 @@ function brokenWhy(orig, raw, text) {
         return 'the rewrite ran into the prompt\'s own format, such as [/INST] or the start of the next turn';
     if (loopVerdict(text) && !loopVerdict(orig))
         return 'the rewrite got stuck repeating or rambling';
-    const garbled = (t) => garbledVerdict(t) || soupVerdict(t) || switchVerdict(t);
+    const garbled = (t) => garbledVerdict(t) || soupVerdict(t) || switchVerdict(t) || gluedVerdict(t);
     if (garbled(text) && !garbled(orig))
         return 'the rewrite came back garbled';
     return '';

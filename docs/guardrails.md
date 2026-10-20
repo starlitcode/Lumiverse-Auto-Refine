@@ -51,8 +51,8 @@ A rewrite is dropped when it is:
 
 A model can break down while it rewrites, the same ways a reply can break. **Refuse a broken rewrite** throws the rewrite away when it:
 
-- **came back garbled**: words from several languages run together, broken characters such as `cafÃ©` for `café`, or a switch to another alphabet that runs to the end
-- **got stuck repeating or rambling**: a word or phrase repeated over and over to the end, a short pattern such as `1.1.1.1.` repeated hundreds of times, or 150 words on one line with no punctuation
+- **came back garbled**: words from several languages run together, words with no spaces between them, broken characters such as `cafÃ©` for `café` or a model's own marks `Ġ` and `Ċ` printed in place of a space or a line break, or a switch to another alphabet that runs to the end
+- **got stuck repeating or rambling**: a word or phrase repeated over and over to the end, 30 words in all, such as `and,` 30 times; a short pattern such as `1.1.1.1.` repeated hundreds of times; or 150 words on one line with no punctuation
 - **ran into the prompt's own format**: a marker such as `[/INST]` or `<<SYS>>`, a heading such as `### Instruction:`, the start of the next turn, or a character card's data
 
 It is on by default. Each one only counts when the rewrite has it and your reply did not. So a reply that already had a passage in Russian, or a chant that repeats, can still be refined.
@@ -62,6 +62,7 @@ Writing set apart on purpose is also left alone:
 - a passage in another alphabet in quotation marks or asterisks, in a quoted block, or after a colon
 - a character card or a prompt format written out on purpose: at the very start of the rewrite, or after a colon, such as "Here is the card:"
 - repetition in quotation marks or asterisks that close again after it, in a quoted block, or after a colon, such as a crowd's chant or the same line written out many times
+- one long word, a held sound such as `nooooooo`, web addresses and hashtags, and German or Dutch, which write long words on purpose
 
 A model stuck in a loop does not close a quotation mark or an asterisk it opened, so a loop inside dialogue that never closes still counts. Code is never checked.
 
