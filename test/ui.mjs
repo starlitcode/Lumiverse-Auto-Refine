@@ -2324,7 +2324,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all thirteen second models are offered, each model's sizes under one entry, and one for a model not in the list", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq,other", JSON.stringify(jev.who));
+    ok("all fourteen second models are offered, each model's sizes under one entry, and one for a model not in the list", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq,jeff,other", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -7759,7 +7759,13 @@ console.log("\nthe card is handed over, never swapped");
   await inTab(browser, {}, async (page) => {
     const out = await page.evaluate(async () => {
       const card = () => document.querySelector("[data-arf-pop]");
-      const rest = () => new Promise((r) => setTimeout(r, 450));
+      // The fade's length, then until it has finished. A busy machine can run
+      // the fade late, and reading it partway says nothing about a swap.
+      const rest = async () => {
+        await new Promise((r) => setTimeout(r, 450));
+        for (let i = 0; i < 30 && card() && getComputedStyle(card()).opacity !== "1"; i++)
+          await new Promise((r) => setTimeout(r, 50));
+      };
       const read = () => {
         const c = card();
         if (!c) return { gone: true };
@@ -14572,6 +14578,21 @@ await inTab(browser, { saved: { refineOn: false } }, async (page) => {
     return window.__sent.filter((m) => m.type === "reroll_added").length;
   });
   ok("not with the automatic pass off", got === 0, String(got));
+});
+
+console.log("\na retry Auto Retry sets and calls off");
+// Auto Retry says in the page when it sets a retry of a chat's reply and when
+// it calls one off. The panel hands both to the backend, which leaves a reply
+// about to be replaced, and refines it after all when the retry is off.
+await inTab(browser, { saved: { refineOn: true } }, async (page) => {
+  const got = await page.evaluate(async () => {
+    window.dispatchEvent(new CustomEvent("auto-retry:retrying", { detail: { chatId: "c4" } }));
+    window.dispatchEvent(new CustomEvent("auto-retry:retry-off", { detail: { chatId: "c4" } }));
+    window.dispatchEvent(new CustomEvent("auto-retry:retrying", { detail: {} }));
+    await new Promise((r) => setTimeout(r, 100));
+    return window.__sent.filter((m) => m.type === "retry_pending" || m.type === "retry_off").map((m) => m.type + ":" + m.chatId);
+  });
+  ok("both are handed to the backend, with the chat", got.join() === "retry_pending:c4,retry_off:c4", JSON.stringify(got));
 });
 
 console.log("\nwhat to refine");

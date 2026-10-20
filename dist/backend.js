@@ -100,6 +100,28 @@ let chatsOff = new Set();
 // is already being written: the rewrite would land under the reader mid-scene,
 // and on some builds the save races the new message.
 const generating = new Set();
+// Chats where Auto Retry has set a retry of the reply, and when. Auto Retry
+// says so in the page, the panel hands it here, and the reply is left alone,
+// since it is about to be replaced. Cleared when the retry's reply starts,
+// when Auto Retry adds a reroll, and when Auto Retry calls the retry off. A
+// retry nothing more is heard about is let go after RETRY_HOLD_MS, so a page
+// closed mid-retry does not hold the chat for good. Several tries at once can
+// run for minutes with no reply starting in the chat, so the hold is long.
+const retrying = new Map();
+const RETRY_HOLD_MS = 10 * 60 * 1000;
+function retryPending(chatId) {
+    const at = retrying.get(String(chatId));
+    if (at == null)
+        return false;
+    if (Date.now() - at < RETRY_HOLD_MS)
+        return true;
+    retrying.delete(String(chatId));
+    return false;
+}
+// The reply the automatic pass left because a retry was set, per chat. Refined
+// after all if Auto Retry calls the retry off.
+const leftForRetry = new Map();
+const LEFT_MAX = 200;
 const before = new Map();
 const BEFORE_MAX = 30;
 // The file the list is kept in, with Keep them through an update on.
@@ -4604,6 +4626,8 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     // money is spent.
     if (!byHand && generating.has(String(chatId)))
         return { ok: false, stood: true, why: 'another reply is being written in this chat, so this one was left' };
+    if (!byHand && retryPending(chatId))
+        return { ok: false, stood: true, why: 'Auto Retry is going to retry this reply, so it was left' };
     let verdict = { ok: false, text: '', why: 'nothing was tried' };
     let notes = '';
     // A refine is allowed more than one call, so what it used is the run rather
@@ -4668,7 +4692,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             // but on its own that is the whole chain paid for before anybody finds out:
             // a swipe during the second of six passes buys four more calls that were
             // never going to be saved.
-            if (step + 1 < chain.length && generating.has(String(chatId))) {
+            if (step + 1 < chain.length && (generating.has(String(chatId)) || (!byHand && retryPending(chatId)))) {
                 say('info', 'another reply started, so the chain stopped after pass ' + (step + 1));
                 return {
                     ok: false,
@@ -4886,6 +4910,13 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             stood: true,
             notes: notes,
             why: 'another reply started while the rewrite was being written, so it was not saved',
+        };
+    if (!byHand && retryPending(chatId))
+        return {
+            ok: false,
+            stood: true,
+            notes: notes,
+            why: 'Auto Retry set a retry of this reply while the rewrite was being written, so it was not saved',
         };
     const back = unshield(verdict.text, armed.parts);
     if (back.lost.length)
@@ -5307,6 +5338,18 @@ const SUBQ_HOSTS = {
     nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'subq/subq-snap-preview', kind: 'decisions' },
     subq: { url: 'https://api.subq.ai/v1/systemone', model: 'subq-snap-preview', kind: 'decisions' },
 };
+// Jeff, from eu/jev, which serves it from Germany. It takes Jev's request on
+// NanoGPT and on eu/jev's own API, and at most 8 questions in one call. Each
+// host has a release that stays put and a name that always points at the
+// newest.
+const JEFF_HOSTS = {
+    nanogpt: {
+        url: 'https://nano-gpt.com/api/v1/decisions',
+        models: { exact: 'eu-jev/eu-jeff-1.0.0', latest: 'eu-jev/eu-jeff-latest' },
+        kind: 'decisions',
+    },
+    eujev: { url: 'https://eu-jev.com/v1/systemone', models: { exact: 'eu-jeff-1.0.0', latest: 'eu-jeff-latest' }, kind: 'decisions' },
+};
 // Classify-1, from ScaleDown. OpenRouter takes Jev's request for it. It reads
 // only the text field of the state, which ScaleDown's own docs say.
 const CLASSIFY_HOSTS = {
@@ -5433,6 +5476,7 @@ const ownNames = {
     drex: '',
     classify: '',
     subq: '',
+    jeff: '',
 };
 const SIZE_PICKS = {
     mercury: {
@@ -5454,6 +5498,11 @@ const SIZE_PICKS = {
             flash: { name: 'Decider Flash', line: 'deciderFlashOver' },
             flashLatest: { name: 'Decider Flash', line: 'deciderFlashOver' },
         },
+    },
+    jeff: {
+        setting: 'jeffVersion',
+        standard: 'exact',
+        sizes: { exact: { name: 'Jeff', line: 'jeffOver' }, latest: { name: 'Jeff', line: 'jeffOver' } },
     },
     d1: {
         setting: 'd1Size',
@@ -5497,6 +5546,7 @@ const LINES = {
     drex: { key: 'drexOver', fallback: 30 },
     classify: { key: 'classifyOver', fallback: 30 },
     subq: { key: 'subqOver', fallback: 30 },
+    jeff: { key: 'jeffOver', fallback: 30 },
     other: { key: 'otherOver', fallback: 30 },
 };
 let judgeWorn = true;
@@ -5603,6 +5653,12 @@ const SECOND_MODELS = {
         hosts: SUBQ_HOSTS,
         model: (host) => ownNames.subq || SUBQ_HOSTS[host].model,
     },
+    jeff: {
+        name: 'Jeff',
+        most: 8,
+        hosts: JEFF_HOSTS,
+        model: (host) => ownNames.jeff || sizedName(JEFF_HOSTS[host]),
+    },
 };
 function secondModel() {
     return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
@@ -5659,6 +5715,7 @@ const HOST_LABELS = {
     cloudflare: 'Cloudflare',
     perplexity: 'Perplexity',
     subq: 'SubQ',
+    eujev: 'eu/jev',
     custom: 'the address you gave',
 };
 const hostLabel = (host) => HOST_LABELS[host] || host;
@@ -6499,6 +6556,15 @@ async function autoPass(p, who) {
     if (answered.has(run))
         return stand('this reply was announced twice, and it was taken the first time', messageId);
     note(answered, run, ANSWERED_MAX);
+    const leave = () => {
+        leftForRetry.set(String(p.chatId), { messageId: String(messageId), who: who });
+        while (leftForRetry.size > LEFT_MAX)
+            leftForRetry.delete(leftForRetry.keys().next().value);
+    };
+    if (retryPending(p.chatId)) {
+        leave();
+        return stand('Auto Retry is going to retry this reply, so it was left', messageId);
+    }
     // The gap between automatic refines. Waited out rather than skipped: the
     // reply still gets its refine, a few seconds later.
     const gapMs = refineGap * 1000;
@@ -6523,6 +6589,8 @@ async function autoPass(p, who) {
         done = { ok: false, why: 'something went wrong: ' + ((e && e.message) || String(e)) };
         say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
     }
+    if (done.stood && retryPending(p.chatId))
+        leave();
     // Nothing reached a model, so nothing is reported as refused. The reply
     // may well come back round: Auto Retry swipes a refusal and the next one
     // arrives as its own generation, with its own text, which this pass has
@@ -6550,8 +6618,13 @@ async function autoPass(p, who) {
 try {
     spindle.on('GENERATION_STARTED', (p) => {
         try {
-            if (p && p.chatId)
+            if (p && p.chatId) {
                 generating.add(String(p.chatId));
+                // The retry's own reply, or the reader's: either way the reply that was
+                // held for a retry is being replaced now.
+                retrying.delete(String(p.chatId));
+                leftForRetry.delete(String(p.chatId));
+            }
         }
         catch (_) { }
     });
@@ -6585,7 +6658,7 @@ catch (_) {
 // The messages that do work with the account's settings. Each runs in its
 // account's turn. The rest, such as saving settings or Stop, never wait.
 const WORK = new Set([
-    'reroll_added', 'refine_now', 'refine_all', 'refine_selection', 'snip_selection', 'try_refine',
+    'reroll_added', 'retry_off', 'refine_now', 'refine_all', 'refine_selection', 'snip_selection', 'try_refine',
     'preview_prompt', 'apply_refine', 'undo_refine', 'jev_test', 'list_undoable', 'forget_undo',
 ]);
 spindle.onFrontendMessage((payload, userId) => payload && WORK.has(String(payload.type))
@@ -6626,9 +6699,32 @@ async function onPanel(payload, userId) {
         // event announces it. The panel hears about it in the page and hands it
         // here, and it goes through the automatic pass like any reply that ended.
         // Keyed by the reroll, so the same one is never taken twice.
+        // Auto Retry has set a retry of this chat's reply. Held until the retry's
+        // reply starts, a reroll is added, or the retry is called off.
+        if (payload.type === 'retry_pending') {
+            if (payload.chatId)
+                retrying.set(String(payload.chatId), Date.now());
+            return;
+        }
+        // Auto Retry called the retry off, so the reply stays. A reply the
+        // automatic pass left for the retry is refined after all.
+        if (payload.type === 'retry_off') {
+            if (!payload.chatId)
+                return;
+            const chatId = String(payload.chatId);
+            retrying.delete(chatId);
+            const left = leftForRetry.get(chatId);
+            leftForRetry.delete(chatId);
+            if (!left)
+                return;
+            await autoPass({ chatId: chatId, messageId: left.messageId, runKey: 'off:' + left.messageId + ':' + Date.now() }, userId);
+            return;
+        }
         if (payload.type === 'reroll_added') {
             if (!payload.chatId || !payload.messageId)
                 return;
+            retrying.delete(String(payload.chatId));
+            leftForRetry.delete(String(payload.chatId));
             await autoPass({
                 chatId: String(payload.chatId),
                 messageId: String(payload.messageId),

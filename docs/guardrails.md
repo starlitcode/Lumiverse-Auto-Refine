@@ -25,6 +25,17 @@ Sometimes the reply itself is the model refusing to write the scene. Rewriting i
 - The refine button still works on it, if you want to refine it anyway.
 - [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) can retry the reply instead. The reply it gets back is refined as usual.
 
+## A reply Auto Retry is going to retry
+
+[Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) waits a few seconds before it retries a reply. It says so in the page when it sets a retry, and when it calls one off.
+
+- The automatic pass leaves a reply that Auto Retry is going to retry. Refining it would pay for a rewrite of a reply that is about to be replaced.
+- A refine already running when the retry is set stops before its next pass, and its rewrite is not saved.
+- The reply Auto Retry gets back is refined as usual.
+- If Auto Retry calls the retry off, such as when you press **Cancel**, the reply stays, so it is refined after all.
+- A refine you start yourself, with a button or a selection, still runs.
+- This needs Auto Retry 5.20.1 or later. With an older one, a refine stops once the retry's reply starts.
+
 ## The \* marks around actions
 
 Many replies use \* marks around an action or a stressed word, such as \*she turns away\*. A model can drop these marks while it rewrites. With **Refuse a rewrite that loses \* marks** on, the rewrite is thrown away when:

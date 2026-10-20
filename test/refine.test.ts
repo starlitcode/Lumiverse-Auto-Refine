@@ -552,6 +552,80 @@ describe("going over a reply more than once", () => {
   });
 });
 
+// Auto Retry says in the page when it sets a retry of a chat's reply, and when
+// it calls one off. A reply about to be replaced is not refined: the call
+// would be paid for writing nobody reads. A retry called off leaves the reply,
+// so it is refined after all.
+describe("a reply Auto Retry is going to retry", () => {
+  test("is left, with no model asked", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.stood().join(" ")).toMatch(/Auto Retry is going to retry this reply/);
+  });
+
+  test("and is refined after all when the retry is called off", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    await h.front({ type: "retry_off", chatId: "c1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a retry called off with nothing left asks nothing", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.front({ type: "retry_off", chatId: "c1" });
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("the retry's own reply is refined when it ends", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    h.started({ chatId: "c1", generationId: "g2" });
+    h.edit("m2", "A fresh reply from the retry, long enough to be refined.");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    // The reply the retry replaced is not refined afterwards when nothing calls it off.
+    await h.front({ type: "retry_off", chatId: "c1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a reroll Auto Retry adds is refined", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a refine asked for by hand still runs", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true });
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("another chat is not held", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_pending", chatId: "c9" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+});
+
 // One install serving several accounts. The settings live in one set of
 // variables, so each account's work runs in its own turn with its own settings,
 // and another account's work waits for the turn to end.
@@ -1714,6 +1788,12 @@ describe("two models: Jev reads the reply first", () => {
     ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-v2.0"],
     ["subq", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "subq/subq-snap-preview"],
     ["subq", "subq", "https://api.subq.ai/v1/systemone", "subq-snap-preview"],
+    ["jeff", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "eu-jev/eu-jeff-1.0.0"],
+    ["jeff", "eujev", "https://eu-jev.com/v1/systemone", "eu-jeff-1.0.0"],
+    ["jeff", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "eu-jev/eu-jeff-latest", { jeffVersion: "latest" }],
+    ["jeff", "eujev", "https://eu-jev.com/v1/systemone", "eu-jeff-latest", { jeffVersion: "latest" }],
+    // eu/jev is on neither OpenRouter nor TypeSafe, so either left picked sends Jeff to NanoGPT.
+    ["jeff", "openrouter", "https://nano-gpt.com/api/v1/decisions", "eu-jev/eu-jeff-1.0.0"],
     ["mercury", "openrouter", "https://openrouter.ai/api/alpha/decisions", "inception/mercury-decide", { mercuryTier: "paid" }],
     ["decider", "openrouter", "https://openrouter.ai/api/alpha/decisions", "perplexity/pplx-decider-v1.2"],
     ["decider", "perplexity", "https://api.perplexity.ai/v1/decisions", "pplx-decider-v1.2"],
@@ -1787,6 +1867,25 @@ describe("two models: Jev reads the reply first", () => {
     expect(first.length).toBe(16);
     expect(second.length).toBe(2);
     expect(first.concat(second).sort()).toEqual(Array.from({ length: 18 }, (_, i) => "check_" + (i + 1)).sort());
+    expect(h.asked.length).toBe(1);
+  });
+
+  // Jeff takes at most 8 questions in a call. Ten checks go over two calls,
+  // and the last one, in the second call, is the one over the line.
+  test("Jeff is asked 8 questions at a time, and every answer counts", async () => {
+    const checks = Array.from({ length: 10 }, (_, i) => "`reply` has problem number " + (i + 1) + ".").join("\n");
+    const high = (_url: string, init: any) => {
+      const b = JSON.parse(init.body);
+      const answers: any = {};
+      for (const id of Object.keys(b.questions)) answers[id] = { noul: id === "check_10" ? 0.9 : 0.1 };
+      return { status: 200, body: JSON.stringify({ model: b.model, answers: answers }) };
+    };
+    const h = await keyed({ judgeWho: "jeff", judgeHost: "eujev", judgeWorn: false, judgeChecks: checks }, { jev: high });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(h.jevCalls.length).toBe(2);
+    expect(Object.keys(h.jevCalls[0].body.questions).length).toBe(8);
+    expect(Object.keys(h.jevCalls[1].body.questions).length).toBe(2);
     expect(h.asked.length).toBe(1);
   });
 
@@ -1894,6 +1993,8 @@ describe("two models: Jev reads the reply first", () => {
     ["drex", "drexOver"],
     ["classify", "classifyOver"],
     ["subq", "subqOver"],
+    ["jeff", "jeffOver"],
+    ["jeff", "jeffOver", { jeffVersion: "latest" }],
     ["solar", "solarFlashOver", { solarTier: "flash" }],
   ] as Array<[string, string, any?]>) {
     test(key + " is a line of its own, 30 by default", async () => {
@@ -1901,7 +2002,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10, jeffOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);

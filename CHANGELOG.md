@@ -16,6 +16,11 @@ _2026-10-20_
 - **D1 Ultra.** Liquid AI's largest decision model. **Which D1** shows when D1 is picked, with **D1** and **D1 Ultra, the largest**, on OpenRouter and Liquid AI's own API. D1 Ultra has its own **Refine when a check reaches**, 30 by default. It reads up to 32,768 tokens on OpenRouter.
 - **Decider Latest on Perplexity's own API.** It was only offered on OpenRouter.
 - **Jev 1.14 exactly on OpenRouter.** OpenRouter now has a name for it, `typesafe/jev-1.14`.
+- **Jeff, from eu/jev.** A decision model served from Germany, on NanoGPT and on eu/jev's own API, with **eu/jev** as a new host under **Where it is reached**. **Which Jeff** offers **Jeff 1.0.0** and **Jeff Latest, always the newest**. Jeff has its own **Refine when a check reaches**, 30 by default. It takes at most 8 checks in one call, so more are sent over two or more calls.
+
+### Fixed
+
+- **A reply Auto Retry was about to retry could be refined.** Auto Retry waits a few seconds before a retry. In that time the automatic pass refined the reply, and paid for a rewrite that was then replaced. With Auto Retry 5.20.1 or later, the automatic pass now leaves a reply that Auto Retry is going to retry, and a refine already running is not saved. If the retry is called off, the reply is refined after all. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
 
 ### Changed
 

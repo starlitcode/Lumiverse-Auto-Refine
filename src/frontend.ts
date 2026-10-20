@@ -27,6 +27,12 @@ const VERSION = "1.46.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
+// The page events Auto Retry raises when it sets a retry of a chat's reply,
+// and when it calls one off before it starts. The automatic pass leaves a
+// reply that is about to be replaced, and refines it after all when the retry
+// is called off. Both extensions spell them the same way.
+const RETRYING_EVENT = "auto-retry:retrying";
+const RETRY_OFF_EVENT = "auto-retry:retry-off";
 
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
@@ -73,6 +79,8 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   { value: "drex", name: "Drex", from: "Nace.AI", about: "https://www.nace.ai/drex" },
   { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
   { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://subq.ai/introducing-subq-snap" },
+  // eu/jev has no introduction post, so its link is its own docs.
+  { value: "jeff", name: "Jeff", from: "eu/jev", about: "https://eu-jev.com/docs" },
   // A decision model with no entry of its own, reached at an address the
   // reader types. It has no maker and no page, and its own line.
   { value: "other", name: "Your model", from: "", about: "", label: "A model not in this list" },
@@ -119,6 +127,17 @@ const SIZE_PICKS: Record<string, { key: string; title: string; standard: string;
       { value: "latest", label: "Decider Latest, always the newest", name: "Decider", line: "deciderOver" },
       { value: "flash", label: "Decider Flash V1.2, smaller and faster", name: "Decider Flash", line: "deciderFlashOver" },
       { value: "flashLatest", label: "Decider Flash Latest, always the newest", name: "Decider Flash", line: "deciderFlashOver" },
+    ],
+  },
+  // Jeff, as a release that stays put and as a name that always points at
+  // eu/jev's newest. Both hosts serve both.
+  jeff: {
+    key: "jeffVersion",
+    title: "Which Jeff",
+    standard: "exact",
+    sizes: [
+      { value: "exact", label: "Jeff 1.0.0", name: "Jeff", line: "jeffOver" },
+      { value: "latest", label: "Jeff Latest, always the newest", name: "Jeff", line: "jeffOver" },
     ],
   },
   // D1 and D1 Ultra, Liquid AI's largest, which also reads pictures. NanoGPT
@@ -239,6 +258,10 @@ const BUILT_IN_MODEL_NAMES: Record<string, Record<string, string | Record<string
   drex: { openrouter: "nace-ai/drex-v2.0" },
   classify: { openrouter: "scaledown/classify-1" },
   subq: { nanogpt: "subq/subq-snap-preview", subq: "subq-snap-preview" },
+  jeff: {
+    nanogpt: { exact: "eu-jev/eu-jeff-1.0.0", latest: "eu-jev/eu-jeff-latest" },
+    eujev: { exact: "eu-jeff-1.0.0", latest: "eu-jeff-latest" },
+  },
 };
 
 // The built-in name for the model and host picked. A host the model is not on
@@ -271,6 +294,7 @@ const OWN_NAME_KEYS: Record<string, string> = {
   drex: "drexName",
   classify: "classifyName",
   subq: "subqName",
+  jeff: "jeffName",
 };
 
 // A link in the panel's own colors. Names are linked rather than printed as
@@ -392,7 +416,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "jeffVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "jeffName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "jeffOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -905,6 +929,7 @@ const CONFIG = {
   solarTier: "full",
   deciderVersion: "exact",
   d1Size: "full",
+  jeffVersion: "exact",
   // Where the second model is reached, and for "custom" the address and model name.
   judgeHost: "openrouter",
   judgeUrl: "",
@@ -928,6 +953,7 @@ const CONFIG = {
   drexName: "",
   classifyName: "",
   subqName: "",
+  jeffName: "",
   // The account ID Cloudflare's own address holds. Empty until the reader
   // pastes theirs.
   cloudflareAccount: "",
@@ -951,6 +977,7 @@ const CONFIG = {
   drexOver: 30,
   classifyOver: 30,
   subqOver: 30,
+  jeffOver: 30,
   otherOver: 30,
   solarFlashOver: 30,
   // With worn phrases on, the second model is also asked whether the reply uses one.
@@ -2668,6 +2695,7 @@ const JUDGE_FIELDS: Field[] = [
       { value: "cloudflare", label: "Cloudflare" },
       { value: "perplexity", label: "Perplexity" },
       { value: "subq", label: "SubQ" },
+      { value: "eujev", label: "eu/jev" },
     ]
       .map((o) => ({ ...o, needs: { key: "judgeWho", is: modelsOn(o.value) } }))
       .concat([{ value: "custom", label: "Another address" } as any]),
@@ -2734,7 +2762,7 @@ const JUDGE_FIELDS: Field[] = [
       label: "Model name",
       type: "text",
       needs: { key: "judgeWho", is: who },
-      also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq"] },
+      also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq", "eujev"] },
       under: true,
       placeholder: (c: any) => builtInModelName(c),
       hint: "Empty uses the name shown. If the host renames the model, type its new name here.",
@@ -2775,6 +2803,7 @@ const JUDGE_FIELDS: Field[] = [
           drex: "nace-ai/drex-v2.0",
           classify: "scaledown/classify-1",
           subq: "subq-snap-preview",
+          jeff: "eu-jeff-1.0.0",
           other: "my-decision-model",
         } as Record<string, string>
       )[c.judgeWho] || "typesafe/jev-latest"),
@@ -2999,6 +3028,17 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "subq" },
     hint: "For SubQ Snap. A percentage, " + CONFIG.subqOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "jeffOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "jeff" },
+    hint: "For Jeff. A percentage, " + CONFIG.jeffOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "otherOver",
@@ -17490,6 +17530,22 @@ export function setup(ctx: Ctx, overrides?: any) {
       window.addEventListener(REROLL_EVENT, onReroll);
       disposers.push(() => {
         try { window.removeEventListener(REROLL_EVENT, onReroll); } catch (_) {}
+      });
+      // Handed over whatever the settings say, since the backend only holds a
+      // note of it, and the automatic pass asks its own settings.
+      const onRetry = (type: string) => (e: any) => {
+        try {
+          const d = e && e.detail;
+          if (d && d.chatId) send({ type: type, chatId: String(d.chatId) });
+        } catch (_) {}
+      };
+      const onRetrying = onRetry("retry_pending");
+      const onRetryOff = onRetry("retry_off");
+      window.addEventListener(RETRYING_EVENT, onRetrying);
+      window.addEventListener(RETRY_OFF_EVENT, onRetryOff);
+      disposers.push(() => {
+        try { window.removeEventListener(RETRYING_EVENT, onRetrying); } catch (_) {}
+        try { window.removeEventListener(RETRY_OFF_EVENT, onRetryOff); } catch (_) {}
       });
     }
   } catch (_) {}

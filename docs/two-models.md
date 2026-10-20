@@ -21,6 +21,7 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | **Drex** | Nace.AI | Paid, per call | [Nace.AI: Drex](https://www.nace.ai/drex) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
 | **SubQ Snap** | Subquadratic | Paid, per call | [Introducing SubQ Snap](https://subq.ai/introducing-subq-snap) |
+| **Jeff** | eu/jev | Paid, per call | [eu/jev: Documentation](https://eu-jev.com/docs) |
 
 All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked, so every size of a model shares its link.
 
@@ -108,9 +109,10 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
 | Decider | **Which Decider** | Decider V1.2, Decider Latest, Decider Flash V1.2, or Decider Flash Latest |
 | D1 | **Which D1** | D1, or D1 Ultra |
+| Jeff | **Which Jeff** | Jeff 1.0.0, or Jeff Latest |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
-- The free and paid kinds of Mercury Decide are the same model, so they share one line. Decider V1.2 and Decider Latest share one line, and so do the two kinds of Decider Flash.
+- The free and paid kinds of Mercury Decide are the same model, so they share one line. Decider V1.2 and Decider Latest share one line, and so do the two kinds of Decider Flash and the two kinds of Jeff.
 - A host only offers the sizes it serves. If the size you picked is not served on the host you change to, the standard size is used there, with its line. Change back and your size is picked again.
 - One **Model name** box serves every size of a model. It shows the name for the one picked. A name typed in it is sent whichever size is picked.
 
@@ -313,6 +315,27 @@ SubQ Snap is Subquadratic's decision model. Auto Refine uses SubQ Snap Preview, 
 - It is not on OpenRouter. If OpenRouter or another host is left picked, NanoGPT is used.
 - It is paid, per call. Each host's own page shows the price.
 
+## Jeff
+
+Jeff is eu/jev's decision model, served from Germany. It takes the same request as Jev, on NanoGPT and on eu/jev's own API. eu/jev's prepared input has room for 32,768 tokens.
+
+**Which Jeff** shows when Jeff is picked:
+
+- **Jeff 1.0.0**, the default. Its answers stay steady.
+- **Jeff Latest, always the newest**. It moves to each new Jeff by itself.
+
+| Host | Jeff 1.0.0 | Jeff Latest |
+| --- | --- | --- |
+| NanoGPT | `eu-jev/eu-jeff-1.0.0` | `eu-jev/eu-jeff-latest` |
+| eu/jev | `eu-jeff-1.0.0` | `eu-jeff-latest` |
+
+- Both kinds use the same **Refine when a check reaches**.
+- It takes at most 8 checks in one call. With more checks than that, Auto Refine sends them over two or more calls and reads the answers together. Each call is paid.
+- If one of those calls fails, the reply is refined, the same as when any second model cannot answer.
+- On eu/jev's own API, the key comes from your eu/jev account, in its dashboard. eu/jev gives new accounts a starting credit.
+- It is not on OpenRouter. If OpenRouter or another host is left picked, NanoGPT is used.
+- It is paid, per call. Each host's own page shows the price.
+
 ## When a model is renamed, or a new one comes out
 
 The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
@@ -386,7 +409,7 @@ Addresses known to work:
 | Host | Address | Model name |
 | --- | --- | --- |
 | OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b` or `subq/subq-snap-preview` |
+| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `subq/subq-snap-preview`, `eu-jev/eu-jeff-1.0.0` or `eu-jev/eu-jeff-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
 | Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
@@ -396,6 +419,7 @@ Addresses known to work:
 | Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` or `clef-omni` with the address ending in that name |
 | Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.2`, `pplx-decider-latest`, `pplx-decider-flash-v1.2` or `pplx-decider-flash-latest` |
 | SubQ | `https://api.subq.ai/v1/systemone` | `subq-snap-preview` |
+| eu/jev | `https://eu-jev.com/v1/systemone` | `eu-jeff-1.0.0` or `eu-jeff-latest` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 
