@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.48.1
+
+_2026-10-22_
+
+### Changed
+
+- **Block names on a built-in prompt are plain text.** On the **Prompt** tab, each block in a built-in prompt shows its name as text, not as a grayed box. To change a name, save the prompt as your own first.
+
+### Fixed
+
+- **A read-only box on a built-in prompt lit up.** A block's text on a built-in prompt cannot be typed in, but it glowed when tapped and its border changed on hover. It now stays as it is. You can still select and copy the text.
+
+---
+
 ## 1.48.0
 
 _2026-10-22_

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.48.0";
+const VERSION = "1.48.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -5892,6 +5892,11 @@ export function setup(ctx, overrides) {
         "input.arf-field:focus,textarea.arf-field:focus{outline:none;" +
         "border-color:var(--lumiverse-primary,rgba(147,112,219,.9));" +
         "box-shadow:" + FOCUS_RING + "}" +
+        // A box that cannot be typed in, such as a block of a built-in prompt,
+        // takes no mark when it is tapped. It can still be focused to select and
+        // copy from, and a ring there said it was waiting for typing.
+        "input.arf-field[readonly]:focus,textarea.arf-field[readonly]:focus{" +
+        "box-shadow:none;border-color:var(--lumiverse-border,rgba(147,112,219,.12))}" +
         // The search box gets nothing on focus, not even that border change. It is
         // the first thing on the panel and it is focused the moment anybody uses
         // it, so a mark on it is lit most of the time it is on screen.
@@ -6250,7 +6255,7 @@ export function setup(ctx, overrides) {
         "@media (hover: hover){" +
         ".arf-segbtn:not([aria-pressed=true]):hover{background:var(--lumiverse-fill-subtle,rgba(128,128,128,.08))}" +
         ".arf-box:hover:not(:disabled){box-shadow:0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
-        ".arf-field:hover:not(:focus):not(:disabled){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
+        ".arf-field:hover:not(:focus):not(:disabled):not([readonly]){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
         ".arf-link:hover{filter:brightness(1.25)}" +
         "}" +
         // A finger needs room. The small round buttons and the links grow to at
@@ -6482,6 +6487,9 @@ export function setup(ctx, overrides) {
         // Fixed at the width the two carets share, so the name beside it does not
         // shift when one turns.
         ".arf-blockfold{font-size:12px;padding:2px 4px;min-width:16px;text-align:center;flex:0 0 auto}" +
+        // A block's name on a built-in prompt, as text where a box would be.
+        ".arf-blockname{min-width:0;overflow-wrap:anywhere;color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "font:13px/1.5 var(--lumiverse-font-family,system-ui)}" +
         // The full-screen editor for one block of text.
         ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
         "justify-content:center;padding:16px;box-sizing:border-box;" +
@@ -10643,12 +10651,17 @@ export function setup(ctx, overrides) {
             refreshBlocks();
         });
         left.appendChild(box);
+        // On a built-in prompt the name is plain text. A grayed box there looked
+        // like a field to type in that refused the tap.
+        if (locked) {
+            const named = el("span", "arf-blockname arf-grow", blockLabel(b));
+            named.setAttribute("data-arf-blockname", b.id);
+            left.appendChild(named);
+        }
         const nameIn = document.createElement("input");
         nameIn.type = "text";
         nameIn.className = "arf-field arf-grow";
         nameIn.value = b.name || "";
-        if (locked)
-            lockForBuiltIn(nameIn);
         nameIn.placeholder = "What is this block called?";
         nameIn.setAttribute("aria-label", "Name for this block");
         nameIn.setAttribute("data-arf-field", "blockname:" + b.id);
@@ -10657,7 +10670,8 @@ export function setup(ctx, overrides) {
             next[i].name = nameIn.value;
             setBlocks(next, false);
         });
-        left.appendChild(nameIn);
+        if (!locked)
+            left.appendChild(nameIn);
         top.appendChild(left);
         const moves = el("div", "arf-row");
         const move = (to, label, sign) => {

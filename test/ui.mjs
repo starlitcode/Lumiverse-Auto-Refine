@@ -20,6 +20,7 @@
 // needs nothing extra.
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 import { join } from "node:path";
 // The defaults, read from the panel's own source rather than copied here, so a
 // setting added without one is caught instead of being described twice.
@@ -643,6 +644,53 @@ try {
   process.exit(0);
 }
 
+// Decodes a PNG far enough to read its pixels, for a check of what is drawn
+// that the page's own styles cannot answer.
+function decodePixels(buf) {
+  let pos = 8, width = 0, height = 0, depth = 0, color = 0;
+  const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString("ascii", pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0); height = data.readUInt32BE(4);
+      depth = data[8]; color = data[9];
+    } else if (type === "IDAT") idat.push(data);
+    else if (type === "IEND") break;
+    pos += 12 + len;
+  }
+  if (depth !== 8 || (color !== 6 && color !== 2)) return null;
+  const ch = color === 6 ? 4 : 3;
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = width * ch;
+  const out = Buffer.alloc(height * stride);
+  const px = [];
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    const line = raw.subarray(y * (stride + 1) + 1, y * (stride + 1) + 1 + stride);
+    for (let i = 0; i < stride; i++) {
+      const a = i >= ch ? out[y * stride + i - ch] : 0;
+      const b = y > 0 ? out[(y - 1) * stride + i] : 0;
+      const c = i >= ch && y > 0 ? out[(y - 1) * stride + i - ch] : 0;
+      let v = line[i];
+      if (filter === 1) v += a;
+      else if (filter === 2) v += b;
+      else if (filter === 3) v += (a + b) >> 1;
+      else if (filter === 4) {
+        const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c);
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      out[y * stride + i] = v & 255;
+    }
+    for (let x = 0; x < width; x++) {
+      const o = y * stride + x * ch;
+      px.push({ r: out[o], g: out[o + 1], b: out[o + 2] });
+    }
+  }
+  return px;
+}
+
 console.log("\nthe tab as the host mounts it");
 {
   const errors = await inTab(browser, {}, async (page) => {
@@ -1017,8 +1065,9 @@ console.log("\nthe prompt layout editor");
     const names = () =>
       page.evaluate(() =>
         Array.from(
-          document.querySelectorAll('#drawer [data-arf-block] [data-arf-field^="blockname:"]'),
-        ).map((n) => n.value),
+          // A name box on a prompt of your own, plain text on a built-in one.
+          document.querySelectorAll('#drawer [data-arf-block] [data-arf-field^="blockname:"], #drawer [data-arf-block] [data-arf-blockname]'),
+        ).map((n) => (n.tagName === "INPUT" ? n.value : n.textContent.trim())),
       );
     const before = await names();
     ok("every block in the prompt is listed", before.length >= 6, before.join(" | "));
@@ -1163,8 +1212,9 @@ console.log("\nsettings that were saved before");
       await goTab(page, "Prompt");
       const shown = await page.evaluate(() =>
         Array.from(
-          document.querySelectorAll('#drawer [data-arf-block] [data-arf-field^="blockname:"]'),
-        ).map((n) => n.value),
+          // A name box on a prompt of your own, plain text on a built-in one.
+          document.querySelectorAll('#drawer [data-arf-block] [data-arf-field^="blockname:"], #drawer [data-arf-block] [data-arf-blockname]'),
+        ).map((n) => (n.tagName === "INPUT" ? n.value : n.textContent.trim())),
       );
       ok("a one-block prompt is shown as it is, not repaired", shown.length === 1, shown.join(" | "));
       const warned = await page.evaluate(() => !!document.querySelector("#drawer .arf-bad"));
@@ -10688,6 +10738,72 @@ console.log("\nsaying the built-in prompts have changed");
     ok("loading one marks them as seen", out.stamped && out.stamped !== OLD, JSON.stringify(out));
     ok("so the line goes with it", !out.line, JSON.stringify(out));
   });
+}
+
+console.log("\na built-in prompt shows names as text, and its boxes do not light up");
+{
+  // On a built-in prompt nothing can be typed, so each block's name is plain
+  // text rather than a grayed box, and a tapped text box takes no glow. On a
+  // prompt of your own, both stay as they are. Read from what is drawn.
+  // Checked at a phone width and a laptop width.
+  // Pixels that visibly differ. Two shots of an unchanged box are not always
+  // the same bytes, and a text cursor is a few pixels, while a glow around
+  // the border changes hundreds.
+  const changed = (a, b) => {
+    const x = decodePixels(a), y = decodePixels(b);
+    if (!x || !y || x.length !== y.length) return Infinity;
+    let n = 0;
+    for (let k = 0; k < x.length; k++)
+      if (Math.abs(x[k].r - y[k].r) + Math.abs(x[k].g - y[k].g) + Math.abs(x[k].b - y[k].b) > 24) n++;
+    return n;
+  };
+  const same = (a, b) => changed(a, b) <= 30;
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [what, saved] of [["built-in", { presetPick: "The line edit" }], ["your own", {}]]) {
+      const say = label + ", " + what + ": ";
+      await inTab(browser, { viewport, touch, saved }, async (page) => {
+        await goTab(page, "Prompt");
+        await settle(page);
+        const names = await page.evaluate(() => ({
+          boxes: document.querySelectorAll('#drawer [data-arf-block] input[data-arf-field^="blockname:"]').length,
+          text: [...document.querySelectorAll("#drawer [data-arf-blockname]")].map((n) => n.textContent.trim()),
+          blocks: document.querySelectorAll("#drawer [data-arf-block]").length,
+          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        }));
+        if (what === "built-in") {
+          ok(say + "no name box, and every block's name is shown as text", names.boxes === 0 && names.text.length === names.blocks && names.text.every((t) => t.length > 0), JSON.stringify(names));
+        } else {
+          ok(say + "every block has its name box", names.boxes === names.blocks && names.text.length === 0, JSON.stringify(names));
+        }
+        ok(say + "nothing runs off the side", !names.sideways, "");
+        // Open the first block, then compare the box and the space around it
+        // before and after it is tapped.
+        await page.evaluate(() => {
+          const row = document.querySelector("#drawer [data-arf-block]");
+          const fold = row.querySelector(".arf-blockfold");
+          if (fold.getAttribute("aria-expanded") === "false") fold.click();
+        });
+        await page.waitForTimeout(500);
+        const area = await page.evaluate(() => {
+          const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+          ta.scrollIntoView({ block: "center" });
+          const r = ta.getBoundingClientRect();
+          return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 12), width: r.width + 24, height: Math.min(r.height + 24, 300) };
+        });
+        await page.mouse.move(2, 2);
+        await page.waitForTimeout(300);
+        const before = await page.screenshot({ clip: area });
+        if (touch) await page.tap('#drawer [data-arf-field^="blocktext:"]');
+        else await page.click('#drawer [data-arf-field^="blocktext:"]');
+        await page.mouse.move(2, 2);
+        await page.waitForTimeout(400);
+        const after = await page.screenshot({ clip: area });
+        const focused = await page.evaluate(() => document.activeElement === document.querySelector('#drawer [data-arf-field^="blocktext:"]'));
+        if (what === "built-in") ok(say + "the tapped box is drawn the same as before, with no glow", focused && same(before, after), "focused " + focused);
+        else ok(say + "the tapped box lights up, since it can be typed in", focused && !same(before, after), "focused " + focused);
+      });
+    }
+  }
 }
 
 console.log("\na built-in prompt cannot be typed into");
