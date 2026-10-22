@@ -209,7 +209,7 @@ _2026-10-16_
 
 ### Added
 
-- **A different model for each pass.** With several passes, **Each pass uses its preset's model setup**, on the Limits tab, runs each pass on the model setup its preset is linked to. That covers the connection, thinking, timeout, samplers and prices. For example, a quick pass with thinking off on a cheap model, then a prose pass with thinking on. A pass with no linked setup uses the Model tab. It is off by default. See [A different model for each pass](docs/prompt.md#a-different-model-for-each-pass).
+- **A different model for each pass.** With several passes, **Each pass uses its preset's model setup**, on the Limits tab, runs each pass on the model setup its preset is linked to. That covers the connection, thinking, timeout, samplers and prices. For example, a quick pass with thinking off on a cheap model, then a prose pass with thinking on. A pass with no linked setup uses the Model tab. It is off by default. See [A different model for each pass](docs/prompt.md#a-different-model-for-each-pass). Suggested by a Discord user.
 - **Several passes for your own messages.** **The passes for your messages, in order**, on the Limits tab, is a list of passes for your own messages. Each pass runs that preset's prompt for your messages. It is empty by default, and then your messages run once, as before. See [Passes for your own messages](docs/prompt.md#passes-for-your-own-messages).
 - **The passes boxes say which passes will not run.** A line under each list names each pass that is skipped, and why: no preset has that name, the preset has no `{{message}}` block, it is past the sixth pass, or it is a built-in prompt for replies in the list for your messages.
 - **The cost of a refine follows each pass's model.** The cost on the Log tab, and the one under **See what gets sent**, use the prices of the model setup each pass ran on.
@@ -320,8 +320,8 @@ _2026-10-15_
 
 ### Fixed
 
-- **Another extension's input box is never written into.** Another extension can have its own chat with its own input box, such as an agent's chat in a drawer tab. With the chat's own box not found, a refine of your draft could read that box and write the rewrite into it. The input box and the next button are now never looked for inside another extension, and text selected inside one is not read as part of a chat message.
-- **A refusal among several rewrites at once is asked again.** With **Several rewrites at once** on, a rewrite stopped by the provider's filter, such as "prohibited_content", next to one that failed for its length, ended the refine without asking again. The refusal is now the failure kept, so **Ask again when a check fails** asks again.
+- **Another extension's input box is never written into.** Another extension can have its own chat with its own input box, such as an agent's chat in a drawer tab. With the chat's own box not found, a refine of your draft could read that box and write the rewrite into it. The input box and the next button are now never looked for inside another extension, and text selected inside one is not read as part of a chat message. Reported by a Discord user.
+- **A refusal among several rewrites at once is asked again.** With **Several rewrites at once** on, a rewrite stopped by the provider's filter, such as "prohibited_content", next to one that failed for its length, ended the refine without asking again. The refusal is now the failure kept, so **Ask again when a check fails** asks again. Reported by a Discord user.
 - **Fixed again: the countdown on the status line stays on the first line.** 1.35.2 kept **trying again in 25s** together, but a long line on a phone still put it on the line below the words. The countdown now comes first, as it does in Auto Retry: **Trying again in 25s (1 of 2). The provider would not take the call.** The wait between automatic refines reads the same way.
 
 ---

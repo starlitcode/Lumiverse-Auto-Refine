@@ -254,6 +254,18 @@ shown in Lumiverse.
   it and what it missed. The Discord post uses "Fixed again" as its lead.
 - Credit for a report goes in the changelog, for example "Reported by a Discord
   user". Credit goes only to people the owner names.
+- Whenever the owner passes on something from a user, such as a report, a
+  request, a suggestion or a question, every changelog entry it leads to ends
+  with the credit: "Reported by a Discord user." for a problem, "Suggested by
+  a Discord user." for something new, "Asked about by a Discord user." for a
+  question. Write it in the same commit as the entry. This covers every entry
+  that comes from it:
+  - the fix or the feature itself;
+  - the same change made in the other extension;
+  - a feature added after a user's question, even when the owner asks for it
+    in their own words.
+  Before a push to `stable`, read the owner's messages since the last release
+  for anything that came from a user, and check each entry it led to.
 
 ## Discord posts
 
