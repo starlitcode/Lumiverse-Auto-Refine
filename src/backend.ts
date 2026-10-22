@@ -2781,8 +2781,9 @@ function worthRetrying(why: string): boolean {
 }
 
 // ---- the note that goes with an ask made again ----
-// Off by default. On, an ask made again after a refusal, a softened rewrite or
-// an empty answer carries a note that says what went wrong with the last one.
+// Off by default. On, an ask made again after a refusal, a softened rewrite, an
+// empty answer or a broken rewrite carries a note that says what went wrong
+// with the last one.
 // The panel holds the same built-in texts, and each can be changed there. A
 // text left empty sends no note for that failure.
 const ASK_NOTE_REFUSED =
@@ -2796,6 +2797,9 @@ const ASK_NOTE_SOFTENED =
 const ASK_NOTE_EMPTY =
   'Your last answer was empty. Please answer with the rewritten passage, in ' +
   'the format the instructions ask for.';
+const ASK_NOTE_BROKEN =
+  'Your last rewrite came back broken. Please answer with the rewritten ' +
+  'passage as clean, readable prose, in the format the instructions ask for.';
 
 interface AskNote {
   role: string;
@@ -2808,6 +2812,7 @@ let askNoteRole = 'user';
 let askNoteRefused: string | null = null;
 let askNoteSoftened: string | null = null;
 let askNoteEmpty: string | null = null;
+let askNoteBroken: string | null = null;
 
 // Which note goes with the next ask, from why the last answer failed. Null
 // when notes are off, when the failure has no note, or when its note is empty.
@@ -2825,6 +2830,10 @@ function noteFor(why: string): AskNote | null {
   } else if (/sent nothing back/i.test(w)) {
     about = 'After an empty answer';
     text = askNoteEmpty == null ? ASK_NOTE_EMPTY : askNoteEmpty;
+  } else if (/own format|stuck repeating|came back garbled/i.test(w)) {
+    // The three failures Refuse a broken rewrite checks for.
+    about = 'After a broken rewrite';
+    text = askNoteBroken == null ? ASK_NOTE_BROKEN : askNoteBroken;
   }
   text = text.trim();
   if (!text) return null;
@@ -5491,9 +5500,15 @@ const DECIDER_HOSTS: Record<string, SizedHost> = {
 const MICROSOFT_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
   openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'microsoft/microsoft-decision-1', kind: 'decisions' },
 };
-// Drex, from Nace.AI. OpenRouter takes Jev's request for it.
-const DREX_HOSTS: Record<string, { url: string; model: string; kind: JevKind }> = {
-  openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'nace-ai/drex-v2.0', kind: 'decisions' },
+// Drex, from Nace.AI, comes in two: Drex 2.0, and Drex Max, Nace.AI's
+// largest. Both take Jev's request on OpenRouter and on Nace.AI's own API.
+const DREX_HOSTS: Record<string, SizedHost> = {
+  openrouter: {
+    url: 'https://openrouter.ai/api/alpha/decisions',
+    models: { full: 'nace-ai/drex-v2.0', max: 'nace-ai/drex-max' },
+    kind: 'decisions',
+  },
+  nace: { url: 'https://console.nace.ai/v1/systemone', models: { full: 'drex-v2.0', max: 'drex-max' }, kind: 'decisions' },
 };
 // SubQ Snap, from Subquadratic, in public preview. It takes Jev's request on
 // NanoGPT and on SubQ's own API, and at most 16 questions in one call.
@@ -5669,6 +5684,11 @@ const SIZE_PICKS: Record<string, SizePick> = {
     standard: 'exact',
     sizes: { exact: { name: 'Jeff', line: 'jeffOver' }, latest: { name: 'Jeff', line: 'jeffOver' } },
   },
+  drex: {
+    setting: 'drexSize',
+    standard: 'full',
+    sizes: { full: { name: 'Drex', line: 'drexOver' }, max: { name: 'Drex Max', line: 'drexMaxOver' } },
+  },
   d1: {
     setting: 'd1Size',
     standard: 'full',
@@ -5831,7 +5851,7 @@ const SECOND_MODELS: Record<string, SecondModel> = {
   drex: {
     name: 'Drex',
     hosts: DREX_HOSTS,
-    model: (host) => ownNames.drex || DREX_HOSTS[host].model,
+    model: (host) => ownNames.drex || sizedName(DREX_HOSTS[host]),
   },
   classify: {
     name: 'Classify-1',
@@ -5916,6 +5936,7 @@ const HOST_LABELS: Record<string, string> = {
   perplexity: 'Perplexity',
   subq: 'SubQ',
   eujev: 'eu/jev',
+  nace: 'Nace.AI',
   custom: 'the address you gave',
 };
 const hostLabel = (host: string) => HOST_LABELS[host] || host;
@@ -6594,6 +6615,7 @@ function applyRules(s: any): void {
   askNoteRefused = typeof s.askNoteRefused === 'string' ? s.askNoteRefused.trim().slice(0, 2000) : null;
   askNoteSoftened = typeof s.askNoteSoftened === 'string' ? s.askNoteSoftened.trim().slice(0, 2000) : null;
   askNoteEmpty = typeof s.askNoteEmpty === 'string' ? s.askNoteEmpty.trim().slice(0, 2000) : null;
+  askNoteBroken = typeof s.askNoteBroken === 'string' ? s.askNoteBroken.trim().slice(0, 2000) : null;
   const many = Math.round(Number(s.refineAtOnceCount));
   refineAtOnce = s.refineAtOnce === true
     ? Math.min(REFINE_AT_ONCE_MAX, Math.max(2, Number.isFinite(many) ? many : 2))

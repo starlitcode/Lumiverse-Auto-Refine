@@ -1869,7 +1869,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "openrouter"], ["classify", "openrouter"], ["subq", "subq"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "nace"], ["classify", "openrouter"], ["subq", "subq"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -2109,11 +2109,11 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://blog.cloudflare.com/clef-decision-models"],
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
-    ["drex", "Drex, from Nace.AI", "openrouter,custom", "drexOver", "What is Drex? https://www.nace.ai/drex"],
+    ["drex", "Drex, from Nace.AI", "openrouter,nace,custom", "drexOver", "What is Drex? https://www.nace.ai/drex"],
     ["subq", "SubQ Snap, from Subquadratic", "nanogpt,subq,custom", "subqOver", "What is SubQ Snap? https://subq.ai/introducing-subq-snap"],
     ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -2178,6 +2178,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
           clef: [["nanogpt", "NanoGPT"], ["cloudflare", "Cloudflare"]],
           decider: [["nanogpt", "NanoGPT"], ["perplexity", "Perplexity"]],
           subq: [["subq", "SubQ"]],
+          drex: [["nace", "Nace.AI"]],
         }[who] || [];
         for (const own of owns) {
           await page.evaluate((host) => {
@@ -2543,15 +2544,15 @@ console.log("\na note when it asks again");
       await settle(page);
       await settle(page);
       const boxes = await page.evaluate(() =>
-        ["askNoteRefused", "askNoteSoftened", "askNoteEmpty"].map((k) => {
+        ["askNoteRefused", "askNoteSoftened", "askNoteEmpty", "askNoteBroken"].map((k) => {
           const b = document.querySelector('#drawer [data-arf-field="' + k + '"]');
           return b && !b.closest("[hidden]") ? b.value : null;
         }));
-      ok(label + ": the fold holds the three notes with their built-in text",
-        /^Your last answer declined to rewrite/.test(boxes[0] || "") && /^Your last rewrite took out or toned down/.test(boxes[1] || "") && /^Your last answer was empty/.test(boxes[2] || ""),
+      ok(label + ": the fold holds the four notes with their built-in text",
+        /^Your last answer declined to rewrite/.test(boxes[0] || "") && /^Your last rewrite took out or toned down/.test(boxes[1] || "") && /^Your last answer was empty/.test(boxes[2] || "") && /^Your last rewrite came back broken/.test(boxes[3] || ""),
         JSON.stringify(boxes));
       ok(label + ": each has its own button for the built-in text",
-        (await vis(page, '#drawer [data-arf-asknoterefused="builtin"]')) && (await vis(page, '#drawer [data-arf-asknotesoftened="builtin"]')) && (await vis(page, '#drawer [data-arf-asknoteempty="builtin"]')));
+        (await vis(page, '#drawer [data-arf-asknoterefused="builtin"]')) && (await vis(page, '#drawer [data-arf-asknotesoftened="builtin"]')) && (await vis(page, '#drawer [data-arf-asknoteempty="builtin"]')) && (await vis(page, '#drawer [data-arf-asknotebroken="builtin"]')));
 
       // Typed over, then put back.
       await page.evaluate(() => {
@@ -2581,7 +2582,7 @@ console.log("\na note when it asks again");
       const look = await page.evaluate((touch) => {
         const out = { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small: [] };
         if (touch)
-          for (const n of document.querySelectorAll('#drawer [data-arf-row^="askNote"] input, #drawer [data-arf-row^="askNote"] select, #drawer [data-arf-row^="askNote"] button, #drawer [data-arf-asknoterefused="builtin"], #drawer [data-arf-asknotesoftened="builtin"], #drawer [data-arf-asknoteempty="builtin"]')) {
+          for (const n of document.querySelectorAll('#drawer [data-arf-row^="askNote"] input, #drawer [data-arf-row^="askNote"] select, #drawer [data-arf-row^="askNote"] button, #drawer [data-arf-asknoterefused="builtin"], #drawer [data-arf-asknotesoftened="builtin"], #drawer [data-arf-asknoteempty="builtin"], #drawer [data-arf-asknotebroken="builtin"]')) {
             if (n.closest("[hidden]") || !n.getClientRects().length || n.type === "checkbox") continue;
             if (n.offsetHeight < 32) out.small.push((n.getAttribute("data-arf-field") || n.textContent || n.tagName).slice(0, 30) + ":" + n.offsetHeight);
           }
@@ -5046,6 +5047,131 @@ console.log("\nthe status dot stays beside a long status line");
       ok(label + ": the countdown is on the first line, with the words before it", together.trying != null && together.trying === together.number && Math.abs(together.number - together.first) <= 2, JSON.stringify(together));
       ok(label + ": nothing runs off the side", !!got && !got.sideways, "");
     });
+  }
+}
+
+console.log("\nthe Stop button stays put while the status line changes");
+{
+  // A refine moves through asking, a countdown after a call the provider
+  // would not take, and asking again. The status line changes length each
+  // time, and the countdown loses a digit as it runs down. None of it moves
+  // the Stop button under it. Checked at phone and laptop widths, at three
+  // UI Scale steps.
+  for (const [label, viewport, touch, drawerW] of [["phone at 360", { width: 360, height: 900 }, true], ["phone at 412", { width: 412, height: 900 }, true], ["phone, a drawer 250 wide", { width: 360, height: 900 }, true, 250], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const zoom of [1, 1.25, 0.85]) {
+      const say = label + ", zoom " + zoom + ": ";
+      await inTab(browser, { viewport, touch, css: "html{zoom:" + zoom + "}" + (drawerW ? "#drawer{width:" + drawerW + "px}" : ""), saved: { enabled: true, timeoutSecs: 100 } }, async (page) => {
+        await goTab(page, "Log");
+        await page.evaluate(() => {
+          const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+          window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+        });
+        await settle(page);
+        const ahead = (secs) =>
+          page.evaluate((secs) => {
+            window.__ahead = (window.__ahead || 0) + secs * 1000;
+            if (!window.__realNow) {
+              window.__realNow = Date.now.bind(Date);
+              Date.now = () => window.__realNow() + window.__ahead;
+            }
+          }, secs);
+        const where = async () => {
+          await page.waitForTimeout(320);
+          return page.evaluate(() => {
+            const stop = document.querySelector("#drawer [data-arf-stop]");
+            const words = document.querySelector("#drawer .arf-dot");
+            return {
+              top: stop ? Math.round(stop.getBoundingClientRect().top * 10) / 10 : null,
+              text: words && words.nextElementSibling ? words.nextElementSibling.textContent : "",
+            };
+          });
+        };
+        await page.evaluate(() => {
+          Array.from(document.querySelectorAll("#drawer button"))
+            .find((b) => /Refine the latest reply/.test(b.textContent))
+            .click();
+          const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+          window.__fromBackend({ type: "refine_ack", requestId: id });
+          window.__fromBackend({ type: "refine_progress", stage: "asking" });
+        });
+        const seen = [await where()];
+        await ahead(12);
+        seen.push(await where());
+        await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "waiting", waitMs: 4000, attempt: 1, of: 3 }));
+        seen.push(await where());
+        await ahead(3);
+        seen.push(await where());
+        await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "asking" }));
+        seen.push(await where());
+        await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "waiting", waitMs: 33000, attempt: 2, of: 3 }));
+        seen.push(await where());
+        await ahead(20);
+        seen.push(await where());
+        await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "writing" }));
+        seen.push(await where());
+        ok(say + "the line went through every step", seen.some((w) => /Trying\sagain\sin\s4s\s\(1\sof\s3\)/.test(w.text)) && seen.some((w) => /Trying\sagain\sin\s33s\s\(2\sof\s3\)/.test(w.text)) && seen.some((w) => /^Writing/.test(w.text)), JSON.stringify(seen.map((w) => w.text)));
+        const tops = seen.map((w) => w.top);
+        ok(say + "the Stop button never moves", tops.every((t) => t != null && Math.abs(t - tops[0]) <= 1), JSON.stringify(tops));
+        ok(say + "the countdown and the reason are on lines of their own", seen.filter((w) => /Trying again/.test(w.text)).every((w) => /\)\.\nThe provider would not take the call\.$/.test(w.text)), JSON.stringify(seen.map((w) => w.text)));
+        const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+        ok(say + "nothing runs off the side", !sideways, "");
+      });
+    }
+  }
+}
+
+console.log("\nthe Stop button stays put through a run through the chat");
+{
+  // The line above Stop is written again for each reply, and its counts gain
+  // digits as the run goes on. Stop stays where it is. The drawer's width is
+  // stepped through, since where the words wrap depends on the exact width,
+  // on a phone and on a laptop.
+  const widths = [];
+  for (let w = 240; w <= 420; w += 6) widths.push(w);
+  for (const zoom of [1, 1.25, 0.85]) {
+    for (const [label, viewport, touch] of [["phone", { width: 420, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+      const say = label + ", zoom " + zoom + ": ";
+      await inTab(browser, { viewport, touch, css: "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page) => {
+        await page.evaluate(() => {
+          const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+          window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+        });
+        await settle(page);
+        const moved = [];
+        const said = [];
+        for (const w of widths) {
+          await page.evaluate((w) => { document.getElementById("drawer").style.width = w + "px"; }, w);
+          await page.evaluate(() => document.querySelector("#drawer [data-arf-sweep]").click());
+          await settle(page);
+          await page.evaluate(() => document.querySelector("[data-arf-sweep-yes]").click());
+          await settle(page);
+          const tops = [];
+          for (const [at, saved, skipped] of [[1, 0, 0], [9, 7, 1], [10, 8, 1], [11, 9, 1], [99, 90, 8], [112, 100, 11]]) {
+            await page.evaluate(([at, saved, skipped]) => {
+              const m = window.__sent.filter((x) => x.type === "refine_all").pop();
+              window.__fromBackend({ type: "refine_all_progress", requestId: m ? m.requestId : "x", chatId: "c1", at, of: 120, saved, skipped });
+              window.__fromBackend({ type: "refine_progress", stage: "writing" });
+            }, [at, saved, skipped]);
+            await page.waitForTimeout(200);
+            const got = await page.evaluate(() => {
+              const stop = document.querySelector("#drawer [data-arf-sweep-stop]");
+              return { top: stop ? Math.round(stop.getBoundingClientRect().top * 10) / 10 : null, text: (document.querySelector("#drawer").textContent.match(/Going through the chat[^.]*\./) || [""])[0] };
+            });
+            tops.push(got.top);
+            said.push(got.text);
+          }
+          if (!tops.every((t) => t != null && Math.abs(t - tops[0]) <= 1)) moved.push(w + ": " + JSON.stringify(tops));
+          await page.evaluate(() => {
+            const m = window.__sent.filter((x) => x.type === "refine_all").pop();
+            window.__fromBackend({ type: "refine_all_done", requestId: m ? m.requestId : "x", saved: 0, skipped: 0 });
+            window.__fromBackend({ type: "refine_done", ok: false, why: "stopped" });
+          });
+          await settle(page);
+        }
+        ok(say + "the run went from the first reply to reply 112", said.some((t) => /reply 1 of 120/.test(t)) && said.some((t) => /reply 112 of 120, 100 refined, 11 left alone/.test(t)), JSON.stringify(said.slice(0, 6)));
+        ok(say + "the Stop button never moves", moved.length === 0, moved.join(" | "));
+      });
+    }
   }
 }
 
@@ -10955,7 +11081,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "solarFlashOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.

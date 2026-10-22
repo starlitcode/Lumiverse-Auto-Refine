@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are thirteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds). The last choice, **A model not in this list**, is for any other decision model. See [A model not in this list](#a-model-not-in-this-list).
+There are fourteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds). The last choice, **A model not in this list**, is for any other decision model. See [A model not in this list](#a-model-not-in-this-list).
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ There are thirteen to pick from. Some come in more than one size or kind, picked
 | **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Introducing Clef](https://blog.cloudflare.com/clef-decision-models) |
 | **Decider**, and **Decider Flash** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
 | **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
-| **Drex** | Nace.AI | Paid, per call | [Nace.AI: Drex](https://www.nace.ai/drex) |
+| **Drex**, and **Drex Max** | Nace.AI | Paid, per call | [Nace.AI: Drex](https://www.nace.ai/drex) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
 | **SubQ Snap** | Subquadratic | Paid, per call | [Introducing SubQ Snap](https://subq.ai/introducing-subq-snap) |
 | **Jeff** | eu/jev | Paid, per call | [eu/jev: Documentation](https://eu-jev.com/docs) |
@@ -34,7 +34,7 @@ Everything is on the Model tab, in **One model or two**.
 1. Set **How many models** to two.
 2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, Solar Decide, Clef and Decider, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, D1, Solar Decide, Clef, Decider, Drex and Jeff, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -109,6 +109,7 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
 | Decider | **Which Decider** | Decider V1.2, Decider Latest, Decider Flash V1.2, or Decider Flash Latest |
 | D1 | **Which D1** | D1, or D1 Ultra |
+| Drex | **Which Drex** | Drex 2.0, or Drex Max |
 | Jeff | **Which Jeff** | Jeff 1.0.0, or Jeff Latest |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
@@ -276,16 +277,22 @@ Microsoft-Decision-1 is Microsoft's decision model. It takes the same request as
 
 ## Drex
 
-Drex is Nace.AI's decision model. Auto Refine uses Drex v2.0. It takes the same request as Jev on OpenRouter. It reads up to 131,072 tokens.
+Drex is Nace.AI's decision model. It takes the same request as Jev, on OpenRouter and on Nace.AI's own API.
 
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `nace-ai/drex-v2.0` |
+**Which Drex** picks one of two:
 
-- It is on OpenRouter only. If another host is left picked, OpenRouter is used.
-- The older Drex v1.5 is `nace-ai/drex-v1.5` on OpenRouter. Type it in **Model name** to use it.
-- Its weights are open. You can run it yourself with Nace.AI's server and reach it under **Another address**. See [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0).
-- It is paid, per call. OpenRouter's page for it shows the price.
+- **Drex 2.0**, the default. It reads up to 131,072 tokens.
+- **Drex Max, the largest**. It reads up to 262,144 tokens on OpenRouter.
+
+| Host | Drex 2.0 | Drex Max |
+| --- | --- | --- |
+| OpenRouter | `nace-ai/drex-v2.0` | `nace-ai/drex-max` |
+| Nace.AI | `drex-v2.0` | `drex-max` |
+
+- The older Drex v1.5 is `nace-ai/drex-v1.5` on OpenRouter and `drex-v1.5` on Nace.AI. Type it in **Model name** to use it.
+- On Nace.AI's own API, the key comes from your account at [console.nace.ai](https://console.nace.ai). Nace.AI's keys start with `nace_sk_`.
+- Drex 2.0's weights are open. You can run it yourself with Nace.AI's server and reach it under **Another address**. See [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0).
+- It is paid, per call. Each host's own page shows the price.
 
 ## Classify-1
 
@@ -408,7 +415,7 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `nace-ai/drex-max`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `subq/subq-snap-preview`, `eu-jev/eu-jeff-1.0.0` or `eu-jev/eu-jeff-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
@@ -420,6 +427,7 @@ Addresses known to work:
 | Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.2`, `pplx-decider-latest`, `pplx-decider-flash-v1.2` or `pplx-decider-flash-latest` |
 | SubQ | `https://api.subq.ai/v1/systemone` | `subq-snap-preview` |
 | eu/jev | `https://eu-jev.com/v1/systemone` | `eu-jeff-1.0.0` or `eu-jeff-latest` |
+| Nace.AI | `https://console.nace.ai/v1/systemone` | `drex-v2.0` or `drex-max` |
 
 NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
 
@@ -495,6 +503,7 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Span** | 30 percent |
 | **Mercury Decide** | 30 percent |
 | **D1** | 30 percent |
+| **D1 Ultra** | 30 percent |
 | **Solar Decide** | 30 percent |
 | **Solar Decide Flash** | 30 percent |
 | **Kev 4B** | 30 percent |
@@ -503,10 +512,13 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Clef Flash** | 30 percent |
 | **Clef Omni** | 30 percent |
 | **Decider** | 30 percent |
+| **Decider Flash** | 30 percent |
 | **Microsoft-Decision-1** | 30 percent |
 | **Drex** | 30 percent |
+| **Drex Max** | 30 percent |
 | **Classify-1** | 30 percent |
 | **SubQ Snap** | 30 percent |
+| **Jeff** | 30 percent |
 | **A model not in this list** | 30 percent |
 
 ### Where the defaults come from

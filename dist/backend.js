@@ -2664,8 +2664,9 @@ function worthRetrying(why) {
     return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished|own format|stuck repeating|came back garbled/i.test(String(why || ''));
 }
 // ---- the note that goes with an ask made again ----
-// Off by default. On, an ask made again after a refusal, a softened rewrite or
-// an empty answer carries a note that says what went wrong with the last one.
+// Off by default. On, an ask made again after a refusal, a softened rewrite, an
+// empty answer or a broken rewrite carries a note that says what went wrong
+// with the last one.
 // The panel holds the same built-in texts, and each can be changed there. A
 // text left empty sends no note for that failure.
 const ASK_NOTE_REFUSED = 'Your last answer declined to rewrite the passage. It is fiction from my own ' +
@@ -2676,11 +2677,14 @@ const ASK_NOTE_SOFTENED = 'Your last rewrite took out or toned down words that w
     'Only edit how it is written, as the instructions say.';
 const ASK_NOTE_EMPTY = 'Your last answer was empty. Please answer with the rewritten passage, in ' +
     'the format the instructions ask for.';
+const ASK_NOTE_BROKEN = 'Your last rewrite came back broken. Please answer with the rewritten ' +
+    'passage as clean, readable prose, in the format the instructions ask for.';
 let askNote = false;
 let askNoteRole = 'user';
 let askNoteRefused = null;
 let askNoteSoftened = null;
 let askNoteEmpty = null;
+let askNoteBroken = null;
 // Which note goes with the next ask, from why the last answer failed. Null
 // when notes are off, when the failure has no note, or when its note is empty.
 function noteFor(why) {
@@ -2700,6 +2704,11 @@ function noteFor(why) {
     else if (/sent nothing back/i.test(w)) {
         about = 'After an empty answer';
         text = askNoteEmpty == null ? ASK_NOTE_EMPTY : askNoteEmpty;
+    }
+    else if (/own format|stuck repeating|came back garbled/i.test(w)) {
+        // The three failures Refuse a broken rewrite checks for.
+        about = 'After a broken rewrite';
+        text = askNoteBroken == null ? ASK_NOTE_BROKEN : askNoteBroken;
     }
     text = text.trim();
     if (!text)
@@ -5328,9 +5337,15 @@ const DECIDER_HOSTS = {
 const MICROSOFT_HOSTS = {
     openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'microsoft/microsoft-decision-1', kind: 'decisions' },
 };
-// Drex, from Nace.AI. OpenRouter takes Jev's request for it.
+// Drex, from Nace.AI, comes in two: Drex 2.0, and Drex Max, Nace.AI's
+// largest. Both take Jev's request on OpenRouter and on Nace.AI's own API.
 const DREX_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'nace-ai/drex-v2.0', kind: 'decisions' },
+    openrouter: {
+        url: 'https://openrouter.ai/api/alpha/decisions',
+        models: { full: 'nace-ai/drex-v2.0', max: 'nace-ai/drex-max' },
+        kind: 'decisions',
+    },
+    nace: { url: 'https://console.nace.ai/v1/systemone', models: { full: 'drex-v2.0', max: 'drex-max' }, kind: 'decisions' },
 };
 // SubQ Snap, from Subquadratic, in public preview. It takes Jev's request on
 // NanoGPT and on SubQ's own API, and at most 16 questions in one call.
@@ -5504,6 +5519,11 @@ const SIZE_PICKS = {
         standard: 'exact',
         sizes: { exact: { name: 'Jeff', line: 'jeffOver' }, latest: { name: 'Jeff', line: 'jeffOver' } },
     },
+    drex: {
+        setting: 'drexSize',
+        standard: 'full',
+        sizes: { full: { name: 'Drex', line: 'drexOver' }, max: { name: 'Drex Max', line: 'drexMaxOver' } },
+    },
     d1: {
         setting: 'd1Size',
         standard: 'full',
@@ -5632,7 +5652,7 @@ const SECOND_MODELS = {
     drex: {
         name: 'Drex',
         hosts: DREX_HOSTS,
-        model: (host) => ownNames.drex || DREX_HOSTS[host].model,
+        model: (host) => ownNames.drex || sizedName(DREX_HOSTS[host]),
     },
     classify: {
         name: 'Classify-1',
@@ -5716,6 +5736,7 @@ const HOST_LABELS = {
     perplexity: 'Perplexity',
     subq: 'SubQ',
     eujev: 'eu/jev',
+    nace: 'Nace.AI',
     custom: 'the address you gave',
 };
 const hostLabel = (host) => HOST_LABELS[host] || host;
@@ -6405,6 +6426,7 @@ function applyRules(s) {
     askNoteRefused = typeof s.askNoteRefused === 'string' ? s.askNoteRefused.trim().slice(0, 2000) : null;
     askNoteSoftened = typeof s.askNoteSoftened === 'string' ? s.askNoteSoftened.trim().slice(0, 2000) : null;
     askNoteEmpty = typeof s.askNoteEmpty === 'string' ? s.askNoteEmpty.trim().slice(0, 2000) : null;
+    askNoteBroken = typeof s.askNoteBroken === 'string' ? s.askNoteBroken.trim().slice(0, 2000) : null;
     const many = Math.round(Number(s.refineAtOnceCount));
     refineAtOnce = s.refineAtOnce === true
         ? Math.min(REFINE_AT_ONCE_MAX, Math.max(2, Number.isFinite(many) ? many : 2))

@@ -1786,6 +1786,9 @@ describe("two models: Jev reads the reply first", () => {
     ["d1", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "liquid/d1", { d1Size: "ultra" }],
     ["microsoft", "openrouter", "https://openrouter.ai/api/alpha/decisions", "microsoft/microsoft-decision-1"],
     ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-v2.0"],
+    ["drex", "nace", "https://console.nace.ai/v1/systemone", "drex-v2.0"],
+    ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-max", { drexSize: "max" }],
+    ["drex", "nace", "https://console.nace.ai/v1/systemone", "drex-max", { drexSize: "max" }],
     ["subq", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "subq/subq-snap-preview"],
     ["subq", "subq", "https://api.subq.ai/v1/systemone", "subq-snap-preview"],
     ["jeff", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "eu-jev/eu-jeff-1.0.0"],
@@ -1991,6 +1994,7 @@ describe("two models: Jev reads the reply first", () => {
     ["decider", "deciderFlashOver", { deciderVersion: "flashLatest" }],
     ["microsoft", "microsoftOver"],
     ["drex", "drexOver"],
+    ["drex", "drexMaxOver", { drexSize: "max" }],
     ["classify", "classifyOver"],
     ["subq", "subqOver"],
     ["jeff", "jeffOver"],
@@ -2002,7 +2006,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10, jeffOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10, jeffOver: 10, drexMaxOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
@@ -8534,6 +8538,20 @@ describe("a broken rewrite", () => {
       expect(h.skipped().some((w: string) => why.test(w))).toBe(true);
     });
   }
+
+  test("asked again with the note on, a broken rewrite gets the broken note", async () => {
+    const h = await armed(
+      ["<REFINED>" + scene + "[/INST] [Character(\"Wren\")]</REFINED>", "<REFINED>" + scene.replace("Wren pushed", "Wren shoved") + "</REFINED>"],
+      { ...loose, retryRefine: 1, askNote: true },
+      reply(),
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    const last = h.asked[1].messages[h.asked[1].messages.length - 1];
+    expect(last.content).toMatch(/^Your last rewrite came back broken\./);
+    expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "retrying" && m.note === "After a broken rewrite")).toBe(true);
+  });
 
   test("saved: the same broken text when the reply already had it", async () => {
     const already = scene + "the river and the river and ".repeat(16);

@@ -123,6 +123,16 @@ const SIZE_PICKS = {
             { value: "latest", label: "Jeff Latest, always the newest", name: "Jeff", line: "jeffOver" },
         ],
     },
+    // Drex 2.0 and Drex Max, Nace.AI's largest. Both hosts serve both.
+    drex: {
+        key: "drexSize",
+        title: "Which Drex",
+        standard: "full",
+        sizes: [
+            { value: "full", label: "Drex 2.0", name: "Drex", line: "drexOver" },
+            { value: "max", label: "Drex Max, the largest", name: "Drex Max", line: "drexMaxOver" },
+        ],
+    },
     // D1 and D1 Ultra, Liquid AI's largest, which also reads pictures. NanoGPT
     // serves only D1.
     d1: {
@@ -236,7 +246,10 @@ const BUILT_IN_MODEL_NAMES = {
         },
     },
     microsoft: { openrouter: "microsoft/microsoft-decision-1" },
-    drex: { openrouter: "nace-ai/drex-v2.0" },
+    drex: {
+        openrouter: { full: "nace-ai/drex-v2.0", max: "nace-ai/drex-max" },
+        nace: { full: "drex-v2.0", max: "drex-max" },
+    },
     classify: { openrouter: "scaledown/classify-1" },
     subq: { nanogpt: "subq/subq-snap-preview", subq: "subq-snap-preview" },
     jeff: {
@@ -368,6 +381,7 @@ const PARTS = [
             "askNoteRefused",
             "askNoteSoftened",
             "askNoteEmpty",
+            "askNoteBroken",
             "refineAtOnce",
             "refineAtOnceCount",
             "rateWaits",
@@ -399,7 +413,7 @@ const PARTS = [
         id: "judge",
         label: "One model or two",
         what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "jeffVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "jeffName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "jeffOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "drexSize", "jeffVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "jeffName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "jeffOver", "drexMaxOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -578,6 +592,8 @@ const ASK_NOTE_SOFTENED = "Your last rewrite took out or toned down words that w
     "Only edit how it is written, as the instructions say.";
 const ASK_NOTE_EMPTY = "Your last answer was empty. Please answer with the rewritten passage, in " +
     "the format the instructions ask for.";
+const ASK_NOTE_BROKEN = "Your last rewrite came back broken. Please answer with the rewritten " +
+    "passage as clean, readable prose, in the format the instructions ask for.";
 // The note as it was up to 1.34.0, word for word.
 const PROTECT_NOTE_1_34 = "Parts of this passage have been replaced with tokens shaped like [[AR1]], " +
     "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
@@ -876,6 +892,7 @@ const CONFIG = {
     askNoteRefused: ASK_NOTE_REFUSED,
     askNoteSoftened: ASK_NOTE_SOFTENED,
     askNoteEmpty: ASK_NOTE_EMPTY,
+    askNoteBroken: ASK_NOTE_BROKEN,
     // Write several rewrites at the same time and use the first that passes every
     // check. Off by default: each one is a whole call to pay for.
     refineAtOnce: false,
@@ -906,6 +923,7 @@ const CONFIG = {
     solarTier: "full",
     deciderVersion: "exact",
     d1Size: "full",
+    drexSize: "full",
     jeffVersion: "exact",
     // Where the second model is reached, and for "custom" the address and model name.
     judgeHost: "openrouter",
@@ -952,6 +970,7 @@ const CONFIG = {
     deciderFlashOver: 30,
     microsoftOver: 30,
     drexOver: 30,
+    drexMaxOver: 30,
     classifyOver: 30,
     subqOver: 30,
     jeffOver: 30,
@@ -2290,7 +2309,7 @@ const GUARD_FIELDS = [
         type: "bool",
         needs: { key: "retryRefine" },
         under: true,
-        hint: "Off by default. After a refusal, a softened rewrite or an empty answer, the next ask ends with a note that says what went wrong.",
+        hint: "Off by default. After a refusal, a softened rewrite, an empty answer or a broken rewrite, the next ask ends with a note that says what went wrong.",
     },
     {
         key: "askNoteRole",
@@ -2327,6 +2346,15 @@ const GUARD_FIELDS = [
         needs: { key: "askNote" },
         under: true,
         hint: "Sent when the model answered with nothing. Empty sends no note.",
+    },
+    {
+        key: "askNoteBroken",
+        label: "After a broken rewrite",
+        type: "lines",
+        rows: 3,
+        needs: { key: "askNote" },
+        under: true,
+        hint: "Sent when the rewrite came back garbled, repeated itself, or ran into the prompt's own format. Empty sends no note.",
     },
     {
         key: "refineAtOnce",
@@ -2506,6 +2534,7 @@ const JUDGE_FIELDS = [
             { value: "perplexity", label: "Perplexity" },
             { value: "subq", label: "SubQ" },
             { value: "eujev", label: "eu/jev" },
+            { value: "nace", label: "Nace.AI" },
         ]
             .map((o) => ({ ...o, needs: { key: "judgeWho", is: modelsOn(o.value) } }))
             .concat([{ value: "custom", label: "Another address" }]),
@@ -2569,7 +2598,7 @@ const JUDGE_FIELDS = [
         label: "Model name",
         type: "text",
         needs: { key: "judgeWho", is: who },
-        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq", "eujev"] },
+        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq", "eujev", "nace"] },
         under: true,
         placeholder: (c) => builtInModelName(c),
         hint: "Empty uses the name shown. If the host renames the model, type its new name here.",
@@ -2807,7 +2836,20 @@ const JUDGE_FIELDS = [
         max: 99,
         needs: { key: "judgeMode", is: "two" },
         also: { key: "judgeWho", is: "drex" },
+        when: (c) => lineInUse(c, "drexOver"),
         hint: "For Drex. A percentage, " + CONFIG.drexOver + " by default. Lower refines more replies, higher refines fewer.",
+    },
+    {
+        key: "drexMaxOver",
+        label: "Refine when a check reaches",
+        type: "num",
+        int: true,
+        min: 1,
+        max: 99,
+        needs: { key: "judgeMode", is: "two" },
+        also: { key: "judgeWho", is: "drex" },
+        when: (c) => lineInUse(c, "drexMaxOver"),
+        hint: "For Drex Max. A percentage, " + CONFIG.drexMaxOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "classifyOver",
@@ -4718,6 +4760,46 @@ export function setup(ctx, overrides) {
     // The status line's own nodes, so the running clock can be written into them
     // without repainting the panel around whatever somebody is typing in.
     let liveEls = null;
+    // The tallest the status words and the line about a run through the chat
+    // have been while something runs, in CSS pixels. Each is held as its least
+    // height, so the Stop button under them does not move up and down as the
+    // words change between one line and two. Let go when nothing is running.
+    const holds = {};
+    // most is the longest the words can get, when that is known. They are put
+    // in, measured and taken out again in one go, with nothing drawn between.
+    function holdTall(node, slot, lines, most) {
+        try {
+            if (!busy && !sweep) {
+                delete holds[slot];
+                if (node.style.minHeight)
+                    node.style.minHeight = "";
+                return;
+            }
+            if (!node.isConnected || !node.offsetWidth)
+                return;
+            const least = lines * (parseFloat(getComputedStyle(node).lineHeight) || 0);
+            let h = Math.max(least, cssHeight(node));
+            if (most) {
+                const real = node.textContent;
+                node.textContent = most;
+                h = Math.max(h, cssHeight(node));
+                node.textContent = real;
+            }
+            // Grown only by more than half a pixel. With UI Scale on, a height read
+            // back carries a fraction, and rounding it up on every read would grow
+            // the hold a pixel at a time.
+            if (h > (holds[slot] || 0) + 0.5)
+                holds[slot] = Math.ceil(h);
+            const want = holds[slot] + "px";
+            if (node.style.minHeight !== want)
+                node.style.minHeight = want;
+        }
+        catch (_) { }
+    }
+    // Two lines at the least, since the line with a countdown is two lines and
+    // it can come at any point in a refine. On a narrow panel the countdown
+    // itself can wrap, so it is measured with the widest numbers it can show.
+    const holdStatus = (words) => holdTall(words, "status", 2, Number(cfg.rateWaits) > 0 ? keep("Trying again in 99s (9 of 9).") + "\nThe provider would not take the call." : undefined);
     let clock = null;
     let runStartedAt = 0;
     // When the model call running now began. The backend gives each call to the
@@ -4938,17 +5020,15 @@ export function setup(ctx, overrides) {
         // down, because a status line that says "waiting" and does not move looks
         // exactly like one that has stopped, and this is the longest anything here
         // ever sits still.
-        // The countdown comes first, and the reason after it, the same as Auto
-        // Retry's line. A line that wraps on a phone then keeps the number on its
-        // first line, and the words held together with no-break spaces stay
-        // together.
+        // The countdown is on a line of its own and the reason on the next, the
+        // same as Auto Retry's line. On one line, a countdown that gained a digit
+        // pushed the reason onto a second line and moved everything under it.
         if (stage === "waiting") {
             const left = Math.max(0, Math.ceil((waitUntil - Date.now()) / 1000));
             if (waitGap)
-                return keep("Starting in " + left + "s") + ". Waiting for the gap between refines.";
-            return (keep("Trying again in " + left + "s") +
-                (waitAt ? " " + keep("(" + waitAt + " of " + waitOf + ")") : "") +
-                ". The provider would not take the call.");
+                return keep("Starting in " + left + "s.") + "\nWaiting for the gap between refines.";
+            return (keep("Trying again in " + left + "s" + (waitAt ? " (" + waitAt + " of " + waitOf + ")" : "") + ".") +
+                "\nThe provider would not take the call.");
         }
         // Which try this is, because a refine that takes three times as
         // long reads as broken unless it says why.
@@ -5362,6 +5442,7 @@ export function setup(ctx, overrides) {
                 const now = liveNow();
                 liveEls.text.textContent = now.text;
                 liveEls.dot.className = now.dot;
+                holdStatus(liveEls.text);
             }
         }
         catch (_) { }
@@ -5708,7 +5789,7 @@ export function setup(ctx, overrides) {
         ".arf-statusline>.arf-dot{margin-top:5px}" +
         // Every digit the same width, so a countdown does not move the words
         // around it each second.
-        ".arf-statusline>span:last-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}" +
+        ".arf-statusline>span:last-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;white-space:pre-line;font-variant-numeric:tabular-nums}" +
         // The refine buttons above the tabs, in two groups with a heading each:
         // replies, then your own messages. Two equal columns, so the buttons line
         // up rather than wrapping at whatever width each label happens to be. A
@@ -8367,6 +8448,11 @@ export function setup(ctx, overrides) {
         // whole panel once a second to move one number would close every open
         // select and lose the caret in whatever box was being typed in.
         liveEls = { dot: dot, text: words };
+        // Two lines of 1.45 until the clock first measures it.
+        if (!busy && !sweep)
+            delete holds.status;
+        else
+            words.style.minHeight = holds.status ? holds.status + "px" : "2.9em";
         const row = el("div", "arf-row");
         const stop = whyNot();
         // Your own messages are refined with their own prompt, so their buttons
@@ -8376,9 +8462,17 @@ export function setup(ctx, overrides) {
         // going, rather than being reported somewhere else: what it is doing and
         // the way to end it belong where the button that started it was.
         if (sweep) {
-            wrap.appendChild(note((sweepMine ? "Going through your messages: message " : "Going through the chat: reply ") +
-                sweep.at + " of " + sweep.of + ", " +
-                sweep.saved + " refined, " + sweep.skipped + " left alone."));
+            const sweepWords = (at, saved, skipped) => (sweepMine ? "Going through your messages: message " : "Going through the chat: reply ") +
+                at + " of " + sweep.of + ", " + saved + " refined, " + skipped + " left alone.";
+            const said = note(sweepWords(sweep.at, sweep.saved, sweep.skipped));
+            // Rebuilt for each message, and a count that gains a digit can take the
+            // words onto another line. Held at the height of the longest the counts
+            // can get, so the Stop button under it stays where it is.
+            const top = Math.max(sweep.of, 1);
+            if (holds.sweep)
+                said.style.minHeight = holds.sweep + "px";
+            requestAnimationFrame(() => holdTall(said, "sweep", 1, sweepWords(top, top, top)));
+            wrap.appendChild(said);
             const halt = button("Stop", false);
             halt.setAttribute("data-arf-sweep-stop", "1");
             halt.title = "Ends the run after the reply it is on, so nothing is left half written.";
@@ -11550,7 +11644,7 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     // What goes under Send a note when it asks again: who the notes come from,
-    // then the three notes in one fold, each with a way back to its built-in
+    // then the four notes in one fold, each with a way back to its built-in
     // text.
     function buildAskNotes() {
         const role = GUARD_FIELDS.find((f) => f.key === "askNoteRole");
@@ -11558,6 +11652,7 @@ export function setup(ctx, overrides) {
             ["askNoteRefused", ASK_NOTE_REFUSED, "asknoterefused"],
             ["askNoteSoftened", ASK_NOTE_SOFTENED, "asknotesoftened"],
             ["askNoteEmpty", ASK_NOTE_EMPTY, "asknoteempty"],
+            ["askNoteBroken", ASK_NOTE_BROKEN, "asknotebroken"],
         ];
         const shows = () => fieldShows(role);
         const notes = hangsOff(fold("What the notes say", (body) => {

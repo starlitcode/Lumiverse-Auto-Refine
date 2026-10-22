@@ -17,9 +17,13 @@ _2026-10-20_
 - **Decider Latest on Perplexity's own API.** It was only offered on OpenRouter.
 - **Jev 1.14 exactly on OpenRouter.** OpenRouter now has a name for it, `typesafe/jev-1.14`.
 - **Jeff, from eu/jev.** A decision model served from Germany, on NanoGPT and on eu/jev's own API, with **eu/jev** as a new host under **Where it is reached**. **Which Jeff** offers **Jeff 1.0.0** and **Jeff Latest, always the newest**. Jeff has its own **Refine when a check reaches**, 30 by default. It takes at most 8 checks in one call, so more are sent over two or more calls.
+- **Drex on Nace.AI's own API.** **Nace.AI** is a new host under **Where it is reached** when Drex is picked. The key comes from your account at console.nace.ai.
+- **Drex Max.** Nace.AI's largest decision model. **Which Drex** shows when Drex is picked, with **Drex 2.0** and **Drex Max, the largest**, on OpenRouter and Nace.AI's own API. Drex Max has its own **Refine when a check reaches**, 30 by default.
+- **A note after a broken rewrite.** With **Send a note when it asks again** on, a rewrite that came back garbled, repeated itself to the end, or ran into the prompt's own format is asked again with the note **After a broken rewrite**. You can change its text under **What the notes say**. See [A note when it asks again](docs/guardrails.md#a-note-when-it-asks-again).
 
 ### Fixed
 
+- **Fixed again: the Stop button moved while a refine waited.** 1.35.2 said the status line does not shift each second, and 1.39.0 put the countdown first. The line still changed between one line and two, as the countdown changed length and as the refine moved from one step to the next, so **Stop this refine** jumped up and down. The countdown and the reason are now on two lines of their own, such as **Trying again in 15s (1 of 2).** and then **The provider would not take the call.** The status keeps its height until the refine ends, so the button stays where it is. The line about a run through the chat does the same, so its **Stop** stays put too.
 - **A reply Auto Retry was about to retry could be refined.** Auto Retry waits a few seconds before a retry. In that time the automatic pass refined the reply, and paid for a rewrite that was then replaced. With Auto Retry 5.20.1 or later, the automatic pass now leaves a reply that Auto Retry is going to retry, and a refine already running is not saved. If the retry is called off, the reply is refined after all. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
 
 ### Changed

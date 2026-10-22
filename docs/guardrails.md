@@ -129,13 +129,14 @@ What it cannot catch:
 
 When it is on, the ask made again carries a note at the end of the request. The note says what went wrong with the last answer. The first ask never carries a note.
 
-There are three notes, one for each failure:
+There are four notes, one for each kind of failure:
 
 | Failure | Note |
 | --- | --- |
 | The model declined, or a provider's filter stopped it | **After a refusal** |
 | The rewrite took out or toned down strong words | **After a softened rewrite** |
 | The model answered with nothing | **After an empty answer** |
+| The rewrite came back garbled, repeated itself to the end, or ran into the prompt's own format | **After a broken rewrite** |
 
 Other failures, such as an answer that talks about the edit, are asked again with no note.
 
