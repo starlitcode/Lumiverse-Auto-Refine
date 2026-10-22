@@ -6,17 +6,12 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.46.0
+## 1.47.0
 
 _2026-10-22_
 
 ### Added
 
-- **Decider Flash.** Perplexity's smaller, faster Decider. **Which Decider** now has **Decider Flash V1.2** and **Decider Flash Latest, always the newest**, on OpenRouter and Perplexity's own API. Decider Flash has its own **Refine when a check reaches**, 30 by default.
-- **D1 Ultra.** Liquid AI's largest decision model. **Which D1** shows when D1 is picked, with **D1** and **D1 Ultra, the largest**, on OpenRouter and Liquid AI's own API. D1 Ultra has its own **Refine when a check reaches**, 30 by default. It reads up to 32,768 tokens on OpenRouter.
-- **Decider Latest on Perplexity's own API.** It was only offered on OpenRouter.
-- **Jev 1.14 exactly on OpenRouter.** OpenRouter now has a name for it, `typesafe/jev-1.14`.
-- **Jeff, from eu/jev.** A decision model served from Germany, on NanoGPT and on eu/jev's own API, with **eu/jev** as a new host under **Where it is reached**. **Which Jeff** offers **Jeff 1.0.0** and **Jeff Latest, always the newest**. Jeff has its own **Refine when a check reaches**, 30 by default. It takes at most 8 checks in one call, so more are sent over two or more calls.
 - **Drex on Nace.AI's own API.** **Nace.AI** is a new host under **Where it is reached** when Drex is picked. The key comes from your account at console.nace.ai.
 - **Drex Max.** Nace.AI's largest decision model. **Which Drex** shows when Drex is picked, with **Drex 2.0** and **Drex Max, the largest**, on OpenRouter and Nace.AI's own API. Drex Max has its own **Refine when a check reaches**, 30 by default.
 - **Mammoth 1 and Elephant 1, from Baseten.** Two sizes of one decision model, under one entry, **Mammoth 1 and Elephant 1**. **Which Baseten model** offers **Mammoth 1, the larger** and **Elephant 1, smaller and faster**, on OpenRouter, where both are free, and on Baseten's own API, with **Baseten** as a new host under **Where it is reached**. Each has its own **Refine when a check reaches**, 30 by default.
@@ -25,11 +20,33 @@ _2026-10-22_
 ### Fixed
 
 - **Fixed again: the Stop button moved while a refine waited.** 1.35.2 said the status line does not shift each second, and 1.39.0 put the countdown first. The line still changed between one line and two, as the countdown changed length and as the refine moved from one step to the next, so **Stop this refine** jumped up and down. The countdown and the reason are now on two lines of their own, such as **Trying again in 15s (1 of 2).** and then **The provider would not take the call.** The status keeps its height until the refine ends, so the button stays where it is. The line about a run through the chat does the same, so its **Stop** stays put too.
-- **A reply Auto Retry was about to retry could be refined.** Auto Retry waits a few seconds before a retry. In that time the automatic pass refined the reply, and paid for a rewrite that was then replaced. With Auto Retry 5.20.1 or later, the automatic pass now leaves a reply that Auto Retry is going to retry, and a refine already running is not saved. If the retry is called off, the reply is refined after all. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
 
 ### Changed
 
 - **What is Drex? opens Nace.AI's own Drex API docs.** It went to Nace.AI's product page for Drex.
+
+See [Two models](docs/two-models.md).
+
+---
+
+## 1.46.0
+
+_2026-10-20_
+
+### Added
+
+- **Decider Flash.** Perplexity's smaller, faster Decider. **Which Decider** now has **Decider Flash V1.2** and **Decider Flash Latest, always the newest**, on OpenRouter and Perplexity's own API. Decider Flash has its own **Refine when a check reaches**, 30 by default.
+- **D1 Ultra.** Liquid AI's largest decision model. **Which D1** shows when D1 is picked, with **D1** and **D1 Ultra, the largest**, on OpenRouter and Liquid AI's own API. D1 Ultra has its own **Refine when a check reaches**, 30 by default. It reads up to 32,768 tokens on OpenRouter.
+- **Decider Latest on Perplexity's own API.** It was only offered on OpenRouter.
+- **Jev 1.14 exactly on OpenRouter.** OpenRouter now has a name for it, `typesafe/jev-1.14`.
+- **Jeff, from eu/jev.** A decision model served from Germany, on NanoGPT and on eu/jev's own API, with **eu/jev** as a new host under **Where it is reached**. **Which Jeff** offers **Jeff 1.0.0** and **Jeff Latest, always the newest**. Jeff has its own **Refine when a check reaches**, 30 by default. It takes at most 8 checks in one call, so more are sent over two or more calls.
+
+### Fixed
+
+- **A reply Auto Retry was about to retry could be refined.** Auto Retry waits a few seconds before a retry. In that time the automatic pass refined the reply, and paid for a rewrite that was then replaced. With Auto Retry 5.20.1 or later, the automatic pass now leaves a reply that Auto Retry is going to retry, and a refine already running is not saved. If the retry is called off, the reply is refined after all. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
+
+### Changed
+
 - **Span-02 replaces Span-01 on OpenRouter.** **Which Span** now offers **Span-01 Lite, free** and **Span-02**. If you had Span-01 picked, Span-02 is sent instead. To keep Span-01, type `respan/span-01` in **Model name**.
 - **Span-02 is sent the same request as Jev.** It reads named fields, as Respan's docs show, on OpenRouter and on Respan's own API. Span-01 and Span-01 Lite are still sent the reply as a conversation.
 - **Decider V1.2 replaces Decider V1.1 27B** on OpenRouter and Perplexity's own API. NanoGPT lists only V1.1 27B, so it is still sent there. Perplexity answers a request for an older Decider with V1.2.
