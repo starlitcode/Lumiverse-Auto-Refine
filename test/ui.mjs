@@ -2263,7 +2263,7 @@ console.log("\na model that comes in more than one size");
           await choose("judgeHost", host);
           await choose(pick.key, size.value);
           const got = await read();
-          const link = "What is " + model.name + "? " + model.about;
+          const link = (/ and /.test(model.name) ? "What are " : "What is ") + model.name + "? " + model.about;
           ok(label + ", " + size.name + " on " + host + ": only its line shows", got.lines.join() === size.line, JSON.stringify(got));
           ok(label + ", " + size.name + ": its built-in name shows", got.placeholder === names[host][size.value], JSON.stringify(got.placeholder));
           ok(label + ", " + size.name + ": its link", got.link === link, JSON.stringify(got.link));
