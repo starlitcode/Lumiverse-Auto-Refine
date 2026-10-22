@@ -5078,6 +5078,20 @@ console.log("\nleaving things out of the run-up, and the lorebook names");
       await page.evaluate(() => window.__fromBackend({ type: "history_bad", patterns: [] }));
       await settle(page);
       ok(label + ": and the note goes once it is fixed", !(await note()), "");
+      // The note arriving while somebody is still typing in the box redraws
+      // the panel. The cursor stays in the box, where it was.
+      await page.click('#drawer [data-arf-field="historyCut"]');
+      await page.keyboard.type("^\\[(HP");
+      await page.evaluate(() => window.__fromBackend({ type: "history_bad", patterns: ["^\\[(HP (missing )"] }));
+      await settle(page);
+      await page.keyboard.type(")\\]$");
+      const typing = await page.evaluate(() => {
+        const box = document.querySelector('#drawer [data-arf-field="historyCut"]');
+        return { value: box.value, focused: document.activeElement === box, caret: box.selectionStart };
+      });
+      ok(label + ": typing goes on in the box when the note comes up", typing.focused && typing.value === "^\\[(HP)\\]$" && typing.caret === typing.value.length, JSON.stringify(typing));
+      await page.evaluate(() => window.__fromBackend({ type: "history_bad", patterns: [] }));
+      await settle(page);
       const look = await page.evaluate((touch) => {
         const out = { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small: [] };
         if (touch)

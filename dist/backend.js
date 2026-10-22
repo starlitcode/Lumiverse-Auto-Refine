@@ -3564,7 +3564,9 @@ function cutHistory(text) {
     // Each cut leaves a mark first, so a line that held nothing but cuts can be
     // told from a blank line the message had of its own.
     const MARK = '\uE000';
-    let t = text;
+    // One kind of line ending, so a line cut from a message saved with \r\n
+    // does not leave its \r behind as a blank line.
+    let t = text.replace(/\r\n?/g, '\n');
     for (const re of historyCut) {
         try {
             re.lastIndex = 0;

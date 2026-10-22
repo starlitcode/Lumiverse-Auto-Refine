@@ -3323,6 +3323,46 @@ describe("leaving things out of the run-up", () => {
     expect(said(h)).not.toContain("Tam:");
   });
 
+  test("a message saved with \\r\\n line endings leaves no blank line where a line was cut", async () => {
+    const crlf = (): Msg[] => [
+      { id: "m0", role: "assistant", content: "The gate stands open.\r\n[HP 9/10 | Coins 4]\r\nThe road past it is dark." },
+      { id: "m1", role: "user", content: "i walk through it" },
+      { id: "m2", role: "assistant", content: "She stepped through and, suddenly, the cold hit her." },
+    ];
+    const h = await armed(["She stepped through and the cold hit her."], { historyCut: "^\\[HP[^\\]]*\\]$" }, crlf());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The gate stands open.\nThe road past it is dark.");
+  });
+
+  test("the size limit counts a message after the cut, so a message that fits once cut is kept", async () => {
+    const big = (): Msg[] => [
+      { id: "m0", role: "assistant", content: "[" + "x".repeat(600) + "]\nThe gate stands open." },
+      { id: "m1", role: "user", content: "i walk through it" },
+      { id: "m2", role: "assistant", content: "She stepped through and, suddenly, the cold hit her." },
+    ];
+    const none = await armed(["She stepped through and the cold hit her."], { maxHistoryTokens: 40 }, big());
+    await none.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(none)).not.toContain("The gate stands open");
+    const cut = await armed(["She stepped through and the cold hit her."], { maxHistoryTokens: 40, historyCut: "^\\[x+\\]$" }, big());
+    await cut.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(cut)).toContain("The gate stands open");
+  });
+
+  test("the prompt preview shows the run-up with the cut, and the lorebook without names when they are off", async () => {
+    const h = await armed(["x"], { historyCut: "^\\[HP[^\\]]*\\]$", loreNames: false }, tracked());
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const got = h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+    const text = JSON.stringify(got.messages);
+    expect(text).toContain("The gate stands open.");
+    expect(text).not.toContain("HP 9/10");
+    expect(text).toContain("The ferry runs at dusk");
+    expect(text).not.toContain("The crossing:");
+  });
+
   test("with no patterns the run-up is sent as it is saved", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {}, tracked());
     await h.ended({ chatId: "c1", messageId: "m2" });
