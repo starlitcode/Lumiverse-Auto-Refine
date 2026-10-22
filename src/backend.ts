@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.47.0';
+const VERSION = '1.48.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -78,6 +78,9 @@ let contextMessages = 4;
 // Whether each line of the run-up carries who said it. Off for a chat whose
 // messages already begin with a name, where the label says it a second time.
 let nameSpeakers = true;
+// Whether each lorebook entry in {{lore}} starts with its name, so the model
+// knows what the entry is about. Off for entries whose text already says.
+let loreNames = true;
 // Sampler values for the refine call, sent as parameters. Empty means the
 // connection's own preset decides, which is the right default: a reader who
 // has not asked for a temperature should get the one they already tuned.
@@ -740,7 +743,9 @@ let shieldKeep: RegExp[] = [];
 // instead of throwing on every refine. Anything that matches the empty string
 // is dropped: it would match at every position and turn the message into
 // tokens.
-function makePatterns(raw: any, cap: number): { list: RegExp[]; bad: string[] } {
+// flags is 'gi' unless a caller needs more, such as 'm' so that ^ and $ match
+// at each line.
+function makePatterns(raw: any, cap: number, flags = 'gi'): { list: RegExp[]; bad: string[] } {
   const list: RegExp[] = [];
   const bad: string[] = [];
   for (const line of String(raw == null ? '' : raw).split(/\n/)) {
@@ -753,7 +758,7 @@ function makePatterns(raw: any, cap: number): { list: RegExp[]; bad: string[] } 
     }
     let re: RegExp;
     try {
-      re = new RegExp(src, 'gi');
+      re = new RegExp(src, flags);
     } catch (e: any) {
       bad.push(src.slice(0, 40) + ' (' + ((e && e.message) || 'not a pattern') + ')');
       continue;
@@ -3674,6 +3679,28 @@ async function gatherPersonaName(
   }
 }
 
+// One earlier message with the reader's patterns taken out. Lines that only
+// held what was cut leave no gap of blank lines behind them.
+function cutHistory(text: string): string {
+  if (!historyCut.length) return text;
+  // Each cut leaves a mark first, so a line that held nothing but cuts can be
+  // told from a blank line the message had of its own.
+  const MARK = '\uE000';
+  let t = text;
+  for (const re of historyCut) {
+    try {
+      re.lastIndex = 0;
+      t = t.replace(re, MARK);
+    } catch (_) {}
+  }
+  return t
+    .replace(/^[ \t]*\uE000[\uE000 \t]*(?:\n|$)/gm, '')
+    .split(MARK)
+    .join('')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 async function gatherHistory(
   msgs: any[],
   at: number,
@@ -3694,7 +3721,9 @@ async function gatherHistory(
   for (let i = at - 1; i >= 0 && out.length < want; i--) {
     const m = msgs[i];
     if (!m || (m.role !== 'assistant' && m.role !== 'user')) continue;
-    const body = String(m.content == null ? '' : m.content).trim();
+    const body = cutHistory(String(m.content == null ? '' : m.content)).trim();
+    // A message that was all markup is left out, rather than sent as a name
+    // with nothing after it.
     if (!body) continue;
     // Both sides named, so the run-up reads the way the chat does and the
     // model is never working out which of two labels is a person. A reply
@@ -3718,6 +3747,10 @@ const LORE_ENTRIES_MAX = 24;
 // characters is wildly different depending on the language and the formatting.
 let maxLoreTokens = 2500;
 let maxHistoryTokens = 4500;
+// The reader's patterns for what to take out of each earlier message before
+// it goes into {{history}}, such as a tracker line or markup. Only the copy
+// sent to the model is cut. The chat is never changed.
+let historyCut: RegExp[] = [];
 
 // The host's own tokenizer when it will answer, and the usual estimate when it
 // will not. Roughly four characters a token is close enough for a budget, and
@@ -3928,7 +3961,7 @@ async function gatherLore(chatId: string, userId?: string): Promise<string> {
       ).trim();
       if (!body) continue;
       const name = String((entry && (entry.name || entry.comment)) || '').trim();
-      out.push(name ? name + ': ' + body : body);
+      out.push(loreNames && name ? name + ': ' + body : body);
     }
     // Trimmed to the budget rather than to a character count, whole entries at
     // a time.
@@ -6453,8 +6486,12 @@ function rememberRules(userId: string | undefined, s: any): void {
   // Said once, when it is saved. A pattern that cannot compile is a typo the
   // reader can fix, and ignoring it would leave them believing a region is
   // shielded when nothing is shielding it.
+  //
+  // Sent every time, an empty list included, so a warning goes away once the
+  // pattern is fixed.
   const bad = makePatterns(s.shieldAdd, 30).bad.concat(makePatterns(s.shieldKeep, 30).bad);
-  if (bad.length) replyTo(userId, { type: 'shield_bad', patterns: bad });
+  replyTo(userId, { type: 'shield_bad', patterns: bad });
+  replyTo(userId, { type: 'history_bad', patterns: makePatterns(s.historyCut, 30, 'gim').bad });
   if (turnCount === 0 || turnKey === k) {
     applyRules(s);
     chatsOff = chatsOffBy.get(k) || new Set<string>();
@@ -6616,6 +6653,7 @@ function applyRules(s: any): void {
   // Absent on a panel older than this setting, where the labels were always
   // on, so a missing value means on rather than off.
   nameSpeakers = s.nameSpeakers === undefined ? true : !!s.nameSpeakers;
+  loreNames = s.loreNames === undefined ? true : !!s.loreNames;
   maxLoreTokens = Number(s.maxLoreTokens);
   maxLoreTokens = Number.isFinite(maxLoreTokens) && maxLoreTokens >= 0 ? maxLoreTokens : 2500;
   maxHistoryTokens = Number(s.maxHistoryTokens);
@@ -6632,6 +6670,9 @@ function applyRules(s: any): void {
     shieldAdd = add.list;
     shieldKeep = keep.list;
   }
+  // Multiline, so that ^ and $ match at each line, which is how a tracker
+  // line in a message is written.
+  historyCut = makePatterns(s.historyCut, 30, 'gim').list;
   guardRefusal = s.guardRefusal !== false;
   skipRefusals = s.skipRefusals !== false;
   guardPreamble = s.guardPreamble !== false;

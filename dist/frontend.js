@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.47.0";
+const VERSION = "1.48.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -349,7 +349,9 @@ const PARTS = [
             "contextMessages",
             "nameSpeakers",
             "maxHistoryTokens",
+            "historyCut",
             "maxLoreTokens",
+            "loreNames",
             "wornOn",
             "wornBack",
             "wornLeast",
@@ -1060,6 +1062,11 @@ const CONFIG = {
     // is worse than one fewer of them.
     maxLoreTokens: 2500,
     maxHistoryTokens: 4500,
+    // Each lorebook entry in {{lore}} starts with its name.
+    loreNames: true,
+    // Patterns, one per line, for what to take out of each earlier message
+    // before it goes into {{history}}. Empty takes nothing out.
+    historyCut: "",
     // Which tab the panel opens on, remembered so it comes back where you left it.
     tab: "prompt",
     // How a before and an after are drawn. Off puts one text on the screen with
@@ -10844,6 +10851,14 @@ export function setup(ctx, overrides) {
             hint: "The same limit in tokens. Whole messages are dropped, oldest first, so the latest one is always kept.",
         }));
         wrap.appendChild(fieldRow({
+            key: "historyCut",
+            label: "Leave out of the run-up",
+            type: "lines",
+            hint: "Optional. One regular expression per line, capitals ignored. What it matches is taken out of {{history}}. Your chat is not changed.",
+        }));
+        if (historyBad.length)
+            wrap.appendChild(bad("These patterns could not be read and are doing nothing: " + historyBad.join("; ")));
+        wrap.appendChild(fieldRow({
             key: "maxLoreTokens",
             int: true,
             label: "Most tokens of lorebook",
@@ -10851,6 +10866,13 @@ export function setup(ctx, overrides) {
             min: 0,
             max: 200000,
             hint: "A ceiling on the entries this chat has active. Whole entries are kept or dropped. 0 sends none, which is the same as switching the block off.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "loreNames",
+            label: "Name each lorebook entry",
+            type: "bool",
+            under: true,
+            hint: "On by default. Puts each entry's name before its text in {{lore}}. Turn it off if your entries already say what they are about.",
         }));
         wrap.appendChild(note("Counted with Lumiverse's own tokenizer where it will answer, and estimated at four characters a token where it will not."));
         return wrap;
@@ -11772,6 +11794,7 @@ export function setup(ctx, overrides) {
     // Patterns the backend could not compile, named so a typo is visible instead
     // of being a region somebody believes is shielded and is not.
     let shieldBad = [];
+    let historyBad = [];
     // Which try is running, for the line that says so.
     let retryAt = 0;
     let retryOf = 0;
@@ -17793,9 +17816,22 @@ export function setup(ctx, overrides) {
                         return;
                     }
                     if (msg.type === "shield_bad") {
+                        const was = shieldBad.join("\n");
                         shieldBad = Array.isArray(msg.patterns) ? msg.patterns.map(String).slice(0, 10) : [];
+                        if (shieldBad.join("\n") === was)
+                            return;
                         if (shieldBad.length)
                             log("some shield patterns could not be read");
+                        paint();
+                        return;
+                    }
+                    if (msg.type === "history_bad") {
+                        const was = historyBad.join("\n");
+                        historyBad = Array.isArray(msg.patterns) ? msg.patterns.map(String).slice(0, 10) : [];
+                        if (historyBad.join("\n") === was)
+                            return;
+                        if (historyBad.length)
+                            log("some patterns in Leave out of the run-up could not be read");
                         paint();
                         return;
                     }

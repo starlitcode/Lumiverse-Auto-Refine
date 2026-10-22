@@ -5052,6 +5052,48 @@ console.log("\nthe status dot stays beside a long status line");
   }
 }
 
+console.log("\nleaving things out of the run-up, and the lorebook names");
+{
+  // The Context tab has a box for patterns to cut from {{history}}, and a
+  // switch for the names in front of lorebook entries. A pattern that cannot
+  // be read is named under the box, and the note goes once it is fixed.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch }, async (page) => {
+      await goTab(page, "Context");
+      await settle(page);
+      const rows = await page.evaluate(() => {
+        const seen = (k) => {
+          const n = document.querySelector('#drawer [data-arf-field="' + k + '"]');
+          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+        };
+        const lore = document.querySelector('#drawer [data-arf-field="loreNames"]');
+        return { cut: seen("historyCut"), names: seen("loreNames"), on: !!lore && lore.checked };
+      });
+      ok(label + ": Leave out of the run-up is on the Context tab", rows.cut, JSON.stringify(rows));
+      ok(label + ": Name each lorebook entry is there, and on", rows.names && rows.on, JSON.stringify(rows));
+      const note = () => page.evaluate(() => /These patterns could not be read and are doing nothing: \(\[unclosed/.test(document.querySelector("#drawer").textContent));
+      await page.evaluate(() => window.__fromBackend({ type: "history_bad", patterns: ["([unclosed (missing )"] }));
+      await settle(page);
+      ok(label + ": a pattern that cannot be read is named", await note(), "");
+      await page.evaluate(() => window.__fromBackend({ type: "history_bad", patterns: [] }));
+      await settle(page);
+      ok(label + ": and the note goes once it is fixed", !(await note()), "");
+      const look = await page.evaluate((touch) => {
+        const out = { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small: [] };
+        if (touch)
+          for (const k of ["historyCut", "loreNames"]) {
+            const row = document.querySelector('#drawer [data-arf-row="' + k + '"]');
+            const n = row && row.querySelector("textarea, input:not([type=checkbox]), .arf-box, label");
+            if (n && n.getBoundingClientRect().height < 32) out.small.push(k + ":" + Math.round(n.getBoundingClientRect().height));
+          }
+        return out;
+      }, touch);
+      ok(label + ": nothing runs off the side", !look.sideways, "");
+      if (touch) ok(label + ": both rows are at least 32 pixels high to tap", look.small.length === 0, JSON.stringify(look.small));
+    });
+  }
+}
+
 console.log("\nthe Stop button stays put while the status line changes");
 {
   // A refine moves through asking, a countdown after a call the provider

@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.48.0
+
+_2026-10-22_
+
+### Added
+
+- **Leave out of the run-up.** A box on the **Context** tab for regular expressions, one per line. What they match is taken out of `{{history}}` before it is sent, such as tracker lines or markup. Lumiverse's own regex scripts do not run on `{{history}}`, so this is where to cut them. Your chat is never changed. See [Leaving things out of the run-up](docs/prompt.md#leaving-things-out-of-the-run-up).
+- **Name each lorebook entry.** A switch on the **Context** tab, on by default. Each entry in `{{lore}}` starts with its name, as before. Turn it off to send the entries without their names.
+
+### Fixed
+
+- **A warning about a pattern that could not be read stayed after it was fixed.** The note under **Patterns of your own to hide** stayed on the panel until a reload, even after the pattern was corrected. It now goes as soon as the fixed pattern is saved.
+
+---
+
 ## 1.47.0
 
 _2026-10-22_

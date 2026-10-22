@@ -246,14 +246,34 @@ The checks on what comes back are separate. A model that refuses to edit a scene
 
 ## How much it is told
 
-Four settings on the **Context** tab. Three of them set a size, and every one of those costs tokens on every refine.
+Six settings on the **Context** tab. Three of them set a size, and every one of those costs tokens on every refine.
 
 - **Messages of run-up to send** is how many messages before the one being refined are sent. The default is 4. 0 sends none, which is fine for rules about wording, but a model that cannot see earlier messages may lose the thread of the scene.
-- **Most tokens of run-up** is a size limit on the same messages. Whichever limit is reached first wins. Whole messages are kept or dropped, counting back from the one being refined, so the message just before it is always kept.
 - **Name the speakers in the run-up** is on by default. It puts each speaker's name at the start of their lines, which is the only way to tell the voices apart in one block of text. Turn it off for a chat whose messages already start with a name.
+- **Most tokens of run-up** is a size limit on the same messages. Whichever limit is reached first wins. Whole messages are kept or dropped, counting back from the one being refined, so the message just before it is always kept.
+- **Leave out of the run-up** takes things out of `{{history}}` before it is sent. See [Leaving things out of the run-up](#leaving-things-out-of-the-run-up).
+- **Most tokens of lorebook** is a size limit on the lorebook entries. Whole entries are kept or dropped.
+- **Name each lorebook entry** is on by default. Each entry in `{{lore}}` starts with its name, as in `The old mill: Nobody has worked it since the flood.`, so the model knows what the entry is about. Turn it off if your entries already say what they are about.
 
 **In a group chat**, each reply is named after the character who wrote it. The card sent in `{{description}}` is that character's card too, found by name among the cards in the chat. Where no card matches the name, the chat's own card is sent.
-- **Most tokens of lorebook** is a size limit on the lorebook entries. Whole entries are kept or dropped.
+
+### Leaving things out of the run-up
+
+`{{history}}` sends each earlier message as it is saved in the chat. Lumiverse's own regex scripts do not run on it, because Auto Refine builds it itself. **Leave out of the run-up** is where you cut what you do not want the refine model to read, such as tracker lines or markup.
+
+- Write one regular expression per line. Capitals are ignored.
+- `^` and `$` match the start and end of each line in a message, so `^\[.*\]$` matches a line that is only something in square brackets.
+- What a pattern matches is taken out. A line that held nothing else goes with it.
+- A message with nothing left in it is not sent at all.
+- Only the copy sent to the model is cut. Your chat is never changed, and neither is the message being refined.
+- A pattern that cannot be read is named under the box, and does nothing until it is fixed.
+
+Some patterns to start from:
+
+- `^\[.*\]$` takes out a line that is only something in square brackets, like `[Day 3, morning]`.
+- `^.*\|.*\|.*$` takes out a line with two or more `|` in it, like a tracker row.
+- `<[^>]+>` takes out every HTML tag, and keeps the text between them.
+- `<details>[\s\S]*?</details>` takes out a folded block and everything in it.
 
 Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokenizer where it can, and estimated at four characters a token where it cannot.
 

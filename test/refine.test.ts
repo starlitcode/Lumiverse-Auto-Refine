@@ -3299,7 +3299,75 @@ describe("what the model is told about the scene", () => {
   });
 });
 
+describe("leaving things out of the run-up", () => {
+  const tracked = (): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open.\n[HP 9/10 | Coins 4]\nThe road past it is <b>dark</b>." },
+    { id: "m1", role: "user", content: "[HP 9/10 | Coins 4]" },
+    { id: "m2", role: "assistant", content: "She stepped through and, suddenly, the cold hit her." },
+  ];
+
+  test("what a pattern matches is taken out of {{history}}, and ^ and $ work per line", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { historyCut: "^\\[HP[^\\]]*\\]$\n</?b>" }, tracked());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The gate stands open.\nThe road past it is dark.");
+    expect(said(h)).not.toContain("HP 9/10");
+    expect(said(h)).not.toContain("<b>");
+  });
+
+  test("a message that was only what was cut is left out, with no name and nothing after it", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { historyCut: "^\\[HP[^\\]]*\\]$" }, tracked());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toMatch(/Tam:\s*(\n|$)/);
+    expect(said(h)).not.toContain("Tam:");
+  });
+
+  test("with no patterns the run-up is sent as it is saved", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], {}, tracked());
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("[HP 9/10 | Coins 4]");
+  });
+
+  test("a pattern that cannot be read is reported, and the report clears once it is fixed", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { historyCut: "([unclosed" });
+    await wait(10);
+    const first = h.sent.filter((m: any) => m.type === "history_bad").pop();
+    expect(first.patterns.join(" ")).toContain("([unclosed");
+    await h.front({ type: "set_settings", settings: { ...RULES, historyCut: "^\\[HP" } });
+    await wait(10);
+    const after = h.sent.filter((m: any) => m.type === "history_bad").pop();
+    expect(after.patterns).toEqual([]);
+  });
+
+  test("a shield pattern's report clears once it is fixed, too", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { shieldAdd: "([unclosed" });
+    await wait(10);
+    expect(h.sent.filter((m: any) => m.type === "shield_bad").pop().patterns.length).toBe(1);
+    await h.front({ type: "set_settings", settings: { ...RULES, shieldAdd: "" } });
+    await wait(10);
+    expect(h.sent.filter((m: any) => m.type === "shield_bad").pop().patterns).toEqual([]);
+  });
+});
+
 describe("the lorebook", () => {
+  test("each entry starts with its name by default", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The crossing: The ferry runs at dusk");
+  });
+
+  test("with Name each lorebook entry off, the entries go in without their names", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { loreNames: false });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The ferry runs at dusk");
+    expect(said(h)).not.toContain("The crossing:");
+    expect(said(h)).not.toContain("The gate:");
+  });
+
   test("active entries go in the prompt", async () => {
     const h = await armed(["She stepped through and the cold hit her."]);
     await h.ended({ chatId: "c1", messageId: "m2" });
