@@ -259,9 +259,9 @@ Six settings on the **Context** tab. Three of them set a size, and every one of 
 
 ### Leaving things out of the run-up
 
-`{{history}}` sends each earlier message as it is saved in the chat. Lumiverse's own regex scripts do not run on it, because Auto Refine builds it itself. **Leave out of the run-up** is where you cut what you do not want the refine model to read, such as tracker lines or markup.
+`{{history}}` sends each earlier message as it is saved in the chat, because Auto Refine builds it itself. A Lumiverse regex script set to change the prompt or the display does not reach it. A script set to change the response does, since it changes the reply before it is saved. **Leave out of the run-up** is where you cut what you do not want the refine model to read, such as tracker lines or markup.
 
-- Write one regular expression per line. Capitals are ignored.
+- Write one regular expression per line. Capitals are ignored. See [Writing a pattern](#writing-a-pattern) for the forms it reads.
 - `^` and `$` match the start and end of each line in a message, so `^\[.*\]$` matches a line that is only something in square brackets.
 - What a pattern matches is taken out. A line that held nothing else goes with it.
 - A message with nothing left in it is not sent at all.
@@ -274,6 +274,19 @@ Some patterns to start from:
 - `^.*\|.*\|.*$` takes out a line with two or more `|` in it, like a tracker row.
 - `<[^>]+>` takes out every HTML tag, and keeps the text between them.
 - `<details>[\s\S]*?</details>` takes out a folded block and everything in it.
+
+### Writing a pattern
+
+The three pattern boxes, **Leave out of the run-up**, **Patterns of your own to hide** and **Patterns to keep visible**, read patterns the same way:
+
+- **A plain pattern**, such as `\[.*?\]`, ignores capitals.
+- **A pattern written as `/pattern/flags`**, such as `/\[.*?\]/g`, uses its own flags. Many apps write patterns this way, so one can be pasted as it is. Without `i` in its flags, capitals count.
+- **A pattern from a Lumiverse regex script** is a plain pattern. Its flags are in a separate box in Lumiverse, so paste the pattern alone.
+- **A leading `(?i)`, `(?m)` or `(?s)`** is read as that flag. `(?s)` lets `.` match across lines.
+- **Unicode classes**, such as `\p{L}` for any letter, work in all of them.
+- A pattern that cannot be read is named under its box, and does nothing until it is fixed.
+- A pattern that matches nothing at all, such as `^\s*$`, is refused, because it would match everywhere.
+- A group that repeats something inside it and is then repeated itself, such as `(a+)+`, is refused. On text that almost matches, it can stop Auto Refine for about a second on each message, for everyone on the server, and then match nothing. A set count, such as `(\d{2})+`, is fine.
 
 Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokenizer where it can, and estimated at four characters a token where it cannot.
 
@@ -414,7 +427,7 @@ What is not hidden:
 - **Braces.** A macro in a reply is already safe, because this extension's macros are filled in last.
 - **Plain inline formatting** like `<i>`, `<b>` and `<em>`. Hiding these would leave holes in the middle of sentences and make the rewrite worse. The prompt tells the model to leave them alone. **Hide plain italic and bold too** hides them as well, if you prefer.
 
-**Patterns of your own to hide** adds one regular expression per line to the built-in list.
+**Patterns of your own to hide** adds one regular expression per line to the built-in list. See [Writing a pattern](#writing-a-pattern) for the forms it reads.
 
 - Yours are tried first.
 - A pattern that cannot be read is named under the box.

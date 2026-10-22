@@ -12,11 +12,13 @@ _2026-10-22_
 
 ### Added
 
-- **Leave out of the run-up.** A box on the **Context** tab for regular expressions, one per line. What they match is taken out of `{{history}}` before it is sent, such as tracker lines or markup. Lumiverse's own regex scripts do not run on `{{history}}`, so this is where to cut them. Your chat is never changed. See [Leaving things out of the run-up](docs/prompt.md#leaving-things-out-of-the-run-up).
+- **Leave out of the run-up.** A box on the **Context** tab for regular expressions, one per line. What they match is taken out of `{{history}}` before it is sent, such as tracker lines or markup. Lumiverse regex scripts set to change the prompt or the display do not reach `{{history}}`, so this is where to cut those things. Your chat is never changed. See [Leaving things out of the run-up](docs/prompt.md#leaving-things-out-of-the-run-up).
+- **Patterns written the way other apps write them.** Every pattern box now reads `/pattern/flags`, the form many apps use, with its own flags. It also reads a leading `(?i)`, `(?m)` or `(?s)`, and Unicode classes such as `\p{L}`. See [Writing a pattern](docs/prompt.md#writing-a-pattern).
 - **Name each lorebook entry.** A switch on the **Context** tab, on by default. Each entry in `{{lore}}` starts with its name, as before. Turn it off to send the entries without their names.
 
 ### Fixed
 
+- **A pattern could stop Auto Refine answering.** A pattern that repeats a group with a repeat inside it, such as `(a+)+`, can stop Auto Refine for about a second on each message it reads, for everyone on the server, and then match nothing. Such a pattern is now refused when it is saved, and named under its box with the reason.
 - **A warning about a pattern that could not be read stayed after it was fixed.** The note under **Patterns of your own to hide** stayed on the panel until a reload, even after the pattern was corrected. It now goes as soon as the fixed pattern is saved.
 
 ---

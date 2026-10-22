@@ -743,6 +743,72 @@ let shieldKeep: RegExp[] = [];
 // instead of throwing on every refine. Anything that matches the empty string
 // is dropped: it would match at every position and turn the message into
 // tokens.
+// One line of a pattern box as a pattern. Written as /pattern/flags, the way
+// many apps write them, it takes those flags, plus g. A leading (?i), (?m) or (?s) is read as that flag. Unicode
+// classes such as \p{L} need u, so u is added where the pattern allows it;
+// a pattern with an escape u refuses, such as \:, is read without it.
+function readPattern(src: string, flags: string): RegExp {
+  let body = src;
+  let use = flags;
+  const slash = /^\/([\s\S]+)\/([a-z]*)$/.exec(src);
+  if (slash) {
+    if (!/^[dgimsuy]*$/.test(slash[2])) throw new Error('unknown flag in /' + slash[2]);
+    body = slash[1];
+    use = slash[2].indexOf('g') < 0 ? slash[2] + 'g' : slash[2];
+  }
+  const inline = /^\(\?([a-z]+)\)/.exec(body);
+  if (inline) {
+    if (!/^[ims]+$/.test(inline[1])) throw new Error('(?' + inline[1] + ') is not a flag this can read');
+    body = body.slice(inline[0].length);
+    for (const f of inline[1]) if (use.indexOf(f) < 0) use += f;
+  }
+  if (use.indexOf('u') < 0) {
+    try {
+      return new RegExp(body, use + 'u');
+    } catch (_) {}
+  }
+  return new RegExp(body, use);
+}
+
+// Whether a pattern repeats a group that repeats something inside it, such as
+// (a+)+ or (\w*\s?)*. On text that almost matches, that shape tries every way
+// of splitting the text between the two repeats. Bun gives up on such a match
+// after about a second, with no match, so the pattern does nothing and the
+// backend, which serves every account on the server, stops for that second on
+// every message it reads. The shape is refused when it is saved.
+function repeatsARepeat(src: string): boolean {
+  // A count such as {2} repeats a set number of times, so only an open one,
+  // such as {2,}, counts as a repeat.
+  const repeatAt = (i: number): boolean => {
+    const c = src[i];
+    if (c === '+' || c === '*') return true;
+    if (c !== '{') return false;
+    const close = src.indexOf('}', i);
+    return close > i && src.slice(i, close).indexOf(',') >= 0;
+  };
+  const open: boolean[] = [];
+  let inClass = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '\\') {
+      i++;
+      continue;
+    }
+    if (inClass) {
+      if (c === ']') inClass = false;
+      continue;
+    }
+    if (c === '[') inClass = true;
+    else if (c === '(') open.push(false);
+    else if (c === ')') {
+      const inner = open.pop();
+      if (inner && repeatAt(i + 1)) return true;
+      if (inner && open.length) open[open.length - 1] = true;
+    } else if (repeatAt(i) && open.length && src[i - 1] !== '(') open[open.length - 1] = true;
+  }
+  return false;
+}
+
 // flags is 'gi' unless a caller needs more, such as 'm' so that ^ and $ match
 // at each line.
 function makePatterns(raw: any, cap: number, flags = 'gi'): { list: RegExp[]; bad: string[] } {
@@ -756,9 +822,13 @@ function makePatterns(raw: any, cap: number, flags = 'gi'): { list: RegExp[]; ba
       bad.push(src.slice(0, 40) + ' (too long)');
       continue;
     }
+    if (repeatsARepeat(src)) {
+      bad.push(src.slice(0, 40) + ' (a repeat inside a repeat, which can stop Auto Refine for a second on each message)');
+      continue;
+    }
     let re: RegExp;
     try {
-      re = new RegExp(src, flags);
+      re = readPattern(src, flags);
     } catch (e: any) {
       bad.push(src.slice(0, 40) + ' (' + ((e && e.message) || 'not a pattern') + ')');
       continue;

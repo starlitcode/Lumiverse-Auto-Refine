@@ -3363,6 +3363,95 @@ describe("leaving things out of the run-up", () => {
     expect(text).not.toContain("The crossing:");
   });
 
+  // Patterns written the ways people bring them from other apps.
+  const forms = (): Msg[] => [
+    {
+      id: "m0",
+      role: "assistant",
+      content:
+        "Mira nodded.\n[Day 2 | Rain]\n<span class=\"warn\">Careful</span>, she said.\n<status>Mood: calm\nLoc: dock</status>\nÉLAN ran. 🌧️ Done.",
+    },
+    { id: "m1", role: "user", content: "i follow her" },
+    { id: "m2", role: "assistant", content: "She stepped through and, suddenly, the cold hit her." },
+  ];
+  const cases: Array<[string, string, string[], string[]]> = [
+    ["the /pattern/flags form", "/\\[.*?\\]/g", ["Mira nodded.\n<span"], ["[Day 2"]],
+    ["the /pattern/flags form with s, so . crosses lines", "/<status>.*?<\\/status>/s", ["she said.\nÉLAN ran."], ["Mood: calm"]],
+    ["the /pattern/flags form without i keeps capitals", "/rain/g", ["[Day 2 | Rain]"], []],
+    ["a leading (?i) is read as the flag", "(?i)CAREFUL", ["\">"], ["Careful"]],
+    ["a leading (?s) lets . cross lines", "(?s)<status>.*?</status>", ["ÉLAN ran."], ["Loc: dock"]],
+    ["a Unicode class", "\\p{Extended_Pictographic}\\uFE0F?", ["ÉLAN ran.", "Done."], ["🌧"]],
+    ["capitals ignored for letters with accents", "élan", [" ran. "], ["ÉLAN"]],
+    ["a lookbehind and a lookahead", "(?<=<span[^>]*>)Careful(?=</span>)", ["<span class=\"warn\"></span>"], []],
+    ["a needless escape other apps allow", "Mood\\: calm", ["<status>\nLoc: dock"], ["Mood: calm"]],
+    ["an escaped slash", "<\\/?span[^>]*>", ["Careful, she said."], ["<span"]],
+  ];
+  for (const [what, pattern, keeps, drops] of cases) {
+    test("works: " + what, async () => {
+      const h = await armed(["She stepped through and the cold hit her."], { historyCut: pattern, nameSpeakers: false }, forms());
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      for (const k of keeps) expect(said(h)).toContain(k);
+      for (const d of drops) expect(said(h)).not.toContain(d);
+      expect(h.sent.filter((m: any) => m.type === "history_bad").pop().patterns).toEqual([]);
+    });
+  }
+
+  test("a flag that cannot be read is named, in either form", async () => {
+    const h = await armed(["x"], { historyCut: "/rain/q\n(?x)rain" });
+    await wait(10);
+    const bad = h.sent.filter((m: any) => m.type === "history_bad").pop().patterns.join(" | ");
+    expect(bad).toContain("/rain/q");
+    expect(bad).toContain("(?x)rain");
+  });
+
+  // A repeat inside a repeat takes time that doubles with each letter of
+  // text it almost matches, and the backend serves every account.
+  test("a repeat inside a repeat is refused and named, in every pattern box", async () => {
+    const h = await armed(["x"], { historyCut: "(a+)+$\n(\\d{2})+", shieldAdd: "(\\w*\\s?)*x" });
+    await wait(10);
+    const cut = h.sent.filter((m: any) => m.type === "history_bad").pop().patterns.join(" | ");
+    const hide = h.sent.filter((m: any) => m.type === "shield_bad").pop().patterns.join(" | ");
+    expect(cut).toContain("(a+)+$ (a repeat inside a repeat");
+    // A set count, such as {2}, is not a repeat that can split the text many ways.
+    expect(cut).not.toContain("\\d{2}");
+    expect(hide).toContain("(\\w*\\s?)*x (a repeat inside a repeat");
+  });
+
+  // Bun gives up on such a match after about a second, so four messages of
+  // almost-matches would hold a refine up for four seconds or more.
+  test("and a refused pattern is not used, so four messages of almost-matches do not hold a refine up", async () => {
+    const almost = "a".repeat(60) + "!";
+    const slow = (): Msg[] => [
+      { id: "m0", role: "assistant", content: almost },
+      { id: "m1", role: "user", content: almost },
+      { id: "m2", role: "assistant", content: almost },
+      { id: "m3", role: "user", content: almost },
+      { id: "m4", role: "assistant", content: "She stepped through and, suddenly, the cold hit her." },
+    ];
+    const t = Date.now();
+    const h = await armed(["She stepped through and the cold hit her."], { historyCut: "(a+)+$" }, slow());
+    await h.ended({ chatId: "c1", messageId: "m4" });
+    await wait(50);
+    expect(Date.now() - t).toBeLessThan(2500);
+    expect(said(h)).toContain("a".repeat(60) + "!");
+  });
+
+  test("the shield boxes read the /pattern/flags form too", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her at last.</REFINED>"],
+      { shieldAdd: "/HP \\d+\\/\\d+/i" },
+      [
+        { id: "m0", role: "assistant", content: "The gate stands open." },
+        { id: "m1", role: "user", content: "i go in" },
+        { id: "m2", role: "assistant", content: "She stepped through, hp 9/10, and, suddenly, the cold just hit her." },
+      ],
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("hp 9/10");
+  });
+
   test("with no patterns the run-up is sent as it is saved", async () => {
     const h = await armed(["She stepped through and the cold hit her."], {}, tracked());
     await h.ended({ chatId: "c1", messageId: "m2" });
