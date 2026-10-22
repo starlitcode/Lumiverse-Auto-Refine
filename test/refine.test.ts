@@ -1410,6 +1410,19 @@ describe("two models: Jev reads the reply first", () => {
     expect(h.jevCalls[0].init.headers.Authorization).toBe("Bearer sk-typesafe-made-up");
   });
 
+  test("Baseten's own API is sent the key as Api-Key, and OpenRouter still as Bearer", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeWho: "mammoth", judgeHost: "baseten" }, chat(), { jev: says([10]) });
+    await h.front({ type: "jev_key_set", requestId: "a", key: "bt-made-up", host: "baseten" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].init.headers.Authorization).toBe("Api-Key bt-made-up");
+    const r = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeWho: "mammoth", judgeHost: "openrouter" }, chat(), { jev: says([10]) });
+    await r.front({ type: "jev_key_set", requestId: "a", key: "sk-router-made-up", host: "openrouter" });
+    await r.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(r.jevCalls[0].init.headers.Authorization).toBe("Bearer sk-router-made-up");
+  });
+
   test("the key kept for a host reaches both models on it", async () => {
     const h = await armed(["She stepped through and the cold hit her."], { ...TWO, judgeWho: "span" }, chat(), { jev: says([10]) });
     await h.front({ type: "jev_key_set", requestId: "a", key: "sk-router-made-up", host: "openrouter" });
@@ -1789,6 +1802,10 @@ describe("two models: Jev reads the reply first", () => {
     ["drex", "nace", "https://console.nace.ai/v1/systemone", "drex-v2.0"],
     ["drex", "openrouter", "https://openrouter.ai/api/alpha/decisions", "nace-ai/drex-max", { drexSize: "max" }],
     ["drex", "nace", "https://console.nace.ai/v1/systemone", "drex-max", { drexSize: "max" }],
+    ["mammoth", "openrouter", "https://openrouter.ai/api/alpha/decisions", "baseten/mammoth-1:free"],
+    ["mammoth", "baseten", "https://inference.baseten.co/v1/systemone", "decision-models/baseten-mammoth-27b-latest"],
+    ["mammoth", "openrouter", "https://openrouter.ai/api/alpha/decisions", "baseten/elephant-1:free", { mammothSize: "small" }],
+    ["mammoth", "baseten", "https://inference.baseten.co/v1/systemone", "decision-models/baseten-elephant-9b-latest", { mammothSize: "small" }],
     ["subq", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "subq/subq-snap-preview"],
     ["subq", "subq", "https://api.subq.ai/v1/systemone", "subq-snap-preview"],
     ["jeff", "nanogpt", "https://nano-gpt.com/api/v1/decisions", "eu-jev/eu-jeff-1.0.0"],
@@ -1995,6 +2012,8 @@ describe("two models: Jev reads the reply first", () => {
     ["microsoft", "microsoftOver"],
     ["drex", "drexOver"],
     ["drex", "drexMaxOver", { drexSize: "max" }],
+    ["mammoth", "mammothOver"],
+    ["mammoth", "elephantOver", { mammothSize: "small" }],
     ["classify", "classifyOver"],
     ["subq", "subqOver"],
     ["jeff", "jeffOver"],
@@ -2006,7 +2025,7 @@ describe("two models: Jev reads the reply first", () => {
       await over.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);
       expect(over.asked.length).toBe(1);
-      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10, jeffOver: 10, drexMaxOver: 10 };
+      const lows = { judgeOver: 10, spanOver: 10, mercuryOver: 10, d1Over: 10, solarOver: 10, kevOver: 10, lunaOver: 10, clefOver: 10, clefFlashOver: 10, clefOmniOver: 10, deciderOver: 10, microsoftOver: 10, drexOver: 10, classifyOver: 10, subqOver: 10, solarFlashOver: 10, d1UltraOver: 10, deciderFlashOver: 10, jeffOver: 10, drexMaxOver: 10, mammothOver: 10, elephantOver: 10 };
       const under = await keyed({ judgeWho: who, ...(pick || {}), ...lows, [key]: undefined }, { jev: says([29]) });
       await under.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(50);

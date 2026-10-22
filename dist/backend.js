@@ -5365,6 +5365,22 @@ const JEFF_HOSTS = {
     },
     eujev: { url: 'https://eu-jev.com/v1/systemone', models: { exact: 'eu-jeff-1.0.0', latest: 'eu-jeff-latest' }, kind: 'decisions' },
 };
+// Mammoth 1 and Elephant 1, from Baseten, two sizes of one decision model.
+// Both take Jev's request on OpenRouter and on Baseten's own API, which reads
+// its key as `Api-Key` rather than `Bearer` (see KEY_WORDS). OpenRouter gives
+// each 16,384 tokens.
+const MAMMOTH_HOSTS = {
+    openrouter: {
+        url: 'https://openrouter.ai/api/alpha/decisions',
+        models: { full: 'baseten/mammoth-1:free', small: 'baseten/elephant-1:free' },
+        kind: 'decisions',
+    },
+    baseten: {
+        url: 'https://inference.baseten.co/v1/systemone',
+        models: { full: 'decision-models/baseten-mammoth-27b-latest', small: 'decision-models/baseten-elephant-9b-latest' },
+        kind: 'decisions',
+    },
+};
 // Classify-1, from ScaleDown. OpenRouter takes Jev's request for it. It reads
 // only the text field of the state, which ScaleDown's own docs say.
 const CLASSIFY_HOSTS = {
@@ -5492,6 +5508,7 @@ const ownNames = {
     classify: '',
     subq: '',
     jeff: '',
+    mammoth: '',
 };
 const SIZE_PICKS = {
     mercury: {
@@ -5523,6 +5540,11 @@ const SIZE_PICKS = {
         setting: 'drexSize',
         standard: 'full',
         sizes: { full: { name: 'Drex', line: 'drexOver' }, max: { name: 'Drex Max', line: 'drexMaxOver' } },
+    },
+    mammoth: {
+        setting: 'mammothSize',
+        standard: 'full',
+        sizes: { full: { name: 'Mammoth 1', line: 'mammothOver' }, small: { name: 'Elephant 1', line: 'elephantOver' } },
     },
     d1: {
         setting: 'd1Size',
@@ -5567,6 +5589,7 @@ const LINES = {
     classify: { key: 'classifyOver', fallback: 30 },
     subq: { key: 'subqOver', fallback: 30 },
     jeff: { key: 'jeffOver', fallback: 30 },
+    mammoth: { key: 'mammothOver', fallback: 30 },
     other: { key: 'otherOver', fallback: 30 },
 };
 let judgeWorn = true;
@@ -5679,6 +5702,11 @@ const SECOND_MODELS = {
         hosts: JEFF_HOSTS,
         model: (host) => ownNames.jeff || sizedName(JEFF_HOSTS[host]),
     },
+    mammoth: {
+        name: 'Mammoth 1',
+        hosts: MAMMOTH_HOSTS,
+        model: (host) => ownNames.mammoth || sizedName(MAMMOTH_HOSTS[host]),
+    },
 };
 function secondModel() {
     return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
@@ -5737,7 +5765,13 @@ const HOST_LABELS = {
     subq: 'SubQ',
     eujev: 'eu/jev',
     nace: 'Nace.AI',
+    baseten: 'Baseten',
     custom: 'the address you gave',
+};
+// The word before the key in the Authorization header, for a host that does
+// not read it as `Bearer`.
+const KEY_WORDS = {
+    baseten: 'Api-Key',
 };
 const hostLabel = (host) => HOST_LABELS[host] || host;
 // Whether an address can be sent a key. Over plain http the key can be read
@@ -5968,7 +6002,7 @@ async function askJevOnce(userId, state, questions) {
     // Both go only to the address the user picked, the same as the bearer key.
     const headers = { 'Content-Type': 'application/json' };
     if (key)
-        headers.Authorization = 'Bearer ' + key;
+        headers.Authorization = (KEY_WORDS[hostFor(judgeWho, judgeHost)] || 'Bearer') + ' ' + key;
     if (where.kind === 'messages') {
         if (key)
             headers['x-api-key'] = key;

@@ -4,7 +4,7 @@ A beta. With one model, which is the default, every reply the automatic pass rea
 
 The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are fourteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds). The last choice, **A model not in this list**, is for any other decision model. See [A model not in this list](#a-model-not-in-this-list).
+There are fifteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds). The last choice, **A model not in this list**, is for any other decision model. See [A model not in this list](#a-model-not-in-this-list).
 
 | Model | Made by | Cost | What is it? |
 | --- | --- | --- | --- |
@@ -22,6 +22,7 @@ There are fourteen to pick from. Some come in more than one size or kind, picked
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
 | **SubQ Snap** | Subquadratic | Paid, per call | [Introducing SubQ Snap](https://subq.ai/introducing-subq-snap) |
 | **Jeff** | eu/jev | Paid, per call | [eu/jev: Documentation](https://eu-jev.com/docs) |
+| **Mammoth 1 and Elephant 1** | Baseten | Free on OpenRouter | [Baseten: mammoth-1 and elephant-1](https://www.baseten.co/blog/the-best-decision-models-in-the-world-mammoth-1-and-elephant-1/) |
 
 All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked, so every size of a model shares its link.
 
@@ -34,7 +35,7 @@ Everything is on the Model tab, in **One model or two**.
 1. Set **How many models** to two.
 2. Pick **Which second model**. The list names each model and its maker.
 3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, D1, Solar Decide, Clef, Decider, Drex and Jeff, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
+4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, D1, Solar Decide, Clef, Decider, Drex, Jeff, and Mammoth 1 and Elephant 1, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
 5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
 6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
@@ -110,6 +111,7 @@ Some models come in more than one size, or as a free kind and a paid kind. Each 
 | Decider | **Which Decider** | Decider V1.2, Decider Latest, Decider Flash V1.2, or Decider Flash Latest |
 | D1 | **Which D1** | D1, or D1 Ultra |
 | Drex | **Which Drex** | Drex 2.0, or Drex Max |
+| Mammoth 1 and Elephant 1 | **Which Baseten model** | Mammoth 1, or Elephant 1 |
 | Jeff | **Which Jeff** | Jeff 1.0.0, or Jeff Latest |
 
 - A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
@@ -343,6 +345,25 @@ Jeff is eu/jev's decision model, served from Germany. It takes the same request 
 - It is not on OpenRouter. If OpenRouter or another host is left picked, NanoGPT is used.
 - It is paid, per call. Each host's own page shows the price.
 
+## Mammoth 1 and Elephant 1
+
+Mammoth 1 and Elephant 1 are two sizes of one decision model from Baseten, trained by its Base Labs team. They take the same request as Jev, on OpenRouter and on Baseten's own API.
+
+**Which Baseten model** shows when they are picked:
+
+- **Mammoth 1, the larger**, the default. It has 27B parameters.
+- **Elephant 1, smaller and faster**. It has 9B parameters.
+
+| Host | Mammoth 1 | Elephant 1 |
+| --- | --- | --- |
+| OpenRouter | `baseten/mammoth-1:free` | `baseten/elephant-1:free` |
+| Baseten | `decision-models/baseten-mammoth-27b-latest` | `decision-models/baseten-elephant-9b-latest` |
+
+- Each size has its own **Refine when a check reaches**.
+- OpenRouter lists both as free. It gives each 16,384 tokens, so a long reply with the one before it can be too much. The host then refuses the call, and the reply is refined the same as when any second model cannot answer.
+- On Baseten's own API, the key comes from your Baseten account. Baseten made both free to try for one week from October 21, 2026. After that, Baseten's own pricing page shows the price.
+- If OpenRouter stops serving the free names, type the new name in **Model name**.
+
 ## When a model is renamed, or a new one comes out
 
 The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
@@ -415,7 +436,7 @@ Addresses known to work:
 
 | Host | Address | Model name |
 | --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `nace-ai/drex-max`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
+| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `nace-ai/drex-max`, `baseten/mammoth-1:free`, `baseten/elephant-1:free`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
 | NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `subq/subq-snap-preview`, `eu-jev/eu-jeff-1.0.0` or `eu-jev/eu-jeff-latest` |
 | TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
 | Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
@@ -519,6 +540,8 @@ Each second model has its own line, and the panel shows the one for the model yo
 | **Classify-1** | 30 percent |
 | **SubQ Snap** | 30 percent |
 | **Jeff** | 30 percent |
+| **Mammoth 1** | 30 percent |
+| **Elephant 1** | 30 percent |
 | **A model not in this list** | 30 percent |
 
 ### Where the defaults come from

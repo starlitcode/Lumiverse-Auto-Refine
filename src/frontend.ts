@@ -81,6 +81,12 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://subq.ai/introducing-subq-snap" },
   // eu/jev has no introduction post, so its link is its own docs.
   { value: "jeff", name: "Jeff", from: "eu/jev", about: "https://eu-jev.com/docs" },
+  {
+    value: "mammoth",
+    name: "Mammoth 1 and Elephant 1",
+    from: "Baseten",
+    about: "https://www.baseten.co/blog/the-best-decision-models-in-the-world-mammoth-1-and-elephant-1/",
+  },
   // A decision model with no entry of its own, reached at an address the
   // reader types. It has no maker and no page, and its own line.
   { value: "other", name: "Your model", from: "", about: "", label: "A model not in this list" },
@@ -138,6 +144,17 @@ const SIZE_PICKS: Record<string, { key: string; title: string; standard: string;
     sizes: [
       { value: "exact", label: "Jeff 1.0.0", name: "Jeff", line: "jeffOver" },
       { value: "latest", label: "Jeff Latest, always the newest", name: "Jeff", line: "jeffOver" },
+    ],
+  },
+  // Mammoth 1 and Elephant 1, Baseten's two sizes of one decision model.
+  // Both hosts serve both.
+  mammoth: {
+    key: "mammothSize",
+    title: "Which Baseten model",
+    standard: "full",
+    sizes: [
+      { value: "full", label: "Mammoth 1, the larger", name: "Mammoth 1", line: "mammothOver" },
+      { value: "small", label: "Elephant 1, smaller and faster", name: "Elephant 1", line: "elephantOver" },
     ],
   },
   // Drex 2.0 and Drex Max, Nace.AI's largest. Both hosts serve both.
@@ -271,6 +288,10 @@ const BUILT_IN_MODEL_NAMES: Record<string, Record<string, string | Record<string
   },
   classify: { openrouter: "scaledown/classify-1" },
   subq: { nanogpt: "subq/subq-snap-preview", subq: "subq-snap-preview" },
+  mammoth: {
+    openrouter: { full: "baseten/mammoth-1:free", small: "baseten/elephant-1:free" },
+    baseten: { full: "decision-models/baseten-mammoth-27b-latest", small: "decision-models/baseten-elephant-9b-latest" },
+  },
   jeff: {
     nanogpt: { exact: "eu-jev/eu-jeff-1.0.0", latest: "eu-jev/eu-jeff-latest" },
     eujev: { exact: "eu-jeff-1.0.0", latest: "eu-jeff-latest" },
@@ -308,6 +329,7 @@ const OWN_NAME_KEYS: Record<string, string> = {
   classify: "classifyName",
   subq: "subqName",
   jeff: "jeffName",
+  mammoth: "mammothName",
 };
 
 // A link in the panel's own colors. Names are linked rather than printed as
@@ -430,7 +452,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "judge",
     label: "One model or two",
     what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "drexSize", "jeffVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "jeffName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "jeffOver", "drexMaxOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "drexSize", "mammothSize", "jeffVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "jeffName", "mammothName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "jeffOver", "drexMaxOver", "mammothOver", "elephantOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
   },
   {
     id: "switches",
@@ -949,6 +971,7 @@ const CONFIG = {
   d1Size: "full",
   drexSize: "full",
   jeffVersion: "exact",
+  mammothSize: "full",
   // Where the second model is reached, and for "custom" the address and model name.
   judgeHost: "openrouter",
   judgeUrl: "",
@@ -973,6 +996,7 @@ const CONFIG = {
   classifyName: "",
   subqName: "",
   jeffName: "",
+  mammothName: "",
   // The account ID Cloudflare's own address holds. Empty until the reader
   // pastes theirs.
   cloudflareAccount: "",
@@ -998,6 +1022,8 @@ const CONFIG = {
   classifyOver: 30,
   subqOver: 30,
   jeffOver: 30,
+  mammothOver: 30,
+  elephantOver: 30,
   otherOver: 30,
   solarFlashOver: 30,
   // With worn phrases on, the second model is also asked whether the reply uses one.
@@ -2726,6 +2752,7 @@ const JUDGE_FIELDS: Field[] = [
       { value: "subq", label: "SubQ" },
       { value: "eujev", label: "eu/jev" },
       { value: "nace", label: "Nace.AI" },
+      { value: "baseten", label: "Baseten" },
     ]
       .map((o) => ({ ...o, needs: { key: "judgeWho", is: modelsOn(o.value) } }))
       .concat([{ value: "custom", label: "Another address" } as any]),
@@ -2792,7 +2819,7 @@ const JUDGE_FIELDS: Field[] = [
       label: "Model name",
       type: "text",
       needs: { key: "judgeWho", is: who },
-      also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq", "eujev", "nace"] },
+      also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq", "eujev", "nace", "baseten"] },
       under: true,
       placeholder: (c: any) => builtInModelName(c),
       hint: "Empty uses the name shown. If the host renames the model, type its new name here.",
@@ -2834,6 +2861,7 @@ const JUDGE_FIELDS: Field[] = [
           classify: "scaledown/classify-1",
           subq: "subq-snap-preview",
           jeff: "eu-jeff-1.0.0",
+          mammoth: "baseten/mammoth-1:free",
           other: "my-decision-model",
         } as Record<string, string>
       )[c.judgeWho] || "typesafe/jev-latest"),
@@ -3082,6 +3110,30 @@ const JUDGE_FIELDS: Field[] = [
     needs: { key: "judgeMode", is: "two" },
     also: { key: "judgeWho", is: "jeff" },
     hint: "For Jeff. A percentage, " + CONFIG.jeffOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "mammothOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "mammoth" },
+    when: (c: any) => lineInUse(c, "mammothOver"),
+    hint: "For Mammoth 1. A percentage, " + CONFIG.mammothOver + " by default. Lower refines more replies, higher refines fewer.",
+  },
+  {
+    key: "elephantOver",
+    label: "Refine when a check reaches",
+    type: "num",
+    int: true,
+    min: 1,
+    max: 99,
+    needs: { key: "judgeMode", is: "two" },
+    also: { key: "judgeWho", is: "mammoth" },
+    when: (c: any) => lineInUse(c, "elephantOver"),
+    hint: "For Elephant 1. A percentage, " + CONFIG.elephantOver + " by default. Lower refines more replies, higher refines fewer.",
   },
   {
     key: "otherOver",
@@ -11374,7 +11426,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     about.setAttribute("data-arf-jevabout", "1");
     const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
     // A model not in the list has no page, so it says what to fill in.
-    if (picked.about) about.appendChild(linkTo(picked.about, "What is " + picked.name + "?"));
+    // An entry named for two models asks about both.
+    if (picked.about) about.appendChild(linkTo(picked.about, (/ and /.test(picked.name) ? "What are " : "What is ") + picked.name + "?"));
     else about.textContent = "Any decision model that answers yes-or-no checks. Fill in its address and name below.";
     // Only with two models picked. With one there is no second model to read
     // about, and the links are one more line to read past.

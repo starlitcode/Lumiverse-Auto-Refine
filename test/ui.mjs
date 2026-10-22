@@ -1869,7 +1869,7 @@ console.log("\na model name of your own for every second model");
   // of these. Checked at a phone width and a laptop width.
   const { OWN_NAME_KEYS, builtInModelName } = __testing;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "nace"], ["classify", "openrouter"], ["subq", "subq"]]) {
+    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "nace"], ["classify", "openrouter"], ["subq", "subq"], ["mammoth", "baseten"]]) {
       await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
         await goTab(page, "Model");
         await settle(page);
@@ -2111,9 +2111,10 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
     ["drex", "Drex, from Nace.AI", "openrouter,nace,custom", "drexOver", "What is Drex? https://console.nace.ai/docs/drex"],
     ["subq", "SubQ Snap, from Subquadratic", "nanogpt,subq,custom", "subqOver", "What is SubQ Snap? https://subq.ai/introducing-subq-snap"],
+    ["mammoth", "Mammoth 1 and Elephant 1, from Baseten", "openrouter,baseten,custom", "mammothOver", "What are Mammoth 1 and Elephant 1? https://www.baseten.co/blog/the-best-decision-models-in-the-world-mammoth-1-and-elephant-1/"],
     ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
   ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver"];
+  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver", "mammothOver", "elephantOver"];
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [who, name, hosts, line, link] of MODELS) {
       const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
@@ -2134,7 +2135,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
               values: Object.fromEntries(LINES.map((k) => [k, (document.querySelector('#drawer [data-arf-field="' + k + '"]') || {}).value])),
               versions: vis('#drawer [data-arf-row="judgeVersion"]') || vis('#drawer [data-arf-row="spanTier"]'),
               key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
-              link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => t.indexOf("What is " + (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(",")[0] : "") + "?") === 0),
+              link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => /^What (is|are) /.test(t) && t.indexOf(" " + (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(",")[0] : "") + "?") > 0),
               sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
               about: (document.querySelector("#drawer [data-arf-jevabout]") || {}).textContent || "",
               warn: (() => {
@@ -2179,6 +2180,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
           decider: [["nanogpt", "NanoGPT"], ["perplexity", "Perplexity"]],
           subq: [["subq", "SubQ"]],
           drex: [["nace", "Nace.AI"]],
+          mammoth: [["baseten", "Baseten"]],
         }[who] || [];
         for (const own of owns) {
           await page.evaluate((host) => {
@@ -2325,7 +2327,7 @@ console.log("\nSpan, the other second model");
     };
 
     const jev = await read();
-    ok("all fourteen second models are offered, each model's sizes under one entry, and one for a model not in the list", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq,jeff,other", JSON.stringify(jev.who));
+    ok("all fifteen second models are offered, each model's sizes under one entry, and one for a model not in the list", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq,jeff,mammoth,other", JSON.stringify(jev.who));
     ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
     ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
     ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
@@ -11081,7 +11083,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   }
   // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver"])
+  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver", "mammothOver", "elephantOver"])
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.
