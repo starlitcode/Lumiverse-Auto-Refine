@@ -76,7 +76,7 @@ const SECOND_MODELS: Array<{ value: string; name: string; from: string; about: s
   { value: "clef", name: "Clef", from: "Cloudflare", about: "https://blog.cloudflare.com/clef-decision-models" },
   { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
   { value: "microsoft", name: "Microsoft-Decision-1", from: "Microsoft", about: "https://commandline.microsoft.com/microsoft-decision-1-model-foundry/" },
-  { value: "drex", name: "Drex", from: "Nace.AI", about: "https://www.nace.ai/drex" },
+  { value: "drex", name: "Drex", from: "Nace.AI", about: "https://console.nace.ai/docs/drex" },
   { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
   { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://subq.ai/introducing-subq-snap" },
   // eu/jev has no introduction post, so its link is its own docs.

@@ -18,7 +18,7 @@ There are fourteen to pick from. Some come in more than one size or kind, picked
 | **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Introducing Clef](https://blog.cloudflare.com/clef-decision-models) |
 | **Decider**, and **Decider Flash** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
 | **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
-| **Drex**, and **Drex Max** | Nace.AI | Paid, per call | [Nace.AI: Drex](https://www.nace.ai/drex) |
+| **Drex**, and **Drex Max** | Nace.AI | Paid, per call | [Nace.AI: Drex API](https://console.nace.ai/docs/drex) |
 | **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
 | **SubQ Snap** | Subquadratic | Paid, per call | [Introducing SubQ Snap](https://subq.ai/introducing-subq-snap) |
 | **Jeff** | eu/jev | Paid, per call | [eu/jev: Documentation](https://eu-jev.com/docs) |

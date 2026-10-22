@@ -28,6 +28,7 @@ _2026-10-20_
 
 ### Changed
 
+- **What is Drex? opens Nace.AI's own Drex API docs.** It went to Nace.AI's product page for Drex.
 - **Span-02 replaces Span-01 on OpenRouter.** **Which Span** now offers **Span-01 Lite, free** and **Span-02**. If you had Span-01 picked, Span-02 is sent instead. To keep Span-01, type `respan/span-01` in **Model name**.
 - **Span-02 is sent the same request as Jev.** It reads named fields, as Respan's docs show, on OpenRouter and on Respan's own API. Span-01 and Span-01 Lite are still sent the reply as a conversation.
 - **Decider V1.2 replaces Decider V1.1 27B** on OpenRouter and Perplexity's own API. NanoGPT lists only V1.1 27B, so it is still sent there. Perplexity answers a request for an older Decider with V1.2.

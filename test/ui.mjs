@@ -2109,7 +2109,7 @@ console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
     ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://blog.cloudflare.com/clef-decision-models"],
     ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
     ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
-    ["drex", "Drex, from Nace.AI", "openrouter,nace,custom", "drexOver", "What is Drex? https://www.nace.ai/drex"],
+    ["drex", "Drex, from Nace.AI", "openrouter,nace,custom", "drexOver", "What is Drex? https://console.nace.ai/docs/drex"],
     ["subq", "SubQ Snap, from Subquadratic", "nanogpt,subq,custom", "subqOver", "What is SubQ Snap? https://subq.ai/introducing-subq-snap"],
     ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
   ];
