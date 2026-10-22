@@ -12,9 +12,9 @@ _2026-10-22_
 
 ### Added
 
-- **Leave out of the run-up.** A box on the **Context** tab for regular expressions, one per line. What they match is taken out of `{{history}}` before it is sent, such as tracker lines or markup. Lumiverse regex scripts set to change the prompt or the display do not reach `{{history}}`, so this is where to cut those things. Your chat is never changed. See [Leaving things out of the run-up](docs/prompt.md#leaving-things-out-of-the-run-up).
+- **Leave out of the run-up.** A box on the **Context** tab for regular expressions, one per line. What they match is taken out of `{{history}}` before it is sent, such as tracker lines or markup. Lumiverse regex scripts set to change the prompt or the display do not reach `{{history}}`, so this is where to cut those things. Your chat is never changed. See [Leaving things out of the run-up](docs/prompt.md#leaving-things-out-of-the-run-up). Suggested by a Discord user.
 - **Patterns written the way other apps write them.** Every pattern box now reads `/pattern/flags`, the form many apps use, with its own flags. It also reads a leading `(?i)`, `(?m)` or `(?s)`, and Unicode classes such as `\p{L}`. See [Writing a pattern](docs/prompt.md#writing-a-pattern).
-- **Name each lorebook entry.** A switch on the **Context** tab, on by default. Each entry in `{{lore}}` starts with its name, as before. Turn it off to send the entries without their names.
+- **Name each lorebook entry.** A switch on the **Context** tab, on by default. Each entry in `{{lore}}` starts with its name, as before. Turn it off to send the entries without their names. Asked about by a Discord user.
 
 ### Fixed
 
