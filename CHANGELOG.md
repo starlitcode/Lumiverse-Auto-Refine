@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.48.2
+
+_2026-10-22_
+
+### Changed
+
+- **The role of a block on a built-in prompt is plain text.** On the **Prompt** tab, **Sent as** on a built-in prompt now shows the role as text, such as **System**, instead of a grayed picker. To change it, save the prompt as your own first.
+
+---
+
 ## 1.48.1
 
 _2026-10-22_

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.48.1";
+const VERSION = "1.48.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -6718,8 +6718,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Fixed at the width the two carets share, so the name beside it does not
     // shift when one turns.
     ".arf-blockfold{font-size:12px;padding:2px 4px;min-width:16px;text-align:center;flex:0 0 auto}" +
-    // A block's name on a built-in prompt, as text where a box would be.
-    ".arf-blockname{min-width:0;overflow-wrap:anywhere;color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+    // A block's name and role on a built-in prompt, as text where a box would be.
+    ".arf-blockname,.arf-blockrole{min-width:0;overflow-wrap:anywhere;color:var(--lumiverse-text,rgba(255,255,255,.9));" +
     "font:13px/1.5 var(--lumiverse-font-family,system-ui)}" +
     // The full-screen editor for one block of text.
     ".arf-over{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;" +
@@ -10936,7 +10936,6 @@ export function setup(ctx: Ctx, overrides?: any) {
     sel.className = "arf-field";
     sel.style.maxWidth = "140px";
     sel.setAttribute("aria-label", "Role for " + blockLabel(b));
-    if (locked) lockForBuiltIn(sel);
     for (const o of ROLE_OPTIONS) {
       const op = document.createElement("option");
       op.value = o.value;
@@ -10949,7 +10948,13 @@ export function setup(ctx: Ctx, overrides?: any) {
       next[i].role = sel.value;
       setBlocks(next, false);
     });
-    foot.appendChild(sel);
+    // On a built-in prompt the role is plain text, the same as the name.
+    if (locked) {
+      const role = ROLE_OPTIONS.find((o) => o.value === b.role);
+      const said = el("span", "arf-blockrole", role ? role.label : String(b.role || ""));
+      said.setAttribute("data-arf-blockrole", b.id);
+      foot.appendChild(said);
+    } else foot.appendChild(sel);
     // A gap that takes whatever is left, so Delete sits at the far edge of the
     // row rather than up against the picker.
     foot.appendChild(el("span", "arf-grow"));

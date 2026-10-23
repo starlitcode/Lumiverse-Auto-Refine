@@ -10740,10 +10740,10 @@ console.log("\nsaying the built-in prompts have changed");
   });
 }
 
-console.log("\na built-in prompt shows names as text, and its boxes do not light up");
+console.log("\na built-in prompt shows names and roles as text, and its boxes do not light up");
 {
-  // On a built-in prompt nothing can be typed, so each block's name is plain
-  // text rather than a grayed box, and a tapped text box takes no glow. On a
+  // On a built-in prompt nothing can be typed, so each block's name and role
+  // are plain text rather than grayed boxes, and a tapped text box takes no glow. On a
   // prompt of your own, both stay as they are. Read from what is drawn.
   // Checked at a phone width and a laptop width.
   // Pixels that visibly differ. Two shots of an unchanged box are not always
@@ -10768,12 +10768,16 @@ console.log("\na built-in prompt shows names as text, and its boxes do not light
           boxes: document.querySelectorAll('#drawer [data-arf-block] input[data-arf-field^="blockname:"]').length,
           text: [...document.querySelectorAll("#drawer [data-arf-blockname]")].map((n) => n.textContent.trim()),
           blocks: document.querySelectorAll("#drawer [data-arf-block]").length,
+          rolePickers: document.querySelectorAll('#drawer [data-arf-block] select[aria-label^="Role for"]').length,
+          roleText: [...document.querySelectorAll("#drawer [data-arf-blockrole]")].map((n) => n.textContent.trim()),
           sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
         }));
         if (what === "built-in") {
           ok(say + "no name box, and every block's name is shown as text", names.boxes === 0 && names.text.length === names.blocks && names.text.every((t) => t.length > 0), JSON.stringify(names));
+          ok(say + "no role picker, and every block's role is shown as text", names.rolePickers === 0 && names.roleText.length === names.blocks && names.roleText.every((t) => /^(System|User|Assistant)$/i.test(t)), JSON.stringify(names));
         } else {
           ok(say + "every block has its name box", names.boxes === names.blocks && names.text.length === 0, JSON.stringify(names));
+          ok(say + "every block has its role picker", names.rolePickers === names.blocks && names.roleText.length === 0, JSON.stringify(names));
         }
         ok(say + "nothing runs off the side", !names.sideways, "");
         // Open the first block, then compare the box and the space around it
