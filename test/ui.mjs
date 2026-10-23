@@ -10771,8 +10771,12 @@ console.log("\na built-in prompt shows names and roles as text, and its boxes do
           rolePickers: document.querySelectorAll('#drawer [data-arf-block] select[aria-label^="Role for"]').length,
           roleText: [...document.querySelectorAll("#drawer [data-arf-blockrole]")].map((n) => n.textContent.trim()),
           sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+          drawer: document.getElementById("drawer").textContent,
         }));
         if (what === "built-in") {
+          // The note under the picker says to save a copy first, since the
+          // built-in prompt itself cannot be changed.
+          ok(say + "the note says to save a copy before changing it", /cannot be changed\. To change it, put a name in the box above and press Save as new/.test(names.drawer) && !/however you like/.test(names.drawer), "");
           ok(say + "no name box, and every block's name is shown as text", names.boxes === 0 && names.text.length === names.blocks && names.text.every((t) => t.length > 0), JSON.stringify(names));
           ok(say + "no role picker, and every block's role is shown as text", names.rolePickers === 0 && names.roleText.length === names.blocks && names.roleText.every((t) => /^(System|User|Assistant)$/i.test(t)), JSON.stringify(names));
         } else {

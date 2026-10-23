@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.48.2";
+const VERSION = "1.48.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -15163,7 +15163,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       if (which) wrap.appendChild(note(which.what));
       wrap.appendChild(
         note(
-          "One of the four built in. Picking it loaded it, so change it however you like and save it under a name of your own.",
+          "One of the four built in. It cannot be changed. To change it, put a name in the box above and press Save as new. The copy is yours and opens for editing.",
         ),
       );
     }

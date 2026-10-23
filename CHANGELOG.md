@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.48.3
+
+_2026-10-23_
+
+### Fixed
+
+- **The note under a built-in prompt gave the steps in the wrong order.** It said to change the prompt and then save it under a name of your own. A built-in prompt cannot be changed. The note now says to put a name in the box above and press **Save as new** first. The copy is yours and opens for editing.
+
+---
+
 ## 1.48.2
 
 _2026-10-22_

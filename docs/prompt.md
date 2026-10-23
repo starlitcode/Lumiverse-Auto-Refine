@@ -211,7 +211,7 @@ There are four: a judge for replies and a line judge for your own messages, each
 - The rules name kinds of stock writing, with a few examples each, because "cut clichés" gives a model nothing to act on. A model reads a kind as a pattern and catches the versions that are not listed. The kinds include held breaths and hammering hearts, stock faces, voices given a texture, the air doing the mood's job, fancy stand-ins for plain words, office talk in fiction, and the negation trick: "it wasn't a request, it was a command".
 - **Roll Call** is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
 - Both have a block called **Checks Found**, switched off. It is for two models. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found).
-- All four work as they are. Load one, change what you like, and save it under your own name.
+- All four work as they are. They cannot be changed. To change one, load it, put a name in the box under **Presets**, and press **Save as new**. The copy is yours and opens for editing.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.
 
 ### For your own messages
