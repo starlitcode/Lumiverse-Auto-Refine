@@ -6,7 +6,7 @@ Thank you for wanting to help with Auto Refine.
 
 Bug reports, ideas and questions are welcome.
 
-- Post them in the Lumiverse Discord server, or
+- Post them under my Auto Refine post on the Lumiverse Discord server, or
 - [open an issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues).
 
 For anything sensitive, such as a security problem, follow [SECURITY.md](SECURITY.md) instead.
