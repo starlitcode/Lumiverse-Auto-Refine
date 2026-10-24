@@ -140,7 +140,7 @@ It asks for seven permissions:
 
 ## Help and feedback
 
-Questions, bug reports and ideas are welcome in my [Auto Refine post](https://discord.com/channels/1484149939167821915/1545884657743171594) on the Lumiverse Discord server, or as a [GitHub issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues). See [Contributing](CONTRIBUTING.md) for how changes are made.
+Questions, bug reports and ideas are welcome in my [Auto Refine post](https://discord.com/channels/1484149939167821915/1545884657743171594) on the Lumiverse Discord server, or as a [GitHub issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues). [Contributing](CONTRIBUTING.md) says what to put in a bug report.
 
 ## Made for adults
 
