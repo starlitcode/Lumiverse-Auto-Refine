@@ -11140,10 +11140,10 @@ console.log("\nwhen the prompt stops matching the preset named in the box");
   // Loading a preset sets the picker and nothing cleared it, so editing a block
   // afterwards left the box naming a preset the prompt no longer matched.
   //
-  // The fields are not locked while a built-in preset is picked. Loading one and
-  // changing it is how somebody is meant to start, and locking the field would
-  // stop the thing the card exists for. What was missing was the panel saying
-  // the two had parted company, and where to keep the change.
+  // A built-in prompt cannot be typed in, but the prompt can still change
+  // while its name is in the box, such as by an import. The check changes a
+  // block by script to stand for that. The panel has to say the prompt no
+  // longer matches the preset it names, and where to keep the change.
   await inTab(browser, {}, async (page) => {
     await goTab(page, "Prompt");
     const out = await page.evaluate(async () => {
