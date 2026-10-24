@@ -138,6 +138,10 @@ It asks for seven permissions:
 
 [Privacy](docs/privacy.md) says what still works without each one.
 
+## Help and feedback
+
+Questions, bug reports and ideas are welcome in my [Auto Refine post](https://discord.com/channels/1484149939167821915/1545884657743171594) on the Lumiverse Discord server, or as a [GitHub issue](https://github.com/starlitcode/Lumiverse-Auto-Refine/issues). See [Contributing](CONTRIBUTING.md) for how changes are made.
+
 ## Made for adults
 
 Auto Refine is for adults, 18 and older. It is not for sexual content involving minors, and I do not support anyone using it for that. I do not help anyone who tells me they are under 18, with anything. [The one thing they do not edit](docs/prompt.md#the-one-thing-they-do-not-edit) says exactly how the built-in prompts handle it.
