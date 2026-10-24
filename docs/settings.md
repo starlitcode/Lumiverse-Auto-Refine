@@ -194,13 +194,18 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Below, it shows what the last refine used, in input and output tokens, and what it cost if you set prices. This includes dropped rewrites and retries, because those were paid for too.
 - **What the model said outside the rewrite** keeps the model's notes from the last refine that finished. It has **Copy**, **Expand** and **Clear**. Stopping a refine leaves the last notes alone.
 - **What it has been doing** lists what it did, newest first.
-  - **Show in this list**, under it, chooses which kinds of line are shown. Untick one to hide it:
-    - **What the second model decided**: one line for each reply the second model reads.
+  - **Show in this list**, under it, has a switch for each kind of line. All are on by default. Untick one to hide it:
+    - **Refines starting and finishing**: each refine, a run through the chat, a wait, and a retry after a failed check.
     - **Replies left alone**: a reply or draft that was not changed, and why.
+    - **What the second model decided**: one line for each reply the second model reads.
+    - **What the second model sent on**: what the second model found, sent to the refine model.
+    - **The second model reading a rewrite**: whether a rewrite needs a second refine.
+    - **Your answers and put-backs**: a refine waiting for you, accepted or turned down, and a reply put back.
     - **Settings, presets and model setups**: settings, presets or model setups loaded, put back, or moved to and from your account.
-  - Every other line is always shown. The count at the top says how many lines are hidden.
+    - **Problems and warnings**: something that could not be done, such as a window that would not open.
+  - The count at the top says how many lines are hidden.
   - Hidden lines are still kept. **Reporting a problem** still includes them.
-- **Reporting a problem** copies everything needed for a bug report.
+- **Reporting a problem** copies a report you can add to a bug report. It is optional, but it helps show exactly what went wrong.
   - **What it carries** chooses what goes in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser.
   - What your blocks say is never included, only their names, roles and macros.
   - **Read and edit it first** lets you check it before it is copied.

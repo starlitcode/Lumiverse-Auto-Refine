@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.49.0
+
+_2026-10-24_
+
+### Added
+
+- **A switch for every kind of line in the Log.** **Show in this list**, on the **Log** tab, had switches for three kinds of line, and every other line was always shown. Every line now has a kind, and each of the eight kinds has a switch: **Refines starting and finishing**, **Replies left alone**, **What the second model decided**, **What the second model sent on**, **The second model reading a rewrite**, **Your answers and put-backs**, **Settings, presets and model setups**, and **Problems and warnings**. All are on by default. See [Log](docs/settings.md#log).
+
+### Changed
+
+- **Reporting a problem says it is optional.** The note on the **Reporting a problem** card, on the **Log** tab, now says that adding the report to a bug report is optional, and that it helps show exactly what went wrong.
+
+---
+
 ## 1.48.3
 
 _2026-10-23_

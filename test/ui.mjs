@@ -14865,6 +14865,53 @@ await inTab(browser, {}, async (page) => {
   ok("unticking settings, presets and model setups hides it", got.after === false, JSON.stringify(got));
   ok("and the choice names model setups", /model setups/i.test(got.label || ""), JSON.stringify(got));
 });
+// What the second model found, sent on to the refine model, has its own kind,
+// and so does every other line. One box for each kind in the list.
+await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+  await goTab(page, "Log");
+  await settle(page);
+  const got = await page.evaluate(async () => {
+    window.__fromBackend({ type: "jev_found_sent", count: 2, after: false });
+    await new Promise((r) => setTimeout(r, 400));
+    const lines = () => [...document.querySelectorAll('#drawer [data-arf-logline="found"]')].length;
+    const boxes = document.querySelectorAll('#drawer [data-arf-picker="logShow"] [data-arf-part^="logShow:"]').length;
+    const before = lines();
+    const box = document.querySelector('#drawer [data-arf-part="logShow:found"]');
+    if (!box) return { before, boxes, missing: true };
+    box.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const other = [...document.querySelectorAll("#drawer [data-arf-logline]")].filter((n) => n.getAttribute("data-arf-logline") === "other").length;
+    return { before, boxes, after: lines(), other };
+  });
+  ok("a line saying what the second model sent on shows", got.before === 1, JSON.stringify(got));
+  ok("unticking What the second model sent on hides it", got.after === 0, JSON.stringify(got));
+  ok("there is one box for each of the eight kinds", got.boxes === 8, JSON.stringify(got));
+  ok("no line is left without a kind", got.other === 0, JSON.stringify(got));
+});
+// The list of eight fits a phone and a laptop: nothing runs off the side,
+// and on a phone each box is at least 32 pixels high.
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  await inTab(browser, { viewport, touch }, async (page) => {
+    await goTab(page, "Log");
+    await settle(page);
+    const out = await page.evaluate(() => {
+      const drawer = document.querySelector("#drawer");
+      const boxes = [...document.querySelectorAll('#drawer [data-arf-part^="logShow:"]')].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { id: b.getAttribute("data-arf-part"), tall: Math.round(r.height), right: Math.round(r.right), left: Math.round(r.left) };
+      });
+      const d = drawer.getBoundingClientRect();
+      return {
+        boxes,
+        width: Math.round(d.right),
+        sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1,
+      };
+    });
+    ok(label + ": the eight boxes are there", out.boxes.length === 8, JSON.stringify(out));
+    ok(label + ": nothing runs off the side", !out.sideways && out.boxes.every((b) => b.left >= 0 && b.right <= out.width + 1), JSON.stringify(out));
+    if (touch) ok(label + ": each box is at least 32 pixels high", out.boxes.every((b) => b.tall >= 32), JSON.stringify(out.boxes));
+  });
+}
 
 console.log("\na reroll Auto Retry adds");
 // Several tries at once writes its reroll into the chat directly, so no end

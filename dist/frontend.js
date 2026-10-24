@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.48.3";
+const VERSION = "1.49.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -1197,11 +1197,16 @@ const MACROS = [
     { tag: "{{user}}", what: "Your name.", ours: false },
 ];
 const TURN_MACRO = "{{message}}";
-// A Log line about settings, presets or model setups: loaded, put back, set
-// back to the default, or moved between this browser and your account. A
-// built-in preset writes the same line as one of yours. These are the lines Show in
-// this list hides together.
-const SETUP_LINE = /^(settings (loaded|moved)|brought \d+ (presets?|model setups?) down|sent \d+ (presets?|model setups?) up|loaded the (preset|model setup) |put back what the (preset|model setup) replaced|put the prompt back to the default|reset \d+ parts?$|ready v|the backend is running)/;
+const LOG_KINDS = [
+    { id: "refine", label: "Refines starting and finishing", what: "Each refine, a run through the chat, a wait, and a retry after a failed check." },
+    { id: "left", label: "Replies left alone", what: "A reply or draft that was not changed, and why." },
+    { id: "judge", label: "What the second model decided", what: "One line for each reply the second model reads." },
+    { id: "found", label: "What the second model sent on", what: "What the second model found, sent to the refine model." },
+    { id: "recheck", label: "The second model reading a rewrite", what: "Whether a rewrite needs a second refine." },
+    { id: "answer", label: "Your answers and put-backs", what: "A refine waiting for you, accepted or turned down, and a reply put back." },
+    { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, put back, or moved to and from your account." },
+    { id: "problem", label: "Problems and warnings", what: "Something that could not be done, such as a window that would not open." },
+];
 // The tag a prompt puts the model's working in. What is inside it is streamed
 // back to the panel while the refine runs and never reaches the story, so a
 // prompt that does not ask for it has nothing to show while it writes.
@@ -4201,14 +4206,14 @@ export function setup(ctx, overrides) {
             send({ type: "set_settings", settings: forBackend(), keep: true });
             askUndoable();
             syncExtras();
-            log("settings loaded from your account", true);
+            log("setup", "settings loaded from your account", true);
             paint();
             return;
         }
         try {
             if (typeof localStorage !== "undefined" && localStorage.getItem(STORE_KEY)) {
                 send({ type: "set_settings", settings: forBackend() });
-                log("settings moved up to your account", true);
+                log("setup", "settings moved up to your account", true);
             }
         }
         catch (_) { }
@@ -4303,28 +4308,6 @@ export function setup(ctx, overrides) {
     // ---- state the tab shows ----
     const LOG_MAX = 20;
     const activity = [];
-    // The kinds of Log line that can be hidden, for a Log that is busy with one
-    // of them. Hidden lines are still kept, so a problem report has them all.
-    const LOG_KINDS = [
-        { id: "judge", label: "What the second model decided", what: "One line for each reply the second model reads." },
-        { id: "left", label: "Replies left alone", what: "A reply or draft that was not changed, and why." },
-        { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, put back, or moved to and from your account." },
-    ];
-    // Which kind a line is, from what it says. Everything not named here is
-    // always shown.
-    function logKind(text) {
-        for (const m of SECOND_MODELS)
-            if (text.indexOf(m.name + " ") === 0)
-                return "judge";
-        const typed = String(cfg.judgeModel || "").trim();
-        if (cfg.judgeWho === "other" && typed && text.indexOf(typed + " ") === 0)
-            return "judge";
-        if (/^(left a reply (alone|as it was)|left your draft as it was|did not touch your draft)/.test(text))
-            return "left";
-        if (SETUP_LINE.test(text))
-            return "setup";
-        return "";
-    }
     // A line for the Log tab. The panel is rebuilt from nothing on every repaint,
     // so a line each was one full rebuild each, and a run through a long chat
     // writes a line per reply: forty rebuilds of every box on the tab, back to
@@ -4355,8 +4338,8 @@ export function setup(ctx, overrides) {
             setTimeout(go, 0);
         }
     }
-    function log(text, good) {
-        activity.unshift({ at: Date.now(), text: String(text), good: !!good, kind: logKind(String(text)) });
+    function log(kind, text, good) {
+        activity.unshift({ at: Date.now(), text: String(text), good: !!good, kind: kind });
         while (activity.length > LOG_MAX)
             activity.pop();
         const now = Date.now();
@@ -4807,7 +4790,7 @@ export function setup(ctx, overrides) {
         if (box && setComposer(box, mine.before)) {
             lastDraft = null;
             unwatchDraft();
-            log("put your draft back", true);
+            log("answer", "put your draft back", true);
             toast("Your draft is back as it was.");
         }
         else
@@ -5140,7 +5123,7 @@ export function setup(ctx, overrides) {
             tally.dropped++;
             countDrop(why);
             lastRun = { ms: lastRunMs, ok: false, why: why };
-            log("no answer from the backend. Check that Auto Refine is fully installed.");
+            log("problem", "no answer from the backend. Check that Auto Refine is fully installed.");
             toast("Auto Refine's backend is not answering. Nothing was refined.", true, "error");
             paint();
         }, ACK_MS);
@@ -5170,7 +5153,7 @@ export function setup(ctx, overrides) {
             const got = sweep;
             sweep = null;
             sweepAsk = null;
-            log("the run through the chat stopped answering after reply " + got.at + " of " + got.of);
+            log("problem", "the run through the chat stopped answering after reply " + got.at + " of " + got.of);
             toast("The run through the chat stopped answering. What it had already saved is kept.", true, "warning");
             paint();
         }, (cap + 30) * 1000);
@@ -5268,7 +5251,7 @@ export function setup(ctx, overrides) {
         tally.dropped++;
         countDrop(why);
         lastRun = { ms: lastRunMs, ok: false, why: why };
-        log("gave up waiting: " + why);
+        log("problem", "gave up waiting: " + why);
         toast(away
             ? "The refine did not come back while this tab was in the background. Check the reply to see whether it changed."
             : "The refine never came back. Nothing was changed.", true, "warning");
@@ -5608,12 +5591,12 @@ export function setup(ctx, overrides) {
             send({ type: "set_chats_off", chats: chatsOff.slice() });
             stateLoaded = true;
             paint();
-            log("chats switched off read from the account");
+            log("setup", "chats switched off read from the account");
             return;
         }
         stateLoaded = true;
         saveStateToAccount();
-        log("chats switched off sent up to the account");
+        log("setup", "chats switched off sent up to the account");
     }
     function setChatOff(id, off) {
         if (id == null)
@@ -8732,10 +8715,10 @@ export function setup(ctx, overrides) {
                 before: one.before,
                 after: one.after,
             });
-            log("accepted a refine", true);
+            log("answer", "accepted a refine", true);
         }
         else {
-            log("turned a refine down");
+            log("answer", "turned a refine down");
             toast("Left as it was.", true);
         }
         paint();
@@ -9891,7 +9874,7 @@ export function setup(ctx, overrides) {
                     const why = "No block in your prompt has {{overused}} in it, so there is nowhere to put " +
                         "the worn phrases. Add one under Prompt, or load one of the built-in prompts.";
                     toast(why, true, "warning");
-                    log("worn phrases are on, but " + why.charAt(0).toLowerCase() + why.slice(1));
+                    log("problem", "worn phrases are on, but " + why.charAt(0).toLowerCase() + why.slice(1));
                 }
                 reveal();
                 settle();
@@ -10530,7 +10513,7 @@ export function setup(ctx, overrides) {
                 presetSaid = null;
             }
             setBlocks(want);
-            log("put the prompt back to the default", true);
+            log("setup", "put the prompt back to the default", true);
         });
         acts.appendChild(add);
         acts.appendChild(reset);
@@ -11400,7 +11383,7 @@ export function setup(ctx, overrides) {
             setupName = back.pick;
             setupUndo = null;
             setupSaid = "Put back what was here before.";
-            log("put back what the model setup replaced", true);
+            log("setup", "put back what the model setup replaced", true);
             paint();
         });
         const asNew = button("Save as new", false);
@@ -12086,12 +12069,12 @@ export function setup(ctx, overrides) {
     }
     function buildDebugCard() {
         const chosen = DEBUG_PARTS.filter((p) => partOn("debugParts", p.id)).length;
-        const wrap = card("Reporting a problem", "Everything somebody would otherwise have to ask you for, in one paste. What your blocks say is never in it: it carries their names, roles and macros, not their text.", chosen + " of " + DEBUG_PARTS.length);
+        const wrap = card("Reporting a problem", "Optional. Adding this to a bug report helps show exactly what went wrong. It never includes what your blocks say, only their names, roles and macros.", chosen + " of " + DEBUG_PARTS.length);
         const row = el("div", "arf-row");
         const copy = button("Copy it", true);
         copy.addEventListener("click", () => {
             copyText(debugText());
-            log("copied debug info", true);
+            log("setup", "copied debug info", true);
         });
         const read = button("Read and edit it first", false);
         read.addEventListener("click", () => {
@@ -12100,7 +12083,7 @@ export function setup(ctx, overrides) {
             // and take out anything they would rather not post.
             openBig("Debug info", debugText(), (text) => {
                 copyText(text);
-                log("copied debug info", true);
+                log("setup", "copied debug info", true);
             });
         });
         const clear = button("Clear the log", false);
@@ -12112,7 +12095,7 @@ export function setup(ctx, overrides) {
             tally.dropped = 0;
             tally.undone = 0;
             lastRun = null;
-            log("cleared the log", true);
+            log("setup", "cleared the log", true);
             paint();
         });
         row.appendChild(copy);
@@ -12127,8 +12110,6 @@ export function setup(ctx, overrides) {
         }));
         return wrap;
     }
-    // Settings and counts, never your writing. A bug report should be safe to
-    // paste in public, and a rules box can hold anything.
     // Settings and counts, never your writing. A bug report should be safe to
     // paste in public, and a block can hold anything.
     function debugText() {
@@ -13968,12 +13949,12 @@ export function setup(ctx, overrides) {
             }
             catch (_) { }
             passesMoved();
-            log("brought " + clean.length + (clean.length === 1 ? " model setup" : " model setups") + " down from your account", true);
+            log("setup", "brought " + clean.length + (clean.length === 1 ? " model setup" : " model setups") + " down from your account", true);
             paint();
         }
         else if (setups.length) {
             saveSetups();
-            log("sent " + setups.length + (setups.length === 1 ? " model setup" : " model setups") + " up to your account", true);
+            log("setup", "sent " + setups.length + (setups.length === 1 ? " model setup" : " model setups") + " up to your account", true);
         }
     }
     // What the Model tab says right now, copied rather than referenced so that
@@ -14092,12 +14073,12 @@ export function setup(ctx, overrides) {
                     localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
             }
             catch (_) { }
-            log("brought " + clean.length + (clean.length === 1 ? " preset" : " presets") + " down from your account", true);
+            log("setup", "brought " + clean.length + (clean.length === 1 ? " preset" : " presets") + " down from your account", true);
             paint();
         }
         else if (presets.length) {
             savePresets();
-            log("sent " + presets.length + (presets.length === 1 ? " preset" : " presets") + " up to your account", true);
+            log("setup", "sent " + presets.length + (presets.length === 1 ? " preset" : " presets") + " up to your account", true);
         }
     }
     // Only the keys a preset owns, and each one copied rather than referenced, or
@@ -14202,7 +14183,7 @@ export function setup(ctx, overrides) {
             if (one) {
                 applySetup(one);
                 alsoSaid = " Model setup " + wants + " went on with it.";
-                log("loaded the model setup " + wants + " with the preset", true);
+                log("setup", "loaded the model setup " + wants + " with the preset", true);
             }
             else {
                 // Named but not here, which is what a shared preset looks like. Said
@@ -14219,7 +14200,7 @@ export function setup(ctx, overrides) {
         presetSaid = took
             ? "Loaded " + p.name + "." + alsoSaid
             : "There was nothing in that preset to load." + alsoSaid;
-        log("loaded the preset " + p.name, true);
+        log("setup", "loaded the preset " + p.name, true);
     }
     // Loading a model setup, from a pick or from the button, keeping what it
     // replaces so the pick can be taken back.
@@ -14228,7 +14209,7 @@ export function setup(ctx, overrides) {
         const took = applySetup(one);
         setupUndo = took ? before : null;
         setupSaid = took ? "Loaded " + one.name + "." : "There was nothing in that setup to load.";
-        log("loaded the model setup " + one.name, true);
+        log("setup", "loaded the model setup " + one.name, true);
     }
     // The preset the box names, whether it comes with the extension or is one of
     // yours. Read in two places, so it is named once.
@@ -14471,7 +14452,7 @@ export function setup(ctx, overrides) {
             presetSetup = String((was && was.setup) || "");
             presetUndo = null;
             presetSaid = "Put back what was here before.";
-            log("put back what the preset replaced", true);
+            log("setup", "put back what the preset replaced", true);
             paint();
         });
         const asNew = button("Save as new", false);
@@ -14697,7 +14678,7 @@ export function setup(ctx, overrides) {
         syncExtras();
         resetSaid =
             "Put back: " + chosen.map((p) => p.label.toLowerCase()).join(", ") + ".";
-        log("reset " + chosen.length + " part" + (chosen.length === 1 ? "" : "s"), true);
+        log("setup", "reset " + chosen.length + " part" + (chosen.length === 1 ? "" : "s"), true);
         paint();
     }
     let resetArmed = false;
@@ -15014,7 +14995,7 @@ export function setup(ctx, overrides) {
                     return;
                 }
                 btn.click();
-                log("moved the reply on to the swipe the refine went into");
+                log("refine", "moved the reply on to the swipe the refine went into");
                 // Once, and then it stands down whatever happens next. Looking again
                 // would find the old writing still on screen wherever the press did not
                 // take, and press a second time, and by then the swipe this was moving
@@ -15141,7 +15122,7 @@ export function setup(ctx, overrides) {
         const node = composer();
         if (!node) {
             toast("Could not find the input box on this page.", true, "warning");
-            log("could not find the input box");
+            log("problem", "could not find the input box");
             return;
         }
         const text = String(node.value || "").trim();
@@ -15168,7 +15149,7 @@ export function setup(ctx, overrides) {
         inputBefore = text;
         const id = newId();
         inputWaiting = id;
-        log("refining what you are typing");
+        log("refine", "refining what you are typing");
         // Nothing is saved to the chat: the answer comes back and this puts it in
         // the box. The prompt used is the one for your own writing, since that is
         // what a draft is.
@@ -15295,7 +15276,7 @@ export function setup(ctx, overrides) {
             // switch doing nothing with no message.
             widget = null;
             widgetFailed = true;
-            log("could not create the floating button. Check that the ui_panels permission is granted.");
+            log("problem", "could not create the floating button. Check that the ui_panels permission is granted.");
             return;
         }
         widgetFailed = false;
@@ -15654,7 +15635,7 @@ export function setup(ctx, overrides) {
             // A Lumiverse without the API. Say where everything is rather than
             // opening nothing and looking broken. The Extras row is still registered
             // in this case, because widgetCarriesEntries answers no.
-            log("this version of Lumiverse cannot open the button's menu");
+            log("problem", "this version of Lumiverse cannot open the button's menu");
             toast("Everything is in the Auto Refine tab in the drawer.", true);
             return;
         }
@@ -15741,7 +15722,7 @@ export function setup(ctx, overrides) {
             picked = got && got.selectedKey ? String(got.selectedKey) : null;
         }
         catch (e) {
-            log("the button's menu could not be opened: " + ((e && e.message) || String(e)));
+            log("problem", "the button's menu could not be opened: " + ((e && e.message) || String(e)));
         }
         finally {
             if (menuToken === token)
@@ -16108,7 +16089,7 @@ export function setup(ctx, overrides) {
                     return;
                 roleAsk = "";
                 roleAsked = new Set();
-                log("no answer about whose each message is yet, so it will be asked again");
+                log("problem", "no answer about whose each message is yet, so it will be asked again");
                 fillSlots();
             }, ROLE_WAIT_MS);
         }, 150);
@@ -16129,7 +16110,7 @@ export function setup(ctx, overrides) {
             clearTimeout(roleGiveUp);
         roleGiveUp = null;
         if (!msg.ok) {
-            log("could not tell whose each message is, so the button stays off the messages What to refine leaves out");
+            log("problem", "could not tell whose each message is, so the button stays off the messages What to refine leaves out");
             return;
         }
         const chat = String(msg.chatId == null ? "" : msg.chatId);
@@ -16527,7 +16508,7 @@ export function setup(ctx, overrides) {
         // refine finished when it did not.
         eyeStopped = true;
         send({ type: "cancel_refine", requestId: newId() });
-        log("asked it to stop");
+        log("refine", "asked it to stop");
     }
     const stopRefine = cancelRefine;
     // ---- every reply in the chat ----
@@ -16567,7 +16548,7 @@ export function setup(ctx, overrides) {
         // not running answers nothing at all, and without this the card would sit
         // there counting nothing for the rest of the session.
         armAck();
-        log(mine ? "going through your messages in this chat" : "going through every reply in this chat");
+        log("refine", mine ? "going through your messages in this chat" : "going through every reply in this chat");
         send({ type: "refine_all", requestId: sweepAsk, chatId: lastChatId, mine: mine });
         paint();
     }
@@ -17062,7 +17043,7 @@ export function setup(ctx, overrides) {
         const why = whyNot();
         if (why) {
             toast(why, true, "warning");
-            log("nothing taken out: " + why.toLowerCase().replace(/\.$/, ""));
+            log("left", "nothing taken out: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
         snipping = true;
@@ -17073,13 +17054,13 @@ export function setup(ctx, overrides) {
             if (!snipping)
                 return;
             snipping = false;
-            log("no answer from the backend. Nothing was taken out.");
+            log("problem", "no answer from the backend. Nothing was taken out.");
             toast("Auto Refine's backend is not answering. Nothing was taken out.", true, "error");
             paint();
             fillSlotsSoon();
         }, ACK_MS);
         paint();
-        log("taking out the part you selected, " + one.text.trim().length + " characters of it");
+        log("refine", "taking out the part you selected, " + one.text.trim().length + " characters of it");
         send({
             type: "snip_selection",
             requestId: newId(),
@@ -17102,7 +17083,7 @@ export function setup(ctx, overrides) {
         const why = whyNot(pickedIsMine());
         if (why) {
             toast(why, true, "warning");
-            log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
+            log("left", "nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
         retryAt = 0;
@@ -17110,7 +17091,7 @@ export function setup(ctx, overrides) {
         runKind = "part";
         markBusy(true);
         paint();
-        log("refining the part you selected, " + one.text.trim().length + " characters of it");
+        log("refine", "refining the part you selected, " + one.text.trim().length + " characters of it");
         send({
             type: "refine_selection",
             requestId: newId(),
@@ -17136,7 +17117,7 @@ export function setup(ctx, overrides) {
         const why = whyNot(mine);
         if (why) {
             toast(why, true, "warning");
-            log("nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
+            log("left", "nothing to refine: " + why.toLowerCase().replace(/\.$/, ""));
             return;
         }
         retryAt = 0;
@@ -17334,7 +17315,7 @@ export function setup(ctx, overrides) {
                 disposers.push(o);
     }
     catch (_) {
-        log("could not listen for replies. Check that the generation permission is granted.");
+        log("problem", "could not listen for replies. Check that the generation permission is granted.");
     }
     // ---- backend messages ----
     try {
@@ -17375,7 +17356,7 @@ export function setup(ctx, overrides) {
                     if (msg.type === "jev_found_sent") {
                         const n = Math.max(0, Number(msg.count) || 0);
                         const checks = n + (n === 1 ? " check" : " checks");
-                        log(msg.after
+                        log("found", msg.after
                             ? "what " + whoName() + " found in the rewrite went to the second refine: " + checks
                             : "what " + whoName() + " found went to the refine model: " + checks, true);
                         return;
@@ -17384,7 +17365,7 @@ export function setup(ctx, overrides) {
                     // down by a check. The first rewrite is what gets saved, and the Log
                     // says why.
                     if (msg.type === "refine_again_dropped") {
-                        log("the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
+                        log("recheck", "the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
                         return;
                     }
                     // The second model's answer on one reply, for the Log. Each check
@@ -17426,19 +17407,19 @@ export function setup(ctx, overrides) {
                         const by = msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "";
                         if (msg.after) {
                             if (msg.failed)
-                                log(whoName() + " could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
+                                log("recheck", whoName() + " could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
                             else if (msg.refine)
-                                log(whoName() + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
+                                log("recheck", whoName() + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
                             else
-                                log(whoName() + by + " read the rewrite and found nothing more: " + each + cost, true);
+                                log("recheck", whoName() + by + " read the rewrite and found nothing more: " + each + cost, true);
                             return;
                         }
                         if (msg.failed)
-                            log(whoName() + " could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
+                            log("judge", whoName() + " could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
                         else if (msg.refine)
-                            log(whoName() + by + " says refine: " + each + cost, true);
+                            log("judge", whoName() + by + " says refine: " + each + cost, true);
                         else
-                            log(whoName() + by + " says leave it: " + each + cost, true);
+                            log("judge", whoName() + by + " says leave it: " + each + cost, true);
                         return;
                     }
                     // Whether a key is saved is true whichever question it answers, so
@@ -17490,7 +17471,7 @@ export function setup(ctx, overrides) {
                             ? whoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
                                 " answered. The key works. The Log tab shows the test under What " + whoName() + " decided."
                             : whoName() + " did not answer: " + String(msg.why || "no reason given") + ". The Log tab shows where the test was sent.";
-                        log(msg.ok ? whoName() + " answered a test question" : whoName() + " test failed: " + String(msg.why || ""), true);
+                        log("judge", msg.ok ? whoName() + " answered a test question" : whoName() + " test failed: " + String(msg.why || ""), true);
                         // A notification as well, so the answer is seen without looking
                         // for it on the panel: green with the model and the time when the
                         // key works, red with the reason when it does not.
@@ -17509,7 +17490,7 @@ export function setup(ctx, overrides) {
                         // and on every backend restart, and a line saying the halves agree
                         // is one the reader has no use for.
                         if (said && said !== backendVersion && said !== VERSION)
-                            log("the backend is running " + said + ", this panel is " + VERSION);
+                            log("problem", "the backend is running " + said + ", this panel is " + VERSION);
                         backendVersion = said;
                         return;
                     }
@@ -17565,7 +17546,7 @@ export function setup(ctx, overrides) {
                         if (msg.stage === "retrying") {
                             retryAt = Number(msg.attempt) || 0;
                             retryOf = Number(msg.of) || 0;
-                            log("an answer failed a check, asking again" +
+                            log("refine", "an answer failed a check, asking again" +
                                 (typeof msg.note === "string" && msg.note ? ", with the note " + msg.note : ""));
                         }
                         if (msg.stage === "waiting") {
@@ -17580,7 +17561,7 @@ export function setup(ctx, overrides) {
                             // reported a refine that never came back while it was sitting
                             // there waiting on purpose.
                             armDeadman(ms);
-                            log(waitGap
+                            log("refine", waitGap
                                 ? "a reply landed inside the gap between refines, waiting " + Math.round(ms / 1000) + "s"
                                 : "the provider would not take the call, waiting " +
                                     Math.round(ms / 1000) +
@@ -17751,14 +17732,14 @@ export function setup(ctx, overrides) {
                             const gone = String(msg.before || "").length - String(msg.after || "").length;
                             // Said each time, because a snip sits among buttons that do call
                             // the model, and nothing else on screen says this one does not.
-                            log("took " + (gone > 0 ? gone : 0) + " characters out of a reply, with no model call", true);
+                            log("refine", "took " + (gone > 0 ? gone : 0) + " characters out of a reply, with no model call", true);
                             toast("Taken out. No model was asked, so it cost nothing. Put it back is on the card.");
                         }
                         else {
                             // The Log line would paint the panel at once. The paint after
                             // the frame, below, covers it, so the card is drawn first.
                             logPaintedAt = Date.now();
-                            log("refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+                            log("refine", "refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
                             // Not for each reply of a run through the chat, which says how it
                             // went once when it ends. One per reply would be a notification
                             // for every reply, and Lumiverse drops all but five in ten seconds.
@@ -17793,7 +17774,7 @@ export function setup(ctx, overrides) {
                         // Settings that look saved and are not is the worst shape this can
                         // take, so it is said plainly rather than only logged.
                         const what = String(msg.what || "settings");
-                        log("your " + what + " could not be saved to your account. They are still saved in this browser.");
+                        log("problem", "your " + what + " could not be saved to your account. They are still saved in this browser.");
                         toast("Could not save your " + what + " to your account. They are saved in this browser only.", true, "error");
                         paint();
                         return;
@@ -17810,7 +17791,7 @@ export function setup(ctx, overrides) {
                         // and let the panel go again.
                         if (!msg.ok) {
                             const why = String(msg.why || "it could not be taken out");
-                            log("nothing taken out: " + why);
+                            log("left", "nothing taken out: " + why);
                             toast(why.charAt(0).toUpperCase() + why.slice(1), true, "warning");
                         }
                         paint();
@@ -17828,7 +17809,7 @@ export function setup(ctx, overrides) {
                         // and the backend says otherwise, the panel is the one that is
                         // wrong, and leaving it spinning is the worse half of that.
                         if (!msg.stopped)
-                            log("there was nothing running to stop");
+                            log("refine", "there was nothing running to stop");
                         markBusy(false);
                         // Half-written working for a refine that will not finish. The Log
                         // keeps what the last finished one worked out, untouched.
@@ -17842,7 +17823,7 @@ export function setup(ctx, overrides) {
                         if (shieldBad.join("\n") === was)
                             return;
                         if (shieldBad.length)
-                            log("some shield patterns could not be read");
+                            log("problem", "some shield patterns could not be read");
                         paint();
                         return;
                     }
@@ -17852,7 +17833,7 @@ export function setup(ctx, overrides) {
                         if (historyBad.join("\n") === was)
                             return;
                         if (historyBad.length)
-                            log("some patterns in Leave out of the run-up could not be read");
+                            log("problem", "some patterns in Leave out of the run-up could not be read");
                         paint();
                         return;
                     }
@@ -17911,7 +17892,7 @@ export function setup(ctx, overrides) {
                             return;
                         markBusy(false);
                         lastRun = { ms: lastRunMs, ok: false, why: String(msg.why || "") };
-                        log("left a reply alone: " + String(msg.why || "no reason given"));
+                        log("left", "left a reply alone: " + String(msg.why || "no reason given"));
                         paint();
                         return;
                     }
@@ -17928,7 +17909,7 @@ export function setup(ctx, overrides) {
                             countDrop(why);
                         }
                         lastRun = { ms: lastRunMs, ok: false, why: why };
-                        log(msg.same ? "left a reply as it was: " + why : "left a reply alone: " + why);
+                        log("left", msg.same ? "left a reply as it was: " + why : "left a reply alone: " + why);
                         paint();
                         return;
                     }
@@ -17953,7 +17934,7 @@ export function setup(ctx, overrides) {
                             // of it is still said when the save was not heard.
                             const key = String(msg.chatId) + ":" + String(msg.messageId);
                             if (!(announced && announced.key === key && Date.now() - announced.at < 10000)) {
-                                log("refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+                                log("refine", "refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
                                 toast("Reply refined.", true, "success");
                             }
                             else if (!cfg.toast)
@@ -17969,7 +17950,7 @@ export function setup(ctx, overrides) {
                                 countDrop(why);
                             }
                             lastRun = { ms: lastRunMs, ok: false, why: why };
-                            log(msg.same ? "left a reply as it was: " + why : "could not refine: " + why);
+                            log(msg.same ? "left" : "problem", msg.same ? "left a reply as it was: " + why : "could not refine: " + why);
                             toast(msg.same ? "Left as it was: " + why : "Not refined: " + why, true, msg.same ? "info" : "warning");
                         }
                         paint();
@@ -18004,15 +17985,15 @@ export function setup(ctx, overrides) {
                                 const why = String(msg.why || "no reason given");
                                 if (!msg.same)
                                     countDrop(why);
-                                log(msg.same ? "left your draft as it was: " + why : "did not touch your draft: " + why);
+                                log("left", msg.same ? "left your draft as it was: " + why : "did not touch your draft: " + why);
                                 toast(msg.same ? "Left your draft as it was: " + why : "Left your draft alone: " + why, true, msg.same ? "info" : "warning");
                             }
                             else if (!node) {
-                                log("the input box went away before the refine came back");
+                                log("problem", "the input box went away before the refine came back");
                                 toast("The input box went away before it came back.", true, "warning");
                             }
                             else if (setComposer(node, String(msg.after || ""))) {
-                                log("refined what you were typing", true);
+                                log("refine", "refined what you were typing", true);
                                 toast("Your draft was refined.");
                                 lastDraft = {
                                     before: inputBefore,
@@ -18025,7 +18006,7 @@ export function setup(ctx, overrides) {
                                 ping();
                             }
                             else {
-                                log("could not write to the input box");
+                                log("problem", "could not write to the input box");
                                 toast("Could not write to the input box.", true, "error");
                             }
                             paint();
@@ -18101,12 +18082,12 @@ export function setup(ctx, overrides) {
                             if (!undoHere().length)
                                 setBadge(null);
                             tally.undone++;
-                            log("put a reply back the way it was", true);
+                            log("answer", "put a reply back the way it was", true);
                             toast("Put back.", true, "success");
                         }
                         else {
                             const why = String(msg.why || "no reason given");
-                            log("could not put it back: " + why);
+                            log("problem", "could not put it back: " + why);
                             // Nothing to try again. The message was deleted, or swiped or
                             // edited since the refine, so the text this was holding does not
                             // belong in it any more. The row goes rather than staying on the
@@ -18138,7 +18119,7 @@ export function setup(ctx, overrides) {
                             held: String(msg.held || ""),
                         };
                         setBadge("1");
-                        log("a refine is waiting for you", true);
+                        log("answer", "a refine is waiting for you", true);
                         ping();
                         paint();
                         // And as a modal where the host can draw one, since this is a
@@ -18209,9 +18190,9 @@ export function setup(ctx, overrides) {
                                 (msg.stopped ? ", stopped partway" : "") +
                                 ".";
                         const why = String(msg.why || "").trim();
-                        log(count.toLowerCase().replace(/\.$/, ""), saved > 0);
+                        log("refine", count.toLowerCase().replace(/\.$/, ""), saved > 0);
                         if (why)
-                            log("what stopped the rest: " + why);
+                            log("refine", "what stopped the rest: " + why);
                         toast(count + (why ? " " + why + "." : ""), !saved, saved ? "success" : "warning");
                         paint();
                         return;
@@ -18374,7 +18355,7 @@ export function setup(ctx, overrides) {
     loadSetupsFromAccount();
     loadStateFromAccount();
     send({ type: "list_connections", requestId: newId() });
-    log("ready v" + VERSION);
+    log("setup", "ready v" + VERSION);
     paint();
     return () => {
         tornDown = true;
@@ -18406,7 +18387,7 @@ export function setup(ctx, overrides) {
 // never loads.
 export const __testing = {
     MORE_CHECKS,
-    SETUP_LINE,
+    LOG_KINDS,
     BUILT_IN_MODEL_NAMES,
     builtInModelName,
     OWN_NAME_KEYS,

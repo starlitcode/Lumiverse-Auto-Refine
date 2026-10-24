@@ -1,41 +1,46 @@
-// Which Log lines Show in this list hides under Settings, presets and model
-// setups. Every line the panel writes about a preset, a model setup or the
-// settings has to be on this list, and lines about a refine must not be.
+// Every Log line has a kind, and every kind can be hidden under Show in this
+// list. A line with no kind could not be hidden, so each call to log in the
+// source has to name one of the kinds in LOG_KINDS.
 //
 // Run with: bun test
 
 import { expect, test, describe } from "bun:test";
+import { readFileSync } from "node:fs";
 import { __testing } from "../src/frontend";
 
-const { SETUP_LINE } = __testing as any;
+const { LOG_KINDS } = __testing as any;
+const SRC = readFileSync(new URL("../src/frontend.ts", import.meta.url), "utf8");
+const IDS = new Set<string>(LOG_KINDS.map((k: any) => k.id));
 
-describe("settings, presets and model setups", () => {
-  for (const line of [
-    "settings loaded from your account",
-    "settings moved up to your account",
-    "brought 3 presets down from your account",
-    "brought 1 preset down from your account",
-    "sent 2 presets up to your account",
-    "brought 2 model setups down from your account",
-    "sent 1 model setup up to your account",
-    "loaded the preset Copper Kettle | QUICK",
-    "loaded the preset A judge",
-    "loaded the model setup Lantern",
-    "loaded the model setup Lantern with the preset",
-    "put back what the preset replaced",
-    "put back what the model setup replaced",
-    "put the prompt back to the default",
-    "reset 1 part",
-    "reset 4 parts",
-  ])
-    test("hidden: " + line, () => expect(SETUP_LINE.test(line)).toBe(true));
+// What each call passes first, up to the comma after the kind.
+const calls = [...SRC.matchAll(/(?<![\w.])log\(\s*([^,]*),/g)]
+  .map((m) => m[1].trim())
+  .filter((first) => !/^kind: LogKind/.test(first));
 
-  for (const line of [
-    "refined a reply, 312 characters",
-    "left a reply alone: nothing changed",
-    "loaded the reply",
-    "put back the last refine",
-    "reset the timer",
-  ])
-    test("shown: " + line, () => expect(SETUP_LINE.test(line)).toBe(false));
+describe("every Log line can be hidden", () => {
+  test("the calls were found at all", () => {
+    expect(calls.length).toBeGreaterThan(60);
+  });
+
+  test("every call names a kind from the list", () => {
+    const bad: string[] = [];
+    for (const first of calls) {
+      const named = [...first.matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+      if (!named.length || named.some((n) => !IDS.has(n))) bad.push(first);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  test("every kind in the list is used", () => {
+    const used = new Set<string>();
+    for (const first of calls) for (const m of first.matchAll(/"([a-z]+)"/g)) used.add(m[1]);
+    expect([...IDS].filter((id) => !used.has(id))).toEqual([]);
+  });
+
+  test("what the second model found, sent to the refine model, has its own kind", () => {
+    const at = SRC.indexOf('"what " + whoName() + " found went to the refine model: "');
+    expect(at).toBeGreaterThan(0);
+    const call = SRC.lastIndexOf("log(", at);
+    expect(SRC.slice(call, at)).toContain('"found"');
+  });
 });
