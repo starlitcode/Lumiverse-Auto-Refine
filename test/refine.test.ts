@@ -609,6 +609,21 @@ describe("a reply Auto Retry is going to retry", () => {
     expect(h.asked.length).toBe(1);
   });
 
+  // A turn that failed before any text came back saved no reply, so Auto
+  // Retry adds the reply that passed as a new message, with one version.
+  test("a new reply Auto Retry adds after a turn that saved none is refined, and the chat is let go", async () => {
+    const h = await armed(["She stepped through and the cold hit her.", "The next reply, refined as usual."]);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 0 });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    h.started({ chatId: "c1", generationId: "g5" });
+    h.edit("m2", "A later reply in the same chat, long enough to be refined.");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g5" });
+    await wait(60);
+    expect(h.asked.length).toBe(2);
+  });
+
   test("a refine asked for by hand still runs", async () => {
     const h = await armed(["She stepped through and the cold hit her."], { refineAgain: true });
     await h.front({ type: "retry_pending", chatId: "c1" });

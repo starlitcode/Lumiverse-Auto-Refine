@@ -17229,9 +17229,10 @@ export function setup(ctx, overrides) {
         }
     }
     catch (_) { }
-    // A reroll Auto Retry added with Several tries at once. It is written to the
-    // chat directly, so Lumiverse raises no end event for it, and Auto Retry says
-    // so in the page instead. The automatic pass then treats it like any reply
+    // A reroll Auto Retry added with Several tries at once, or a new reply it
+    // added after a turn that saved none. Either is written to the chat
+    // directly, so Lumiverse raises no end event for it, and Auto Retry says so
+    // in the page instead. The automatic pass then treats it like any reply
     // that ended.
     try {
         if (typeof window !== "undefined") {

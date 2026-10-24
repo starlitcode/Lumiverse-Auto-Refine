@@ -81,6 +81,7 @@ Each row is one thing you can refine, and every place its button is.
 | **All your messages in this chat** | Above the tabs. The floating button's menu. | No |
 | **One message**, a reply or one of yours | The refine button on that message. | **A button on every message**, on the Setup tab |
 | **A reroll Auto Retry adds** with **Several tries at once** | Nothing to press. The automatic pass refines it like any new reply. | The automatic pass, and [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) 5.11.0 or later |
+| **A reply Auto Retry adds** with **Several tries at once**, after a turn that saved no reply | Nothing to press. The automatic pass refines it like any new reply. | The automatic pass, and [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) 5.20.6 or later |
 | **Part of a message**, a reply or one of yours | Select the text, then press **Refine the part I selected**: above the tabs, in the floating button's menu, in the Extras menu, or on the chat buttons. | No |
 | **What you are typing**, before you send it | Above the tabs. The floating button's menu, or the Extras menu. | **Refining the draft in your input box**, on the Setup tab |
 
