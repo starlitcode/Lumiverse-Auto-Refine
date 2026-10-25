@@ -14822,6 +14822,30 @@ console.log("\nthe floating button shrinks a little when pressed");
   }
 }
 
+console.log("\nthe problem report");
+// Easy to read for the person and for whoever fixes the bug: the reader's own
+// time with the zone, the second model in use, every changed setting by its
+// name with its default, and the kind of each recent line. Safe to paste in
+// public: an address, a name and a note's text never appear.
+await inTab(browser, { saved: { judgeMode: "two", judgeWho: "clef", clefTier: "flash", clefFlashOver: 40, judgeUrl: "http://192.0.2.7:8000", askNoteRefused: "Please try the lantern scene again.", passNames: ["Wren Hollow"] } }, async (page) => {
+  await goTab(page, "Log");
+  await settle(page);
+  const text = await page.evaluate(async () => {
+    window.__fromBackend({ type: "jev_found_sent", count: 1, after: false });
+    await new Promise((r) => setTimeout(r, 400));
+    const card = [...document.querySelectorAll("#drawer .arf-card")].find((c) => /Reporting a problem/.test(c.textContent));
+    const well = card && card.querySelector(".arf-well");
+    return well ? well.textContent : "";
+  });
+  ok("the report was found", text.length > 200, text.slice(0, 200));
+  ok("its time is the reader's own, with the zone", /when: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d \(UTC[+-]\d+(:\d\d)?\)/.test(text), text.slice(0, 200));
+  ok("it names the second model and its line", /model: Clef Flash/.test(text) && /refine when a check reaches: 40% \(clefFlashOver, default 30\)/.test(text), text);
+  ok("a changed setting is listed with its default", /clefFlashOver: 40 \(default: 30\)/.test(text), text);
+  ok("an address shows only as set", /judgeUrl: set/.test(text) && !/192\.0\.2\.7/.test(text), text);
+  ok("a name and a note's text never appear", !/Wren Hollow/.test(text) && !/lantern scene/.test(text), text);
+  ok("a recent line says its kind", /\[found\] what Clef Flash found/.test(text), text);
+});
+
 console.log("\nhiding kinds of line in the Log");
 await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
   await goTab(page, "Log");

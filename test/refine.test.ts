@@ -119,6 +119,8 @@ function host(
     // A group chat: the chat's own card is Wren, and Oriel is a second card in
     // it. Each card read is counted, since each one is a host call.
     group?: boolean;
+    // The chat's own settings, such as the connection it is set to.
+    chatMeta?: any;
     cardReads?: string[];
   } = {},
 ) {
@@ -313,8 +315,10 @@ function host(
         if (opts.chatFail) throw new Error(opts.chatFail);
         if (opts.noCard) return { id: "c1" };
         return opts.group
-          ? { id: "c1", character_id: "ch1", metadata: { character_ids: ["ch1", "ch2"] } }
-          : { id: "c1", character_id: "ch1" };
+          ? { id: "c1", character_id: "ch1", metadata: Object.assign({ character_ids: ["ch1", "ch2"] }, opts.chatMeta || {}) }
+          : opts.chatMeta
+            ? { id: "c1", character_id: "ch1", metadata: opts.chatMeta }
+            : { id: "c1", character_id: "ch1" };
       },
       // What Lumiverse remembers of the chat, as its own call hands it over:
       // already written out with the reader's header and chunk templates.
@@ -503,6 +507,34 @@ async function armed(answers: string[], over: any = {}, messages = chat(), opts 
 // twice must never buy a second refine, whatever the setting says. Going back
 // to a reply that has since been swiped or regenerated is a different thing,
 // and that one is the reader's to choose.
+// With no connection picked, a call that names none goes to Lumiverse's
+// default connection, which is not always the one the chat uses.
+describe("the connection a refine goes to", () => {
+  const reply = ["She stepped through and the cold hit her."];
+
+  test("with none picked, a chat set to its own connection and model is used", async () => {
+    const h = await armed(reply, {}, chat(), { chatMeta: { connection_profile_id: "conn-chat", connection_model: "lamplight-small" } });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked[0].connection_id).toBe("conn-chat");
+    expect(h.asked[0].parameters).toMatchObject({ model: "lamplight-small" });
+  });
+
+  test("one picked for refining wins", async () => {
+    const h = await armed(reply, { connectionId: "conn-cheap" }, chat(), { chatMeta: { connection_profile_id: "conn-chat" } });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked[0].connection_id).toBe("conn-cheap");
+  });
+
+  test("a chat set to no connection leaves it to Lumiverse", async () => {
+    const h = await armed(reply);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked[0].connection_id).toBeUndefined();
+  });
+});
+
 describe("going over a reply more than once", () => {
   test("one generation announced twice is refined once", async () => {
     const h = await armed(["She stepped through and the cold hit her."]);

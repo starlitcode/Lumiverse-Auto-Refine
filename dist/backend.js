@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.49.0';
+const VERSION = '1.49.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4111,6 +4111,24 @@ function rejectedFields(msg, sent) {
         }
     return sent.filter((f) => named.has(f));
 }
+// The connection a chat is set to, and the model set on it, read from the
+// chat's own settings. Empty when the chat is not set to one or cannot be
+// read, which leaves the call to Lumiverse's default connection.
+async function chatConnection(chatId, userId) {
+    const none = { id: '', model: '' };
+    if (!spindle.chats || typeof spindle.chats.get !== 'function')
+        return none;
+    try {
+        const chat = await spindle.chats.get(chatId, userId);
+        const meta = chat && chat.metadata && typeof chat.metadata === 'object' ? chat.metadata : {};
+        const id = typeof meta.connection_profile_id === 'string' ? meta.connection_profile_id.trim() : '';
+        const m = id && typeof meta.connection_model === 'string' ? meta.connection_model.trim() : '';
+        return { id: id, model: m };
+    }
+    catch (_) {
+        return none;
+    }
+}
 async function askModel(text, isUser, scene, userId, use, drop, 
 // Set when this is one of several rewrites written at once. Its call is
 // added to the group so the rest can be stopped once one passes, and it does
@@ -4201,12 +4219,23 @@ model) {
                     kept[key] = params[key];
             params = Object.keys(kept).length ? kept : null;
         }
-        if (params)
-            req.parameters = params;
         // The connection the reader picked for refining, which is the point of
         // being able to pick one: a rewrite does not need the model you roleplay
         // with, and running it on a cheaper one is most of the saving.
-        const useConnection = model ? model.connectionId : connectionId;
+        let useConnection = model ? model.connectionId : connectionId;
+        // With none picked, a call that names no connection goes to the default
+        // one. A chat set to its own connection, and its own model on it, sends
+        // its replies there, so the refine goes there too.
+        if (!useConnection && scene.chatId) {
+            const bound = await chatConnection(scene.chatId, userId);
+            if (bound.id) {
+                useConnection = bound.id;
+                if (bound.model && !(params && params.model))
+                    params = Object.assign({}, params || {}, { model: bound.model });
+            }
+        }
+        if (params)
+            req.parameters = params;
         if (useConnection)
             req.connection_id = useConnection;
         // Who the call is for. Without it an operator-scoped install refuses the

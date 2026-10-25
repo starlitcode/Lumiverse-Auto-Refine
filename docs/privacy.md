@@ -64,7 +64,7 @@ Your key:
 | --- | --- | --- |
 | `generation` | Runs the refine. | Nothing is refined, and the panel says so. |
 | `chat_mutation` | Saves the rewrite over the message. | Refines run, but nothing can be saved. |
-| `chats` | Knows which chat you are in and which card it belongs to. Reads what Lumiverse remembers of the chat, for `{{memories}}`. It only reads memories, never changes them. | It uses the last chat it saw a reply in, sends no card, and leaves out memories. |
+| `chats` | Knows which chat you are in and which card it belongs to. Reads what Lumiverse remembers of the chat, for `{{memories}}`. It only reads memories, never changes them. With **Refine using** left on its default, reads which connection and model the chat is set to. | It uses the last chat it saw a reply in, sends no card, and leaves out memories. A refine goes to your default connection. |
 | `characters` | Reads the character card, so a rewrite keeps each character's voice. | The card block is left out. Refining carries on. |
 | `world_books` | Reads the lorebook entries this chat has active, so a rewrite does not contradict them. | The lore block is left out. Refining carries on. |
 | `ui_panels` | The floating button, which is off by default. | Everything works except that button, and the panel says so. |

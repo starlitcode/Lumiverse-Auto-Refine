@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.49.1
+
+_2026-10-24_
+
+### Fixed
+
+- **The model I am chatting with did not follow a chat's own connection.** With **Refine using** on **The model I am chatting with**, a refine named no connection, so Lumiverse sent it to your default connection. A chat set to its own connection, and its own model on it, now refines on that connection. A chat with no connection of its own still uses your default connection. See [Model](docs/settings.md#model).
+- **Reporting a problem left out most settings.** Its **Your settings** part said it carried every switch and number. It showed about 20 settings, and nothing about the second model. It now names the second model, its host, the model name sent and its line. It also lists every setting you changed, with its default. Text you wrote shows only as its length, and an address or an account shows only as set or empty.
+
+### Changed
+
+- **Reporting a problem is easier to read.** The time at the top is your own time, with your time zone. The recent lines say they are newest first, and each says which kind of line it is. See [Log](docs/settings.md#log).
+
+---
+
 ## 1.49.0
 
 _2026-10-24_

@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.49.0";
+const VERSION = "1.49.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -455,7 +455,7 @@ const PART_CHATS = "chats";
 // about the report rather than about the settings: what is in the panel, what
 // it has been doing, and what it is running on.
 const DEBUG_PARTS = [
-    { id: "settings", label: "Your settings", what: "Every switch and number, but never the text of your prompt." },
+    { id: "settings", label: "Your settings", what: "Every setting you changed, and the second model you use. Text you wrote shows only as its length." },
     { id: "prompt", label: "The shape of your prompt", what: "Block names, roles, order and which macros each one uses. Not what the blocks say." },
     { id: "counts", label: "Counts for this session", what: "How many refines were saved, dropped and put back, and why." },
     { id: "log", label: "What it has been doing", what: "The last dozen lines from the Log tab." },
@@ -483,8 +483,8 @@ const PERMS = [
     {
         id: "chats",
         label: "Chats",
-        why: "Says which chat you are in and which card it belongs to, and reads what Lumiverse remembers of it, behind {{memories}}.",
-        without: "It falls back to the last chat it saw a reply in, so the per-chat switch and the buttons can act on a chat you have left, and the memories block is left out.",
+        why: "Says which chat you are in and which card it belongs to, reads what Lumiverse remembers of it, behind {{memories}}, and reads which connection the chat is set to.",
+        without: "It falls back to the last chat it saw a reply in, so the per-chat switch and the buttons can act on a chat you have left, the memories block is left out, and a refine goes to your default connection.",
     },
     {
         id: "characters",
@@ -1207,6 +1207,40 @@ const LOG_KINDS = [
     { id: "setup", label: "Settings, presets and model setups", what: "Settings, presets or model setups loaded, put back, or moved to and from your account." },
     { id: "problem", label: "Problems and warnings", what: "Something that could not be done, such as a window that would not open." },
 ];
+// The time on the reader's own clock, with the zone, so a time in a report
+// matches what the person saw and can be turned into anyone else's time.
+function localStamp(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    const off = -d.getTimezoneOffset();
+    const zone = "UTC" + (off >= 0 ? "+" : "-") + Math.floor(Math.abs(off) / 60) + (Math.abs(off) % 60 ? ":" + p(Math.abs(off) % 60) : "");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + " (" + zone + ")";
+}
+// A setting's value as a problem report shows it. A report should be safe to
+// paste where anyone can read it, so writing of the reader's own shows only
+// as its length, and an address or an account shows only whether it is set.
+const REPORT_WITHHELD = new Set(["judgeUrl", "soundUrl", "cloudflareAccount"]);
+// Text that is a setting rather than writing, shown in full.
+const REPORT_SHOWN = new Set(["inputSelector", "swipeSelector", "thinkTags", "cutColor", "addColor"]);
+function reportValue(key, v) {
+    if (REPORT_WITHHELD.has(key))
+        return String(v == null ? "" : v).trim() ? "set" : "empty";
+    if (typeof v === "boolean" || typeof v === "number")
+        return String(v);
+    if (typeof v === "string") {
+        if (REPORT_SHOWN.has(key) || /^[A-Za-z0-9_.:~\/#-]{0,48}$/.test(v))
+            return JSON.stringify(v);
+        return "text, " + v.length + " characters";
+    }
+    if (Array.isArray(v))
+        return v.length + (v.length === 1 ? " item" : " items");
+    if (v && typeof v === "object") {
+        const vals = Object.keys(v).map((k) => v[k]);
+        if (vals.every((x) => typeof x === "boolean" || typeof x === "number"))
+            return JSON.stringify(v);
+        return vals.length + (vals.length === 1 ? " entry" : " entries");
+    }
+    return String(v);
+}
 // The tag a prompt puts the model's working in. What is inside it is streamed
 // back to the panel while the refine runs and never reaches the story, so a
 // prompt that does not ask for it has nothing to show while it writes.
@@ -12122,7 +12156,7 @@ export function setup(ctx, overrides) {
                 : backendVersion === VERSION
                     ? "the same version"
                     : backendVersion + ", which is not the version above"));
-        lines.push("when: " + new Date().toISOString());
+        lines.push("when: " + localStamp(new Date()));
         if (on("chat")) {
             lines.push("");
             lines.push("[where]");
@@ -12137,7 +12171,7 @@ export function setup(ctx, overrides) {
             lines.push("[settings]");
             lines.push("on: " + (cfg.enabled ? "yes" : "no") + ", automatic: " + (cfg.refineOn ? "yes" : "no"));
             lines.push("connection: " +
-                (cfg.connectionId ? "picked" : "the chat's own") +
+                (cfg.connectionId ? "picked" : "none picked, so the chat's own or Lumiverse's default") +
                 ", connections seen: " +
                 connections.length);
             lines.push("thinking: " +
@@ -12177,6 +12211,37 @@ export function setup(ctx, overrides) {
                 ", sound: " +
                 (cfg.soundOn ? (hasSound() ? "on" : "on but none chosen") : "off"));
             lines.push("presets saved: " + presets.length);
+            lines.push("");
+            lines.push("[second model]");
+            const two = cfg.judgeMode === "two";
+            lines.push("in use: " + (two ? "yes" : "no") + " (judgeMode " + JSON.stringify(cfg.judgeMode) + ")");
+            if (two) {
+                const z = sizeInUse(cfg);
+                lines.push("model: " + whoName() + " (judgeWho " + JSON.stringify(cfg.judgeWho) + (z ? ", size " + JSON.stringify(z.value) : "") + ")");
+                const host = keyHost();
+                lines.push("host: " + (host === "custom" ? "another address, " + (String(cfg.judgeUrl || "").trim() ? "set" : "empty") : hostName(host)) + " (judgeHost " + JSON.stringify(cfg.judgeHost) + ")");
+                const ownKey = OWN_NAME_KEYS[cfg.judgeWho];
+                const typed = String((ownKey ? cfg[ownKey] : cfg.judgeModel) || "").trim();
+                lines.push("model name sent: " + (typed ? JSON.stringify(typed) + ", typed in Model name" : JSON.stringify(builtInModelName(cfg)) + ", the built-in name"));
+                const line = JUDGE_FIELDS.find((f) => /Over$/.test(String(f.key)) && fieldShows(f));
+                if (line)
+                    lines.push("refine when a check reaches: " + cfg[line.key] + "% (" + line.key + ", default " + CONFIG[line.key] + ")");
+                const checks = String(cfg.judgeChecks || "").split("\n").filter((l) => l.trim()).length;
+                lines.push("checks: " + checks + (sameAsWas(cfg.judgeChecks, CONFIG.judgeChecks) ? ", the built-in list" : ", your own list"));
+                lines.push("reads before the refine: " + (cfg.judgeBefore ? "yes" : "no") +
+                    ", reads the rewrite: " + (cfg.judgeAfter ? "yes" : "no") +
+                    ", worn phrases check: " + (cfg.judgeWorn ? "yes" : "no") +
+                    ", on a button press too: " + (cfg.judgeByHand ? "yes" : "no"));
+            }
+            // Every setting that is not at its default, by its name in the code,
+            // with the default beside it. The version line above says what every
+            // other setting is.
+            const changed = Object.keys(CONFIG).filter((k) => !sameAsWas(cfg[k], CONFIG[k]));
+            lines.push("");
+            lines.push("[changed from the default, " + changed.length + " of " + Object.keys(CONFIG).length + "]");
+            for (const k of changed)
+                lines.push("  " + k + ": " + reportValue(k, cfg[k]) + " (default: " + reportValue(k, CONFIG[k]) + ")");
+            lines.push("every other setting is at its default for " + VERSION);
         }
         if (on("prompt")) {
             lines.push("");
@@ -12225,9 +12290,10 @@ export function setup(ctx, overrides) {
         }
         if (on("log") && activity.length) {
             lines.push("");
-            lines.push("[recent]");
+            // Each line with its kind, the same names as LOG_KINDS.
+            lines.push("[recent, newest first]");
             for (const a of activity.slice(0, 12))
-                lines.push("  " + new Date(a.at).toTimeString().slice(0, 8) + " " + a.text);
+                lines.push("  " + new Date(a.at).toTimeString().slice(0, 8) + " [" + a.kind + "] " + a.text);
         }
         if (on("browser")) {
             lines.push("");
