@@ -507,8 +507,8 @@ const PERMS = [
     {
         id: "interceptor",
         label: "Interceptor",
-        why: "Learns which connection your chat's replies use, so The model I am chatting with refines on that one. It hands the prompt back as it came and never reads or keeps it.",
-        without: "With Refine using left on its default, a refine goes to the connection the chat is set to, or your default connection.",
+        why: "Lets Auto Refine see which connection you chat with, so The model I am chatting with really uses it. It does not read, keep or change your prompt.",
+        without: "If you have not picked a model under Refine using, Auto Refine cannot see which one you chat with. It uses the chat's own connection, or your default one if the chat has none.",
     },
     {
         id: "cors_proxy",
@@ -12389,7 +12389,9 @@ export function setup(ctx, overrides) {
                 row.appendChild(el("span", "arf-lab arf-grow", p.label));
                 row.appendChild(el("span", "arf-pill", hasPerm(p.id) ? "granted" : "refused"));
                 body.appendChild(row);
-                body.appendChild(note(p.why + " Without it: " + p.without.toLowerCase()));
+                // Only the first letter, since the text can name a setting or run on
+                // into a second sentence.
+                body.appendChild(note(p.why + " Without it: " + p.without.charAt(0).toLowerCase() + p.without.slice(1)));
             }
         }));
         return wrap;

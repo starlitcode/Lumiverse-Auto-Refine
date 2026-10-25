@@ -116,9 +116,9 @@ Where the buttons come from:
 Not sure what to pick? [What to use](recommended.md) has settings that work well for most people.
 
 - **Refine using** picks the model that refines, from your connection profiles. Leave it on the default to use the model you chat with.
-  - The default refines on the connection the chat's replies use: the one the chat is set to, or the one you picked in Lumiverse. This needs the `interceptor` permission.
-  - Without it, a chat set to its own connection still refines on it. Any other chat refines on Lumiverse's default connection.
-  - A refine on a chat that has had no reply since Auto Refine last started uses the connection the chat is set to, or the default.
+  - On the default, it refines with the connection you chat with. To see which one that is, it needs the `interceptor` permission.
+  - Without that permission, it uses the chat's own connection, or your default one if the chat has none.
+  - It also uses those two before a chat has had a reply since Auto Refine started.
 - **Let it think first** is off by default. You can leave it to your connection's setting, or pick an effort level. See [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** stops a refine that has not come back.
   - The default is four minutes. The most is an hour. At 0, it waits the full hour.

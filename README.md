@@ -131,7 +131,7 @@ It asks for eight permissions:
 | `generation` | running the refine |
 | `chat_mutation` | saving the rewrite |
 | `chats` | knowing which chat you are in, and what Lumiverse remembers of it |
-| `interceptor` | learning which connection your chat's replies use |
+| `interceptor` | seeing which connection you chat with |
 | `characters` | reading the character card |
 | `world_books` | reading the lore the chat has active |
 | `ui_panels` | the floating button |
