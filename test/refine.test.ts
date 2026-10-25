@@ -135,6 +135,8 @@ function host(
 
   const handlers: Record<string, Array<(p: any) => any>> = {};
   let frontHandler: any = null;
+  // The interceptor the backend registers, so a check can run a prompt through it.
+  let interceptor: any = null;
   const sent: any[] = [];
   const writes: Array<{ id: string; content: string }> = [];
   const asked: any[] = [];
@@ -397,6 +399,7 @@ function host(
       },
     },
     permissions: { has: () => true, onChanged: () => {}, onDenied: () => {} },
+    registerInterceptor: (fn: any) => { interceptor = fn; },
   };
 
   vm.runInContext(
@@ -427,6 +430,8 @@ function host(
   );
 
   return {
+    intercept: (messages: any[], context: any) => (interceptor ? interceptor(messages, context) : messages),
+    hasInterceptor: () => !!interceptor,
     sent,
     writes,
     asked,
@@ -525,6 +530,30 @@ describe("the connection a refine goes to", () => {
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
     await wait(60);
     expect(h.asked[0].connection_id).toBe("conn-cheap");
+  });
+
+  // Lumiverse tells the interceptor which connection a reply goes to, which
+  // is the only way to learn the one picked in Lumiverse.
+  test("with none picked, the connection the chat's last reply used is used", async () => {
+    const h = await armed(reply);
+    expect(h.hasInterceptor()).toBe(true);
+    const prompt = [{ role: "user", content: "The bell rang twice." }];
+    const back = await h.intercept(prompt, { chatId: "c1", connectionId: "conn-picked", generationType: "normal", userId: "u1" });
+    // The prompt is handed back as it came.
+    expect(back).toBe(prompt);
+    expect(prompt).toEqual([{ role: "user", content: "The bell rang twice." }]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked[0].connection_id).toBe("conn-picked");
+  });
+
+  test("a background call or a prompt preview does not count as the chat's reply", async () => {
+    const h = await armed(reply);
+    await h.intercept([], { chatId: "c1", connectionId: "conn-quiet", generationType: "quiet" });
+    await h.intercept([], { chatId: "c1", connectionId: "conn-preview", generationType: "normal", dryRun: true });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked[0].connection_id).toBeUndefined();
   });
 
   test("a chat set to no connection leaves it to Lumiverse", async () => {

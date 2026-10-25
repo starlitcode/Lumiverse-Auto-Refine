@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.49.1";
+const VERSION = "1.50.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -503,6 +503,12 @@ const PERMS = [
         label: "Interface panels",
         why: "The floating button.",
         without: "Everything works except the floating button, and its switch says so.",
+    },
+    {
+        id: "interceptor",
+        label: "Interceptor",
+        why: "Learns which connection your chat's replies use, so The model I am chatting with refines on that one. It hands the prompt back as it came and never reads or keeps it.",
+        without: "With Refine using left on its default, a refine goes to the connection the chat is set to, or your default connection.",
     },
     {
         id: "cors_proxy",
@@ -12171,7 +12177,7 @@ export function setup(ctx, overrides) {
             lines.push("[settings]");
             lines.push("on: " + (cfg.enabled ? "yes" : "no") + ", automatic: " + (cfg.refineOn ? "yes" : "no"));
             lines.push("connection: " +
-                (cfg.connectionId ? "picked" : "none picked, so the chat's own or Lumiverse's default") +
+                (cfg.connectionId ? "picked" : "none picked, so the one the chat's replies use") +
                 ", connections seen: " +
                 connections.length);
             lines.push("thinking: " +

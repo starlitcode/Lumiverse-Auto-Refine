@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.49.1';
+const VERSION = '1.50.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -4213,6 +4213,49 @@ function rejectedFields(msg: string, sent: string[]): string[] {
   return sent.filter((f) => named.has(f));
 }
 
+// The connection each chat's last reply used, by chat. Lumiverse tells an
+// interceptor which connection a reply goes to: the one the chat is set to,
+// or the one picked in Lumiverse. Nothing else says which one was picked, and
+// a call that names no connection goes to the default one. The prompt is
+// handed back as it came and is never read or kept.
+const seenConnection = new Map<string, string>();
+// Enough for someone moving between many chats. The oldest goes first.
+const SEEN_CONNECTION_MAX = 50;
+const connectionInterceptor = async (messages: any[], context: any) => {
+  try {
+    const type = String((context && context.generationType) || '').toLowerCase();
+    // A background call or a prompt preview is not a reply in the chat.
+    if (context && context.dryRun !== true && type !== 'quiet') {
+      const chat = context.chatId ? String(context.chatId) : '';
+      const id = context.connectionId ? String(context.connectionId) : '';
+      if (chat && id) {
+        seenConnection.delete(chat);
+        seenConnection.set(chat, id);
+        while (seenConnection.size > SEEN_CONNECTION_MAX) seenConnection.delete(seenConnection.keys().next().value as string);
+      }
+    }
+  } catch (_) { /* noting the connection must never cost anyone their reply */ }
+  return messages;
+};
+
+// Registering without the permission does nothing and raises nothing, and a
+// grant can come while the extension runs, so this is tried at startup and
+// again on every change to the grants. The flag stops a second registration.
+let interceptorOn = false;
+function tryRegisterInterceptor(): void {
+  if (interceptorOn) return;
+  try {
+    const perms: any = (spindle as any).permissions;
+    if (perms && typeof perms.has === 'function' && !perms.has('interceptor')) return;
+  } catch (_) {}
+  try {
+    spindle.registerInterceptor(connectionInterceptor);
+    interceptorOn = true;
+  } catch (_) {
+    try { spindle.log.warn('auto-refine: could not register the interceptor, so a refine cannot follow the connection you picked'); } catch (__) {}
+  }
+}
+
 // The connection a chat is set to, and the model set on it, read from the
 // chat's own settings. Empty when the chat is not set to one or cannot be
 // read, which leaves the call to Lumiverse's default connection.
@@ -4324,14 +4367,13 @@ async function askModel(
     // with, and running it on a cheaper one is most of the saving.
     let useConnection = model ? model.connectionId : connectionId;
     // With none picked, a call that names no connection goes to the default
-    // one. A chat set to its own connection, and its own model on it, sends
-    // its replies there, so the refine goes there too.
+    // one. The refine goes where the chat's replies go: the connection its
+    // last reply used, or the one the chat is set to, with the model set on it.
     if (!useConnection && scene.chatId) {
       const bound = await chatConnection(scene.chatId, userId);
-      if (bound.id) {
-        useConnection = bound.id;
-        if (bound.model && !(params && (params as any).model)) params = Object.assign({}, params || {}, { model: bound.model });
-      }
+      useConnection = seenConnection.get(scene.chatId) || bound.id;
+      if (useConnection && useConnection === bound.id && bound.model && !(params && (params as any).model))
+        params = Object.assign({}, params || {}, { model: bound.model });
     }
     if (params) req.parameters = params;
     if (useConnection) req.connection_id = useConnection;
@@ -7982,12 +8024,14 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
 try {
   if (spindle.permissions && typeof spindle.permissions.onChanged === 'function') {
     spindle.permissions.onChanged(() => {
+      tryRegisterInterceptor();
       try {
         spindle.sendToFrontend({ type: 'permissions_changed' });
       } catch (_) {}
     });
   }
 } catch (_) {}
+tryRegisterInterceptor();
 
 try { spindle.sendToFrontend({ type: 'backend_ready' }); } catch (_) {}
 // Sent unprompted as well as on request, so a panel that was already open when

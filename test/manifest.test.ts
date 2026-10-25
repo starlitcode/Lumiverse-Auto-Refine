@@ -47,6 +47,10 @@ const EARNS: Record<string, { uses: RegExp; why: string }> = {
     uses: /createFloatWidget|showContextMenu/,
     why: "the floating button and its menu",
   },
+  interceptor: {
+    uses: /spindle\.registerInterceptor\(/,
+    why: "learns which connection the chat's replies use",
+  },
   cors_proxy: {
     uses: /spindle\.cors\(/,
     why: "reaches Jev in two-model mode",

@@ -124,13 +124,14 @@ All four change only a line the model could quote as breaking a rule. The two fo
 - **Refine what I am typing** reads and writes the input box on the page, because Lumiverse has no API for it. If an update moves the box, **Where the input box is** on the Setup tab points it at the new one.
 - The files Lumiverse loads are `dist/frontend.js` and `dist/backend.js`. They are plain, readable JavaScript. Nothing is minified.
 
-It asks for seven permissions:
+It asks for eight permissions:
 
 | Permission | What it is for |
 | --- | --- |
 | `generation` | running the refine |
 | `chat_mutation` | saving the rewrite |
 | `chats` | knowing which chat you are in, and what Lumiverse remembers of it |
+| `interceptor` | learning which connection your chat's replies use |
 | `characters` | reading the character card |
 | `world_books` | reading the lore the chat has active |
 | `ui_panels` | the floating button |

@@ -6,13 +6,17 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.49.1
+## 1.50.0
 
 _2026-10-24_
 
+### Added
+
+- **The interceptor permission.** Auto Refine asks for one more permission, `interceptor`. With it, **The model I am chatting with** refines on the connection your chat's replies use. It hands the prompt back as it came, and never reads, keeps or changes it. See [Privacy](docs/privacy.md).
+
 ### Fixed
 
-- **The model I am chatting with did not follow a chat's own connection.** With **Refine using** on **The model I am chatting with**, a refine named no connection, so Lumiverse sent it to your default connection. A chat set to its own connection, and its own model on it, now refines on that connection. A chat with no connection of its own still uses your default connection. See [Model](docs/settings.md#model).
+- **The model I am chatting with refined on your default connection.** With **Refine using** on **The model I am chatting with**, a refine named no connection, so Lumiverse sent it to your default connection. That is not always the one you chat with. A refine now goes to the connection the chat's replies use: the one the chat is set to, or the one you picked in Lumiverse. Without the `interceptor` permission, a chat set to its own connection still refines on it, and any other chat uses your default connection. See [Model](docs/settings.md#model).
 - **Reporting a problem left out most settings.** Its **Your settings** part said it carried every switch and number. It showed about 20 settings, and nothing about the second model. It now names the second model, its host, the model name sent and its line. It also lists every setting you changed, with its default. Text you wrote shows only as its length, and an address or an account shows only as set or empty.
 
 ### Changed
