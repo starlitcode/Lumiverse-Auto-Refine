@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.51.0
+
+_2026-10-25_
+
+### Added
+
+- **Reporting a problem says which Lumiverse you use.** A newer Lumiverse tells extensions its version, and the report now includes it. Much of what goes wrong depends on how that version behaves.
+
+---
+
 ## 1.50.0
 
 _2026-10-25_

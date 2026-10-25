@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.50.0";
+const VERSION = "1.51.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -12635,6 +12635,11 @@ export function setup(ctx: Ctx, overrides?: any) {
             : backendVersion + ", which is not the version above"),
     );
     lines.push("when: " + localStamp(new Date()));
+    // Lumiverse's own version, which a newer Lumiverse hands to extensions.
+    // Much of what goes wrong depends on how that version behaves.
+    let host = "";
+    try { host = String(((ctx as any).host && (ctx as any).host.lumiverseVersion) || ""); } catch (_) {}
+    lines.push("lumiverse: " + (host ? host.replace(/^v/, "") : "not reported by this Lumiverse"));
 
     if (on("chat")) {
       lines.push("");

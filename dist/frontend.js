@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.50.0";
+const VERSION = "1.51.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -12163,6 +12163,14 @@ export function setup(ctx, overrides) {
                     ? "the same version"
                     : backendVersion + ", which is not the version above"));
         lines.push("when: " + localStamp(new Date()));
+        // Lumiverse's own version, which a newer Lumiverse hands to extensions.
+        // Much of what goes wrong depends on how that version behaves.
+        let host = "";
+        try {
+            host = String((ctx.host && ctx.host.lumiverseVersion) || "");
+        }
+        catch (_) { }
+        lines.push("lumiverse: " + (host ? host.replace(/^v/, "") : "not reported by this Lumiverse"));
         if (on("chat")) {
             lines.push("");
             lines.push("[where]");

@@ -14844,6 +14844,7 @@ await inTab(browser, { saved: { judgeMode: "two", judgeWho: "clef", clefTier: "f
   ok("an address shows only as set", /judgeUrl: set/.test(text) && !/192\.0\.2\.7/.test(text), text);
   ok("a name and a note's text never appear", !/Wren Hollow/.test(text) && !/lantern scene/.test(text), text);
   ok("a recent line says its kind", /\[found\] what Clef Flash found/.test(text), text);
+  ok("it says which Lumiverse, or that Lumiverse did not say", /\nlumiverse: (\S+|not reported by this Lumiverse)\n/.test(text), text.slice(0, 300));
 });
 
 console.log("\nhiding kinds of line in the Log");

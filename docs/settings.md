@@ -214,7 +214,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - **Your settings** names the second model you use and lists every setting you changed, with its default beside it. Text you wrote shows only as its length, and an address or an account only as set or empty.
   - The time at the top is your own time, with your time zone. Each recent line says which kind of line it is.
   - **Read and edit it first** lets you check it before it is copied.
-  - The first two lines always name the panel's version and the backend's version. They differ if you updated without reloading.
+  - The first lines always name the panel's version, the backend's version and Lumiverse's version. The first two differ if you updated without reloading.
 
 ## Setup
 
