@@ -401,7 +401,7 @@ Pick **Another address** for any host not in the list. It works for every second
 
 1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
    - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.
-   - An address on the same computer as Lumiverse can use `http://`, since it never goes over a network. That is `localhost`, `127.0.0.1`, `[::1]` and, in Docker, `host.docker.internal`.
+   - An address on the same device as Lumiverse can use `http://`, since it never goes over a network. That is `localhost`, `127.0.0.1`, `[::1]` and, in Docker, `host.docker.internal`.
    - For any other `http://` address on your own machine or network, such as another Docker container by its name, switch on **Let the key go over http://**. It is off by default. Only switch it on for an address you run yourself. With **It needs no key** on, this is not needed.
 2. **Model name**: what your host calls the model, spelled the way its docs spell it.
 3. **It needs no key**: off by default, so the key box shows as it does for every host. Switch it on for a model you run yourself that takes no key. Then:

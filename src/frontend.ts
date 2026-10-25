@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.51.0";
+const VERSION = "1.52.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -1268,10 +1268,12 @@ function reportValue(key: string, v: any): string {
   if (REPORT_WITHHELD.has(key)) return String(v == null ? "" : v).trim() ? "set" : "empty";
   if (typeof v === "boolean" || typeof v === "number") return String(v);
   if (typeof v === "string") {
+    // Said in a word, which reads more plainly than a pair of quote marks.
+    if (v === "") return "empty";
     if (REPORT_SHOWN.has(key) || /^[A-Za-z0-9_.:~\/#-]{0,48}$/.test(v)) return JSON.stringify(v);
     return "text, " + v.length + " characters";
   }
-  if (Array.isArray(v)) return v.length + (v.length === 1 ? " item" : " items");
+  if (Array.isArray(v)) return v.length === 0 ? "empty" : v.length + (v.length === 1 ? " item" : " items");
   if (v && typeof v === "object") {
     const vals = Object.keys(v).map((k) => v[k]);
     if (vals.every((x) => typeof x === "boolean" || typeof x === "number")) return JSON.stringify(v);
@@ -2889,7 +2891,7 @@ const JUDGE_FIELDS: Field[] = [
         : c.judgeWho === "jev"
           ? "https://jev.example.com/v1/decisions"
           : "https://decide.example.com/v1/decisions",
-    hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on this same computer.",
+    hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on the same device as Lumiverse.",
   },
   {
     key: "judgeModel",
@@ -12620,6 +12622,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
+  // Whether the page is a secure one, which some browser features need. Said
+  // as yes or no only, so the report carries no address or port.
+  function securePageLine(): string {
+    let https = false;
+    let secure = false;
+    try {
+      https = location.protocol === "https:";
+      secure = !!window.isSecureContext;
+    } catch (_) {}
+    return "secure page: " + (https ? "yes (https)" : secure ? "yes (Lumiverse is on this device)" : "no (plain http, reached over the network)");
+  }
+
   // Settings and counts, never your writing. A bug report should be safe to
   // paste in public, and a block can hold anything.
   function debugText(): string {
@@ -12640,6 +12654,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     let host = "";
     try { host = String(((ctx as any).host && (ctx as any).host.lumiverseVersion) || ""); } catch (_) {}
     lines.push("lumiverse: " + (host ? host.replace(/^v/, "") : "not reported by this Lumiverse"));
+    lines.push(securePageLine());
 
     if (on("chat")) {
       lines.push("");

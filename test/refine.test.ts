@@ -1542,7 +1542,7 @@ describe("two models: Jev reads the reply first", () => {
   });
 
   // Over plain http the key can be read on the way, so it is only sent over
-  // https, or over http to the same computer.
+  // https, or over http to the same device.
   test("a key is not sent to an http:// address on another computer", async () => {
     for (const url of ["http://jev.example.test/v1/decide", "http://192.168.1.20:8080/v1/decide", "http://localhost.example.test/v1/decide"]) {
       const h = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
@@ -1554,7 +1554,7 @@ describe("two models: Jev reads the reply first", () => {
     }
   });
 
-  test("and is sent over http:// to the same computer", async () => {
+  test("and is sent over http:// to the same device", async () => {
     for (const url of ["http://localhost:8080/v1/decide", "http://127.0.0.1/v1/decide", "http://[::1]:9000/v1/decide"]) {
       const h = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
       await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
@@ -1564,7 +1564,7 @@ describe("two models: Jev reads the reply first", () => {
     }
   });
 
-  test("host.docker.internal is the same computer", async () => {
+  test("host.docker.internal is the same device", async () => {
     const url = "http://host.docker.internal:8080/v1/decide";
     const h = await keyed({ judgeHost: "custom", judgeUrl: url, judgeModel: "jev-custom" }, { jev: says([90]) });
     await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });

@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.51.0';
+const VERSION = '1.52.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -6151,7 +6151,7 @@ const hostLabel = (host: string) => HOST_LABELS[host] || host;
 
 // Whether an address can be sent a key. Over plain http the key can be read
 // by anyone on the network between Lumiverse and the host, so http is only
-// taken for an address on the same computer, where it never goes over a
+// taken for an address on the same device, where it never goes over a
 // network. host.docker.internal is the machine Docker runs on. Any other http
 // address, such as another container's name, cannot be told apart from a
 // computer elsewhere, so it needs the reader's own switch. Every built-in

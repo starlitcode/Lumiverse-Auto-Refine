@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.52.0
+
+_2026-10-25_
+
+### Added
+
+- **Reporting a problem says whether the page is secure.** Some browser features only work on a secure page: one on `https`, or one opened on the same device that Lumiverse runs on. The report says yes or no. It never shows the address or the port.
+
+### Changed
+
+- **"The same device", not "the same computer".** The hint under a second model's address said it could use `http://` when it is "on this same computer". It now says "on the same device as Lumiverse", which can be a phone.
+- **An empty default says "empty".** In the report's settings, a setting whose default is empty, such as `connectionId`, showed its default as a pair of quote marks. It now says "empty".
+
+---
+
 ## 1.51.0
 
 _2026-10-25_
