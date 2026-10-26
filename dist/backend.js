@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.52.1';
+const VERSION = '1.53.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -4760,15 +4760,19 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     if (jevReads) {
         tell(userId, { type: 'refine_progress', stage: 'judging' });
         const worn = jevWorn;
-        // Held like a call to the refine model, so Stop reaches it. The request to
-        // the second model cannot be pulled back once sent, so Stop is honored
-        // when it answers.
+        // Held like a call to the refine model, so Stop reaches it and calls the
+        // second model off.
         let stopped = false;
-        const handle = { abort: () => { stopped = true; } };
+        const ask = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : null;
+        const handle = { abort: () => { stopped = true; try {
+                if (ask)
+                    ask.abort();
+            }
+            catch (_) { } } };
         holdRun(userId, handle);
         let verdict;
         try {
-            verdict = await judgeReply(userId, split.body, worn, jevBefore);
+            verdict = await judgeReply(userId, split.body, worn, jevBefore, ask ? ask.signal : undefined);
         }
         finally {
             dropRun(userId, handle);
@@ -4792,13 +4796,13 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             return {
                 ok: false,
                 stood: true,
-                why: who() + ' found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
+                why: who(verdict.model) + ' found nothing that needs a refine: no check reached ' + judgeOver + '%, and the highest was ' + top + '%',
             };
         }
         // Handed on for {{checks_found}}. Empty when it could not decide, since then
         // there is nothing it found.
         if (!verdict.failed)
-            scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver) };
+            scene = { ...scene, jevFound: jevFoundText(verdict.scores, judgeOver, verdict.model) };
         // Said in the Log, since a real request is not shown anywhere and the
         // preview never asks the second model. Only when a block is there to take it.
         if (scene.jevFound && wantsFound(isUser, willSend))
@@ -4981,10 +4985,15 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
         // refine too. A Stop there has to stop the first rewrite being saved, and
         // this is how that is known, whatever the refine model's call says.
         let stopped = false;
-        const handle = { abort: () => { stopped = true; } };
+        const ask = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : null;
+        const handle = { abort: () => { stopped = true; try {
+                if (ask)
+                    ask.abort();
+            }
+            catch (_) { } } };
         holdRun(userId, handle);
         try {
-            const after = await judgeReply(userId, unshield(carried, armed.parts).text, jevWorn, jevBefore);
+            const after = await judgeReply(userId, unshield(carried, armed.parts).text, jevWorn, jevBefore, ask ? ask.signal : undefined);
             if (stopped)
                 return { ok: false, stood: true, notes: notes, why: 'stopped while ' + who() + ' was reading the rewrite' };
             tell(userId, {
@@ -5001,8 +5010,8 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                 over: judgeOver,
             });
             if (!after.failed && after.refine) {
-                say('info', who() + ' read the rewrite and a check still reached the line, so it is refined once more');
-                scene = { ...scene, jevFound: jevFoundText(after.scores, judgeOver) };
+                say('info', who(after.model) + ' read the rewrite and a check still reached the line, so it is refined once more');
+                scene = { ...scene, jevFound: jevFoundText(after.scores, judgeOver, after.model) };
                 if (wantsFound(isUser, willSend))
                     tell(userId, { type: 'jev_found_sent', chatId: chatId, messageId: m.id, after: true, count: jevHits(after.scores, judgeOver).length });
                 tell(userId, { type: 'refine_progress', stage: 'again' });
@@ -5462,385 +5471,29 @@ onSwipe) {
         return { ok: false, why: 'the message could not be saved: ' + ((e && e.message) || 'no reason given') };
     }
 }
-// model is the newest Jev exactly, on the hosts that serve it. An older one is
-// reached by typing its name in the Model name box.
-const JEV_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.14', latest: '~typesafe/jev-latest', kind: 'decisions' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'typesafe/jev-1.14', latest: 'typesafe/jev-latest', kind: 'decisions' },
-    typesafe: { url: 'https://api.typesafe.ai/v1/systemone', model: 'jev-1.14.0', latest: 'jev-latest', preview: 'jev-preview', kind: 'decisions' },
-};
-const SPAN_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { free: 'respan/span-01-lite', full: 'respan/span-02' },
-        kind: 'decisions',
-    },
-    respan: {
-        url: 'https://api.respan.ai/api/v1/decisions',
-        models: { free: 'span-02' },
-        kind: 'decisions',
-    },
-};
-// Mercury Decide, from Inception. OpenRouter serves it free, and without the
-// free limits for a price. It takes the same decisions request as Jev.
-const MERCURY_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { free: 'inception/mercury-decide:free', paid: 'inception/mercury-decide' },
-        kind: 'decisions',
-    },
-};
-// D1, from Liquid AI, and Solar Decide, from Upstage. Both take the same
-// decisions request as Jev, on OpenRouter and on their maker's own API.
-// D1 comes in two: D1, and D1 Ultra, Liquid AI's largest. Liquid's own API
-// names D1 `d1:free`. NanoGPT serves D1 too, on the same decisions route it
-// uses for Jev, and has no D1 Ultra.
-const D1_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { full: 'liquid/d1', ultra: 'liquid/d1-ultra' },
-        kind: 'decisions',
-    },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { full: 'liquid/d1' }, kind: 'decisions' },
-    liquid: { url: 'https://api.liquid.ai/decisions/v1/systemone', models: { full: 'd1:free', ultra: 'd1-ultra' }, kind: 'decisions' },
-};
-// Solar Decide comes in two: Solar Decide, and Solar Decide Flash, which is
-// faster. Upstage's own API has no Flash yet, so asking it for Flash gets
-// Solar Decide.
-const SOLAR_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { full: 'upstage/solar-decide', flash: 'upstage/solar-decide-flash' },
-        kind: 'decisions',
-    },
-    upstage: { url: 'https://api.upstage.ai/v1/systemone', models: { full: 'solar-decide' }, kind: 'decisions' },
-};
-// Kev 4B, an open model from Jared Palmer that takes Jev's request too. It is
-// small, and OpenRouter and NanoGPT give it 8,192 tokens, so a long reply with the one
-// before it can be too much for it. The host then refuses the call, and the
-// reply is refined the same as when any second model cannot answer.
-const KEV_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'jaredpalmer/kev-4b', kind: 'decisions' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'jaredpalmer/kev-4b', kind: 'decisions' },
-};
-// GPT-6 Luna Decisions, from OpenAI. OpenRouter and NanoGPT take Jev's request
-// for it.
-// OpenAI's own API calls it gpt-6-luna and takes a predicates request.
-const LUNA_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'openai/gpt-6-luna-decisions', kind: 'decisions' },
-    openai: { url: 'https://api.openai.com/v1/decisions', model: 'gpt-6-luna', kind: 'predicates' },
-};
-// Clef, from Cloudflare, comes in three: Clef, Clef Flash, which is smaller
-// and faster, and Clef Omni, which also reads pictures and sound. All three
-// take Jev's request. Cloudflare's own address holds the
-// account ID and the model name, which are put in for {account} and {model}
-// when the call is made, and its answer comes back inside `result`. NanoGPT
-// serves both too.
-const CLEF_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash', omni: 'cloudflare/clef-omni' },
-        kind: 'decisions',
-    },
-    nanogpt: {
-        url: 'https://nano-gpt.com/api/v1/decisions',
-        models: { full: 'cloudflare/clef', flash: 'cloudflare/clef-flash', omni: 'cloudflare/clef-omni' },
-        kind: 'decisions',
-    },
-    cloudflare: {
-        url: 'https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}',
-        models: { full: 'clef', flash: 'clef-flash', omni: 'clef-omni' },
-        kind: 'decisions',
-    },
-};
-// Decider, from Perplexity, and Decider Flash, which is smaller and faster.
-// Both take Jev's request on OpenRouter and Perplexity's own API, each as a
-// version that stays put and as a name that always points at the newest.
-// NanoGPT serves only the older Decider V1.1 27B.
-const DECIDER_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: {
-            exact: 'perplexity/pplx-decider-v1.2',
-            latest: '~perplexity/pplx-decider-latest',
-            flash: 'perplexity/pplx-decider-flash-v1.2',
-            flashLatest: '~perplexity/pplx-decider-flash-latest',
-        },
-        kind: 'decisions',
-    },
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', models: { exact: 'perplexity/pplx-decider-v1.1-27b' }, kind: 'decisions' },
-    perplexity: {
-        url: 'https://api.perplexity.ai/v1/decisions',
-        models: {
-            exact: 'pplx-decider-v1.2',
-            latest: 'pplx-decider-latest',
-            flash: 'pplx-decider-flash-v1.2',
-            flashLatest: 'pplx-decider-flash-latest',
-        },
-        kind: 'decisions',
-    },
-};
-// Microsoft-Decision-1, from Microsoft. OpenRouter takes Jev's request for it.
-// It reads up to 32,768 tokens.
-const MICROSOFT_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'microsoft/microsoft-decision-1', kind: 'decisions' },
-};
-// Drex, from Nace.AI, comes in two: Drex 2.0, and Drex Max, Nace.AI's
-// largest. Both take Jev's request on OpenRouter and on Nace.AI's own API.
-const DREX_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { full: 'nace-ai/drex-v2.0', max: 'nace-ai/drex-max' },
-        kind: 'decisions',
-    },
-    nace: { url: 'https://console.nace.ai/v1/systemone', models: { full: 'drex-v2.0', max: 'drex-max' }, kind: 'decisions' },
-};
-// SubQ Snap, from Subquadratic, in public preview. It takes Jev's request on
-// NanoGPT and on SubQ's own API, and at most 16 questions in one call.
-const SUBQ_HOSTS = {
-    nanogpt: { url: 'https://nano-gpt.com/api/v1/decisions', model: 'subq/subq-snap-preview', kind: 'decisions' },
-    subq: { url: 'https://api.subq.ai/v1/systemone', model: 'subq-snap-preview', kind: 'decisions' },
-};
-// Jeff, from eu/jev, which serves it from Germany. It takes Jev's request on
-// NanoGPT and on eu/jev's own API, and at most 8 questions in one call. Each
-// host has a release that stays put and a name that always points at the
-// newest.
-const JEFF_HOSTS = {
-    nanogpt: {
-        url: 'https://nano-gpt.com/api/v1/decisions',
-        models: { exact: 'eu-jev/eu-jeff-1.0.0', latest: 'eu-jev/eu-jeff-latest' },
-        kind: 'decisions',
-    },
-    eujev: { url: 'https://eu-jev.com/v1/systemone', models: { exact: 'eu-jeff-1.0.0', latest: 'eu-jeff-latest' }, kind: 'decisions' },
-};
-// Mammoth 1 and Elephant 1, from Baseten, two sizes of one decision model.
-// Both take Jev's request on OpenRouter and on Baseten's own API, which reads
-// its key as `Api-Key` rather than `Bearer` (see KEY_WORDS). OpenRouter gives
-// each 16,384 tokens.
-const MAMMOTH_HOSTS = {
-    openrouter: {
-        url: 'https://openrouter.ai/api/alpha/decisions',
-        models: { full: 'baseten/mammoth-1:free', small: 'baseten/elephant-1:free' },
-        kind: 'decisions',
-    },
-    baseten: {
-        url: 'https://inference.baseten.co/v1/systemone',
-        models: { full: 'decision-models/baseten-mammoth-27b-latest', small: 'decision-models/baseten-elephant-9b-latest' },
-        kind: 'decisions',
-    },
-};
-// Classify-1, from ScaleDown. OpenRouter takes Jev's request for it. It reads
-// only the text field of the state, which ScaleDown's own docs say.
-const CLASSIFY_HOSTS = {
-    openrouter: { url: 'https://openrouter.ai/api/alpha/decisions', model: 'scaledown/classify-1', kind: 'decisions' },
-};
-// The text of a responses API reply when it has no `output_text` of its own:
-// the first output_text part of the first message in `output`.
-function jevOutputText(output) {
-    if (!Array.isArray(output))
-        return undefined;
-    for (const item of output) {
-        const parts = item && Array.isArray(item.content) ? item.content : [];
-        for (const part of parts)
-            if (part && part.type === 'output_text' && typeof part.text === 'string')
-                return part.text;
-    }
-    return undefined;
-}
-// Another address is sent the kind of request its path names, and a
-// decisions request otherwise, so pasting the host's own address is all it
-// takes.
-function jevKindOf(url) {
-    if (/\/chat\/completions\/?(\?.*)?$/i.test(url))
-        return 'chat';
-    if (/\/responses\/?(\?.*)?$/i.test(url))
-        return 'responses';
-    if (/\/messages\/?(\?.*)?$/i.test(url))
-        return 'messages';
-    if (/\/scores\/?(\?.*)?$/i.test(url))
-        return 'scores';
-    // OpenAI's decisions route ends the same as the others, but takes its own
-    // request.
-    if (/^https?:\/\/api\.openai\.com\/.*\/decisions\/?(\?.*)?$/i.test(url.trim()))
-        return 'predicates';
-    return 'decisions';
-}
-// One key is kept for each host, since a key belongs to the host and not the
-// model: an OpenRouter key reaches every second model OpenRouter serves. Each is its own secret,
-// named after the host. The name with nothing after it is where the one key
-// was kept before there was one per host.
+// ---- the second model ----
+// In two-model mode a second, much smaller model reads a finished reply first
+// and says whether it needs a refine. It answers each check with the chance,
+// from 0 to 1, that a statement about the reply is true, and nothing else: it
+// writes no text, so there is nothing of its own to save over a reply. The
+// refine model then runs only on the replies it picks out.
 //
-// Another address is kept per origin: the scheme, the host name and the port.
-// The address is a setting, and settings can be imported from somebody
-// else's file. Tied to the origin, a key saved for one address is never sent
-// to a different one, so an imported address has no key until one is saved
-// for it.
-const JEV_KEY = 'jev_api_key';
-// Read with a pattern rather than URL, which the backend does not always
-// have. A user name or password in the address is left out, and each
-// scheme's own port is the same as no port.
-function originOf(url) {
-    const m = /^(https?):\/\/([^\/?#]+)/i.exec(String(url || '').trim());
-    if (!m)
-        return '';
-    const scheme = m[1].toLowerCase();
-    const place = m[2].replace(/^.*@/, '').toLowerCase();
-    if (!place)
-        return '';
-    const port = scheme === 'https' ? ':443' : ':80';
-    return scheme + '://' + (place.slice(-port.length) === port ? place.slice(0, -port.length) : place);
-}
-// Two 32-bit FNV-1a hashes, so the name stays short and within the letters
-// the secure store takes, whatever the address is.
-function originMark(origin) {
-    let a = 0x811c9dc5;
-    let b = 0x01000193;
-    for (let i = 0; i < origin.length; i++) {
-        const c = origin.charCodeAt(i);
-        a = Math.imul(a ^ c, 0x01000193) >>> 0;
-        b = Math.imul(b ^ c, 0x811c9dc5) >>> 0;
-    }
-    return ('00000000' + a.toString(16)).slice(-8) + ('00000000' + b.toString(16)).slice(-8);
-}
-// The secret's name for a host. Empty for another address with no usable
-// address yet, which has nowhere to keep a key.
-function keyName(host, url = judgeUrl) {
-    if (host !== 'custom')
-        return JEV_KEY + '.' + host;
-    const origin = originOf(url);
-    return origin ? JEV_KEY + '.custom.' + originMark(origin) : '';
-}
-// A decision comes back in well under a second, so twenty is a host that is
-// down rather than one that is slow.
-const JEV_TIMEOUT_MS = 20000;
-// How much of the reply goes over. Far past any reply, and a cap all the same,
-// since the text leaves Lumiverse for somebody else's server.
+// It is reached through one of the reader's Decision connections in
+// Lumiverse, with spindle.decisions. Lumiverse keeps the address and the key,
+// so this extension never sees either.
 const JEV_REPLY_MAX = 60000;
+// Lumiverse takes 1 to 256 questions in one call. Far fewer are ever sent.
 const JEV_CHECKS_MAX = 20;
-// The one kind of question put to the second model: the chance, 0 to 1, that a statement is
-// true. Named so it does not read as one of the bridge's message types.
+// The one kind of question put to the second model: the chance, 0 to 1, that a
+// statement is true. Named so it does not read as one of the bridge's message
+// types.
 const NOUL = 'noul';
-// OpenAI's name for the same kind of question. Named for the same reason.
-const PREDICATE = 'predicate';
-// The response format a chat request names to get decisions back rather than
-// prose. Named for the same reason as NOUL.
-const QUESTIONS_FORMAT = 'questions';
 let judgeMode = 'one';
-// Which second model reads the reply. Everything else about two models, the
-// checks, the line and the key, is the same for both.
-let judgeWho = 'jev';
-let spanTier = 'free';
-let judgeHost = 'openrouter';
-let judgeUrl = '';
-// Set by the reader for an http address they know is their own, such as
-// another Docker container. See safeForKey.
-let judgeHttpOk = false;
-// Another address that takes no key, such as a model the user runs themselves.
-let judgeNoKey = false;
-let judgeModel = '';
-let judgeVersion = 'latest';
-// A model name typed in for each second model. Empty uses the built-in name,
-// so a host that renames a model needs no update here.
-const ownNames = {
-    jev: '',
-    span: '',
-    mercury: '',
-    d1: '',
-    solar: '',
-    kev: '',
-    luna: '',
-    clef: '',
-    decider: '',
-    microsoft: '',
-    drex: '',
-    classify: '',
-    subq: '',
-    jeff: '',
-    mammoth: '',
-};
-const SIZE_PICKS = {
-    mercury: {
-        setting: 'mercuryTier',
-        standard: 'free',
-        sizes: { free: { name: 'Mercury Decide', line: 'mercuryOver' }, paid: { name: 'Mercury Decide', line: 'mercuryOver' } },
-    },
-    solar: {
-        setting: 'solarTier',
-        standard: 'full',
-        sizes: { full: { name: 'Solar Decide', line: 'solarOver' }, flash: { name: 'Solar Decide Flash', line: 'solarFlashOver' } },
-    },
-    decider: {
-        setting: 'deciderVersion',
-        standard: 'exact',
-        sizes: {
-            exact: { name: 'Decider', line: 'deciderOver' },
-            latest: { name: 'Decider', line: 'deciderOver' },
-            flash: { name: 'Decider Flash', line: 'deciderFlashOver' },
-            flashLatest: { name: 'Decider Flash', line: 'deciderFlashOver' },
-        },
-    },
-    jeff: {
-        setting: 'jeffVersion',
-        standard: 'exact',
-        sizes: { exact: { name: 'Jeff', line: 'jeffOver' }, latest: { name: 'Jeff', line: 'jeffOver' } },
-    },
-    drex: {
-        setting: 'drexSize',
-        standard: 'full',
-        sizes: { full: { name: 'Drex', line: 'drexOver' }, max: { name: 'Drex Max', line: 'drexMaxOver' } },
-    },
-    mammoth: {
-        setting: 'mammothSize',
-        standard: 'full',
-        sizes: { full: { name: 'Mammoth 1', line: 'mammothOver' }, small: { name: 'Elephant 1', line: 'elephantOver' } },
-    },
-    d1: {
-        setting: 'd1Size',
-        standard: 'full',
-        sizes: { full: { name: 'D1', line: 'd1Over' }, ultra: { name: 'D1 Ultra', line: 'd1UltraOver' } },
-    },
-    clef: {
-        setting: 'clefTier',
-        standard: 'full',
-        sizes: {
-            full: { name: 'Clef', line: 'clefOver' },
-            flash: { name: 'Clef Flash', line: 'clefFlashOver' },
-            omni: { name: 'Clef Omni', line: 'clefOmniOver' },
-        },
-    },
-};
-// The size picked for each model that has sizes.
-const sizesPicked = {};
-// The reader's Cloudflare account ID, which Cloudflare's own address holds.
-// Only an ID of 32 letters and numbers is kept, so nothing else can be put
-// into the address.
-let cloudflareAccount = '';
+// The Decision connection picked. Empty uses the reader's default Decision
+// connection in Lumiverse.
+let judgeConnection = '';
 let judgeChecks = [];
-// The line in use, for the second model picked. Each model has its own,
-// because their scores do not run on the same scale, so each can be tuned
-// apart from the others.
 let judgeOver = 30;
-// Each second model's line setting, and its default. The defaults come from
-// testing during the beta.
-const LINES = {
-    jev: { key: 'judgeOver', fallback: 30 },
-    span: { key: 'spanOver', fallback: 30 },
-    mercury: { key: 'mercuryOver', fallback: 30 },
-    d1: { key: 'd1Over', fallback: 30 },
-    solar: { key: 'solarOver', fallback: 30 },
-    kev: { key: 'kevOver', fallback: 30 },
-    luna: { key: 'lunaOver', fallback: 30 },
-    clef: { key: 'clefOver', fallback: 30 },
-    decider: { key: 'deciderOver', fallback: 30 },
-    microsoft: { key: 'microsoftOver', fallback: 30 },
-    drex: { key: 'drexOver', fallback: 30 },
-    classify: { key: 'classifyOver', fallback: 30 },
-    subq: { key: 'subqOver', fallback: 30 },
-    jeff: { key: 'jeffOver', fallback: 30 },
-    mammoth: { key: 'mammothOver', fallback: 30 },
-    other: { key: 'otherOver', fallback: 30 },
-};
 let judgeWorn = true;
 // Whether the reply before the one being read goes to the second model too, as
 // `previous_reply`, with the checks in judgeBeforeChecks. A check in the main
@@ -5858,509 +5511,87 @@ let protectNote = null;
 // Whether the second model also reads a reply before a refine somebody starts
 // with a button. Off, a refine asked for by hand goes ahead without it.
 let judgeByHand = false;
-// Whether the second model reads the rewrite too, and a check still over the line gets the
-// reply one more refine.
+// Whether the second model reads the rewrite too, and a check still over the
+// line gets the reply one more refine.
 let judgeAfter = false;
-const SECOND_MODELS = {
-    jev: {
-        name: 'Jev',
-        hosts: JEV_HOSTS,
-        model: (host) => {
-            const h = JEV_HOSTS[host];
-            // A name typed in wins, so a host that renames Jev needs no update here.
-            if (ownNames.jev)
-                return ownNames.jev;
-            // A host with no exact name is sent its latest.
-            const moving = judgeVersion === 'preview' ? h.preview || h.latest : judgeVersion === 'latest' ? h.latest : '';
-            return moving || h.model || h.latest;
-        },
-    },
-    span: {
-        name: 'Span',
-        turns: true,
-        hosts: SPAN_HOSTS,
-        model: (host) => ownNames.span || SPAN_HOSTS[host].models[spanTier] || SPAN_HOSTS[host].models.free || '',
-    },
-    mercury: {
-        name: 'Mercury Decide',
-        hosts: MERCURY_HOSTS,
-        model: (host) => ownNames.mercury || sizedName(MERCURY_HOSTS[host]),
-    },
-    d1: {
-        name: 'D1',
-        hosts: D1_HOSTS,
-        model: (host) => ownNames.d1 || sizedName(D1_HOSTS[host]),
-    },
-    solar: {
-        name: 'Solar Decide',
-        hosts: SOLAR_HOSTS,
-        model: (host) => ownNames.solar || sizedName(SOLAR_HOSTS[host]),
-    },
-    kev: {
-        name: 'Kev 4B',
-        hosts: KEV_HOSTS,
-        model: (host) => ownNames.kev || KEV_HOSTS[host].model,
-    },
-    luna: {
-        name: 'GPT-6 Luna Decisions',
-        hosts: LUNA_HOSTS,
-        model: (host) => ownNames.luna || LUNA_HOSTS[host].model,
-    },
-    clef: {
-        name: 'Clef',
-        hosts: CLEF_HOSTS,
-        model: (host) => ownNames.clef || sizedName(CLEF_HOSTS[host]),
-    },
-    decider: {
-        name: 'Decider',
-        hosts: DECIDER_HOSTS,
-        model: (host) => ownNames.decider || sizedName(DECIDER_HOSTS[host]),
-    },
-    microsoft: {
-        name: 'Microsoft-Decision-1',
-        hosts: MICROSOFT_HOSTS,
-        model: (host) => ownNames.microsoft || MICROSOFT_HOSTS[host].model,
-    },
-    drex: {
-        name: 'Drex',
-        hosts: DREX_HOSTS,
-        model: (host) => ownNames.drex || sizedName(DREX_HOSTS[host]),
-    },
-    classify: {
-        name: 'Classify-1',
-        text: true,
-        hosts: CLASSIFY_HOSTS,
-        model: (host) => ownNames.classify || CLASSIFY_HOSTS[host].model,
-    },
-    // A model not in this list: reached only at the address typed for it, and
-    // called by the model name typed there.
-    other: {
-        name: 'Your model',
-        hosts: {},
-        model: () => judgeModel,
-    },
-    subq: {
-        name: 'SubQ Snap',
-        most: 16,
-        hosts: SUBQ_HOSTS,
-        model: (host) => ownNames.subq || SUBQ_HOSTS[host].model,
-    },
-    jeff: {
-        name: 'Jeff',
-        most: 8,
-        hosts: JEFF_HOSTS,
-        model: (host) => ownNames.jeff || sizedName(JEFF_HOSTS[host]),
-    },
-    mammoth: {
-        name: 'Mammoth 1',
-        hosts: MAMMOTH_HOSTS,
-        model: (host) => ownNames.mammoth || sizedName(MAMMOTH_HOSTS[host]),
-    },
-};
-function secondModel() {
-    return SECOND_MODELS[judgeWho] || SECOND_MODELS.jev;
+// The second model's name, for what the Log says. The model that answered,
+// without the maker in front of it, such as jev-latest for
+// ~typesafe/jev-latest. Before any answer, "the second model".
+function who(model) {
+    const m = String(model || '').trim();
+    if (!m)
+        return 'the second model';
+    return m.slice(m.lastIndexOf('/') + 1).replace(/^~/, '') || m;
 }
-// The size in use, for a model that has sizes: the one picked, where the host
-// serves it, and the standard one where it does not. Another address is sent
-// whatever is typed for it, so the pick holds there. Empty for a model with
-// no sizes.
-function sizeInUse() {
-    const pick = SIZE_PICKS[judgeWho];
-    if (!pick)
-        return '';
-    const want = pick.sizes[sizesPicked[judgeWho]] ? sizesPicked[judgeWho] : pick.standard;
-    const host = hostFor(judgeWho, judgeHost);
-    if (host === 'custom')
-        return want;
-    const h = secondModel().hosts[host];
-    return h && h.models && h.models[want] ? want : pick.standard;
+// Whether this Lumiverse has Decision connections for extensions at all.
+function hasDecisions() {
+    return !!(spindle.decisions && typeof spindle.decisions.evaluate === 'function');
 }
-// A sized host's name for the size in use.
-function sizedName(h) {
-    const pick = SIZE_PICKS[judgeWho];
-    return (h && h.models[sizeInUse()]) || (h && pick && h.models[pick.standard]) || '';
+// What went wrong with a Decision call, in words for the Log and the panel.
+// Lumiverse's own message is kept after it, so a problem with the provider
+// can still be read.
+function decisionTrouble(e) {
+    const raw = String((e && e.message) || e || '').slice(0, 300);
+    if (/permission/i.test(raw) && /decision/i.test(raw))
+        return 'the Decision models permission is refused. Grant it to Auto Refine in Lumiverse, under Extensions';
+    if (/No default Decision connection/i.test(raw))
+        return 'there is no default Decision connection. Set one up under Decision models in Lumiverse\'s Connections panel, or pick one under Which Decision connection';
+    if (/Decision connection not found/i.test(raw))
+        return 'the Decision connection picked is gone. Pick another one under Which Decision connection';
+    if (/No readable API key/i.test(raw))
+        return 'the Decision connection has no key saved. Add its key under Decision models in Lumiverse\'s Connections panel';
+    if (/timed out/i.test(raw))
+        return 'the second model did not answer within 30 seconds';
+    if (/cancel/i.test(raw))
+        return 'the call to the second model was stopped';
+    return 'the second model could not be asked: ' + (raw || 'no answer');
 }
-// The second model's name, for everything that is said about what it did.
-function who() {
-    if (judgeWho === 'other')
-        return judgeModel || SECOND_MODELS.other.name;
-    const pick = SIZE_PICKS[judgeWho];
-    const size = pick && pick.sizes[sizeInUse()];
-    return size ? size.name : secondModel().name;
-}
-// The host a model is reached on. A host this model is not on, left picked
-// from another model, falls back to the model's first host, which is
-// OpenRouter for every model OpenRouter serves. The panel shows the same.
-function hostFor(who, host) {
-    if (host === 'custom')
-        return 'custom';
-    const m = SECOND_MODELS[who] || SECOND_MODELS.jev;
-    // A model with no host of its own is always at the address typed for it.
-    if (!Object.keys(m.hosts).length)
-        return 'custom';
-    return m.hosts[host] ? host : Object.keys(m.hosts)[0];
-}
-// A host's name, for what the Log says. The panel's host list uses the same.
-const HOST_LABELS = {
-    openrouter: 'OpenRouter',
-    nanogpt: 'NanoGPT',
-    typesafe: 'TypeSafe',
-    respan: 'Respan',
-    liquid: 'Liquid AI',
-    upstage: 'Upstage',
-    openai: 'OpenAI',
-    cloudflare: 'Cloudflare',
-    perplexity: 'Perplexity',
-    subq: 'SubQ',
-    eujev: 'eu/jev',
-    nace: 'Nace.AI',
-    baseten: 'Baseten',
-    custom: 'the address you gave',
-};
-// The word before the key in the Authorization header, for a host that does
-// not read it as `Bearer`.
-const KEY_WORDS = {
-    baseten: 'Api-Key',
-};
-const hostLabel = (host) => HOST_LABELS[host] || host;
-// Whether an address can be sent a key. Over plain http the key can be read
-// by anyone on the network between Lumiverse and the host, so http is only
-// taken for an address on the same device, where it never goes over a
-// network. host.docker.internal is the machine Docker runs on. Any other http
-// address, such as another container's name, cannot be told apart from a
-// computer elsewhere, so it needs the reader's own switch. Every built-in
-// host is https.
-function safeForKey(url) {
-    const u = String(url || '').trim();
-    if (/^https:\/\//i.test(u))
-        return true;
-    if (!/^http:\/\//i.test(u))
-        return false;
-    if (/^http:\/\/(localhost|127(\.\d{1,3}){3}|\[::1\]|host\.docker\.internal)(:\d+)?(\/|$)/i.test(u))
-        return true;
-    return judgeHttpOk;
-}
-// Every host a key can be kept for.
-function keyHosts() {
-    const all = ['custom'];
-    for (const k of Object.keys(SECOND_MODELS))
-        for (const h of Object.keys(SECOND_MODELS[k].hosts))
-            if (all.indexOf(h) < 0)
-                all.push(h);
-    return all;
-}
-function jevWhere() {
-    const host = hostFor(judgeWho, judgeHost);
-    if (host === 'custom')
-        return { url: judgeUrl, model: judgeModel, kind: jevKindOf(judgeUrl) };
-    const m = secondModel();
-    // An address that needs the account ID has none until one is saved. An
-    // address that holds the model name is given the one sent.
-    const model = m.model(host);
-    const url = m.hosts[host].url.replace('{model}', encodeURIComponent(model));
-    const placed = url.indexOf('{account}') < 0 ? url : cloudflareAccount ? url.replace('{account}', cloudflareAccount) : '';
-    return { url: placed, model: model, kind: m.hosts[host].kind };
-}
-// The key kept for one host. A key saved before there was one per host is
-// moved to the first host it is looked for on, which is the host picked at
-// the time: the panel asks for it on load, and a reply asks for it before the
-// call.
-async function jevKey(userId, host, url = judgeUrl) {
+// One ask of the second model, through the Decision connection picked.
+// Answers with what it said, or with why it could not be asked.
+async function askJev(userId, state, questions, signal) {
+    if (!hasDecisions())
+        return { error: 'this Lumiverse has no Decision connections for extensions. Update Lumiverse to use two models' };
+    let got;
     try {
-        if (!spindle.enclave || typeof spindle.enclave.get !== 'function')
-            return '';
-        const name = keyName(host, url);
-        if (!name)
-            return '';
-        const got = await spindle.enclave.get(name, userId);
-        if (got != null && got !== '')
-            return String(got);
-        const old = await spindle.enclave.get(JEV_KEY, userId);
-        if (old == null || old === '')
-            return '';
-        await spindle.enclave.put(name, String(old), userId);
-        await spindle.enclave.delete(JEV_KEY, userId);
-        return String(old);
+        const input = { state: state, questions: questions };
+        if (judgeConnection)
+            input.connection_id = judgeConnection;
+        if (userId)
+            input.userId = userId;
+        got = await spindle.decisions.evaluate(input, signal ? { signal: signal } : undefined);
     }
-    catch (_) {
-        return '';
+    catch (e) {
+        return { error: decisionTrouble(e) };
     }
+    if (!got || typeof got.answers !== 'object' || !got.answers)
+        return { error: 'the second model sent back no answers' };
+    const cost = Number(got.usage && got.usage.cost);
+    // The exact model that answered, from the connection. Asked by an alias,
+    // this is the only place that says which release the alias pointed at.
+    const model = typeof got.model === 'string' ? got.model.slice(0, 100) : '';
+    return { answers: got.answers, cost: Number.isFinite(cost) ? cost : 0, model: model };
 }
-// The hosts that have a key kept, for the panel to list. Read with has, so no
-// key is decrypted to answer.
-async function hostsWithKeys(userId, url = judgeUrl) {
-    const out = [];
+// The reader's Decision connections, for the panel's picker. Never the key:
+// Lumiverse says only whether one is saved.
+async function decisionConnections(userId) {
+    if (!hasDecisions())
+        return { list: [], state: 'old' };
     try {
-        if (!spindle.enclave)
-            return out;
-        for (const h of keyHosts()) {
-            const name = keyName(h, url);
-            if (!name)
-                continue;
-            const there = typeof spindle.enclave.has === 'function'
-                ? await spindle.enclave.has(name, userId)
-                : (await spindle.enclave.get(name, userId)) != null;
-            if (there)
-                out.push(h);
-        }
+        const got = await spindle.decisions.listConnections(userId ? { userId: userId } : undefined);
+        const list = (Array.isArray(got) ? got : []).map((c) => ({
+            id: String(c && c.id),
+            name: String((c && c.name) || ''),
+            provider: String((c && c.provider) || ''),
+            model: String((c && c.model) || ''),
+            isDefault: !!(c && c.is_default),
+            hasKey: !!(c && c.has_api_key),
+        }));
+        return { list: list, state: 'ok' };
     }
-    catch (_) { }
-    return out;
-}
-// What the enclave will take: printable ASCII, and far less of it than its
-// limit. A key with a line break pasted onto its end is the usual way this
-// fails, so the ends are trimmed first.
-function cleanJevKey(raw) {
-    const key = String(raw == null ? '' : raw).trim();
-    return /^[\x20-\x7e]{1,4096}$/.test(key) ? key : '';
-}
-function jevTimeout(work) {
-    let timer = null;
-    const late = new Promise((_, no) => {
-        timer = setTimeout(() => no(new Error(who() + ' did not answer within ' + JEV_TIMEOUT_MS / 1000 + 's')), JEV_TIMEOUT_MS);
-    });
-    return Promise.race([work, late]).finally(() => clearTimeout(timer));
-}
-// Span-01 reads a conversation, not named fields. The reply goes in as the
-// assistant's turn, and the reply before it, when it is sent, as the one turn
-// ahead of it. Respan's scores address takes the same turns. The checks name
-// the reply in backticks, the way Jev's state does, so for Span the names are
-// put in words: the reply, the previous reply, and the list of worn phrases
-// written out after the words that name it.
-function spanTurns(state) {
-    return {
-        input: state.previous_reply ? [{ role: 'assistant', content: String(state.previous_reply) }] : [],
-        output: { role: 'assistant', content: String(state.reply || '') },
-    };
-}
-function spanWords(line, state) {
-    const plain = String(line || '')
-        .replace(/`reply`/g, 'the reply')
-        .replace(/`previous_reply`/g, 'the previous reply')
-        .replace(/`worn_phrases`/g, 'this list of phrases (' + String(state.worn_phrases || '').replace(/\s*\n\s*/g, '; ') + ')');
-    return plain.charAt(0).toUpperCase() + plain.slice(1);
-}
-// A scores request, for Respan's own API: each check is a behavior with a
-// definition.
-function scoresRequest(model, state, questions) {
-    return {
-        model: model,
-        span: spanTurns(state),
-        behaviors: Object.keys(questions).map((id) => ({
-            id: id,
-            definition: spanWords(questions[id] && questions[id].instructions, state),
-        })),
-    };
-}
-// A predicates request, for OpenAI's own decisions API. The state goes as
-// JSON text, so the names the checks use, such as `reply`, are still in it.
-function predicatesRequest(model, stateText, questions) {
-    return {
-        model: model,
-        input: stateText,
-        questions: Object.keys(questions).map((id) => ({
-            type: PREDICATE,
-            name: id,
-            instructions: String((questions[id] && questions[id].instructions) || ''),
-        })),
-    };
-}
-// A decisions request for a model that reads a conversation, which is how
-// OpenRouter takes Span-01 and Span-01 Lite. It turns away any other state
-// with a 400. Span-02 reads named fields, the same as Jev, so a Span model
-// named anything but Span-01 is sent Jev's request.
-const READS_TURNS = /span-01/i;
-function turnsRequest(model, state, questions) {
-    const asked = {};
-    for (const id of Object.keys(questions))
-        asked[id] = { ...questions[id], instructions: spanWords(questions[id] && questions[id].instructions, state) };
-    return { model: model, state: spanTurns(state), questions: asked };
-}
-// One ask of the second model. A model that takes only so many questions in
-// a call is sent them in parts, and the answers are put back together. A part
-// that fails fails the whole ask, the same as one call that fails.
-async function askJev(userId, state, questions) {
-    const most = secondModel().most || 0;
-    const ids = Object.keys(questions);
-    if (!most || ids.length <= most)
-        return askJevOnce(userId, state, questions);
-    const answers = {};
-    let cost = 0;
-    let model = '';
-    for (let i = 0; i < ids.length; i += most) {
-        const part = {};
-        for (const id of ids.slice(i, i + most))
-            part[id] = questions[id];
-        const got = await askJevOnce(userId, state, part);
-        if (got.error)
-            return got;
-        Object.assign(answers, got.answers || {});
-        cost += got.cost || 0;
-        model = model || got.model || '';
+    catch (e) {
+        const why = decisionTrouble(e);
+        return { list: [], state: /permission is refused/.test(why) ? 'refused' : 'failed', why: why };
     }
-    return { answers: answers, cost: cost, model: model };
-}
-// One call to the second model. Answers with what it said, or with why it
-// could not be asked, in words fit for the Log.
-async function askJevOnce(userId, state, questions) {
-    const where = jevWhere();
-    if (!where.url && hostFor(judgeWho, judgeHost) === 'cloudflare')
-        return { error: 'no usable Cloudflare account ID is saved. Paste its 32 letters and numbers into Cloudflare account ID on the Model tab' };
-    if (!where.url)
-        return { error: 'no address is set for ' + who() };
-    // A model run without a key, such as one on the user's own machine, is sent
-    // no key at all. With nothing secret in the call, http:// is allowed at any
-    // address. Only for Another address: every host in the list needs its key.
-    const keyless = judgeNoKey && hostFor(judgeWho, judgeHost) === 'custom';
-    if (!keyless && !safeForKey(where.url))
-        return {
-            error: 'the key was not sent, because the address does not start with https://. Over http:// the key can be read on the way. To use an http:// address on your own machine or network, such as another Docker container, switch on Let the key go over http://',
-        };
-    if (!where.model)
-        return { error: 'no model name is set for ' + who() };
-    const key = keyless ? '' : await jevKey(userId, hostFor(judgeWho, judgeHost));
-    if (!keyless && !key)
-        return { error: 'no key is saved for ' + hostLabel(hostFor(judgeWho, judgeHost)) };
-    // Some hosts repeat the key they were sent in their error message. What a
-    // host says goes to the Log, and the Log can go into a bug report, so the
-    // key is taken out of anything the host says before it is passed on.
-    const hideKey = (text) => (key.length >= 8 ? String(text).split(key).join('[your key]') : String(text));
-    if (typeof spindle.cors !== 'function')
-        return { error: 'Lumiverse is not letting this extension make the call. Grant it the CORS proxy permission' };
-    // A chat API request carries the state as text. It goes as JSON, so the
-    // names the checks use, such as `reply`, are still in it.
-    const stateText = JSON.stringify(state);
-    const asked = { type: QUESTIONS_FORMAT, questions: questions };
-    const asText = [{ role: 'user', content: stateText }];
-    const body = JSON.stringify(where.kind === 'chat'
-        ? { model: where.model, messages: asText, response_format: asked, stream: false }
-        : where.kind === 'responses'
-            ? { model: where.model, input: stateText, text: { format: asked }, stream: false, store: false }
-            : where.kind === 'messages'
-                ? { model: where.model, max_tokens: 1024, messages: asText, output_config: { format: asked }, stream: false }
-                : where.kind === 'scores'
-                    ? scoresRequest(where.model, state, questions)
-                    : where.kind === 'predicates'
-                        ? predicatesRequest(where.model, stateText, questions)
-                        : secondModel().turns && READS_TURNS.test(where.model)
-                            ? turnsRequest(where.model, state, questions)
-                            : secondModel().text
-                                ? { model: where.model, state: { text: stateText }, questions: questions }
-                                : { model: where.model, state: state, questions: questions });
-    // Claude-style hosts read the key from x-api-key and want a version header.
-    // Both go only to the address the user picked, the same as the bearer key.
-    const headers = { 'Content-Type': 'application/json' };
-    if (key)
-        headers.Authorization = (KEY_WORDS[hostFor(judgeWho, judgeHost)] || 'Bearer') + ' ' + key;
-    if (where.kind === 'messages') {
-        if (key)
-            headers['x-api-key'] = key;
-        headers['anthropic-version'] = '2023-06-01';
-    }
-    const send = async () => {
-        try {
-            return await jevTimeout(spindle.cors(where.url, {
-                method: 'POST',
-                headers: headers,
-                body: body,
-            }));
-        }
-        catch (e) {
-            return { status: 0, body: '', error: (e && e.message) || String(e) };
-        }
-    };
-    let res = await send();
-    // Busy rather than broken, and a second ask a moment later usually lands.
-    if (res && (res.status === 429 || res.status === 529)) {
-        await new Promise((r) => setTimeout(r, 1200));
-        res = await send();
-    }
-    if (!res || res.error || !res.status)
-        return { error: who() + ' could not be reached: ' + hideKey((res && res.error) || 'no answer') };
-    let data = null;
-    try {
-        data = JSON.parse(String(res.body || ''));
-    }
-    catch (_) {
-        data = null;
-    }
-    // Cloudflare puts what it did in `result`, beside `success` and a list of
-    // `errors`. The rest is read the same as any other host's answer.
-    if (data && typeof data === 'object' && !data.answers && data.result && typeof data.result === 'object' && data.result.answers)
-        data = data.result;
-    const listed = data && Array.isArray(data.errors) && data.errors.length ? data.errors[0] : null;
-    const said = data && (data.error || data.detail || data.message || listed);
-    const saidText = hideKey(typeof said === 'string' ? said : said && said.message ? String(said.message) : '');
-    // The status and the host's own words go with it. A refused call is not
-    // always a wrong key: a key for another host, or a host that turns the
-    // proxy away, look the same without them.
-    const why = ' (' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') + ')';
-    // 401 is the key. 403 is the host saying no to this account, which a key
-    // that works everywhere else can still get, so it is not called a bad key.
-    if (res.status === 401)
-        return keyless
-            ? { error: 'the address asked for a key. Switch off It needs no key and save the key for it' + why }
-            : { error: 'the ' + who() + ' key was refused' + why };
-    if (res.status === 403)
-        return { error: who() + ' turned the call down' + why };
-    if (res.status === 402)
-        return { error: 'the ' + who() + ' account has no credit left' + why };
-    if (res.status < 200 || res.status >= 300 || saidText)
-        return { error: who() + ' answered ' + res.status + (saidText ? ': ' + saidText.slice(0, 200) : '') };
-    // A chat API answer is JSON written as the text of the reply: the assistant
-    // message for chat completions, `output_text` or the output message for
-    // responses, the first text block for messages.
-    // A scores answer is a list of results, one per behavior, each with the
-    // chance it is present. That chance is the score, the same as Jev's.
-    if (where.kind === 'scores' && data && Array.isArray(data.results)) {
-        const answers = {};
-        for (const r of data.results) {
-            const p = r && Number(r.p_present);
-            if (r && typeof r.id === 'string' && Number.isFinite(p))
-                answers[r.id] = { noul: p };
-        }
-        data = { ...data, answers: answers };
-    }
-    // A predicates answer is a list. Each one is put under its name, the same
-    // as Jev's. A refusal has no chance, so that check has no answer.
-    if (where.kind === 'predicates' && data && Array.isArray(data.answers)) {
-        const answers = {};
-        let refused = 0;
-        for (const a of data.answers) {
-            if (a && a.type === 'refusal')
-                refused++;
-            const p = a && a.probability;
-            if (a && typeof a.name === 'string' && typeof p === 'number' && Number.isFinite(p))
-                answers[a.name] = { noul: p };
-        }
-        if (refused && !Object.keys(answers).length)
-            return { error: who() + ' declined to answer the checks' };
-        data = { ...data, answers: answers };
-    }
-    if (where.kind !== 'decisions' && where.kind !== 'scores' && where.kind !== 'predicates' && data && !data.answers) {
-        const text = where.kind === 'chat'
-            ? data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
-            : where.kind === 'responses'
-                ? typeof data.output_text === 'string'
-                    ? data.output_text
-                    : jevOutputText(data.output)
-                : Array.isArray(data.content) && (data.content.find((b) => b && b.type === 'text') || {}).text;
-        try {
-            const parsed = typeof text === 'string' ? JSON.parse(text) : null;
-            if (parsed && typeof parsed === 'object')
-                data = { ...data, answers: parsed };
-        }
-        catch (_) {
-            return { error: who() + ' answered, but not with the JSON a ' + where.kind + ' request should get back' };
-        }
-    }
-    if (!data || typeof data.answers !== 'object' || !data.answers)
-        return { error: who() + ' sent back no answers' };
-    const cost = Number(data.usage && data.usage.cost);
-    // The exact version that answered. Asked by an alias, this is the only
-    // place that says which release the alias pointed at.
-    const model = typeof data.model === 'string' ? data.model.slice(0, 100) : '';
-    return { answers: data.answers, cost: Number.isFinite(cost) ? cost : 0, model: model };
 }
 // What is asked about the reply before this one, when that is sent and the
 // reader has not written their own. The same list as the panel's box, so a
@@ -6400,7 +5631,7 @@ function withoutOthersBlocks(text) {
         out = out.replace(re, '');
     return out;
 }
-async function judgeReply(userId, reply, worn, before) {
+async function judgeReply(userId, reply, worn, before, signal) {
     reply = withoutOthersBlocks(reply);
     if (before)
         before = withoutOthersBlocks(before);
@@ -6433,7 +5664,7 @@ async function judgeReply(userId, reply, worn, before) {
     }
     if (!asked.length)
         return { refine: true, failed: true, why: 'there are no checks for ' + who() + ' to answer' };
-    const got = await askJev(userId, state, questions);
+    const got = await askJev(userId, state, questions, signal);
     if (got.error)
         return { refine: true, failed: true, why: got.error };
     const scores = [];
@@ -6443,7 +5674,7 @@ async function judgeReply(userId, reply, worn, before) {
             scores.push({ id: one.id, check: one.check, pct: Math.round(v * 100) });
     }
     if (!scores.length)
-        return { refine: true, failed: true, why: who() + ' sent back no usable answers', cost: got.cost, model: got.model };
+        return { refine: true, failed: true, why: who(got.model) + ' sent back no usable answers', cost: got.cost, model: got.model };
     return { refine: scores.some((x) => x.pct >= judgeOver), scores: scores, cost: got.cost, model: got.model };
 }
 // The checks that reached the line, strongest first.
@@ -6459,12 +5690,12 @@ function jevHits(scores, over) {
 // since the second model can be wrong, and a model told to fix each one would
 // change writing that was fine.
 // Empty when no check reached the line, which leaves the block out.
-function jevFoundText(scores, over) {
+function jevFoundText(scores, over, model) {
     const hits = jevHits(scores, over);
     if (!hits.length)
         return '';
     const lead = (judgeFoundLead == null ? FOUND_LEAD : judgeFoundLead)
-        .replace(/\{\{second_model\}\}/g, who())
+        .replace(/\{\{second_model\}\}/g, who(model))
         .replace(/\{\{checks_line\}\}/g, String(over))
         .trim();
     return ((lead ? lead + '\n' : '') +
@@ -6481,7 +5712,7 @@ const NEEDED = [
     'characters',
     'world_books',
     'ui_panels',
-    'cors_proxy',
+    'decisions',
 ];
 // ---- whose turn it is ----
 // One backend can serve several accounts, and the rules above are one set of
@@ -6512,6 +5743,7 @@ function loadRules(k) {
 function rememberRules(userId, s) {
     const k = keyOf(userId);
     rulesBy.set(k, s);
+    dropOldKeys(userId);
     // Said once, when it is saved. A pattern that cannot compile is a typo the
     // reader can fix, and ignoring it would leave them believing a region is
     // shielded when nothing is shielding it.
@@ -6525,6 +5757,32 @@ function rememberRules(userId, s) {
         applyRules(s);
         chatsOff = chatsOffBy.get(k) || new Set();
         loadedKey = k;
+    }
+}
+// The keys an older version saved in Lumiverse's secure store for reaching a
+// second model itself, one per host and one per address. The second model is
+// now reached through a Decision connection, which keeps its own key, so these
+// are deleted, once per account each time the backend starts.
+const OLD_KEY = /^jev_api_key(\.|$)/;
+const oldKeysChecked = new Set();
+async function dropOldKeys(userId) {
+    const k = keyOf(userId);
+    if (oldKeysChecked.has(k))
+        return;
+    oldKeysChecked.add(k);
+    try {
+        if (!spindle.enclave || typeof spindle.enclave.list !== 'function' || typeof spindle.enclave.delete !== 'function')
+            return;
+        const names = await spindle.enclave.list(userId);
+        for (const name of Array.isArray(names) ? names : [])
+            if (OLD_KEY.test(String(name)))
+                await spindle.enclave.delete(String(name), userId);
+    }
+    catch (e) {
+        try {
+            spindle.log.warn('could not delete the old second model keys: ' + ((e && e.message) || String(e)));
+        }
+        catch (_) { }
     }
 }
 // Runs work as one account. When another account has the turn, waits for it to
@@ -6739,54 +5997,16 @@ function applyRules(s) {
     refineGap = Number(s.refineGap);
     refineGap = Number.isFinite(refineGap) ? Math.min(120, Math.max(0, refineGap)) : 0;
     judgeMode = s.judgeMode === 'two' ? 'two' : 'one';
-    judgeWho = Object.prototype.hasOwnProperty.call(SECOND_MODELS, String(s.judgeWho)) ? String(s.judgeWho) : 'jev';
-    // A saved 'lite' was Span-01 Lite without the free limits, which is the
-    // free one now.
-    spanTier = s.spanTier === 'full' ? 'full' : 'free';
-    for (const who of Object.keys(SIZE_PICKS)) {
-        const pick = SIZE_PICKS[who];
-        const got = String(s[pick.setting]);
-        sizesPicked[who] = Object.prototype.hasOwnProperty.call(pick.sizes, got) ? got : pick.standard;
-    }
-    judgeHost = String(s.judgeHost) === 'custom' || Object.keys(SECOND_MODELS).some((k) => !!SECOND_MODELS[k].hosts[String(s.judgeHost)])
-        ? String(s.judgeHost)
-        : 'openrouter';
-    judgeUrl = String(s.judgeUrl == null ? '' : s.judgeUrl).trim().slice(0, 500);
-    judgeModel = String(s.judgeModel == null ? '' : s.judgeModel).trim().slice(0, 200);
-    judgeHttpOk = s.judgeHttpOk === true;
-    judgeNoKey = s.judgeNoKey === true;
-    judgeVersion = ['preview', 'exact'].indexOf(String(s.judgeVersion)) >= 0 ? s.judgeVersion : 'latest';
-    {
-        const id = String(s.cloudflareAccount == null ? '' : s.cloudflareAccount).trim();
-        cloudflareAccount = /^[0-9a-f]{32}$/i.test(id) ? id : '';
-    }
-    for (const who of Object.keys(ownNames)) {
-        const raw = s[who + 'Name'];
-        ownNames[who] = String(raw == null ? '' : raw).trim().slice(0, 200);
-    }
-    // Settings saved before Jev had a Model name box of its own: a typed name was
-    // a choice under Which Jev, sent only with that choice picked, and the exact
-    // Jev when it was empty. The panel moves these across when it loads; this covers
-    // a backend reading them before it does.
-    if (s.judgeVersion === 'own') {
-        judgeVersion = 'exact';
-        if (!ownNames.jev)
-            ownNames.jev = String(s.judgeName == null ? '' : s.judgeName).trim().slice(0, 200);
-    }
+    judgeConnection = String(s.judgeConnection == null ? '' : s.judgeConnection).trim().slice(0, 200);
     judgeChecks = String(s.judgeChecks == null ? '' : s.judgeChecks)
         .split('\n')
         .map((l) => l.trim().slice(0, 500))
         .filter(Boolean)
         .slice(0, JEV_CHECKS_MAX);
-    const lineOf = (raw, fallback) => {
-        const n = Number(raw);
-        return Number.isFinite(n) && raw !== '' && raw != null ? Math.min(99, Math.max(1, n)) : fallback;
-    };
-    // A model with sizes has a line per size.
-    const pick = SIZE_PICKS[judgeWho];
-    const sized = pick && pick.sizes[sizeInUse()];
-    const line = sized ? { key: sized.line, fallback: 30 } : LINES[judgeWho] || LINES.jev;
-    judgeOver = lineOf(s[line.key], line.fallback);
+    {
+        const n = Number(s.judgeOver);
+        judgeOver = Number.isFinite(n) && s.judgeOver !== '' && s.judgeOver != null ? Math.min(99, Math.max(1, n)) : 30;
+    }
     judgeWorn = s.judgeWorn !== false;
     judgeBefore = s.judgeBefore === true;
     judgeWornCheck = typeof s.judgeWornCheck === 'string' ? s.judgeWornCheck.trim().slice(0, 500) : null;
@@ -7669,75 +6889,29 @@ async function onPanel(payload, userId) {
         // Which build this half is on. Asked on every panel load rather than only
         // announced at startup: this module comes up once and stays up, so a panel
         // opened at any point after that missed the announcement.
-        // The key for the second model. It comes in once, goes into the enclave, and is never sent
-        // back: the panel is only ever told whether there is one.
-        if (payload.type === 'jev_key_set' || payload.type === 'jev_key_forget' || payload.type === 'jev_key_status') {
-            // The host the panel shows, checked against the ones there are. A host
-            // this build does not know, or none, is the one the settings pick.
-            const asked = String(payload.host == null ? '' : payload.host);
-            const host = keyHosts().indexOf(asked) >= 0 ? asked : hostFor(judgeWho, judgeHost);
-            // The address the panel shows, for another address. The settings can
-            // reach the backend a moment after the key does.
-            const url = payload.url == null ? judgeUrl : String(payload.url).trim().slice(0, 500);
-            let said = '';
-            try {
-                if (!spindle.enclave)
-                    said = 'this build of Lumiverse has no secure store to keep the key in';
-                else if (payload.type === 'jev_key_set') {
-                    const key = cleanJevKey(payload.key);
-                    if (!key)
-                        said = 'that does not look like a key: it has to be one line of plain characters';
-                    else if (!keyName(host, url))
-                        said = 'type the address first. A key for another address is kept for that address';
-                    else {
-                        await spindle.enclave.put(keyName(host, url), key, userId);
-                        said = 'saved';
-                    }
-                }
-                else if (payload.type === 'jev_key_forget') {
-                    if (keyName(host, url))
-                        await spindle.enclave.delete(keyName(host, url), userId);
-                    said = 'forgotten';
-                }
-            }
-            catch (e) {
-                said = 'the key could not be stored: ' + ((e && e.message) || String(e));
-            }
-            const has = !!(await jevKey(userId, host, url));
-            replyTo(userId, {
-                type: 'jev_key',
-                requestId: payload.requestId,
-                host: host,
-                has: has,
-                hosts: await hostsWithKeys(userId, url),
-                for: payload.for == null ? '' : String(payload.for),
-                said: said,
-            });
+        // The reader's Decision connections, for the panel's picker.
+        if (payload.type === 'list_decision_connections') {
+            const got = await decisionConnections(userId);
+            replyTo(userId, { type: 'decision_connections', requestId: payload.requestId, list: got.list, state: got.state, why: got.why || '' });
             return;
         }
-        // One small question with nothing from any chat in it, so a key can be
-        // checked before a reply depends on it.
+        // One small question with nothing from any chat in it, so a connection can
+        // be checked before a reply depends on it.
         if (payload.type === 'jev_test') {
             const check = 'The door in `reply` is open.';
             const got = await askJev(userId, { reply: 'The door is open.' }, { open: { type: NOUL, instructions: check } });
             const v = got.answers && got.answers.open && got.answers.open.noul;
             const scored = typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
-            // Where the test went and in which format, so a failed test on another
-            // address can be read against what was sent. Never the key.
-            const where = jevWhere();
             replyTo(userId, {
                 type: 'jev_tested',
                 requestId: payload.requestId,
                 ok: !got.error && scored,
-                why: got.error || (scored ? '' : who() + ' answered, but not with a usable score'),
+                why: got.error || (scored ? '' : who(got.model) + ' answered, but not with a usable score'),
                 model: got.model || '',
                 check: check,
                 pct: scored ? Math.round(v * 100) : null,
                 over: judgeOver,
                 cost: got.cost || 0,
-                url: where.url,
-                sent: where.model,
-                kind: where.kind,
             });
             return;
         }

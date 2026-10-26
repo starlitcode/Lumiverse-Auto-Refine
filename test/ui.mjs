@@ -1855,616 +1855,6 @@ console.log("\neach list keeps its own lock");
   ok("no errors switching lists", errors.length === 0, errors.join("\n         "));
 }
 
-// ---- one model or two ----
-// The Jev card on the Model tab. Everything under the mode waits on two, the
-// address waits on the host being your own, and the key goes to the backend
-// once and is never kept by the panel.
-console.log("\nMercury Decide, the third second model");
-{
-  // Picking Mercury Decide: OpenRouter and another address are the only hosts,
-  // neither version picker shows, and only its own line shows, at 30. At a
-  // phone width and a laptop width, nothing runs off the side.
-  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "mercury" } }, async (page) => {
-      await goTab(page, "Model");
-      await settle(page);
-      const got = await page.evaluate(() => {
-        const vis = (sel) => {
-          const n = document.querySelector(sel);
-          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-        };
-        const opts = (key) =>
-          [...(document.querySelector('#drawer [data-arf-field="' + key + '"]') || { options: [] }).options].map((o) => o.value);
-        const who = document.querySelector('#drawer [data-arf-field="judgeWho"]');
-        return {
-          picked: who && who.value,
-          label: who && who.selectedOptions[0] && who.selectedOptions[0].textContent,
-          hosts: opts("judgeHost"),
-          tierShown: vis('#drawer [data-arf-row="spanTier"]'),
-          versionShown: vis('#drawer [data-arf-row="judgeVersion"]'),
-          jevLine: vis('#drawer [data-arf-row="judgeOver"]'),
-          spanLine: vis('#drawer [data-arf-row="spanOver"]'),
-          ownLine: vis('#drawer [data-arf-row="mercuryOver"]'),
-          ownLineValue: (document.querySelector('#drawer [data-arf-field="mercuryOver"]') || {}).value,
-          key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
-          link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => t.indexOf("What is Mercury Decide?") === 0),
-          sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
-        };
-      });
-      ok(label + ": Mercury Decide is picked, from Inception", got.picked === "mercury" && got.label === "Mercury Decide, from Inception", JSON.stringify(got));
-      ok(label + ": only OpenRouter and another address are offered", got.hosts.join() === "openrouter,custom", JSON.stringify(got.hosts));
-      ok(label + ": neither Which Jev nor Which Span shows", !got.versionShown && !got.tierShown, JSON.stringify(got));
-      ok(label + ": only its own line shows, at 30", got.ownLine && !got.jevLine && !got.spanLine && got.ownLineValue === "30", JSON.stringify(got));
-      ok(label + ": the key is OpenRouter's", got.key === "Key for OpenRouter", String(got.key));
-      ok(label + ": its link is Inception's page for it", got.link === "What is Mercury Decide? https://docs.inceptionlabs.ai/capabilities/decisions", String(got.link));
-      ok(label + ": nothing scrolls sideways", !got.sideways, "");
-      await page.evaluate(() => {
-        const sel = document.querySelector('#drawer [data-arf-field="judgeHost"]');
-        sel.value = "custom";
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      await settle(page);
-      await settle(page);
-      const ex = await page.evaluate(() => ({
-        url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
-        model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
-      }));
-      ok(label + ": with another address, the empty boxes show a Mercury Decide example", ex.model === "inception/mercury-decide:free" && !/jev|span/.test(ex.url + ex.model), JSON.stringify(ex));
-    });
-    ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
-  }
-}
-
-console.log("\na model name of your own for every second model");
-{
-  // Each second model has a Model name box on its own hosts, showing the name
-  // used when it is empty. Another address has its own box, so it shows none
-  // of these. Checked at a phone width and a laptop width.
-  const { OWN_NAME_KEYS, builtInModelName } = __testing;
-  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, host] of [["jev", "typesafe"], ["span", "respan"], ["mercury", "openrouter"], ["d1", "liquid"], ["solar", "upstage"], ["kev", "openrouter"], ["luna", "openai"], ["clef", "cloudflare"], ["decider", "perplexity"], ["microsoft", "openrouter"], ["drex", "nace"], ["classify", "openrouter"], ["subq", "subq"], ["mammoth", "baseten"]]) {
-      await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
-        await goTab(page, "Model");
-        await settle(page);
-        const got = await page.evaluate(({ key, keys }) => {
-          const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
-          const row = document.querySelector('#drawer [data-arf-row="' + key + '"]');
-          const shown = !!row && !row.closest("[hidden]") && row.getClientRects().length > 0;
-          const others = keys.filter((k) => {
-            const n = document.querySelector('#drawer [data-arf-field="' + k + '"]');
-            return !!n && n.getClientRects().length > 0 && !n.closest("[hidden]");
-          });
-          return {
-            shown,
-            placeholder: box && box.placeholder,
-            height: box ? Math.round(box.getBoundingClientRect().height) : 0,
-            others,
-            sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
-          };
-        }, { key: OWN_NAME_KEYS[who], keys: Object.values(OWN_NAME_KEYS) });
-        const want = builtInModelName({ judgeWho: who, judgeHost: host, spanTier: "free", judgeVersion: "latest" });
-        ok(label + ", " + who + " on " + host + ": its Model name box shows", got.shown, JSON.stringify(got));
-        ok(label + ", " + who + ": with the built-in name as the example", got.placeholder === want, JSON.stringify({ got: got.placeholder, want }));
-        ok(label + ", " + who + ": and no other model's box", got.others.join() === OWN_NAME_KEYS[who], JSON.stringify(got.others));
-        ok(label + ", " + who + ": nothing runs off the side", !got.sideways, "");
-        if (touch) ok(label + ", " + who + ": the box is tall enough to tap", got.height >= 32, String(got.height));
-      });
-    }
-  }
-  // Typing a name is kept, and the backend is told.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "d1", judgeHost: "openrouter" } }, async (page) => {
-    await goTab(page, "Model");
-    await settle(page);
-    await page.evaluate(() => {
-      const box = document.querySelector('#drawer [data-arf-field="d1Name"]');
-      box.value = "liquid/d1-renamed";
-      box.dispatchEvent(new Event("input", { bubbles: true }));
-      box.dispatchEvent(new Event("change", { bubbles: true }));
-      box.dispatchEvent(new Event("blur"));
-    });
-    await new Promise((r) => setTimeout(r, 700));
-    await settle(page);
-    const kept = await page.evaluate(() => ({
-      saved: JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").d1Name,
-      sent: (window.__sent.filter((m) => m.type === "set_settings").pop() || { settings: {} }).settings.d1Name,
-    }));
-    ok("a typed name is saved", kept.saved === "liquid/d1-renamed", JSON.stringify(kept));
-    ok("and handed to the backend", kept.sent === "liquid/d1-renamed", JSON.stringify(kept));
-  });
-  // A Jev name saved with "A name I type" picked moves into Jev's box, and the
-  // choice becomes the exact Jev, which is what an empty box under it sent. A name
-  // saved under another choice was never sent, and is not picked up.
-  for (const [saved, want] of [
-    [{ judgeVersion: "own", judgeName: "typesafe/jev-renamed" }, { name: "typesafe/jev-renamed", version: "exact" }],
-    [{ judgeVersion: "own", judgeName: "" }, { name: "", version: "exact" }],
-    [{ judgeVersion: "latest", judgeName: "typesafe/jev-left-over" }, { name: "", version: "latest" }],
-  ]) {
-    // On TypeSafe, which offers the exact Jev, so the list shows what is kept.
-    await inTab(browser, { saved: { judgeMode: "two", judgeWho: "jev", judgeHost: "typesafe", ...saved } }, async (page) => {
-      await goTab(page, "Model");
-      await settle(page);
-      const got = await page.evaluate(() => ({
-        name: (document.querySelector('#drawer [data-arf-field="jevName"]') || {}).value,
-        version: (document.querySelector('#drawer [data-arf-field="judgeVersion"]') || {}).value,
-      }));
-      ok("a Jev name saved as " + JSON.stringify(saved) + " reads " + JSON.stringify(want), got.name === want.name && got.version === want.version, JSON.stringify(got));
-    });
-  }
-  // Another address has its own box, so these stay away.
-  for (const [who, host] of [["jev", "custom"], ["d1", "custom"]]) {
-    await inTab(browser, { saved: { judgeMode: "two", judgeWho: who, judgeHost: host } }, async (page) => {
-      await goTab(page, "Model");
-      await settle(page);
-      const any = await page.evaluate((keys) => keys.some((k) => {
-        const n = document.querySelector('#drawer [data-arf-field="' + k + '"]');
-        return !!n && n.getClientRects().length > 0 && !n.closest("[hidden]");
-      }), Object.values(OWN_NAME_KEYS));
-      ok(who + " on " + host + ": no model name box of this kind", !any, "");
-    });
-  }
-}
-
-console.log("\nanother address that needs no key");
-{
-  // A model run on your own machine often takes no key. It needs no key is off
-  // by default, so the key box shows as usual. Switched on, the box, Save key
-  // and Forget key go, Test works with no key saved, and the http:// switch
-  // goes, since no key is sent. Checked at a phone width and a laptop width.
-  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "kev", judgeHost: "custom", judgeUrl: "http://localhost:8008/v1/systemone", judgeModel: "made-up-local-model" } }, async (page) => {
-      await goTab(page, "Model");
-      await settle(page);
-      const look = () =>
-        page.evaluate(() => {
-          const vis = (sel) => {
-            const n = document.querySelector(sel);
-            return !!n && !n.closest("[hidden]") && !n.hidden && n.getClientRects().length > 0;
-          };
-          const test = document.querySelector('#drawer [data-arf-jev="test"]');
-          const sw = document.querySelector('#drawer [data-arf-field="judgeNoKey"]');
-          return {
-            switchShown: vis('#drawer [data-arf-row="judgeNoKey"]'),
-            switchOn: !!(sw && sw.checked),
-            // The switch answers a tap a little above and below what is drawn,
-            // so what a finger can hit is measured by asking what is under a
-            // point near each edge.
-            switchHeight: (() => {
-              if (!sw) return 0;
-              const r = sw.getBoundingClientRect();
-              const x = r.left + r.width / 2;
-              let top = r.top, bottom = r.bottom;
-              while (top > r.top - 12 && document.elementFromPoint(x, top - 1) === sw) top--;
-              while (bottom < r.bottom + 12 && document.elementFromPoint(x, bottom + 1) === sw) bottom++;
-              return Math.round(bottom - top);
-            })(),
-            box: vis("#drawer [data-arf-jevkey-box]"),
-            save: vis('#drawer [data-arf-jev="save"]'),
-            forget: vis('#drawer [data-arf-jev="forget"]'),
-            testOn: !!test && !test.disabled,
-            http: vis('#drawer [data-arf-row="judgeHttpOk"]'),
-            said: (document.querySelector("#drawer [data-arf-jevsaid]") || {}).textContent || "",
-            sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
-          };
-        });
-      const before = await look();
-      ok(label + ": It needs no key shows for another address, off by default", before.switchShown && !before.switchOn, JSON.stringify(before));
-      ok(label + ": with it off, the key box shows as usual", before.box && before.save && before.http, JSON.stringify(before));
-      await page.evaluate(() => {
-        const sw = document.querySelector('#drawer [data-arf-field="judgeNoKey"]');
-        sw.click();
-      });
-      await settle(page);
-      await new Promise((r) => setTimeout(r, 400));
-      const after = await look();
-      ok(label + ": switched on, the key box, Save key and Forget key go", !after.box && !after.save && !after.forget, JSON.stringify(after));
-      ok(label + ": Test works with no key saved", after.testOn, JSON.stringify(after));
-      ok(label + ": the http:// switch goes, since no key is sent", !after.http, JSON.stringify(after));
-      ok(label + ": and the panel says no key is sent", /No key is sent/.test(after.said), after.said);
-      ok(label + ": nothing runs off the side", !after.sideways, "");
-      if (touch) ok(label + ": the switch is tall enough to tap", after.switchHeight >= 32, String(after.switchHeight));
-      await page.evaluate(() => {
-        window.__sent.length = 0;
-        document.querySelector('#drawer [data-arf-jev="test"]').click();
-      });
-      ok(label + ": Test asks the backend", await page.evaluate(() => window.__sent.some((m) => m.type === "jev_test")), "");
-    });
-  }
-  // A host in the list always needs its key, so the switch is not offered.
-  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "kev", judgeHost: "openrouter", judgeNoKey: true } }, async (page) => {
-    await goTab(page, "Model");
-    await settle(page);
-    const got = await page.evaluate(() => ({
-      sw: !!document.querySelector('#drawer [data-arf-row="judgeNoKey"]') && document.querySelector('#drawer [data-arf-row="judgeNoKey"]').getClientRects().length > 0 && !document.querySelector('#drawer [data-arf-row="judgeNoKey"]').closest("[hidden]"),
-      box: !!document.querySelector("#drawer [data-arf-jevkey-box]") && !document.querySelector("#drawer [data-arf-jevkey-box]").hidden,
-    }));
-    ok("on a host in the list, the switch is not offered and the key box shows", !got.sw && got.box, JSON.stringify(got));
-  });
-}
-
-// Mapika Decider was hosted by LLM Tech, which closes on 31 October 2026, and
-// is not in the list. A setup saved with it picked shows Jev, which is what is asked.
-console.log("\na second model that was taken out of the list");
-for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-  const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "mapika", judgeHost: "nanogpt", mapikaSize: "2b" } }, async (page) => {
-    await goTab(page, "Model");
-    await settle(page);
-    const got = await page.evaluate(() => {
-      const sel = document.querySelector('#drawer [data-arf-field="judgeWho"]');
-      return {
-        value: sel && sel.value,
-        mapika: !!sel && [...sel.options].some((o) => o.value === "mapika"),
-        links: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent),
-      };
-    });
-    ok(label + ": Mapika Decider is not offered", !got.mapika, JSON.stringify(got));
-    ok(label + ": Jev shows as the second model", got.value === "jev" && got.links.join() === "What is Jev?", JSON.stringify(got));
-  });
-  ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
-  // Span-01 Lite without the free limits, saved, shows as the free one.
-  await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "span", judgeHost: "openrouter", spanTier: "lite" } }, async (page) => {
-    await goTab(page, "Model");
-    await settle(page);
-    const tier = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="spanTier"]') || {}).value);
-    ok(label + ": a saved Span-01 Lite without the free limits shows as Span-01 Lite, free", tier === "free", String(tier));
-  });
-}
-
-// A model not in this list is reached only at Another address. Picked with
-// another host left over, the host list shows Another address, its boxes
-// show, its own line shows, and a line says what to fill in.
-console.log("\na model not in this list");
-for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-  const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: "other", judgeHost: "openrouter" } }, async (page) => {
-    await goTab(page, "Model");
-    await settle(page);
-    const got = await page.evaluate(() => {
-      const vis = (sel) => {
-        const n = document.querySelector(sel);
-        return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-      };
-      const who = document.querySelector('#drawer [data-arf-field="judgeWho"]');
-      const host = document.querySelector('#drawer [data-arf-field="judgeHost"]');
-      const lines = [...document.querySelectorAll('#drawer [data-arf-row$="Over"]')].filter((n) => !n.closest("[hidden]") && n.getClientRects().length > 0).map((n) => n.getAttribute("data-arf-row"));
-      return {
-        label: who && who.selectedOptions[0] && who.selectedOptions[0].textContent,
-        host: host && host.value,
-        hosts: host ? [...host.options].filter((o) => !o.hidden && !o.disabled).map((o) => o.value) : [],
-        url: vis('#drawer [data-arf-row="judgeUrl"]'),
-        model: vis('#drawer [data-arf-row="judgeModel"]'),
-        lines,
-        about: (document.querySelector("#drawer [data-arf-jevabout]") || {}).textContent,
-        links: document.querySelectorAll("#drawer [data-arf-jevabout] a").length,
-        sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-      };
-    });
-    ok(label + ": it is offered as A model not in this list", got.label === "A model not in this list", JSON.stringify(got));
-    ok(label + ": the host shows as Another address", got.host === "custom", JSON.stringify(got));
-    ok(label + ": the Address and Model name boxes show", got.url && got.model, JSON.stringify(got));
-    ok(label + ": only its own line shows", got.lines.join() === "otherOver", JSON.stringify(got.lines));
-    ok(label + ": a line says what to fill in, with no link", got.links === 0 && /Fill in its address and name below/.test(got.about), JSON.stringify(got));
-    ok(label + ": nothing scrolls sideways", !got.sideways, "");
-  });
-  ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
-}
-
-console.log("\nD1, Solar Decide, Kev 4B and the decision models after them");
-{
-  // Each shows its own hosts and only its own line, at 30, with its link to
-  // its maker's page. On a host of its maker's own, the key box is named after
-  // that host. Cloudflare's own host asks for the account ID as well, and the
-  // two Clefs say how much Cloudflare reads. Checked at a phone width and a
-  // laptop width.
-  const MODELS = [
-    ["d1", "D1, from Liquid AI", "openrouter,nanogpt,liquid,custom", "d1Over", "What is D1? https://www.liquid.ai/blog/d1-decision-model"],
-    ["solar", "Solar Decide, from Upstage", "openrouter,upstage,custom", "solarOver", "What is Solar Decide? https://console.upstage.ai/docs/models/solar-decide"],
-    ["kev", "Kev 4B, from Jared Palmer", "openrouter,nanogpt,custom", "kevOver", "What is Kev 4B? https://jaredpalmer.com/blog/introducing-kev"],
-    ["luna", "GPT-6 Luna Decisions, from OpenAI", "openrouter,nanogpt,openai,custom", "lunaOver", "What is GPT-6 Luna Decisions? https://developers.openai.com/api/docs/guides/decisions"],
-    ["clef", "Clef, from Cloudflare", "openrouter,nanogpt,cloudflare,custom", "clefOver", "What is Clef? https://blog.cloudflare.com/clef-decision-models"],
-    ["decider", "Decider, from Perplexity", "openrouter,nanogpt,perplexity,custom", "deciderOver", "What is Decider? https://docs.perplexity.ai/docs/decisions/quickstart"],
-    ["microsoft", "Microsoft-Decision-1, from Microsoft", "openrouter,custom", "microsoftOver", "What is Microsoft-Decision-1? https://commandline.microsoft.com/microsoft-decision-1-model-foundry/"],
-    ["drex", "Drex, from Nace.AI", "openrouter,nace,custom", "drexOver", "What is Drex? https://console.nace.ai/docs/drex"],
-    ["subq", "SubQ Snap, from Subquadratic", "nanogpt,subq,custom", "subqOver", "What is SubQ Snap? https://subq.ai/introducing-subq-snap"],
-    ["mammoth", "Mammoth 1 and Elephant 1, from Baseten", "openrouter,baseten,custom", "mammothOver", "What are Mammoth 1 and Elephant 1? https://www.baseten.co/blog/the-best-decision-models-in-the-world-mammoth-1-and-elephant-1/"],
-    ["classify", "Classify-1, from ScaleDown", "openrouter,custom", "classifyOver", "What is Classify-1? https://docs.scaledown.ai/api-reference/decisions-overview"],
-  ];
-  const LINES = ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver", "mammothOver", "elephantOver"];
-  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const [who, name, hosts, line, link] of MODELS) {
-      const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
-        await goTab(page, "Model");
-        await settle(page);
-        const read = () =>
-          page.evaluate((LINES) => {
-            const vis = (sel) => {
-              const n = document.querySelector(sel);
-              return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-            };
-            const sel = document.querySelector('#drawer [data-arf-field="judgeWho"]');
-            const host = document.querySelector('#drawer [data-arf-field="judgeHost"]');
-            return {
-              label: sel && sel.selectedOptions[0] && sel.selectedOptions[0].textContent,
-              hosts: [...host.options].map((o) => o.value).join(),
-              lines: LINES.filter((k) => vis('#drawer [data-arf-row="' + k + '"]')),
-              values: Object.fromEntries(LINES.map((k) => [k, (document.querySelector('#drawer [data-arf-field="' + k + '"]') || {}).value])),
-              versions: vis('#drawer [data-arf-row="judgeVersion"]') || vis('#drawer [data-arf-row="spanTier"]'),
-              key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
-              link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).find((t) => /^What (is|are) /.test(t) && t.indexOf(" " + (sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(",")[0] : "") + "?") > 0),
-              sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
-              about: (document.querySelector("#drawer [data-arf-jevabout]") || {}).textContent || "",
-              warn: (() => {
-                const n = document.querySelector("#drawer [data-arf-kevwarn]");
-                return n && !n.closest("[hidden]") && n.getClientRects().length > 0 ? n.textContent : "";
-              })(),
-              clefNote: (() => {
-                const n = document.querySelector("#drawer [data-arf-clefwarn]");
-                return n && !n.closest("[hidden]") && n.getClientRects().length > 0 ? n.textContent : "";
-              })(),
-              account: vis('#drawer [data-arf-row="cloudflareAccount"]'),
-              accountHeight: (() => {
-                const n = document.querySelector('#drawer [data-arf-field="cloudflareAccount"]');
-                return n ? Math.round(n.getBoundingClientRect().height) : 0;
-              })(),
-              // The warning is a line of its own: no text after the link.
-              linkAlone: (() => {
-                const n = document.querySelector("#drawer [data-arf-jevabout]");
-                return !!n && n.textContent === (n.querySelector("a") || {}).textContent;
-              })(),
-              links: document.querySelectorAll("#drawer [data-arf-jevabout] a").length,
-            };
-          }, LINES);
-        const got = await read();
-        ok(label + ", " + who + ": picked and named " + name, got.label === name, JSON.stringify(got));
-        ok(label + ", " + who + ": its hosts are " + hosts, got.hosts === hosts, JSON.stringify(got));
-        ok(label + ", " + who + ": only its own line shows, at 30", got.lines.join() === line && got.values[line] === "30", JSON.stringify(got));
-        ok(label + ", " + who + ": " + (__testing.SIZE_PICKS[who] ? "its own picker shows instead of Jev's or Span's" : "no version picker shows"), !got.versions, JSON.stringify(got));
-        ok(label + ", " + who + ": its link is its maker's page", got.link === link, JSON.stringify(got));
-        ok(label + ", " + who + ": nothing scrolls sideways", !got.sideways, "");
-        ok(label + ", " + who + ": its link is the only one", got.links === 1, JSON.stringify(got));
-        ok(label + ", " + who + ": " + (who === "kev" ? "the card warns that it is a small model" : "no small-model warning"), /Kev 4B is a small model/.test(got.warn) === (who === "kev"), JSON.stringify(got.warn));
-        ok(label + ", " + who + ": nothing runs on after the link in its line", got.linkAlone, JSON.stringify(got.about));
-        const clefs = who === "clef";
-        ok(label + ", " + who + ": " + (clefs ? "the card says how much Cloudflare reads" : "no note about Cloudflare"), /may not read the end of a long reply/.test(got.clefNote) === clefs, JSON.stringify(got.clefNote));
-        ok(label + ", " + who + ": on OpenRouter, no Cloudflare account ID box", !got.account, JSON.stringify(got));
-        const owns = {
-          d1: [["nanogpt", "NanoGPT"], ["liquid", "Liquid AI"]],
-          solar: [["upstage", "Upstage"]],
-          luna: [["openai", "OpenAI"]],
-          clef: [["nanogpt", "NanoGPT"], ["cloudflare", "Cloudflare"]],
-          decider: [["nanogpt", "NanoGPT"], ["perplexity", "Perplexity"]],
-          subq: [["subq", "SubQ"]],
-          drex: [["nace", "Nace.AI"]],
-          mammoth: [["baseten", "Baseten"]],
-        }[who] || [];
-        for (const own of owns) {
-          await page.evaluate((host) => {
-            const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
-            s.value = host;
-            s.dispatchEvent(new Event("change", { bubbles: true }));
-          }, own[0]);
-          await settle(page);
-          await settle(page);
-          const there = await read();
-          ok(label + ", " + who + " on " + own[1] + ": the key box is " + own[1] + "'s", there.key === "Key for " + own[1], JSON.stringify(there));
-          ok(label + ", " + who + " on " + own[1] + ": nothing scrolls sideways", !there.sideways, "");
-          const wantAccount = own[0] === "cloudflare";
-          ok(label + ", " + who + " on " + own[1] + ": " + (wantAccount ? "the Cloudflare account ID box shows" : "no Cloudflare account ID box"), there.account === wantAccount, JSON.stringify(there));
-          if (wantAccount && touch) ok(label + ", " + who + " on Cloudflare: the account ID box is tall enough to tap", there.accountHeight >= 32, String(there.accountHeight));
-        }
-      });
-      ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
-    }
-  }
-}
-
-console.log("\na model that comes in more than one size");
-{
-  // Mercury Decide, Solar Decide and Clef each have a picker
-  // under them. For each size, on a host that serves it: picking it shows
-  // that size's line and no other, its built-in name, and its own link where
-  // it has one. On a host that does not serve the size, the size is not
-  // offered and the standard size is used. Read from the panel's own list, so
-  // a size added there is checked here too.
-  const { SIZE_PICKS, BUILT_IN_MODEL_NAMES, SECOND_MODELS } = __testing;
-  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    for (const who of Object.keys(SIZE_PICKS)) {
-      const pick = SIZE_PICKS[who];
-      const names = BUILT_IN_MODEL_NAMES[who];
-      const model = SECOND_MODELS.find((m) => m.value === who);
-      const lines = [...new Set(pick.sizes.map((z) => z.line))];
-      const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeWho: who } }, async (page) => {
-        await goTab(page, "Model");
-        await settle(page);
-        const read = () =>
-          page.evaluate(({ key, lines, nameKey }) => {
-            const vis = (sel) => {
-              const n = document.querySelector(sel);
-              return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-            };
-            const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
-            const name = document.querySelector('#drawer [data-arf-field="' + nameKey + '"]');
-            return {
-              shown: vis('#drawer [data-arf-row="' + key + '"]'),
-              title: ((document.querySelector('#drawer [data-arf-row="' + key + '"] .arf-lab') || {}).textContent || "").trim(),
-              options: sel ? [...sel.options].map((o) => o.value) : [],
-              value: sel ? sel.value : "",
-              height: sel ? Math.round(sel.getBoundingClientRect().height) : 0,
-              lines: lines.filter((k) => vis('#drawer [data-arf-row="' + k + '"]')),
-              link: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href).join("|"),
-              placeholder: name ? name.placeholder : "",
-              sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
-            };
-          }, { key: pick.key, lines, nameKey: __testing.OWN_NAME_KEYS[who] });
-        const choose = async (key, value) => {
-          await page.evaluate(
-            ({ key, value }) => {
-              const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
-              sel.value = value;
-              sel.dispatchEvent(new Event("change", { bubbles: true }));
-            },
-            { key, value },
-          );
-          await settle(page);
-          await settle(page);
-          // A row on its way out folds away first, so the check waits for it.
-          await closed(page);
-        };
-        const first = await read();
-        ok(label + ", " + who + ": " + pick.title + " shows under it, at the standard size", first.shown && first.title === pick.title && first.value === pick.standard, JSON.stringify(first));
-        if (touch) ok(label + ", " + who + ": the picker is tall enough to tap", first.height >= 32, String(first.height));
-        for (const size of pick.sizes) {
-          const host = Object.keys(names).find((h) => names[h][size.value]);
-          await choose("judgeHost", host);
-          await choose(pick.key, size.value);
-          const got = await read();
-          const link = (/ and /.test(model.name) ? "What are " : "What is ") + model.name + "? " + model.about;
-          ok(label + ", " + size.name + " on " + host + ": only its line shows", got.lines.join() === size.line, JSON.stringify(got));
-          ok(label + ", " + size.name + ": its built-in name shows", got.placeholder === names[host][size.value], JSON.stringify(got.placeholder));
-          ok(label + ", " + size.name + ": its link", got.link === link, JSON.stringify(got.link));
-          ok(label + ", " + size.name + ": nothing scrolls sideways", !got.sideways, "");
-          const without = Object.keys(names).find((h) => !names[h][size.value]);
-          if (without) {
-            await choose("judgeHost", without);
-            const there = await read();
-            const standard = pick.sizes.find((z) => z.value === pick.standard);
-            ok(label + ", " + size.name + " on " + without + ": it is not offered, and the standard size is used", there.options.indexOf(size.value) < 0 && there.value === pick.standard && there.lines.join() === standard.line && there.placeholder === names[without][pick.standard], JSON.stringify(there));
-            await choose("judgeHost", host);
-            const back = await read();
-            ok(label + ", " + size.name + ": back on " + host + ", it is picked again", back.value === size.value && back.placeholder === names[host][size.value], JSON.stringify(back));
-          }
-        }
-      });
-      ok(label + ", " + who + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
-    }
-  }
-}
-
-console.log("\nSpan, the other second model");
-{
-  // Picking Span changes the rows to Span's: its hosts, which Span, and the
-  // name the key and the lines use. Jev's version picker goes.
-  const errors = await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
-    await goTab(page, "Model");
-    await settle(page);
-    const read = () =>
-      page.evaluate(() => {
-        const vis = (sel) => {
-          const n = document.querySelector(sel);
-          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-        };
-        const opts = (key) =>
-          [...(document.querySelector('#drawer [data-arf-field="' + key + '"]') || { options: [] }).options].map((o) => o.value);
-        return {
-          who: opts("judgeWho"),
-          hosts: opts("judgeHost"),
-          tiers: opts("spanTier"),
-          tierShown: vis('#drawer [data-arf-row="spanTier"]'),
-          versionShown: vis('#drawer [data-arf-row="judgeVersion"]'),
-          jevLine: vis('#drawer [data-arf-row="judgeOver"]'),
-          spanLine: vis('#drawer [data-arf-row="spanOver"]'),
-          spanLineValue: (document.querySelector('#drawer [data-arf-field="spanOver"]') || {}).value,
-          key: (document.querySelector("#arf-jevkey-name") || {}).textContent,
-          links: [...document.querySelectorAll("#drawer [data-arf-jevabout] a")].map((a) => a.textContent + " " + a.href),
-        };
-      });
-    const pick = async (key, value) => {
-      await page.evaluate(
-        ({ key, value }) => {
-          const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
-          sel.value = value;
-          sel.dispatchEvent(new Event("change", { bubbles: true }));
-        },
-        { key, value },
-      );
-      await settle(page);
-      await settle(page);
-    };
-
-    const jev = await read();
-    ok("all fifteen second models are offered, each model's sizes under one entry, and one for a model not in the list", jev.who.join() === "jev,span,mercury,d1,solar,kev,luna,clef,decider,microsoft,drex,classify,subq,jeff,mammoth,other", JSON.stringify(jev.who));
-    ok("with Jev, Jev's hosts are offered and Respan is not", jev.hosts.join() === "openrouter,nanogpt,typesafe,custom", JSON.stringify(jev.hosts));
-    ok("and Which Jev shows while Which Span does not", jev.versionShown && !jev.tierShown, JSON.stringify(jev));
-    ok("the key is named after the host", jev.key === "Key for OpenRouter", String(jev.key));
-    ok("and only Jev's line shows", jev.jevLine && !jev.spanLine, JSON.stringify(jev));
-    ok("only the picked model's link shows", jev.links.length === 1 && jev.links[0] === "What is Jev? https://typesafe.ai/blog/introducing-system-one-models-and-jev", JSON.stringify(jev.links));
-
-    await pick("judgeWho", "span");
-    await closed(page);
-    const span = await read();
-    ok("with Span, Span's hosts are offered", span.hosts.join() === "openrouter,respan,custom", JSON.stringify(span.hosts));
-    ok("and Which Span shows while Which Jev does not", span.tierShown && !span.versionShown, JSON.stringify(span));
-    ok("on OpenRouter, both Spans are offered", span.tiers.join() === "free,full", JSON.stringify(span.tiers));
-    ok("and the same key is used for Span on the same host", span.key === "Key for OpenRouter", String(span.key));
-    ok("and only Span's line shows, at 30", span.spanLine && !span.jevLine && span.spanLineValue === "30", JSON.stringify(span));
-    ok("and the link is Span's alone", span.links.length === 1 && span.links[0] === "What is Span? https://www.respan.ai/blog/introducing-span-1", JSON.stringify(span.links));
-
-    await pick("judgeHost", "respan");
-    await closed(page);
-    const respan = await read();
-    ok("on Respan, which serves Span-02, Which Span is not shown", !respan.tierShown, JSON.stringify(respan));
-    ok("and the key is Respan's", respan.key === "Key for Respan", String(respan.key));
-    ok("the http switch is only for another address", !(await page.evaluate(() => {
-      const n = document.querySelector('#drawer [data-arf-row="judgeHttpOk"]');
-      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-    })), "");
-    const keys = await page.evaluate(async () => {
-      const asked = window.__sent.filter((m) => m.type === "jev_key_status").map((m) => m.host);
-      window.__fromBackend({ type: "jev_key", host: "respan", has: true, hosts: ["openrouter", "respan"], said: "" });
-      await new Promise((r) => setTimeout(r, 150));
-      const read = () => ({
-        said: (document.querySelector("#drawer [data-arf-jevsaid]") || {}).textContent || "",
-        kept: (document.querySelector("#drawer [data-arf-jevkept]") || {}).textContent || "",
-      });
-      const first = read();
-      // An answer about a host no longer shown, arriving late.
-      window.__fromBackend({ type: "jev_key", host: "openrouter", has: false, hosts: ["openrouter", "respan"], said: "" });
-      await new Promise((r) => setTimeout(r, 150));
-      return { asked, first, late: read() };
-    });
-    ok("changing host asks about that host's key", keys.asked.indexOf("respan") >= 0, JSON.stringify(keys.asked));
-    ok("the hosts with a key are listed by name", /Keys are saved for: OpenRouter, Respan\./.test(keys.first.kept), JSON.stringify(keys.first));
-    ok("and the host shown says its key is saved", /A key is saved/.test(keys.first.said), JSON.stringify(keys.first));
-    ok("a late answer about another host does not change it", /A key is saved/.test(keys.late.said), JSON.stringify(keys.late));
-
-    await pick("judgeHost", "custom");
-    await closed(page);
-    const custom = await read();
-    ok("Another address is offered for Span, and Which Span waits for a host", !custom.tierShown, JSON.stringify(custom));
-    // The examples in the empty boxes are for the model picked, so a Span
-    // user is not shown a Jev address to copy.
-    const spanEx = await page.evaluate(() => ({
-      url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
-      model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
-    }));
-    ok("with Span, the empty boxes show a Span example", /span/.test(spanEx.url) && spanEx.model === "span-02" && !/jev/.test(spanEx.url + spanEx.model), JSON.stringify(spanEx));
-    const addr = await page.evaluate(async () => {
-      const vis = (sel) => {
-        const n = document.querySelector(sel);
-        return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-      };
-      const box = document.querySelector('#drawer [data-arf-field="judgeUrl"]');
-      box.focus();
-      box.value = "https://mine.example.test/v1/decide";
-      box.dispatchEvent(new Event("input", { bubbles: true }));
-      box.blur();
-      await new Promise((r) => setTimeout(r, 150));
-      const last = window.__sent.filter((m) => m.type === "jev_key_status").pop();
-      return { httpOk: vis('#drawer [data-arf-row="judgeHttpOk"]'), last };
-    });
-    ok("the http switch shows for another address", addr.httpOk, JSON.stringify(addr));
-    ok("and leaving the address box asks about that address's key", !!addr.last && addr.last.host === "custom" && addr.last.url === "https://mine.example.test/v1/decide", JSON.stringify(addr.last));
-
-    const sent = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings);
-    ok("the choice is saved", sent.judgeWho === "span" && sent.judgeHost === "custom", JSON.stringify({ who: sent.judgeWho, host: sent.judgeHost }));
-    await pick("judgeWho", "jev");
-    const jevEx = await page.evaluate(() => ({
-      url: (document.querySelector('#drawer [data-arf-field="judgeUrl"]') || {}).placeholder || "",
-      model: (document.querySelector('#drawer [data-arf-field="judgeModel"]') || {}).placeholder || "",
-    }));
-    ok("with Jev, they show a Jev example", /jev/.test(jevEx.url) && /jev/.test(jevEx.model), JSON.stringify(jevEx));
-  });
-  ok("no console errors", !errors || !errors.length, JSON.stringify(errors));
-}
-
 console.log("\nmore checks you can add");
 {
   // A fold under What the second model checks holds more checks, each shown
@@ -2712,226 +2102,199 @@ console.log("\nevery fixed text is a box of its own");
 
 console.log("\none model or two");
 {
-  const errors = await inTab(browser, {}, async (page) => {
+  // Two Decision connections as the backend lists them. Made up.
+  const LIST = [
+    { id: "dc-1", name: "Quick checks", provider: "openrouter", model: "~typesafe/jev-latest", isDefault: true, hasKey: true },
+    { id: "dc-2", name: "Slow checks", provider: "typesafe", model: "jev-1.14.0", isDefault: false, hasKey: false },
+  ];
+  const answer = (page, msg) =>
+    page.evaluate(async (msg) => {
+      window.__fromBackend({ type: "decision_connections", requestId: "x", ...msg });
+      await new Promise((r) => setTimeout(r, 60));
+    }, msg);
+  const shown = (page) =>
+    page.evaluate(() => {
+      const vis = (sel) => {
+        const n = document.querySelector(sel);
+        return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+      };
+      const sel = document.querySelector('#drawer [data-arf-field="judgeConnection"]');
+      const problem = document.querySelector('#drawer [data-arf-decision="problem"]');
+      const test = document.querySelector('#drawer [data-arf-jev="test"]');
+      return {
+        mode: vis('#drawer [data-arf-row="judgeMode"]'),
+        connection: vis('#drawer [data-arf-row="judgeConnection"]'),
+        checks: vis('#drawer [data-arf-row="judgeChecks"]'),
+        line: vis('#drawer [data-arf-row="judgeOver"]'),
+        builtIn: vis("#drawer [data-arf-jevchecks]"),
+        byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
+        after: vis('#drawer [data-arf-row="judgeAfter"]'),
+        before: vis('#drawer [data-arf-row="judgeBefore"]'),
+        found: vis("#drawer [data-arf-jevfound]"),
+        test: vis('#drawer [data-arf-jev="test"]'),
+        testOff: !!test && test.disabled,
+        options: sel ? [...sel.options].map((o) => o.textContent) : [],
+        problem: problem && vis('#drawer [data-arf-decision="problem"]') ? problem.textContent : "",
+        // Nothing left in the card for a key, a host or an address.
+        oldParts: !!document.querySelector('#drawer [data-arf-jevkey], #drawer [data-arf-row="judgeHost"], #drawer [data-arf-row="judgeUrl"]'),
+      };
+    });
+  const pick = (page, key, value) =>
+    page.evaluate(
+      ({ key, value }) => {
+        const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+        sel.value = value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      },
+      { key, value },
+    );
+
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    const errors = await inTab(browser, { viewport, touch }, async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "list_decision_connections").length);
+      ok(label + ": the panel asks for the Decision connections on load", asked >= 1, String(asked));
+      const one = await shown(page);
+      ok(label + ": the mode is on the Model tab", one.mode, JSON.stringify(one));
+      ok(label + ": with one model nothing else about the second model shows",
+        !one.connection && !one.checks && !one.line && !one.builtIn && !one.byHand && !one.after && !one.before && !one.found && !one.test, JSON.stringify(one));
+
+      await pick(page, "judgeMode", "two");
+      await closed(page);
+      await answer(page, { list: LIST, state: "ok" });
+      await settle(page);
+      const two = await shown(page);
+      ok(label + ": with two, the connection, the checks and the line show", two.connection && two.checks && two.line, JSON.stringify(two));
+      ok(label + ": and no key box, host or address", !two.oldParts, JSON.stringify(two));
+      ok(label + ": the picker offers the default, then each connection with its model",
+        two.options.join("|") === "Your default Decision connection|Quick checks (~typesafe/jev-latest) - default|Slow checks (jev-1.14.0)", JSON.stringify(two.options));
+      ok(label + ": with a default that has a key, nothing is wrong and Test can be pressed", !two.problem && two.test && !two.testOff, JSON.stringify(two));
+      ok(label + ": and the switches for the rest show", two.byHand && two.after && two.before, JSON.stringify(two));
+
+      // A connection with no key saved.
+      await pick(page, "judgeConnection", "dc-2");
+      await settle(page);
+      const noKey = await shown(page);
+      ok(label + ": a connection with no key says so, and Test waits", /has no key saved/.test(noKey.problem) && noKey.testOff, JSON.stringify(noKey));
+
+      // A connection that is gone is kept in the list and named.
+      await answer(page, { list: LIST.slice(0, 1), state: "ok" });
+      await settle(page);
+      const gone = await shown(page);
+      ok(label + ": a picked connection that is gone is named in the list", gone.options.indexOf("A Decision connection that is gone") >= 0, JSON.stringify(gone.options));
+      ok(label + ": and the card says to pick another", /picked is gone/.test(gone.problem), JSON.stringify(gone));
+      await pick(page, "judgeConnection", "");
+      await settle(page);
+
+      // No connections at all, and the other ways the list can come back.
+      await answer(page, { list: [], state: "ok" });
+      await settle(page);
+      ok(label + ": with none, it says where to add one", /under Decision models in Lumiverse's Connections panel/.test((await shown(page)).problem));
+      await answer(page, { list: [], state: "old" });
+      await settle(page);
+      ok(label + ": an older Lumiverse says to update it", /Update Lumiverse/.test((await shown(page)).problem));
+      await answer(page, { list: [], state: "refused" });
+      await settle(page);
+      ok(label + ": a refused permission says so", /permission is refused/.test((await shown(page)).problem));
+
+      // Test asks the backend, through the connection in use.
+      await answer(page, { list: LIST, state: "ok" });
+      await settle(page);
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-jev="test"]').click());
+      await settle(page);
+      const test = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_test").length);
+      ok(label + ": Test asks the backend", test === 1, String(test));
+      const said = await page.evaluate(async () => {
+        const last = window.__sent.filter((m) => m.type === "jev_test").pop();
+        window.__fromBackend({ type: "jev_tested", requestId: last.requestId, ok: true, pct: 97, over: 30, model: "typesafe/jev-1.14", check: "The door in `reply` is open.", cost: 0 });
+        await new Promise((r) => setTimeout(r, 60));
+        return document.querySelector("#drawer [data-arf-jevsaid]").textContent;
+      });
+      ok(label + ": and says the connection works", /The Decision connection works/.test(said), said);
+
+      // Nothing runs off the side.
+      const fit = await page.evaluate(() => {
+        const d = document.getElementById("drawer");
+        const r = d.getBoundingClientRect();
+        let over = 0;
+        for (const n of d.querySelectorAll("*")) {
+          const b = n.getBoundingClientRect();
+          if (b.width && b.right > r.right + 1) over++;
+        }
+        return { over, sideways: document.documentElement.scrollWidth > innerWidth };
+      });
+      ok(label + ": nothing runs off the side", fit.over === 0 && !fit.sideways, JSON.stringify(fit));
+      if (touch) {
+        const tall = await page.evaluate(() => document.querySelector('#drawer [data-arf-jev="test"]').getBoundingClientRect().height);
+        ok(label + ": Test is a 32px tap target", tall >= 32, String(tall));
+      }
+
+      // A mistake in the checks is put right with one button, which asks first
+      // and touches nothing else on the card.
+      const checksNow = () => page.evaluate(() => document.querySelector('#drawer [data-arf-field="judgeChecks"]').value);
+      const pressBuiltIn = async () => {
+        await page.evaluate(() => document.querySelector('#drawer [data-arf-jevchecks="builtin"]').click());
+        await settle(page);
+        await settle(page);
+      };
+      await page.evaluate(() => {
+        window.__confirms = [];
+        window.__toasts = [];
+      });
+      await pressBuiltIn();
+      const same = await page.evaluate(() => ({
+        asked: window.__confirms.length,
+        told: window.__toasts.slice(),
+        line: (document.querySelector('#drawer [data-arf-jevchecks="said"]') || {}).textContent || "",
+      }));
+      ok(label + ": pressed on the built-in checks, it asks nothing", same.asked === 0, JSON.stringify(same));
+      ok(label + ": and says beside the button they are already the built-in ones", /already the built-in checks\. Nothing changed\./.test(same.line), JSON.stringify(same));
+      ok(label + ": without a pop-up", same.told.length === 0, JSON.stringify(same));
+      await page.evaluate(() => {
+        const ta = document.querySelector('#drawer [data-arf-field="judgeChecks"]');
+        ta.value = "`reply` is made-up.";
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        ta.dispatchEvent(new Event("blur"));
+      });
+      await pick(page, "judgeConnection", "dc-1");
+      await settle(page);
+      await page.evaluate(() => {
+        window.__confirmSay = false;
+      });
+      await pressBuiltIn();
+      ok(label + ": saying no leaves your checks", (await checksNow()) === "`reply` is made-up.", await checksNow());
+      await page.evaluate(() => {
+        window.__confirmSay = true;
+      });
+      await pressBuiltIn();
+      ok(label + ": saying yes puts the built-in checks back", (await checksNow()) === STOCK_DEFAULTS.judgeChecks, await checksNow());
+      const kept = await page.evaluate(() => {
+        const last = window.__sent.filter((m) => m.type === "set_settings").pop().settings;
+        return { mode: last.judgeMode, connection: last.judgeConnection, checks: last.judgeChecks };
+      });
+      ok(label + ": and saves them, with the mode and the connection left as they were",
+        kept.checks === STOCK_DEFAULTS.judgeChecks && kept.mode === "two" && kept.connection === "dc-1", JSON.stringify(kept));
+
+      // Back to one model: the connection row goes with the rest.
+      await pick(page, "judgeMode", "one");
+      await closed(page);
+      const back = await shown(page);
+      ok(label + ": with one model again, the connection and the checks go", !back.connection && !back.checks && !back.test, JSON.stringify(back));
+    });
+    ok(label + ": no errors on the card", errors.length === 0, errors.join("\n         "));
+  }
+
+  // Settings from before: the line of the model that was picked becomes the
+  // one line.
+  await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", spanOver: 42, judgeOver: 30 } }, async (page) => {
     await goTab(page, "Model");
     await settle(page);
-    const shown = () =>
-      page.evaluate(() => {
-        const vis = (sel) => {
-          const n = document.querySelector(sel);
-          return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-        };
-        return {
-          mode: vis('#drawer [data-arf-row="judgeMode"]'),
-          host: vis('#drawer [data-arf-row="judgeHost"]'),
-          url: vis('#drawer [data-arf-row="judgeUrl"]'),
-          checks: vis('#drawer [data-arf-row="judgeChecks"]'),
-          key: vis("#drawer [data-arf-jevkey]"),
-          builtIn: vis("#drawer [data-arf-jevchecks]"),
-          version: vis('#drawer [data-arf-row="judgeVersion"]'),
-          name: vis('#drawer [data-arf-row="jevName"]'),
-          byHand: vis('#drawer [data-arf-row="judgeByHand"]'),
-          after: vis('#drawer [data-arf-row="judgeAfter"]'),
-          before: vis('#drawer [data-arf-row="judgeBefore"]'),
-          found: vis("#drawer [data-arf-jevfound]"),
-        };
-      });
-    const pick = (key, value) =>
-      page.evaluate(
-        ({ key, value }) => {
-          const sel = document.querySelector('#drawer [data-arf-field="' + key + '"]');
-          sel.value = value;
-          sel.dispatchEvent(new Event("change", { bubbles: true }));
-        },
-        { key, value },
-      );
-
-    const one = await shown();
-    ok("the mode is on the Model tab", one.mode, JSON.stringify(one));
-    const aboutLink = () =>
-      page.evaluate(() => {
-        const a = document.querySelector("#drawer [data-arf-jevabout] a");
-        return a ? { text: a.textContent, href: a.href, target: a.target, rel: a.rel, shown: a.getClientRects().length > 0 && !a.closest("[hidden]") } : null;
-      });
-    const aboutOne = await aboutLink();
-    ok("with one model the links about the second models are hidden", !aboutOne || !aboutOne.shown, JSON.stringify(aboutOne));
-    ok("with one model nothing else about Jev shows", !one.host && !one.checks && !one.key && !one.builtIn && !one.byHand && !one.after && !one.before && !one.found, JSON.stringify(one));
-    const before = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
-    ok("with one model the panel does not ask about a Jev key", before === 0, String(before));
-
-    await pick("judgeMode", "two");
-    await closed(page);
-    const asked = await page.evaluate(() => window.__sent.filter((m) => m.type === "jev_key_status").length);
-    ok("with two it asks whether a key is saved", asked >= 1, String(asked));
-    const two = await shown();
-    ok("with two, the host, the key and the checks show", two.host && two.key && two.checks, JSON.stringify(two));
-    const about = await aboutLink();
-    ok(
-      "and a What is Jev? link opens TypeSafe's introduction in a new tab",
-      !!about && about.shown && about.text === "What is Jev?" && /typesafe\.ai\/blog\//.test(about.href) &&
-        about.target === "_blank" && /noopener/.test(about.rel),
-      JSON.stringify(about),
-    );
-    ok("and so does the switch for refines you start yourself", two.byHand, JSON.stringify(two));
-    ok("and the switch for Jev checking the rewrite", two.after, JSON.stringify(two));
-    ok("and the switch for sending the reply before it", two.before, JSON.stringify(two));
-    ok("and, with no block taking what Jev finds, a line saying where to switch one on", two.found, JSON.stringify(two));
-    ok("and the address waits for another address", !two.url, JSON.stringify(two));
-    ok("which Jev shows for a host that has one", two.version, JSON.stringify(two));
-    ok("and the Model name box shows under it", two.name, JSON.stringify(two));
-    const choices = await page.evaluate(() =>
-      [...document.querySelector('#drawer [data-arf-field="judgeVersion"]').options].map((o) => o.value).join());
-    ok("which Jev has no choice for typing a name, since the box is always there", choices.indexOf("own") < 0, choices);
-    await pick("judgeHost", "nanogpt");
-    await settle(page);
-    const nano = await shown();
-    ok("NanoGPT has the same choice", nano.version && nano.name, JSON.stringify(nano));
-
-    // The preview is a TypeSafe name, so it is offered only there. A preview
-    // picked on TypeSafe shows as the latest elsewhere, which is what is sent,
-    // and comes back when TypeSafe is picked again.
-    const versions = () =>
-      page.evaluate(() => {
-        const sel = document.querySelector('#drawer [data-arf-field="judgeVersion"]');
-        return { values: Array.from(sel.options).map((o) => o.value), chosen: sel.value };
-      });
-    const onNano = await versions();
-    ok("NanoGPT offers no preview", onNano.values.indexOf("preview") < 0 && onNano.values.length === 2, JSON.stringify(onNano));
-    await pick("judgeHost", "typesafe");
-    await settle(page);
-    const onTs = await versions();
-    ok("TypeSafe offers the preview", onTs.values.indexOf("preview") >= 0 && onTs.chosen === "latest", JSON.stringify(onTs));
-    const exactLabel = await page.evaluate(() => {
-      const o = [...document.querySelector('#drawer [data-arf-field="judgeVersion"]').options].find((x) => x.value === "exact");
-      return o ? o.textContent : null;
-    });
-    ok("the exact choice is the newest Jev, 1.14", exactLabel === "Jev 1.14 exactly", String(exactLabel));
-    await pick("judgeVersion", "preview");
-    await pick("judgeHost", "openrouter");
-    await settle(page);
-    const onOr = await versions();
-    ok("a preview picked on TypeSafe shows as the latest on OpenRouter", onOr.values.indexOf("preview") < 0 && onOr.chosen === "latest", JSON.stringify(onOr));
-    ok("OpenRouter offers the latest and Jev 1.14 exactly, with no preview", onOr.values.join() === "latest,exact", JSON.stringify(onOr));
-    await pick("judgeHost", "typesafe");
-    await settle(page);
-    const again = await versions();
-    ok("and is picked again on TypeSafe", again.chosen === "preview", JSON.stringify(again));
-    await pick("judgeVersion", "own");
-    await pick("judgeHost", "nanogpt");
-    await settle(page);
-
-    await pick("judgeHost", "custom");
-    await closed(page);
-    const own = await shown();
-    ok("another address shows the address box", own.url, JSON.stringify(own));
-    ok("and takes its model name there, not from Which Jev", !own.version && !own.name, JSON.stringify(own));
-    await pick("judgeVersion", "latest");
-
-    // Back to one model with another address still picked. The address hangs
-    // off the host, and the host off the mode, so both go.
-    await pick("judgeMode", "one");
-    await closed(page);
-    const back = await shown();
-    ok("with one model again, the address box goes too", !back.url && !back.host, JSON.stringify(back));
-    const model = await page.evaluate(() => {
-      const n = document.querySelector('#drawer [data-arf-row="judgeModel"]');
-      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
-    });
-    ok("and so does the model name", !model);
-    await pick("judgeMode", "two");
-    await settle(page);
-
-    // A mistake in the checks is put right with one button, which asks first
-    // and touches nothing else on the card.
-    ok("with two, the button for the built-in checks shows", (await shown()).builtIn);
-    const checksNow = () =>
-      page.evaluate(() => document.querySelector('#drawer [data-arf-field="judgeChecks"]').value);
-    const pressBuiltIn = async () => {
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-jevchecks="builtin"]').click());
-      await settle(page);
-      await settle(page);
-    };
-    await page.evaluate(() => {
-      window.__confirms = [];
-      window.__toasts = [];
-    });
-    await pressBuiltIn();
-    const same = await page.evaluate(() => ({
-      asked: window.__confirms.length,
-      told: window.__toasts.slice(),
-      line: (document.querySelector('#drawer [data-arf-jevchecks="said"]') || {}).textContent || "",
-    }));
-    ok("pressed on the built-in checks, it asks nothing", same.asked === 0, JSON.stringify(same));
-    // On the line beside the button, the way a name already in use is said
-    // under the preset buttons, and not as a pop-up.
-    ok("and says beside the button they are already the built-in ones", /already the built-in checks\. Nothing changed\./.test(same.line), JSON.stringify(same));
-    ok("without a pop-up", same.told.length === 0, JSON.stringify(same));
-    await page.evaluate(() => {
-      const ta = document.querySelector('#drawer [data-arf-field="judgeChecks"]');
-      ta.value = "`reply` is made-up.";
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-      ta.dispatchEvent(new Event("blur"));
-    });
-    await pick("judgeHost", "nanogpt");
-    await settle(page);
-    await page.evaluate(() => {
-      window.__confirmSay = false;
-    });
-    await pressBuiltIn();
-    ok("saying no leaves your checks", (await checksNow()) === "`reply` is made-up.", await checksNow());
-    await page.evaluate(() => {
-      window.__confirmSay = true;
-    });
-    await pressBuiltIn();
-    ok("saying yes puts the built-in checks back", (await checksNow()) === STOCK_DEFAULTS.judgeChecks, await checksNow());
-    const kept = await page.evaluate(() => {
-      const last = window.__sent.filter((m) => m.type === "set_settings").pop().settings;
-      return { mode: last.judgeMode, host: last.judgeHost, checks: last.judgeChecks };
-    });
-    ok("and saves them", kept.checks === STOCK_DEFAULTS.judgeChecks, JSON.stringify(kept));
-    ok("with two models and the host left as they were", kept.mode === "two" && kept.host === "nanogpt", JSON.stringify(kept));
-    await pick("judgeHost", "openrouter");
-    await settle(page);
-
-    // The key goes to the backend and nowhere the panel keeps.
-    await page.evaluate(() => {
-      const box = document.querySelector("#drawer [data-arf-jevkey-box]");
-      box.value = "sk-panel-made-up";
-      document.querySelector('#drawer [data-arf-jev="save"]').click();
-    });
-    await settle(page);
-    const after = await page.evaluate(() => ({
-      sent: window.__sent.filter((m) => m.type === "jev_key_set").map((m) => m.key),
-      box: document.querySelector("#drawer [data-arf-jevkey-box]").value,
-      stored: JSON.stringify(localStorage),
-      settings: JSON.stringify(window.__sent.filter((m) => m.type === "set_settings")),
-      password: document.querySelector("#drawer [data-arf-jevkey-box]").type,
-    }));
-    ok("saving sends the key to the backend once", after.sent.join() === "sk-panel-made-up", after.sent.join());
-    ok("the box is emptied", after.box === "", after.box);
-    ok("the box hides what is typed", after.password === "password", after.password);
-    ok("the key is not in this browser's storage", after.stored.indexOf("sk-panel-made-up") < 0);
-    ok("and not in the settings sent to the account", after.settings.indexOf("sk-panel-made-up") < 0);
-
-    // The backend saying there is one now.
-    await page.evaluate(() => {
-      const last = window.__sent.filter((m) => m.type === "jev_key_set").pop();
-      window.__fromBackend({ type: "jev_key", requestId: last.requestId, has: true, said: "saved" });
-    });
-    await settle(page);
-    const saved = await page.evaluate(() => ({
-      said: document.querySelector("#drawer [data-arf-jevsaid]").textContent,
-      test: document.querySelector('#drawer [data-arf-jev="test"]').disabled,
-    }));
-    ok("it says the key was saved", /Saved/.test(saved.said), saved.said);
-    ok("and Test can be pressed", saved.test === false);
+    const v = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="judgeOver"]') || {}).value);
+    ok("an older setup's line for the model it picked is kept", v === "42", String(v));
   });
-  ok("no errors on the Jev card", errors.length === 0, errors.join("\n         "));
 }
 
-// ---- what Jev decided ----
-// The card on the Log tab that lays out Jev's last decision: one bar per check,
-// the ones that reached the line marked, and which Jev answered.
 console.log("\nthe notification for a finished refine is a switch, off by default");
 {
   // The card already shows a finished refine, so the Lumiverse notification is
@@ -2989,7 +2352,7 @@ console.log("\na refine you start is logged once");
   });
 }
 
-console.log("\nwhat Jev found has somewhere to go");
+console.log("\nwhat the second model found has somewhere to go");
 {
   // The line about Checks Found is for somebody whose prompt has nowhere to
   // put it. Once a block takes {{checks_found}}, it has nothing to say.
@@ -3011,10 +2374,10 @@ console.log("\nwhat Jev found has somewhere to go");
       ok("with a block taking {{checks_found}}, the line is not shown", !note);
     },
   );
-  ok("no errors with a block taking what Jev found", errors.length === 0, errors.join("\n         "));
+  ok("no errors with a block taking what it found", errors.length === 0, errors.join("\n         "));
 }
 
-console.log("\nwhat Jev decided");
+console.log("\nwhat the second model decided");
 {
   const card = (page) =>
     page.evaluate(() => {
@@ -3029,8 +2392,8 @@ console.log("\nwhat Jev decided");
     });
   const one = await inTab(browser, { saved: { enabled: true, judgeMode: "one" } }, async (page) => {
     await goTab(page, "Log");
-    ok("with one model there is no Jev card", (await card(page)) === null);
-    // With one model, Jev is named only on the card that turns two on.
+    ok("with one model there is no card for the second model", (await card(page)) === null);
+    // With one model, no model name such as Jev shows anywhere.
     const seen = [];
     for (const t of ["Prompt", "Context", "Model", "Limits", "Log", "Setup"]) {
       await goTab(page, t);
@@ -3050,12 +2413,12 @@ console.log("\nwhat Jev decided");
         })),
       );
     }
-    ok("with one model no tab names Jev beyond the switch", seen.length === 0, seen.join(" | "));
+    ok("with one model no tab names a second model", seen.length === 0, seen.join(" | "));
   });
   const errors = await inTab(browser, { saved: { enabled: true, judgeMode: "two" } }, async (page) => {
     await goTab(page, "Log");
     const empty = await card(page);
-    ok("with two models the card is there before Jev has read anything", !!empty && /Nothing yet/.test(empty.text), JSON.stringify(empty));
+    ok("with two models the card is there before it has read anything", !!empty && /Nothing yet/.test(empty.text), JSON.stringify(empty));
     await page.evaluate(() =>
       window.__fromBackend({
         type: "judge_said",
@@ -3080,7 +2443,7 @@ console.log("\nwhat Jev decided");
     ok("after a decision it shows each check", !!got && /reply repeats itself/.test(got.text) && /reply uses stock phrases/.test(got.text), JSON.stringify(got));
     ok("the one that reached the line is marked, the other is not", !!got && got.over === 1 && got.under === 1, JSON.stringify(got));
     ok("each bar is as long as its score", !!got && got.widths.join() === "72%,18%", JSON.stringify(got));
-    ok("it names the Jev that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
+    ok("it names the model that answered and says the reply was refined", !!got && /jev-1\.13\.0/.test(got.text) && /refined/.test(got.text), JSON.stringify(got));
     const wrongOnRefined = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-jevwrong]"));
     ok("a refined reply does not say the second model can be wrong", !wrongOnRefined);
     // A reply left alone says the second model can be wrong, and how to
@@ -3092,16 +2455,16 @@ console.log("\nwhat Jev decided");
     const wrong = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevwrong]") || {}).textContent || "");
     ok("a reply left alone says the second model can be wrong, and how to refine it anyway",
       /can be wrong/.test(wrong) && /press the refine button on the message/.test(wrong), wrong);
-    // A second reply left alone, and a third Jev could not decide on.
+    // A second reply left alone, and a third it could not decide on.
     await page.evaluate(() => {
       window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m3", refine: false, failed: false, why: "", scores: [{ id: "check_1", check: "x", pct: 10 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
-      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m4", refine: true, failed: true, why: "the Jev key was refused", scores: [], cost: 0, model: "", over: 50 });
+      window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m4", refine: true, failed: true, why: "the provider turned the call down", scores: [], cost: 0, model: "", over: 50 });
     });
     // Log lines landing together are painted once, a moment after the first.
     await closed(page);
     const tally = await page.evaluate(() => (document.querySelector("#drawer [data-arf-jevtally]") || {}).textContent || "");
-    ok("it counts the replies Jev read, left alone and could not decide on", /read 4 replies/.test(tally) && /left 2 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
-    // Jev reading a rewrite, with a check still over the line. It is not a
+    ok("it counts the replies it read, left alone and could not decide on", /read 4 replies/.test(tally) && /left 2 alone/.test(tally) && /could not decide on 1/.test(tally), tally);
+    // The second model reading a rewrite, with a check still over the line. It is not a
     // reply read, so the count of replies stays where it was.
     await page.evaluate(() => {
       window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m2", after: true, refine: true, failed: false, why: "", scores: [{ id: "check_1", check: "`reply` repeats itself.", pct: 81 }], cost: 0.00002, model: "jev-1.13.0", over: 50 });
@@ -3113,8 +2476,8 @@ console.log("\nwhat Jev decided");
       !!again && /read a rewrite/.test(again.text) && /refined once more/.test(again.text) && /refined again/.test(again.text), JSON.stringify(again));
     ok("and is counted apart from the replies", /read 4 replies/.test(tally2) && /read 1 rewrite and sent 1 back/.test(tally2), tally2);
     const logged = await page.evaluate(() => document.querySelector("#drawer").textContent);
-    ok("the Log says Jev read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
-    // A real request is not shown anywhere, so the Log says when what Jev found
+    ok("the Log says it read the rewrite", /read the rewrite and a check still reached the line/.test(logged));
+    // A real request is not shown anywhere, so the Log says when what it found
     // went into it.
     await page.evaluate(() => {
       window.__fromBackend({ type: "jev_found_sent", chatId: "c1", messageId: "m2", count: 2 });
@@ -3122,8 +2485,8 @@ console.log("\nwhat Jev decided");
     });
     await closed(page);
     const sentLog = await page.evaluate(() => document.querySelector("#drawer").textContent);
-    ok("the Log says what Jev found went to the refine model, and how many checks",
-      /what Jev found went to the refine model: 2 checks/.test(sentLog));
+    ok("the Log says what it found went to the refine model, and how many checks",
+      /what the second model found went to the refine model: 2 checks/.test(sentLog));
     ok("and says so for the second refine too", /went to the second refine: 1 check/.test(sentLog));
     await page.evaluate(() => {
       const b = Array.from(document.querySelectorAll("#drawer [data-arf-jevcard] button")).find((x) => x.textContent === "Clear");
@@ -3134,8 +2497,14 @@ console.log("\nwhat Jev decided");
     ok("Clear empties the card and the count", !!cleared && /Nothing yet/.test(cleared.text), JSON.stringify(cleared));
 
     // The Test button's answer lands in the same card, marked as a test, with
-    // where it went. It is not a reply, so the count does not show it.
+    // the Decision connection it went through. It is not a reply, so the
+    // count does not show it.
     await page.evaluate(() => {
+      window.__fromBackend({
+        type: "decision_connections",
+        list: [{ id: "dc-1", name: "Quick checks", provider: "openrouter", model: "~typesafe/jev-latest", isDefault: true, hasKey: true }],
+        state: "ok",
+      });
       window.__fromBackend({
         type: "jev_tested",
         ok: true,
@@ -3145,9 +2514,6 @@ console.log("\nwhat Jev decided");
         pct: 98,
         over: 50,
         cost: 0,
-        url: "https://jev.example.com/v1/chat/completions",
-        sent: "typesafe/jev-latest",
-        kind: "chat",
       });
     });
     await closed(page);
@@ -3164,8 +2530,8 @@ console.log("\nwhat Jev decided");
         : null;
     });
     ok("a test shows in the card, marked as a test", !!test && test.mark === "ok" && /made-up question/.test(test.text) && /The door in reply is open/.test(test.text) && test.widths.join() === "98%", JSON.stringify(test));
-    ok("it says where the test went, in which format, and the name sent", !!test && /jev\.example\.com\/v1\/chat\/completions/.test(test.sent) && /OpenAI chat request/.test(test.sent) && /typesafe\/jev-latest/.test(test.sent), JSON.stringify(test));
-    ok("it says when the host reported no cost", !!test && /reported no cost/.test(test.text), JSON.stringify(test));
+    ok("it says which Decision connection the test went through", !!test && /Asked through the Decision connection Quick checks\./.test(test.sent), JSON.stringify(test));
+    ok("it says when the provider reported no cost", !!test && /reported no cost/.test(test.text), JSON.stringify(test));
     ok("a test is not counted as a reply", !!test && !test.tally, JSON.stringify(test));
     const lastNote = () =>
       page.evaluate(() => {
@@ -3174,20 +2540,20 @@ console.log("\nwhat Jev decided");
       });
     const okNote = await lastNote();
     ok("a test that worked says so in a green notification, with the model",
-      !!okNote && okNote.kind === "success" && /answered/.test(okNote.text) && /jev-1\.13\.0/.test(okNote.text) && /The key works/.test(okNote.text), JSON.stringify(okNote));
+      !!okNote && okNote.kind === "success" && /answered/.test(okNote.text) && /jev-1\.13\.0/.test(okNote.text) && /The Decision connection works/.test(okNote.text), JSON.stringify(okNote));
     await page.evaluate(() => {
-      window.__fromBackend({ type: "jev_tested", ok: false, why: "the host said the key is not valid", model: "", check: "", pct: null, over: 50, cost: 0, url: "https://jev.example.com/v1/decisions", sent: "jev-1.13.0", kind: "decisions" });
+      window.__fromBackend({ type: "jev_tested", ok: false, why: "the provider said the key is not valid", model: "", check: "", pct: null, over: 50, cost: 0 });
     });
     await closed(page);
     const failed = await page.evaluate(() => {
       const c = document.querySelector("#drawer [data-arf-jevcard]");
       return { mark: c.getAttribute("data-arf-jevtest"), text: c.textContent, bars: c.querySelectorAll(".arf-jevbar").length };
     });
-    ok("a failed test says why and where it went", failed.mark === "failed" && /key is not valid/.test(failed.text) && /jev\.example\.com\/v1\/decisions/.test(failed.text) && failed.bars === 0, JSON.stringify(failed));
+    ok("a failed test says why", failed.mark === "failed" && /key is not valid/.test(failed.text) && failed.bars === 0, JSON.stringify(failed));
     const badNote = await lastNote();
-    ok("and says why in a red notification", !!badNote && badNote.kind === "error" && /did not answer: the host said the key is not valid/.test(badNote.text), JSON.stringify(badNote));
+    ok("and says why in a red notification", !!badNote && badNote.kind === "error" && /did not answer: the provider said the key is not valid/.test(badNote.text), JSON.stringify(badNote));
   });
-  ok("no errors on the Jev card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
+  ok("no errors on the card", one.length === 0 && errors.length === 0, one.concat(errors).join("\n         "));
 }
 
 // ---- folding the blocks ----
@@ -7319,8 +6685,8 @@ console.log("\nthe preview says which prompt it used");
     const yours = await feed("yours");
     ok("your own turn says it used the prompt for your writing",
       /your own writing/.test(yours || ""), yours);
-    ok("with nothing left out for Jev, nothing is said about it", (await jevLine()) === null);
-    // A preview never asks Jev, so a block holding {{checks_found}} is empty here.
+    ok("with nothing left out for the second model, nothing is said about it", (await jevLine()) === null);
+    // A preview never asks the second model, so a block holding {{checks_found}} is empty here.
     await feed("replies", true);
     const left = await jevLine();
     ok("a preview with Checks Found left out says so, and where to look instead",
@@ -7640,19 +7006,24 @@ console.log("\na switch and the rows that hang off it");
 
 console.log("\na pick that rebuilds the card still moves its rows");
 {
-  // Picking the host, the second model or what to refine rebuilds the card,
-  // since names in the rows around it change. The rows that come or go with
-  // the pick still have to fade in and fold away like every other row, and not
-  // appear or vanish in one frame. Checked at a phone width and a laptop width.
-  const pickHost = (page, host) =>
-    page.evaluate((h) => {
-      const s = document.querySelector('#drawer [data-arf-field="judgeHost"]');
-      s.value = h;
+  // Picking a Decision connection or what to refine rebuilds the card, since
+  // names in the rows around it change. A row that comes or goes with the pick
+  // still has to fade in and fold away like every other row, and not appear
+  // or vanish in one frame. Here that is the line saying a connection has no
+  // key. Checked at a phone width and a laptop width.
+  const LIST = [
+    { id: "dc-1", name: "Quick checks", provider: "openrouter", model: "~typesafe/jev-latest", isDefault: true, hasKey: true },
+    { id: "dc-2", name: "Slow checks", provider: "typesafe", model: "jev-1.14.0", isDefault: false, hasKey: false },
+  ];
+  const pickConnection = (page, id) =>
+    page.evaluate((v) => {
+      const s = document.querySelector('#drawer [data-arf-field="judgeConnection"]');
+      s.value = v;
       s.dispatchEvent(new Event("change", { bubbles: true }));
-    }, host);
-  const urlRow = (page) =>
+    }, id);
+  const problemRow = (page) =>
     page.evaluate(() => {
-      const row = document.querySelector('#drawer [data-arf-row="judgeUrl"]');
+      const row = document.querySelector('#drawer [data-arf-hangs="decision problem"]');
       return {
         there: !!row,
         hidden: !!row && row.hidden,
@@ -7661,21 +7032,24 @@ console.log("\na pick that rebuilds the card still moves its rows");
       };
     });
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
-    const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeHost: "openrouter" } }, async (page) => {
+    const errors = await inTab(browser, { viewport, touch, saved: { judgeMode: "two", judgeConnection: "dc-1" } }, async (page) => {
       await goTab(page, "Model");
-      ok(label + ": the address row starts hidden", (await urlRow(page)).hidden, JSON.stringify(await urlRow(page)));
-      await pickHost(page, "custom");
-      await settle(page);
-      await settle(page);
-      const shown = await urlRow(page);
-      ok(label + ": picking another address opens the address row", shown.there && !shown.hidden && shown.arriving, JSON.stringify(shown));
-      await pickHost(page, "openrouter");
-      await settle(page);
-      await settle(page);
-      const going = await urlRow(page);
-      ok(label + ": picking a listed host folds the address row away", going.folding, JSON.stringify(going));
+      await page.evaluate((list) => window.__fromBackend({ type: "decision_connections", list, state: "ok" }), LIST);
       await closed(page);
-      const gone = await urlRow(page);
+      ok(label + ": the problem line starts hidden", (await problemRow(page)).hidden, JSON.stringify(await problemRow(page)));
+      await pickConnection(page, "dc-2");
+      await settle(page);
+      await settle(page);
+      const shown = await problemRow(page);
+      ok(label + ": picking a connection with no key opens the line", shown.there && !shown.hidden && shown.arriving, JSON.stringify(shown));
+      await closed(page);
+      await pickConnection(page, "dc-1");
+      await settle(page);
+      await settle(page);
+      const going = await problemRow(page);
+      ok(label + ": picking one with a key folds it away", going.folding, JSON.stringify(going));
+      await closed(page);
+      const gone = await problemRow(page);
       ok(label + ": and then it is hidden", gone.hidden, JSON.stringify(gone));
     });
     ok(label + ": no console errors", !errors || !errors.length, JSON.stringify(errors));
@@ -8573,11 +7947,12 @@ console.log("\nthe live line while a refine is running");
       after.replace(/\d+s/, "") === running.replace(/\d+s/, ""),
       JSON.stringify(running) + " became " + JSON.stringify(after),
     );
-    // Jev reading the rewrite, and the refine that can follow it, each named.
+    // The second model reading the rewrite, and the refine that can follow
+    // it, each named.
     await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "rechecking" }));
     await settle(page);
     const rereading = await line(page);
-    ok("Jev reading the rewrite is named", /Jev is reading the rewrite/.test(rereading), JSON.stringify(rereading));
+    ok("the second model reading the rewrite is named", /The second model is reading the rewrite/.test(rereading), JSON.stringify(rereading));
     await page.evaluate(() => window.__fromBackend({ type: "refine_progress", stage: "again" }));
     await settle(page);
     const again = await line(page);
@@ -11334,18 +10709,8 @@ console.log("\nwhen a default moves under somebody who was on it");
     });
   });
 
-  // A line somebody set themselves for Jev is given to Span too. A default is not.
-  for (const [was, want] of [[35, "35"], [40, "30"], [50, "30"]]) {
-    await inTab(browser, { saved: { judgeMode: "two", judgeWho: "span", judgeOver: was } }, async (page) => {
-      await goTab(page, "Model");
-      await settle(page);
-      const got = await page.evaluate(() => (document.querySelector('#drawer [data-arf-field="spanOver"]') || {}).value);
-      ok("a Jev line of " + was + " gives Span a line of " + want, got === want, String(got));
-    });
-  }
-  // Every model's line is 30 by default.
-  for (const k of ["judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "drexMaxOver", "classifyOver", "subqOver", "solarFlashOver", "mammothOver", "elephantOver"])
-    ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
+  // The line is 30 by default.
+  ok("judgeOver is 30 by default", STOCK_DEFAULTS.judgeOver === 30, String(STOCK_DEFAULTS.judgeOver));
 
   // Keep mine puts it away without changing the setting.
   await inTab(browser, { moved: ROWS, saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
@@ -14934,10 +14299,15 @@ console.log("\nthe problem report");
 // time with the zone, the second model in use, every changed setting by its
 // name with its default, and the kind of each recent line. Safe to paste in
 // public: an address, a name and a note's text never appear.
-await inTab(browser, { saved: { judgeMode: "two", judgeWho: "clef", clefTier: "flash", clefFlashOver: 40, connectionId: "conn-lantern", judgeUrl: "http://192.0.2.7:8000", askNoteRefused: "Please try the lantern scene again.", passNames: ["Wren Hollow"] } }, async (page) => {
+await inTab(browser, { saved: { judgeMode: "two", judgeConnection: "dc-9", judgeOver: 40, connectionId: "conn-lantern", soundUrl: "http://192.0.2.7:8000/chime.mp3", askNoteRefused: "Please try the lantern scene again.", passNames: ["Wren Hollow"] } }, async (page) => {
   await goTab(page, "Log");
   await settle(page);
   const text = await page.evaluate(async () => {
+    window.__fromBackend({
+      type: "decision_connections",
+      list: [{ id: "dc-9", name: "Lantern checks", provider: "typesafe", model: "jev-1.14.0", isDefault: false, hasKey: true }],
+      state: "ok",
+    });
     window.__fromBackend({ type: "jev_found_sent", count: 1, after: false });
     await new Promise((r) => setTimeout(r, 400));
     const card = [...document.querySelectorAll("#drawer .arf-card")].find((c) => /Reporting a problem/.test(c.textContent));
@@ -14946,13 +14316,15 @@ await inTab(browser, { saved: { judgeMode: "two", judgeWho: "clef", clefTier: "f
   });
   ok("the report was found", text.length > 200, text.slice(0, 200));
   ok("its time is the reader's own, with the zone", /when: \d{4}-\d\d-\d\d \d\d:\d\d:\d\d \(UTC[+-]\d+(:\d\d)?\)/.test(text), text.slice(0, 200));
-  ok("it names the second model and its line", /model: Clef Flash/.test(text) && /refine when a check reaches: 40% \(clefFlashOver, default 30\)/.test(text), text);
-  ok("a changed setting is listed with its default", /clefFlashOver: 40 \(default: 30\)/.test(text), text);
+  ok("it names the Decision connection's provider and model, and the line",
+    /Decision connection: one picked, provider "typesafe", model "jev-1\.14\.0"/.test(text) && /refine when a check reaches: 40% \(judgeOver, default 30\)/.test(text), text);
+  ok("but never the connection's name", !/Lantern checks/.test(text), text);
+  ok("a changed setting is listed with its default", /judgeOver: 40 \(default: 30\)/.test(text), text);
   ok("a setting whose default is empty says so in a word",
     /connectionId: "conn-lantern" \(default: empty\)/.test(text) && !/default: ""/.test(text), text);
-  ok("an address shows only as set", /judgeUrl: set/.test(text) && !/192\.0\.2\.7/.test(text), text);
+  ok("an address shows only as set", /soundUrl: set/.test(text) && !/192\.0\.2\.7/.test(text), text);
   ok("a name and a note's text never appear", !/Wren Hollow/.test(text) && !/lantern scene/.test(text), text);
-  ok("a recent line says its kind", /\[found\] what Clef Flash found/.test(text), text);
+  ok("a recent line says its kind", /\[found\] what jev-1\.14\.0 found/.test(text), text);
   ok("it says which Lumiverse, or that Lumiverse did not say", /\nlumiverse: (\S+|not reported by this Lumiverse)\n/.test(text), text.slice(0, 300));
   ok("it says whether the page is secure, with no address", /\nsecure page: no \(plain http, reached over the network\)\n/.test(text), text.slice(0, 400));
 });

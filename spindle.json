@@ -1,5 +1,5 @@
 {
-  "version": "1.52.1",
+  "version": "1.53.0",
   "name": "Auto Refine",
   "identifier": "auto_refine",
   "author": "starlitcode",
@@ -14,7 +14,7 @@
     "characters",
     "world_books",
     "ui_panels",
-    "cors_proxy"
+    "decisions"
   ],
   "entry_frontend": "dist/frontend.js",
   "entry_backend": "dist/backend.js",

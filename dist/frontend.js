@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.52.1";
+const VERSION = "1.53.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -48,284 +48,6 @@ function sameSettings(a, b) {
 }
 function blockText(raw) {
     return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
-}
-// The second models, one entry each: the name the panel uses for it, who
-// makes it, and the page that says what it is. That page is the maker's own
-// introduction to its decision model, and need not be about one exact model
-// or size. A host's listing is used only for a maker with no page at all. The picker, the name in every
-// line about what the model did, and the links under the card all come from
-// here, so a model added later is one more entry, beside its entry in the
-// backend.
-// A model offered in more than one size or kind is one entry here. Its sizes
-// are in SIZE_PICKS below.
-const SECOND_MODELS = [
-    { value: "jev", name: "Jev", from: "TypeSafe", about: "https://typesafe.ai/blog/introducing-system-one-models-and-jev" },
-    { value: "span", name: "Span", from: "Respan", about: "https://www.respan.ai/blog/introducing-span-1" },
-    { value: "mercury", name: "Mercury Decide", from: "Inception", about: "https://docs.inceptionlabs.ai/capabilities/decisions" },
-    { value: "d1", name: "D1", from: "Liquid AI", about: "https://www.liquid.ai/blog/d1-decision-model" },
-    { value: "solar", name: "Solar Decide", from: "Upstage", about: "https://console.upstage.ai/docs/models/solar-decide" },
-    { value: "kev", name: "Kev 4B", from: "Jared Palmer", about: "https://jaredpalmer.com/blog/introducing-kev" },
-    { value: "luna", name: "GPT-6 Luna Decisions", from: "OpenAI", about: "https://developers.openai.com/api/docs/guides/decisions" },
-    { value: "clef", name: "Clef", from: "Cloudflare", about: "https://blog.cloudflare.com/clef-decision-models" },
-    { value: "decider", name: "Decider", from: "Perplexity", about: "https://docs.perplexity.ai/docs/decisions/quickstart" },
-    { value: "microsoft", name: "Microsoft-Decision-1", from: "Microsoft", about: "https://commandline.microsoft.com/microsoft-decision-1-model-foundry/" },
-    { value: "drex", name: "Drex", from: "Nace.AI", about: "https://console.nace.ai/docs/drex" },
-    { value: "classify", name: "Classify-1", from: "ScaleDown", about: "https://docs.scaledown.ai/api-reference/decisions-overview" },
-    { value: "subq", name: "SubQ Snap", from: "Subquadratic", about: "https://subq.ai/introducing-subq-snap" },
-    // eu/jev has no introduction post, so its link is its own docs.
-    { value: "jeff", name: "Jeff", from: "eu/jev", about: "https://eu-jev.com/docs" },
-    {
-        value: "mammoth",
-        name: "Mammoth 1 and Elephant 1",
-        from: "Baseten",
-        about: "https://www.baseten.co/blog/the-best-decision-models-in-the-world-mammoth-1-and-elephant-1/",
-    },
-    // A decision model with no entry of its own, reached at an address the
-    // reader types. It has no maker and no page, and its own line.
-    { value: "other", name: "Your model", from: "", about: "", label: "A model not in this list" },
-];
-const SIZE_PICKS = {
-    mercury: {
-        key: "mercuryTier",
-        title: "Which Mercury Decide",
-        standard: "free",
-        sizes: [
-            { value: "free", label: "Mercury Decide, free", name: "Mercury Decide", line: "mercuryOver" },
-            { value: "paid", label: "Mercury Decide, without the free limits", name: "Mercury Decide", line: "mercuryOver" },
-        ],
-    },
-    solar: {
-        key: "solarTier",
-        title: "Which Solar Decide",
-        standard: "full",
-        sizes: [
-            { value: "full", label: "Solar Decide", name: "Solar Decide", line: "solarOver" },
-            // No page of its own, so its link is Upstage's page for Solar Decide.
-            { value: "flash", label: "Solar Decide Flash, faster", name: "Solar Decide Flash", line: "solarFlashOver" },
-        ],
-    },
-    // Decider and Decider Flash, each as a version that stays put and as a
-    // name that always points at the newest. NanoGPT serves only the older
-    // V1.1 27B, under the standard choice.
-    decider: {
-        key: "deciderVersion",
-        title: "Which Decider",
-        standard: "exact",
-        sizes: [
-            { value: "exact", label: "Decider V1.2", name: "Decider", line: "deciderOver" },
-            { value: "latest", label: "Decider Latest, always the newest", name: "Decider", line: "deciderOver" },
-            { value: "flash", label: "Decider Flash V1.2, smaller and faster", name: "Decider Flash", line: "deciderFlashOver" },
-            { value: "flashLatest", label: "Decider Flash Latest, always the newest", name: "Decider Flash", line: "deciderFlashOver" },
-        ],
-    },
-    // Jeff, as a release that stays put and as a name that always points at
-    // eu/jev's newest. Both hosts serve both.
-    jeff: {
-        key: "jeffVersion",
-        title: "Which Jeff",
-        standard: "exact",
-        sizes: [
-            { value: "exact", label: "Jeff 1.0.0", name: "Jeff", line: "jeffOver" },
-            { value: "latest", label: "Jeff Latest, always the newest", name: "Jeff", line: "jeffOver" },
-        ],
-    },
-    // Mammoth 1 and Elephant 1, Baseten's two sizes of one decision model.
-    // Both hosts serve both.
-    mammoth: {
-        key: "mammothSize",
-        title: "Which Baseten model",
-        standard: "full",
-        sizes: [
-            { value: "full", label: "Mammoth 1, the larger", name: "Mammoth 1", line: "mammothOver" },
-            { value: "small", label: "Elephant 1, smaller and faster", name: "Elephant 1", line: "elephantOver" },
-        ],
-    },
-    // Drex 2.0 and Drex Max, Nace.AI's largest. Both hosts serve both.
-    drex: {
-        key: "drexSize",
-        title: "Which Drex",
-        standard: "full",
-        sizes: [
-            { value: "full", label: "Drex 2.0", name: "Drex", line: "drexOver" },
-            { value: "max", label: "Drex Max, the largest", name: "Drex Max", line: "drexMaxOver" },
-        ],
-    },
-    // D1 and D1 Ultra, Liquid AI's largest, which also reads pictures. NanoGPT
-    // serves only D1.
-    d1: {
-        key: "d1Size",
-        title: "Which D1",
-        standard: "full",
-        sizes: [
-            { value: "full", label: "D1", name: "D1", line: "d1Over" },
-            { value: "ultra", label: "D1 Ultra, the largest", name: "D1 Ultra", line: "d1UltraOver" },
-        ],
-    },
-    clef: {
-        key: "clefTier",
-        title: "Which Clef",
-        standard: "full",
-        sizes: [
-            { value: "full", label: "Clef", name: "Clef", line: "clefOver" },
-            { value: "flash", label: "Clef Flash, smaller and faster", name: "Clef Flash", line: "clefFlashOver" },
-            { value: "omni", label: "Clef Omni, which also reads pictures and sound", name: "Clef Omni", line: "clefOmniOver" },
-        ],
-    },
-};
-// Where a model is reached when the host picked does not serve it: the first
-// host it has, which is OpenRouter for every model OpenRouter serves.
-function homeHost(who) {
-    // A model with no host of its own, such as A model not in this list, is
-    // reached at the address typed for it.
-    if (!BUILT_IN_MODEL_NAMES[who])
-        return "custom";
-    return Object.keys(BUILT_IN_MODEL_NAMES[who] || {})[0] || "openrouter";
-}
-// The models a host serves, for the host list to offer it only to them.
-function modelsOn(host) {
-    return Object.keys(BUILT_IN_MODEL_NAMES).filter((who) => !!BUILT_IN_MODEL_NAMES[who][host]);
-}
-// The size in use: the one picked, where the host serves it. Another address
-// is sent whatever is typed for it, so the pick holds there.
-function sizeInUse(c) {
-    const pick = SIZE_PICKS[c && c.judgeWho];
-    if (!pick)
-        return null;
-    const picked = pick.sizes.find((z) => z.value === c[pick.key]) || pick.sizes.find((z) => z.value === pick.standard) || pick.sizes[0];
-    if (c.judgeHost === "custom")
-        return picked;
-    const host = BUILT_IN_MODEL_NAMES[c.judgeWho][c.judgeHost] ? c.judgeHost : homeHost(c.judgeWho);
-    const names = BUILT_IN_MODEL_NAMES[c.judgeWho][host] || {};
-    return names[picked.value] ? picked : pick.sizes.find((z) => z.value === pick.standard) || pick.sizes[0];
-}
-// Whether a line is the one for the size in use. A model with no sizes has
-// one line, which always shows.
-function lineInUse(c, line) {
-    const z = sizeInUse(c);
-    return !z || z.line === line;
-}
-// Whether one size is served where the model is reached: the host picked, or
-// its home host when the host picked does not serve the model. Another
-// address takes any size.
-function sizeServed(c, who, size) {
-    if (c.judgeHost === "custom")
-        return true;
-    const names = BUILT_IN_MODEL_NAMES[who] || {};
-    const host = names[c.judgeHost] ? c.judgeHost : homeHost(who);
-    return !!(names[host] && names[host][size]);
-}
-// The name each host gives each second model. Shown in the Model name box as
-// the name used when the box is empty. The backend holds the same names, and a
-// test checks the two agree. Jev's are per choice under Which Jev, and a host
-// with no preview Jev of its own is sent its latest. Span's are per kind of
-// Span: on OpenRouter, Span-01 Lite is the free one and Span-02 the paid one.
-// Respan's own API serves Span-02 for both kinds.
-const BUILT_IN_MODEL_NAMES = {
-    jev: {
-        openrouter: { latest: "~typesafe/jev-latest", preview: "~typesafe/jev-latest", exact: "typesafe/jev-1.14" },
-        nanogpt: { latest: "typesafe/jev-latest", preview: "typesafe/jev-latest", exact: "typesafe/jev-1.14" },
-        typesafe: { latest: "jev-latest", preview: "jev-preview", exact: "jev-1.14.0" },
-    },
-    span: {
-        openrouter: { free: "respan/span-01-lite", full: "respan/span-02" },
-        respan: { free: "span-02", full: "span-02" },
-    },
-    mercury: { openrouter: { free: "inception/mercury-decide:free", paid: "inception/mercury-decide" } },
-    d1: {
-        openrouter: { full: "liquid/d1", ultra: "liquid/d1-ultra" },
-        nanogpt: { full: "liquid/d1" },
-        liquid: { full: "d1:free", ultra: "d1-ultra" },
-    },
-    solar: {
-        openrouter: { full: "upstage/solar-decide", flash: "upstage/solar-decide-flash" },
-        upstage: { full: "solar-decide" },
-    },
-    kev: { openrouter: "jaredpalmer/kev-4b", nanogpt: "jaredpalmer/kev-4b" },
-    luna: { openrouter: "openai/gpt-6-luna-decisions", nanogpt: "openai/gpt-6-luna-decisions", openai: "gpt-6-luna" },
-    clef: {
-        openrouter: { full: "cloudflare/clef", flash: "cloudflare/clef-flash", omni: "cloudflare/clef-omni" },
-        nanogpt: { full: "cloudflare/clef", flash: "cloudflare/clef-flash", omni: "cloudflare/clef-omni" },
-        cloudflare: { full: "clef", flash: "clef-flash", omni: "clef-omni" },
-    },
-    decider: {
-        openrouter: {
-            exact: "perplexity/pplx-decider-v1.2",
-            latest: "~perplexity/pplx-decider-latest",
-            flash: "perplexity/pplx-decider-flash-v1.2",
-            flashLatest: "~perplexity/pplx-decider-flash-latest",
-        },
-        nanogpt: { exact: "perplexity/pplx-decider-v1.1-27b" },
-        perplexity: {
-            exact: "pplx-decider-v1.2",
-            latest: "pplx-decider-latest",
-            flash: "pplx-decider-flash-v1.2",
-            flashLatest: "pplx-decider-flash-latest",
-        },
-    },
-    microsoft: { openrouter: "microsoft/microsoft-decision-1" },
-    drex: {
-        openrouter: { full: "nace-ai/drex-v2.0", max: "nace-ai/drex-max" },
-        nace: { full: "drex-v2.0", max: "drex-max" },
-    },
-    classify: { openrouter: "scaledown/classify-1" },
-    subq: { nanogpt: "subq/subq-snap-preview", subq: "subq-snap-preview" },
-    mammoth: {
-        openrouter: { full: "baseten/mammoth-1:free", small: "baseten/elephant-1:free" },
-        baseten: { full: "decision-models/baseten-mammoth-27b-latest", small: "decision-models/baseten-elephant-9b-latest" },
-    },
-    jeff: {
-        nanogpt: { exact: "eu-jev/eu-jeff-1.0.0", latest: "eu-jev/eu-jeff-latest" },
-        eujev: { exact: "eu-jeff-1.0.0", latest: "eu-jeff-latest" },
-    },
-};
-// The built-in name for the model and host picked. A host the model is not on
-// is replaced by the model's home host, the same as the backend does.
-function builtInModelName(c) {
-    const hosts = BUILT_IN_MODEL_NAMES[c && c.judgeWho];
-    if (!hosts)
-        return "";
-    const at = hosts[c.judgeHost] || hosts[homeHost(c.judgeWho)];
-    if (typeof at === "string")
-        return at;
-    if (!at)
-        return "";
-    if (c.judgeWho === "jev")
-        return at[c.judgeVersion] || at.latest;
-    const size = sizeInUse(c);
-    if (size)
-        return at[size.value] || "";
-    return at[c.spanTier] || at.free || "";
-}
-// One Model name box for each second model. Empty uses the built-in name, so a
-// host that renames a model needs no update to the extension.
-const OWN_NAME_KEYS = {
-    jev: "jevName",
-    span: "spanName",
-    mercury: "mercuryName",
-    d1: "d1Name",
-    solar: "solarName",
-    kev: "kevName",
-    luna: "lunaName",
-    clef: "clefName",
-    decider: "deciderName",
-    microsoft: "microsoftName",
-    drex: "drexName",
-    classify: "classifyName",
-    subq: "subqName",
-    jeff: "jeffName",
-    mammoth: "mammothName",
-};
-// A link in the panel's own colors. Names are linked rather than printed as
-// bare addresses, which read as noise and cannot be followed on a phone.
-function linkTo(url, text) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    a.textContent = text;
-    a.className = "arf-link";
-    a.style.cssText = "color:var(--lumiverse-primary,rgba(147,112,219,.9));text-decoration:underline";
-    return a;
 }
 const STORE_KEY = "lv-auto-refine:settings:v1";
 // The settings, grouped the way somebody thinks about them. Import, export,
@@ -436,8 +158,8 @@ const PARTS = [
     {
         id: "judge",
         label: "One model or two",
-        what: "Whether a second model reads a reply first, which one, where it is reached, and what it checks. Never the key, which is kept apart.",
-        keys: ["judgeMode", "judgeWho", "spanTier", "mercuryTier", "clefTier", "solarTier", "deciderVersion", "d1Size", "drexSize", "mammothSize", "jeffVersion", "judgeHost", "judgeVersion", "jevName", "spanName", "mercuryName", "d1Name", "solarName", "kevName", "lunaName", "clefName", "deciderName", "microsoftName", "drexName", "classifyName", "subqName", "jeffName", "mammothName", "cloudflareAccount", "judgeUrl", "judgeModel", "judgeNoKey", "judgeHttpOk", "judgeChecks", "judgeOver", "spanOver", "mercuryOver", "d1Over", "solarOver", "kevOver", "lunaOver", "clefOver", "clefFlashOver", "clefOmniOver", "deciderOver", "microsoftOver", "drexOver", "classifyOver", "subqOver", "otherOver", "solarFlashOver", "d1UltraOver", "deciderFlashOver", "jeffOver", "drexMaxOver", "mammothOver", "elephantOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+        what: "Whether a second model reads a reply first, which Decision connection it uses, and what it checks.",
+        keys: ["judgeMode", "judgeConnection", "judgeChecks", "judgeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
     },
     {
         id: "switches",
@@ -511,9 +233,9 @@ const PERMS = [
         without: "If you have not picked a model under Refine using, Auto Refine cannot see which one you chat with. It uses the chat's own connection, or your default one if the chat has none.",
     },
     {
-        id: "cors_proxy",
-        label: "CORS proxy",
-        why: "Reaches the second model in two-model mode, which is not a chat model and so has no connection profile.",
+        id: "decisions",
+        label: "Decision models",
+        why: "Asks the second model, through one of your Decision connections, in two-model mode.",
         without: "Two-model mode cannot ask the second model, so every reply is refined as it is with one model. Nothing else changes.",
     },
 ];
@@ -920,73 +642,13 @@ const CONFIG = {
     // reply first and say whether it needs a refine, so the refine model runs on
     // the replies that do. A beta, and off until asked for.
     judgeMode: "one",
-    // Which second model reads the reply.
-    judgeWho: "jev",
-    // Which Span: Lite at no cost, Lite paid, or the full model.
-    spanTier: "free",
-    // Which kind or size of a model that has more than one. See SIZE_PICKS.
-    mercuryTier: "free",
-    clefTier: "full",
-    solarTier: "full",
-    deciderVersion: "exact",
-    d1Size: "full",
-    drexSize: "full",
-    jeffVersion: "exact",
-    mammothSize: "full",
-    // Where the second model is reached, and for "custom" the address and model name.
-    judgeHost: "openrouter",
-    judgeUrl: "",
-    judgeModel: "",
-    judgeHttpOk: false,
-    // Another address that takes no key, such as a model run on your own machine.
-    // Off, so the key box shows as it does for every host.
-    judgeNoKey: false,
-    judgeVersion: "latest",
-    // A model name typed in for each second model. Empty uses the built-in one.
-    jevName: "",
-    spanName: "",
-    mercuryName: "",
-    d1Name: "",
-    solarName: "",
-    kevName: "",
-    lunaName: "",
-    clefName: "",
-    deciderName: "",
-    microsoftName: "",
-    drexName: "",
-    classifyName: "",
-    subqName: "",
-    jeffName: "",
-    mammothName: "",
-    // The account ID Cloudflare's own address holds. Empty until the reader
-    // pastes theirs.
-    cloudflareAccount: "",
+    // The Decision connection the second model is asked through. Empty uses
+    // your default Decision connection in Lumiverse.
+    judgeConnection: "",
     // One statement a line. The second model gives the chance each is true of `reply`.
     judgeChecks: JUDGE_CHECKS,
     // A check at or above this percentage is a reply worth refining.
     judgeOver: 30,
-    spanOver: 30,
-    mercuryOver: 30,
-    d1Over: 30,
-    d1UltraOver: 30,
-    solarOver: 30,
-    kevOver: 30,
-    lunaOver: 30,
-    clefOver: 30,
-    clefFlashOver: 30,
-    clefOmniOver: 30,
-    deciderOver: 30,
-    deciderFlashOver: 30,
-    microsoftOver: 30,
-    drexOver: 30,
-    drexMaxOver: 30,
-    classifyOver: 30,
-    subqOver: 30,
-    jeffOver: 30,
-    mammothOver: 30,
-    elephantOver: 30,
-    otherOver: 30,
-    solarFlashOver: 30,
     // With worn phrases on, the second model is also asked whether the reply uses one.
     judgeWorn: true,
     // The reply before this one goes to the second model too, and it is asked
@@ -1200,8 +862,8 @@ function localStamp(d) {
 }
 // A setting's value as a problem report shows it. A report should be safe to
 // paste where anyone can read it, so writing of the reader's own shows only
-// as its length, and an address or an account shows only whether it is set.
-const REPORT_WITHHELD = new Set(["judgeUrl", "soundUrl", "cloudflareAccount"]);
+// as its length, and an address shows only whether it is set.
+const REPORT_WITHHELD = new Set(["soundUrl"]);
 // Text that is a setting rather than writing, shown in full.
 const REPORT_SHOWN = new Set(["inputSelector", "swipeSelector", "thinkTags", "cutColor", "addColor"]);
 function reportValue(key, v) {
@@ -2534,8 +2196,7 @@ const PROTECT_NOTE_FIELD = {
     needs: { key: "protectOn" },
     hint: "Goes in {{protect_notes}} when something was hidden. Name the stand-in shape, [[AR1]], so the model keeps each one.",
 };
-// Two-model mode. Everything under the first row waits on it, and the address
-// and model name wait on the host being your own.
+// Two-model mode. Everything under the first row waits on it.
 const JUDGE_FIELDS = [
     {
         key: "judgeMode",
@@ -2545,158 +2206,17 @@ const JUDGE_FIELDS = [
             { value: "one", label: "One: every reply is refined" },
             { value: "two", label: "Two: a second model picks the replies to refine (beta)" },
         ],
-        hint: "With two, a second model reads each reply first, and only the ones it picks are refined. It is a separate service with its own key.",
+        hint: "With two, a second model reads each reply first, and only the ones it picks are refined. It uses a Decision connection.",
     },
     {
-        key: "judgeWho",
-        label: "Which second model",
+        // Filled with the reader's Decision connections, the same way Refine using
+        // is filled with their connections. See fieldRow.
+        key: "judgeConnection",
+        label: "Which Decision connection",
         type: "pick",
-        options: SECOND_MODELS.map((m) => ({ value: m.value, label: m.label || m.name + ", from " + m.from })),
+        options: [],
         needs: { key: "judgeMode", is: "two" },
-        hint: "All of them answer the same checks. Span-01 Lite and Mercury Decide are free on OpenRouter.",
-    },
-    {
-        key: "judgeHost",
-        label: "Where it is reached",
-        type: "pick",
-        // Each host is offered to the models it has a built-in name for, so the
-        // list cannot offer a host the backend has no address for.
-        options: [
-            { value: "openrouter", label: "OpenRouter" },
-            { value: "nanogpt", label: "NanoGPT" },
-            { value: "typesafe", label: "TypeSafe" },
-            { value: "respan", label: "Respan" },
-            { value: "liquid", label: "Liquid AI" },
-            { value: "upstage", label: "Upstage" },
-            { value: "openai", label: "OpenAI" },
-            { value: "cloudflare", label: "Cloudflare" },
-            { value: "perplexity", label: "Perplexity" },
-            { value: "subq", label: "SubQ" },
-            { value: "eujev", label: "eu/jev" },
-            { value: "nace", label: "Nace.AI" },
-            { value: "baseten", label: "Baseten" },
-        ]
-            .map((o) => ({ ...o, needs: { key: "judgeWho", is: modelsOn(o.value) } }))
-            .concat([{ value: "custom", label: "Another address" }]),
-        needs: { key: "judgeMode", is: "two" },
-        hint: "The key you save below has to be one from this host.",
-    },
-    {
-        key: "spanTier",
-        label: "Which Span",
-        type: "pick",
-        options: [
-            { value: "free", label: "Span-01 Lite, free" },
-            { value: "full", label: "Span-02" },
-        ],
-        needs: { key: "judgeWho", is: "span" },
-        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] },
-        under: true,
-        hint: "Span-01 Lite costs nothing. Respan's own API serves Span-02 for both.",
-    },
-    // Which Clef, Which Solar Decide and the rest, one for each model in
-    // SIZE_PICKS. A size is offered on the hosts that serve it.
-    ...Object.keys(SIZE_PICKS).map((who) => ({
-        key: SIZE_PICKS[who].key,
-        label: SIZE_PICKS[who].title,
-        type: "pick",
-        options: SIZE_PICKS[who].sizes.map((z) => ({
-            value: z.value,
-            label: z.label,
-            needs: { key: "judgeHost", test: (c) => sizeServed(c, who, z.value) },
-        })),
-        needs: { key: "judgeWho", is: who },
-        under: true,
-        hint: (SIZE_PICKS[who].sizes.some((z) => z.line !== SIZE_PICKS[who].sizes[0].line) ? "Each has its own line. " : "") + "A host shows only the ones it serves.",
-    })),
-    {
-        key: "judgeVersion",
-        label: "Which Jev",
-        type: "pick",
-        options: [
-            { value: "latest", label: "The latest Jev" },
-            { value: "preview", label: "The preview Jev", needs: { key: "judgeHost", is: "typesafe" } },
-            { value: "exact", label: "Jev 1.14 exactly", needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe"] } },
-        ],
-        needs: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan"] },
-        also: { key: "judgeWho", is: "jev" },
-        under: true,
-        hint: "The latest moves to each new Jev by itself, so its answers can change. Pick 1.14 to keep them steady.",
-    },
-    {
-        key: "cloudflareAccount",
-        label: "Cloudflare account ID",
-        type: "text",
-        needs: { key: "judgeHost", is: "cloudflare" },
-        also: { key: "judgeWho", is: "clef" },
-        under: true,
-        placeholder: "32 letters and numbers",
-        hint: "On the Workers AI page of your Cloudflare dashboard, under Use REST API.",
-    },
-    ...Object.keys(OWN_NAME_KEYS).map((who) => ({
-        key: OWN_NAME_KEYS[who],
-        label: "Model name",
-        type: "text",
-        needs: { key: "judgeWho", is: who },
-        also: { key: "judgeHost", is: ["openrouter", "nanogpt", "typesafe", "respan", "liquid", "upstage", "openai", "cloudflare", "perplexity", "subq", "eujev", "nace", "baseten"] },
-        under: true,
-        placeholder: (c) => builtInModelName(c),
-        hint: "Empty uses the name shown. If the host renames the model, type its new name here.",
-    })),
-    {
-        key: "judgeUrl",
-        label: "Address",
-        type: "text",
-        needs: { key: "judgeHost", is: "custom" },
-        under: true,
-        placeholder: (c) => c.judgeWho === "span"
-            ? "https://span.example.com/api/v1/decisions"
-            : c.judgeWho === "jev"
-                ? "https://jev.example.com/v1/decisions"
-                : "https://decide.example.com/v1/decisions",
-        hint: "Any host that serves the model. Paste its full address, not only the base. It has to start with https://, unless it is on the same device as Lumiverse.",
-    },
-    {
-        key: "judgeModel",
-        label: "Model name",
-        type: "text",
-        needs: { key: "judgeHost", is: "custom" },
-        under: true,
-        placeholder: (c) => ({
-            span: "span-02",
-            mercury: "inception/mercury-decide:free",
-            d1: "liquid/d1",
-            solar: "upstage/solar-decide",
-            kev: "jaredpalmer/kev-4b",
-            luna: "openai/gpt-6-luna-decisions",
-            clef: "cloudflare/clef",
-            decider: "perplexity/pplx-decider-v1.2",
-            microsoft: "microsoft/microsoft-decision-1",
-            drex: "nace-ai/drex-v2.0",
-            classify: "scaledown/classify-1",
-            subq: "subq-snap-preview",
-            jeff: "eu-jeff-1.0.0",
-            mammoth: "baseten/mammoth-1:free",
-            other: "my-decision-model",
-        }[c.judgeWho] || "typesafe/jev-latest"),
-        hint: "What that host calls the model, as its own docs spell it.",
-    },
-    {
-        key: "judgeNoKey",
-        label: "It needs no key",
-        type: "bool",
-        needs: { key: "judgeHost", is: "custom" },
-        under: true,
-        hint: "Off by default. For a model you run yourself. No key is sent, so http:// works at any address.",
-    },
-    {
-        key: "judgeHttpOk",
-        label: "Let the key go over http://",
-        type: "bool",
-        needs: { key: "judgeHost", is: "custom" },
-        also: { key: "judgeNoKey", is: false },
-        under: true,
-        hint: "Off by default. Only for an address on your own machine or network, such as another Docker container. Over http the key is not encrypted.",
+        hint: "Set these up under Decision models in Lumiverse's Connections panel. Lumiverse keeps the key.",
     },
     {
         key: "judgeChecks",
@@ -2714,263 +2234,7 @@ const JUDGE_FIELDS = [
         min: 1,
         max: 99,
         needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "jev" },
-        hint: "For Jev. A percentage, " + CONFIG.judgeOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "spanOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "span" },
-        hint: "For Span. A percentage, " + CONFIG.spanOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "mercuryOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mercury" },
-        hint: "For Mercury Decide. A percentage, " + CONFIG.mercuryOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "d1Over",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "d1" },
-        when: (c) => lineInUse(c, "d1Over"),
-        hint: "For D1. A percentage, " + CONFIG.d1Over + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "d1UltraOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "d1" },
-        when: (c) => lineInUse(c, "d1UltraOver"),
-        hint: "For D1 Ultra. A percentage, " + CONFIG.d1UltraOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "solarOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "solar" },
-        when: (c) => lineInUse(c, "solarOver"),
-        hint: "For Solar Decide. A percentage, " + CONFIG.solarOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "kevOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "kev" },
-        hint: "For Kev 4B. A percentage, " + CONFIG.kevOver + " by default. Kev 4B is a small model, so it can miss more than the others.",
-    },
-    {
-        key: "lunaOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "luna" },
-        hint: "For GPT-6 Luna Decisions. A percentage, " + CONFIG.lunaOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "clefOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "clef" },
-        when: (c) => lineInUse(c, "clefOver"),
-        hint: "For Clef. A percentage, " + CONFIG.clefOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "clefFlashOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "clef" },
-        when: (c) => lineInUse(c, "clefFlashOver"),
-        hint: "For Clef Flash. A percentage, " + CONFIG.clefFlashOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "clefOmniOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "clef" },
-        when: (c) => lineInUse(c, "clefOmniOver"),
-        hint: "For Clef Omni. A percentage, " + CONFIG.clefOmniOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "deciderOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "decider" },
-        when: (c) => lineInUse(c, "deciderOver"),
-        hint: "For Decider. A percentage, " + CONFIG.deciderOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "deciderFlashOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "decider" },
-        when: (c) => lineInUse(c, "deciderFlashOver"),
-        hint: "For Decider Flash. A percentage, " + CONFIG.deciderFlashOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "microsoftOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "microsoft" },
-        hint: "For Microsoft-Decision-1. A percentage, " + CONFIG.microsoftOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "drexOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "drex" },
-        when: (c) => lineInUse(c, "drexOver"),
-        hint: "For Drex. A percentage, " + CONFIG.drexOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "drexMaxOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "drex" },
-        when: (c) => lineInUse(c, "drexMaxOver"),
-        hint: "For Drex Max. A percentage, " + CONFIG.drexMaxOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "classifyOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "classify" },
-        hint: "For Classify-1. A percentage, " + CONFIG.classifyOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "subqOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "subq" },
-        hint: "For SubQ Snap. A percentage, " + CONFIG.subqOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "jeffOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "jeff" },
-        hint: "For Jeff. A percentage, " + CONFIG.jeffOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "mammothOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mammoth" },
-        when: (c) => lineInUse(c, "mammothOver"),
-        hint: "For Mammoth 1. A percentage, " + CONFIG.mammothOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "elephantOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "mammoth" },
-        when: (c) => lineInUse(c, "elephantOver"),
-        hint: "For Elephant 1. A percentage, " + CONFIG.elephantOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "otherOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "other" },
-        hint: "For your model. A percentage, " + CONFIG.otherOver + " by default. Lower refines more replies, higher refines fewer.",
-    },
-    {
-        key: "solarFlashOver",
-        label: "Refine when a check reaches",
-        type: "num",
-        int: true,
-        min: 1,
-        max: 99,
-        needs: { key: "judgeMode", is: "two" },
-        also: { key: "judgeWho", is: "solar" },
-        when: (c) => lineInUse(c, "solarFlashOver"),
-        hint: "For Solar Decide Flash. A percentage, " + CONFIG.solarFlashOver + " by default. Lower refines more replies, higher refines fewer.",
+        hint: "A percentage, " + CONFIG.judgeOver + " by default. Lower refines more replies, higher refines fewer.",
     },
     {
         key: "judgeWorn",
@@ -3656,38 +2920,21 @@ export function setup(ctx, overrides) {
             delete into.shippedSeen;
         }
         catch (_) { }
-        // Settings saved with "A name I type" picked under Which Jev. That choice
-        // sent the name typed under it, and the exact Jev when it was empty. Jev's name
-        // is a Model name box like every other model's, sent whenever it holds a
-        // name, so a name moves across only from a reader who had that choice
-        // picked, with the exact Jev under it. A name saved under another choice was
-        // never sent, and is dropped rather than starting to be.
-        if (into.judgeVersion === "own") {
-            if (!into.jevName && typeof into.judgeName === "string" && into.judgeName.trim())
-                into.jevName = into.judgeName.trim();
-            into.judgeVersion = "exact";
+        // Settings from before the second model went through a Decision
+        // connection. Each built-in second model had its own line, so the line of
+        // the one picked is the line that was in use. Jev's line was judgeOver
+        // already. A line kept per size, such as Clef Flash's, is not carried.
+        // The rest of those settings name hosts, models and addresses that are
+        // gone, and are dropped with every other name this version does not have.
+        if (typeof into.judgeWho === "string" && into.judgeWho !== "jev") {
+            const was = Number(into[into.judgeWho + "Over"]);
+            if (Number.isFinite(was) && was >= 1 && was <= 99)
+                into.judgeOver = was;
         }
         try {
-            delete into.judgeName;
+            delete into.judgeWho;
         }
         catch (_) { }
-        // A second model taken out of the list, such as Mapika Decider, whose only
-        // host closes on 31 October 2026. The backend asks Jev for any name it does
-        // not know, so the panel shows Jev too, rather than an empty picker.
-        if (typeof into.judgeWho === "string" && !SECOND_MODELS.some((m) => m.value === into.judgeWho))
-            into.judgeWho = "jev";
-        // Span-01 Lite without the free limits is the free one, which OpenRouter
-        // lists at no cost.
-        if (into.spanTier === "lite")
-            into.spanTier = "free";
-        // Refine when a check reaches is kept per second model. A line somebody set
-        // themselves, rather than one of the defaults, was meant for whichever model
-        // they had, so it is given to Span too the first time Span's is looked for.
-        if (!("spanOver" in into) && "judgeOver" in into) {
-            const was = Number(into.judgeOver);
-            if (Number.isFinite(was) && was !== 40 && was !== 50)
-                into.spanOver = was;
-        }
         // A list saved as the text of its box, which is how the box used to save
         // it. Read back as the list it always meant to be.
         for (const k of ["passNames", "passNamesYours", "wornFine"])
@@ -3980,40 +3227,32 @@ export function setup(ctx, overrides) {
     // empty lines left out. A box that was clicked into and typed in a little
     // can hold a space at the end of a line or an empty line under the last one,
     // and that is still the text the reader started with.
-    // The second model's name, for everything the panel says about what it did.
+    // The Decision connection the second model is asked through: the one
+    // picked, or the default one when none is picked. Null until the list has
+    // arrived, or when there is no such connection.
+    function decisionInUse() {
+        const id = String(cfg.judgeConnection || "");
+        return decisions.list.find((c) => (id ? c.id === id : c.isDefault)) || null;
+    }
+    // The second model's name, for everything the panel says about what it did:
+    // the connection's model without the maker in front of it, such as
+    // jev-latest for ~typesafe/jev-latest. The backend shortens it the same way.
     function whoName() {
-        const m = SECOND_MODELS.find((x) => x.value === cfg.judgeWho) || SECOND_MODELS[0];
-        if (m.value === "other")
-            return String(cfg.judgeModel || "").trim() || m.name;
-        const z = sizeInUse(cfg);
-        return z ? z.name : m.name;
+        const m = String((decisionInUse() || {}).model || "").trim();
+        if (!m)
+            return "the second model";
+        return m.slice(m.lastIndexOf("/") + 1).replace(/^~/, "") || m;
     }
-    // The host the second model is reached on, as the host list shows it. A
-    // host the picked model is not on shows as the model's home host, and the
-    // backend falls back the same way.
-    function keyHost() {
-        const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
-        const opt = f && f.options ? f.options.find((o) => o.value === cfg.judgeHost) : null;
-        if (!opt)
-            return homeHost(cfg.judgeWho);
-        const needs = opt.needs;
-        return !needs || optionShows(needs) ? String(opt.value) : homeHost(cfg.judgeWho);
-    }
-    // What a key answer is about: the host, and for another address the address
-    // too, since that key is kept for the address.
-    function keyFor() {
-        return keyHost() === "custom" ? "custom|" + String(cfg.judgeUrl || "").trim() : keyHost();
-    }
-    // What goes with every key message, so the backend keeps or reads the key for
-    // what the panel shows even before the settings reach it.
-    function keyWhere() {
-        return { host: keyHost(), url: String(cfg.judgeUrl || "").trim(), for: keyFor() };
-    }
-    // A host's name as the host list gives it.
-    function hostName(host) {
-        const f = JUDGE_FIELDS.find((x) => x.key === "judgeHost");
-        const opt = f && f.options ? f.options.find((o) => o.value === host) : null;
-        return opt ? String(opt.label) : host;
+    // The same, at the start of a sentence.
+    const WhoName = () => {
+        const w = whoName();
+        return w === "the second model" ? "The second model" : w;
+    };
+    // Whether the connection picked is one the account no longer has. Not
+    // asked before the list has arrived.
+    function lostDecision() {
+        const id = String(cfg.judgeConnection || "");
+        return !!id && decisions.state === "ok" && !decisions.list.some((c) => c.id === id);
     }
     function sameAsWas(now, was) {
         if (typeof was !== "string")
@@ -4256,6 +3495,9 @@ export function setup(ctx, overrides) {
             loadPresetsFromAccount();
             loadSetupsFromAccount();
             loadStateFromAccount();
+            // A Decision connection can be added in Lumiverse while this tab is in
+            // the background.
+            send({ type: "list_decision_connections", requestId: newId() });
         }
         catch (_) { }
     }
@@ -4811,6 +4053,11 @@ export function setup(ctx, overrides) {
         paint();
     }
     let connections = [];
+    // The reader's Decision connections, from the backend. state is "wait"
+    // until it answers, "ok" with the list, "old" on a Lumiverse with no
+    // Decision connections for extensions, "refused" when the permission is,
+    // and "failed" with why.
+    let decisions = { list: [], state: "wait", why: "" };
     // The status line's own nodes, so the running clock can be written into them
     // without repainting the panel around whatever somebody is typing in.
     let liveEls = null;
@@ -5061,9 +4308,9 @@ export function setup(ctx, overrides) {
         if (stage === "checking")
             return "Checking the answer" + clockPart;
         if (stage === "judging")
-            return whoName() + " is reading the reply" + clockPart;
+            return WhoName() + " is reading the reply" + clockPart;
         if (stage === "rechecking")
-            return whoName() + " is reading the rewrite" + clockPart;
+            return WhoName() + " is reading the rewrite" + clockPart;
         if (stage === "again")
             return "Refining once more, since " + whoName() + " still found something" + clockPart;
         // Another account on this install has a refine running, and this one waits
@@ -6252,15 +5499,13 @@ export function setup(ctx, overrides) {
         ".arf-segbtn:not([aria-pressed=true]):hover{background:var(--lumiverse-fill-subtle,rgba(128,128,128,.08))}" +
         ".arf-box:hover:not(:disabled){box-shadow:0 0 0 3px var(--lumiverse-primary-020,rgba(147,112,219,.2))}" +
         ".arf-field:hover:not(:focus):not(:disabled):not([readonly]){border-color:var(--lumiverse-primary-050,rgba(147,112,219,.5))}" +
-        ".arf-link:hover{filter:brightness(1.25)}" +
         "}" +
-        // A finger needs room. The small round buttons and the links grow to at
-        // least 32 pixels. The switches grow below, with the other sizes for a
+        // A finger needs room. The small round buttons grow to at least 32
+        // pixels. The switches grow below, with the other sizes for a
         // finger: a pseudo-element around a checkbox is drawn but is not part of
         // what a tap can hit, so it cannot stand in for the switch being bigger.
         "@media (pointer: coarse){" +
         ".arf-x.arf-blockfold{min-width:32px;min-height:32px}" +
-        ".arf-link{display:inline-block;padding:9px 0}" +
         "}" +
         // The floating button. Squared against the host's container rather than
         // trusting it, so it is a circle whatever shape the container turns out to
@@ -9800,17 +9045,15 @@ export function setup(ctx, overrides) {
     function optionShows(needs) {
         if (typeof needs.test === "function")
             return needs.test(cfg);
-        // A model with no host of its own is always at Another address, whatever
-        // host was left picked, so the address boxes show for it.
-        const held = needs.key === "judgeHost" && !BUILT_IN_MODEL_NAMES[cfg.judgeWho] ? "custom" : cfg[needs.key];
+        const held = cfg[needs.key];
         const is = needs.is;
         return is === undefined ? !!held : Array.isArray(is) ? is.indexOf(held) >= 0 : held === is;
     }
     // Whether a row has anything to do where it sits.
-    // A row also waits on whatever the row it hangs off waits on. The address for
-    // the second model hangs off the host being your own, and the host hangs off two models:
-    // checking only the host left the address on screen with one model, for
-    // anybody who had once picked another address.
+    // A row also waits on whatever the row it hangs off waits on. What it
+    // compares hangs off Also compare with the reply before it, and that hangs
+    // off two models: checking only the switch left the box on screen with one
+    // model, for anybody who had once switched it on.
     function fieldShows(f, depth) {
         if (f.also && !optionShows(f.also))
             return false;
@@ -9920,10 +9163,6 @@ export function setup(ctx, overrides) {
             box.addEventListener("blur", () => {
                 cfg[f.key] = box.value;
                 persist(true);
-                // A key for another address is kept for the address, so a new one is
-                // asked about. The answer redraws the card.
-                if (f.key === "judgeUrl")
-                    askKeyStatus();
             });
             wrap.appendChild(box);
         }
@@ -10016,7 +9255,17 @@ export function setup(ctx, overrides) {
                         },
                     ]
                     : [])
-                : (f.options || []).map((o) => ({ value: o.value, label: o.label, group: "", needs: o.needs }));
+                : f.key === "judgeConnection"
+                    ? [{ value: "", label: "Your default Decision connection", group: "" }]
+                        .concat(decisions.list.map((c) => ({
+                        value: c.id,
+                        label: (c.name || c.provider || "Decision connection") + (c.model ? " (" + c.model + ")" : "") + (c.isDefault ? " - default" : ""),
+                        group: "",
+                    })))
+                        // Kept and said out loud, for the same reason as a lost chat
+                        // connection above.
+                        .concat(lostDecision() ? [{ value: String(cfg.judgeConnection), label: "A Decision connection that is gone", group: "" }] : [])
+                    : (f.options || []).map((o) => ({ value: o.value, label: o.label, group: "", needs: o.needs }));
             const fill = () => {
                 sel.textContent = "";
                 const shown = opts.filter((o) => !o.needs || optionShows(o.needs));
@@ -10050,7 +9299,7 @@ export function setup(ctx, overrides) {
                 // is what the backend sends in its place. The setting is kept, so it
                 // comes back if the host that offers it is picked again.
                 const offered = shown.some((o) => o.value === held) || !opts.some((o) => o.value === held);
-                sel.value = offered ? held : f.key === "judgeHost" ? homeHost(cfg.judgeWho) : String(CONFIG[f.key]);
+                sel.value = offered ? held : String(CONFIG[f.key]);
             };
             fill();
             if (opts.some((o) => o.needs)) {
@@ -10060,12 +9309,12 @@ export function setup(ctx, overrides) {
             sel.addEventListener("change", () => {
                 cfg[f.key] = sel.value;
                 persist(true);
-                // The second model's name and its host are written into the rows
-                // around them, and the key row is for the host, so changing either
-                // redraws the card rather than only showing and hiding rows. The rows
-                // start the rebuild as they were, so the ones that come or go still
-                // fade in and fold away like every other row.
-                if (f.key === "judgeWho" || f.key === "judgeHost" || Object.keys(SIZE_PICKS).some((w) => SIZE_PICKS[w].key === f.key) || f.key === "refineSide") {
+                // The Decision connection's model names the second model in the rows
+                // around it, so changing it redraws the card rather than only showing
+                // and hiding rows. The rows start the rebuild as they were, so the
+                // ones that come or go still fade in and fold away like every other
+                // row.
+                if (f.key === "judgeConnection" || f.key === "refineSide") {
                     paint(rowsShowing());
                     return;
                 }
@@ -11151,120 +10400,57 @@ export function setup(ctx, overrides) {
             wrap.appendChild(bad("The connection this is pointed at is not on your account any more, so nothing can be refined until you pick another one above."));
         return wrap;
     }
-    // Two-model mode, and the key the second model is reached with. The key is sent to the
-    // backend once and kept in Lumiverse's secure store. The panel is only told
-    // whether there is one, so it never sits in the settings or an export.
-    // A key is kept for each host. jevHas is for the host shown, and jevHosts
-    // lists every host with a key kept.
-    let jevHas = null;
-    let jevHosts = [];
+    // Two-model mode. The second model is asked through one of the reader's
+    // Decision connections in Lumiverse, which keeps the address and the key, so
+    // nothing secret passes through this panel.
     let jevSaid = "";
     let jevAsk = "";
     // When Test was pressed, so its notification can say how long the answer
     // took. 0 when no test is waiting.
     let jevTestAt = 0;
-    // The host last asked about. Asked once per host rather than per paint: the
-    // card is rebuilt on every paint, and asking on each one sent a question per
-    // keystroke while the answer was on its way.
-    let jevStatusFor = "";
-    function askKeyStatus() {
-        if (cfg.judgeMode !== "two" || jevStatusFor === keyFor())
-            return;
-        jevStatusFor = keyFor();
-        jevHas = null;
-        jevSaid = "";
-        send({ type: "jev_key_status", requestId: newId(), ...keyWhere() });
+    // What stops the second model being asked, in words, or "" when nothing
+    // does. Every one of these leaves each reply refined as it is with one model.
+    function decisionProblem() {
+        const then = " Until then, every reply is refined as it is with one model.";
+        if (decisions.state === "old")
+            return "This Lumiverse has no Decision connections for extensions. Update Lumiverse to use two models." + then;
+        if (decisions.state === "refused" || (!hasPerm("decisions") && granted))
+            return "The Decision models permission is refused, so the second model cannot be asked." + then;
+        if (decisions.state === "failed")
+            return "Could not list your Decision connections: " + (decisions.why || "no reason given") + "." + then;
+        if (decisions.state !== "ok")
+            return "";
+        if (!decisions.list.length)
+            return "You have no Decision connections yet. Add one under Decision models in Lumiverse's Connections panel." + then;
+        if (lostDecision())
+            return "The Decision connection picked is gone. Pick another one above." + then;
+        const use = decisionInUse();
+        if (!use)
+            return "None of your Decision connections is the default. Pick one above, or set a default in Lumiverse." + then;
+        if (!use.hasKey)
+            return "That Decision connection has no key saved. Add its key in Lumiverse's Connections panel." + then;
+        return "";
     }
     function buildJudgeCard() {
-        // Asked only once two models are on, since nothing about the second model
-        // shows before, and again whenever the host shown changes.
-        askKeyStatus();
         const wrap = card("One model or two", "Beta. With two, a small second model reads each reply first. Only the replies it flags are sent to the refine model.", cfg.judgeMode === "two" ? "two, beta" : "one");
-        // The link for the model picked, and no others. A row of every model's
-        // link wrapped onto several lines and was hard to read. Picking another
-        // model repaints the card, so the link follows the pick.
-        const about = note("");
-        about.setAttribute("data-arf-jevabout", "1");
-        const picked = SECOND_MODELS.find((m) => m.value === cfg.judgeWho) || SECOND_MODELS[0];
-        // A model not in the list has no page, so it says what to fill in.
-        // An entry named for two models asks about both.
-        if (picked.about)
-            about.appendChild(linkTo(picked.about, (/ and /.test(picked.name) ? "What are " : "What is ") + picked.name + "?"));
-        else
-            about.textContent = "Any decision model that answers yes-or-no checks. Fill in its address and name below.";
-        // Only with two models picked. With one there is no second model to read
-        // about, and the links are one more line to read past.
-        wrap.appendChild(hangsOff(about, () => cfg.judgeMode === "two", "second model links"));
-        // A line of its own under the link. On a phone the link is padded out to
-        // a tap target, and text run on after it inside the same line sat further
-        // from its second line than the lines below did.
-        if (picked.value === "kev") {
-            const small = note("Kev 4B is a small model. It can miss more problems than the others, and a very long reply can be too much for it.");
-            small.setAttribute("data-arf-kevwarn", "1");
-            wrap.appendChild(hangsOff(small, () => cfg.judgeMode === "two", "small model warning"));
-        }
-        if (picked.value === "clef") {
-            const short = note("Clef may not read the end of a long reply. Cloudflare and NanoGPT read only the first 2,000 tokens or so, about 1,500 words. OpenRouter sends some Clef calls to Cloudflare.");
-            short.setAttribute("data-arf-clefwarn", "1");
-            wrap.appendChild(hangsOff(short, () => cfg.judgeMode === "two", "Clef length note"));
-        }
-        // Everything above the checks sits above the key: the mode, the host, and
-        // how that host is reached. Split by key rather than by count, so a row
-        // added to the list lands on the right side of the key.
         const checksAt = JUDGE_FIELDS.findIndex((f) => f.key === "judgeChecks");
         for (const f of JUDGE_FIELDS.slice(0, checksAt))
             wrap.appendChild(fieldRow(f));
-        const keyRow = el("div", "arf-col");
-        keyRow.setAttribute("data-arf-jevkey", "1");
-        // Another address with It needs no key on: there is no key to paste, save
-        // or forget, and Test runs without one.
-        const keyless = keyHost() === "custom" && !!cfg.judgeNoKey;
-        const lab = el("span", "arf-lab", keyless ? "Another address, with no key" : keyHost() === "custom" ? "Key for another address" : "Key for " + hostName(keyHost()));
-        lab.id = "arf-jevkey-name";
-        keyRow.appendChild(lab);
-        const box = document.createElement("input");
-        box.type = "password";
-        box.className = "arf-field arf-mono";
-        box.setAttribute("aria-labelledby", lab.id);
-        box.setAttribute("autocomplete", "off");
-        box.setAttribute("data-arf-jevkey-box", "1");
-        box.placeholder = jevHas
-            ? "A key is saved. Paste a new one to replace it."
-            : keyHost() === "custom"
-                ? "Paste the key for the address above"
-                : "Paste the key from " + hostName(keyHost());
-        if (keyless)
-            box.hidden = true;
-        keyRow.appendChild(box);
+        // Always built, and hidden while nothing is wrong, so a pick or a new
+        // list that brings it up opens it like any other row rather than popping
+        // it in.
+        const problem = decisionProblem();
+        const n = bad(problem || " ");
+        n.setAttribute("data-arf-decision", "problem");
+        wrap.appendChild(hangsOff(n, () => cfg.judgeMode === "two" && !!decisionProblem(), "decision problem"));
+        // One small question with nothing from any chat in it, so the connection
+        // can be checked before a reply depends on it.
+        const testRow = el("div", "arf-col");
+        testRow.setAttribute("data-arf-jevtest", "1");
         const acts = el("div", "arf-row");
-        const save = button("Save key", false);
-        save.setAttribute("data-arf-jev", "save");
-        save.addEventListener("click", () => {
-            const key = box.value.trim();
-            box.value = "";
-            if (!key) {
-                jevSaid = "Paste a key into the box first.";
-                paint();
-                return;
-            }
-            jevSaid = "Saving.";
-            jevAsk = newId();
-            send({ type: "jev_key_set", requestId: jevAsk, key: key, ...keyWhere() });
-            paint();
-        });
-        const forget = button("Forget key", false);
-        forget.setAttribute("data-arf-jev", "forget");
-        forget.disabled = !jevHas;
-        forget.style.opacity = forget.disabled ? "0.45" : "1";
-        forget.addEventListener("click", () => {
-            jevSaid = "Forgetting.";
-            jevAsk = newId();
-            send({ type: "jev_key_forget", requestId: jevAsk, ...keyWhere() });
-            paint();
-        });
         const test = button("Test", false);
         test.setAttribute("data-arf-jev", "test");
-        test.disabled = !jevHas && !keyless;
+        test.disabled = !!problem || decisions.state !== "ok";
         test.style.opacity = test.disabled ? "0.45" : "1";
         test.addEventListener("click", () => {
             jevSaid = "Asking " + whoName() + " one small question.";
@@ -11273,28 +10459,13 @@ export function setup(ctx, overrides) {
             send({ type: "jev_test", requestId: jevAsk });
             paint();
         });
-        if (!keyless) {
-            acts.appendChild(save);
-            acts.appendChild(forget);
-        }
         acts.appendChild(test);
-        keyRow.appendChild(acts);
-        const said = note(jevSaid ||
-            (keyless
-                ? "No key is sent to this address."
-                : jevHas == null
-                    ? "Asking whether a key is saved."
-                    : jevHas
-                        ? "A key is saved. It is kept in Lumiverse's secure store and never shown again."
-                        : "No key is saved yet."));
+        testRow.appendChild(acts);
+        const said = note(jevSaid || (problem ? "" : "Test asks " + whoName() + " one small question, with nothing from any chat in it."));
         said.setAttribute("data-arf-jevsaid", "1");
-        keyRow.appendChild(said);
-        if (jevHosts.length) {
-            const kept = note("Keys are saved for: " + jevHosts.map(hostName).join(", ") + ". Picking a host uses its key.");
-            kept.setAttribute("data-arf-jevkept", "1");
-            keyRow.appendChild(kept);
-        }
-        wrap.appendChild(hangsOff(keyRow, () => cfg.judgeMode === "two", "jev key"));
+        if (said.textContent)
+            testRow.appendChild(said);
+        wrap.appendChild(hangsOff(testRow, () => cfg.judgeMode === "two", "decision test"));
         const [checksField, ...afterChecks] = JUDGE_FIELDS.slice(checksAt);
         wrap.appendChild(fieldRow(checksField));
         wrap.appendChild(builtInRow("judgeChecks", JUDGE_CHECKS, "What the second model checks", "jevchecks", () => cfg.judgeMode === "two", "checks"));
@@ -11315,8 +10486,6 @@ export function setup(ctx, overrides) {
             found.setAttribute("data-arf-jevfound", "off");
             wrap.appendChild(found);
         }
-        if (cfg.judgeMode === "two" && !hasPerm("cors_proxy") && granted)
-            wrap.appendChild(bad("The CORS proxy permission is refused, so " + whoName() + " cannot be asked and every reply is refined as it is with one model."));
         return wrap;
     }
     // Named setups for the Model tab, so somebody running more than one custom
@@ -11923,21 +11092,14 @@ export function setup(ctx, overrides) {
             return wrap;
         }
         const when = new Date(last.at).toTimeString().slice(0, 8);
-        const who = whoName() + (last.model ? " (" + last.model + ")" : "");
+        const who = WhoName() + (last.model ? " (" + last.model + ")" : "");
         if (last.test) {
             wrap.setAttribute("data-arf-jevtest", last.failed ? "failed" : "ok");
             wrap.appendChild(note(last.failed
                 ? "The test at " + when + " failed: " + last.why + "."
                 : who + " answered the test at " + when + ". The test is one made-up question, not a reply from your chat. The door is open, so a score near 100% is right."));
-            const kinds = {
-                decisions: "a decisions request",
-                chat: "an OpenAI chat request",
-                responses: "an OpenAI responses request",
-                messages: "a Claude messages request",
-            };
-            const asked = last.test;
-            if (asked.url) {
-                const sent = note("Sent to " + asked.url + " as " + (kinds[asked.kind] || "a request") + (asked.sent ? ", asking for " + asked.sent + "." : "."));
+            if (last.test.through) {
+                const sent = note("Asked through the Decision connection " + last.test.through + ".");
                 sent.setAttribute("data-arf-jevsent", "1");
                 sent.style.overflowWrap = "anywhere";
                 wrap.appendChild(sent);
@@ -11958,7 +11120,7 @@ export function setup(ctx, overrides) {
             // The second model can miss a problem, and the way to refine this one
             // anyway is on the message itself.
             if (!last.failed && !last.refine) {
-                const wrong = note(whoName() + " can be wrong. To refine this reply anyway, press the refine button on the message. If it keeps missing one kind of problem, lower " +
+                const wrong = note(WhoName() + " can be wrong. To refine this reply anyway, press the refine button on the message. If it keeps missing one kind of problem, lower " +
                     "Refine when a check reaches or add an example to that check.");
                 wrong.setAttribute("data-arf-jevwrong", "1");
                 wrap.appendChild(wrong);
@@ -11987,7 +11149,7 @@ export function setup(ctx, overrides) {
         if (last.cost > 0)
             wrap.appendChild(note("Cost " + last.cost.toFixed(6) + "."));
         else if (last.test && !last.failed)
-            wrap.appendChild(note("The host reported no cost for it."));
+            wrap.appendChild(note("The provider reported no cost for it."));
         const t = jevTally;
         const sum = note("Since this page opened, " + whoName() + " read " + t.read + (t.read === 1 ? " reply" : " replies") +
             " and left " + t.spared + " alone, so " + t.spared + (t.spared === 1 ? " refine was" : " refines were") + " not paid for." +
@@ -11995,7 +11157,7 @@ export function setup(ctx, overrides) {
             (t.rechecked
                 ? " It read " + t.rechecked + (t.rechecked === 1 ? " rewrite" : " rewrites") + " and sent " + t.again + " back for one more refine."
                 : "") +
-            (t.cost > 0 ? " " + whoName() + " cost " + t.cost.toFixed(6) + " in all." : ""));
+            (t.cost > 0 ? " It cost " + t.cost.toFixed(6) + " in all." : ""));
         sum.setAttribute("data-arf-jevtally", "1");
         // Only once a real reply is counted. A test alone would read as nothing
         // counted at all.
@@ -12216,16 +11378,12 @@ export function setup(ctx, overrides) {
             const two = cfg.judgeMode === "two";
             lines.push("in use: " + (two ? "yes" : "no") + " (judgeMode " + JSON.stringify(cfg.judgeMode) + ")");
             if (two) {
-                const z = sizeInUse(cfg);
-                lines.push("model: " + whoName() + " (judgeWho " + JSON.stringify(cfg.judgeWho) + (z ? ", size " + JSON.stringify(z.value) : "") + ")");
-                const host = keyHost();
-                lines.push("host: " + (host === "custom" ? "another address, " + (String(cfg.judgeUrl || "").trim() ? "set" : "empty") : hostName(host)) + " (judgeHost " + JSON.stringify(cfg.judgeHost) + ")");
-                const ownKey = OWN_NAME_KEYS[cfg.judgeWho];
-                const typed = String((ownKey ? cfg[ownKey] : cfg.judgeModel) || "").trim();
-                lines.push("model name sent: " + (typed ? JSON.stringify(typed) + ", typed in Model name" : JSON.stringify(builtInModelName(cfg)) + ", the built-in name"));
-                const line = JUDGE_FIELDS.find((f) => /Over$/.test(String(f.key)) && fieldShows(f));
-                if (line)
-                    lines.push("refine when a check reaches: " + cfg[line.key] + "% (" + line.key + ", default " + CONFIG[line.key] + ")");
+                const use = decisionInUse();
+                lines.push("Decision connection: " +
+                    (cfg.judgeConnection ? "one picked" : "the default") +
+                    (use ? ", provider " + JSON.stringify(use.provider) + ", model " + JSON.stringify(use.model) + (use.hasKey ? "" : ", no key saved") : ", not found") +
+                    " (list " + decisions.state + ")");
+                lines.push("refine when a check reaches: " + cfg.judgeOver + "% (judgeOver, default " + CONFIG.judgeOver + ")");
                 const checks = String(cfg.judgeChecks || "").split("\n").filter((l) => l.trim()).length;
                 lines.push("checks: " + checks + (sameAsWas(cfg.judgeChecks, CONFIG.judgeChecks) ? ", the built-in list" : ", your own list"));
                 lines.push("reads before the refine: " + (cfg.judgeBefore ? "yes" : "no") +
@@ -17439,6 +16597,7 @@ export function setup(ctx, overrides) {
                         askBackendVersion();
                         reaskRoles();
                         send({ type: "list_connections", requestId: newId() });
+                        send({ type: "list_decision_connections", requestId: newId() });
                         return;
                     }
                     // What the second model found went into the request. A real request
@@ -17498,43 +16657,40 @@ export function setup(ctx, overrides) {
                         const by = msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "";
                         if (msg.after) {
                             if (msg.failed)
-                                log("recheck", whoName() + " could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
+                                log("recheck", WhoName() + " could not read the rewrite (" + String(msg.why || "no reason given") + "), so the rewrite is kept", true);
                             else if (msg.refine)
-                                log("recheck", whoName() + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
+                                log("recheck", WhoName() + by + " read the rewrite and a check still reached the line, so it is refined once more: " + each + cost, true);
                             else
-                                log("recheck", whoName() + by + " read the rewrite and found nothing more: " + each + cost, true);
+                                log("recheck", WhoName() + by + " read the rewrite and found nothing more: " + each + cost, true);
                             return;
                         }
                         if (msg.failed)
-                            log("judge", whoName() + " could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
+                            log("judge", WhoName() + " could not decide (" + String(msg.why || "no reason given") + "), so the reply is refined anyway", true);
                         else if (msg.refine)
-                            log("judge", whoName() + by + " says refine: " + each + cost, true);
+                            log("judge", WhoName() + by + " says refine: " + each + cost, true);
                         else
-                            log("judge", whoName() + by + " says leave it: " + each + cost, true);
+                            log("judge", WhoName() + by + " says leave it: " + each + cost, true);
                         return;
                     }
-                    // Whether a key is saved is true whichever question it answers, so
-                    // every one of these is taken.
-                    if (msg.type === "jev_key") {
-                        if (Array.isArray(msg.hosts))
-                            jevHosts = msg.hosts.map((h) => String(h));
-                        // An answer about a host or address no longer shown still updates
-                        // the list, and leaves the rest alone.
-                        if (msg.for ? String(msg.for) !== keyFor() : msg.host && String(msg.host) !== keyHost()) {
-                            paint();
-                            return;
-                        }
-                        jevHas = !!msg.has;
-                        const said = String(msg.said || "");
-                        jevSaid =
-                            said === "saved"
-                                ? "Saved. Press Test to check it."
-                                : said === "forgotten"
-                                    ? "Forgotten. Two-model mode refines every reply until a key is saved."
-                                    : said
-                                        ? said.charAt(0).toUpperCase() + said.slice(1) + "."
-                                        : "";
-                        paint();
+                    if (msg.type === "decision_connections") {
+                        const list = Array.isArray(msg.list) ? msg.list : [];
+                        const next = {
+                            list: list.map((c) => ({
+                                id: String(c && c.id),
+                                name: String((c && c.name) || ""),
+                                provider: String((c && c.provider) || ""),
+                                model: String((c && c.model) || ""),
+                                isDefault: !!(c && c.isDefault),
+                                hasKey: !!(c && c.hasKey),
+                            })),
+                            state: ["ok", "old", "refused", "failed"].indexOf(String(msg.state)) >= 0 ? String(msg.state) : "failed",
+                            why: String(msg.why || "").slice(0, 300),
+                        };
+                        const same = JSON.stringify(next) === JSON.stringify(decisions);
+                        const was = rowsShowing();
+                        decisions = next;
+                        if (!same)
+                            paint(was);
                         return;
                     }
                     if (msg.type === "jev_tested") {
@@ -17552,26 +16708,22 @@ export function setup(ctx, overrides) {
                             over: Number(msg.over) || 50,
                             model: String(msg.model || "").slice(0, 60),
                             cost: Number(msg.cost) > 0 ? Number(msg.cost) : 0,
-                            test: {
-                                url: String(msg.url || "").slice(0, 300),
-                                sent: String(msg.sent || "").slice(0, 200),
-                                kind: String(msg.kind || ""),
-                            },
+                            test: { through: (() => { const c = decisionInUse(); return c ? c.name || c.model : ""; })() },
                         };
                         jevSaid = msg.ok
-                            ? whoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
-                                " answered. The key works. The Log tab shows the test under What " + whoName() + " decided."
-                            : whoName() + " did not answer: " + String(msg.why || "no reason given") + ". The Log tab shows where the test was sent.";
-                        log("judge", msg.ok ? whoName() + " answered a test question" : whoName() + " test failed: " + String(msg.why || ""), true);
+                            ? WhoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
+                                " answered. The Decision connection works. The Log tab shows the test under What " + whoName() + " decided."
+                            : WhoName() + " did not answer: " + String(msg.why || "no reason given") + ".";
+                        log("judge", msg.ok ? WhoName() + " answered a test question" : "The test of " + whoName() + " failed: " + String(msg.why || ""), true);
                         // A notification as well, so the answer is seen without looking
                         // for it on the panel: green with the model and the time when the
                         // key works, red with the reason when it does not.
                         const took = jevTestAt ? Date.now() - jevTestAt : 0;
                         jevTestAt = 0;
                         toast(msg.ok
-                            ? whoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
-                                " answered" + (took ? " in " + took + " ms" : "") + ". The key works."
-                            : whoName() + " did not answer: " + String(msg.why || "no reason given") + ".", true, msg.ok ? "success" : "error");
+                            ? WhoName() + (msg.model ? " (" + String(msg.model).slice(0, 60) + ")" : "") +
+                                " answered" + (took ? " in " + took + " ms" : "") + ". The Decision connection works."
+                            : WhoName() + " did not answer: " + String(msg.why || "no reason given") + ".", true, msg.ok ? "success" : "error");
                         paint();
                         return;
                     }
@@ -18446,6 +17598,7 @@ export function setup(ctx, overrides) {
     loadSetupsFromAccount();
     loadStateFromAccount();
     send({ type: "list_connections", requestId: newId() });
+    send({ type: "list_decision_connections", requestId: newId() });
     log("setup", "ready v" + VERSION);
     paint();
     return () => {
@@ -18479,13 +17632,6 @@ export function setup(ctx, overrides) {
 export const __testing = {
     MORE_CHECKS,
     LOG_KINDS,
-    BUILT_IN_MODEL_NAMES,
-    builtInModelName,
-    OWN_NAME_KEYS,
-    SIZE_PICKS,
-    sizeInUse,
-    homeHost,
-    SECOND_MODELS,
     splitSelectorList,
     blockText,
     sameSettings,

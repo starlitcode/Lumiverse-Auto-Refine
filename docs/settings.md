@@ -138,7 +138,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
-- **One model or two** is a beta. With two, a small second model, such as Jev or Span, checks each new reply first, and only the replies that need it are refined. It has its own host, version, key and checks, and every text it sends is in a box you can change. See [Two models](two-models.md).
+- **One model or two** is a beta. With two, a small second model checks each new reply first, and only the replies that need it are refined. It is asked through one of your Decision connections in Lumiverse. It has its own checks and line, and every text it sends is in a box you can change. See [Two models](two-models.md).
 
 ## Limits
 
@@ -211,7 +211,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 - **Reporting a problem** copies a report you can add to a bug report. It is optional, but it helps show exactly what went wrong.
   - **What it carries** chooses what goes in: your settings, the shape of your prompt, the counts, the recent log, where you are, and your browser.
   - What your blocks say is never included, only their names, roles and macros.
-  - **Your settings** names the second model you use and lists every setting you changed, with its default beside it. A default that is empty says "empty". Text you wrote shows only as its length, and an address or an account only as set or empty.
+  - **Your settings** names the provider and model of your Decision connection, and lists every setting you changed, with its default beside it. A default that is empty says "empty". Text you wrote shows only as its length, and an address only as set or empty.
   - The time at the top is your own time, with your time zone. Each recent line says which kind of line it is.
   - **Read and edit it first** lets you check it before it is copied.
   - The first lines always name the panel's version, the backend's version and Lumiverse's version. The first two differ if you updated without reloading.
@@ -347,7 +347,7 @@ While the floating button is on screen, its menu holds these extra actions. With
   - Alerts and sound
   - Buttons and the widget
   - Where the input box is
-  - One model or two (never the key for the second model)
+  - One model or two
   - The on and off switches
   - Saved presets
   - Saved model setups

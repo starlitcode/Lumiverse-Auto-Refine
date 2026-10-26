@@ -51,9 +51,9 @@ const EARNS: Record<string, { uses: RegExp; why: string }> = {
     uses: /spindle\.registerInterceptor\(/,
     why: "learns which connection the chat's replies use",
   },
-  cors_proxy: {
-    uses: /spindle\.cors\(/,
-    why: "reaches Jev in two-model mode",
+  decisions: {
+    uses: /spindle\.decisions\.evaluate\(/,
+    why: "asks the second model through a Decision connection, in two-model mode",
   },
 };
 

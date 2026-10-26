@@ -81,7 +81,7 @@ A refine is a second model call on every reply it refines. To spend less:
 - **Refine using** (Model tab): point it at a cheaper model than the one you chat with.
 - **Let it think first** (Model tab): off by default. Rewriting does not need a reasoning model.
 - **How much it is told** (Context tab): less chat history means a cheaper call.
-- **Two models** (Model tab, beta): a small second model, such as Jev or Span, checks each reply first, so only the ones that need it are refined. It can be wrong, so a reply that needs a refine is sometimes left alone. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
+- **Two models** (Model tab, beta): a small second model, through one of your Decision connections, checks each reply first, so only the ones that need it are refined. It can be wrong, so a reply that needs a refine is sometimes left alone. See [It can be wrong](docs/two-models.md#it-can-be-wrong).
 
 **Several rewrites at once** (Limits tab) costs more, because each rewrite it writes is a whole call. It is off by default.
 
@@ -110,7 +110,7 @@ All four change only a line the model could quote as breaking a rule. The two fo
 - [Settings](docs/settings.md): every tab and setting
 - [Ways to reach it](docs/settings.md#setup): the floating button, the chat buttons, and refining a selection
 - [Presets](docs/prompt.md#presets) and [Import and export](docs/prompt.md#import-and-export)
-- [Two models](docs/two-models.md): a beta where a second model, such as Jev or Span, picks which replies to refine
+- [Two models](docs/two-models.md): a beta where a second model, through a Decision connection, picks which replies to refine
 - [Privacy](docs/privacy.md): what it can reach, what it sends, and what it keeps
 - [Security policy](SECURITY.md): how to report a security problem
 - [Changelog](CHANGELOG.md): what changed in every version
@@ -118,7 +118,7 @@ All four change only a line the model could quote as breaking a rule. The two fo
 ## How it works
 
 - The refining runs in the extension's backend, because editing a saved message is a backend job.
-- Every refine goes through Lumiverse to the provider you set up. With two models on, the call to the second model goes through Lumiverse's own proxy to the host you picked.
+- Every refine goes through Lumiverse to the provider you set up. With two models on, the call to the second model goes through Lumiverse to your Decision connection.
 - The extension has no networking of its own. Search the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource` and you will find nothing.
 - **Nothing is ever added to your chat.** It only edits messages that already exist.
 - **Refine what I am typing** reads and writes the input box on the page, because Lumiverse has no API for it. If an update moves the box, **Where the input box is** on the Setup tab points it at the new one.
@@ -135,7 +135,7 @@ It asks for eight permissions:
 | `characters` | reading the character card |
 | `world_books` | reading the lore the chat has active |
 | `ui_panels` | the floating button |
-| `cors_proxy` | reaching the second model, when two models are on |
+| `decisions` | asking the second model, when two models are on |
 
 [Privacy](docs/privacy.md) says what still works without each one.
 

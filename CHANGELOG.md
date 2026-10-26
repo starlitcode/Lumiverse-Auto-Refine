@@ -6,11 +6,25 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.52.1
+## 1.53.0
 
 _2026-10-26_
 
+### Changed
+
+- **The second model is asked through a Decision connection in Lumiverse.** Set one up under **Decision models** in Lumiverse's **Connections** panel, then pick it under **Which Decision connection**, in **One model or two**, or leave it on **Your default Decision connection**. Lumiverse keeps the connection's address and key, so Auto Refine never sees either. The card says what is wrong when there is no connection to use, the one picked is gone, it has no key, or the permission is refused. See [Two models](docs/two-models.md).
+- **One line for every model.** **Refine when a check reaches** is one setting, 30 by default. The line you had set for the model you had picked is kept as that line.
+- **Stop calls the second model off.** Before, Stop waited for its answer.
+- **A new permission: Decision models.** It replaces the CORS proxy permission, which nothing uses now.
+
+### Removed
+
+- **The built-in second models and hosts.** **Which second model**, **Where it is reached**, the version and size pickers, the **Model name** boxes, **Another address**, **It needs no key**, **Let the key go over http://** and **Cloudflare account ID** are gone. Any decision model your Decision connection offers can be used instead.
+- **The key box.** The keys saved for the second model are deleted from Lumiverse's secure store the first time this version loads your settings.
+- **The link to each model's page**, and the notes about Kev 4B and Clef.
+
 ### Fixed
+
 
 - **A refine could change another extension's block in a reply.** Another extension can ask the model to write data into a reply, inside a tag it named, such as `<note-card>…</note-card>`. Only the two tags were hidden from the refine, so the words inside could be rewritten, and that extension could then act on the block a second time. A block whose tag name has a hyphen is now hidden whole, even with **Hide markup from the model** off. The second model no longer reads these blocks either. See [Another extension's blocks](docs/prompt.md#another-extensions-blocks).
 - **A refine was thrown away when another extension rewrote its own block at the same time.** If only that block changed while the refine was out, the refine is now saved, with the block as the other extension left it.
@@ -376,7 +390,7 @@ _2026-10-16_
 
 ### Changed
 
-- **The note under Clef is clearer.** It now says that Clef may not read the end of a long reply, and that Cloudflare and NanoGPT read only about the first 1,500 words. [Clef](docs/two-models.md#clef) in the docs says which hosts have the limit, and that OpenRouter sends only some calls to Cloudflare.
+- **The note under Clef is clearer.** It now says that Clef may not read the end of a long reply, and that Cloudflare and NanoGPT read only about the first 1,500 words. [Clef](docs/two-models.md) in the docs says which hosts have the limit, and that OpenRouter sends only some calls to Cloudflare.
 
 ---
 
@@ -392,15 +406,15 @@ _2026-10-15_
   - **Classify-1**, from ScaleDown.
 
   See [Two models](docs/two-models.md).
-- **SubQ Snap.** A new second model, from Subquadratic, on NanoGPT and on SubQ's own API. It sends SubQ Snap Preview. It has its own **Refine when a check reaches**, 30 by default. It takes at most 16 checks in one call, so more checks are sent over more than one call. See [SubQ Snap](docs/two-models.md#subq-snap).
-- **A model not in this list.** The last choice under **Which second model**, for a decision model Auto Refine does not have yet. It is reached at **Another address**, has its own **Refine when a check reaches**, 30 by default, and the Log calls it by the name you type. See [A model not in this list](docs/two-models.md#a-model-not-in-this-list).
+- **SubQ Snap.** A new second model, from Subquadratic, on NanoGPT and on SubQ's own API. It sends SubQ Snap Preview. It has its own **Refine when a check reaches**, 30 by default. It takes at most 16 checks in one call, so more checks are sent over more than one call. See [SubQ Snap](docs/two-models.md).
+- **A model not in this list.** The last choice under **Which second model**, for a decision model Auto Refine does not have yet. It is reached at **Another address**, has its own **Refine when a check reaches**, 30 by default, and the Log calls it by the name you type. See [A model not in this list](docs/two-models.md).
 - **Which Decider.** With Decider picked, **Decider Latest, always the newest** can be picked on OpenRouter. It always sends Perplexity's newest Decider. Decider V1.1 27B stays the default, and is used on the other hosts. Both use the same line.
 - **GPT-6 Luna Decisions and Kev 4B on NanoGPT.** **Where it is reached** now offers NanoGPT for both.
 
 ### Changed
 
 - **The What is links go to the makers' own pages.** **What is Mercury Decide?** now goes to Inception's page about it, and the docs say how to reach it on Inception's own API, under **Another address**. With Solar Decide Flash picked, the link is **What is Solar Decide?**, to Upstage's page. Both went to OpenRouter before. **What is D1?** now goes to Liquid AI's post introducing d1, and **What is Clef?** to Cloudflare's post introducing Clef. Clef Flash and Clef Omni use that same link.
-- **One Span-01 Lite on OpenRouter.** OpenRouter now lists `respan/span-01-lite` as free, so **Span-01 Lite, free** sends that name. **Span-01 Lite, without the free limits** is gone, since it was the same model. Anyone who had it picked now has **Span-01 Lite, free**, which sends the same model. See [Which Span](docs/two-models.md#which-span).
+- **One Span-01 Lite on OpenRouter.** OpenRouter now lists `respan/span-01-lite` as free, so **Span-01 Lite, free** sends that name. **Span-01 Lite, without the free limits** is gone, since it was the same model. Anyone who had it picked now has **Span-01 Lite, free**, which sends the same model. See [Which Span](docs/two-models.md).
 
 ### Removed
 
@@ -422,7 +436,7 @@ _2026-10-15_
 
 - **Jev 1.14 exactly takes the place of Jev 1.13 exactly.** Under **Which Jev**, the exact choice is now Jev 1.14, on TypeSafe and NanoGPT. OpenRouter has no name for it yet, so it is not offered there, and the latest Jev is sent. To keep Jev 1.13, type its name in **Model name**: `jev-1.13.0` on TypeSafe, or `typesafe/jev-1.13` on NanoGPT and OpenRouter.
 - **Respan's own API sends Span-02.** With Respan as the host, Span-02 is sent, and **Which Span** is not shown. Span-01 is still on OpenRouter. To use Span-01 on Respan's own API, pick **Another address**, with `https://api.respan.ai/api/v1/scores` and `span-01-pro`.
-- **A new version takes the old one's place.** When a second model has a new version, the list holds the new one. An older one is reached by typing its name in **Model name**, for as long as its host serves it. See [When a model is renamed, or a new one comes out](docs/two-models.md#when-a-model-is-renamed-or-a-new-one-comes-out).
+- **A new version takes the old one's place.** When a second model has a new version, the list holds the new one. An older one is reached by typing its name in **Model name**, for as long as its host serves it. See [When a model is renamed, or a new one comes out](docs/two-models.md).
 
 ### Fixed
 
@@ -619,7 +633,7 @@ _2026-10-08_
 
 ### Added
 
-- **It needs no key, for a model you run yourself.** Under **Another address** there is a new switch, off by default. Switched on, no key is sent, **Test** works with no key saved, and `http://` works at any address. See [A model you run yourself](docs/two-models.md#a-model-you-run-yourself).
+- **It needs no key, for a model you run yourself.** Under **Another address** there is a new switch, off by default. Switched on, no key is sent, **Test** works with no key saved, and `http://` works at any address. See [A model you run yourself](docs/two-models.md).
 - **Leave a refusal as it is.** A new switch, on by default. A short reply where the model refused is not refined by the automatic pass, so no call is spent on it. The refine button still works on it. See [A reply that is a refusal](docs/guardrails.md#a-reply-that-is-a-refusal).
 - **Drop an answer with no tags.** A new switch under **Take the answer from between the tags**, on by default. When your prompt asks for `<REFINED>` tags and the answer has none, the model did not follow the format, and the rewrite is thrown away. Before, the whole answer was saved. See [The answer it asks for](docs/prompt.md#the-answer-it-asks-for).
 - **Refuse a rewrite that loses \* marks.** A new check, off by default. On, a rewrite with fewer \* marks than the reply, or with one left unpaired, is thrown away. See [The \* marks around actions](docs/guardrails.md#the--marks-around-actions).
@@ -650,12 +664,12 @@ _2026-10-03_
 
 ### Added
 
-- **A Model name box for every second model.** Span, Mercury Decide, D1, Solar Decide and Kev 4B each have a **Model name** box under **Where it is reached**. It shows the built-in name for that host. Left empty, the built-in name is used. If a host renames a model or adds a new version, type its new name there. See [When a model is renamed, or a new one comes out](docs/two-models.md#when-a-model-is-renamed-or-a-new-one-comes-out).
+- **A Model name box for every second model.** Span, Mercury Decide, D1, Solar Decide and Kev 4B each have a **Model name** box under **Where it is reached**. It shows the built-in name for that host. Left empty, the built-in name is used. If a host renames a model or adds a new version, type its new name there. See [When a model is renamed, or a new one comes out](docs/two-models.md).
 
 ### Changed
 
 - **Jev's Model name box looks like every other model's.** **Which Jev** no longer has **A name I type**. Jev has a **Model name** box under **Which Jev** at all times, the same as the other models, showing the name your choice sends. A name you typed under **A name I type** is kept in the new box, and **Which Jev** is set to **Jev 1.13 exactly**, which is what an empty box sent before.
-- **Another address works for every second model.** It always did, and [Two models](docs/two-models.md#another-address) said it was only for Jev and Span. It now says so, with the steps for adding a new model that is not in the list.
+- **Another address works for every second model.** It always did, and [Two models](docs/two-models.md) said it was only for Jev and Span. It now says so, with the steps for adding a new model that is not in the list.
 
 ### Fixed
 
@@ -723,8 +737,8 @@ _2026-10-02_
 
 ### Added
 
-- **Solar Decide on Upstage's own API.** With Solar Decide picked, **Where it is reached** now has **Upstage**. It takes a key from your Upstage account. See [Solar Decide](docs/two-models.md#solar-decide).
-- **D1 on NanoGPT.** With D1 picked, **Where it is reached** now has **NanoGPT**. A NanoGPT key saved for Jev is used for D1 too. See [D1](docs/two-models.md#d1).
+- **Solar Decide on Upstage's own API.** With Solar Decide picked, **Where it is reached** now has **Upstage**. It takes a key from your Upstage account. See [Solar Decide](docs/two-models.md).
+- **D1 on NanoGPT.** With D1 picked, **Where it is reached** now has **NanoGPT**. A NanoGPT key saved for Jev is used for D1 too. See [D1](docs/two-models.md).
 
 ---
 
@@ -734,9 +748,9 @@ _2026-10-02_
 
 ### Added
 
-- **Mercury Decide, a third second model.** It is made by Inception and is free on OpenRouter for now. Pick it under **Which second model** on the Model tab, with two models on. It answers the same checks as Jev and Span, and an OpenRouter key works for it. It has its own **Refine when a check reaches**, 40 by default, because it scores most checks close to 0 or close to 100. See [Mercury Decide](docs/two-models.md#mercury-decide).
-- **D1 and Solar Decide, two more second models.** D1 is made by Liquid AI. It is paid on OpenRouter, and it can also be reached on Liquid's own API, with a key from your Liquid account. Solar Decide is made by Upstage, and it is paid on OpenRouter. Each has its own **Refine when a check reaches**, 50 by default. Neither line has been measured yet, so the docs say how to adjust it. See [D1](docs/two-models.md#d1) and [Solar Decide](docs/two-models.md#solar-decide).
-- **Kev 4B, a small second model.** It is an open model made by Jared Palmer, and it is paid on OpenRouter. It is small, so it can miss more than the larger models, and a very long reply can be too much for it. It has its own **Refine when a check reaches**, 50 by default, not measured yet. See [Kev 4B](docs/two-models.md#kev-4b).
+- **Mercury Decide, a third second model.** It is made by Inception and is free on OpenRouter for now. Pick it under **Which second model** on the Model tab, with two models on. It answers the same checks as Jev and Span, and an OpenRouter key works for it. It has its own **Refine when a check reaches**, 40 by default, because it scores most checks close to 0 or close to 100. See [Mercury Decide](docs/two-models.md).
+- **D1 and Solar Decide, two more second models.** D1 is made by Liquid AI. It is paid on OpenRouter, and it can also be reached on Liquid's own API, with a key from your Liquid account. Solar Decide is made by Upstage, and it is paid on OpenRouter. Each has its own **Refine when a check reaches**, 50 by default. Neither line has been measured yet, so the docs say how to adjust it. See [D1](docs/two-models.md) and [Solar Decide](docs/two-models.md).
+- **Kev 4B, a small second model.** It is an open model made by Jared Palmer, and it is paid on OpenRouter. It is small, so it can miss more than the larger models, and a very long reply can be too much for it. It has its own **Refine when a check reaches**, 50 by default, not measured yet. See [Kev 4B](docs/two-models.md).
 
 ### Changed
 
@@ -913,9 +927,9 @@ _2026-09-26_
 ### Added
 
 - **Span, a second choice for the second model.** Span is a scoring model from Respan. Pick it under **Which second model**, in **One model or two**. It answers the same checks as Jev. See [Two models](docs/two-models.md).
-- **Which Span.** Span-01 Lite, free, Span-01 Lite, paid, and Span-01. On Respan's own API these are called span-01-free and span-01-pro. See [Which Span](docs/two-models.md#which-span).
+- **Which Span.** Span-01 Lite, free, Span-01 Lite, paid, and Span-01. On Respan's own API these are called span-01-free and span-01-pro. See [Which Span](docs/two-models.md).
 - **Respan as a host**, under **Where it is reached**, while Span is picked.
-- **Another address takes Respan's scores format.** An address ending in `/scores` is sent the kind of request Respan's own API takes. See [Another address](docs/two-models.md#another-address).
+- **Another address takes Respan's scores format.** An address ending in `/scores` is sent the kind of request Respan's own API takes. See [Another address](docs/two-models.md).
 - **What is Span?**, a link on the Model tab to Respan's page introducing Span.
 - **Also compare with the reply before it**, in **One model or two**, off by default. On, the second model is also sent the reply before the one it reads. Three checks are added for you: whether the reply has the same events in the same order, has the characters speak in the same order, or describes the surroundings again with the same details. Your own checks can name it too, as `previous_reply`. See [Comparing with the reply before it](docs/two-models.md#comparing-with-the-reply-before-it).
 - **`{{checks_found}}`**, the macro for what the checks found. It works the same whichever second model is picked, and its lead-in names that model.
@@ -1138,7 +1152,7 @@ _2026-09-23_
 
 ### Added
 
-- **Which Jev.** In **One model or two**, under **Where Jev is reached**. Pick **The latest Jev**, **The preview Jev**, **Jev 1.13 exactly**, or **A name I type**. See [Which Jev](docs/two-models.md#which-jev).
+- **Which Jev.** In **One model or two**, under **Where Jev is reached**. Pick **The latest Jev**, **The preview Jev**, **Jev 1.13 exactly**, or **A name I type**. See [Which Jev](docs/two-models.md).
   - The latest moves to each new Jev by itself, so its answers can change. Jev 1.13 exactly keeps them steady.
   - The preview runs ahead of the latest when TypeSafe has a preview build. Only TypeSafe names one, so it is only offered when the host is TypeSafe.
   - A name you type is sent as you typed it, for a host that renames Jev.
@@ -1149,7 +1163,7 @@ _2026-09-23_
 
 - **The Log names the Jev that answered**, for example "Jev (jev-1.13.0) says leave it". **Test** names it too.
 
-- **Another address takes OpenAI and Claude format addresses.** An address ending in `/chat/completions`, `/responses` or `/messages` is sent the kind of request that format takes. The address and model name boxes show an example, and [Another address](docs/two-models.md#another-address) lists the addresses known to work.
+- **Another address takes OpenAI and Claude format addresses.** An address ending in `/chat/completions`, `/responses` or `/messages` is sent the kind of request that format takes. The address and model name boxes show an example, and [Another address](docs/two-models.md) lists the addresses known to work.
 
 ### Changed
 

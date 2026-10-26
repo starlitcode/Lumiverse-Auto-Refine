@@ -120,71 +120,25 @@ Two skills are available. Load them before starting work.
   the old one is then told, and can take the new one. A setting added in the
   version being written has no old value, so it is not listed.
 
-## Second models
+## The second model
 
-- Each second model has its own **Refine when a check reaches** setting, with
-  its own default. Scoring models do not score on the same scale, so a user
-  can tune each one apart from the others.
-- The defaults come from the owner's testing during the beta. Every second
-  model's default is 30, which the owner chose as the safest line.
-- A new second model gets its own line setting, and its default is 30. The
-  owner changes a default only if the owner's testing finds a better one or a model
-  changes. `test/model-names.test.ts` checks that every line starts at 30.
-- Models from the same maker that are sizes or kinds of one model, such as
-  Clef and Clef Flash, or Mercury Decide free and paid, are one entry under
-  **Which second model**, with a picker under it, such as **Which Clef**.
-  They are kept in `SIZE_PICKS`, in the panel and in the backend. Each size
-  has its own line setting at 30. Two kinds of the same model share a line.
-  Every size uses its model's **What is** link. All the sizes share
-  one **Model name** box, which shows the name for the one picked. A host
-  offers a size when it has a built-in name for it.
-- When a second model has a new version, the new one takes the old one's
-  place, under the same choice. The old one is not kept as a choice of its
-  own, so the code holds no names a host has stopped serving. A user who wants
-  the old one types its name in **Model name**. The changelog and
-  `docs/two-models.md` say which name to type.
-- Each second model's **What is** link goes to its maker's own introduction
-  to its decision model. It introduces the decision model as a whole, so it
-  does not need to be a page for that exact model or size, and every size
-  uses its model's link. Original sources come first, since a third party
-  can describe a model wrongly. Pick the first of these that exists:
-  1. The maker's introduction post. Search for `introducing [model] by
-     [maker]`.
-  2. The maker's own docs for its decisions API.
-  3. The page of the host where the model was found, usually OpenRouter, or
-     NanoGPT when OpenRouter does not have it.
-  Check that the page opens and is the maker's. If an introduction cannot be
-  found, or a maker's site cannot be opened from the session, ask the owner
-  to search for it before falling back to the next one. A host's page needs
-  the model named in `NO_MAKER_PAGE` in `test/model-names.test.ts`, which
-  fails on any other link to a host. The docs use the same link.
-- To look for new decision models, read each host's whole model list and
-  pick out every model that returns decisions, whoever makes it. On
-  OpenRouter that is `output_modalities` holding `decisions`, from
-  `/api/v1/models?output_modalities=all`. On NanoGPT it is a description
-  that names Choice, Score and Noul questions, from
-  `/api/v1/models?detailed=true`. Never search only for the names of models
-  already in the list, which misses a new maker.
-- A second model whose every host stops serving it is taken out of the list,
-  with all of its parts. A setup saved with it picked reads as Jev, in the
-  panel and in the backend, and the changelog says so under "Removed".
-- Never leave out a decision model because it is paid. Paid and free models
-  are added the same way.
-- A paid second model that cannot be tested, because there is no key with
-  credit, can still be added if it answers yes-or-no checks and suits Auto
-  Refine.
-- `docs/two-models.md` never claims a default is measured or correct. It says
-  the defaults come from testing during the beta and can change.
-- Every entry under **Which second model** has a **Model name** box, Jev
-  included, so a user can type a new name when a host renames a model or
-  releases a new version. **A model not in this list** is the one exception:
-  it has no host of its own and uses the boxes under **Another address**. When
-  a second model or a host for one is added or changed, keep all of its parts:
-  the setting in `OWN_NAME_KEYS` with an empty default in `CONFIG`, the box on
-  the Model tab, its place in `PARTS`, and its built-in name for every host in
-  `BUILT_IN_MODEL_NAMES`, matching the backend's. Never remove the box of a
-  model that is still in the list.
-  `test/model-names.test.ts` fails when a part is missing.
+- Two-model mode asks the second model through one of the reader's Decision
+  connections in Lumiverse, with `spindle.decisions.evaluate`. Lumiverse
+  keeps the address and the key. Auto Refine never sees or stores a key, and
+  names no model, maker or host of its own.
+- **Which Decision connection** is `judgeConnection`. Empty uses the reader's
+  default Decision connection. The panel lists the connections with
+  `list_decision_connections`, which the backend answers from
+  `spindle.decisions.listConnections`.
+- Every reason the second model cannot be asked is said in plain words, in the
+  Log and on the card: no connection, none default, the one picked gone, no
+  key, the permission refused, a Lumiverse too old. Each one refines the reply
+  as with one model.
+- There is one line, `judgeOver`, 30 by default. The default comes from the
+  owner's testing during the beta. `docs/two-models.md` never claims it is
+  measured or correct.
+- The model is named in the panel and the Log by the connection's model id,
+  with the maker taken off, such as `jev-latest`.
 
 ## Thinking formats
 

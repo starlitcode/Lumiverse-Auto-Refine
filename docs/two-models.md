@@ -2,459 +2,47 @@
 
 A beta. With one model, which is the default, every reply the automatic pass reaches is refined. With two, a second model reads each finished reply first and says whether it needs a refine, and the refine model runs only on the replies it picks out. Replies that were fine already stop costing a refine.
 
-The second model is a small scoring model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
+The second model is a small scoring model, called a decision model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
-There are fifteen to pick from. Some come in more than one size or kind, picked under the model. See [Sizes and kinds](#sizes-and-kinds). The last choice, **A model not in this list**, is for any other decision model. See [A model not in this list](#a-model-not-in-this-list).
-
-| Model | Made by | Cost | What is it? |
-| --- | --- | --- | --- |
-| **Jev** | TypeSafe | Paid, per call | [Introducing Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) |
-| **Span** | Respan | Span-01 Lite is free on OpenRouter. Span-02 is paid, per call. | [Introducing Span-01](https://www.respan.ai/blog/introducing-span-1), [Introducing Span-02](https://www.respan.ai/blog/introducing-span-2) |
-| **Mercury Decide**, free or without the free limits | Inception | The free one costs nothing. The other is paid, per call. | [Inception: Decisions](https://docs.inceptionlabs.ai/capabilities/decisions) |
-| **D1**, and **D1 Ultra** | Liquid AI | Paid on OpenRouter. On Liquid's own API, D1 is called `d1:free`. | [Introducing d1](https://www.liquid.ai/blog/d1-decision-model) |
-| **Solar Decide**, and **Solar Decide Flash** | Upstage | Paid, per call | [Upstage: Solar Decide](https://console.upstage.ai/docs/models/solar-decide) |
-| **Kev 4B** | Jared Palmer | Paid, per call | [Introducing Kev](https://jaredpalmer.com/blog/introducing-kev) |
-| **GPT-6 Luna Decisions** | OpenAI | Paid, per call | [OpenAI: Decisions](https://developers.openai.com/api/docs/guides/decisions) |
-| **Clef**, **Clef Flash** and **Clef Omni** | Cloudflare | Paid, per call | [Introducing Clef](https://blog.cloudflare.com/clef-decision-models) |
-| **Decider**, and **Decider Flash** | Perplexity | Paid, per call | [Perplexity: Decisions API](https://docs.perplexity.ai/docs/decisions/quickstart) |
-| **Microsoft-Decision-1** | Microsoft | Paid, per call | [Microsoft: Microsoft-Decision-1](https://commandline.microsoft.com/microsoft-decision-1-model-foundry/) |
-| **Drex**, and **Drex Max** | Nace.AI | Paid, per call | [Nace.AI: Drex API](https://console.nace.ai/docs/drex) |
-| **Classify-1** | ScaleDown | Paid, per call | [ScaleDown: Decisions](https://docs.scaledown.ai/api-reference/decisions-overview) |
-| **SubQ Snap** | Subquadratic | Paid, per call | [Introducing SubQ Snap](https://subq.ai/introducing-subq-snap) |
-| **Jeff** | eu/jev | Paid, per call | [eu/jev: Documentation](https://eu-jev.com/docs) |
-| **Mammoth 1 and Elephant 1** | Baseten | Free on OpenRouter | [Baseten: mammoth-1 and elephant-1](https://www.baseten.co/blog/the-best-decision-models-in-the-world-mammoth-1-and-elephant-1/) |
-
-All of them answer the same checks, and everything on this page works the same for all of them, unless a section says it is for one. The Model tab shows the link for the model you picked, such as **What is Jev?**, while **How many models** is set to two. The link goes to the maker's own introduction to its decision model. It does not have to be about the exact model or size picked, so every size of a model shares its link.
-
-With Kev 4B picked, a warning that it is a small model shows next to its link. With any Clef picked, a note says how much of a reply Cloudflare reads.
+Auto Refine asks it through one of your **Decision connections** in Lumiverse. Lumiverse keeps the connection's address and key, so Auto Refine never sees either.
 
 ## Setting it up
 
-Everything is on the Model tab, in **One model or two**.
+First, in Lumiverse:
+
+1. Open the **Connections** panel.
+2. Under **Decision models**, add a Decision connection. Pick the provider, paste its key, and pick a decision model.
+3. To use it without picking it in Auto Refine, set it as your default Decision connection.
+
+Then, on Auto Refine's Model tab, in **One model or two**:
 
 1. Set **How many models** to two.
-2. Pick **Which second model**. The list names each model and its maker.
-3. Pick **Where it is reached**. The list only shows hosts that serve the model you picked. **Another address** is for any other host. It is there for every second model. See [Another address](#another-address).
-4. Pick which version. For Jev, see [Which Jev](#which-jev). For Span, see [Which Span](#which-span). For Mercury Decide, D1, Solar Decide, Clef, Decider, Drex, Jeff, and Mammoth 1 and Elephant 1, see [Sizes and kinds](#sizes-and-kinds). The others have one version each, so there is nothing to pick. See the section for your model below, such as [Mercury Decide](#mercury-decide) or [Clef](#clef).
-5. Paste a key from that host into the key box and press **Save key**. The box is named after the host, such as **Key for OpenRouter**. The key has to come from that host.
-6. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
+2. Under **Which Decision connection**, keep **Your default Decision connection**, or pick one of yours. The list shows each connection's name and model.
+3. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
-Two-model mode also needs the `cors_proxy` permission, since the second model is not a chat model and no connection profile can reach it. Without it the panel says so and every reply is refined, the same as with one model.
+Two-model mode needs the **Decision models** permission. Lumiverse asks for it after updating to a version that uses it.
 
-A key is kept for each host:
+The card says what is wrong, if anything, under **Which Decision connection**:
 
-- Save a key once for each host you use. Picking a host uses the key saved for it.
-- A key belongs to the host, not the model. An OpenRouter key is used for Jev and for Span on OpenRouter.
-- **Keys are saved for**, under the box, lists the hosts that have a key.
-- **Forget key** deletes the key for the host shown. The others are kept.
-- **Another address** keeps a key for each address. A different address, such as one set by importing somebody else's settings, has no key until you save one for it. The same host with a different path uses the same key.
-- A key saved before keys were kept per host is moved to the host you have picked the first time it is used.
+- You have no Decision connections yet.
+- None of them is the default, and none is picked.
+- The one picked is gone.
+- The one in use has no key saved.
+- The permission is refused.
+- This Lumiverse is too old to have Decision connections for extensions.
 
-## Which Jev
+In each of these, every reply is refined, the same as with one model.
 
-**Which Jev** shows when Jev is picked. It has these choices:
+## Coming from an older version
 
-- **The latest Jev**, the default. It moves to each new Jev by itself, with no update to this extension. Its answers can change when a new Jev comes out, even though nothing changed on your side.
-- **The preview Jev**, only when the host is TypeSafe. It runs ahead of the latest when TypeSafe has a preview build, for earlier access. When there is none, it is the same as the latest.
-- **Jev 1.14 exactly**, when the host is OpenRouter, TypeSafe or NanoGPT. Its answers stay steady. Pick this if you have tuned **Refine when a check reaches** and want it to keep meaning the same thing.
+Older versions reached the second model themselves, with a host, a model name and a key saved in Auto Refine. That is gone:
 
-The name each host is sent:
+- The keys you saved for the second model are deleted from Lumiverse's secure store the first time this version loads your settings.
+- Your host, model and address settings are dropped.
+- Your checks, and every other setting on the card, are kept.
+- **Refine when a check reaches** was kept per model. The line of the model you had picked is kept as the one line.
 
-| Host | The latest Jev | The preview Jev | Jev 1.14 exactly |
-| --- | --- | --- | --- |
-| OpenRouter | `~typesafe/jev-latest` | not offered | `typesafe/jev-1.14` |
-| TypeSafe | `jev-latest` | `jev-preview` | `jev-1.14.0` |
-| NanoGPT | `typesafe/jev-latest` | not offered | `typesafe/jev-1.14` |
-
-- OpenRouter and NanoGPT have no preview name, so **The preview Jev** is not in the list for them.
-- A choice that is not in the list for the host sends the latest. Change back to a host that has it, and it is picked again.
-- **Jev 1.14 exactly** is the newest Jev. When a newer one comes out, this choice moves to it. To keep an older Jev, type its name in **Model name**, such as `jev-1.13.0` on TypeSafe or `typesafe/jev-1.13` on NanoGPT and OpenRouter. It works for as long as the host serves it.
-
-**Model name**, under **Which Jev**, is the same box every second model has. It shows the name your choice above sends. Type a different name and that name is sent instead, whatever **Which Jev** says. See [When a model is renamed, or a new one comes out](#when-a-model-is-renamed-or-a-new-one-comes-out).
-
-## Which Span
-
-**Which Span** shows when Span is picked and the host is OpenRouter. It has these choices:
-
-- **Span-01 Lite, free**, the default. It costs nothing at the moment. OpenRouter sets its price.
-- **Span-02**, the newest Span. It is paid, per call.
-
-The name each host is sent:
-
-| Host | Span-01 Lite, free | Span-02 |
-| --- | --- | --- |
-| OpenRouter | `respan/span-01-lite` | `respan/span-02` |
-| Respan | `span-02` | `span-02` |
-
-**Respan's own decisions address** serves Span-02 only, so **Which Span** is not shown there.
-
-Span-02 takes the same request as Jev, so nothing about the checks changes. It reads up to 131,072 tokens on OpenRouter.
-
-Span-01 Lite reads a conversation, not named fields. The panel does this for you:
-
-- The reply is sent as the assistant's turn of a conversation.
-- The word `reply` in backticks is written out as "the reply" in each check.
-- With **Also compare with the reply before it** on, that reply is sent as the turn before, and `previous_reply` is written out as "the previous reply". See [Comparing with the reply before it](#comparing-with-the-reply-before-it).
-- A key for Respan's own API comes from your Respan account, at [platform.respan.ai](https://platform.respan.ai).
-- Span-01, the full model, is still on OpenRouter as `respan/span-01`. Type it in **Model name** to use it. It is sent the conversation too.
-- To use Span-01 on Respan's own API, pick **Another address**, with the address `https://api.respan.ai/api/v1/scores` and the model name `span-01-pro`. That address takes a scores request: each check is sent as a behavior, and the chance the behavior is present is the score.
-
-## Sizes and kinds
-
-Some models come in more than one size, or as a free kind and a paid kind. Each is one entry under **Which second model**, with a picker under it:
-
-| Model | Picker | Choices |
-| --- | --- | --- |
-| Mercury Decide | **Which Mercury Decide** | free, or without the free limits |
-| Solar Decide | **Which Solar Decide** | Solar Decide, or Solar Decide Flash |
-| Clef | **Which Clef** | Clef, Clef Flash, or Clef Omni |
-| Decider | **Which Decider** | Decider V1.2, Decider Latest, Decider Flash V1.2, or Decider Flash Latest |
-| D1 | **Which D1** | D1, or D1 Ultra |
-| Drex | **Which Drex** | Drex 2.0, or Drex Max |
-| Mammoth 1 and Elephant 1 | **Which Baseten model** | Mammoth 1, or Elephant 1 |
-| Jeff | **Which Jeff** | Jeff 1.0.0, or Jeff Latest |
-
-- A different size is a different model, so each size has its own **Refine when a check reaches**. The panel shows the line for the size in use.
-- The free and paid kinds of Mercury Decide are the same model, so they share one line. Decider V1.2 and Decider Latest share one line, and so do the two kinds of Decider Flash and the two kinds of Jeff.
-- A host only offers the sizes it serves. If the size you picked is not served on the host you change to, the standard size is used there, with its line. Change back and your size is picked again.
-- One **Model name** box serves every size of a model. It shows the name for the one picked. A name typed in it is sent whichever size is picked.
-
-## Mercury Decide
-
-Mercury Decide is reached on OpenRouter. It takes the same request as Jev, so nothing about the checks changes.
-
-**Which Mercury Decide** picks one of two kinds of the same model:
-
-- **Mercury Decide, free**, the default. It costs nothing at the moment.
-- **Mercury Decide, without the free limits**. It is paid, per call. OpenRouter's limits for free models do not apply to it.
-
-| Host | Free | Without the free limits |
-| --- | --- | --- |
-| OpenRouter | `inception/mercury-decide:free` | `inception/mercury-decide` |
-
-- OpenRouter limits free models to 20 calls a minute. It also limits them to 50 calls a day, or 1000 a day once you have bought 10 credits or more.
-- Inception's own API serves it too, as `mercury-decide`, at `https://api.inceptionlabs.ai/v1/decisions`. To use it there, pick **Another address**, fill in that address and model name, and save a key from your Inception account. See [Inception: Decisions](https://docs.inceptionlabs.ai/capabilities/decisions).
-
-## D1
-
-D1 is Liquid AI's decision model. It takes the same request as Jev.
-
-**Which D1** picks one of two:
-
-- **D1**, the default. It reads up to 65,536 tokens on OpenRouter.
-- **D1 Ultra, the largest**. It also reads pictures. It reads up to 32,768 tokens on OpenRouter, so a long reply with the one before it can be too much for it. The host then refuses the call, and the reply is refined the same as when any second model cannot answer.
-
-| Host | D1 | D1 Ultra |
-| --- | --- | --- |
-| OpenRouter | `liquid/d1` | `liquid/d1-ultra` |
-| NanoGPT | `liquid/d1` | |
-| Liquid AI | `d1:free` | `d1-ultra` |
-
-- NanoGPT has no D1 Ultra, so D1 is used there.
-- On OpenRouter and NanoGPT it is paid, per call. Each host's own page shows the price.
-- NanoGPT lists D1, but its docs for the decisions route only name Jev so far. If **Test** fails on NanoGPT, use OpenRouter or Liquid AI.
-- On Liquid's own API, the key comes from your Liquid account, at [console.liquid.ai](https://console.liquid.ai), under **API Keys**. Liquid's keys start with `liquid_`.
-
-## Solar Decide
-
-Solar Decide is Upstage's decision model. It takes the same request as Jev. Upstage gives it 512K tokens of context, so a long reply fits easily.
-
-**Which Solar Decide** shows when Solar Decide is picked:
-
-- **Solar Decide**, the default.
-- **Solar Decide Flash, faster**. A faster Solar Decide, with the same 512K tokens of context. It is only offered where it is served.
-
-| Host | Solar Decide | Solar Decide Flash |
-| --- | --- | --- |
-| OpenRouter | `upstage/solar-decide` | `upstage/solar-decide-flash` |
-| Upstage | `solar-decide` | not offered |
-
-- Each of the two has its own **Refine when a check reaches**. The panel shows the line for the one in use.
-- Upstage has not published its own name for Solar Decide Flash, so it is not offered on Upstage. If you picked it on OpenRouter and then change to Upstage, Solar Decide is sent, and its line is used. Change back to OpenRouter and Solar Decide Flash is picked again.
-- One **Model name** box serves both. It shows the name for the one picked. A name typed in it is sent for both.
-- On OpenRouter both are paid, per call. OpenRouter's page for each shows the price.
-- On Upstage's own API, the key comes from your Upstage account, at [console.upstage.ai](https://console.upstage.ai/api-keys), under **API Keys**.
-- Upstage marks it as a beta.
-
-## Kev 4B
-
-Kev 4B is an open model made by Jared Palmer. It takes the same request as Jev. Its weights are on [Hugging Face](https://huggingface.co/jaredpalmer/kev-4b).
-
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `jaredpalmer/kev-4b` |
-| NanoGPT | `jaredpalmer/kev-4b` |
-
-It is a small model, so keep these in mind:
-
-- It can miss more problems than the larger models, and score more checks wrongly.
-- OpenRouter and NanoGPT give it 8,192 tokens. That covers the reply, the checks, and the reply before it when **Also compare with the reply before it** is on.
-- Its maker trained it on texts up to about 7,500 tokens. A very long reply can be more than it handles well.
-- When a call is too long for it, the host refuses the call. The reply is then refined, the same as when any second model cannot answer.
-- It is paid, per call. Each host's own page shows the price.
-
-## GPT-6 Luna Decisions
-
-GPT-6 Luna Decisions is GPT-6 Luna, from OpenAI, answering through OpenAI's decisions API. OpenRouter gives it 1,050,000 tokens of context, so a long reply fits easily.
-
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `openai/gpt-6-luna-decisions` |
-| NanoGPT | `openai/gpt-6-luna-decisions` |
-| OpenAI | `gpt-6-luna` |
-
-- On OpenRouter and NanoGPT it takes the same request as Jev.
-- On OpenAI's own API the request is laid out the way OpenAI asks. The panel does this for you:
-  - The reply, and the reply before it when that is sent, go as JSON text, so the checks can still call them `reply` and `previous_reply`.
-  - Each check goes as a named yes-or-no question.
-- OpenAI can decline to answer a check. That check then has no score, and the others are read as usual. If it declines every check, the Log says so and the reply is refined.
-- On OpenAI's own API, the key comes from your OpenAI account, at [platform.openai.com](https://platform.openai.com/api-keys).
-- It is paid, per call. OpenAI marks the decisions API as a beta.
-
-## Clef
-
-Clef, Clef Flash and Clef Omni are Cloudflare's decision models. All three take the same request as Jev. Their weights are open.
-
-**Which Clef** shows when Clef is picked:
-
-- **Clef**, the default. The larger one.
-- **Clef Flash, smaller and faster**. It is only offered where it is served.
-- **Clef Omni, which also reads pictures and sound**. Auto Refine sends it text only, the same as the others.
-
-| Host | Clef | Clef Flash | Clef Omni |
-| --- | --- | --- | --- |
-| OpenRouter | `cloudflare/clef` | `cloudflare/clef-flash` | `cloudflare/clef-omni` |
-| NanoGPT | `cloudflare/clef` | `cloudflare/clef-flash` | `cloudflare/clef-omni` |
-| Cloudflare | `clef` | `clef-flash` | `clef-omni` |
-
-- **How much they read.** Clef may not read the end of a long reply. How much it reads depends on who runs it:
-  - **Cloudflare** reads only about the first 2,000 tokens it is sent, which is about 1,500 words.
-  - **NanoGPT** reads only about the first 1,800 tokens.
-  - **OpenRouter** does not run Clef itself. It passes each call to a company that does, and it can pick a different one each time. For Clef and Clef Flash, that is Cloudflare, DeepInfra or PrimeIntellect. Only Cloudflare has the short limit. Clef Omni is only run by Cloudflare, so it always has the short limit.
-  - What Clef is sent counts toward the limit: the reply, the checks, and the reply before it when **Also compare with the reply before it** is on. Turning that switch off leaves more room for the reply.
-  - A short reply is read in full on every host.
-- **On Cloudflare's own API** you need two things, both from the Workers AI page of your Cloudflare dashboard, under **Use REST API**:
-  1. Your account ID. Paste it into **Cloudflare account ID**, which shows when Cloudflare is the host. It is 32 letters and numbers. Anything else is not used.
-  2. An API token made with the **Workers AI** template. Save it in the key box.
-- With no account ID saved, Cloudflare is not called, the Log says what is missing, and the reply is refined.
-- Each of the three has its own **Refine when a check reaches**. The panel shows the line for the one in use.
-- NanoGPT serves all three, on the same decisions route as Jev.
-- One **Model name** box serves all three. It shows the name for the one picked. A name typed in it is sent for all three. On Cloudflare the name is also part of the address, so it has to be `clef`, `clef-flash` or `clef-omni`.
-- All three are paid, per call. Each host's own page shows the price.
-
-## Decider
-
-Decider is Perplexity's decision model. Decider Flash is a smaller one that is faster and costs less. Both take the same request as Jev, on OpenRouter, NanoGPT and Perplexity's own API. Both read up to 262,144 tokens.
-
-**Which Decider** shows when Decider is picked:
-
-- **Decider V1.2**, the default. Its answers stay steady.
-- **Decider Latest, always the newest**. It moves to each new Decider by itself.
-- **Decider Flash V1.2, smaller and faster**.
-- **Decider Flash Latest, always the newest**.
-
-| Host | Decider V1.2 | Decider Latest | Decider Flash V1.2 | Decider Flash Latest |
-| --- | --- | --- | --- | --- |
-| OpenRouter | `perplexity/pplx-decider-v1.2` | `~perplexity/pplx-decider-latest` | `perplexity/pplx-decider-flash-v1.2` | `~perplexity/pplx-decider-flash-latest` |
-| NanoGPT | `perplexity/pplx-decider-v1.1-27b` | | | |
-| Perplexity | `pplx-decider-v1.2` | `pplx-decider-latest` | `pplx-decider-flash-v1.2` | `pplx-decider-flash-latest` |
-
-- NanoGPT lists only the older Decider V1.1 27B, so it is sent whichever Decider is picked there.
-- Decider V1.2 and Decider Latest use the same **Refine when a check reaches**. Decider Flash has its own.
-
-- On Perplexity's own API, the key comes from your Perplexity account, under **API Keys**.
-- Perplexity says a request for an older Decider, such as `pplx-decider-v1.1-27b` or `pplx-decider-v1-27b`, is answered by Decider V1.2 on its own API.
-- It is paid, per call. Each host's own page shows the price.
-
-## Microsoft-Decision-1
-
-Microsoft-Decision-1 is Microsoft's decision model. It takes the same request as Jev on OpenRouter. It reads up to 32,768 tokens, which covers the reply, the checks, and the reply before it when **Also compare with the reply before it** is on.
-
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `microsoft/microsoft-decision-1` |
-
-- It is on OpenRouter only. If another host is left picked, OpenRouter is used.
-- It is paid, per call. OpenRouter's page for it shows the price.
-
-## Drex
-
-Drex is Nace.AI's decision model. It takes the same request as Jev, on OpenRouter and on Nace.AI's own API.
-
-**Which Drex** picks one of two:
-
-- **Drex 2.0**, the default. It reads up to 131,072 tokens.
-- **Drex Max, the largest**. It reads up to 262,144 tokens on OpenRouter.
-
-| Host | Drex 2.0 | Drex Max |
-| --- | --- | --- |
-| OpenRouter | `nace-ai/drex-v2.0` | `nace-ai/drex-max` |
-| Nace.AI | `drex-v2.0` | `drex-max` |
-
-- The older Drex v1.5 is `nace-ai/drex-v1.5` on OpenRouter and `drex-v1.5` on Nace.AI. Type it in **Model name** to use it.
-- On Nace.AI's own API, the key comes from your account at [console.nace.ai](https://console.nace.ai). Nace.AI's keys start with `nace_sk_`.
-- Drex 2.0's weights are open. You can run it yourself with Nace.AI's server and reach it under **Another address**. See [Drex v2.0 on Hugging Face](https://huggingface.co/nace-ai/drex-v2.0).
-- It is paid, per call. Each host's own page shows the price.
-
-## Classify-1
-
-Classify-1 is ScaleDown's decision model. It takes the same request as Jev on OpenRouter. It reads up to 1,000,000 tokens, so a long reply fits easily.
-
-| Host | Model name |
-| --- | --- |
-| OpenRouter | `scaledown/classify-1` |
-
-- It is on OpenRouter only. If another host is left picked, OpenRouter is used.
-- ScaleDown says it reads only the text of the request. So the reply goes to it as JSON text, and the names the checks use, such as `reply`, are still in it.
-- ScaleDown's own API takes the key in an `x-api-key` header. Auto Refine sends the key the way OpenRouter takes it, so ScaleDown's own API is not offered.
-- It is paid, per call. OpenRouter's page for it shows the price.
-
-## SubQ Snap
-
-SubQ Snap is Subquadratic's decision model. Auto Refine uses SubQ Snap Preview, which Subquadratic marks as a public preview. It takes the same request as Jev, on NanoGPT and on SubQ's own API. It reads up to 384,000 tokens.
-
-| Host | Model name |
-| --- | --- |
-| NanoGPT | `subq/subq-snap-preview` |
-| SubQ | `subq-snap-preview` |
-
-- It takes at most 16 checks in one call. With more checks than that, such as with **More checks you can add** and **Also compare with the reply before it** on, Auto Refine sends them over two or more calls and reads the answers together. Each call is paid.
-- If one of those calls fails, the reply is refined, the same as when any second model cannot answer.
-- On SubQ's own API, the key comes from your SubQ account.
-- It is not on OpenRouter. If OpenRouter or another host is left picked, NanoGPT is used.
-- It is paid, per call. Each host's own page shows the price.
-
-## Jeff
-
-Jeff is eu/jev's decision model, served from Germany. It takes the same request as Jev, on NanoGPT and on eu/jev's own API. eu/jev's prepared input has room for 32,768 tokens.
-
-**Which Jeff** shows when Jeff is picked:
-
-- **Jeff 1.0.0**, the default. Its answers stay steady.
-- **Jeff Latest, always the newest**. It moves to each new Jeff by itself.
-
-| Host | Jeff 1.0.0 | Jeff Latest |
-| --- | --- | --- |
-| NanoGPT | `eu-jev/eu-jeff-1.0.0` | `eu-jev/eu-jeff-latest` |
-| eu/jev | `eu-jeff-1.0.0` | `eu-jeff-latest` |
-
-- Both kinds use the same **Refine when a check reaches**.
-- It takes at most 8 checks in one call. With more checks than that, Auto Refine sends them over two or more calls and reads the answers together. Each call is paid.
-- If one of those calls fails, the reply is refined, the same as when any second model cannot answer.
-- On eu/jev's own API, the key comes from your eu/jev account, in its dashboard. eu/jev gives new accounts a starting credit.
-- It is not on OpenRouter. If OpenRouter or another host is left picked, NanoGPT is used.
-- It is paid, per call. Each host's own page shows the price.
-
-## Mammoth 1 and Elephant 1
-
-Mammoth 1 and Elephant 1 are two sizes of one decision model from Baseten, trained by its Base Labs team. They take the same request as Jev, on OpenRouter and on Baseten's own API.
-
-**Which Baseten model** shows when they are picked:
-
-- **Mammoth 1, the larger**, the default. It has 27B parameters.
-- **Elephant 1, smaller and faster**. It has 9B parameters.
-
-| Host | Mammoth 1 | Elephant 1 |
-| --- | --- | --- |
-| OpenRouter | `baseten/mammoth-1:free` | `baseten/elephant-1:free` |
-| Baseten | `decision-models/baseten-mammoth-27b-latest` | `decision-models/baseten-elephant-9b-latest` |
-
-- Each size has its own **Refine when a check reaches**.
-- OpenRouter lists both as free. It gives each 16,384 tokens, so a long reply with the one before it can be too much. The host then refuses the call, and the reply is refined the same as when any second model cannot answer.
-- On Baseten's own API, the key comes from your Baseten account. Baseten made both free to try for one week from October 21, 2026. After that, Baseten's own pricing page shows the price.
-- If OpenRouter stops serving the free names, type the new name in **Model name**.
-
-## When a model is renamed, or a new one comes out
-
-The model names are built in, and a host can change them. You do not have to wait for an update to Auto Refine.
-
-**An older version of a model in the list.** When a model has a new version, the new one takes the old one's place in the list, so the list holds only models that work today. An older version still works for as long as its host serves it:
-
-1. Pick the model, and its host.
-2. Type the older version's name in **Model name**, such as `jev-1.13.0` on TypeSafe.
-3. Press **Test**.
-
-**A model in the list was renamed, or has a new version on the same host:**
-
-1. Pick the model under **Which second model**, and its host under **Where it is reached**.
-2. Type the new name in **Model name**, under the host. The box shows the built-in name as an example, and an empty box uses it.
-3. Press **Test**. It says whether the model answered, and which one.
-
-**A new model that is not in the list:** see [A model not in this list](#a-model-not-in-this-list).
-
-## A model not in this list
-
-**A model not in this list** is the last choice under **Which second model**. It is for any decision model Auto Refine does not have yet.
-
-1. Pick **A model not in this list** under **Which second model**. **Where it is reached** shows **Another address**, since this choice has no host of its own.
-2. Fill in **Address** and **Model name** with what the model's host gives. For a model on OpenRouter, the address is `https://openrouter.ai/api/alpha/decisions`.
-3. Save the key for that address, and press **Test**.
-
-- It has its own **Refine when a check reaches**, 30 by default.
-- The Log calls it by the **Model name** you typed.
-- The model has to answer the same kind of request as the models in the list: a list of yes-or-no checks, each answered with a chance from 0 to 100 percent. See [Another address](#another-address) for the kinds of request it can take.
-- It is sent the plain request, with the reply as a named field. A model in the list that needs its request laid out another way, such as Span, Classify-1 or SubQ Snap, works best picked by its own name, with **Another address** under it.
-
-## Another address
-
-Pick **Another address** for any host not in the list. It works for every second model. Fill in two boxes:
-
-1. **Address**: your host's full address for the model. Paste the whole thing, not only the base. `https://example.com/v1` will not work. `https://example.com/v1/chat/completions` will.
-   - It has to start with `https://`. Over `http://` your key could be read by anyone on the network between Lumiverse and the host, so the key is not sent.
-   - An address on the same device as Lumiverse can use `http://`, since it never goes over a network. That is `localhost`, `127.0.0.1`, `[::1]` and, in Docker, `host.docker.internal`.
-   - For any other `http://` address on your own machine or network, such as another Docker container by its name, switch on **Let the key go over http://**. It is off by default. Only switch it on for an address you run yourself. With **It needs no key** on, this is not needed.
-2. **Model name**: what your host calls the model, spelled the way its docs spell it.
-3. **It needs no key**: off by default, so the key box shows as it does for every host. Switch it on for a model you run yourself that takes no key. Then:
-   - No key is sent, and the key box, **Save key** and **Forget key** are hidden.
-   - **Test** works with no key saved.
-   - `http://` works at any address, because nothing secret is sent. **Let the key go over http://** is hidden.
-   - If the address answers that it wants a key, the Log says so. Switch it off and save the key.
-
-### A model you run yourself
-
-Kev 4B is an open model, so you can run it on your own computer with its maker's server. See [Kev 4B on Hugging Face](https://huggingface.co/jaredpalmer/kev-4b) for how to start it. Then:
-
-1. Pick **Kev 4B** under **Which second model**.
-2. Pick **Another address** under **Where it is reached**.
-3. Fill in **Address** with your server's address, such as `http://localhost:8008/v1/systemone`.
-4. Fill in **Model name** with `jaredpalmer/kev-4b`.
-5. Switch on **It needs no key**, unless you set a key on your server.
-6. Press **Test**.
-
-The address is reached from the machine Lumiverse runs on. `localhost` is that machine. If Lumiverse runs on your phone, it is your phone.
-
-Hosts take a scoring model in one of six ways, and the address decides which:
-
-- **Ending in `/chat/completions`**: the OpenAI chat format. The reply goes as the text of one user message, and the checks go with it.
-- **Ending in `/responses`**: the OpenAI responses format. The same, laid out the way that format expects.
-- **Ending in `/messages`**: the Claude format. The same again, with the key also sent in the header Claude-style hosts read.
-- **Ending in `/scores`**: the scores format that Respan's own API takes. See [Which Span](#which-span).
-- **OpenAI's own decisions address**, `https://api.openai.com/v1/decisions`: OpenAI's own decisions request. See [GPT-6 Luna Decisions](#gpt-6-luna-decisions).
-- **Any other ending**: a decisions request, the same kind OpenRouter, NanoGPT and TypeSafe take.
-
-Addresses known to work:
-
-| Host | Address | Model name |
-| --- | --- | --- |
-| OpenRouter | `https://openrouter.ai/api/alpha/decisions` | `~typesafe/jev-latest`, `typesafe/jev-1.14`, `respan/span-01-lite`, `respan/span-02`, `inception/mercury-decide:free`, `liquid/d1`, `liquid/d1-ultra`, `upstage/solar-decide`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.2`, `~perplexity/pplx-decider-latest`, `perplexity/pplx-decider-flash-v1.2`, `~perplexity/pplx-decider-flash-latest`, `microsoft/microsoft-decision-1`, `nace-ai/drex-v2.0`, `nace-ai/drex-max`, `baseten/mammoth-1:free`, `baseten/elephant-1:free`, `scaledown/classify-1`, `upstage/solar-decide-flash` or `inception/mercury-decide` |
-| NanoGPT | `https://nano-gpt.com/api/v1/decisions` | `typesafe/jev-1.14`, `typesafe/jev-latest`, `liquid/d1`, `jaredpalmer/kev-4b`, `openai/gpt-6-luna-decisions`, `cloudflare/clef`, `cloudflare/clef-flash`, `cloudflare/clef-omni`, `perplexity/pplx-decider-v1.1-27b`, `subq/subq-snap-preview`, `eu-jev/eu-jeff-1.0.0` or `eu-jev/eu-jeff-latest` |
-| TypeSafe | `https://api.typesafe.ai/v1/systemone` | `jev-1.14.0`, `jev-latest` or `jev-preview` |
-| Respan | `https://api.respan.ai/api/v1/decisions` | `span-02` |
-| Respan, scores | `https://api.respan.ai/api/v1/scores` | `span-01-free` or `span-01-pro` |
-| Liquid AI | `https://api.liquid.ai/decisions/v1/systemone` | `d1:free` or `d1-ultra` |
-| Upstage | `https://api.upstage.ai/v1/systemone` | `solar-decide` |
-| OpenAI | `https://api.openai.com/v1/decisions` | `gpt-6-luna` |
-| Cloudflare | `https://api.cloudflare.com/client/v4/accounts/` your account ID `/ai/run/@cf/cloudflare/clef` | `clef`, or `clef-flash` or `clef-omni` with the address ending in that name |
-| Perplexity | `https://api.perplexity.ai/v1/decisions` | `pplx-decider-v1.2`, `pplx-decider-latest`, `pplx-decider-flash-v1.2` or `pplx-decider-flash-latest` |
-| SubQ | `https://api.subq.ai/v1/systemone` | `subq-snap-preview` |
-| eu/jev | `https://eu-jev.com/v1/systemone` | `eu-jeff-1.0.0` or `eu-jeff-latest` |
-| Nace.AI | `https://console.nace.ai/v1/systemone` | `drex-v2.0` or `drex-max` |
-
-NanoGPT also takes Jev at `/api/v1/chat/completions`, `/api/v1/responses` and `/api/v1/messages` on the same host. It serves Jev on `nano-gpt.com`, not `api.nano-gpt.com`.
-
-The hosts in this table are in the list already, so only use their rows here if you need a different model name. Press **Test** after filling the boxes in: it says whether the model answered, and which one.
-
-Every answer says which exact model gave it. The Log shows it next to each decision, for example "Jev (jev-1.14.0) says leave it".
+To go on using two models, add a Decision connection in Lumiverse for the model you used, as above.
 
 ## What the second model checks
 
@@ -496,7 +84,7 @@ What to know:
 - They are not in the built-in list, because some writing styles use these on purpose.
 - Each one names something narrow, or needs a count, so ordinary prose and dialogue do not trip it.
 - The built-in prompts have no rule for some of them. What the second model finds goes to the refine model in `{{checks_found}}`, so it knows what to fix.
-- Each check is one more question in every call. Some hosts take only so many in one call. If **Test** fails after you add them, take a few out.
+- Each check is one more question in every call. Some providers take only so many in one call. If a reply fails to be read after you add them, take a few out.
 
 ### How the second model reads a check
 
@@ -509,61 +97,29 @@ Write each check so that:
 - **It names what is on the page.** "Contains a stock phrase, such as a shiver ran down his spine" works. "Is badly written" or "names a feeling the actions already show" asks for a judgment. Scores for a judgment change more from one reply to the next.
 - **It gives examples, one for each form.** Examples show which pattern you mean. With one example, another form of the same habit can score low.
 - **It asks about one thing.** A statement that joins two patterns with "and" or "or" is two checks. The second model scores the whole statement, so a reply with only one of the two can score low.
-- **A high score means there is a problem.** Write each check so that "true" means the reply needs a refine. A check can be written as a statement or as a question. TypeSafe, who make Jev, say both work as well. The built-in checks are statements.
+- **A high score means there is a problem.** Write each check so that "true" means the reply needs a refine. A check can be written as a statement or as a question. The built-in checks are statements.
 - **It is false of a reply with nothing wrong in it.** A check that is true of most replies sends every reply to be refined.
 
-To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. **What Jev decided**, **What Span decided** and so on, on the Log tab, shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
+To test a check, find a reply that has the problem and refine it with **Let it check refines you start yourself** on. The decision card on the Log tab shows the score for each check. If a reply you know has the problem scores low, add an example shaped like it.
 
-**Refine when a check reaches** is the line. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer.
-
-Each second model has its own line, and the panel shows the one for the model you picked:
-
-| Model | Line by default |
-| --- | --- |
-| **Jev** | 30 percent |
-| **Span** | 30 percent |
-| **Mercury Decide** | 30 percent |
-| **D1** | 30 percent |
-| **D1 Ultra** | 30 percent |
-| **Solar Decide** | 30 percent |
-| **Solar Decide Flash** | 30 percent |
-| **Kev 4B** | 30 percent |
-| **GPT-6 Luna Decisions** | 30 percent |
-| **Clef** | 30 percent |
-| **Clef Flash** | 30 percent |
-| **Clef Omni** | 30 percent |
-| **Decider** | 30 percent |
-| **Decider Flash** | 30 percent |
-| **Microsoft-Decision-1** | 30 percent |
-| **Drex** | 30 percent |
-| **Drex Max** | 30 percent |
-| **Classify-1** | 30 percent |
-| **SubQ Snap** | 30 percent |
-| **Jeff** | 30 percent |
-| **Mammoth 1** | 30 percent |
-| **Elephant 1** | 30 percent |
-| **A model not in this list** | 30 percent |
+**Refine when a check reaches** is the line. A reply is refined when any check reaches it. Lower refines more replies, higher refines fewer. It is 30 percent by default.
 
 ### Where the defaults come from
 
-- These defaults come from testing during the beta. They are a starting point, not a measured or correct value.
-- The second models are new, and their makers can change them. A model that changes can score differently.
-- So the defaults can change in a later version, if testing finds one that works better or a model changes.
-- None of the makers gives one line that suits every use. TypeSafe, Respan and Jared Palmer each say to pick the line by testing on your own replies.
-
-Span splits each answer three ways: the problem is there, it is not there, or it cannot be told from the reply. The three add up to 100 percent, and Auto Refine reads the first. Some of each answer goes to the other two, so Span's scores can run lower than the other models' scores on the same reply. If Span leaves alone replies you know have a problem, lower its line.
+- The default comes from testing during the beta. It is a starting point, not a measured or correct value.
+- Decision models are new, and their makers can change them. A model that changes can score differently.
+- So the default can change in a later version, if testing finds one that works better.
+- Models do not all score on the same scale. If you switch to another model, check your line again.
 
 To find the line that suits you:
 
 1. Turn on **Let it check refines you start yourself**.
 2. Refine a few replies. Include some you know have a problem and some you know are fine.
-3. Read the scores under **What Jev decided**, **What Span decided** and so on, on the Log tab.
+3. Read the scores in the decision card on the Log tab.
 4. If a reply you know has a problem scores under your line, lower the line.
 5. If replies that were fine keep reaching your line, raise it.
 
 The check from **Also check for worn-out phrases** is different. It asks whether the reply uses a phrase from a list, so a reply that does often scores well over 50%. The line matters most for the other checks.
-
-Changing one line does not change the others. If you switch model, the line you set for each of the others is kept for when you switch back.
 
 It goes from 1 to 99. The two ends are left out because each one makes the second model a cost with no use:
 
@@ -611,7 +167,7 @@ A check in **What the second model checks** can name `previous_reply` too. It is
 If you make a mistake in **What the second model checks** or **What it compares**, press **Use the built-in checks** under that box.
 
 - It asks first, because what you wrote is not kept.
-- It only changes the checks. The model, the host, the key, the threshold and the number of models stay as they are.
+- It only changes the checks. The connection, the line and the number of models stay as they are.
 
 ## When it is asked
 
@@ -637,7 +193,7 @@ Two things are never sent to the second model, whichever way the switch is set:
 - A selection, since it is part of a reply and the checks are about the whole reply.
 - Your own messages, since the checks are about the character's replies.
 
-It is asked after **Seconds between automatic refines**, when that is set, and the panel says, for example, "Span is reading the reply" while it does. **Stop** works while it is reading.
+It is asked after **Seconds between automatic refines**, when that is set, and the panel says, for example, "jev-latest is reading the reply" while it does. It is named by the model of the Decision connection in use. **Stop** works while it is reading, and calls the request off.
 
 ## Passing on what the checks found
 
@@ -652,7 +208,7 @@ If your prompt is your own, add a block with `{{checks_found}}` in it instead. I
 
 What the refine model is given:
 
-- A short lead-in. It is the text in **What the refine model is told about the checks**, on the Model tab. You can change it, and **Use the built-in text** puts it back. In it, `{{second_model}}` becomes the name of the second model you picked, and `{{checks_line}}` becomes your line. The built-in lead-in says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone. An empty box sends the checks with no lead-in.
+- A short lead-in. It is the text in **What the refine model is told about the checks**, on the Model tab. You can change it, and **Use the built-in text** puts it back. In it, `{{second_model}}` becomes the name of the model that answered, and `{{checks_line}}` becomes your line. The built-in lead-in says another model scored the passage against checks you wrote, and that each check is a lead to check. Where a check does not fit the passage, the model is told to leave that part alone. An empty box sends the checks with no lead-in.
 - Each check that reached your line, strongest first, with its score, like `- reply repeats itself. (91%)`. The backticks are taken out, and `previous_reply` is written as "the reply before it".
 
 The block is empty, and left out of the prompt, whenever the second model did not read the reply or could not decide. That includes one model, a selection, and a button refine with **Let it check refines you start yourself** off.
@@ -661,7 +217,7 @@ The second model can be wrong, which is why the lead-in calls the checks leads. 
 
 To see that it was sent:
 
-- **The Log** says, for example, "what Span found went to the refine model", with how many checks, on each refine that sent it.
+- **The Log** says, for example, "what jev-latest found went to the refine model", with how many checks, on each refine that sent it.
 - **Show me the request** on the **Context** tab does not show it. A preview never asks the second model, so the block is empty there and left out. The card says so.
 
 ## Having it check the rewrite
@@ -677,7 +233,7 @@ To see that it was sent:
 
 It only happens on a refine the second model read first. A refine that skipped it is not checked afterwards either.
 
-While it runs, the panel says, for example, "Jev is reading the rewrite", then "Refining once more" if a check reached the line. **Stop** works at both points, and nothing is saved.
+While it runs, the panel says, for example, "jev-latest is reading the rewrite", then "Refining once more" if a check reached the line. **Stop** works at both points, and nothing is saved.
 
 ## It can be wrong
 
@@ -699,11 +255,11 @@ The refine model is told the same. **Checks Found** calls each check a lead, and
 
 ## When it cannot answer
 
-The reply is refined, the same as with one model. This happens when the key is missing or refused, the account has no credit, the host is down, or the answer has nothing usable in it. The Log says which. When the host refuses the call, it also gives the status the host sent and the host's own message. The beta failing costs you a refine you might not have needed, never a refine you did.
+The reply is refined, the same as with one model. This happens when there is no Decision connection to use, the permission is refused, the key is missing or refused, the account has no credit, the provider is down, it takes over 30 seconds, or the answer has nothing usable in it. The Log says which, with the provider's own message where Lumiverse passes one on. The beta failing costs you a refine you might not have needed, never a refine you did.
 
 ## Reading what it decided
 
-The decision card, on the Log tab, shows the last reply the second model read. It is named after the model you picked, such as **What Jev decided** or **What Span decided**. It is there while two models are on.
+The decision card, on the Log tab, shows the last reply the second model read. It is named after the model of the Decision connection in use, such as **What jev-latest decided**. It is there while two models are on.
 
 - Whether the reply was refined or left alone, or why the model could not decide.
 - Each check with its percentage and a bar. A mark on each bar shows your line. A check that reached it is in bold.
@@ -715,8 +271,8 @@ The decision card, on the Log tab, shows the last reply the second model read. I
 Every answer also goes in the Log as one line:
 
 ```
-Jev (jev-1.14.0) says leave it: reply uses the same phrase of three or more words twice within a few sentences. 12%; ...
-Span (span-02) says refine: ... uses a stock phrase, such as a held breath or a shiver down a spine 71%; ...
+jev-latest (typesafe/jev-1.14) says leave it: reply uses the same phrase of three or more words twice within a few sentences. 12%; ...
+jev-latest (typesafe/jev-1.14) says refine: reply contains a stock phrase, such as a shiver ran down his spine 71%; ...
 ```
 
 A reply left alone also says so where a refine that stood down would, with the highest percentage given. If the second model is letting through replies you would have refined, lower the line or add the check it is missing. If it refines replies that were fine, raise the line or drop the check that keeps firing.
@@ -726,24 +282,22 @@ A reply left alone also says so where a refine that stood down would, with the h
 **Test** puts its answer in the same card, marked **test**. A test is not a reply from your chat, so it is not added to the count.
 
 - The question is always the same: the text "The door is open." and the check "The door in reply is open." The door is open, so a score near 100% is right.
-- The address the test went to, the format it was sent in, and the model name it asked for.
+- The Decision connection it went through.
 - Which model answered.
-- What the host said it cost. If the host reported no cost, the card says so.
-- If the test failed, why, and where it was sent. Use this to check an address or model name you typed.
-
-The key is never shown.
+- What the provider said it cost. If the provider reported no cost, the card says so.
+- If the test failed, why.
 
 ## What it costs
 
-The second model is billed by the host you picked, not by your refine provider. Each reply the automatic pass reaches is one call, and so is each press of **Test**. **Also compare with the reply before it** makes each call longer, which costs more on a host that charges for what is sent. Span-01 Lite, free, and Mercury Decide cost nothing at the moment.
+The second model is billed by the provider of your Decision connection, not by your refine provider. Each reply the automatic pass reaches is one call, and so is each press of **Test**. **Also compare with the reply before it** makes each call longer, which costs more on a provider that charges for what is sent. Some decision models are free on some providers.
 
-With **Have it check the rewrite** on, each refine costs one more call. A reply refined once more also costs a second refine from your refine provider, one call per pass. Where the host reports the cost of a call, the Log and the card show it.
+With **Have it check the rewrite** on, each refine costs one more call. A reply refined once more also costs a second refine from your refine provider, one call per pass. Where the provider reports the cost of a call, the Log and the card show it.
 
-A test is very small, so its cost can be a tiny part of a cent. A host's own billing page may round it to nothing.
+A test is very small, so its cost can be a tiny part of a cent. A provider's own billing page may round it to nothing.
 
 ## Privacy
 
-What goes to the second model, and where the key is kept, is on the [Privacy](privacy.md#the-second-model) page.
+What goes to the second model is on the [Privacy](privacy.md#the-second-model) page.
 
 ---
 

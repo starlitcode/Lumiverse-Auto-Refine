@@ -30,35 +30,26 @@ Two things are taken out of a message before it is sent:
 
 Your settings are never sent. Nothing from a chat you are not in is sent.
 
-The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. The only call to somewhere other than your provider is the call to the second model, with two models on, and it goes through Lumiverse's own proxy, `spindle.cors`.
-
-With two models on, the Model tab shows one link, for the second model you picked, such as **What is Jev?**. It points at that model's maker's page introducing it. [Two models](two-models.md) lists every model and its maker. Showing the link fetches nothing. Tapping it opens the page in your browser.
+The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. With two models on, the call to the second model goes through Lumiverse, with `spindle.decisions`, to the Decision connection in use.
 
 ## The second model
 
-With **How many models** set to two, each finished reply is sent to the second model you picked before it is refined. It is reached through the host you picked under **Where it is reached**: OpenRouter, NanoGPT, TypeSafe, Respan, Liquid AI, Upstage, OpenAI, Cloudflare, Perplexity, SubQ, eu/jev, Nace.AI, Baseten, or an address you typed. That host is a separate service with its own terms. It receives:
+With **How many models** set to two, each finished reply is sent to the second model before it is refined. It goes through Lumiverse to the provider of the Decision connection in use: the one picked under **Which Decision connection**, or your default one. That provider is a separate service with its own terms. It receives:
 
 - the reply, with its thinking taken out
 - the checks you wrote under **What the second model checks**
 - the list of phrases this chat has worn out, if **Also check for worn-out phrases** is on
 - the reply before it, with its thinking taken out, if **Also compare with the reply before it** is on
-- your key, which tells the host the call is yours
-- on Cloudflare's own API, your Cloudflare account ID, which is part of its address
 
 Nothing else goes to the second model. Your card, your own messages, the rest of the chat, lore, memories and settings stay out of it.
 
 A refine you start yourself is only sent to it when **Let it check refines you start yourself** is on. A selection and your own messages are never sent to it.
 
-Your key:
+The key for the Decision connection is kept by Lumiverse, with the connection. Auto Refine never sees it. The panel is only told whether one is saved.
 
-- is sent from the panel to the backend once, when you press **Save key**
-- is kept in Lumiverse's secure store, for your account only, with one key for each host, and for **Another address** one for each address
-- is only sent over `https://`, or over `http://` to the same device as Lumiverse, unless you switch on **Let the key go over http://**
-- is never in your settings, an export, or this browser's storage
-- is never shown again. The panel is only told whether a key is saved.
-- is deleted by **Forget key**, for the host shown
+Older versions kept a key for the second model in Lumiverse's secure store. This version deletes those keys the first time it loads your settings.
 
-## The seven permissions
+## The eight permissions
 
 | Permission | What it is for | Without it |
 | --- | --- | --- |
@@ -69,7 +60,7 @@ Your key:
 | `characters` | Reads the character card, so a rewrite keeps each character's voice. | The card block is left out. Refining carries on. |
 | `world_books` | Reads the lorebook entries this chat has active, so a rewrite does not contradict them. | The lore block is left out. Refining carries on. |
 | `ui_panels` | The floating button, which is off by default. | Everything works except that button, and the panel says so. |
-| `cors_proxy` | Reaches the second model, with two models on, which is off by default. | Two-model mode refines every reply, like one model. Nothing else changes. |
+| `decisions` | Asks the second model through your Decision connection, with two models on, which is off by default. | Two-model mode refines every reply, like one model. Nothing else changes. |
 
 The ones that read your chat, card and lore make a rewrite sound like your characters. Refusing them lowers quality, but the extension still works.
 
@@ -88,7 +79,6 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 - **Your settings**, in your browser and in Lumiverse's storage for your account, so they follow you to other devices.
 - **The chats you switched it off in**, in your browser and your account, so every browser and device you use has the same chats switched off. Only the chat ids are kept. Chat titles and text are not.
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
-- **Your keys for the second model**, one for each host you saved one for, in Lumiverse's secure store for your account and nowhere else.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.
 - **The text from before and after each refine**, so you can put a refine back. Your server keeps the last 30 at most.
   - It is held in your server's memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
