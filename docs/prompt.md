@@ -437,6 +437,15 @@ What is not hidden:
 
 Some things cannot be found by pattern, such as a stat block or a translation line. The built-in prompts have an **Out of Bounds** block that tells the model to keep these as they are.
 
+### Another extension's blocks
+
+Another extension can ask the model to write data into a reply, inside a tag that extension named, such as `<note-card>…</note-card>`. Lumiverse hides the block on screen and hands it to that extension.
+
+- A block whose tag name has a hyphen in it is hidden whole, with everything inside it. HTML has no tag names with a hyphen, so a name with one belongs to somebody.
+- This happens even with **Hide markup from the model** off. The block is not your writing, and a changed block can make that extension act on it twice.
+- The second model, if you use one, does not read these blocks either. It reads the reply as you see it.
+- An element with nothing inside it, such as `<span id="a4"></span>`, is hidden as one piece. Another extension can use one to mark a place in the reply.
+
 ### The reply's own reasoning
 
 **Keep the reply's own reasoning out of the refine** is also on by default. A reasoning model's working is taken off before the refine and put back afterwards, unchanged.

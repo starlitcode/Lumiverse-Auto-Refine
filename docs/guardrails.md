@@ -225,6 +225,7 @@ A refine reads the reply, sends it to a model, and writes the answer back. That 
 - If the reply changed before the answer arrived, **the refine is dropped and nothing is written**. The refine can be run again on the new text. An edit written over cannot be recovered.
 - This covers you editing the reply while you wait, and another extension writing to it at the same time.
 - **Thinking moved out of the reply does not count as a change.** If only the thinking at the start or end of the reply was moved, for example into the Reasoning box, the refine is saved. It is saved without the thinking that was moved out.
+- **Another extension rewriting its own hidden block does not count either.** Some extensions rewrite their block in a reply right after the reply ends. If only that block changed, the refine is saved, with the block as the extension left it. See [Another extension's blocks](prompt.md#another-extensions-blocks).
 - If the reply cannot be read again at all, the refine goes ahead. A failed read does not mean anything changed.
 
 ## Putting one back

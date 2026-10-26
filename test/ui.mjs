@@ -11718,9 +11718,11 @@ console.log("\nrefining the part you selected");
     </div>
     <div data-component="MessageContent"><div><div><div class="_prose_1rr8k_181"><p id="p1">Wren set the crate down on the step and wiped both hands on her jeans.</p>
     <p id="p2"><span class="_proseDialogue_1rr8k_222">"The lock's been changed."</span> She tried the handle twice anyway.</p>
-    </div></div></div></div>
+    </div></div></div><div data-spindle-ext="someone_else" id="card">New text from Ines: the van is out front.</div></div>
     <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
   </div>`;
+  // The card at the end of the reply is another extension's, put there the way
+  // Lumiverse wraps anything an extension injects. It is not the reply.
 
   await inTab(browser, { saved: { widgetOn: true, enabled: true } }, async (page) => {
     const out = await page.evaluate(async (html) => {
@@ -11770,6 +11772,21 @@ console.log("\nrefining the part you selected");
       const afterClearing = await menu();
       pickIn("thinking", "own working");
       const afterPickingThinking = await menu();
+      pickIn("card", "the van is out front");
+      const afterPickingCard = await menu();
+      // A drag from the last sentence of the reply into the card.
+      {
+        const from = [...document.getElementById("p2").childNodes].find((n) => n.nodeType === 3 && n.nodeValue.includes("handle"));
+        const to = document.getElementById("card").firstChild;
+        const r = document.createRange();
+        r.setStart(from, from.nodeValue.indexOf("handle"));
+        r.setEnd(to, 10);
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+        document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      }
+      const afterDragIntoCard = await menu();
+      clear();
 
       // And the one that actually runs it.
       window.__sent.length = 0;
@@ -11779,7 +11796,7 @@ console.log("\nrefining the part you selected");
       await new Promise((r) => setTimeout(r, 60));
       const fired = window.__sent.filter((m) => m && m.type === "refine_selection");
       window.__menuPick = null;
-      return { noneAtFirst, afterPicking, afterClearing, afterPickingThinking, fired };
+      return { noneAtFirst, afterPicking, afterClearing, afterPickingThinking, afterPickingCard, afterDragIntoCard, fired };
     }, BUBBLE);
 
     const has = (list) => !!list && list.some((t) => /part I selected/i.test(t));
@@ -11789,6 +11806,8 @@ console.log("\nrefining the part you selected");
     // The host draws the model's working outside the message body, so a
     // selection in it is not in a reply and there is nothing to offer.
     ok("selecting the model's working offers nothing", !has(out.afterPickingThinking), JSON.stringify(out.afterPickingThinking));
+    ok("selecting another extension's card inside the reply offers nothing", !has(out.afterPickingCard), JSON.stringify(out.afterPickingCard));
+    ok("and neither does a drag from the reply into that card", !has(out.afterDragIntoCard), JSON.stringify(out.afterDragIntoCard));
 
     const one = out.fired && out.fired[0];
     ok("choosing it sends the refine", !!one, JSON.stringify(out.fired));
@@ -12757,7 +12776,7 @@ console.log("\nhold to select text in messages");
     <div data-component="MessageContent"><div class="_prose_1rr8k_181">
       <p id="p1">Wren set the crate down on the step and wiped both hands on her jeans.</p>
       <p id="p2"><span id="blocked" style="user-select:none;-webkit-user-select:none">"The lock's been changed."</span> She tried the handle twice anyway.</p>
-    </div></div>
+    </div><div data-spindle-ext="someone_else" id="card" style="user-select:none;-webkit-user-select:none">New text from Ines: the van is out front.</div></div>
     <span data-spindle-mount="message_footer" data-spindle-scope="message:msg-one:minimal:footer" style="display:contents"></span>
   </div>
   <div id="elsewhere">Not a message.</div>`;
@@ -12802,6 +12821,11 @@ console.log("\nhold to select text in messages");
             hold(document.getElementById("elsewhere"));
             const menusElsewhere = menus - menusOnText;
             const blockedSelect = getComputedStyle(document.getElementById("blocked")).userSelect;
+            // Another extension's card inside the reply keeps its own taps.
+            const cardSelect = getComputedStyle(document.getElementById("card")).userSelect;
+            const before = menus;
+            const cardPrevented = hold(document.getElementById("card"));
+            const menusOnCard = menus - before;
             // Select part of the reply, as a hold or a drag would, with the
             // reply on screen as it is when somebody holds it.
             document.getElementById("p1").scrollIntoView({ block: "center" });
@@ -12835,7 +12859,7 @@ console.log("\nhold to select text in messages");
             }
             const hiddenAfter = !bar || !bar.hasAttribute("data-arf-on");
             return {
-              heldPrevented, menusOnText, menusElsewhere, blockedSelect, shown, shownMid,
+              heldPrevented, menusOnText, menusElsewhere, blockedSelect, cardSelect, cardPrevented, menusOnCard, shown, shownMid,
               acts: acts.map((a) => a.textContent.trim()),
               inside: !!b && b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight,
               // Below the selection, or above it when there is no room below.
@@ -12855,6 +12879,8 @@ console.log("\nhold to select text in messages");
           ok(tag + ": text another extension blocked can be selected", out.blockedSelect === "text", JSON.stringify(out));
           ok(tag + ": a hold on message text does not open the host's menu", out.menusOnText === 0 && out.heldPrevented, JSON.stringify(out));
           ok(tag + ": a hold anywhere else still does", out.menusElsewhere === 1, JSON.stringify(out));
+          ok(tag + ": another extension's card inside the reply keeps its own setting", out.cardSelect === "none", JSON.stringify(out));
+          ok(tag + ": and a hold on it reaches the host as usual", out.menusOnCard === 1 && !out.cardPrevented, JSON.stringify(out));
           ok(tag + ": selecting text brings up the bar", out.shown && out.acts.join("|") === "Refine it|Take it out|Copy", JSON.stringify(out));
           ok(tag + ": it fades in", out.shownMid > 0 && out.shownMid < 1, JSON.stringify(out));
           ok(tag + ": by the selection, inside the screen", out.inside && out.near, JSON.stringify(out));

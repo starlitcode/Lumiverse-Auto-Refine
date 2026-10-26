@@ -942,6 +942,17 @@ describe("two models: Jev reads the reply first", () => {
     });
   });
 
+  // Another extension's block in the reply is hidden on screen, so the second
+  // model reads the reply without it. The tag name is made up.
+  test("the second model is not sent another extension's block", async () => {
+    const c = chat();
+    c[2].content = REPLY + '\n<tide-note kind="dm">{"text":"Bring the spare lantern."}</tide-note>';
+    const h = await keyed({}, { jev: says([10]) }, c);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(String(h.jevCalls[0].body.state.reply)).not.toContain("spare lantern");
+  });
+
   // Which Jev answers, per host. The latest is each host's own alias where it
   // has published one, and the exact version is pinned. Settings saved with
   // "A name I type" picked send the name typed under it, and the exact Jev
@@ -8933,5 +8944,97 @@ describe("a broken rewrite", () => {
     await wait(80);
     expect(h.asked.length).toBe(2);
     expect(h.body("m2")).toBe(good);
+  });
+});
+
+// Another extension's block in a reply. An extension can ask the model to write
+// data into the reply inside a tag it named, which Lumiverse hides on screen and
+// hands to that extension. A rewrite that changes the words inside makes a new
+// block, and the extension acts on it a second time. The names here are made
+// up; a hyphen in the name is what marks one.
+describe("another extension's block in a reply", () => {
+  const BLOCK = '<tide-note kind="dm">{"from":"Odile","text":"Bring the spare lantern."}</tide-note>';
+  const withBlock = (body: string): Msg[] => {
+    const c = chat();
+    c[2].content = body;
+    return c;
+  };
+  const turnOf = (h: any) => String(h.asked[0].messages[h.asked[0].messages.length - 1].content);
+  const tokensIn = (h: any): string[] => turnOf(h).match(/\[\[AR\d+\]\]/g) || [];
+  const body = "She stepped through and, suddenly, the cold just hit her.\n" + BLOCK;
+
+  test("is hidden whole, with the words inside it", async () => {
+    const h = await armed(["ok"], {}, withBlock(body));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(turnOf(h)).not.toContain("spare lantern");
+    expect(turnOf(h)).not.toContain("tide-note");
+    expect(tokensIn(h).length).toBe(1);
+  });
+
+  test("and comes back exactly as it was", async () => {
+    const seen = await armed([], {}, withBlock(body));
+    await seen.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const t = tokensIn(seen);
+    const h = await armed(["<refined>She stepped through and the cold hit her.\n" + t[0] + "</refined>"], {}, withBlock(body));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.\n" + BLOCK);
+  });
+
+  test("is hidden with the protect switch off too", async () => {
+    const h = await armed(["ok"], { protectOn: false }, withBlock(body));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(turnOf(h)).not.toContain("spare lantern");
+  });
+
+  test("so is one that closes itself", async () => {
+    const h = await armed(["ok"], {}, withBlock("She stepped through and, suddenly, the cold just hit her.\n<tide-mark ref=\"k4\"/>"));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(turnOf(h)).not.toContain("tide-mark");
+    expect(tokensIn(h).length).toBe(1);
+  });
+
+  test("an empty element is hidden as one piece, so its two tags stay together", async () => {
+    const h = await armed(["ok"], {}, withBlock('She stepped through and, suddenly, the cold just hit her.\n<span class="tide-anchor" data-tide="k4"></span>'));
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(tokensIn(h).length).toBe(1);
+  });
+
+  // The extension turns its block into an anchor right after the reply ends,
+  // while the refine is out. The words are the same, so the refine is kept,
+  // with the anchor in place of the block.
+  const ANCHOR = '<span class="tide-anchor" data-tide="k4"></span>';
+  test("the refine is kept when only that block changed while it was out", async () => {
+    const seen = await armed([], {}, withBlock(body));
+    await seen.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const t = tokensIn(seen);
+    const h = host(withBlock(body), ["<refined>She stepped through and the cold hit her.\n" + t[0] + "</refined>"], {
+      whileAsking: () => h.edit("m2", "She stepped through and, suddenly, the cold just hit her.\n" + ANCHOR),
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.\n" + ANCHOR);
+  });
+
+  test("and still dropped when the words changed as well", async () => {
+    const seen = await armed([], {}, withBlock(body));
+    await seen.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    const t = tokensIn(seen);
+    const h = host(withBlock(body), ["<refined>She stepped through and the cold hit her.\n" + t[0] + "</refined>"], {
+      whileAsking: () => h.edit("m2", "Somebody else got here first.\n" + ANCHOR),
+    });
+    await h.front({ type: "set_settings", settings: RULES });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.body("m2")).toBe("Somebody else got here first.\n" + ANCHOR);
+    expect(h.skipped().join(" ")).toMatch(/changed while the rewrite/i);
   });
 });

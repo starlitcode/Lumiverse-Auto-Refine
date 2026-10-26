@@ -670,6 +670,28 @@ const GUARDED = [
     /\bhttps?:\/\/[^\s<>"')\]]+/g, // a bare URL
     /<\/?[a-zA-Z][^<>]*>/g, // every other tag, checked below
 ];
+// Blocks that belong to another extension, hidden whole with what is inside
+// them, whether or not the switch for the rest is on.
+//
+// An extension can ask the model to write data into the reply, inside a tag
+// whose name it made up, such as <note-card id="4">{"text": "..."}</note-card>.
+// Lumiverse hides the block on screen and hands it to that extension, which
+// acts on it. The rule above for a single tag would hide the two tags and
+// leave the words between them to the rewrite, and a changed block is a new
+// one to the extension that reads it, so it would act on it again. HTML has
+// no element names with a hyphen in them, so a name with one is somebody's
+// own, and never prose.
+const OTHERS_BLOCKS = [
+    /<([a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)+)\b[^<>]{0,2000}>[\s\S]{0,20000}?<\/\1\s*>/g,
+    /<[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z0-9]+)+\b[^<>]{0,2000}\/\s*>/g,
+];
+// Only text with such a tag in it is searched for one, so a reply full of
+// unfinished tags of other names costs nothing extra.
+const OTHERS_TAG = /<[a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9]/;
+// An element with nothing inside it, such as <span id="a4"></span>: an anchor
+// another extension keeps its place by. Hidden as one piece, so its two tags
+// stay together and on their own line.
+const EMPTY_ELEMENT = /<([a-zA-Z][a-zA-Z0-9-]*)\b[^<>]{0,2000}>[ \t]*<\/\1\s*>/g;
 // Extra patterns the reader wrote, and patterns that keep a region visible even
 // when one of the above matched it.
 //
@@ -817,14 +839,17 @@ function keptVisible(hit) {
     return false;
 }
 function shield(text) {
-    if (!protectOn)
+    const others = OTHERS_TAG.test(String(text)) ? OTHERS_BLOCKS : [];
+    if (!protectOn && !others.length)
         return { text: text, parts: [] };
     const parts = [];
     let out = text;
-    // The reader's own go first. A pattern written for a particular card is more
+    // Another extension's blocks first, so no other rule takes a piece out of
+    // one. Then the reader's own: a pattern written for a particular card is more
     // specific than the general rules, and whichever matches first owns the
     // region, so specific before general is the order that does what was meant.
-    for (const rule of shieldAdd.concat(GUARDED)) {
+    const rules = protectOn ? others.concat(shieldAdd, [EMPTY_ELEMENT], GUARDED) : others;
+    for (const rule of rules) {
         out = out.replace(rule, (hit) => {
             // Never a token this function put there a moment ago.
             if (TOKEN_ONLY.test(hit))
@@ -5309,6 +5334,35 @@ function onFreshThinking(original, next, fresh) {
     const middle = next.slice(was.head.length, next.length - was.tail.length);
     return now.head + middle + now.tail;
 }
+// The rewrite, moved onto a message where only hidden pieces changed while it
+// was being written, or null when anything else changed.
+//
+// Another extension can rewrite its own block in a reply right after the reply
+// ends, at the same moment a refine starts, such as turning a block of data
+// into an anchor. The words the refine was made from are all still there, so
+// the refine is still good. Each hidden piece that changed is swapped for the
+// new one, so the write does not bring the old one back.
+function onFreshHidden(original, next, fresh) {
+    const was = shield(original);
+    const now = shield(fresh);
+    if (!was.parts.length || was.text !== now.text || was.parts.length !== now.parts.length)
+        return null;
+    let out = next;
+    for (let i = 0; i < was.parts.length; i++) {
+        const old = was.parts[i];
+        if (old === now.parts[i])
+            continue;
+        // Swapped only where it can be found once and only once, in the original
+        // and in the rewrite. Anything less certain leaves the refine refused.
+        if (was.parts.indexOf(old) !== was.parts.lastIndexOf(old))
+            return null;
+        const at = out.indexOf(old);
+        if (at < 0 || out.indexOf(old, at + 1) >= 0)
+            return null;
+        out = out.slice(0, at) + now.parts[i] + out.slice(at + old.length);
+    }
+    return out;
+}
 async function saveRefined(chatId, m, original, next, userId, 
 // What the write was. A snip takes text out with no model call, so the panel
 // words it and counts it differently, but the way back is the same one.
@@ -5335,7 +5389,7 @@ onSwipe) {
     try {
         const fresh = aimed ? await swipeContent(chatId, m.id, onSwipe) : await currentContent(chatId, m.id);
         if (fresh !== null && fresh !== original) {
-            const moved = onFreshThinking(original, next, fresh);
+            const moved = onFreshThinking(original, next, fresh) ?? onFreshHidden(original, next, fresh);
             if (moved === null)
                 return { ok: false, why: 'that message changed while the rewrite was being written, so it was left alone' };
             original = fresh;
@@ -6336,7 +6390,20 @@ const BEFORE_CHECKS = [
 // A check that names `previous_reply` is left out when there is no reply
 // before this one to send, since a question about input that is not there has
 // no answer worth reading.
+// A reply without another extension's blocks in it. The second model reads the
+// reply as a reader sees it, and those blocks are hidden on screen.
+function withoutOthersBlocks(text) {
+    let out = String(text == null ? '' : text);
+    if (!OTHERS_TAG.test(out))
+        return out;
+    for (const re of OTHERS_BLOCKS)
+        out = out.replace(re, '');
+    return out;
+}
 async function judgeReply(userId, reply, worn, before) {
+    reply = withoutOthersBlocks(reply);
+    if (before)
+        before = withoutOthersBlocks(before);
     const questions = {};
     const asked = [];
     const hasBefore = !!(before && before.trim());

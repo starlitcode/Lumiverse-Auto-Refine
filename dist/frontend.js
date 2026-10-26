@@ -5778,9 +5778,10 @@ export function setup(ctx, overrides) {
         .join(",") + "{animation:none!important;transition:none!important}";
     const CSS = PATTERN_CSS +
         // Hold to select text in messages. Message text stays selectable even where
-        // another extension switched selecting off for its own taps.
+        // another extension switched selecting off for its own taps. A card another
+        // extension put inside a reply is its own, and is left as it is.
         "html[data-arf-free-select] [data-component=\"MessageContent\"]," +
-        "html[data-arf-free-select] [data-component=\"MessageContent\"] *{" +
+        "html[data-arf-free-select] [data-component=\"MessageContent\"] *:not(:is(" + OTHER_UI + "),:is(" + OTHER_UI + ") *){" +
         "-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}" +
         // The bar by a selection. It fades in and slides up 4 pixels.
         ".arf-selbar{position:fixed;left:0;top:0;z-index:2147483100;display:flex;gap:6px;" +
@@ -14985,16 +14986,30 @@ export function setup(ctx, overrides) {
             .replace(/[^a-z0-9]+/g, "")
             .slice(0, 240);
     }
+    // Anything another extension put inside the reply, such as a card under it,
+    // is left out. It is not the reply's words.
     function bodyKey(msg) {
         try {
             const body = msg && msg.querySelector ? msg.querySelector('[data-component="MessageContent"]') : null;
             if (!body)
                 return "";
-            return textKey(String(body.innerText || body.textContent || ""));
+            return textKey(textOutsideOthers(body));
         }
         catch (_) {
             return "";
         }
+    }
+    // The text in a node, leaving out every part another extension marked.
+    function textOutsideOthers(root) {
+        const out = [];
+        const walk = document.createTreeWalker(root, 4 /* text */, {
+            acceptNode: (n) => n.parentElement && n.parentElement.closest(OTHER_UI) && root.contains(n.parentElement.closest(OTHER_UI))
+                ? 2 /* reject */
+                : 1 /* accept */,
+        });
+        for (let n = walk.nextNode(); n; n = walk.nextNode())
+            out.push(String(n.nodeValue || ""));
+        return out.join("");
     }
     // Bringing the swipe that was just written into view.
     //
@@ -16643,8 +16658,9 @@ export function setup(ctx, overrides) {
             if (!body || !body.parentElement)
                 return null;
             // A chat message drawn inside another extension's part is that
-            // extension's copy, not the message in the chat.
-            if (body.closest(OTHER_UI))
+            // extension's copy, not the message in the chat. A card another
+            // extension put inside a reply is not part of the reply either.
+            if (body.closest(OTHER_UI) || (el.closest && el.closest(OTHER_UI)))
                 return null;
             const mount = body.parentElement.querySelector('[data-spindle-scope^="message:"]');
             if (!mount)
@@ -16713,6 +16729,11 @@ export function setup(ctx, overrides) {
             // what the backend matches against the reply. A range's text has the
             // markup's spacing instead. What was trimmed off is blank, so only the
             // blank at that side is taken off.
+            // Words in another extension's card inside the reply are outside the
+            // reply, the same as the name or the date.
+            for (const part of Array.from(found.body.querySelectorAll(OTHER_UI)))
+                if (range.intersectsNode(part) && String(part.textContent || "").trim())
+                    return null;
             let text = String(sel.toString());
             if (cutStart)
                 text = text.replace(/^\s+/, "");
@@ -16833,6 +16854,9 @@ export function setup(ctx, overrides) {
             if (!el || !el.closest)
                 return false;
             if (!el.closest('[data-component="MessageContent"]'))
+                return false;
+            // Another extension's card inside a reply keeps what a hold does to it.
+            if (el.closest(OTHER_UI))
                 return false;
             // Links, buttons, fields and pictures keep what a hold does to them.
             return !el.closest("a,button,input,textarea,select,summary,img,video,[role=button]");

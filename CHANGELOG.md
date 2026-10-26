@@ -12,6 +12,9 @@ _2026-10-26_
 
 ### Fixed
 
+- **A refine could change another extension's block in a reply.** Another extension can ask the model to write data into a reply, inside a tag it named, such as `<note-card>…</note-card>`. Only the two tags were hidden from the refine, so the words inside could be rewritten, and that extension could then act on the block a second time. A block whose tag name has a hyphen is now hidden whole, even with **Hide markup from the model** off. The second model no longer reads these blocks either. See [Another extension's blocks](docs/prompt.md#another-extensions-blocks).
+- **A refine was thrown away when another extension rewrote its own block at the same time.** If only that block changed while the refine was out, the refine is now saved, with the block as the other extension left it.
+- **Another extension's card inside a reply was treated as part of the reply.** Selecting its text brought up the bar to refine it. With **Hold to select text in messages** on, the card could be selected and a hold on it did not open Lumiverse's menu. The card is now left alone.
 - **A new install was told a default had changed under it.** The line saying a default moved showed to anyone holding the old value, even someone who installed after the move. For example, a new install that turned on **Lumiverse notification when a refine finishes** was told it was on the old default. A new install is now marked as told when it starts. Each moved default is also answered on its own, so a later one does not bring back one you already answered. The four lines about defaults that moved in 1.35.0 and 1.44.0 are taken out, since an install made after 1.44.0 cannot be told apart from an older one.
 
 ---
