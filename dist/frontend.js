@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.52.0";
+const VERSION = "1.52.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -561,18 +561,6 @@ const MORE_CHECKS = [
     "`reply` describes how words or a silence were taken before anyone acts, as in \"the words settled between them\" or \"the question lingered\".",
     "`reply` shrinks three or more gestures with \"small\", \"slight\" or \"faint\", as in \"a small nod\" and \"a faint smile\".",
 ].join("\n");
-// What the second model checks, as it was up to 1.34.0, word for word. A
-// reader still holding exactly these never wrote their own, and is offered
-// the ones above.
-const JUDGE_CHECKS_1_34 = [
-    "`reply` uses the same phrase of three or more words twice within a few sentences.",
-    "`reply` starts three or more sentences in a row with the same word.",
-    "`reply` contains a stock phrase, such as \"a breath she didn't know she was holding\", \"a shiver ran down his spine\", \"her heart hammered\" or \"a smile that didn't reach his eyes\".",
-    "`reply` says what someone did not do or what something was not, then what they did or what it was, as in \"it wasn't a request, it was a command\" or \"she didn't just leave, she ran\".",
-    "`reply` follows an action with a comment on how it came out, as in \"she laughed, and it was thin\" or \"he smiled, slow and easy\".",
-    "`reply` has a character start an action, then take it back, as in \"reached out, then pulled back\" or \"opened her mouth, then closed it\".",
-    "`reply` ends with a question to the user about what they do next, as in \"What do you do?\".",
-].join("\n");
 // What the second model is asked about the reply before this one, with Also
 // compare with the reply before it on. Each is about repeating, with an
 // example, so a reply that carries the same scene on stays under the line.
@@ -599,12 +587,6 @@ const FOUND_LEAD = "Another model, {{second_model}}, read this passage before yo
     "In them, \"reply\" means the passage you are rewriting. Look at these first. " +
     "Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. " +
     "Everything else in these instructions still applies.";
-// The lead-in as it was up to 1.34.0, word for word.
-const FOUND_LEAD_1_34 = "Another model, {{second_model}}, read this passage before you and scored it against checks the user wrote. " +
-    "The checks below reached the user's line of {{checks_line}}%, strongest first. " +
-    "In them, \"reply\" means the passage you are rewriting. Look at these first. " +
-    "Treat each one as a lead to check. If a check does not fit the passage, leave that part as it is. " +
-    "Everything else in these instructions still applies.";
 // What {{protect_notes}} puts in when something was hidden. The stand-ins are
 // this extension's own, so nothing in a chat could describe them. The backend
 // holds the same text.
@@ -624,11 +606,6 @@ const ASK_NOTE_EMPTY = "Your last answer was empty. Please answer with the rewri
     "the format the instructions ask for.";
 const ASK_NOTE_BROKEN = "Your last rewrite came back broken. Please answer with the rewritten " +
     "passage as clean, readable prose, in the format the instructions ask for.";
-// The note as it was up to 1.34.0, word for word.
-const PROTECT_NOTE_1_34 = "Parts of this passage have been replaced with tokens shaped like [[AR1]], " +
-    "[[AR2]] and so on. Each stands in for formatting that has to survive the " +
-    "edit exactly as it is. Copy every one into your answer unchanged and in the " +
-    "same place, treating each as a single character you cannot spell.";
 const CARET_OPEN = "\u25be";
 const CARET_SHUT = "\u25b8";
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
@@ -2237,41 +2214,22 @@ function markText(text) {
 // number is told nothing: their setup did not change, and a line about a
 // default they are not on is a line to dismiss for no reason.
 //
-// One entry per default that moves, added in the release that moves it and
-// taken out one release later. Empty is the normal state.
+// A row is added in the release that moves the default, and stays until the
+// next major version, which is a reinstall. Auto Retry carries the same table.
 //
-// `needs` keeps the line from somebody the setting does nothing for. The checks
-// are only read with two models on, so a reader on one model is not told about
-// them. If they switch to two models later, the line comes up then.
-const MOVED_DEFAULTS = [
-    {
-        key: "judgeChecks",
-        was: JUDGE_CHECKS_1_34,
-        label: "What the second model checks",
-        why: "One check caught an action followed by a comment on how it came out. Plain description has that shape too, so fine replies were refined. It now asks for a comment that judges the action.",
-        needs: { key: "judgeMode", is: "two" },
-    },
-    {
-        key: "judgeFoundLead",
-        was: FOUND_LEAD_1_34,
-        label: "What the refine model is told about the checks",
-        why: "It said the checks were written by you. Most people use the built-in checks, so it now says they were picked by you.",
-        needs: { key: "judgeMode", is: "two" },
-    },
-    {
-        key: "protectNote",
-        was: PROTECT_NOTE_1_34,
-        label: "What the model is told about the stand-ins",
-        why: "It ended by telling the model to treat each stand-in as a character it cannot spell. It now says plainly not to change, split, translate or remove any of them.",
-    },
-    {
-        key: "toast",
-        was: true,
-        label: "Lumiverse notification when a refine finishes",
-        why: "With the before and after card on, the notification said the same thing a second time. It is now off by default.",
-    },
-];
-const MOVED_MARK = markText(MOVED_DEFAULTS.map((m) => m.key + ":" + String(m.was)).join("\u0003"));
+// A new install is marked as told about every row there is when it starts
+// (see tookAccountSettings). Somebody who installs after a default moved was
+// never on the old one, even if they later pick the same value themselves.
+//
+// `needs` keeps the line from somebody the setting does nothing for. A check
+// that is only read with two models on is not worth a line to a reader on one
+// model. If they switch to two models later, the line comes up then.
+const MOVED_DEFAULTS = [];
+// What a reader is marked with once told about a row: its setting and a mark
+// of the old value. Each row has its own, so a row added later is still told,
+// and a row already answered is not asked about again.
+const movedRowMark = (m) => m.key + ":" + markText(String(m.was));
+const allMovedMarks = () => MOVED_DEFAULTS.map(movedRowMark).join(" ");
 // The mark counts blocks that are switched off, which the shape does not. A
 // block added switched off changes nothing that is sent, but it is still new
 // wording to take, and a mark that skipped it would never tell anybody it is
@@ -3663,9 +3621,14 @@ export function setup(ctx, overrides) {
             return {};
         }
     }
+    // Whether this browser held settings when the panel started, read before
+    // anything here can write them. With none here and none on the account,
+    // this is a new install.
+    const saved = loadSaved();
+    const savedHere = Object.keys(saved).length > 0;
     // Old names are carried on what was saved, before the defaults are under it,
     // so a setting that was never saved still reads as missing.
-    Object.assign(cfg, carryOldNames(Object.assign({}, loadSaved(), overrides || {})));
+    Object.assign(cfg, carryOldNames(Object.assign({}, saved, overrides || {})));
     // Settings written under a name this version no longer uses. Read across once
     // and the old name dropped, so upgrading keeps what the old one was holding
     // rather than starting again from nothing.
@@ -4007,9 +3970,9 @@ export function setup(ctx, overrides) {
     // The moved defaults this reader is actually on. Anybody who set their own
     // value is not on the list, because nothing about their setup moved.
     function movedForMe() {
-        if (String(cfg.movedSeen || "") === MOVED_MARK)
-            return [];
-        return MOVED_DEFAULTS.filter((m) => sameAsWas(cfg[m.key], m.was) &&
+        const seen = String(cfg.movedSeen || "").split(" ");
+        return MOVED_DEFAULTS.filter((m) => seen.indexOf(movedRowMark(m)) < 0 &&
+            sameAsWas(cfg[m.key], m.was) &&
             (!m.needs || cfg[m.needs.key] === m.needs.is) &&
             (!m.also || cfg[m.also.key] === m.also.is));
     }
@@ -4077,9 +4040,10 @@ export function setup(ctx, overrides) {
         line.style.color = "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
     }
     function markMovedSeen() {
-        if (cfg.movedSeen === MOVED_MARK)
+        const all = allMovedMarks();
+        if (cfg.movedSeen === all)
             return;
-        cfg.movedSeen = MOVED_MARK;
+        cfg.movedSeen = all;
         persist(true);
     }
     // Whether the four have changed since this reader last took one. Empty means
@@ -4260,6 +4224,11 @@ export function setup(ctx, overrides) {
             }
         }
         catch (_) { }
+        // Nothing on the account and nothing here: a new install. It starts on
+        // every default as it is now, so no moved default is about it. Kept in
+        // memory and written with the first change.
+        if (!savedHere && !String(cfg.movedSeen || ""))
+            cfg.movedSeen = allMovedMarks();
     }
     // A tab left in the background holds the settings it had when it went
     // there. Coming back to it after a while, the account is asked again before

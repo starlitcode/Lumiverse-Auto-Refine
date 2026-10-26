@@ -49,7 +49,7 @@ if (!existsSync(bundle)) {
   console.error("dist/frontend.js is missing. Run `bun run build` first.");
   process.exit(1);
 }
-const SOURCE = readFileSync(bundle, "utf8") + "\nwindow.__setup = setup;\n";
+const SOURCE = readFileSync(bundle, "utf8") + "\nwindow.__setup = setup;\nwindow.__moved = __testing.MOVED_DEFAULTS;\n";
 
 // Lumiverse's stock theme. A reader's theme overrides these, which is the whole
 // reason the readability sweep exists, so the checks below run against this and
@@ -136,7 +136,7 @@ const COMPOSER_HTML = readFileSync(join(root, "test", "input-area.html"), "utf8"
   .replace(/^<!--[\s\S]*?-->\s*/, "")
   .trim();
 
-async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, setups = null, storage = null, noMenu = false, noConfirm = false } = {}, fn) {
+async function inTab(browser, { css = "", viewport, touch = false, saved = null, presets = null, setups = null, storage = null, noMenu = false, noConfirm = false, moved = null } = {}, fn) {
   const page = await browser.newPage(
     viewport ? { viewport, hasTouch: touch, isMobile: touch } : {},
   );
@@ -208,6 +208,9 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
       return box;
     };
   }, COMPOSER_HTML);
+  // Rows for the moved-defaults table. It is empty between moves, so a check
+  // of the notice brings its own rows, put in before the panel starts.
+  if (moved) await page.evaluate((rows) => { window.__moved.push(...rows); }, moved);
   if (noMenu) await page.evaluate(() => { window.__noMenu = true; });
   // A Lumiverse with no confirm dialog of its own, which is what the armed
   // fallback is for.
@@ -11191,18 +11194,24 @@ console.log("\nwhen a default moves under somebody who was on it");
   // who was following the default. Anybody who set their own is told nothing:
   // their setup did not change, and a line about a default they are not on is
   // a line to dismiss for no reason.
+  //
+  // The table is empty between moves, so these rows are made up for the check.
+  // One is a text read only with two models, and one is a switch.
+  const OLD = "`reply` mentions the weather twice.\n`reply` names a color that is not in the scene.";
+  const CHECKS_ROW = { key: "judgeChecks", was: OLD, label: "What the second model checks", why: "A made-up reason.", needs: { key: "judgeMode", is: "two" } };
+  const TOAST_ROW = { key: "toast", was: true, label: "Lumiverse notification when a refine finishes", why: "Another made-up reason." };
+  const ROWS = [CHECKS_ROW, TOAST_ROW];
   const seen = (page) =>
     page.evaluate(() => {
       const n = document.querySelector("#drawer [data-arf-moveddefault]");
       return n ? n.textContent : null;
     });
-  const entry = __testing.MOVED_DEFAULTS.find((m) => m.key === "judgeChecks");
-  const OLD = entry.was;
   const stored = (page) =>
     page.evaluate(() => {
       const raw = localStorage.getItem("lv-auto-refine:settings:v1");
       return {
         now: raw ? JSON.parse(raw).judgeChecks : null,
+        toast: raw ? JSON.parse(raw).toast : null,
         line: !!document.querySelector("#drawer [data-arf-moveddefault]"),
       };
     });
@@ -11211,11 +11220,33 @@ console.log("\nwhen a default moves under somebody who was on it");
       document.querySelector('#drawer [data-arf-moveddefault="' + which + '"]').click();
       await new Promise((r) => setTimeout(r, 200));
     }, which);
+  // The account's answer to the panel's first ask.
+  const account = (page, settings) =>
+    page.evaluate(async (settings) => {
+      const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
+      window.__fromBackend({ type: "loaded_settings", requestId: id, settings });
+      await new Promise((r) => setTimeout(r, 100));
+    }, settings);
+  // A switch pressed the way a reader presses it, on whichever tab holds it.
+  const flip = async (page, key) => {
+    for (const tab of await page.evaluate(() => Array.from(document.querySelectorAll("#drawer .arf-tab")).map((t) => t.textContent.trim()))) {
+      await goTab(page, tab);
+      const done = await page.evaluate((k) => {
+        const box = document.querySelector('#drawer [data-arf-field="' + k + '"]');
+        if (!box || !box.offsetParent) return false;
+        box.click();
+        return true;
+      }, key);
+      if (done) return true;
+    }
+    return false;
+  };
 
-  ok("the old list is not the built-in one", OLD !== STOCK_DEFAULTS.judgeChecks, "");
+  ok("the made-up old list is not the built-in one", OLD !== STOCK_DEFAULTS.judgeChecks, "");
+  ok("and the switch's old value is not its default", STOCK_DEFAULTS.toast !== true, "");
 
   // Two models, and still on the old list.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
+  await inTab(browser, { moved: ROWS, saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
     const said = await seen(page);
     ok("somebody on the old default is told", !!said, JSON.stringify(said));
     ok("and the line names the setting", !!said && /What the second model checks/.test(said), JSON.stringify(said));
@@ -11226,32 +11257,82 @@ console.log("\nwhen a default moves under somebody who was on it");
 
   // The same list with a space at the end of a line and an empty line after
   // it, which a box that was clicked into can hold. Still the list they had.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD.replace("\n", "  \n") + "\n\n" } }, async (page) => {
+  await inTab(browser, { moved: ROWS, saved: { judgeMode: "two", judgeChecks: OLD.replace("\n", "  \n") + "\n\n" } }, async (page) => {
     ok("spaces and empty lines do not hide the line", !!(await seen(page)), "");
   });
 
   // The checks are only read with two models.
-  await inTab(browser, { saved: { judgeMode: "one", judgeChecks: OLD } }, async (page) => {
+  await inTab(browser, { moved: ROWS, saved: { judgeMode: "one", judgeChecks: OLD } }, async (page) => {
     ok("somebody on one model is left alone", (await seen(page)) === null, "");
   });
 
   // Wrote their own, so nothing of theirs moved.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: "`reply` repeats itself." } }, async (page) => {
+  await inTab(browser, { moved: ROWS, saved: { judgeMode: "two", judgeChecks: "`reply` repeats itself." } }, async (page) => {
     ok("somebody who chose their own is left alone", (await seen(page)) === null, "");
   });
 
-  // Already on the new one, which is everybody installing fresh.
-  await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
+  // Already on the new one.
+  await inTab(browser, { moved: ROWS, saved: { judgeMode: "two" } }, async (page) => {
     ok("and so is somebody already on the new one", (await seen(page)) === null, "");
   });
 
-  // Each of the other texts that moved names itself to somebody still on it.
-  for (const m of __testing.MOVED_DEFAULTS.filter((x) => x.key !== "judgeChecks")) {
-    await inTab(browser, { saved: { judgeMode: "two", [m.key]: m.was } }, async (page) => {
-      const said = await seen(page);
-      ok("somebody on the old " + m.key + " is told, by its name", !!said && said.indexOf(m.label) >= 0, JSON.stringify(said));
+  // A switch that moved names itself to somebody still on it.
+  await inTab(browser, { moved: ROWS, saved: { toast: true } }, async (page) => {
+    const said = await seen(page);
+    ok("somebody on the old switch value is told, by its name", !!said && said.indexOf(TOAST_ROW.label) >= 0, JSON.stringify(said));
+  });
+
+  // A new install: nothing in this browser and nothing on the account. It
+  // started after the move, so it was never on the old value, even once the
+  // reader turns the switch on themselves.
+  await inTab(browser, { moved: ROWS }, async (page) => {
+    await account(page, {});
+    const flipped = await flip(page, "toast");
+    ok("the check found the switch to press", flipped, "");
+    await settle(page);
+    // The line is drawn with a tab, so another tab is opened, as a reader
+    // moving on would.
+    const tabs = await page.evaluate(() => Array.from(document.querySelectorAll("#drawer .arf-tab")).map((t) => t.textContent.trim()));
+    for (const t of tabs.slice(0, 2)) await goTab(page, t);
+    const after = await stored(page);
+    ok("the switch is on", after.toast === true, JSON.stringify(after));
+    ok("a new install that picks the old value is not told it was on it", (await seen(page)) === null, JSON.stringify(await seen(page)));
+  });
+
+  // The same install, opened again: what it was marked with went to the
+  // account with the change, and comes back from there.
+  await inTab(browser, { moved: ROWS }, async (page) => {
+    await account(page, {});
+    await flip(page, "toast");
+    await settle(page);
+    const up = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop());
+    ok("the mark goes to the account with the change", !!up && !!up.settings && !!up.settings.movedSeen, JSON.stringify(up && up.settings && up.settings.movedSeen));
+    const keep = up && up.settings;
+    await inTab(browser, { moved: ROWS }, async (again) => {
+      await account(again, keep);
+      ok("and on another device it is still not told", (await seen(again)) === null, JSON.stringify(await seen(again)));
     });
-  }
+  });
+
+  // An account from before the move, opened in a new browser. It has
+  // settings, so it is not a new install, and it is told.
+  await inTab(browser, { moved: ROWS }, async (page) => {
+    await account(page, { toast: true });
+    await settle(page);
+    ok("an older account opened in a new browser is told", !!(await seen(page)), "");
+  });
+
+  // Each row is answered on its own. A row added after somebody answered
+  // another is still told, and the one answered is not asked about again.
+  await inTab(browser, { moved: [TOAST_ROW], saved: { toast: true, judgeMode: "two", judgeChecks: OLD } }, async (page) => {
+    await press(page, "keep");
+    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")));
+    await inTab(browser, { moved: ROWS, saved: kept }, async (later) => {
+      const said = await seen(later);
+      ok("a row added later is told", !!said && said.indexOf(CHECKS_ROW.label) >= 0, JSON.stringify(said));
+      ok("and the row already answered is not", !!said && said.indexOf(TOAST_ROW.label) < 0, JSON.stringify(said));
+    });
+  });
 
   // A line somebody set themselves for Jev is given to Span too. A default is not.
   for (const [was, want] of [[35, "35"], [40, "30"], [50, "30"]]) {
@@ -11267,7 +11348,7 @@ console.log("\nwhen a default moves under somebody who was on it");
     ok(k + " is 30 by default", STOCK_DEFAULTS[k] === 30, String(STOCK_DEFAULTS[k]));
 
   // Keep mine puts it away without changing the setting.
-  await inTab(browser, { saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
+  await inTab(browser, { moved: ROWS, saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
     await press(page, "keep");
     const after = await stored(page);
     ok("keeping yours leaves the setting alone", after.now === OLD, JSON.stringify(after));

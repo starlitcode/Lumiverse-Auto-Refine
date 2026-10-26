@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.52.1
+
+_2026-10-26_
+
+### Fixed
+
+- **A new install was told a default had changed under it.** The line saying a default moved showed to anyone holding the old value, even someone who installed after the move. For example, a new install that turned on **Lumiverse notification when a refine finishes** was told it was on the old default. A new install is now marked as told when it starts. Each moved default is also answered on its own, so a later one does not bring back one you already answered. The four lines about defaults that moved in 1.35.0 and 1.44.0 are taken out, since an install made after 1.44.0 cannot be told apart from an older one.
+
+---
+
 ## 1.52.0
 
 _2026-10-25_
