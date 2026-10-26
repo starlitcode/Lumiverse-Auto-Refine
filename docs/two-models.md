@@ -17,7 +17,7 @@ First, in Lumiverse:
 Then, on Auto Refine's Model tab, in **One model or two**:
 
 1. Set **How many models** to two.
-2. Under **Which Decision connection**, keep **Your default Decision connection**, or pick one of yours. The list shows each connection's name and model.
+2. Under **Which Decision connection**, keep **Your default Decision connection**, or pick one of yours. The list shows each connection's name and model. The first choice names your default connection, and follows it if you change your default in Lumiverse.
 3. Press **Test**. It asks one small question with nothing from any chat in it, and says whether an answer came back, and which model answered. The Log tab shows the test in full. See [Reading a test](#reading-a-test).
 
 Two-model mode needs the **Decision models** permission. Lumiverse asks for it after updating to a version that uses it.

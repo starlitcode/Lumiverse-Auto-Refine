@@ -2168,7 +2168,7 @@ console.log("\none model or two");
       ok(label + ": with two, the connection, the checks and the line show", two.connection && two.checks && two.line, JSON.stringify(two));
       ok(label + ": and no key box, host or address", !two.oldParts, JSON.stringify(two));
       ok(label + ": the picker offers the default, then each connection with its model",
-        two.options.join("|") === "Your default Decision connection|Quick checks (~typesafe/jev-latest) - default|Slow checks (jev-1.14.0)", JSON.stringify(two.options));
+        two.options.join("|") === "Your default Decision connection (Quick checks)|Quick checks (~typesafe/jev-latest) - default|Slow checks (jev-1.14.0)", JSON.stringify(two.options));
       ok(label + ": with a default that has a key, nothing is wrong and Test can be pressed", !two.problem && two.test && !two.testOff, JSON.stringify(two));
       ok(label + ": and the switches for the rest show", two.byHand && two.after && two.before, JSON.stringify(two));
 

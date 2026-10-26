@@ -9424,7 +9424,15 @@ export function setup(ctx: Ctx, overrides?: any) {
                   : [],
               )
           : f.key === "judgeConnection"
-            ? [{ value: "", label: "Your default Decision connection", group: "" }]
+            ? [
+                {
+                  value: "",
+                  // Named, so it is plain that it is the same connection as
+                  // the one marked default below.
+                  label: "Your default Decision connection" + ((d) => (d ? " (" + (d.name || d.model) + ")" : ""))(decisions.list.find((c) => c.isDefault)),
+                  group: "",
+                },
+              ]
                 .concat(
                   decisions.list.map((c) => ({
                     value: c.id,
