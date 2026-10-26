@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.53.1
+
+_2026-10-26_
+
+### Changed
+
+- **One choice when you have one Decision connection.** If your only Decision connection is your default, **Which Decision connection** lists only **Your default Decision connection**. Before, it also listed that same connection by name, which did the same thing. With two or more connections, the full list shows.
+
+---
+
 ## 1.53.0
 
 _2026-10-26_

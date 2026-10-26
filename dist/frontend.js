@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.53.0";
+const VERSION = "1.53.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -9265,7 +9265,12 @@ export function setup(ctx, overrides) {
                             group: "",
                         },
                     ]
-                        .concat(decisions.list.map((c) => ({
+                        .concat(decisions.list
+                        // One connection that is the default would be a second
+                        // choice that does the same as the first, so it is left
+                        // out unless it is the one picked.
+                        .filter((c) => !(decisions.list.length === 1 && c.isDefault && String(cfg.judgeConnection) !== c.id))
+                        .map((c) => ({
                         value: c.id,
                         label: (c.name || c.provider || "Decision connection") + (c.model ? " (" + c.model + ")" : "") + (c.isDefault ? " - default" : ""),
                         group: "",

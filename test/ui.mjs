@@ -2178,6 +2178,19 @@ console.log("\none model or two");
       const noKey = await shown(page);
       ok(label + ": a connection with no key says so, and Test waits", /has no key saved/.test(noKey.problem) && noKey.testOff, JSON.stringify(noKey));
 
+      // One connection, the default: the default choice alone, unless that
+      // connection is the one picked.
+      await pick(page, "judgeConnection", "");
+      await answer(page, { list: LIST.slice(0, 1), state: "ok" });
+      await settle(page);
+      const single = await shown(page);
+      ok(label + ": with one connection, the default, only the default choice is listed",
+        single.options.join("|") === "Your default Decision connection (Quick checks)", JSON.stringify(single.options));
+      await answer(page, { list: LIST, state: "ok" });
+      await settle(page);
+      await pick(page, "judgeConnection", "dc-2");
+      await settle(page);
+
       // A connection that is gone is kept in the list and named.
       await answer(page, { list: LIST.slice(0, 1), state: "ok" });
       await settle(page);
