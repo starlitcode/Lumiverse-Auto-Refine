@@ -2220,7 +2220,7 @@ console.log("\none model or two");
       ok(label + ": Test asks the backend", test === 1, String(test));
       const said = await page.evaluate(async () => {
         const last = window.__sent.filter((m) => m.type === "jev_test").pop();
-        window.__fromBackend({ type: "jev_tested", requestId: last.requestId, ok: true, pct: 97, over: 30, model: "typesafe/jev-1.14", check: "The door in `reply` is open.", cost: 0 });
+        window.__fromBackend({ type: "jev_tested", requestId: last.requestId, ok: true, pct: 97, over: 30, model: "typesafe/jev-1.14", check: "The cat in `reply` knocks things off the table.", cost: 0 });
         await new Promise((r) => setTimeout(r, 60));
         return document.querySelector("#drawer [data-arf-jevsaid]").textContent;
       });
@@ -2534,7 +2534,7 @@ console.log("\nwhat the second model decided");
         ok: true,
         why: "",
         model: "jev-1.13.0",
-        check: "The door in `reply` is open.",
+        check: "The cat in `reply` knocks things off the table.",
         pct: 98,
         over: 50,
         cost: 0,
@@ -2553,7 +2553,7 @@ console.log("\nwhat the second model decided");
           }
         : null;
     });
-    ok("a test shows in the card, marked as a test", !!test && test.mark === "ok" && /made-up question/.test(test.text) && /The door in reply is open/.test(test.text) && test.widths.join() === "98%", JSON.stringify(test));
+    ok("a test shows in the card, marked as a test", !!test && test.mark === "ok" && /made-up question/.test(test.text) && /The cat in reply knocks things off the table/.test(test.text) && test.widths.join() === "98%", JSON.stringify(test));
     ok("it says which Decision connection the test went through", !!test && /Asked through the Decision connection Quick checks\./.test(test.sent), JSON.stringify(test));
     ok("it says when the provider reported no cost", !!test && /reported no cost/.test(test.text), JSON.stringify(test));
     ok("a test is not counted as a reply", !!test && !test.tally, JSON.stringify(test));

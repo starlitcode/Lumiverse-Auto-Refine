@@ -281,7 +281,7 @@ A reply left alone also says so where a refine that stood down would, with the h
 
 **Test** puts its answer in the same card, marked **test**. A test is not a reply from your chat, so it is not added to the count.
 
-- The question is always the same: the text "The door is open." and the check "The door in reply is open." The door is open, so a score near 100% is right.
+- The question is always the same: the text "The cat looked me right in the eye, then slowly pushed my coffee off the table. Then the spoon. Then my phone." and the check "The cat in reply knocks things off the table." The cat does knock things off the table, so a score near 100% is right.
 - The Decision connection it went through.
 - Which model answered.
 - What the provider said it cost. If the provider reported no cost, the card says so.

@@ -9038,6 +9038,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     armedFor.clear();
   });
+  // What a confirmed press does. A throw from it would go nowhere, since the
+  // press has already been answered, so it is caught here and said.
+  function doConfirmed(go: () => void) {
+    try {
+      go();
+    } catch (e: any) {
+      log("problem", "that did not work: " + ((e && e.message) || String(e)));
+      toast("That did not work. The Log says why.", true, "warning");
+    }
+  }
   async function askFirst(
     key: string,
     spec: { title: string; message: string; confirmLabel: string },
@@ -9046,14 +9056,14 @@ export function setup(ctx: Ctx, overrides?: any) {
   ) {
     const said = await askHost(spec);
     if (said !== null) {
-      if (said) go();
+      if (said) doConfirmed(go);
       return;
     }
     const waiting = armedFor.get(key);
     if (waiting) {
       clearTimeout(waiting);
       armedFor.delete(key);
-      go();
+      doConfirmed(go);
       return;
     }
     toast(armSays, true);
@@ -11530,7 +11540,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         note(
           last.failed
             ? "The test at " + when + " failed: " + last.why + "."
-            : who + " answered the test at " + when + ". The test is one made-up question, not a reply from your chat. The door is open, so a score near 100% is right.",
+            : who + " answered the test at " + when + ". The test is one made-up question, not a reply from your chat. The cat does knock things off the table, so a score near 100% is right.",
         ),
       );
       if (last.test.through) {
@@ -14413,7 +14423,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     go.setAttribute("data-arf-reset", "1");
     go.disabled = !chosen.length;
     go.style.opacity = chosen.length ? "1" : "0.45";
-    go.addEventListener("click", () => resetAll());
+    go.addEventListener("click", () =>
+      resetAll().catch((e: any) => {
+        log("problem", "the reset did not finish: " + ((e && e.message) || String(e)));
+        toast("The reset did not finish. The Log says why.", true, "warning");
+      }),
+    );
     row.appendChild(go);
     wrap.appendChild(row);
     if (resetSaid) wrap.appendChild(resetArmed ? bad(resetSaid) : note(resetSaid));
@@ -15189,7 +15204,10 @@ export function setup(ctx: Ctx, overrides?: any) {
           held = null;
           menuOpened = true;
           b.removeAttribute("data-arf-holding");
-          widgetMenu();
+          widgetMenu().catch((e: any) => {
+          log("problem", "the button's menu could not open: " + ((e && e.message) || String(e)));
+          toast("The button's menu could not open. The Log says why.", true, "warning");
+        });
         }, HOLD_MS);
       });
 
@@ -15223,7 +15241,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         } catch (_) {}
         disarm();
         menuOpened = true;
-        widgetMenu();
+        widgetMenu().catch((e: any) => {
+          log("problem", "the button's menu could not open: " + ((e && e.message) || String(e)));
+          toast("The button's menu could not open. The Log says why.", true, "warning");
+        });
       });
       root.appendChild(b);
       floatBtn = b;

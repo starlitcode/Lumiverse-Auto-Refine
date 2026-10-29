@@ -1315,7 +1315,7 @@ test("the line is the reader's own, not a fixed half", async () => {
   test("Test asks one small question with nothing from any chat in it", async () => {
     const h = await two({}, { jev: says([100]) });
     await h.front({ type: "jev_test", requestId: "t" });
-    expect(h.jevCalls[0].body.state).toEqual({ reply: "The door is open." });
+    expect(h.jevCalls[0].body.state).toEqual({ reply: "The cat looked me right in the eye, then slowly pushed my coffee off the table. Then the spoon. Then my phone." });
     const done = h.sent.find((m: any) => m.type === "jev_tested");
     expect(done.ok).toBe(true);
   });
@@ -1328,7 +1328,7 @@ test("the line is the reader's own, not a fixed half", async () => {
     expect(done.over).toBe(60);
     expect(done.cost).toBe(0.00002);
     expect(done.model).toBe("typesafe/jev-1.14");
-    expect(done.check).toMatch(/door/);
+    expect(done.check).toMatch(/cat/);
   });
 
   test("a test answered with a score outside 0 to 1 fails, like a real reply would", async () => {

@@ -345,7 +345,10 @@ async function readUserJson(file: string, userId?: string): Promise<any> {
     let legacy: any = null;
     try { legacy = JSON.parse(await spindle.storage.read(file)); } catch (_) { legacy = null; }
     if (legacy != null) {
-      try { await spindle.userStorage.setJson(file, legacy, { userId: userId }); } catch (_) {}
+      // Read again from the old store next time, so a failed move is not lost.
+      try { await spindle.userStorage.setJson(file, legacy, { userId: userId }); } catch (e: any) {
+        say('warn', 'could not move ' + file + ' to the account, so it is read from the old store for now: ' + ((e && e.message) || String(e)));
+      }
     }
     return legacy;
   }
@@ -7059,9 +7062,10 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // One small question with nothing from any chat in it, so a connection can
     // be checked before a reply depends on it.
     if (payload.type === 'jev_test') {
-      const check = 'The door in `reply` is open.';
-      const got = await askJev(userId, { reply: 'The door is open.' }, { open: { type: NOUL, instructions: check } });
-      const v = got.answers && got.answers.open && got.answers.open.noul;
+      // Plainly true, so a working model scores it near 100%.
+      const check = 'The cat in `reply` knocks things off the table.';
+      const got = await askJev(userId, { reply: 'The cat looked me right in the eye, then slowly pushed my coffee off the table. Then the spoon. Then my phone.' }, { cat: { type: NOUL, instructions: check } });
+      const v = got.answers && got.answers.cat && got.answers.cat.noul;
       const scored = typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
       replyTo(userId, {
         type: 'jev_tested',

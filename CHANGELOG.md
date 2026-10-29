@@ -12,6 +12,7 @@ _2026-10-29_
 
 ### Fixed
 
+- **Some failures said nothing.** A press you had confirmed, such as deleting a preset, **Reset**, and the floating button's menu could fail without a word. Each now shows a warning, and the Log says why.
 - **Folded blocks in a preset of yours came back open.** The folds are kept under the preset's name. When Lumiverse was opened again and your account sent the settings before the presets, the preset picker could not find your preset yet. It cleared the name, which opened the blocks, and saved the empty name to your account. The picker now waits for the presets before it clears a name.
 - **Your colors for cut and added words were not used.** When your account sent your settings after Auto Refine had started, the colors from **Color of cut words** and **Color of added words** were not put on the page. Finished refines showed the default red and green until you changed a setting. They are now used as soon as your settings arrive. **Keep the eye still**, **Reduce motion** and **Hold to select text in messages** had the same problem and are fixed with them.
 - **A refine you started yourself sent a notification with the switch off.** **Refine the latest reply** and the other buttons that start a refine sent "Reply refined." even with **Lumiverse notification when a refine finishes** off. They now follow the switch. The card and the panel already show the refine.
@@ -21,6 +22,7 @@ _2026-10-29_
 
 ### Changed
 
+- **A new example for Test.** **Test** under **Which Decision connection** now asks about a cat knocking things off a table, in place of an open door. It is still one plain question with a clear yes, so a score near 100% means the connection works.
 - **No notification after Add them to the checks, Use the built-in checks or Use the built-in text.** The box shows what was put in, so no notification is sent.
 
 ---
