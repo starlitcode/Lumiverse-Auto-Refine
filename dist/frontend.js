@@ -16579,11 +16579,11 @@ export function setup(ctx, overrides) {
                 if (!p)
                     return;
                 // An impersonation writes your side, and the automatic pass leaves it
-                // alone, so it does not show as working on one. A draft in the input
-                // box has no message of its own to take note of either.
+                // alone, so it does not show as working on one. It is still in this
+                // chat, but it is not a reply to take note of.
                 const impersonation = String(p.generationType || "").toLowerCase() === "impersonate" || !!p.impersonateDraft;
-                if (!elsewhere(p.chatId) && !impersonation)
-                    sawChat(p.chatId, p.messageId);
+                if (!elsewhere(p.chatId))
+                    sawChat(p.chatId, impersonation ? undefined : p.messageId);
                 if (cfg.enabled && cfg.refineOn && refinesReplies() && !p.error && !impersonation && !chatIsOff(p.chatId)) {
                     markBusy(true);
                     paint();

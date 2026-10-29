@@ -8105,3 +8105,13 @@ describe("a tracker under a divider and in a code fence", () => {
     expect(h.writes.length).toBe(0);
   });
 });
+
+describe("an impersonation says nothing to the panel", () => {
+  test("no answer is sent, so a refine started by hand keeps its spinner", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    const before = (h.sent || []).length;
+    await h.ended({ chatId: "c1", messageId: "", generationId: "g9", generationType: "impersonate", impersonateDraft: true });
+    await wait(60);
+    expect((h.sent || []).slice(before).filter((m: any) => m.type === "refine_stood_down").length).toBe(0);
+  });
+});

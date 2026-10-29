@@ -6103,20 +6103,21 @@ function applyRules(s) {
     requireTags = s.requireTags !== false;
     streamProgress = s.streamProgress !== false;
 }
-// The automatic pass on one reply: every check that decides whether it runs,
-// the gap between refines, the refine, and what the panel is told. Used for a
-// reply that ends in the chat and for a reroll Auto Retry adds itself, which
-// raises no event of its own.
 // Whether a generation's end event is for an impersonation. Lumiverse names
 // the kind of generation on the event, and marks a draft written into the
 // input box as well.
 function isImpersonation(p) {
     return !!p && (String(p.generationType || '').toLowerCase() === 'impersonate' || !!p.impersonateDraft);
 }
+// The automatic pass on one reply: every check that decides whether it runs,
+// the gap between refines, the refine, and what the panel is told. Used for a
+// reply that ends in the chat and for a reroll Auto Retry adds itself, which
+// raises no event of its own.
 async function autoPass(p, who) {
-    // Every way out of this function says so. The panel turns its
-    // spinner on the moment a reply lands, when the automatic pass is on, and
-    // waits for this answer to turn it off. A path that returned without one
+    // Every way out of this function says so, except an impersonation, which
+    // the panel does not wait on. The panel turns its spinner on the moment a
+    // reply lands, when the automatic pass is on, and waits for this answer to
+    // turn it off. A path that returned without one
     // would leave the spinner running until the panel's watchdog gave up and
     // wrongly reported that the backend is not running.
     const stand = (why, messageId) => {
@@ -6127,13 +6128,15 @@ async function autoPass(p, who) {
             why: why,
         });
     };
-    if (p.error)
-        return stand('the reply itself failed, so there was nothing to refine');
     // An impersonation writes your side: a draft in the input box, or a message
     // of yours. It is not a reply, and a draft has no message, so the newest
-    // reply would stand in for it below.
+    // reply would stand in for it below. Nothing is said to the panel, which
+    // does not wait on an impersonation, and an answer would turn off the
+    // spinner of a refine started by hand that is still running.
     if (isImpersonation(p))
-        return stand('that was an impersonation, which writes your side, not a reply');
+        return;
+    if (p.error)
+        return stand('the reply itself failed, so there was nothing to refine');
     if (!masterOn)
         return stand('Auto Refine is switched off');
     if (!refineOn)
