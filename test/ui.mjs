@@ -2329,6 +2329,17 @@ console.log("\nthe notification for a finished refine is a switch, off by defaul
             checked: box ? box.checked : null,
           };
         });
+        // A refine asked for by hand ends with a second answer, to the button.
+        // That answer sends one only when the switch is on.
+        const byHand = await page.evaluate(async () => {
+          window.__toasts = [];
+          window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m3", before: "The gate was shut.", after: "The gate stayed shut." });
+          window.__fromBackend({ type: "refine_result", chatId: "c1", messageId: "m3", ok: true });
+          await new Promise((r) => setTimeout(r, 300));
+          return window.__toasts.filter((t) => /^Reply refined\./.test(t)).length;
+        });
+        ok(label + (on ? ": switched on, a refine asked for by hand sends one" : ": switched off, a refine asked for by hand sends none"),
+          byHand === (on ? 1 : 0), String(byHand));
         if (!on) {
           ok(label + ": by default, a finished refine sends no notification", out.toasts.length === 0, JSON.stringify(out.toasts));
           ok(label + ": the switch says what it is and starts off",
@@ -3510,6 +3521,24 @@ console.log("\naccepting or turning one down");
       });
       ok(label + ": a change to the markup alone is said, not shown as no change", /Only the markup around them changed/.test(tags), tags.slice(0, 200));
       ok(label + ": and a < in a sentence stays", /3 < 5/.test(tags) && !/<b>|<i>/.test(tags), tags.slice(0, 200));
+
+      // Color markup another extension draws as color reads as the chat shows
+      // it: the words, with no [color] or escaped font tag around them.
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-pending="decline"]').click());
+      await settle(page);
+      await page.evaluate(() => window.__fromBackend({
+        type: "confirm_refine", chatId: "c1", messageId: "m9",
+        before: '[color=#5a8fd0]"Lock the door,"[/color] Pell said. &lt;font color="#c08040"&gt;"Now."&lt;/font&gt;',
+        after: '[color=#5a8fd0]"Bolt the door,"[/color] Pell said. &lt;font color="#c08040"&gt;"Now."&lt;/font&gt;',
+      }));
+      await settle(page);
+      const colored = await page.evaluate(() => {
+        const box = [...document.querySelectorAll("#drawer .arf-card")].find((c) => /Waiting for you/.test(c.textContent));
+        const well = box && box.querySelector("[data-arf-diff]");
+        return well ? well.textContent : "";
+      });
+      ok(label + ": color markup another extension draws is not shown in what changed",
+        /Pell said/.test(colored) && !/\[color|\[\/color|&lt;|font color/.test(colored), colored.slice(0, 200));
     });
   }
 
@@ -15012,6 +15041,75 @@ console.log("\nfolding a block with one side refined");
       ok(side + ": the Prompt tab shows that side's prompt from the first draw", !!want && shown.name === want && replyName !== mineName, JSON.stringify({ shown, replyName, mineName }));
       ok(side + ": one press folds the first block", pressed === "false", String(pressed));
       ok(side + ": and it is still folded after a repaint", again.name === want && again.expanded === "false", JSON.stringify(again));
+    });
+  }
+}
+
+console.log("\ncolors for cut and added words that come from the account");
+{
+  // Nothing saved in this browser, and the account holds colors of its own.
+  // A refine that finishes after the account answers draws its words in them.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 844 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch }, async (page) => {
+      const drawn = await page.evaluate(async () => {
+        const id = window.__sent.filter((m) => m.type === "load_settings").pop().requestId;
+        window.__fromBackend({ type: "loaded_settings", requestId: id, settings: { enabled: true, cutColor: "#2244aa", addColor: "#aa6600" } });
+        await new Promise((r) => setTimeout(r, 100));
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m4", canUndo: true, before: "The kettle sang loudly.", after: "The kettle sang softly." });
+        await new Promise((r) => setTimeout(r, 400));
+        const cut = document.querySelector(".arf-pop .arf-cut");
+        const add = document.querySelector(".arf-pop .arf-add");
+        return { cut: cut ? getComputedStyle(cut).color : null, add: add ? getComputedStyle(add).color : null };
+      });
+      ok(label + ": cut words are drawn in the account's color", drawn.cut === "rgb(34, 68, 170)", JSON.stringify(drawn));
+      ok(label + ": added words are drawn in the account's color", drawn.add === "rgb(170, 102, 0)", JSON.stringify(drawn));
+    });
+  }
+}
+
+console.log("\nfolds in a preset of yours after Lumiverse is opened again");
+{
+  // A preset of yours is loaded and one of its blocks is folded. Lumiverse is
+  // closed and opened again. The fold and the preset's name in the picker are
+  // still there, whichever of the account's two answers comes first, and with
+  // or without this browser's copy.
+  const BLOCKS = [
+    { id: "kept-a", on: true, role: "system", name: "Pacing", text: "Keep each scene to one place." },
+    { id: "kept-b", on: true, role: "system", name: "Voice", text: "Short lines for the shopkeeper." },
+  ];
+  const SETTINGS = { enabled: true, presetPick: "Harbor nights", blocks: BLOCKS, blocksShut: ["blocks@Harbor nights\nkept-a"] };
+  const PRESETS = [{ name: "Harbor nights", at: 1, settings: { blocks: BLOCKS } }];
+  const state = (page) =>
+    page.evaluate(() => {
+      const block = document.querySelector('#drawer .arf-block[data-arf-block="kept-a"]');
+      const btn = block && block.querySelector(".arf-blockfold");
+      const sel = document.querySelector('#drawer select[data-arf-field="presetPick"]');
+      return { expanded: btn ? btn.getAttribute("aria-expanded") : null, pick: sel ? sel.value : null };
+    });
+  const answer = (page, type, key, value) =>
+    page.evaluate(async ({ type, key, value }) => {
+      const ask = type === "loaded_settings" ? "load_settings" : "load_presets";
+      const id = window.__sent.filter((m) => m.type === ask).pop().requestId;
+      window.__fromBackend({ type, requestId: id, [key]: value });
+      await new Promise((r) => setTimeout(r, 100));
+    }, { type, key, value });
+  for (const [label, local, first] of [
+    ["with this browser's copy, settings answered first", true, "settings"],
+    ["with this browser's copy, presets answered first", true, "presets"],
+    ["with no copy in this browser, settings answered first", false, "settings"],
+    ["with no copy in this browser, presets answered first", false, "presets"],
+  ]) {
+    await inTab(browser, local ? { saved: SETTINGS, presets: PRESETS } : {}, async (page) => {
+      await goTab(page, "Prompt");
+      await settle(page);
+      const order = first === "settings" ? [["loaded_settings", "settings", SETTINGS], ["loaded_presets", "presets", PRESETS]] : [["loaded_presets", "presets", PRESETS], ["loaded_settings", "settings", SETTINGS]];
+      for (const [type, key, value] of order) {
+        await answer(page, type, key, value);
+        await settle(page);
+      }
+      const now = await state(page);
+      ok(label + ": the preset is still picked", now.pick === "Harbor nights", JSON.stringify(now));
+      ok(label + ": and its folded block is still folded", now.expanded === "false", JSON.stringify(now));
     });
   }
 }

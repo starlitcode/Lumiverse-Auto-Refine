@@ -6,6 +6,25 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.53.2
+
+_2026-10-29_
+
+### Fixed
+
+- **Folded blocks in a preset of yours came back open.** The folds are kept under the preset's name. When Lumiverse was opened again and your account sent the settings before the presets, the preset picker could not find your preset yet. It cleared the name, which opened the blocks, and saved the empty name to your account. The picker now waits for the presets before it clears a name.
+- **Your colors for cut and added words were not used.** When your account sent your settings after Auto Refine had started, the colors from **Color of cut words** and **Color of added words** were not put on the page. Finished refines showed the default red and green until you changed a setting. They are now used as soon as your settings arrive. **Keep the eye still**, **Reduce motion** and **Hold to select text in messages** had the same problem and are fixed with them.
+- **A refine you started yourself sent a notification with the switch off.** **Refine the latest reply** and the other buttons that start a refine sent "Reply refined." even with **Lumiverse notification when a refine finishes** off. They now follow the switch. The card and the panel already show the refine.
+- **An impersonation was treated as a new reply.** With the automatic pass on, an impersonation written into your input box made Auto Refine refine the newest reply in its place, even with **What to refine** set to replies only. An impersonation writes your side, so the automatic pass now leaves it alone, as a draft or as a message.
+- **A selection inside colored dialogue could not be found.** Another extension can color dialogue with `[color=#hex]` and `[/color]`, or with an escaped `&lt;font color&gt;` or `&lt;span style="color"&gt;`, and show only the words inside. Refining a selection in that dialogue said the selection was not in the reply any more. It is now found, and the color markup is kept around the rewrite. **What changed** leaves that markup out too, the same as a `<font>` tag.
+- **A divider above a tracker could be changed or lost.** A line such as `---` or `* * *` went to the model as prose, so a rewrite could drop it. Some cards print a tracker under every reply, a divider and then the stats in a code fence. The divider is now hidden from the model along with the stats, and both come back as they were.
+
+### Changed
+
+- **No notification after Add them to the checks, Use the built-in checks or Use the built-in text.** The box shows what was put in, so no notification is sent.
+
+---
+
 ## 1.53.1
 
 _2026-10-26_

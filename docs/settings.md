@@ -46,6 +46,7 @@ The buttons are in two groups. **What to refine**, on the Setup tab, can hide on
 - **Refine every reply here** goes through the chat you are in, oldest first, one model call each. It asks before it starts.
 - **Refine the part I selected** shows while part of a reply is selected.
 - **Refine every new reply automatically** is the automatic pass. It is off by default.
+  - It leaves an impersonation alone. An impersonation writes your side, as a draft in your input box or as a message of yours, and is not a reply.
 
 **Your messages:**
 

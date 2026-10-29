@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.53.1";
+const VERSION = "1.53.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -3510,6 +3510,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // below reads it, and a panel rebuilt early must not meet it undeclared.
   let editing: "blocks" | "userBlocks" = "blocks";
   const editingYours = () => editing === "userBlocks";
+  // Whether the account has answered with its presets. Until it has, a preset
+  // the picker names may be one that has not arrived yet, so the picker keeps
+  // the name. Clearing it there also took the folds kept under that name.
+  let presetsHeard = false;
   // With only one side refined, the prompt being edited is that side's. Set
   // before anything is drawn, because the block list, its folds and the preset
   // picker all read it, and one drawn before it was set shows the other prompt.
@@ -3639,6 +3643,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     const s = msg.settings;
     if (s && typeof s === "object" && Object.keys(s).length) {
       Object.assign(cfg, coerceSaved(carryOldNames(s)));
+      // What the page itself carries: the colors for cut and added words, and
+      // the motion and selection marks. Nothing is saved here, so it is put on
+      // the page now or it waits for the next change to a setting.
+      stillEyes();
       try {
         if (typeof localStorage !== "undefined")
           localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
@@ -8436,10 +8444,15 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // The text as it reads in the chat, with markup tags such as <font> taken
   // out and the words inside them kept. Only a tag shaped like one is taken,
-  // so a "<" in a sentence stays. Read it in full still shows the text as
-  // written.
+  // so a "<" in a sentence stays. Color markup that another extension draws
+  // as color is taken out the same way: [color=#hex] and [/color], and an
+  // escaped font or span tag that sets a color. Read it in full still shows
+  // the text as written.
   function forReading(t: string): string {
-    return String(t == null ? "" : t).replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/gi, "");
+    return String(t == null ? "" : t)
+      .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/gi, "")
+      .replace(/\[color\s*=\s*["']?#[0-9a-f]{3}(?:[0-9a-f]{3})?["']?\]|\[\/color\]/gi, "")
+      .replace(/&lt;(?:font\b(?:(?!&gt;)[^<>\n])*?\bcolor(?:(?!&gt;)[^<>\n])*|span\b(?:(?!&gt;)[^<>\n])*?\bstyle\s*=(?:(?!&gt;)[^<>\n])*?\bcolor\s*:(?:(?!&gt;)[^<>\n])*)&gt;|&lt;\/(?:font|span)\s*&gt;/gi, "");
   }
 
   // The thinking at the front, which the refine held back and put back as it
@@ -11111,9 +11124,9 @@ export function setup(ctx: Ctx, overrides?: any) {
             return;
           }
           cfg.judgeChecks = have.concat(missing).join("\n");
+          // The box shows the checks it added, so no notification is sent.
           persist(true);
           paint();
-          toast(missing.length === 1 ? "Added 1 check." : "Added " + missing.length + " checks.", true, "success");
         });
         row.appendChild(add);
         row.appendChild(said);
@@ -11145,10 +11158,10 @@ export function setup(ctx: Ctx, overrides?: any) {
         },
         "Press Use " + these + " again to replace yours.",
         () => {
+          // The box shows the built-in text again, so no notification is sent.
           (cfg as any)[key] = list;
           persist(true);
           paint();
-          toast(what === "checks" ? "The built-in checks are back." : "The built-in text is back.", true, "success");
         },
       );
     });
@@ -13836,6 +13849,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   function tookAccountPresets(msg: any): void {
     if (!msg || msg.requestId !== presetAsk) return;
     presetAsk = "";
+    presetsHeard = true;
     const list = Array.isArray(msg.presets) ? msg.presets : null;
     const clean = list
       ? list
@@ -14049,7 +14063,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Switching lists can take the chosen one out of the menu. Left as it was,
     // the box shows blank while every button beside it still acts on a preset
     // that is no longer on screen.
-    if (currentPick() && !groups.some((g) => g.of.some((x) => x.name === currentPick()))) {
+    if (presetsHeard && currentPick() && !groups.some((g) => g.of.some((x) => x.name === currentPick()))) {
       pickPreset("");
       presetSaid = null;
     }
@@ -16993,8 +17007,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       }),
       ctx.events.on("GENERATION_ENDED", (p: any) => {
         if (!p) return;
-        if (!elsewhere(p.chatId)) sawChat(p.chatId, p.messageId);
-        if (cfg.enabled && cfg.refineOn && refinesReplies() && !p.error && !chatIsOff(p.chatId)) {
+        // An impersonation writes your side, and the automatic pass leaves it
+        // alone, so it does not show as working on one. A draft in the input
+        // box has no message of its own to take note of either.
+        const impersonation = String(p.generationType || "").toLowerCase() === "impersonate" || !!p.impersonateDraft;
+        if (!elsewhere(p.chatId) && !impersonation) sawChat(p.chatId, p.messageId);
+        if (cfg.enabled && cfg.refineOn && refinesReplies() && !p.error && !impersonation && !chatIsOff(p.chatId)) {
           markBusy(true);
           paint();
         }
@@ -17585,15 +17603,16 @@ export function setup(ctx: Ctx, overrides?: any) {
             if (msg.ok) {
               lastRun = { ms: lastRunMs, ok: true, why: "" };
               // A saved refine is said once. The save itself already wrote the
-              // Log line for this reply a moment ago, and the toast too when
-              // toasts are on. A refine asked for by hand is always answered
-              // with a toast, so that one is still given with toasts off. All
-              // of it is still said when the save was not heard.
+              // Log line for this reply a moment ago, and the notification too
+              // when notifications are on. With them off, the card and the
+              // panel show the refine, so nothing more is sent. Both are still
+              // said when the save was not heard, since then nothing on screen
+              // shows it.
               const key = String(msg.chatId) + ":" + String(msg.messageId);
               if (!(announced && announced.key === key && Date.now() - announced.at < 10000)) {
                 log("refine", "refined a reply on request in " + (lastRunMs / 1000).toFixed(1) + "s", true);
                 toast("Reply refined.", true, "success");
-              } else if (!cfg.toast) toast("Reply refined.", true, "success");
+              }
             } else {
               const why = String(msg.why || "no reason given");
               // Nothing was sent, so nothing is counted as turned down. It is

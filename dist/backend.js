@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.53.1';
+const VERSION = '1.53.2';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -650,7 +650,15 @@ const TOKEN_ONLY = /^\[\[AR\d+\]\]$/;
 // leave them alone. Hiding those was making the rewrite worse to protect
 // something the model was never likely to break.
 const INLINE_OK = /^<\/?(?:i|b|em|strong|u|s|small|sub|sup|mark|q|code)>$/i;
+// Color markup that another extension draws as color and Lumiverse shows as
+// text: [color=#hex] and [/color], and an escaped font or span tag that sets a
+// color, with either closing tag. Each one is a single piece of formatting.
+const COLOR_MARK_SOURCE = '(?:\\[color\\s*=\\s*["\']?#[0-9a-f]{3}(?:[0-9a-f]{3})?["\']?\\]|\\[\\/color\\]' +
+    '|&lt;(?:font\\b(?:(?!&gt;)[^<>\\n])*?\\bcolor(?:(?!&gt;)[^<>\\n])*|span\\b(?:(?!&gt;)[^<>\\n])*?\\bstyle\\s*=(?:(?!&gt;)[^<>\\n])*?\\bcolor\\s*:(?:(?!&gt;)[^<>\\n])*)&gt;' +
+    '|&lt;\\/(?:font|span)\\s*&gt;)';
+const COLOR_MARK = new RegExp('^' + COLOR_MARK_SOURCE, 'i');
 const GUARDED = [
+    new RegExp(COLOR_MARK_SOURCE, 'gi'), // color markup, before the entity rule below takes &lt; apart
     /```[\s\S]*?```/g, // fenced code
     /~~~[\s\S]*?~~~/g, // the other fence some cards use
     // Braces are on purpose left alone. A macro in a reply is already safe,
@@ -666,6 +674,7 @@ const GUARDED = [
     /【[^】\n]{0,200}】/g, // the bracket a lot of trackers use
     /\|\|[^|\n]{1,200}\|\|/g, // a spoiler bar
     /^[ \t]*\|.*\|[ \t]*$/gm, // a table row, which is a grid and not prose
+    /^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/gm, // a divider line, such as --- above a tracker or * * * between scenes
     /&[a-zA-Z]{2,10};|&#\d{1,5};/g, // an HTML entity, which models like to "fix"
     /\bhttps?:\/\/[^\s<>"')\]]+/g, // a bare URL
     /<\/?[a-zA-Z][^<>]*>/g, // every other tag, checked below
@@ -1599,7 +1608,13 @@ function overusedIn(replies, opts) {
 // actually select, the source index each of them starts at, and the source
 // index just after it. The two differ where one character on screen is several
 // in the source, such as &amp; or \*, so a span never ends partway into one.
-function renderMap(raw) {
+//
+// colors is for a second look, when the first finds nothing. Another extension
+// can draw color markup that Lumiverse shows as plain text: [color=#hex] and
+// [/color], and an escaped &lt;font color&gt; or &lt;span style="color"&gt;
+// with its closing tag. On screen only the words inside are left, so the second
+// look passes over that markup the same way it passes over an HTML tag.
+function renderMap(raw, colors = false) {
     const seen = [];
     const from = [];
     const to = [];
@@ -1660,6 +1675,13 @@ function renderMap(raw) {
             const note = raw.startsWith('<!--', i) ? raw.indexOf('-->', i + 4) : -1;
             if (note > 0) {
                 i = note + 3;
+                continue;
+            }
+        }
+        if (colors && (c === '[' || c === '&')) {
+            const mark = COLOR_MARK.exec(raw.slice(i, i + 300));
+            if (mark) {
+                i += mark[0].length;
                 continue;
             }
         }
@@ -1847,6 +1869,29 @@ function balanced(raw, start, end) {
     while ((l = linkRe.exec(raw))) {
         pairs.push({ open: l.index, inside: l.index + 1, outside: l.index + 1 + l[1].length, shut: l.index + l[0].length });
     }
+    // Color markup another extension draws, from COLOR_MARK, and the closing
+    // mark that matches it: [color] with [/color], and an escaped font or span
+    // tag with its own escaped closing tag.
+    const colorRe = new RegExp(COLOR_MARK_SOURCE, 'gi');
+    const colorStack = [];
+    let cm;
+    while ((cm = colorRe.exec(raw))) {
+        const text = cm[0].toLowerCase();
+        const name = text.indexOf('color') === 1 || text.indexOf('/color') === 1 ? 'bb' : text.indexOf('span') >= 0 ? 'span' : 'font';
+        const closing = text[1] === '/' || text.indexOf('&lt;/') === 0;
+        if (!closing) {
+            colorStack.push({ name: name, at: cm.index, end: cm.index + cm[0].length });
+            continue;
+        }
+        for (let k = colorStack.length - 1; k >= 0; k--) {
+            if (colorStack[k].name !== name)
+                continue;
+            const open = colorStack[k];
+            colorStack.length = k;
+            pairs.push({ open: open.at, inside: open.end, outside: cm.index, shut: cm.index + cm[0].length });
+            break;
+        }
+    }
     // Widening for one pair can put an end inside another, so this runs until
     // nothing moves.
     //
@@ -1897,17 +1942,26 @@ function ordinalOf(before, picked) {
 // could not be found, which is a selection that no longer matches the message.
 function pickedSpan(raw, picked, ordinal) {
     const want = Number(ordinal) > 0 ? Math.floor(Number(ordinal)) : 0;
-    const map = renderMap(String(raw == null ? '' : raw));
-    const hay = loosen(map.seen);
     const needle = loosen(String(picked == null ? '' : picked)).text;
     if (!needle)
         return null;
-    let at = -1;
-    for (let k = 0; k <= want; k++) {
-        at = hay.text.indexOf(needle, at + 1);
-        if (at < 0)
-            return null;
-    }
+    // Looked for as Lumiverse draws the reply, and then, only if that finds
+    // nothing, with color markup another extension draws passed over as well.
+    const find = (colors) => {
+        const map = renderMap(String(raw == null ? '' : raw), colors);
+        const hay = loosen(map.seen);
+        let at = -1;
+        for (let k = 0; k <= want; k++) {
+            at = hay.text.indexOf(needle, at + 1);
+            if (at < 0)
+                return null;
+        }
+        return { map: map, hay: hay, at: at };
+    };
+    const got = find(false) || find(true);
+    if (!got)
+        return null;
+    const { map, hay, at } = got;
     const firstSeen = hay.at[at];
     const lastSeen = hay.at[at + needle.length - 1];
     if (firstSeen == null || lastSeen == null)
@@ -6053,6 +6107,12 @@ function applyRules(s) {
 // the gap between refines, the refine, and what the panel is told. Used for a
 // reply that ends in the chat and for a reroll Auto Retry adds itself, which
 // raises no event of its own.
+// Whether a generation's end event is for an impersonation. Lumiverse names
+// the kind of generation on the event, and marks a draft written into the
+// input box as well.
+function isImpersonation(p) {
+    return !!p && (String(p.generationType || '').toLowerCase() === 'impersonate' || !!p.impersonateDraft);
+}
 async function autoPass(p, who) {
     // Every way out of this function says so. The panel turns its
     // spinner on the moment a reply lands, when the automatic pass is on, and
@@ -6069,6 +6129,11 @@ async function autoPass(p, who) {
     };
     if (p.error)
         return stand('the reply itself failed, so there was nothing to refine');
+    // An impersonation writes your side: a draft in the input box, or a message
+    // of yours. It is not a reply, and a draft has no message, so the newest
+    // reply would stand in for it below.
+    if (isImpersonation(p))
+        return stand('that was an impersonation, which writes your side, not a reply');
     if (!masterOn)
         return stand('Auto Refine is switched off');
     if (!refineOn)

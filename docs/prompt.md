@@ -420,7 +420,11 @@ A model asked to improve a paragraph may drop a `<font color>` tag, reflow a cod
 3. Afterwards, the real markup goes back in.
 4. **If a token did not come back, the rewrite is dropped.** This check is what makes the protection a guarantee.
 
-What is hidden: fenced code, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, tracker brackets, and any tag with an attribute (such as a color or a link).
+What is hidden: fenced code, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, tracker brackets, divider lines such as `---` or `* * *`, and any tag with an attribute (such as a color or a link).
+
+Color markup that another extension draws as color is hidden as well: `[color=#hex]` and `[/color]`, and an escaped `&lt;font color&gt;` or `&lt;span style="color"&gt;` with its closing tag.
+
+A tracker that some cards print under every reply, a divider line and then the stats in a code fence, is two of these, so all of it comes back as it was.
 
 What is not hidden:
 

@@ -8008,3 +8008,100 @@ describe("another extension's block in a reply", () => {
     expect(h.skipped().join(" ")).toMatch(/changed while the rewrite/i);
   });
 });
+
+// Another extension can color dialogue with markup Lumiverse would show as
+// text, and draw only the words inside in color. A selection holds those words
+// alone, so it has to be found with the markup passed over, and the markup has
+// to come back around the rewrite.
+describe("selecting dialogue another extension colored", () => {
+  const msgs = (text: string): Msg[] => [
+    { id: "m0", role: "user", content: "hi" },
+    { id: "m1", role: "assistant", content: text },
+  ];
+  const ask = (h: any) =>
+    h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m1", picked: '"The tide turns at noon," she said.', ahead: "Mira leaned in. " });
+  for (const [label, open, shut] of [
+    ["an HTML font tag", '<font color="#5a8fd0">', "</font>"],
+    ["a [color] mark", "[color=#5a8fd0]", "[/color]"],
+    ["an escaped font tag", '&lt;font color="#5a8fd0"&gt;', "&lt;/font&gt;"],
+    ["an escaped span with a color", '&lt;span style="color: #5a8fd0"&gt;', "&lt;/span&gt;"],
+  ]) {
+    const content = "Mira leaned in. " + open + '"The tide turns at noon,"' + shut + ' she said. "Be ready."';
+    test(label + ": the selection is found and the color stays around the rewrite", async () => {
+      const h = await armed(['<REFINED>[[AR1]]"The tide turns at midday,"[[AR2]] she whispered.</REFINED>'], {}, msgs(content));
+      await ask(h);
+      await wait(80);
+      expect(h.writes.length).toBe(1);
+      expect(h.writes[0].content).toBe("Mira leaned in. " + open + '"The tide turns at midday,"' + shut + ' she whispered. "Be ready."');
+    });
+    test(label + ": a rewrite that drops the color is not saved", async () => {
+      const h = await armed(['<REFINED>"The tide turns at midday," she whispered.</REFINED>'], {}, msgs(content));
+      await ask(h);
+      await wait(80);
+      expect(h.writes.length).toBe(0);
+    });
+  }
+
+  test("a [color] mark typed as plain text and selected with it is still found as written", async () => {
+    const h = await armed(["<REFINED>She wrote [color=#5a8fd0] on the card and smiled.</REFINED>"], { protectOn: false }, msgs("She wrote [color=#5a8fd0] on the card."));
+    await h.front({ type: "refine_selection", requestId: "r", chatId: "c1", messageId: "m1", picked: "She wrote [color=#5a8fd0] on the card.", ahead: "" });
+    await wait(80);
+    expect(h.writes.length).toBe(1);
+  });
+});
+
+// An impersonation writes the reader's side. As a draft it goes into the
+// input box and makes no message, and as a message it is the reader's own.
+// The automatic pass is for replies, so it leaves both alone, and never takes
+// the newest reply in place of the draft.
+describe("an impersonation is not a reply", () => {
+  test("a draft in the input box refines nothing", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.ended({ chatId: "c1", messageId: "", generationId: "g9", generationType: "impersonate", impersonateDraft: true });
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.writes.length).toBe(0);
+  });
+  test("a message written as an impersonation is not refined either", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g9", generationType: "impersonate" });
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.writes.length).toBe(0);
+  });
+  test("an ordinary reply right after is still refined", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"]);
+    await h.ended({ chatId: "c1", messageId: "", generationId: "g9", generationType: "impersonate", impersonateDraft: true });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g10", generationType: "normal" });
+    await wait(60);
+    expect(h.writes.length).toBe(1);
+  });
+});
+
+// A tracker some cards print under every reply: a divider line, then the
+// stats in a code fence. The rewrite is for the prose above it. The divider
+// and the stats go to the model as kept pieces and come back as they were.
+describe("a tracker under a divider and in a code fence", () => {
+  const PROSE = '"Wren, the kettle will *not* stop whistling. Can you come fix it? It trusts you." *She sounds worn out.*';
+  const TRACKER = "---\n```\nMood: Worn out \nThoughts: If she says yes... she is braver than me. \nTrust Level: 40%\nDoubt Level: 5%\n```";
+  const msgs = (): Msg[] => [
+    { id: "m0", role: "user", content: "hi" },
+    { id: "m1", role: "assistant", content: PROSE + "\n\n" + TRACKER },
+  ];
+  test("the divider and the stats are kept as they were", async () => {
+    const h = await armed(['<REFINED>"Wren, the kettle will *not* stop. Can you come fix it? It trusts you." *She sounds tired.*\n\n[[AR2]]\n[[AR1]]</REFINED>'], {}, msgs());
+    await h.ended({ chatId: "c1", messageId: "m1", generationId: "g1" });
+    await wait(80);
+    const sent = JSON.stringify(h.asked[0].messages || []);
+    expect(sent).not.toContain("Trust Level");
+    expect(sent).not.toContain("\\n---\\n");
+    expect(h.writes.length).toBe(1);
+    expect(h.writes[0].content).toBe('"Wren, the kettle will *not* stop. Can you come fix it? It trusts you." *She sounds tired.*\n\n' + TRACKER);
+  });
+  test("a rewrite that drops the tracker is not saved", async () => {
+    const h = await armed(['<REFINED>"Wren, the kettle will *not* stop. Can you come fix it?" *She sounds tired.*</REFINED>'], {}, msgs());
+    await h.ended({ chatId: "c1", messageId: "m1", generationId: "g1" });
+    await wait(80);
+    expect(h.writes.length).toBe(0);
+  });
+});
