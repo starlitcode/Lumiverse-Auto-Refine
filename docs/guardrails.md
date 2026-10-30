@@ -30,6 +30,7 @@ Sometimes the reply itself is the model refusing to write the scene. Rewriting i
 [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry) waits a few seconds before it retries a reply. It says so in the page when it sets a retry, and when it calls one off.
 
 - The automatic pass leaves a reply that Auto Retry is going to retry. Refining it would pay for a rewrite of a reply that is about to be replaced.
+- When a reply ends, the automatic pass waits for Auto Retry to say whether it will retry it, up to 3 seconds. Auto Retry decides at once, but its word reaches Auto Refine a moment after the reply ends. A chat Auto Retry is not watching is not waited on. This needs Auto Retry 5.24.2 or later.
 - A refine already running when the retry is set stops before its next pass, and its rewrite is not saved.
 - The reply Auto Retry gets back is refined as usual.
 - If Auto Retry calls the retry off, such as when you press **Cancel**, the reply stays, so it is refined after all.

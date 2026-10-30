@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.54.0";
+const VERSION = "1.54.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -25,6 +25,12 @@ const REROLL_EVENT = "auto-retry:reroll-added";
 // is called off. Both extensions spell them the same way.
 const RETRYING_EVENT = "auto-retry:retrying";
 const RETRY_OFF_EVENT = "auto-retry:retry-off";
+// The page events Auto Retry raises when a reply it will judge starts, and
+// once it has judged that reply's end. The automatic pass waits between the
+// two, so it hears whether a retry is coming before it starts. Both
+// extensions spell them the same way.
+const JUDGING_EVENT = "auto-retry:judging";
+const JUDGED_EVENT = "auto-retry:judged";
 // A block's text as it is read in from anywhere it was kept: settings, presets
 // or a file. {{jev_found}} was the name of {{checks_found}} while Jev was the
 // only second model, and a block that still carries it is given the name the
@@ -16971,8 +16977,12 @@ export function setup(ctx, overrides) {
             };
             const onRetrying = onRetry("retry_pending");
             const onRetryOff = onRetry("retry_off");
+            const onJudging = onRetry("retry_judging");
+            const onJudged = onRetry("retry_judged");
             window.addEventListener(RETRYING_EVENT, onRetrying);
             window.addEventListener(RETRY_OFF_EVENT, onRetryOff);
+            window.addEventListener(JUDGING_EVENT, onJudging);
+            window.addEventListener(JUDGED_EVENT, onJudged);
             disposers.push(() => {
                 try {
                     window.removeEventListener(RETRYING_EVENT, onRetrying);
@@ -16980,6 +16990,14 @@ export function setup(ctx, overrides) {
                 catch (_) { }
                 try {
                     window.removeEventListener(RETRY_OFF_EVENT, onRetryOff);
+                }
+                catch (_) { }
+                try {
+                    window.removeEventListener(JUDGING_EVENT, onJudging);
+                }
+                catch (_) { }
+                try {
+                    window.removeEventListener(JUDGED_EVENT, onJudged);
                 }
                 catch (_) { }
             });

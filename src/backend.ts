@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.54.0';
+const VERSION = '1.54.1';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -127,6 +127,56 @@ function retryPending(chatId: any): boolean {
   retrying.delete(String(chatId));
   return false;
 }
+// Chats where Auto Retry is judging the reply being written, and when it said
+// so. Lumiverse tells this side a reply ended at the same moment it tells Auto
+// Retry in the page, and Auto Retry's word on whether it will retry the reply
+// comes back through the panel, a moment later. The automatic pass waits for
+// that word, up to VERDICT_WAIT_MS, so a reply about to be retried is never
+// started on. A chat Auto Retry is not judging is not waited on at all.
+const judging = new Map<string, number>();
+const VERDICT_WAIT_MS = 3000;
+// The longest a reply can run and still be the one Auto Retry said it was
+// judging. A mark older than this is from a page that closed mid-reply.
+const JUDGING_MAX_MS = 30 * 60 * 1000;
+const verdictWaiters = new Map<string, Array<() => void>>();
+function heardVerdict(chatId: any): void {
+  const key = String(chatId);
+  judging.delete(key);
+  const waiting = verdictWaiters.get(key);
+  verdictWaiters.delete(key);
+  if (waiting) for (const wake of waiting) {
+    try { wake(); } catch (_) {}
+  }
+}
+// Resolves once Auto Retry has judged this chat's reply, or at once when it
+// is not judging one. True when it had to give up waiting.
+function verdictFor(chatId: any): Promise<boolean> {
+  const key = String(chatId);
+  const at = judging.get(key);
+  if (at == null) return Promise.resolve(false);
+  if (Date.now() - at > JUDGING_MAX_MS) {
+    judging.delete(key);
+    return Promise.resolve(false);
+  }
+  return new Promise((done) => {
+    let over = false;
+    const timer = setTimeout(() => {
+      if (over) return;
+      over = true;
+      judging.delete(key);
+      done(true);
+    }, VERDICT_WAIT_MS);
+    const list = verdictWaiters.get(key) || [];
+    list.push(() => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      done(false);
+    });
+    verdictWaiters.set(key, list);
+  });
+}
+
 // The reply the automatic pass left because a retry was set, per chat. Refined
 // after all if Auto Retry calls the retry off.
 const leftForRetry = new Map<string, { messageId: string; who: any }>();
@@ -6261,6 +6311,8 @@ async function autoPass(p: any, who: any): Promise<void> {
     leftForRetry.set(String(p.chatId), { messageId: String(messageId), who: who });
     while (leftForRetry.size > LEFT_MAX) leftForRetry.delete(leftForRetry.keys().next().value as string);
   };
+  if (await verdictFor(p.chatId))
+    say('info', 'Auto Retry said it was judging this reply and gave no verdict in time, so the refine goes ahead');
   if (retryPending(p.chatId)) {
     leave();
     return stand('Auto Retry is going to retry this reply, so it was left', messageId);
@@ -6327,7 +6379,12 @@ try {
     } catch (_) {}
   });
   spindle.on('GENERATION_STOPPED', (p: any) => {
-    try { if (p && p.chatId) generating.delete(String(p.chatId)); } catch (_) {}
+    try {
+      if (p && p.chatId) {
+        generating.delete(String(p.chatId));
+        heardVerdict(p.chatId);
+      }
+    } catch (_) {}
   });
   spindle.on('GENERATION_ENDED', async (p: any) => {
     try {
@@ -6415,7 +6472,22 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
     // Auto Retry has set a retry of this chat's reply. Held until the retry's
     // reply starts, a reroll is added, or the retry is called off.
     if (payload.type === 'retry_pending') {
-      if (payload.chatId) retrying.set(String(payload.chatId), Date.now());
+      if (payload.chatId) {
+        retrying.set(String(payload.chatId), Date.now());
+        heardVerdict(payload.chatId);
+      }
+      return;
+    }
+
+    // Auto Retry is judging the reply being written in this chat, and then
+    // has judged it. Never queued behind the account's work: the automatic
+    // pass this answers is that work, and is waiting on it.
+    if (payload.type === 'retry_judging') {
+      if (payload.chatId) judging.set(String(payload.chatId), Date.now());
+      return;
+    }
+    if (payload.type === 'retry_judged') {
+      if (payload.chatId) heardVerdict(payload.chatId);
       return;
     }
 

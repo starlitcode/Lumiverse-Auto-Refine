@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.54.1
+
+_2026-10-30_
+
+### Fixed
+
+- **A reply Auto Retry was about to retry could still be refined.** Auto Retry decides at once when a reply ends, such as when it is cut off, but its word reached Auto Refine a moment after the automatic pass had started. The refine then ran, and the call could be paid for, before it was thrown away. The automatic pass now waits for Auto Retry's verdict on each reply, for up to 3 seconds, and leaves a reply that is about to be retried. A chat Auto Retry is not watching is not waited on. This needs Auto Retry 5.24.2 or later. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
+
+---
+
 ## 1.54.0
 
 _2026-10-30_

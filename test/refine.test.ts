@@ -658,6 +658,49 @@ describe("going over a reply more than once", () => {
 // would be paid for writing nobody reads. A retry called off leaves the reply,
 // so it is refined after all.
 describe("a reply Auto Retry is going to retry", () => {
+  // Lumiverse tells this side a reply ended at the same moment it tells Auto
+  // Retry in the page, and Auto Retry's word comes back through the panel a
+  // moment later. The automatic pass waits for it.
+  test("is left when Auto Retry's word arrives just after the reply ends", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_judging", chatId: "c1" });
+    const ending = h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(40);
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.front({ type: "retry_judged", chatId: "c1" });
+    await ending;
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    expect(h.stood().join(" ")).toMatch(/Auto Retry is going to retry this reply/);
+  });
+
+  test("and a reply Auto Retry passes is refined once it says so", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_judging", chatId: "c1" });
+    const ending = h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(40);
+    expect(h.asked.length).toBe(0);
+    await h.front({ type: "retry_judged", chatId: "c1" });
+    await ending;
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("a chat Auto Retry is not judging is not waited on", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("with no word from Auto Retry, the refine goes ahead after the wait", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.front({ type: "retry_judging", chatId: "c1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  }, 10000);
+
   test("is left, with no model asked", async () => {
     const h = await armed(["She stepped through and the cold hit her."]);
     await h.front({ type: "retry_pending", chatId: "c1" });
