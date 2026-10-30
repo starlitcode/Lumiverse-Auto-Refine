@@ -10907,6 +10907,41 @@ console.log("\npick it for me in the drawer");
     ok("a laptop: no console errors", errors.length === 0, errors.join("\n"));
   });
 
+  // How the bar moves, the same as Auto Retry's picker message: there at once,
+  // and on the way out it fades and slides up. Read from what is drawn.
+  await inTab(browser, { viewport: { width: 1280, height: 800 } }, async (page) => {
+    await goTab(page, "Setup");
+    const moves = await page.evaluate(async () => {
+      const drawn = () => {
+        const bar = document.querySelector(".arf-pickbar");
+        if (!bar) return null;
+        const cs = getComputedStyle(bar);
+        const m = new DOMMatrixReadOnly(cs.transform === "none" ? undefined : cs.transform);
+        return { opacity: Number(cs.opacity), y: m.m42 };
+      };
+      document.querySelector("#drawer [data-arf-pickinput]").click();
+      const first = drawn();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      document.querySelector("[data-arf-pickbar-cancel]").click();
+      await new Promise((r) => setTimeout(r, 70));
+      const mid = drawn();
+      await new Promise((r) => setTimeout(r, 300));
+      return { first, mid, gone: !document.querySelector(".arf-pickbar") };
+    });
+    ok("the bar is there at once, with no fade in", !!moves.first && moves.first.opacity === 1 && moves.first.y === 0, JSON.stringify(moves));
+    ok("on the way out it fades and slides up", !!moves.mid && moves.mid.opacity < 1 && moves.mid.opacity > 0 && moves.mid.y < 0, JSON.stringify(moves));
+    ok("and then it is gone", moves.gone, JSON.stringify(moves));
+  });
+  await inTab(browser, { viewport: { width: 1280, height: 800 }, saved: { reduceMotion: true } }, async (page) => {
+    await goTab(page, "Setup");
+    const gone = await page.evaluate(() => {
+      document.querySelector("#drawer [data-arf-pickinput]").click();
+      document.querySelector("[data-arf-pickbar-cancel]").click();
+      return !document.querySelector(".arf-pickbar");
+    });
+    ok("with Reduce motion on, Cancel takes it away at once", gone, String(gone));
+  });
+
   // What it will not take, and a Lumiverse that cannot close the drawer.
   await inTab(browser, { viewport: { width: 1280, height: 800 } }, async (page, errors) => {
     await goTab(page, "Setup");

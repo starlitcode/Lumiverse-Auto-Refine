@@ -5343,8 +5343,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-selbar[data-arf-moving]{pointer-events:none;-webkit-user-select:none;user-select:none}" +
     ".arf-selbar .arf-btn{white-space:nowrap}" +
     // The bar Pick it for me puts at the top of the page, over the chat and
-    // clear of the input box. It fades in and slides down 4 pixels.
-    ".arf-pickbar{position:fixed;left:50%;top:12px;z-index:2147483200;display:flex;align-items:center;gap:10px;" +
+    // clear of the input box. The same as Auto Retry's picker message: it is
+    // there at once, and on the way out it fades and slides up 6 pixels.
+    ".arf-pickbar{position:fixed;left:50%;top:max(20px,env(safe-area-inset-top,0px));z-index:2147483200;" +
+    "display:flex;align-items:center;gap:10px;" +
     "box-sizing:border-box;width:min(460px,calc(100vw - 24px));padding:10px 12px;" +
     "border-radius:var(--lumiverse-radius-md,10px);" +
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
@@ -5354,12 +5356,12 @@ export function setup(ctx: Ctx, overrides?: any) {
     "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
     "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;line-height:1.4;" +
     "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
-    "opacity:0;transform:translate(-50%,-4px);" +
-    "transition:opacity 180ms ease,transform 180ms cubic-bezier(.2,.7,.3,1)}" +
-    ".arf-pickbar[data-arf-on]{opacity:1;transform:translate(-50%,0)}" +
+    "transform:translate(-50%,0)}" +
+    ".arf-pickbar[data-arf-leaving]{opacity:0;transform:translate(-50%,-6px);pointer-events:none;" +
+    "transition:opacity 160ms ease-in,transform 160ms ease-in}" +
     ".arf-pickbar .arf-btn{flex:none;white-space:nowrap}" +
-    "html[data-arf-still] .arf-pickbar{transition:none}" +
-    "@media (prefers-reduced-motion: reduce){.arf-pickbar{transition:none}}" +
+    "html[data-arf-still] .arf-pickbar[data-arf-leaving]{transition:none}" +
+    "@media (prefers-reduced-motion: reduce){.arf-pickbar[data-arf-leaving]{transition:none}}" +
     // While the picker is armed. A long press is also how the browser starts
     // selecting text and raises its own callout, at about the moment the hold
     // finishes. Off for as long as the picker is up, and only for that long.
@@ -12441,13 +12443,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       sweepReadable(bar);
     } catch (_) {}
     pickBar = bar;
-    // Placed below the screen's top and faded in on the next frame, so the
-    // fade and the 4 pixel slide are drawn rather than skipped.
-    try {
-      requestAnimationFrame(() => requestAnimationFrame(() => bar.setAttribute("data-arf-on", "1")));
-    } catch (_) {
-      bar.setAttribute("data-arf-on", "1");
-    }
+    bar.setAttribute("data-arf-on", "1");
   }
   function pickBarSays(text: string) {
     const words = pickBar && pickBar.querySelector("[data-arf-pickbar-text]");
@@ -12458,12 +12454,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     pickBar = null;
     if (!bar) return;
     bar.removeAttribute("data-arf-on");
-    const still = !!cfg.reduceMotion || document.documentElement.hasAttribute("data-arf-still");
+    let still = !!cfg.reduceMotion || document.documentElement.hasAttribute("data-arf-still");
+    try {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) still = true;
+    } catch (_) {}
     if (now || still) {
       bar.remove();
       return;
     }
-    setTimeout(() => bar.remove(), 220);
+    bar.setAttribute("data-arf-leaving", "1");
+    setTimeout(() => bar.remove(), 200);
   }
   disposers.push(() => hidePickBar(true));
 
