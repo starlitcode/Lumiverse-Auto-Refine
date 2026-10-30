@@ -13201,7 +13201,9 @@ for (const [label, viewport, touch] of [
     ok(label + ": holding the selectors it really looks under", /Next swipe/.test(on.value || ""), JSON.stringify(on.value));
     ok(label + ": with Test and the way back beside it", on.test && on.reset, JSON.stringify(on));
     ok(label + ": and no button offering to pick it for you", !on.picker, JSON.stringify(on));
-    ok(label + ": every selector listed in the order it is tried", on.lines >= 5, JSON.stringify(on.lines));
+    ok(label + ": every selector listed in the order it is tried",
+      on.lines >= 3 && on.lines === String(on.value || "").split(",").filter((s) => s.trim()).length,
+      JSON.stringify({ lines: on.lines, value: on.value }));
     ok(label + ": nothing hanging off the side of the panel", !on.wide.length, JSON.stringify(on.wide));
     ok(label + ": and nothing too small to press", !on.small.length, JSON.stringify(on.small));
   });
@@ -13446,6 +13448,39 @@ await inTab(browser, { saved: { enabled: true, widgetOn: true } }, async (page) 
       [WAS, NOW],
     );
     ok("a sweep follows every reply it refined", out["msg-one"] === 1 && out["msg-two"] === 1, JSON.stringify(out));
+  });
+
+  // Lumiverse's own box for its swipe arrows, with the labels in another
+  // language. The next arrow is the last button in the box, and the previous
+  // one is left alone.
+  await inTab(browser, { saved: { enabled: true, asSwipe: true } }, async (page) => {
+    const out = await page.evaluate(
+      async ([was, now]) => {
+        const old = document.getElementById("wrap");
+        if (old) old.remove();
+        const wrap = document.createElement("div");
+        wrap.id = "wrap";
+        const box = document.createElement("div");
+        box.setAttribute("data-message-id", "msg-box");
+        box.innerHTML =
+          '<div data-component="MessageContent"><p></p></div>' +
+          '<div data-component="SwipeControls"><button type="button" aria-label="Anterior" style="width:28px;height:28px">&lt;</button>' +
+          '<span>1 / 2</span><button type="button" aria-label="Siguiente" style="width:28px;height:28px">&gt;</button></div>';
+        box.querySelector("p").textContent = was;
+        const hits = { next: 0, previous: 0 };
+        box.querySelector('[aria-label="Siguiente"]').addEventListener("click", () => (hits.next += 1));
+        box.querySelector('[aria-label="Anterior"]').addEventListener("click", () => (hits.previous += 1));
+        wrap.appendChild(box);
+        document.body.appendChild(wrap);
+        (window.__handlers["CHAT_CHANGED"] || []).forEach((f) => f({ chatId: "c1" }));
+        await new Promise((r) => setTimeout(r, 400));
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "msg-box", before: was, after: now, canUndo: true, kind: "refine", swiped: true });
+        await new Promise((r) => setTimeout(r, 1400));
+        return hits;
+      },
+      [WAS, NOW],
+    );
+    ok("the next arrow in Lumiverse's swipe box is pressed, in any language", out.next === 1 && out.previous === 0, JSON.stringify(out));
   });
 }
 

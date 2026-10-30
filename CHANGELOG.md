@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.53.3
+
+_2026-10-30_
+
+### Fixed
+
+- **The next / swipe arrow could be missed.** With **Add the refine as a swipe instead of writing over the reply** on, Auto Refine moves you to the new swipe with the next arrow. It looked for the arrow by its English label, "Next swipe", so in another language, or while the arrow showed that a new swipe was ready, it was not found. It now finds the arrow by the box Lumiverse puts the swipe arrows in.
+
+### Changed
+
+- **The built-in list for the next / swipe arrow holds only marks Lumiverse uses.** Each mark was checked against the Lumiverse source. Marks that no Lumiverse button has were taken out. A list you saved yourself keeps what you typed.
+
+---
+
 ## 1.53.2
 
 _2026-10-30_

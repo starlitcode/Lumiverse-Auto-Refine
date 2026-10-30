@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.53.2";
+const VERSION = "1.53.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -450,12 +450,12 @@ const INPUT_PICKS = [
 // The same list Auto Retry looks under, so a selector written for one reads the
 // same way in the other.
 const SWIPE_PICKS = [
+  // Lumiverse's own mark on its swipe arrows: the next arrow is the last
+  // button in it. Its label is translated, and while a new swipe is ready or
+  // still being written it says so in place of "Next swipe".
+  '[data-component="SwipeControls"] button:last-of-type',
   '[aria-label="Next swipe"]',
-  '[data-action="swipe-right"]',
-  '[data-testid="swipe-right"]',
   'button[aria-label*="next swipe" i]',
-  'button[aria-label*="swipe right" i]',
-  'button[title*="swipe" i]',
 ];
 
 // Splits a selector list on its top-level commas only. A comma inside brackets,
