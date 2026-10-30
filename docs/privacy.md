@@ -72,6 +72,11 @@ The ones that read your chat, card and lore make a rewrite sound like your chara
 - The text goes to the same place a refine goes: your provider, on your connection.
 - It is not sent anywhere else, and it is not saved to your chat.
 
+**Pick it for me** reads the page only while you use it.
+
+- It reads the attributes of the one box or button you hold, such as its `name`, to write a selector. It reads no text from the page.
+- It asks Lumiverse to close the drawer, with `spindle.ui.closeDrawer`, and opens the Auto Refine tab again after. Neither needs a permission.
+
 The Auto Refine tab itself needs no permission. Every extension can add a drawer tab.
 
 ## What it keeps

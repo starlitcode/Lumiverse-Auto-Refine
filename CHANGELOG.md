@@ -6,9 +6,13 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.53.3
+## 1.54.0
 
 _2026-10-30_
+
+### Added
+
+- **Pick it for me, for the input box and the next / swipe arrow.** It is under **Where the input box is** and under **Your next / swipe button**. Press it, and the drawer closes. A bar at the top of the page says what to hold. Hold the box or the arrow for half a second, and the drawer opens again on Auto Refine with the new selector in the box. A hold on a phone's input box works too. See [Setup](docs/settings.md#setup).
 
 ### Fixed
 
@@ -16,7 +20,7 @@ _2026-10-30_
 
 ### Changed
 
-- **The built-in list for the next / swipe arrow holds only marks Lumiverse uses.** Each mark was checked against the Lumiverse source. Marks that no Lumiverse button has were taken out. A list you saved yourself keeps what you typed.
+- **The built-in list for the next / swipe arrow holds only marks Lumiverse uses.** Each mark was checked against the Lumiverse source. Marks that no Lumiverse button has were taken out. A list you saved yourself keeps what you typed. If yours still holds the old built-in list and **Add the refine as a swipe instead of writing over the reply** is on, a line at the top of the tab says so, and **Take it** puts in the new list.
 
 ---
 

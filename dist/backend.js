@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.53.3';
+const VERSION = '1.54.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -6286,6 +6286,25 @@ async function onPanel(payload, userId) {
             return;
         if (payload.type === 'notify') {
             notify(payload.kind, payload.text, userId);
+            return;
+        }
+        // Pick it for me asks for the drawer to close, so the chat behind it can
+        // be reached. The panel says to close it by hand when this cannot.
+        if (payload.type === 'close_drawer') {
+            let ok = false;
+            try {
+                if (spindle.ui && typeof spindle.ui.closeDrawer === 'function') {
+                    await spindle.ui.closeDrawer({ userId: userId });
+                    ok = true;
+                }
+                else {
+                    say('warn', 'this Lumiverse cannot close the drawer for an extension, so Pick it for me asks you to close it');
+                }
+            }
+            catch (e) {
+                say('warn', 'could not close the drawer for Pick it for me: ' + ((e && e.message) || 'no reason given'));
+            }
+            replyTo(userId, { type: 'close_drawer', requestId: payload.requestId, ok: ok });
             return;
         }
         // Who wrote each message in a chat, so the panel can leave the button off

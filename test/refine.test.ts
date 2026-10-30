@@ -173,8 +173,22 @@ function host(
   const note = (kind: string) => (text: string, opts?: any) => {
     notes.push({ kind: kind, text: text, opts: opts });
   };
+  // Each time the backend asked Lumiverse to close the drawer, and for whom.
+  const drawerCloses: any[] = [];
   const spindle = {
     toast: { success: note("success"), info: note("info"), warning: note("warning"), error: note("error") },
+    // Lumiverse's drawer. Absent for a check standing in for a Lumiverse that
+    // has no way to close it, and refusing for one where the call fails.
+    ...((opts as any).noUi
+      ? {}
+      : {
+          ui: {
+            closeDrawer: async (o?: any) => {
+              drawerCloses.push(o);
+              if ((opts as any).uiFail) throw new Error((opts as any).uiFail);
+            },
+          },
+        }),
     ...(opts.noDecisions
       ? {}
       : {
@@ -482,6 +496,7 @@ function host(
     },
     body: (id: string) => (msgs.find((m) => m.id === id) || ({} as any)).content,
     front: (p: any, who?: string) => frontHandler(p, who === undefined ? "u1" : who),
+    drawerCloses,
     // What each account's store actually holds, and the old shared one.
     perUser,
     vault,
@@ -7683,6 +7698,25 @@ describe("what to refine, asked for by hand", () => {
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
     await wait(50);
     expect(h.body("m1")).toBe("I walk through it.");
+  });
+
+  test("Pick it for me can close the drawer, for the account that asked", async () => {
+    const h = await armed([]);
+    await h.front({ type: "close_drawer", requestId: "d1" }, "u7");
+    await wait(20);
+    expect(h.drawerCloses).toEqual([{ userId: "u7" }]);
+    const got = h.sent.filter((m: any) => m.type === "close_drawer").pop();
+    expect(got).toMatchObject({ requestId: "d1", ok: true });
+  });
+
+  test("a Lumiverse that cannot close the drawer is answered with no", async () => {
+    for (const opts of [{ noUi: true }, { uiFail: "not allowed" }]) {
+      const h = await armed([], {}, chat(), opts);
+      await h.front({ type: "close_drawer", requestId: "d2" });
+      await wait(20);
+      const got = h.sent.filter((m: any) => m.type === "close_drawer").pop();
+      expect(got).toMatchObject({ requestId: "d2", ok: false });
+    }
   });
 
   test("the panel can ask whose each message is", async () => {

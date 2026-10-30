@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.53.3";
+const VERSION = "1.54.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -421,6 +421,60 @@ const SWIPE_PICKS = [
     '[aria-label="Next swipe"]',
     'button[aria-label*="next swipe" i]',
 ];
+// The label on the swipe selector's row, which the moved-default line names.
+const SWIPE_LABEL = "Your next / swipe button";
+// Class and id names Lumiverse makes fresh for each build, such as
+// _card_19912_336. A selector built on one stops matching after an update, so
+// they are skipped when a selector is made from something held.
+const UNSTABLE_NAME = /(^_)|(_[a-z0-9]{4,}_\d+$)|(_[a-z0-9]{6,}$)|([-_][a-f0-9]{6,}$)/i;
+const SAFE_NAME = /^[A-Za-z_-][\w-]*$/;
+// Turns the box or button someone held into a selector for it, choosing
+// attributes that stay the same through an update over class names that do
+// not. Null when nothing dependable is on it. The same as Auto Retry's.
+function deriveSelector(start) {
+    // A text box is the thing itself. Anything else is usually pressed on an
+    // icon or a span inside the control, so walk up to what behaves like a
+    // button. With nothing like one near, it stays on what was pressed, rather
+    // than on some box far up the page.
+    let el = null;
+    let node = start;
+    for (let hops = 0; node && hops < 6; hops++) {
+        const tag = String(node.tagName || "").toLowerCase();
+        const role = node.getAttribute ? node.getAttribute("role") : null;
+        if (tag === "textarea" || tag === "input" || node.isContentEditable === true ||
+            tag === "button" || tag === "a" || role === "button") {
+            el = node;
+            break;
+        }
+        node = node.parentElement;
+    }
+    if (!el)
+        el = start;
+    if (!el || !el.getAttribute)
+        return null;
+    const tag = String(el.tagName || "").toLowerCase() || "*";
+    const q = (v) => '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+    // A text box's name is set by the app and is the same in every language,
+    // where its label is translated.
+    const typed = tag === "textarea" || tag === "input" || el.isContentEditable === true;
+    const attrs = typed
+        ? ["name", "data-testid", "data-test-id", "data-test", "aria-label", "placeholder"]
+        : ["data-testid", "data-test-id", "data-test", "data-action", "aria-label", "title", "name"];
+    for (const attr of attrs) {
+        const v = el.getAttribute(attr);
+        if (v && String(v).trim())
+            return tag + "[" + attr + "=" + q(String(v).trim()) + "]";
+    }
+    const id = el.getAttribute("id");
+    if (id && SAFE_NAME.test(id) && !UNSTABLE_NAME.test(id))
+        return "#" + id;
+    const cls = String(el.className || "")
+        .split(/\s+/)
+        .filter((c) => c && SAFE_NAME.test(c) && !UNSTABLE_NAME.test(c));
+    if (cls.length)
+        return tag + "." + cls.slice(0, 2).join(".");
+    return null;
+}
 // Splits a selector list on its top-level commas only. A comma inside brackets,
 // parentheses or quotes belongs to the selector rather than separating the
 // list, so :is(a, b) and [title="x, y"] survive being pasted in.
@@ -1886,7 +1940,23 @@ function markText(text) {
 // `needs` keeps the line from somebody the setting does nothing for. A check
 // that is only read with two models on is not worth a line to a reader on one
 // model. If they switch to two models later, the line comes up then.
-const MOVED_DEFAULTS = [];
+const MOVED_DEFAULTS = [
+    {
+        key: "swipeSelector",
+        // The list as 1.53.2 had it.
+        was: [
+            '[aria-label="Next swipe"]',
+            '[data-action="swipe-right"]',
+            '[data-testid="swipe-right"]',
+            'button[aria-label*="next swipe" i]',
+            'button[aria-label*="swipe right" i]',
+            'button[title*="swipe" i]',
+        ].join(", "),
+        label: "Your next / swipe button",
+        why: "the built-in list now finds the arrow by the box Lumiverse puts the swipe arrows in, which works in every language. Marks no Lumiverse button has were taken out.",
+        needs: { key: "asSwipe", is: true },
+    },
+];
 // What a reader is marked with once told about a row: its setting and a mark
 // of the old value. Each row has its own, so a row added later is still told,
 // and a row already answered is not asked about again.
@@ -5058,6 +5128,29 @@ export function setup(ctx, overrides) {
         ".arf-selbar[data-arf-place]{transition:opacity 160ms ease}" +
         ".arf-selbar[data-arf-moving]{pointer-events:none;-webkit-user-select:none;user-select:none}" +
         ".arf-selbar .arf-btn{white-space:nowrap}" +
+        // The bar Pick it for me puts at the top of the page, over the chat and
+        // clear of the input box. It fades in and slides down 4 pixels.
+        ".arf-pickbar{position:fixed;left:50%;top:12px;z-index:2147483200;display:flex;align-items:center;gap:10px;" +
+        "box-sizing:border-box;width:min(460px,calc(100vw - 24px));padding:10px 12px;" +
+        "border-radius:var(--lumiverse-radius-md,10px);" +
+        "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
+        "background-color:var(--lumiverse-card-bg-solid,rgb(24,20,34));" +
+        "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
+        "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));" +
+        "box-shadow:var(--lumiverse-shadow-md,0 8px 24px rgba(0,0,0,.4));" +
+        "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;line-height:1.4;" +
+        "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
+        "opacity:0;transform:translate(-50%,-4px);" +
+        "transition:opacity 180ms ease,transform 180ms cubic-bezier(.2,.7,.3,1)}" +
+        ".arf-pickbar[data-arf-on]{opacity:1;transform:translate(-50%,0)}" +
+        ".arf-pickbar .arf-btn{flex:none;white-space:nowrap}" +
+        "html[data-arf-still] .arf-pickbar{transition:none}" +
+        "@media (prefers-reduced-motion: reduce){.arf-pickbar{transition:none}}" +
+        // While the picker is armed. A long press is also how the browser starts
+        // selecting text and raises its own callout, at about the moment the hold
+        // finishes. Off for as long as the picker is up, and only for that long.
+        ".arf-picking,.arf-picking *{-webkit-touch-callout:none!important;" +
+        "-webkit-user-select:none!important;user-select:none!important}" +
         "html[data-arf-still] .arf-selbar{transition:none}" +
         "@media (prefers-reduced-motion: reduce){.arf-selbar{transition:none}}" +
         ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
@@ -11796,6 +11889,333 @@ export function setup(ctx, overrides) {
         wrap.appendChild(sound);
         return wrap;
     }
+    // Lets someone point at the input box or the next arrow instead of writing a
+    // selector. The drawer is closed through Lumiverse, so the chat behind it can
+    // be reached, a bar on the page says what to do, and a press held on the box
+    // or the arrow becomes the selector. The drawer then opens again on this tab,
+    // which shows what was picked.
+    //
+    // Held rather than tapped, so the page carries on working while the picker
+    // is up. The same as Auto Retry's picker.
+    const HOLD_PICK_MS = 500;
+    // How far a finger may wander and still count as a hold rather than a drag.
+    const HOLD_PICK_SLIP = 10;
+    // The picker's own way out, so teardown can take it down.
+    let stopPicking = null;
+    disposers.push(() => {
+        if (stopPicking)
+            stopPicking();
+    });
+    // What the card says after a pick, kept until the next Test or pick, since
+    // the card is built again when the drawer opens.
+    let pickSaid = null;
+    // The ask to close the drawer that is waiting on an answer.
+    let closeAsk = "";
+    let pickBar = null;
+    const PICK_CLOSE_FIRST = "Close this panel first, then press and hold ";
+    function showPickBar(text, cancel) {
+        hidePickBar(true);
+        const bar = el("div", "arf-pickbar");
+        bar.setAttribute("data-arf-pickbar", "1");
+        bar.setAttribute("role", "status");
+        const words = el("span", "arf-grow", text);
+        words.setAttribute("data-arf-pickbar-text", "1");
+        bar.appendChild(words);
+        const no = button("Cancel", false);
+        no.setAttribute("data-arf-pickbar-cancel", "1");
+        no.addEventListener("click", cancel);
+        bar.appendChild(no);
+        document.body.appendChild(bar);
+        try {
+            sweepReadable(bar);
+        }
+        catch (_) { }
+        pickBar = bar;
+        // Placed below the screen's top and faded in on the next frame, so the
+        // fade and the 4 pixel slide are drawn rather than skipped.
+        try {
+            requestAnimationFrame(() => requestAnimationFrame(() => bar.setAttribute("data-arf-on", "1")));
+        }
+        catch (_) {
+            bar.setAttribute("data-arf-on", "1");
+        }
+    }
+    function pickBarSays(text) {
+        const words = pickBar && pickBar.querySelector("[data-arf-pickbar-text]");
+        if (words)
+            words.textContent = text;
+    }
+    function hidePickBar(now) {
+        const bar = pickBar;
+        pickBar = null;
+        if (!bar)
+            return;
+        bar.removeAttribute("data-arf-on");
+        const still = !!cfg.reduceMotion || document.documentElement.hasAttribute("data-arf-still");
+        if (now || still) {
+            bar.remove();
+            return;
+        }
+        setTimeout(() => bar.remove(), 220);
+    }
+    disposers.push(() => hidePickBar(true));
+    // The answer to the ask to close the drawer. A Lumiverse that cannot close it
+    // leaves it to the reader, and the bar says so.
+    function closeAnswered(msg) {
+        if (!closeAsk || !msg || msg.requestId !== closeAsk)
+            return;
+        closeAsk = "";
+        if (msg.ok)
+            return;
+        const words = pickBar && pickBar.querySelector("[data-arf-pickbar-text]");
+        const what = pickBar ? pickBar.getAttribute("data-arf-pickbar-what") : "";
+        if (words && what)
+            pickBarSays(PICK_CLOSE_FIRST + what + ".");
+    }
+    function startPicking(key) {
+        if (typeof document === "undefined")
+            return;
+        if (stopPicking)
+            stopPicking();
+        const input = key === "inputSelector";
+        const what = input ? "the chat input box" : "the next / swipe arrow on a reply";
+        pickSaid = null;
+        let done = false;
+        let held = null;
+        // A press on the bar, or on this panel while the drawer is still open, is
+        // not what is being pointed at.
+        const ours = (t) => {
+            try {
+                return !!(t && t.closest && t.closest(".arf-pickbar, .arf"));
+            }
+            catch (_) {
+                return false;
+            }
+        };
+        const textField = (n) => {
+            try {
+                return !!(n && n.closest && n.closest('textarea, input, [contenteditable=""], [contenteditable="true"]'));
+            }
+            catch (_) {
+                return false;
+            }
+        };
+        const letGo = () => {
+            if (!held)
+                return;
+            try {
+                clearTimeout(held.timer);
+            }
+            catch (_) { }
+            held = null;
+        };
+        const unhook = () => {
+            letGo();
+            try {
+                document.removeEventListener("keydown", onKey, true);
+            }
+            catch (_) { }
+            for (const [type, fn] of [
+                ["pointerdown", onDown],
+                ["pointermove", onMove],
+                ["pointerup", onUp],
+                ["pointercancel", onCancel],
+                ["touchend", onLift],
+                ["contextmenu", onMenu],
+            ]) {
+                try {
+                    document.removeEventListener(type, fn, true);
+                }
+                catch (_) { }
+            }
+            try {
+                document.documentElement.classList.remove("arf-picking");
+            }
+            catch (_) { }
+            closeAsk = "";
+            hidePickBar();
+        };
+        const finish = (sel, text, good) => {
+            if (done)
+                return;
+            done = true;
+            stopPicking = null;
+            unhook();
+            if (sel) {
+                cfg[key] = sel;
+                persist(true);
+            }
+            pickSaid = { key: key, text: text, good: good };
+            paint();
+            // The tab opens again on its own card, which shows what was picked. A
+            // Lumiverse that cannot open it gets a notification in its place, since
+            // nothing else on screen would say.
+            let opened = false;
+            try {
+                if (tab && typeof tab.activate === "function") {
+                    tab.activate();
+                    opened = true;
+                }
+            }
+            catch (e) {
+                log("problem", "could not open the Auto Refine tab again: " + ((e && e.message) || "no reason given"));
+            }
+            if (!opened)
+                toast(text, true, good ? "success" : "warning");
+        };
+        // The press that picked is still down, so a click can come for whatever
+        // is under it. Eaten by a listener of its own, since the picker stands
+        // down the moment it has its answer. A phone that took the press away
+        // sends no click, so the next press ends the wait, and the tap after a
+        // pick is never the one eaten.
+        const eatClick = () => {
+            const stop = () => {
+                try {
+                    document.removeEventListener("click", eat, true);
+                    document.removeEventListener("pointerdown", stop, true);
+                }
+                catch (_) { }
+            };
+            const eat = (e) => {
+                stop();
+                try {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                catch (_) { }
+            };
+            document.addEventListener("click", eat, true);
+            document.addEventListener("pointerdown", stop, true);
+            setTimeout(stop, 1200);
+        };
+        const take = (node) => {
+            held = null;
+            eatClick();
+            // Nothing is ever written into or pressed in another extension's part of
+            // the page, so one picked there would never be used.
+            let other = false;
+            try {
+                other = !!(node && node.closest && node.closest(OTHER_UI));
+            }
+            catch (_) { }
+            if (other) {
+                finish(null, "That belongs to another extension. Hold " + what + " in the chat itself.", false);
+                return;
+            }
+            if (input && !textField(node)) {
+                finish(null, "That is not a text box. Hold " + what + " itself.", false);
+                return;
+            }
+            // The box was focused by the press, which brings up the keyboard on a
+            // phone. It has done its job once it is picked.
+            if (textField(node)) {
+                try {
+                    node.blur();
+                }
+                catch (_) { }
+            }
+            const sel = deriveSelector(node);
+            if (!sel) {
+                finish(null, "Could not tell what that is. Hold " + what + " itself, not an icon inside it.", false);
+                return;
+            }
+            finish(sel, "Set to " + sel, true);
+        };
+        // Nothing is stopped on the way down. A press that is not held does what
+        // it always does.
+        const onDown = (e) => {
+            const t = e && e.target;
+            if (ours(t))
+                return;
+            letGo();
+            held = {
+                node: t,
+                x: (e && e.clientX) || 0,
+                y: (e && e.clientY) || 0,
+                timer: setTimeout(() => take(t), HOLD_PICK_MS),
+            };
+        };
+        const onMove = (e) => {
+            if (!held)
+                return;
+            const dx = ((e && e.clientX) || 0) - held.x;
+            const dy = ((e && e.clientY) || 0) - held.y;
+            if (dx * dx + dy * dy > HOLD_PICK_SLIP * HOLD_PICK_SLIP)
+                letGo();
+        };
+        const onUp = () => letGo();
+        // A text box is held differently. Holding one, a phone starts its own
+        // caret and paste menu, and takes the press away with no menu event to
+        // catch. So a press on a text box is not let go when it is taken away,
+        // only when the finger lifts, which the touch events still report.
+        const onCancel = () => {
+            if (held && textField(held.node))
+                return;
+            letGo();
+        };
+        const onLift = () => {
+            if (held && textField(held.node))
+                letGo();
+        };
+        // The browser raising its own menu on a long press is that same press,
+        // recognized by something else first. Taken as the pick rather than
+        // competed with, which also covers a right click on a desktop.
+        const onMenu = (e) => {
+            const node = held ? held.node : e && e.target;
+            if (!node || ours(node))
+                return;
+            try {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            catch (_) { }
+            take(node);
+        };
+        const onKey = (e) => {
+            if (e && e.key === "Escape")
+                finish(null, "Picking canceled.", false);
+        };
+        // Canceled, not answered: teardown wants the listeners gone, not the tab
+        // opened over a page the extension is leaving.
+        stopPicking = () => {
+            if (done)
+                return;
+            done = true;
+            stopPicking = null;
+            unhook();
+        };
+        try {
+            document.documentElement.classList.add("arf-picking");
+        }
+        catch (_) { }
+        document.addEventListener("pointerdown", onDown, true);
+        document.addEventListener("pointermove", onMove, true);
+        document.addEventListener("pointerup", onUp, true);
+        document.addEventListener("pointercancel", onCancel, true);
+        document.addEventListener("touchend", onLift, true);
+        document.addEventListener("contextmenu", onMenu, true);
+        document.addEventListener("keydown", onKey, true);
+        const keys = fromMouse();
+        showPickBar("Press and hold " + what + ". Everything else still works, so you can get to it. " +
+            (keys ? "Esc or Cancel to stop." : "Or press Cancel."), () => finish(null, "Picking canceled.", false));
+        if (pickBar)
+            pickBar.setAttribute("data-arf-pickbar-what", what);
+        // Lumiverse closes the drawer when the backend asks it to. No answer in a
+        // few seconds is taken as no.
+        const id = newId();
+        closeAsk = id;
+        send({ type: "close_drawer", requestId: id });
+        setTimeout(() => closeAnswered({ requestId: id, ok: false }), 3000);
+    }
+    // The words under a selector box after a pick, until the next Test.
+    function sayPicked(key, said) {
+        if (!pickSaid || pickSaid.key !== key)
+            return;
+        said.textContent = pickSaid.text;
+        said.style.color = pickSaid.good
+            ? "var(--lumiverse-success,#22c55e)"
+            : "var(--lumiverse-text-muted,rgba(255,255,255,.65))";
+    }
     // The next / swipe button, under the switch that puts a refine in beside the
     // reply rather than over it.
     //
@@ -11812,7 +12232,7 @@ export function setup(ctx, overrides) {
         hangsOff(wrap, "asSwipe");
         wrap.appendChild(fieldRow({
             key: "swipeSelector",
-            label: "Your next / swipe button",
+            label: SWIPE_LABEL,
             type: "text",
             hint: "Only needed if a Lumiverse update renames the swipe arrows and refines stop appearing as swipes. Comma-separated, tried in order. Empty uses the built-in list.",
         }));
@@ -11832,6 +12252,7 @@ export function setup(ctx, overrides) {
         // box's. The arrows are only on a message that has swipes, so an answer
         // from a minute ago is an answer about a different page.
         const run = () => {
+            pickSaid = null;
             const state = swipeSelectorState(String(cfg.swipeSelector || ""));
             said.textContent = WORDS[state] || state;
             said.style.color =
@@ -11845,13 +12266,14 @@ export function setup(ctx, overrides) {
         test.addEventListener("click", run);
         test.setAttribute("data-arf-testswipe", "1");
         row.appendChild(test);
-        // No button that picks it for you, the same as the box above it. A picker
-        // has to give the press it was armed for to whatever is under the pointer,
-        // and this panel is over the message those arrows are on. Typing a selector
-        // works every time.
+        const pick = button("Pick it for me", false);
+        pick.setAttribute("data-arf-pickswipe", "1");
+        pick.addEventListener("click", () => startPicking("swipeSelector"));
+        row.appendChild(pick);
         const put = button("Use the built-in list", false);
         put.setAttribute("data-arf-resetswipe", "1");
         put.addEventListener("click", () => {
+            pickSaid = null;
             if (sameSelectors(cfg.swipeSelector, SWIPE_PICKS)) {
                 alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
                 return;
@@ -11862,6 +12284,7 @@ export function setup(ctx, overrides) {
         });
         row.appendChild(put);
         row.appendChild(said);
+        sayPicked("swipeSelector", said);
         wrap.appendChild(row);
         const list = el("div", "arf-col");
         list.setAttribute("data-arf-swipelist", "1");
@@ -11934,9 +12357,7 @@ export function setup(ctx, overrides) {
     // is reading their own page's markup and has to see what is already tried
     // before writing anything.
     //
-    // There is no button that picks the box for you. A click-based picker loses
-    // its click to the drawer closing, and a press-and-hold picker was tried and
-    // did not work reliably. Typing a selector works every time.
+    // Pick it for me closes the drawer and takes the box that is held next.
     function buildInputCard() {
         const wrap = card("Where the input box is", "Only needed if Refine what I have typed stops finding your box after a Lumiverse update.");
         wrap.appendChild(fieldRow({
@@ -11961,6 +12382,7 @@ export function setup(ctx, overrides) {
         // answer is only true for what is on screen now, and a line that went stale
         // while somebody read it would be worse than no line.
         const run = () => {
+            pickSaid = null;
             const state = inputSelectorState(String(cfg.inputSelector || ""));
             said.textContent = WORDS[state] || state;
             said.style.color =
@@ -11974,12 +12396,17 @@ export function setup(ctx, overrides) {
         test.addEventListener("click", run);
         test.setAttribute("data-arf-testinput", "1");
         row.appendChild(test);
+        const pick = button("Pick it for me", false);
+        pick.setAttribute("data-arf-pickinput", "1");
+        pick.addEventListener("click", () => startPicking("inputSelector"));
+        row.appendChild(pick);
         // The way back, beside the thing it puts back. Editing a selector is how
         // somebody ends up with a box that finds nothing, so the reset is here
         // rather than on another card.
         const put = button("Use the built-in list", false);
         put.setAttribute("data-arf-resetinput", "1");
         put.addEventListener("click", () => {
+            pickSaid = null;
             if (sameSelectors(cfg.inputSelector, INPUT_PICKS)) {
                 alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
                 return;
@@ -11990,6 +12417,7 @@ export function setup(ctx, overrides) {
         });
         row.appendChild(put);
         row.appendChild(said);
+        sayPicked("inputSelector", said);
         wrap.appendChild(row);
         const list = el("div", "arf-col");
         list.setAttribute("data-arf-inputlist", "1");
@@ -16624,6 +17052,10 @@ export function setup(ctx, overrides) {
                 try {
                     if (!msg)
                         return;
+                    if (msg.type === "close_drawer") {
+                        closeAnswered(msg);
+                        return;
+                    }
                     if (msg.type === "message_roles") {
                         takeRoles(msg);
                         // A selection made before the answer came has a bar to show now.
@@ -17686,6 +18118,7 @@ export const __testing = {
     blockText,
     sameSettings,
     INPUT_PICKS,
+    SWIPE_LABEL,
     CONFIG,
     PARTS,
     MOVED_DEFAULTS,

@@ -180,7 +180,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - On, the rewrite is added as a new swipe, and the original stays one swipe back.
   - The original stays in the chat, so this way back survives an update and a restart with no other setting.
   - **Put it back** then removes that swipe. It refuses if you have added another swipe since.
-  - **Your next / swipe button** is under it. You only need it if a Lumiverse update renames the swipe arrows. It works like **Where the input box is**, below.
+  - **Your next / swipe button** is under it. You only need it if a Lumiverse update renames the swipe arrows. It works like **Where the input box is**, below. Its **Pick it for me** takes the next / swipe arrow you hold on a reply.
 - **Keep what a refine replaced** keeps the original, so you can put it back. It is on by default.
   - Your server holds it in memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
   - **Keep them through an update** is under it, and off by default. On, the list is also saved on your server for your account, so an update or a restart does not clear it.
@@ -335,6 +335,14 @@ While the floating button is on screen, its menu holds these extra actions. With
 - Emptying the box goes back to the built-in list.
 - The list below the box shows which selector found the box. A selector the browser cannot read is marked in red.
 - **Test** checks the page when you press it, and says whether the box was found and can be typed in.
+- **Pick it for me** makes the selector from the real box on your screen:
+  1. Press **Pick it for me**. The drawer closes, and a bar at the top of the page says what to hold.
+  2. Press and hold the chat input box for half a second. On a phone this opens the keyboard, which closes again after the pick.
+  3. The drawer opens again on Auto Refine. The new selector is in the box, and the line beside the buttons says what was picked.
+  - A short tap picks nothing, and the page works as usual while the bar is up.
+  - **Cancel** on the bar, or Esc on a keyboard, stops it.
+  - If the drawer does not close, the bar asks you to close it yourself. This happens on a Lumiverse that cannot close the drawer for an extension.
+  - Nothing inside another extension's part of the page can be picked.
 - **Use the built-in list** puts the box back to the built-in list.
 
 **Your whole setup** exports your settings to a file, imports a file, or resets to defaults.

@@ -235,7 +235,10 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
             setBadge: (v) => {
               window.__badge = v;
             },
-            activate: () => {},
+            // Counted, so a check can see the tab was opened again.
+            activate: () => {
+              window.__activated = (window.__activated || 0) + 1;
+            },
             destroy: () => {},
           };
         },
@@ -10612,8 +10615,9 @@ console.log("\nwhen a default moves under somebody who was on it");
   // their setup did not change, and a line about a default they are not on is
   // a line to dismiss for no reason.
   //
-  // The table is empty between moves, so these rows are made up for the check.
-  // One is a text read only with two models, and one is a switch.
+  // These rows are made up for the check, and go in after the rows the table
+  // already holds. One is a text read only with two models, and one is a
+  // switch.
   const OLD = "`reply` mentions the weather twice.\n`reply` names a color that is not in the scene.";
   const CHECKS_ROW = { key: "judgeChecks", was: OLD, label: "What the second model checks", why: "A made-up reason.", needs: { key: "judgeMode", is: "two" } };
   const TOAST_ROW = { key: "toast", was: true, label: "Lumiverse notification when a refine finishes", why: "Another made-up reason." };
@@ -10754,12 +10758,203 @@ console.log("\nwhen a default moves under somebody who was on it");
   // The line is 30 by default.
   ok("judgeOver is 30 by default", STOCK_DEFAULTS.judgeOver === 30, String(STOCK_DEFAULTS.judgeOver));
 
+  // The real row for the swipe list, which moved after 1.53.2. Somebody with
+  // the swipe switch on and the old list is told, and Take it puts in the new
+  // list. With the switch off, the list does nothing, so nobody is told.
+  const OLD_SWIPE =
+    '[aria-label="Next swipe"], [data-action="swipe-right"], [data-testid="swipe-right"], ' +
+    'button[aria-label*="next swipe" i], button[aria-label*="swipe right" i], button[title*="swipe" i]';
+  await inTab(browser, { saved: { asSwipe: true, swipeSelector: OLD_SWIPE } }, async (page) => {
+    const said = await seen(page);
+    ok("the old swipe list is told about, by its name", !!said && said.indexOf("Your next / swipe button") >= 0, JSON.stringify(said));
+    await press(page, "take");
+    const now = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1")).swipeSelector);
+    ok("and Take it puts in the list that finds the swipe box", /^\[data-component="SwipeControls"\] button:last-of-type/.test(now) && now.indexOf("swipe-right") < 0, now);
+  });
+  await inTab(browser, { saved: { asSwipe: false, swipeSelector: OLD_SWIPE } }, async (page) => {
+    ok("with the swipe switch off, the old list is not told about", (await seen(page)) === null, JSON.stringify(await seen(page)));
+  });
+
   // Keep mine puts it away without changing the setting.
   await inTab(browser, { moved: ROWS, saved: { judgeMode: "two", judgeChecks: OLD } }, async (page) => {
     await press(page, "keep");
     const after = await stored(page);
     ok("keeping yours leaves the setting alone", after.now === OLD, JSON.stringify(after));
     ok("and still takes the line away", !after.line, JSON.stringify(after));
+  });
+}
+
+console.log("\npick it for me in the drawer");
+{
+  // Pointer events sent the way a phone or a mouse sends them. A phone holding
+  // a text box starts its own text selection and takes the press away with a
+  // pointercancel, and only reports the finger lifting with touchend.
+  const press = (page, sel, kind) =>
+    page.evaluate(
+      ({ sel, kind }) => {
+        const t = document.querySelector(sel);
+        if (!t) throw new Error("nothing at " + sel);
+        const r = t.getBoundingClientRect();
+        const at = { bubbles: true, cancelable: true, composed: true, clientX: r.left + 4, clientY: r.top + 4 };
+        const type = kind === "mouse" ? "mouse" : "touch";
+        t.dispatchEvent(new PointerEvent("pointerdown", { ...at, pointerType: type, isPrimary: true }));
+        if (kind === "phone") t.dispatchEvent(new PointerEvent("pointercancel", { ...at, pointerType: type, isPrimary: true }));
+      },
+      { sel, kind },
+    );
+  const lift = (page, sel, kind) =>
+    page.evaluate(
+      ({ sel, kind }) => {
+        const t = document.querySelector(sel);
+        if (kind === "mouse") t.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" }));
+        else t.dispatchEvent(new Event("touchend", { bubbles: true }));
+      },
+      { sel, kind },
+    );
+  const state = (page) =>
+    page.evaluate(() => {
+      const bar = document.querySelector(".arf-pickbar");
+      const r = bar ? bar.getBoundingClientRect() : null;
+      const no = bar ? bar.querySelector("[data-arf-pickbar-cancel]") : null;
+      const box = document.querySelector('#drawer [data-arf-field="inputSelector"]');
+      const swipe = document.querySelector('#drawer [data-arf-field="swipeSelector"]');
+      const said = [...document.querySelectorAll("#drawer .arf-note")].map((n) => n.textContent).join(" | ");
+      return {
+        bar: !!bar,
+        on: !!bar && bar.hasAttribute("data-arf-on"),
+        text: bar ? bar.textContent : "",
+        rect: r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null,
+        cancelH: no ? no.getBoundingClientRect().height : 0,
+        wide: document.documentElement.scrollWidth > window.innerWidth,
+        picking: document.documentElement.classList.contains("arf-picking"),
+        input: box ? box.value : null,
+        swipe: swipe ? swipe.value : null,
+        said,
+        activated: window.__activated || 0,
+        asks: window.__sent.filter((m) => m && m.type === "close_drawer"),
+      };
+    });
+
+  // The input box on a phone, in Lumiverse's own markup.
+  await inTab(browser, { viewport: { width: 360, height: 760 }, touch: true }, async (page, errors) => {
+    await goTab(page, "Setup");
+    await page.evaluate(() => {
+      window.__makeComposer("");
+      document.querySelector("#drawer [data-arf-pickinput]").click();
+    });
+    await page.waitForTimeout(300);
+    const up = await state(page);
+    ok("a phone: the drawer is asked to close", up.asks.length === 1 && !!up.asks[0].requestId, JSON.stringify(up.asks));
+    ok("a phone: a bar at the top says what to hold", up.on && /hold the chat input box/i.test(up.text), up.text);
+    ok("a phone: the bar fits the screen", !!up.rect && up.rect.left >= 0 && up.rect.right <= 360 && !up.wide, JSON.stringify(up.rect));
+    ok("a phone: its Cancel is big enough to tap", up.cancelH >= 32, up.cancelH);
+
+    // A tap is a tap.
+    const BOX = 'textarea[name="chat-message"]';
+    await press(page, BOX, "phone");
+    await lift(page, BOX, "phone");
+    await page.waitForTimeout(800);
+    const tapped = await state(page);
+    ok("a phone: a quick tap on the box picks nothing", tapped.bar && tapped.picking && tapped.activated === 0, JSON.stringify(tapped).slice(0, 300));
+
+    // A hold that the phone takes away with its own text selection.
+    await press(page, BOX, "phone");
+    await page.waitForTimeout(800);
+    const held = await state(page);
+    ok("a phone: holding the box picks it by its name", held.input === BOX, JSON.stringify(held.input));
+    ok("a phone: and the bar goes", !held.picking && !held.on, JSON.stringify(held).slice(0, 300));
+    ok("a phone: and the tab opens again", held.activated === 1, held.activated);
+    ok("a phone: and the card says what was picked", held.said.indexOf("Set to " + BOX) >= 0, held.said.slice(0, 300));
+    await lift(page, BOX, "phone");
+    ok("a phone: no console errors", errors.length === 0, errors.join("\n"));
+  });
+
+  // The next arrow on a laptop, held on the icon inside it, in a language
+  // that is not English.
+  await inTab(browser, { viewport: { width: 1280, height: 800 }, saved: { asSwipe: true } }, async (page, errors) => {
+    // The swipe switch and the box under it are on Limits.
+    await goTab(page, "Limits");
+    await page.evaluate(() => {
+      const box = document.createElement("div");
+      box.setAttribute("data-component", "SwipeControls");
+      box.innerHTML =
+        '<button aria-label="Deslizar anterior"><svg width="16" height="16"><path d="M0 0h16v16z"/></svg></button>' +
+        "<span>2/3</span>" +
+        '<button aria-label="Deslizar siguiente"><svg width="16" height="16"><path id="next-icon" d="M0 0h16v16z"/></svg></button>';
+      document.body.appendChild(box);
+      document.querySelector("#drawer [data-arf-pickswipe]").click();
+    });
+    await page.waitForTimeout(300);
+    const up = await state(page);
+    ok("a laptop: the bar names the arrow and Esc", /next \/ swipe arrow/.test(up.text) && /Esc/.test(up.text), up.text);
+    await press(page, "#next-icon", "mouse");
+    await page.waitForTimeout(800);
+    await lift(page, "#next-icon", "mouse");
+    const held = await state(page);
+    ok("a laptop: holding the icon picks the arrow around it", held.swipe === 'button[aria-label="Deslizar siguiente"]', JSON.stringify(held.swipe));
+    ok("a laptop: and the tab opens again", held.activated === 1, held.activated);
+
+    // Esc stops it, and the tab opens again saying so.
+    // A real press, right after the last pick: pointer down, up, then the click.
+    await page.click("#drawer [data-arf-pickswipe]");
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    const esc = await state(page);
+    ok("a laptop: Esc stops picking", !esc.picking && !esc.bar, JSON.stringify(esc).slice(0, 300));
+    ok("a laptop: and the card says it was canceled", /Picking canceled/.test(esc.said), esc.said.slice(0, 300));
+    ok("a laptop: and nothing changed", esc.swipe === held.swipe, esc.swipe);
+    ok("a laptop: no console errors", errors.length === 0, errors.join("\n"));
+  });
+
+  // What it will not take, and a Lumiverse that cannot close the drawer.
+  await inTab(browser, { viewport: { width: 1280, height: 800 } }, async (page, errors) => {
+    await goTab(page, "Setup");
+    const before = (await state(page)).input;
+    await page.evaluate(() => {
+      const other = document.createElement("div");
+      other.setAttribute("data-spindle-ext", "someone-else");
+      other.innerHTML = '<textarea name="their-box" style="width:200px;height:40px"></textarea>';
+      document.body.appendChild(other);
+      const plain = document.createElement("div");
+      plain.id = "plain";
+      plain.style.cssText = "width:200px;height:40px";
+      document.body.appendChild(plain);
+      document.querySelector("#drawer [data-arf-pickinput]").click();
+    });
+    await page.waitForTimeout(300);
+    const ask = (await state(page)).asks[0];
+    await page.evaluate((id) => window.__fromBackend({ type: "close_drawer", requestId: id, ok: false }), ask.requestId);
+    const told = await state(page);
+    ok("no drawer close: the bar asks to close it first", /Close this panel first/.test(told.text), told.text);
+
+    await press(page, 'textarea[name="their-box"]', "mouse");
+    await page.waitForTimeout(800);
+    await lift(page, 'textarea[name="their-box"]', "mouse");
+    const theirs = await state(page);
+    ok("another extension's box is not taken", theirs.input === before && /another extension/.test(theirs.said), theirs.said.slice(0, 300));
+
+    // A real press, right after the last pick: pointer down, up, then the click.
+    await page.click("#drawer [data-arf-pickinput]");
+    await page.waitForTimeout(300);
+    await press(page, "#plain", "mouse");
+    await page.waitForTimeout(800);
+    await lift(page, "#plain", "mouse");
+    const plain = await state(page);
+    ok("something that is not a text box is not taken for the input box", plain.input === before && /not a text box/.test(plain.said), plain.said.slice(0, 300));
+
+    // Switched off while it is up, nothing of it is left on the page.
+    // A real press, right after the last pick: pointer down, up, then the click.
+    await page.click("#drawer [data-arf-pickinput]");
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__teardown());
+    await page.waitForTimeout(300);
+    const gone = await page.evaluate(() => ({
+      bar: !!document.querySelector(".arf-pickbar"),
+      picking: document.documentElement.classList.contains("arf-picking"),
+    }));
+    ok("teardown takes the bar and the picking mode away", !gone.bar && !gone.picking, JSON.stringify(gone));
+    ok("no console errors", errors.length === 0, errors.join("\n"));
   });
 }
 
@@ -13200,7 +13395,7 @@ for (const [label, viewport, touch] of [
     ok(label + ": and comes out when it is switched on", on.boxShows && on.listShows, JSON.stringify(on));
     ok(label + ": holding the selectors it really looks under", /Next swipe/.test(on.value || ""), JSON.stringify(on.value));
     ok(label + ": with Test and the way back beside it", on.test && on.reset, JSON.stringify(on));
-    ok(label + ": and no button offering to pick it for you", !on.picker, JSON.stringify(on));
+    ok(label + ": and a button that picks it for you", on.picker, JSON.stringify(on));
     ok(label + ": every selector listed in the order it is tried",
       on.lines >= 3 && on.lines === String(on.value || "").split(",").filter((s) => s.trim()).length,
       JSON.stringify({ lines: on.lines, value: on.value }));

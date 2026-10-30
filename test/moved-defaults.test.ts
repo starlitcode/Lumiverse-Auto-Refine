@@ -30,9 +30,12 @@ describe("the defaults said to have moved", () => {
     // Sent to somebody hunting for the setting the line is about. A label
     // written out by hand drifts from the panel the first time the row is
     // renamed, and the reader is then looking for something that is not there.
+    // The swipe selector's row is built by hand under its switch, and takes
+    // its label from SWIPE_LABEL.
+    const { SWIPE_LABEL } = __testing as any;
     const labels = [...LIMIT_FIELDS, ...COST_FIELDS, ...SAMPLER_FIELDS, ...JUDGE_FIELDS, PROTECT_NOTE_FIELD].map((f: any) =>
       String(f.label || ""),
-    );
+    ).concat([SWIPE_LABEL]);
     for (const m of MOVED_DEFAULTS)
       expect(labels.some((l: string) => l === m.label || l.indexOf(m.label) === 0)).toBe(true);
   });
