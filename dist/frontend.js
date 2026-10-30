@@ -5129,8 +5129,8 @@ export function setup(ctx, overrides) {
         ".arf-selbar[data-arf-moving]{pointer-events:none;-webkit-user-select:none;user-select:none}" +
         ".arf-selbar .arf-btn{white-space:nowrap}" +
         // The bar Pick it for me puts at the top of the page, over the chat and
-        // clear of the input box. The same as Auto Retry's picker message: it is
-        // there at once, and on the way out it fades and slides up 6 pixels.
+        // clear of the input box. It does not move: it is there at once and gone
+        // at once.
         ".arf-pickbar{position:fixed;left:50%;top:max(20px,env(safe-area-inset-top,0px));z-index:2147483200;" +
         "display:flex;align-items:center;gap:10px;" +
         "box-sizing:border-box;width:min(460px,calc(100vw - 24px));padding:10px 12px;" +
@@ -5143,11 +5143,7 @@ export function setup(ctx, overrides) {
         "font-family:var(--lumiverse-font-family,system-ui);font-size:13px;line-height:1.4;" +
         "color:var(--lumiverse-text,rgba(255,255,255,.9));" +
         "transform:translate(-50%,0)}" +
-        ".arf-pickbar[data-arf-leaving]{opacity:0;transform:translate(-50%,-6px);pointer-events:none;" +
-        "transition:opacity 160ms ease-in,transform 160ms ease-in}" +
         ".arf-pickbar .arf-btn{flex:none;white-space:nowrap}" +
-        "html[data-arf-still] .arf-pickbar[data-arf-leaving]{transition:none}" +
-        "@media (prefers-reduced-motion: reduce){.arf-pickbar[data-arf-leaving]{transition:none}}" +
         // While the picker is armed. A long press is also how the browser starts
         // selecting text and raises its own callout, at about the moment the hold
         // finishes. Off for as long as the picker is up, and only for that long.
@@ -11916,7 +11912,7 @@ export function setup(ctx, overrides) {
     let pickBar = null;
     const PICK_CLOSE_FIRST = "Close this panel first, then press and hold ";
     function showPickBar(text, cancel) {
-        hidePickBar(true);
+        hidePickBar();
         const bar = el("div", "arf-pickbar");
         bar.setAttribute("data-arf-pickbar", "1");
         bar.setAttribute("role", "status");
@@ -11940,26 +11936,13 @@ export function setup(ctx, overrides) {
         if (words)
             words.textContent = text;
     }
-    function hidePickBar(now) {
+    function hidePickBar() {
         const bar = pickBar;
         pickBar = null;
-        if (!bar)
-            return;
-        bar.removeAttribute("data-arf-on");
-        let still = !!cfg.reduceMotion || document.documentElement.hasAttribute("data-arf-still");
-        try {
-            if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
-                still = true;
-        }
-        catch (_) { }
-        if (now || still) {
+        if (bar)
             bar.remove();
-            return;
-        }
-        bar.setAttribute("data-arf-leaving", "1");
-        setTimeout(() => bar.remove(), 200);
     }
-    disposers.push(() => hidePickBar(true));
+    disposers.push(() => hidePickBar());
     // The answer to the ask to close the drawer. A Lumiverse that cannot close it
     // leaves it to the reader, and the bar says so.
     function closeAnswered(msg) {
@@ -12208,6 +12191,16 @@ export function setup(ctx, overrides) {
         send({ type: "close_drawer", requestId: id });
         setTimeout(() => closeAnswered({ requestId: id, ok: false }), 3000);
     }
+    // Use the built-in list asks first, the same as every other button that puts
+    // a built-in back over what the reader wrote. The box shows the list again,
+    // so no notification is sent.
+    function askBuiltInList(key, label, go) {
+        askFirst(key, {
+            title: "Use the built-in list",
+            message: "Replace what is in " + label + " with the built-in list? What you wrote there is not kept.",
+            confirmLabel: "Replace",
+        }, "Press Use the built-in list again to replace yours.", go);
+    }
     // The words under a selector box after a pick, until the next Test.
     function sayPicked(key, said) {
         if (!pickSaid || pickSaid.key !== key)
@@ -12279,9 +12272,11 @@ export function setup(ctx, overrides) {
                 alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
                 return;
             }
-            cfg.swipeSelector = SWIPE_PICKS.join(", ");
-            persist(true);
-            paint();
+            askBuiltInList("resetswipe", SWIPE_LABEL, () => {
+                cfg.swipeSelector = SWIPE_PICKS.join(", ");
+                persist(true);
+                paint();
+            });
         });
         row.appendChild(put);
         row.appendChild(said);
@@ -12412,9 +12407,11 @@ export function setup(ctx, overrides) {
                 alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
                 return;
             }
-            cfg.inputSelector = INPUT_PICKS.join(", ");
-            persist(true);
-            paint();
+            askBuiltInList("resetinput", "The selectors it looks under", () => {
+                cfg.inputSelector = INPUT_PICKS.join(", ");
+                persist(true);
+                paint();
+            });
         });
         row.appendChild(put);
         row.appendChild(said);

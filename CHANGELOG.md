@@ -20,6 +20,7 @@ _2026-10-30_
 
 ### Changed
 
+- **Use the built-in list asks first.** The button under **Where the input box is** and under **Your next / swipe button** now shows a pop-up to confirm before it replaces your list, the same as the other buttons that put a built-in text back.
 - **The built-in list for the next / swipe arrow holds only marks Lumiverse uses.** Each mark was checked against the Lumiverse source. Marks that no Lumiverse button has were taken out. A list you saved yourself keeps what you typed. If yours still holds the old built-in list and **Add the refine as a swipe instead of writing over the reply** is on, a line at the top of the tab says so, and **Take it** puts in the new list.
 
 ---

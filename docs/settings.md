@@ -343,7 +343,7 @@ While the floating button is on screen, its menu holds these extra actions. With
   - **Cancel** on the bar, or Esc on a keyboard, stops it.
   - If the drawer does not close, the bar asks you to close it yourself. This happens on a Lumiverse that cannot close the drawer for an extension.
   - Nothing inside another extension's part of the page can be picked.
-- **Use the built-in list** puts the box back to the built-in list.
+- **Use the built-in list** puts the box back to the built-in list. A pop-up asks you to confirm first, since what you wrote is not kept.
 
 **Your whole setup** exports your settings to a file, imports a file, or resets to defaults.
 

@@ -4831,36 +4831,53 @@ console.log("\nUse the built-in list, when it is already the built-in list");
     await settle(page);
     const already = await read();
     const toasts = await page.evaluate(() => window.__toasts.length);
-    await page.evaluate((key) => {
-      const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
-      box.value = ".my-own-box";
-      box.dispatchEvent(new Event("input", { bubbles: true }));
-      box.dispatchEvent(new Event("change", { bubbles: true }));
-      box.dispatchEvent(new Event("blur"));
-    }, key);
+    const mine = async () => {
+      await page.evaluate((key) => {
+        const box = document.querySelector('#drawer [data-arf-field="' + key + '"]');
+        box.value = ".my-own-box";
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        box.dispatchEvent(new Event("change", { bubbles: true }));
+        box.dispatchEvent(new Event("blur"));
+      }, key);
+      await settle(page);
+    };
+    // Lumiverse's confirmation pop-up, answered no first and then yes.
+    await mine();
+    await page.evaluate(() => { window.__confirms = []; window.__confirmSay = false; });
+    await press();
     await settle(page);
+    const declined = await read();
+    const asked = await page.evaluate(() => (window.__confirms || []).map((c) => c.title + " | " + c.message));
+    await page.evaluate(() => { window.__confirmSay = true; });
     await press();
     await settle(page);
     const back = await read();
-    return { before, already, toasts, back };
+    return { before, already, toasts, asked, declined, back };
   };
 
-  await inTab(browser, {}, async (page) => {
+  // The drawer scrolls on its own, as Lumiverse's does, so the question comes
+  // up as Lumiverse's pop-up rather than as press-again.
+  const DRAWER = "#drawer{height:100vh;overflow-y:auto;box-sizing:border-box}";
+  await inTab(browser, { css: DRAWER }, async (page) => {
     await goTab(page, "Setup");
     const out = await tryBox(page, "inputSelector", "data-arf-resetinput");
     ok("input box: pressed on the built-in list, it says so", /already the built-in list\. Nothing changed\./.test(out.already.said), JSON.stringify(out.already).slice(0, 200));
     ok("and changes nothing", out.already.value === out.before.value, JSON.stringify(out).slice(0, 300));
     ok("without a pop-up", out.toasts === 0, String(out.toasts));
-    ok("pressed on a list of your own, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
+    ok("pressed on a list of your own, a confirmation pop-up asks first", out.asked.length === 1 && /^Use the built-in list \| Replace what is in The selectors it looks under/.test(out.asked[0]), JSON.stringify(out.asked));
+    ok("answered no, your list stays", out.declined.value === ".my-own-box", JSON.stringify(out.declined).slice(0, 200));
+    ok("answered yes, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
   });
 
   // On Limits, under the switch it hangs off.
-  await inTab(browser, { saved: { enabled: true, asSwipe: true } }, async (page) => {
+  await inTab(browser, { css: DRAWER, saved: { enabled: true, asSwipe: true } }, async (page) => {
     await goTab(page, "Limits");
     const out = await tryBox(page, "swipeSelector", "data-arf-resetswipe");
     ok("swipe button: pressed on the built-in list, it says so", /already the built-in list\. Nothing changed\./.test(out.already.said), JSON.stringify(out.already).slice(0, 200));
     ok("and changes nothing", out.already.value === out.before.value, JSON.stringify(out).slice(0, 300));
-    ok("pressed on a list of your own, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
+    ok("pressed on a list of your own, a confirmation pop-up asks first", out.asked.length === 1 && /^Use the built-in list \| Replace what is in Your next \/ swipe button/.test(out.asked[0]), JSON.stringify(out.asked));
+    ok("answered no, your list stays", out.declined.value === ".my-own-box", JSON.stringify(out.declined).slice(0, 200));
+    ok("answered yes, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
   });
 }
 
@@ -10907,8 +10924,8 @@ console.log("\npick it for me in the drawer");
     ok("a laptop: no console errors", errors.length === 0, errors.join("\n"));
   });
 
-  // How the bar moves, the same as Auto Retry's picker message: there at once,
-  // and on the way out it fades and slides up. Read from what is drawn.
+  // The bar does not move: there at once, and gone at once. Read from what
+  // is drawn.
   await inTab(browser, { viewport: { width: 1280, height: 800 } }, async (page) => {
     await goTab(page, "Setup");
     const moves = await page.evaluate(async () => {
@@ -10917,29 +10934,18 @@ console.log("\npick it for me in the drawer");
         if (!bar) return null;
         const cs = getComputedStyle(bar);
         const m = new DOMMatrixReadOnly(cs.transform === "none" ? undefined : cs.transform);
-        return { opacity: Number(cs.opacity), y: m.m42 };
+        return { opacity: Number(cs.opacity), y: m.m42, moving: bar.getAnimations().length };
       };
       document.querySelector("#drawer [data-arf-pickinput]").click();
       const first = drawn();
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const settled = drawn();
       document.querySelector("[data-arf-pickbar-cancel]").click();
-      await new Promise((r) => setTimeout(r, 70));
-      const mid = drawn();
-      await new Promise((r) => setTimeout(r, 300));
-      return { first, mid, gone: !document.querySelector(".arf-pickbar") };
+      return { first, settled, gone: !document.querySelector(".arf-pickbar") };
     });
-    ok("the bar is there at once, with no fade in", !!moves.first && moves.first.opacity === 1 && moves.first.y === 0, JSON.stringify(moves));
-    ok("on the way out it fades and slides up", !!moves.mid && moves.mid.opacity < 1 && moves.mid.opacity > 0 && moves.mid.y < 0, JSON.stringify(moves));
-    ok("and then it is gone", moves.gone, JSON.stringify(moves));
-  });
-  await inTab(browser, { viewport: { width: 1280, height: 800 }, saved: { reduceMotion: true } }, async (page) => {
-    await goTab(page, "Setup");
-    const gone = await page.evaluate(() => {
-      document.querySelector("#drawer [data-arf-pickinput]").click();
-      document.querySelector("[data-arf-pickbar-cancel]").click();
-      return !document.querySelector(".arf-pickbar");
-    });
-    ok("with Reduce motion on, Cancel takes it away at once", gone, String(gone));
+    ok("the bar is there at once, with no fade or slide", !!moves.first && moves.first.opacity === 1 && moves.first.y === 0 && moves.first.moving === 0, JSON.stringify(moves));
+    ok("and stays still", !!moves.settled && moves.settled.opacity === 1 && moves.settled.y === 0 && moves.settled.moving === 0, JSON.stringify(moves));
+    ok("Cancel takes it away at once, with no fade", moves.gone, JSON.stringify(moves));
   });
 
   // What it will not take, and a Lumiverse that cannot close the drawer.
