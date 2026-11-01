@@ -11970,9 +11970,8 @@ export function setup(ctx, overrides) {
         closeAsk = "";
         if (msg.ok)
             return;
-        const words = pickBar && pickBar.querySelector("[data-arf-pickbar-text]");
         const what = pickBar ? pickBar.getAttribute("data-arf-pickbar-what") : "";
-        if (words && what)
+        if (what)
             pickBarSays(PICK_CLOSE_FIRST + what + ".");
     }
     function startPicking(key) {
@@ -12247,7 +12246,7 @@ export function setup(ctx, overrides) {
             key: "swipeSelector",
             label: SWIPE_LABEL,
             type: "text",
-            hint: "Only needed if a Lumiverse update renames the swipe arrows and refines stop appearing as swipes. Comma-separated, tried in order. Empty uses the built-in list.",
+            hint: "Only needed if a Lumiverse update renames the swipe arrows and refines stop appearing as swipes. Comma-separated. Yours are tried first, then the built-in list.",
         }));
         const row = el("div", "arf-row");
         row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
@@ -12379,7 +12378,7 @@ export function setup(ctx, overrides) {
             key: "inputSelector",
             label: "The selectors it looks under",
             type: "text",
-            hint: "Separated by commas. Emptying the box falls back to the built-in list.",
+            hint: "Separated by commas. Yours are tried first, then the built-in list.",
         }));
         const row = el("div", "arf-row");
         row.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap";
@@ -14511,10 +14510,8 @@ export function setup(ctx, overrides) {
     // Every selector that button is looked for under, the reader's first, the
     // same shape and for the same reason as the input box list.
     function swipePicks() {
-        const mine = splitSelectorList(String(cfg.swipeSelector || ""));
-        const src = mine.length ? mine : SWIPE_PICKS;
         const out = [];
-        for (const pick of src)
+        for (const pick of splitSelectorList(String(cfg.swipeSelector || "")).concat(SWIPE_PICKS))
             if (out.indexOf(pick) < 0)
                 out.push(pick);
         return out;
@@ -14734,15 +14731,16 @@ export function setup(ctx, overrides) {
     // Every selector the box is looked for under, the reader's first. Duplicates
     // are dropped so a selector already in the built-in list is not tried twice
     // and does not appear twice on the card that lists them.
+    //
+    // The built-in list stands behind whatever was typed, as it does in Auto
+    // Retry. A saved list is a copy of the defaults as they were when it was
+    // saved, or one selector from Pick it for me, and either one alone would
+    // stop finding the box the day Lumiverse renames it. An empty box is not an
+    // instruction to stop looking either: it is what somebody clearing the box
+    // leaves behind.
     function inputPicks() {
-        const mine = splitSelectorList(String(cfg.inputSelector || ""));
-        // An empty box is not an instruction to stop looking. It is what an install
-        // from before this setting existed carries, and what somebody clearing the
-        // box leaves behind, and neither of them meant to switch refining a draft
-        // off.
-        const src = mine.length ? mine : INPUT_PICKS;
         const out = [];
-        for (const pick of src)
+        for (const pick of splitSelectorList(String(cfg.inputSelector || "")).concat(INPUT_PICKS))
             if (out.indexOf(pick) < 0)
                 out.push(pick);
         return out;

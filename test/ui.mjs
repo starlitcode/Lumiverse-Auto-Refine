@@ -11125,16 +11125,18 @@ console.log("\nwhere the input box is");
     ok("and starts holding the built-in list", /chat-message/.test(seen.value), seen.value.slice(0, 90));
   });
 
-  // What the reader writes replaces the list rather than being added in front
-  // of it, which is what a box showing the list has to mean.
+  // What the reader writes goes in front of the built-in list, which stays
+  // behind it, as in Auto Retry. A single selector from Pick it for me would
+  // otherwise be all there is the day Lumiverse renames that box.
   await inTab(browser, { saved: { inputSelector: "textarea.mine" } }, async (page) => {
     await goTab(page, "Setup");
     const seen = await page.evaluate(() => {
       const list = document.querySelector("#drawer [data-arf-inputlist]");
-      return { all: list ? list.textContent : "", count: list ? list.getAttribute("data-arf-mine") : "?" };
+      const lines = list ? [...list.querySelectorAll("[data-arf-pick]")].map((l) => l.textContent) : [];
+      return { lines, count: list ? list.getAttribute("data-arf-mine") : "?" };
     });
-    ok("only what they wrote is tried", seen.count === "1", seen.all.slice(0, 160));
-    ok("and the built-in list is not added to it", !/chat-message/.test(seen.all), seen.all.slice(0, 160));
+    ok("what they wrote is tried first", seen.lines[0] === "textarea.mine", JSON.stringify(seen).slice(0, 200));
+    ok("and the built-in list is still tried after it", seen.count === "6" && seen.lines.some((l) => /chat-message/.test(l)), JSON.stringify(seen).slice(0, 200));
   });
 
   // Emptying the box is not an instruction to stop looking: it is what an

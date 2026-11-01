@@ -333,7 +333,7 @@ While the floating button is on screen, its menu holds these extra actions. With
 **Where the input box is** is only needed if a Lumiverse update moves the input box.
 
 - **The selectors it looks under** is the list it tries, in order, separated by commas.
-- Emptying the box goes back to the built-in list.
+- The built-in list is always tried after yours, so a selector of yours that stops working costs nothing. Emptying the box leaves only the built-in list.
 - The list below the box shows which selector found the box. A selector the browser cannot read is marked in red.
 - **Test** checks the page when you press it, and says whether the box was found and can be typed in.
 - **Pick it for me** makes the selector from the real box on your screen:
