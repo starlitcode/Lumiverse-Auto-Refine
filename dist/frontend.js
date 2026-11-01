@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.54.1";
+const VERSION = "1.54.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -9349,8 +9349,21 @@ export function setup(ctx, overrides) {
             sel.setAttribute("aria-label", f.label);
             sel.className = "arf-field";
             const opts = f.key === "connectionId"
-                ? [{ value: "", label: "The model I am chatting with", group: "" }]
-                    .concat(connections.map((c) => ({
+                ? [
+                    {
+                        value: "",
+                        // With one connection, the chat can only be using that one,
+                        // so it is named here and not listed a second time below.
+                        label: "The model I am chatting with" +
+                            (connections.length === 1
+                                ? " (" + (connections[0].name || connections[0].model || connections[0].provider) + ")"
+                                : ""),
+                        group: "",
+                    },
+                ]
+                    .concat(connections
+                    .filter((c) => !(connections.length === 1 && String(cfg.connectionId) !== c.id))
+                    .map((c) => ({
                     value: c.id,
                     label: (c.name || c.provider || "Connection") +
                         (c.model ? " (" + c.model + ")" : "") +

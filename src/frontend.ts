@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.54.1";
+const VERSION = "1.54.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -9512,9 +9512,23 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.className = "arf-field";
       const opts =
         f.key === "connectionId"
-          ? [{ value: "", label: "The model I am chatting with", group: "" }]
+          ? [
+              {
+                value: "",
+                // With one connection, the chat can only be using that one,
+                // so it is named here and not listed a second time below.
+                label:
+                  "The model I am chatting with" +
+                  (connections.length === 1
+                    ? " (" + (connections[0].name || connections[0].model || connections[0].provider) + ")"
+                    : ""),
+                group: "",
+              },
+            ]
               .concat(
-                connections.map((c) => ({
+                connections
+                  .filter((c) => !(connections.length === 1 && String(cfg.connectionId) !== c.id))
+                  .map((c) => ({
                   value: c.id,
                   label:
                     (c.name || c.provider || "Connection") +

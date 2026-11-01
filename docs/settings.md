@@ -120,6 +120,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - On the default, it refines with the connection you chat with. To see which one that is, it needs the `interceptor` permission.
   - Without that permission, it uses the chat's own connection, or your default one if the chat has none.
   - It also uses those two before a chat has had a reply since Auto Refine started.
+  - With only one connection on your account, the list shows one choice, **The model I am chatting with**, with that connection's name.
 - **Let it think first** is off by default. You can leave it to your connection's setting, or pick an effort level. See [How much thinking it does](prompt.md#how-much-thinking-it-does).
 - **Give up waiting after** stops a refine that has not come back.
   - The default is four minutes. The most is an hour. At 0, it waits the full hour.

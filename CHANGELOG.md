@@ -6,9 +6,19 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.54.2
+
+_2026-11-01_
+
+### Changed
+
+- **One connection is one choice in Refine using.** With only one connection on your account, the list showed **The model I am chatting with** and that same connection by name, which are the same model. It now shows one choice, with the connection's name: **The model I am chatting with (Name)**. A connection you picked by name before stays listed, so your setting does not change. Decision connections already work this way.
+
+---
+
 ## 1.54.1
 
-_2026-10-30_
+_2026-11-01_
 
 ### Fixed
 

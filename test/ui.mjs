@@ -8782,6 +8782,26 @@ console.log("\nlists with headings on them");
     ok("one provider gets no heading at all", got.heads.length === 0, got.heads);
     ok("and every connection is still there", got.all === 3, got.all);
   });
+
+  // One connection is the one the chat uses, so it is one choice, named.
+  await inTab(browser, {}, async (page) => {
+    await withConnections(page, [
+      { id: "s1", name: "Shelf", provider: "OpenAI", model: "gpt-4o", isDefault: true },
+    ]);
+    const got = await shape(page, "connectionId");
+    ok("one connection: a single choice", got.all === 1, JSON.stringify(got));
+    ok("and it names the connection", got.loose.length === 1 && /chatting with \(Shelf\)/.test(got.loose[0]), got.loose);
+  });
+
+  // Picked by name before, it stays listed, so the box does not show nothing.
+  await inTab(browser, { saved: { connectionId: "s1" } }, async (page) => {
+    await withConnections(page, [
+      { id: "s1", name: "Shelf", provider: "OpenAI", model: "gpt-4o", isDefault: true },
+    ]);
+    const got = await shape(page, "connectionId");
+    const value = await page.evaluate(() => document.querySelector('#drawer [data-arf-field="connectionId"]').value);
+    ok("one connection picked by name is still listed and shown", got.all === 2 && value === "s1", JSON.stringify({ got, value }));
+  });
 }
 
 
