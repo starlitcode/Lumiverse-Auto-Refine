@@ -6,7 +6,7 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
-## 1.54.2
+## 1.54.1
 
 _2026-11-01_
 
