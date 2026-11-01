@@ -10,20 +10,14 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 _2026-11-01_
 
+### Fixed
+
+- **A reply Auto Retry was about to retry could still be refined.** Auto Retry decides at once when a reply ends, such as when it is cut off, but its word reached Auto Refine a moment after the automatic pass had started. The refine then ran, and the call could be paid for, before it was thrown away. The automatic pass now waits for Auto Retry's verdict on each reply, for up to 3 seconds, and leaves a reply that is about to be retried. A chat Auto Retry is not watching is not waited on. This needs Auto Retry 5.24.2 or later. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
+
 ### Changed
 
 - **One connection is one choice in Refine using.** With only one connection on your account, the list showed **The model I am chatting with** and that same connection by name, which are the same model. It now shows one choice, with the connection's name: **The model I am chatting with (Name)**. A connection you picked by name before stays listed, so your setting does not change. Decision connections already work this way.
 - **The built-in selector lists are tried after your own.** Under **Where the input box is** and **Your next / swipe button**, a list you wrote replaced the built-in list. Now yours is tried first and the built-in list after it, the same as in Auto Retry. So a single selector from **Pick it for me** keeps working if a Lumiverse update renames the box. The list under each box shows every selector in the order it is tried.
-
----
-
-## 1.54.1
-
-_2026-11-01_
-
-### Fixed
-
-- **A reply Auto Retry was about to retry could still be refined.** Auto Retry decides at once when a reply ends, such as when it is cut off, but its word reached Auto Refine a moment after the automatic pass had started. The refine then ran, and the call could be paid for, before it was thrown away. The automatic pass now waits for Auto Retry's verdict on each reply, for up to 3 seconds, and leaves a reply that is about to be retried. A chat Auto Retry is not watching is not waited on. This needs Auto Retry 5.24.2 or later. See [A reply Auto Retry is going to retry](docs/guardrails.md#a-reply-auto-retry-is-going-to-retry).
 
 ---
 
