@@ -9245,6 +9245,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   // what it does before the card closes.
   type CardButton = { label: string; mark: string; act: () => void };
 
+  // Set while Pick it for me waits for a press. A card that comes up then, such
+  // as a refine finishing, would put its dim over the page, and the press
+  // meant for the box or button would land on the dim and close the card. It
+  // waits in heldCard and comes up once the picker is done.
+  let pickingNow = false;
+  let heldCard: any = null;
+
   function showCard(spec: {
     key: string;
     title: string;
@@ -9261,6 +9268,10 @@ export function setup(ctx: Ctx, overrides?: any) {
     always?: boolean;
   }) {
     if (!cfg.popup && !spec.always) return;
+    if (pickingNow) {
+      heldCard = spec;
+      return;
+    }
     try {
       if (typeof document === "undefined" || !document.body) return;
       const key = spec.key;
@@ -12590,6 +12601,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       done = true;
       stopPicking = null;
       unhook();
+      // A card that came up while the picker waited comes up now.
+      pickingNow = false;
+      const waiting = heldCard;
+      heldCard = null;
+      if (waiting) showCard(waiting);
       if (sel) {
         (cfg as any)[key] = sel;
         persist(true);
@@ -12717,7 +12733,10 @@ export function setup(ctx: Ctx, overrides?: any) {
       done = true;
       stopPicking = null;
       unhook();
+      pickingNow = false;
+      heldCard = null;
     };
+    pickingNow = true;
     try {
       document.documentElement.classList.add("arf-picking");
     } catch (_) {}

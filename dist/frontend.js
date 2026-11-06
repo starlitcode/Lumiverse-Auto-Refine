@@ -9084,9 +9084,19 @@ export function setup(ctx, overrides) {
             back: putDraftBack,
         });
     }
+    // Set while Pick it for me waits for a press. A card that comes up then, such
+    // as a refine finishing, would put its dim over the page, and the press
+    // meant for the box or button would land on the dim and close the card. It
+    // waits in heldCard and comes up once the picker is done.
+    let pickingNow = false;
+    let heldCard = null;
     function showCard(spec) {
         if (!cfg.popup && !spec.always)
             return;
+        if (pickingNow) {
+            heldCard = spec;
+            return;
+        }
         try {
             if (typeof document === "undefined" || !document.body)
                 return;
@@ -12095,6 +12105,12 @@ export function setup(ctx, overrides) {
             done = true;
             stopPicking = null;
             unhook();
+            // A card that came up while the picker waited comes up now.
+            pickingNow = false;
+            const waiting = heldCard;
+            heldCard = null;
+            if (waiting)
+                showCard(waiting);
             if (sel) {
                 cfg[key] = sel;
                 persist(true);
@@ -12237,7 +12253,10 @@ export function setup(ctx, overrides) {
             done = true;
             stopPicking = null;
             unhook();
+            pickingNow = false;
+            heldCard = null;
         };
+        pickingNow = true;
         try {
             document.documentElement.classList.add("arf-picking");
         }

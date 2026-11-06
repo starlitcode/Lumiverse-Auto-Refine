@@ -17,6 +17,7 @@ _2026-11-06_
 ### Fixed
 
 - **Thinking opened in the prompt was missed in some formats.** Some presets, and some local models' chat templates, put the opening thinking tag in the prompt, so the reply has only the closing one. This worked for tags like `</think>`, but not for the formats with tokens of their own, such as `<|END_THINKING|>`, `</seed:think>`, `<|end_of_thought|>` and Kimi's. Their thinking was sent to be refined as if it were the reply. It is now held back the same way, and so is thinking that ends on a connection's own **Suffix** when it has a letter in it.
+- **A refine that finished while you used Pick it for me.** Its card came up with a dim over the page, so the press meant for the box or button closed the card instead. The card now waits, and comes up once the picker is done.
 - **Special tokens around a reply were sent to be refined.** A local model's template can leave a token such as `<|assistant|>`, `<|im_sep|>`, `<|begin_of_solution|>` or `<|end_of_solution|>` around the reply. It was sent with the text, and the refining model could drop it or change it. It is now held back and put back after, like the other turn markers.
 
 ### Changed

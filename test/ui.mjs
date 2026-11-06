@@ -3636,6 +3636,37 @@ console.log("\nevery eye shows the same state, with Keep the eye still on");
   });
 }
 
+console.log("\na refine that finishes while you pick");
+{
+  // A card that comes up while Pick it for me waits would put its dim over the
+  // page, and the press meant for the box would close the card instead. It
+  // waits, and comes up once the picker is done. Checked at a phone width and
+  // a laptop width.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { popup: true } }, async (page, errors) => {
+      await goTab(page, "Setup");
+      const got = await page.evaluate(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        window.__makeComposer("");
+        document.querySelector("#drawer [data-arf-pickinput]").click();
+        await wait(300);
+        const picking = document.documentElement.classList.contains("arf-picking");
+        window.__fromBackend({ type: "refined", chatId: "c1", messageId: "m2", canUndo: true, before: "The old line stood here.", after: "The new line stands here." });
+        await wait(400);
+        const during = { card: !!document.querySelector("[data-arf-pop]"), shade: !!document.querySelector("[data-arf-shade]"), stillPicking: document.documentElement.classList.contains("arf-picking") };
+        document.querySelector(".arf-pickbar [data-arf-pickbar-cancel]").click();
+        await wait(500);
+        const after = { card: !!document.querySelector("[data-arf-pop]"), picking: document.documentElement.classList.contains("arf-picking") };
+        return { picking, during, after };
+      });
+      ok(label + ": the picker was up, or this proves nothing", got.picking, JSON.stringify(got));
+      ok(label + ": while picking, no card and no dim come up", !got.during.card && !got.during.shade && got.during.stillPicking, JSON.stringify(got.during));
+      ok(label + ": once the picker is done, the card comes up", got.after.card && !got.after.picking, JSON.stringify(got.after));
+      ok(label + ": no console errors", errors.length === 0, errors.join("\n"));
+    });
+  }
+}
+
 console.log("\nthe card a refine raises comes before the panel catches up");
 {
   // With the drawer open on this tab, painting the panel takes long enough to
