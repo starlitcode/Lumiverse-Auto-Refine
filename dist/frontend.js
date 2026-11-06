@@ -7620,6 +7620,14 @@ export function setup(ctx, overrides) {
     // `was` is what rowsShowing() said before the change that called for this
     // rebuild. Without it every row is built as it should now be, with no
     // movement.
+    // How solid the cards and the tab strip are over a pattern, set on the tab
+    // itself. Called on every repaint, and while How solid the boxes are is
+    // being typed, which repaints nothing.
+    function showBoxSolid(v, on) {
+        const el = on || (tab && tab.root);
+        if (el && el.style)
+            el.style.setProperty("--arf-box-layer", boxLayer(v));
+    }
     function paint(was) {
         paints++;
         const from = was instanceof Map ? was : null;
@@ -7666,7 +7674,7 @@ export function setup(ctx, overrides) {
             root.setAttribute("data-arf-pattern", String(cfg.panelPattern));
         else
             root.removeAttribute("data-arf-pattern");
-        root.style.setProperty("--arf-box-layer", boxLayer(cfg.boxSolid));
+        showBoxSolid(cfg.boxSolid, root);
         pinWallpaper(root);
         liveEls = null;
         root.appendChild(buildHeader());
@@ -9549,7 +9557,17 @@ export function setup(ctx, overrides) {
                 cfg[f.key] = v;
                 num.value = String(v);
                 persist(true);
+                if (f.key === "boxSolid")
+                    showBoxSolid(v);
             });
+            // The boxes change as the number is typed, the same as in Auto Retry,
+            // so the look can be judged before the box is left. It is saved when it
+            // is left, as every number here is.
+            if (f.key === "boxSolid")
+                num.addEventListener("input", () => {
+                    if (String(num.value).trim() !== "")
+                        showBoxSolid(num.value);
+                });
             wrap.appendChild(num);
         }
         // The description is behind the "?", so it is not in the page for the

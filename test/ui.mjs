@@ -13957,6 +13957,14 @@ console.log("\na pattern behind the panel");
       });
       ok(label + ": it shows 60", box.value === "60", JSON.stringify(box));
       ok(label + ": its box is at least 32 pixels high and inside the screen", box.h >= 32 && box.right <= box.vw, JSON.stringify(box));
+      // Typing a number changes the cards at once, before the box is left.
+      const typed = await page.evaluate((COVER) => {
+        const f = document.querySelector('#drawer [data-arf-field="boxSolid"]');
+        f.value = "100";
+        f.dispatchEvent(new Event("input", { bubbles: true }));
+        return new Promise((r) => requestAnimationFrame(() => r(eval(COVER)(document.querySelector("#drawer .arf-card")).a)));
+      }, COVER);
+      ok(label + ": typing 100 makes the cards solid at once", typed >= 0.98, String(typed));
     });
     for (const kind of ["diamonds", "stripes", "dots", "hearts", "stars"]) {
       await inTab(browser, { viewport, touch, saved: { enabled: true, panelPattern: kind } }, async (page) => {
