@@ -3081,14 +3081,18 @@ function noteFor(why: string): AskNote | null {
 // Free tiers and shared keys meter per minute, and a local server answers 503
 // while it is loading a model. Both are the common case for anybody not paying
 // per token, and both clear on their own.
+// The same list as Auto Retry's, so the two agree on which errors are worth
+// trying again.
 const RATE_LIMITED =
-  /\b(?:408|429|500|502|503|504|522|524)\b|rate.?limit|too many requests|quota|overloaded|capacity|try again later|temporarily unavailable|connection reset|socket hang up|econnrefused|fetch failed/i;
+  /\b(?:408|429|500|502|503|504|520|521|522|523|524)\b|rate.?limit|too many requests|quota|overloaded|capacity|try again later|temporar(?:y|ily)|time(?:d ?| |-)?out|network|connection reset|socket hang up|econnrefused|econnreset|fetch failed/i;
 
-// Errors waiting cannot fix. A wrong key stays wrong, and a model that does not
-// exist does not start existing. Checked first, because a message can carry
-// both a number and a word from the list above.
+// Errors waiting cannot fix: a wrong key stays wrong, a model that does not
+// exist does not start existing, a balance does not refill, and a prompt over
+// the context length is the same prompt next time. Checked first, because a
+// message can carry both a number and a word from the list above. The same
+// list as Auto Retry's.
 const NOT_WORTH_WAITING =
-  /\b(?:400|401|402|403|404|405|413|422)\b|invalid.?api.?key|authentication|unauthorized|forbidden|not found|does not exist|insufficient (?:balance|credit|funds)|context length|too long|billing/i;
+  /\b(?:400|401|402|403|404|405|406|411|413|415|422|invalid[_ ]?api[_ ]?key|authentication|unauthorized|forbidden|permission|not allowed|not found|does not exist|model missing|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long)\b/i;
 
 function rateLimited(err: any): boolean {
   const s = String(err == null ? '' : err);

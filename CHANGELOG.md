@@ -21,6 +21,7 @@ _2026-11-06_
 
 ### Changed
 
+- **Errors are read the same way as in Auto Retry.** The two extensions now share one list of errors that will not fix themselves, and one list of errors worth waiting out. **Wait out a provider that will not take the call** no longer waits on a missing permission, or on an account with no quota left, such as OpenAI's `insufficient_quota`. It now also waits on a call that timed out and on a network error. An error that only said "too long", such as a call that took too long, is now waited on, and only a prompt too long for the model is not.
 - **The tab strip has the same see-through color as the cards.** It was solid, even with no pattern. It now matches the cards. It still stays at the top while you scroll, and it blurs the rows that pass under it, so its names stay easy to read.
 - **The cards over a pattern are partly see-through.** They were solid, so the pattern only showed in the gaps between them. They are now 60% solid by default, so the pattern shows behind them too. Set **How solid the boxes are (%)** to 100 to have them solid again.
 

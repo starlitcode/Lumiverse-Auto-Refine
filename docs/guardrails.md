@@ -192,10 +192,13 @@ It waits on:
 
 - "too many requests"
 - a key at its limit
-- a server saying it is overloaded
+- a server saying it is overloaded or at capacity
 - a local server answering 503 while it loads a model
+- a call that timed out, or a connection that dropped
 
-It never waits on a wrong key, a model that does not exist, or a prompt too long for the model. Waiting cannot fix those.
+It never waits on a wrong key, a model that does not exist, a missing permission, an account with no balance or quota left, or a prompt too long for the model. Waiting cannot fix those.
+
+Auto Retry reads errors with the same two lists, so the two extensions agree on which errors are worth trying again.
 
 How long it waits:
 
