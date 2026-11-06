@@ -1958,7 +1958,7 @@ const MOVED_DEFAULTS = [
             'button[aria-label*="swipe right" i]',
             'button[title*="swipe" i]',
         ].join(", "),
-        label: "Your next / swipe button",
+        label: SWIPE_LABEL,
         why: "the built-in list now finds the arrow by the box Lumiverse puts the swipe arrows in, which works in every language. Marks no Lumiverse button has were taken out.",
         needs: { key: "asSwipe", is: true },
     },
