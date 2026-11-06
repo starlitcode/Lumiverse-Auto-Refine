@@ -10270,6 +10270,11 @@ console.log("\na built-in prompt shows names and roles as text, and its boxes do
         await page.waitForTimeout(500);
         const area = await page.evaluate(() => {
           const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+          // The letters are hidden for the shots. Chrome can draw them with
+          // colored subpixel edges before a tap and plain gray ones after it,
+          // which changes thousands of pixels and is not a glow. The box, its
+          // border and any ring around it are what this compares.
+          ta.style.setProperty("color", "transparent", "important");
           ta.scrollIntoView({ block: "center" });
           const r = ta.getBoundingClientRect();
           return { x: Math.max(0, r.left - 12), y: Math.max(0, r.top - 12), width: r.width + 24, height: Math.min(r.height + 24, 300) };
@@ -10283,7 +10288,6 @@ console.log("\na built-in prompt shows names and roles as text, and its boxes do
         await page.waitForTimeout(400);
         const after = await page.screenshot({ clip: area });
         const focused = await page.evaluate(() => document.activeElement === document.querySelector('#drawer [data-arf-field^="blocktext:"]'));
-        if (what === "built-in" && !same(before, after)) console.log("SHOTS " + label + " " + before.toString("base64") + " " + after.toString("base64"));
         if (what === "built-in") ok(say + "the tapped box is drawn the same as before, with no glow", focused && same(before, after), JSON.stringify({ focused, changed: same(before, after) ? null : whereChanged(before, after) }));
         else ok(say + "the tapped box lights up, since it can be typed in", focused && !same(before, after), "focused " + focused);
       });
