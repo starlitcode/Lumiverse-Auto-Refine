@@ -13876,30 +13876,95 @@ await inTab(browser, { saved: { eyeStill: true } }, async (page) => {
 
 console.log("\na pattern behind the panel");
 {
-  // None by default. A pattern chosen in Setup is drawn behind the panel, and
-  // the cards and the tab strip turn solid so nothing is read across it.
+  // None by default. A pattern chosen in Setup is drawn behind the panel. The
+  // cards and the tab strip are two layers of the theme's raised color over
+  // it, together as solid as How solid the boxes are says: 60 by default,
+  // so the pattern shows through. With no pattern, the tab strip has the
+  // cards' own color and blurs the rows that scroll under it.
+  //
+  // What a box covers, read the way it is drawn: its color, and the one
+  // color its gradient lays on top. A color-mix is read back as
+  // color(srgb r g b / a), with channels from 0 to 1.
+  const COVER = `(el) => {
+    const read = (c) => {
+      let m = /^rgba?\\(([^)]*)\\)/.exec(c);
+      if (m) { const p = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+      m = /^color\\(srgb ([^)]*)\\)/.exec(c);
+      if (m) { const p = m[1].split(/[ \\/]+/).filter(Boolean).map(Number); return { r: p[0] * 255, g: p[1] * 255, b: p[2] * 255, a: p.length > 3 ? p[3] : 1 }; }
+      return null;
+    };
+    const cs = getComputedStyle(el);
+    const base = read(cs.backgroundColor) || { r: 0, g: 0, b: 0, a: 0 };
+    const stop = /(rgba?\\([^)]*\\)|color\\(srgb [^)]*\\))/.exec(cs.backgroundImage || "");
+    const top = stop ? read(stop[1]) : null;
+    const a = top ? top.a + base.a * (1 - top.a) : base.a;
+    return { a: Math.round(a * 1000) / 1000, rgb: [Math.round(base.r), Math.round(base.g), Math.round(base.b)].join(","), blur: cs.backdropFilter || cs.webkitBackdropFilter || "none", bg: cs.backgroundColor, img: cs.backgroundImage };
+  }`;
   await inTab(browser, { saved: { enabled: true } }, async (page) => {
     const plain = await page.evaluate(() => document.querySelector("#drawer").hasAttribute("data-arf-pattern"));
     ok("by default there is no pattern", plain === false);
   });
-  // The solid color comes from the theme. Lumiverse's own "solid card"
-  // color is a fixed gray, and a purple theme turned gray-black under it.
+  // The color comes from the theme. Lumiverse's own "solid card" color is a
+  // fixed gray, and a purple theme turned gray-black under it.
   const THEMED = ":root{--lumiverse-bg-elevated:rgb(40,0,60);--lumiverse-card-bg-solid:rgb(24,20,34)}";
-  await inTab(browser, { css: THEMED, saved: { enabled: true, panelPattern: "dots" } }, async (page) => {
+  for (const [solid, want] of [[undefined, 0.6], [100, 1], [30, 0.3], [0, 0]]) {
+    const say = solid === undefined ? "by default" : "at " + solid;
+    await inTab(browser, { css: THEMED, saved: { enabled: true, panelPattern: "dots", ...(solid === undefined ? {} : { boxSolid: solid }) } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      const got = await page.evaluate((COVER) => {
+        const cover = eval(COVER);
+        const root = document.querySelector("#drawer");
+        return { card: cover(root.querySelector(".arf-card")), tabs: cover(root.querySelector(".arf-tabs")) };
+      }, COVER);
+      ok("with a pattern, " + say + ", the cards cover " + want * 100 + "% of it", Math.abs(got.card.a - want) < 0.01, JSON.stringify(got.card));
+      ok("with a pattern, " + say + ", the tab strip covers the same as the cards", Math.abs(got.tabs.a - got.card.a) < 0.01, JSON.stringify(got));
+      if (want > 0) ok("with a pattern, " + say + ", the cards take the theme's color, not a fixed gray", got.card.rgb === "40,0,60", JSON.stringify(got.card));
+    });
+  }
+  // With no pattern, the tab strip is the cards' own see-through color, and
+  // blurs what is behind it.
+  await inTab(browser, { saved: { enabled: true } }, async (page) => {
     await goTab(page, "Setup");
     await settle(page);
-    const color = await page.evaluate(() => getComputedStyle(document.querySelector("#drawer .arf-card")).backgroundColor);
-    ok("with a pattern, the cards take the theme's color, not a fixed gray", color === "rgb(40, 0, 60)", color);
+    const got = await page.evaluate((COVER) => {
+      const cover = eval(COVER);
+      const root = document.querySelector("#drawer");
+      return { card: cover(root.querySelector(".arf-card")), tabs: cover(root.querySelector(".arf-tabs")) };
+    }, COVER);
+    ok("with no pattern, the tab strip has the cards' color", got.tabs.bg === got.card.bg && got.tabs.a === got.card.a && got.tabs.a < 0.5, JSON.stringify(got));
+    ok("with no pattern, the tab strip blurs what scrolls under it", /blur\(12px\)/.test(got.tabs.blur), JSON.stringify(got.tabs));
   });
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
+    // How solid the boxes are is a row of its own, shown only while a
+    // pattern is picked.
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Setup");
+      await settle(page);
+      const shown = () => page.evaluate(() => { const r = document.querySelector('#drawer [data-arf-row="boxSolid"]'); return !!r && !r.hidden && r.getClientRects().length > 0; });
+      ok(label + ": with no pattern, How solid the boxes are is not shown", (await shown()) === false);
+      await page.evaluate(() => {
+        const sel = document.querySelector('#drawer select[data-arf-field="panelPattern"]');
+        sel.value = "stars";
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await page.waitForTimeout(700);
+      ok(label + ": picking a pattern shows How solid the boxes are", (await shown()) === true);
+      const box = await page.evaluate(() => {
+        const f = document.querySelector('#drawer [data-arf-field="boxSolid"]');
+        const r = f.getBoundingClientRect();
+        return { value: f.value, h: r.height, right: r.right, vw: window.innerWidth };
+      });
+      ok(label + ": it shows 60", box.value === "60", JSON.stringify(box));
+      ok(label + ": its box is at least 32 pixels high and inside the screen", box.h >= 32 && box.right <= box.vw, JSON.stringify(box));
+    });
     for (const kind of ["diamonds", "stripes", "dots", "hearts", "stars"]) {
       await inTab(browser, { viewport, touch, saved: { enabled: true, panelPattern: kind } }, async (page) => {
         await goTab(page, "Setup");
         await settle(page);
-        const got = await page.evaluate(() => {
+        const got = await page.evaluate((COVER) => {
+          const cover = eval(COVER);
           const root = document.querySelector("#drawer");
-          const card = root.querySelector(".arf-card");
-          const tabs = root.querySelector(".arf-tabs");
           return {
             kind: root.getAttribute("data-arf-pattern"),
             // Drawn on a layer held at the top of the box that scrolls,
@@ -13911,15 +13976,13 @@ console.log("\na pattern behind the panel");
               (/gradient/.test(cs.backgroundImage) || /url\(/.test(cs.maskImage || cs.webkitMaskImage || "")))(
               getComputedStyle(root, "::before"),
             ),
-            // Solid enough that nothing reads through: opaque, or a theme
-            // color that is at most a little see-through.
-            cardSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(card).backgroundColor),
-            tabsSolid: ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(tabs).backgroundColor),
+            card: cover(root.querySelector(".arf-card")).a,
+            tabs: cover(root.querySelector(".arf-tabs")).a,
             sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
           };
-        });
+        }, COVER);
         ok(label + ", " + kind + ": the pattern is drawn", got.kind === kind && got.drawn, JSON.stringify(got));
-        ok(label + ", " + kind + ": the cards and the tab strip are solid over it", got.cardSolid && got.tabsSolid, JSON.stringify(got));
+        ok(label + ", " + kind + ": the cards and the tab strip let some of it show through", got.card > 0.5 && got.card < 0.7 && Math.abs(got.tabs - got.card) < 0.01, JSON.stringify(got));
         ok(label + ", " + kind + ": nothing runs off the side", !got.sideways, "");
       });
     }

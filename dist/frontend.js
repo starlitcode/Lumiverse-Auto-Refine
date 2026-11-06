@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.54.1";
+const VERSION = "1.55.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -153,7 +153,7 @@ const PARTS = [
         id: "reach",
         label: "Buttons and the widget",
         what: "The floating button, the buttons in the chat, and the input bar row.",
-        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "freeSelect", "eyeStill", "reduceMotion", "panelPattern", "cutColor", "addColor"],
+        keys: ["widgetOn", "widgetSize", "inputRefine", "refineSide", "barButton", "messageButton", "freeSelect", "eyeStill", "reduceMotion", "panelPattern", "boxSolid", "cutColor", "addColor"],
     },
     {
         id: "inputbox",
@@ -625,6 +625,10 @@ const CONFIG = {
     // A faint pattern drawn behind the panel, in the theme's own color. Empty
     // is plain.
     panelPattern: "",
+    // How solid the cards and the tab strip are over a pattern, from 0 to 100.
+    // Partly see-through by default, so the pattern shows behind them. Auto
+    // Retry has the same setting, with the same default.
+    boxSolid: 60,
     // Colors for cut and added words in a before and after, as #rrggbb. Empty
     // uses the theme's danger and success colors.
     cutColor: "",
@@ -2617,6 +2621,20 @@ function hslHex(h, s, l) {
 // and unknown means leave it alone.
 function parseColor(input) {
     const s = String(input == null ? "" : input).trim();
+    // A color mixed with color-mix is read back in this form, with each
+    // channel from 0 to 1.
+    const mixed = s.match(/^color\(\s*srgb\s+([^)]+)\)$/i);
+    if (mixed) {
+        const p = mixed[1].replace(/\//g, " ").split(/\s+/).filter(Boolean);
+        if (p.length < 3)
+            return null;
+        const one = (t) => (t.indexOf("%") >= 0 ? parseFloat(t) / 100 : parseFloat(t));
+        const r = one(p[0]) * 255, g = one(p[1]) * 255, b = one(p[2]) * 255;
+        if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b))
+            return null;
+        const a = p.length > 3 ? one(p[3]) : 1;
+        return { r: r, g: g, b: b, a: Number.isFinite(a) ? Math.min(1, Math.max(0, a)) : 1 };
+    }
     const m = s.match(/^rgba?\(([^)]+)\)$/i);
     if (!m)
         return null;
@@ -2636,6 +2654,15 @@ function parseColor(input) {
         a = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
     }
     return { r: r, g: g, b: b, a: a };
+}
+// How much of the raised color each of the two layers under a card holds,
+// so that the two together cover `solid` per cent of what is behind them.
+// One layer covers a, and two cover 1 - (1 - a) * (1 - a), so each layer is
+// 1 - sqrt(1 - solid). Anything that is not a number is the default, 60.
+function boxLayer(solid) {
+    const n = solid === "" || solid == null ? NaN : Number(solid);
+    const s = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) / 100 : 0.6;
+    return (100 * (1 - Math.sqrt(1 - s))).toFixed(1) + "%";
 }
 // One color laid over another, which is what a translucent panel over a
 // translucent drawer over the page actually is.
@@ -2753,7 +2780,7 @@ function surfaceOf(el, style) {
         const base = parseColor(cs.backgroundColor);
         const img = String(cs.backgroundImage || "");
         if (img && img !== "none") {
-            const stop = img.match(/rgba?\([^)]+\)/i);
+            const stop = img.match(/rgba?\([^)]+\)|color\(\s*srgb[^)]+\)/i);
             const tint = stop ? parseColor(stop[0]) : null;
             if (tint)
                 return base ? blendColor(tint, base) : tint;
@@ -4988,9 +5015,8 @@ export function setup(ctx, overrides) {
     // The patterns behind the panel. Thin lines or dots in the theme's color,
     // drawn with gradients so there is no image to load. Marked important,
     // since the host's own drawer can set a background of its own on the same
-    // element with a stronger selector. With one on, the
-    // cards and the tab strip get a solid color, so nothing is read across the
-    // lines.
+    // element with a stronger selector. With one on, the cards and the tab
+    // strip get a color of their own, as solid as boxSolid says.
     const PATTERNS = ["", "diamonds", "stripes", "dots", "hearts", "stars"];
     const PAT_INK = "var(--lumiverse-primary-010,rgba(147,112,219,.12))";
     // The two patterns drawn as shapes. Each tile holds two, set apart from
@@ -5004,17 +5030,23 @@ export function setup(ctx, overrides) {
         const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'>" + one(3, 3) + one(21, 21) + "</svg>";
         return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
     }
-    // Solid, and in the theme's own color: the theme's raised color, laid
-    // twice. The raised color is what Lumiverse draws its own panels in, so it
-    // is light on a light theme and dark on a dark one. A theme that makes it
-    // see-through is near solid once it is laid twice. Lumiverse's "solid card"
-    // color is a fixed gray that no theme changes, and the theme's deepest
-    // background is not always set by a custom theme, so neither is used: a
-    // dark color under a light strip makes the readability sweep darken the
-    // text on it.
-    const PAT_SOLID = "background-color:var(--lumiverse-bg-elevated,rgba(35,30,48,.96));" +
-        "background-image:linear-gradient(var(--lumiverse-bg-elevated,rgba(35,30,48,.96))," +
-        "var(--lumiverse-bg-elevated,rgba(35,30,48,.96)));";
+    // The theme's own raised color, laid twice. The raised color is what
+    // Lumiverse draws its own panels in, so it is light on a light theme and
+    // dark on a dark one. Lumiverse's "solid card" color is a fixed gray that no
+    // theme changes, and the theme's deepest background is not always set by a
+    // custom theme, so neither is used: a dark color under a light strip makes
+    // the readability sweep darken the text on it.
+    //
+    // Each of the two layers is the raised color mixed with nothing, by
+    // --arf-box-layer, which boxSolid sets (see boxLayer). Two layers keep a
+    // theme whose raised color is itself see-through near solid at 100. A
+    // browser with no color-mix keeps the first two lines, which are solid.
+    const PAT_RAISED = "var(--lumiverse-bg-elevated,rgba(35,30,48,.96))";
+    const PAT_MIX = "color-mix(in srgb," + PAT_RAISED + " var(--arf-box-layer,37%),transparent)";
+    const PAT_SOLID = "background-color:" + PAT_RAISED + ";" +
+        "background-image:linear-gradient(" + PAT_RAISED + "," + PAT_RAISED + ");" +
+        "background-color:" + PAT_MIX + ";" +
+        "background-image:linear-gradient(" + PAT_MIX + "," + PAT_MIX + ");";
     // The pattern is a wallpaper: the tab scrolls over it and it stays where
     // it is. It is drawn on a layer that sticks to the top of the box that
     // scrolls, as tall as that box shows (--arf-view, measured by
@@ -5160,16 +5192,17 @@ export function setup(ctx, overrides) {
         ".arf{display:flex;flex-direction:column;gap:14px;padding:14px;box-sizing:border-box;" +
         "font:13px/1.5 var(--lumiverse-font-family,system-ui);color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
         ".arf *{box-sizing:border-box}" +
-        // The tab strip's holder. The strip is solid at all times, in the theme's
-        // own color, so the rows scrolling under it never show through and
-        // nothing about it changes color as you scroll. Held at the top, it gains
-        // a shadow along its lower edge, which fades in and out.
+        // The tab strip's holder. The strip has the cards' own color, and blurs
+        // what is behind it, so the rows scrolling under it cannot be read
+        // through it and nothing about it changes color as you scroll. Held at
+        // the top, it gains a shadow along its lower edge, which fades in and out.
         //
         // A browser that can tell by itself that the strip is held does it here,
         // in the same frame as the scroll. arf-stuck is the script's fallback for
         // the rest.
         ".arf-stick{position:sticky;top:0;z-index:4;container-type:scroll-state}" +
-        ".arf-stick .arf-tabs{" + PAT_SOLID + "transition:box-shadow .18s ease}" +
+        ".arf-stick .arf-tabs{-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);" +
+        "transition:box-shadow .18s ease}" +
         ".arf-stick.arf-stuck .arf-tabs{" + STRIP_SHADOW + "}" +
         "@container scroll-state(stuck: top){.arf-stick .arf-tabs{" + STRIP_SHADOW + "}}" +
         "@media (prefers-reduced-motion: reduce){.arf-stick .arf-tabs{transition:none}}" +
@@ -7633,6 +7666,7 @@ export function setup(ctx, overrides) {
             root.setAttribute("data-arf-pattern", String(cfg.panelPattern));
         else
             root.removeAttribute("data-arf-pattern");
+        root.style.setProperty("--arf-box-layer", boxLayer(cfg.boxSolid));
         pinWallpaper(root);
         liveEls = null;
         root.appendChild(buildHeader());
@@ -12808,6 +12842,17 @@ export function setup(ctx, overrides) {
                 { value: "stars", label: "Stars" },
             ],
             hint: "None by default. A faint pattern in your theme's color, drawn behind the cards on this tab.",
+        }));
+        wrap.appendChild(fieldRow({
+            key: "boxSolid",
+            label: "How solid the boxes are (%)",
+            type: "num",
+            int: true,
+            min: 0,
+            max: 100,
+            under: true,
+            when: (c) => PATTERNS.indexOf(String(c.panelPattern)) > 0,
+            hint: "60 by default. Lower lets more of the pattern show through the cards and the tabs. Higher makes them more solid.",
         }));
         wrap.appendChild(colorRow("cutColor", "Color of cut words", "--lumiverse-danger", "#ef4444", true));
         wrap.appendChild(colorRow("addColor", "Color of added words", "--lumiverse-success", "#22c55e", false));
@@ -18140,6 +18185,7 @@ export function setup(ctx, overrides) {
 // never loads.
 export const __testing = {
     MORE_CHECKS,
+    boxLayer,
     LOG_KINDS,
     splitSelectorList,
     blockText,

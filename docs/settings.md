@@ -284,7 +284,15 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 **Pattern behind the panel** draws a faint pattern behind this tab: Diamonds, Stripes, Dots, Hearts or Stars. It is None by default.
 
 - The pattern is drawn in your theme's color.
-- With a pattern on, the cards are solid, so no text is read across the lines. The tab strip is solid with or without a pattern.
+- With a pattern on, the cards and the tab strip have a color of their own over it. **How solid the boxes are (%)** sets how much of the pattern shows through them.
+- With no pattern, the tab strip has the same see-through color as the cards.
+- The tab strip stays at the top while you scroll. It blurs the rows that pass under it, so its names stay easy to read.
+
+**How solid the boxes are (%)** is shown only while a pattern is picked. It is 60 by default.
+
+- Lower lets more of the pattern show through the cards and the tab strip.
+- Higher makes them more solid. 100 is solid.
+- Auto Retry has the same setting, with the same default.
 
 **Color of cut words** and **Color of added words** set the colors used in every before and after: on the card, in the panel and on the Log tab.
 

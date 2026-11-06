@@ -12,6 +12,7 @@ import { expect, test, describe } from "bun:test";
 import { __testing } from "../src/frontend";
 
 const {
+  boxLayer,
   parseColor,
   blendColor,
   relLuminance,
@@ -46,9 +47,18 @@ describe("reading what the browser reports", () => {
     expect(parseColor("rgba(0, 0, 0, -2)")!.a).toBe(0);
   });
 
-  // getComputedStyle only ever hands back rgb() or rgba(), so anything else
-  // came from somewhere unexpected and must not be acted on: repainting from a
-  // color nobody measured is worse than leaving the theme alone.
+  test("the form a color-mix() is read back in, with channels from 0 to 1", () => {
+    expect(parseColor("color(srgb 1 0 0.5)")).toEqual(rgb(255, 0, 127.5));
+    expect(parseColor("color(srgb 0.2 0.4 0.6 / 0.25)")).toEqual(rgb(51, 102, 153, 0.25));
+    expect(parseColor("color(srgb 0 0 0 / 50%)")).toEqual(rgb(0, 0, 0, 0.5));
+    expect(parseColor("color(srgb 0.5 0.5)")).toBe(null);
+    expect(parseColor("color(display-p3 1 0 0)")).toBe(null);
+  });
+
+  // getComputedStyle hands back rgb(), rgba(), or color(srgb) for a mixed
+  // color, so anything else came from somewhere unexpected and must not be
+  // acted on: repainting from a color nobody measured is worse than leaving
+  // the theme alone.
   test("anything else comes back as unknown rather than as a guess", () => {
     for (const v of ["transparent", "#ffffff", "red", "", "rgb(1 2)", null, undefined])
       expect(parseColor(v)).toBe(null);
@@ -151,5 +161,33 @@ describe("picking ink that can be read", () => {
   test("the floors are in the order the rules put them", () => {
     expect(TEXT_FLOOR).toBeGreaterThan(BIG_TEXT_FLOOR);
     expect(BIG_TEXT_FLOOR).toBeGreaterThan(FILL_FLOOR);
+  });
+});
+
+// How solid the cards are over a pattern. Each card is two layers of the
+// theme's raised color, so each layer is set so that the two together cover
+// what the reader asked for.
+describe("how solid the boxes are", () => {
+  const cover = (layer: string) => {
+    const a = parseFloat(layer) / 100;
+    return 1 - (1 - a) * (1 - a);
+  };
+
+  test("the two layers together cover what was asked for", () => {
+    for (const asked of [0, 25, 60, 90, 100]) expect(cover(boxLayer(asked))).toBeCloseTo(asked / 100, 2);
+  });
+
+  test("100 is two full layers, and 0 is nothing", () => {
+    expect(boxLayer(100)).toBe("100.0%");
+    expect(boxLayer(0)).toBe("0.0%");
+  });
+
+  test("a number outside 0 to 100 is pulled back into it", () => {
+    expect(boxLayer(150)).toBe("100.0%");
+    expect(boxLayer(-5)).toBe("0.0%");
+  });
+
+  test("anything that is not a number is the default, 60", () => {
+    for (const v of [undefined, null, "", "lots"]) expect(boxLayer(v)).toBe(boxLayer(60));
   });
 });

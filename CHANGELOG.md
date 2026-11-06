@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.55.0
+
+_2026-11-06_
+
+### Added
+
+- **How solid the boxes are (%).** A new setting under **Pattern behind the panel**. It sets how much of the pattern shows through the cards and the tab strip. It is shown only while a pattern is picked, and it is 60 by default. 100 is solid. Auto Retry has the same setting.
+
+### Changed
+
+- **The tab strip has the same see-through color as the cards.** It was solid, even with no pattern. It now matches the cards. It still stays at the top while you scroll, and it blurs the rows that pass under it, so its names stay easy to read.
+- **The cards over a pattern are partly see-through.** They were solid, so the pattern only showed in the gaps between them. They are now 60% solid by default, so the pattern shows behind them too. Set **How solid the boxes are (%)** to 100 to have them solid again.
+
+---
+
 ## 1.54.1
 
 _2026-11-01_
