@@ -15013,8 +15013,10 @@ console.log("\nthe tabs stay at the top");
   // The drawer scrolls on its own, as it does in Lumiverse. The tab strip has
   // to stay at the top of it while the tab scrolls, and be back in its own
   // place once the tab is scrolled back up. The search box scrolls away with
-  // the rest. The strip is solid at all times, so it never changes color as
-  // you scroll. Held at the top it gains a shadow along its lower edge.
+  // the rest. The strip has the cards' own color at all times, and blurs what
+  // passes under it, so it never changes color as you scroll and the rows
+  // under it cannot be read through it. Held at the top it gains a shadow
+  // along its lower edge.
   const SCROLLS = "#drawer{height:520px;overflow-y:auto}";
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 760 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     await inTab(browser, { css: SCROLLS, viewport, touch, saved: { enabled: true } }, async (page) => {
@@ -15027,9 +15029,12 @@ console.log("\nthe tabs stay at the top");
         const where = () => Math.round(bar().getBoundingClientRect().top - drawer.getBoundingClientRect().top);
         const pad = Math.round(parseFloat(getComputedStyle(drawer).paddingTop) || 0);
         const clear = (c) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
-        // Solid enough that nothing reads through: opaque, or a theme color
-        // that is at most a little see-through.
-        const solid = () => ((c) => { const m = /rgba?\(([^)]*)\)/.exec(c); if (!m) return false; const p = m[1].split(","); return p.length < 4 || parseFloat(p[3]) >= 0.85; })(getComputedStyle(strip()).backgroundColor);
+        // The cards' own color, with what is behind it blurred.
+        const card = drawer.querySelector(".arf-card");
+        const solid = () => {
+          const cs = getComputedStyle(strip());
+          return cs.backgroundColor === getComputedStyle(card).backgroundColor && /blur\(12px\)/.test(cs.backdropFilter || cs.webkitBackdropFilter || "");
+        };
         const shadow = () => getComputedStyle(strip()).boxShadow !== "none";
         const rest = where();
         const restHolder = getComputedStyle(bar()).backgroundColor;
@@ -15062,10 +15067,10 @@ console.log("\nthe tabs stay at the top");
         return { pad, rest, restHolder: clear(restHolder), restStuck, restSolid, restShadow, restStrip, room, atTop, hasTabs, covers, heldSolid, heldShadow, heldStuck, back, backStuck, backShadow, sameColor: heldStrip === restStrip && goingStrip === restStrip && backStrip === restStrip, sideways: document.documentElement.scrollWidth > window.innerWidth + 1 || drawer.scrollWidth > drawer.clientWidth + 1 };
       });
       ok(label + ": the tab is long enough to scroll", got.room > 300, JSON.stringify(got));
-      ok(label + ": at rest nothing is drawn behind the strip, and the strip is solid with no shadow", got.restHolder && !got.restStuck && got.restSolid && !got.restShadow, JSON.stringify(got));
+      ok(label + ": at rest nothing is drawn behind the strip, and the strip has the cards' color and a blur, with no shadow", got.restHolder && !got.restStuck && got.restSolid && !got.restShadow, JSON.stringify(got));
       ok(label + ": scrolled down, the strip sits at the top of the drawer", got.atTop === got.pad, JSON.stringify(got));
       ok(label + ": and it holds the tabs, not the search box", got.hasTabs, JSON.stringify(got));
-      ok(label + ": held there, the strip is solid with a shadow, so nothing shows through it", got.heldStuck && got.heldSolid && got.heldShadow && got.covers, JSON.stringify(got));
+      ok(label + ": held there, the strip keeps the cards' color, blurs what is under it, and has a shadow", got.heldStuck && got.heldSolid && got.heldShadow && got.covers, JSON.stringify(got));
       ok(label + ": the strip keeps one color the whole way, held, scrolling back and at rest", got.sameColor, JSON.stringify(got));
       ok(label + ": scrolled back up, it is in its own place with no shadow", got.back === got.rest && got.rest > 0 && !got.backStuck && !got.backShadow, JSON.stringify(got));
       ok(label + ": nothing scrolls sideways", !got.sideways, "");
