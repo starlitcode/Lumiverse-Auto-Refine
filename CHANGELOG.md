@@ -14,6 +14,11 @@ _2026-11-06_
 
 - **How solid the boxes are (%).** A new setting under **Pattern behind the panel**. It sets how much of the pattern shows through the cards and the tab strip. It is shown only while a pattern is picked, and it is 60 by default. 100 is solid. Auto Retry has the same setting.
 
+### Fixed
+
+- **Thinking opened in the prompt was missed in some formats.** Some presets, and some local models' chat templates, put the opening thinking tag in the prompt, so the reply has only the closing one. This worked for tags like `</think>`, but not for the formats with tokens of their own, such as `<|END_THINKING|>`, `</seed:think>`, `<|end_of_thought|>` and Kimi's. Their thinking was sent to be refined as if it were the reply. It is now held back the same way, and so is thinking that ends on a connection's own **Suffix** when it has a letter in it.
+- **Special tokens around a reply were sent to be refined.** A local model's template can leave a token such as `<|assistant|>`, `<|im_sep|>`, `<|begin_of_solution|>` or `<|end_of_solution|>` around the reply. It was sent with the text, and the refining model could drop it or change it. It is now held back and put back after, like the other turn markers.
+
 ### Changed
 
 - **The tab strip has the same see-through color as the cards.** It was solid, even with no pattern. It now matches the cards. It still stays at the top while you scroll, and it blurs the rows that pass under it, so its names stay easy to read.

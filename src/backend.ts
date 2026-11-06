@@ -1070,6 +1070,12 @@ const LEAD_MARKS = [
   '<\\|START_RESPONSE\\|>', // Cohere
   '<\\|START_OF_TURN_TOKEN\\|>',
   '<\\|CHATBOT_TOKEN\\|>',
+  // The ones a local model's template can leave in front of the reply: the
+  // assistant's turn in Phi-3 and Zephyr style, Phi-4's separator, and the
+  // start of the answer in the begin and end of thought format.
+  '<\\|assistant\\|>',
+  '<\\|im_sep\\|>',
+  '<\\|begin_of_solution\\|>',
 ].join('|');
 
 const LEAD = '(?:\\s|' + LEAD_MARKS + ')*';
@@ -1080,7 +1086,7 @@ const LEAD_RE = new RegExp('^' + LEAD, 'i');
 // backend rather than to the reader, and a refiner handed one either drops it
 // or rewords it, so they come off with the tail and go back on after.
 const END_MARK =
-  '(?:<turn\\|>|<end_of_turn>|<\\|(?:end|return|call|eot_id|im_end|endoftext|END_RESPONSE)\\|>)';
+  '(?:<turn\\|>|<end_of_turn>|<\\|(?:end|return|call|eot_id|im_end|endoftext|END_RESPONSE|end_of_solution)\\|>)';
 
 const TAIL_RE = new RegExp('(?:\\s*' + END_MARK + ')+\\s*$', 'i');
 
@@ -1208,11 +1214,26 @@ function openPairRunsOut(text: string): boolean {
 // opens mid-thought and its first tag is the closer of one it never wrote.
 function closerOnlyEnd(text: string): number {
   const alt = thinkNames().join('|');
+  let end = -1;
   const close = new RegExp('<\\/(?:' + alt + ')\\s*>|\\[\\/(?:' + alt + ')\\s*\\]', 'i').exec(text);
-  if (!close) return -1;
-  const open = new RegExp('<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\]', 'i');
-  if (open.test(text.slice(0, close.index))) return -1;
-  return close.index + close[0].length;
+  if (close) {
+    const open = new RegExp('<\\|?(?:' + alt + ')(?:\\s[^>]*)?\\|?>|\\[(?:' + alt + ')(?:\\s[^\\]]*)?\\]', 'i');
+    if (!open.test(text.slice(0, close.index))) end = close.index + close[0].length;
+  }
+  // The formats with tokens of their own, and the Prefix and Suffix saved on
+  // a connection, work the same way: a local model's chat template can put
+  // the opener in the prompt for any of them. The first such closer with no
+  // opener of its own in front of it ends the working. A closer with no
+  // letter in it, such as *** saved on a connection, is also a scene break,
+  // so it does not end anything.
+  for (const p of thinkPairs()) {
+    if (!/[a-z]/i.test(p.close)) continue;
+    const c = new RegExp(p.close, 'i').exec(text);
+    if (!c || new RegExp(p.open, 'i').test(text.slice(0, c.index))) continue;
+    const at = c.index + c[0].length;
+    if (end < 0 || at < end) end = at;
+  }
+  return end;
 }
 
 // The same shapes, anchored to the front of a message and allowed to sit
@@ -1377,6 +1398,7 @@ function stripControlTokens(text: string): string {
     );
     t = t.replace(/<\|(?:START|END)_(?:THINKING|RESPONSE)\|>/gi, HOLE);
     t = t.replace(/<\|(?:START_OF_TURN_TOKEN|CHATBOT_TOKEN|USER_TOKEN|SYSTEM_TOKEN)\|>/gi, HOLE);
+    t = t.replace(/<\|(?:assistant|im_sep|begin_of_solution|end_of_solution)\|>/gi, HOLE);
   } catch (_) {
     return text;
   }

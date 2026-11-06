@@ -482,12 +482,13 @@ Six more are recognized as formats of their own, because their closing token has
 
 - **Harmony:** the block runs to the next control token. The channels treated as working are `analysis`, `thinking`, `thought`, `reasoning` and `commentary`. The `final` channel is the reply and is refined.
 - **Gemma 4:** every reply has one, empty when the model is not thinking. An empty pair is held back too.
-- **Turn markers** that open and close a reply are always held back and put back around the rewrite, whatever the reasoning switches say.
-- **Thinking opened in the prompt:** if the reply has a closing tag with no opening tag, everything before it is treated as thinking.
+- **Turn markers** that open and close a reply are always held back and put back around the rewrite, whatever the reasoning switches say. This includes the tokens a local model's template can leave around a reply, such as `<\|assistant\|>`, `<\|im_sep\|>`, and `<\|begin_of_solution\|>` and `<\|end_of_solution\|>`.
+- **Thinking opened in the prompt:** some presets, and some local models' chat templates, put the opening tag in the prompt. The reply then has a closing tag with no opening tag, and everything before it is treated as thinking. This works for every format in the table.
 
 **Your own thinking markers** are recognized too. In Lumiverse's **Reasoning** settings, a **Prefix** and **Suffix** saved on a connection are read from that connection.
 
 - Each must be at least 3 characters, so ordinary punctuation is never taken for thinking.
+- A Suffix with a letter in it also ends thinking opened in the prompt. A Suffix with no letter, such as `***`, does not, since it is also a scene break.
 - They are read again at most once a minute.
 - A Prefix and Suffix set only in the global Reasoning settings, with nothing saved on a connection, cannot be read by an extension. For those, add the tag name to **Extra thinking tag names**.
 

@@ -3850,6 +3850,71 @@ describe("thinking the extension has to recognize", () => {
     );
   });
 
+  // Special tokens a local model's template can leave around the reply. They
+  // are not the reader's writing, so they are held back and put back as they
+  // were.
+  for (const [label, head, tail] of [
+    ["a turn token", "<|assistant|>", ""],
+    ["a separator token", "<|im_sep|>", ""],
+    ["the solution markers", "<|begin_of_thought|>plan the edit<|end_of_thought|>\n<|begin_of_solution|>", "<|end_of_solution|>"],
+  ]) {
+    test(label + " around the reply is held back", async () => {
+      const msgs = withHead(head);
+      msgs[2].content = msgs[2].content + tail;
+      const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], {}, msgs);
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(said(h)).not.toContain("<|");
+      expect(h.body("m2")).toBe(head + "She stepped through and the cold hit her." + tail);
+    });
+  }
+
+  // The formats with tokens of their own work the same way. A local model's
+  // chat template can put the opener in the prompt for any of them.
+  for (const close of ["<|END_THINKING|>", "</seed:think>", "<|end_of_thought|>", "\u25c1/think\u25b7"]) {
+    test("working with only the closer " + close + " is kept out too", async () => {
+      const h = await armed(
+        ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+        {},
+        withHead("# The plan\nkeep it short, end on the door\n" + close + "\n\n"),
+      );
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(said(h)).not.toContain("end on the door");
+      expect(h.body("m2")).toBe(
+        "# The plan\nkeep it short, end on the door\n" + close + "\n\nShe stepped through and the cold hit her.",
+      );
+    });
+  }
+
+  // The Prefix and Suffix saved on a connection, the case where Lumiverse
+  // starts the reply with the Prefix.
+  test("working with only a connection's own closer is kept out too", async () => {
+    const h = await armed(
+      ["<REFINED>She stepped through and the cold hit her.</REFINED>"],
+      {},
+      withHead("# The plan\nkeep it short, end on the door\n<</plan>>\n\n"),
+      { bound: [["<<plan>>", "<</plan>>"]] },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).not.toContain("end on the door");
+  });
+
+  // A Suffix with no letter in it, such as ***, is also a scene break, so it
+  // does not end anything on its own.
+  test("but a connection's closer with no letter in it is a scene break", async () => {
+    const h = await armed(
+      ["<REFINED>The lamp went out. Morning came.</REFINED>"],
+      {},
+      withHead("The lamp went out.\n\n***\n\n"),
+      { bound: [["+++", "***"]] },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The lamp went out.");
+  });
+
   // The model ran out of room, or was stopped, while it was still thinking. The
   // opener is there and nothing closes it, so the whole message is working and
   // none of it is a reply to rewrite.
