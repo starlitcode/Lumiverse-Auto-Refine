@@ -10217,6 +10217,22 @@ console.log("\na built-in prompt shows names and roles as text, and its boxes do
       if (Math.abs(x[k].r - y[k].r) + Math.abs(x[k].g - y[k].g) + Math.abs(x[k].b - y[k].b) > 24) n++;
     return n;
   };
+  // Where the two shots differ, for the report when the check fails: how
+  // many pixels, the box around them, and the first one's color in each.
+  const whereChanged = (a, b) => {
+    const x = decodePixels(a), y = decodePixels(b);
+    if (!x || !y || x.length !== y.length) return "the shots are not the same size";
+    const w = a.readUInt32BE(16);
+    let n = 0, x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1, first = null;
+    for (let k = 0; k < x.length; k++) {
+      if (Math.abs(x[k].r - y[k].r) + Math.abs(x[k].g - y[k].g) + Math.abs(x[k].b - y[k].b) <= 24) continue;
+      n++;
+      const px = k % w, py = Math.floor(k / w);
+      x0 = Math.min(x0, px); y0 = Math.min(y0, py); x1 = Math.max(x1, px); y1 = Math.max(y1, py);
+      if (!first) first = { at: [px, py], from: x[k], to: y[k] };
+    }
+    return { n, box: n ? [x0, y0, x1, y1] : null, of: [w, x.length / w], first };
+  };
   const same = (a, b) => changed(a, b) <= 30;
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     for (const [what, saved] of [["built-in", { presetPick: "The line edit" }], ["your own", {}]]) {
@@ -10267,7 +10283,8 @@ console.log("\na built-in prompt shows names and roles as text, and its boxes do
         await page.waitForTimeout(400);
         const after = await page.screenshot({ clip: area });
         const focused = await page.evaluate(() => document.activeElement === document.querySelector('#drawer [data-arf-field^="blocktext:"]'));
-        if (what === "built-in") ok(say + "the tapped box is drawn the same as before, with no glow", focused && same(before, after), "focused " + focused);
+        if (what === "built-in" && !same(before, after)) console.log("SHOTS " + label + " " + before.toString("base64") + " " + after.toString("base64"));
+        if (what === "built-in") ok(say + "the tapped box is drawn the same as before, with no glow", focused && same(before, after), JSON.stringify({ focused, changed: same(before, after) ? null : whereChanged(before, after) }));
         else ok(say + "the tapped box lights up, since it can be typed in", focused && !same(before, after), "focused " + focused);
       });
     }
