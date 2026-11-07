@@ -2982,7 +2982,7 @@ const RATE_LIMITED = /\b(?:408|429|500|502|503|504|520|521|522|523|524)\b|rate.?
 // the context length is the same prompt next time. Checked first, because a
 // message can carry both a number and a word from the list above. The same
 // list as Auto Retry's.
-const NOT_WORTH_WAITING = /\b(?:400|401|402|403|404|405|406|411|413|415|422|invalid[_ ]?api[_ ]?key|authentication|unauthorized|forbidden|permission|not allowed|not found|does not exist|model missing|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long)\b/i;
+const NOT_WORTH_WAITING = /\b(?:400|401|402|403|404|405|406|411|413|415|422|invalid[_ ]?api[_ ]?key|authentication|unauthorized|forbidden|permission|not allowed|not found|does not exist|model missing|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
 function rateLimited(err) {
     const s = String(err == null ? '' : err);
     if (!s)
