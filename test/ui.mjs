@@ -110,6 +110,24 @@ function ok(name, pass, detail) {
   }
 }
 
+// A step that comes out of nowhere once a movement is slowing down: more
+// than 2px, and more than three times each of the two frames before it.
+// Something that came in one step came as the card was built again, after its
+// movement had ended. Read from the first frame where the movement starts to
+// slow, since a movement starting is meant to speed up, and in plain
+// distances, since a slow frame on the test machine covers twice the ground
+// at most, not three times. `tops` is how far something has moved, one entry
+// a frame.
+function lateJump(tops) {
+  const d = tops.map((t, i) => Math.abs(t - (i ? tops[i - 1] : 0)));
+  let peak = d.length;
+  for (let i = 1; i < d.length - 1; i++) if (d[i] > 0.5 && d[i + 1] < d[i]) { peak = i; break; }
+  let worst = 0;
+  for (let i = Math.max(2, peak + 1); i < d.length; i++)
+    if (d[i] > 2 && d[i] > 3 * Math.max(d[i - 1], d[i - 2])) worst = Math.max(worst, d[i]);
+  return Math.round(worst);
+}
+
 // Two frames, which is what the panel takes to build and then repair itself.
 const settle = (page) =>
   page.evaluate(
@@ -4308,19 +4326,11 @@ console.log("\nthe notice under the buttons comes and goes with the main switch"
         ok(say + "switched off, the notice closes and the card gets shorter", !!shut && shut.travel < -20 && shut.hidden, JSON.stringify(shut && { travel: shut.travel, hidden: shut.hidden }));
         ok(say + "switched on, the notice opens again", !!opened && opened.travel > 20 && !opened.hidden, JSON.stringify(opened && { travel: opened.travel, hidden: opened.hidden }));
         if (!reduceMotion) {
-          // A step well past the two before it is a skip. Counted once the
-          // movement has started, since a slow first frame is the test machine.
-          const skips = (w) => {
-            let worst = 0;
-            const from = Math.max(2, w.steps.findIndex((x) => x > 0.5) + 2);
-            for (let i = from; i < w.tops.length; i++) worst = Math.max(worst, w.steps[i] - Math.max(w.steps[i - 1], w.steps[i - 2]));
-            return worst;
-          };
           for (const [name, w] of [["closing", shut], ["opening", opened]]) {
             ok(say + name + ", the card moves in small steps, never more than a third in one frame",
               !!w && Math.max(...w.steps) < Math.abs(w.travel) / 3, JSON.stringify(w && { travel: w.travel, biggest: w.biggest }));
             ok(say + name + ", it lands with no skip, and nothing jumps when the card is built again",
-              !!w && skips(w) <= 6, JSON.stringify(w && w.tops.map(Math.round)));
+              !!w && lateJump(w.tops) <= 2, JSON.stringify(w && w.tops.map(Math.round)));
           }
           const faded = shut ? shut.looks.findIndex((l) => !l || l.o < 0.05) : -1;
           const flat = shut ? shut.looks.findIndex((l) => !l || l.h < 1) : -1;
@@ -4331,6 +4341,99 @@ console.log("\nthe notice under the buttons comes and goes with the main switch"
           ok(say + "it closes in one step", !!shut && Math.abs(shut.biggest - Math.abs(shut.travel)) <= 2, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
           ok(say + "and opens in one step", !!opened && Math.abs(opened.biggest - opened.travel) <= 2, JSON.stringify(opened && { travel: opened.travel, biggest: opened.biggest }));
         }
+      });
+    }
+  }
+}
+
+console.log("\nwhat a switch brings out moves with it, and nothing in a fold is squeezed");
+{
+  // Three things that came and went in one step. A warning that a switch
+  // turns on, which used to wait for the rebuild after the switch. The
+  // button for your draft, which a button's minimum height held at full size
+  // while its fold ran. And a text box in a prompt block, squashed while the
+  // block closed and stretched while it opened.
+  //
+  // Each step is read as the distance one frame at 60 a second would cover,
+  // so a slow frame on the test machine is not counted as a skip.
+  const run = (page, sel, box, ms) =>
+    page.evaluate(async ([sel, box, ms]) => {
+      const drawer = document.getElementById("drawer");
+      const b = document.querySelector(box);
+      if (!b) return null;
+      b.scrollIntoView({ block: "center" });
+      const start = drawer.getBoundingClientRect().height;
+      const tops = [], times = [], looks = [];
+      b.click();
+      const t0 = performance.now();
+      while (performance.now() - t0 < ms) {
+        await new Promise((r) => requestAnimationFrame(r));
+        tops.push(drawer.getBoundingClientRect().height - start);
+        times.push(performance.now());
+        const n = sel ? document.querySelector(sel) : null;
+        looks.push(n && !n.hidden ? { o: parseFloat(getComputedStyle(n).opacity), h: n.getBoundingClientRect().height } : null);
+      }
+      const steps = tops.map((t, i) => (Math.abs(t - (i ? tops[i - 1] : 0)) * 16.7) / Math.max(16.7, times[i] - (i ? times[i - 1] : t0)));
+      return { travel: Math.round(tops[tops.length - 1]), tops, steps, looks };
+    }, [sel, box, ms]);
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const zoom of [1, 1.25, 0.85]) {
+      const say = label + (zoom === 1 ? "" : ", zoom " + zoom) + ": ";
+      await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page) => {
+        // The warning under Hide markup from the model.
+        await goTab(page, "Limits");
+        const warnSel = '#drawer [data-arf-hangs="protection off warning"]';
+        const off = await run(page, warnSel, '#drawer [data-arf-row="protectOn"] input[type="checkbox"]', 800);
+        const firstShown = off ? off.looks.findIndex((l) => l && l.h > 1) : -1;
+        ok(say + "switching protection off opens its warning at once, not after the rebuild",
+          firstShown >= 0 && firstShown <= 3 && off.looks[firstShown].o < 0.9, JSON.stringify(off && off.looks.slice(0, 5)));
+        ok(say + "and nothing jumps when the card is built again", !!off && lateJump(off.tops) <= 2, JSON.stringify(off && off.tops.map(Math.round)));
+        await settle(page);
+        const on = await run(page, warnSel, '#drawer [data-arf-row="protectOn"] input[type="checkbox"]', 800);
+        ok(say + "switching it on again closes the warning with no jump at the end", !!on && lateJump(on.tops) <= 2, JSON.stringify(on && on.tops.map(Math.round)));
+        ok(say + "and the warning is gone", !!on && on.looks[on.looks.length - 1] === null, JSON.stringify(on && on.looks.slice(-2)));
+
+        // The button for your draft, under Setup.
+        await goTab(page, "Setup");
+        const draftSel = "#drawer [data-arf-draft]";
+        const opened = await run(page, draftSel, '#drawer [data-arf-row="inputRefine"] input[type="checkbox"]', 800);
+        ok(say + "the draft button opens its space over several frames, never more than a third in one",
+          !!opened && opened.travel > 20 && Math.max(...opened.steps) < opened.travel / 3, JSON.stringify(opened && { travel: opened.travel, tops: opened.tops.map(Math.round) }));
+        ok(say + "and it starts smaller than its full height", !!opened && !!opened.looks[0] && opened.looks[0].h < 20, JSON.stringify(opened && opened.looks.slice(0, 3)));
+        await settle(page);
+        const shut = await run(page, draftSel, '#drawer [data-arf-row="inputRefine"] input[type="checkbox"]', 800);
+        ok(say + "switched off, it closes over several frames, never more than a third in one",
+          !!shut && shut.travel < -20 && Math.max(...shut.steps) < Math.abs(shut.travel) / 3, JSON.stringify(shut && shut.tops.map(Math.round)));
+        ok(say + "and with no jump at the end", !!shut && lateJump(shut.tops) <= 2, JSON.stringify(shut && shut.tops.map(Math.round)));
+      });
+      await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page) => {
+        // A prompt block's text box keeps its height while the block folds.
+        await goTab(page, "Prompt");
+        const watch = (label) =>
+          page.evaluate(async (label) => {
+            const btn = [...document.querySelectorAll("#drawer button")].find((b) => b.getAttribute("aria-label") === label);
+            if (!btn) return null;
+            const block = btn.closest(".arf-block");
+            btn.scrollIntoView({ block: "center" });
+            const ta = () => block.querySelector("textarea");
+            const full = ta() && !ta().closest("[hidden]") ? ta().getBoundingClientRect().height : 0;
+            const seen = [];
+            btn.click();
+            const t0 = performance.now();
+            while (performance.now() - t0 < 450) {
+              await new Promise((r) => requestAnimationFrame(r));
+              const t = ta();
+              if (t && !t.closest("[hidden]") && t.getBoundingClientRect().height > 0) seen.push(Math.round(t.getBoundingClientRect().height));
+            }
+            return { full: Math.round(full), seen };
+          }, label);
+        const shut = await watch("Close Passage");
+        await settle(page);
+        const open = await watch("Open Passage");
+        ok(say + "closing a block, its text box keeps its height until the block is shut",
+          !!shut && shut.full > 0 && shut.seen.every((h) => Math.abs(h - shut.full) <= 1), JSON.stringify(shut));
+        ok(say + "opening it, the text box is at its own height from the first frame",
+          !!open && open.seen.length > 0 && open.seen.every((h) => Math.abs(h - open.seen[open.seen.length - 1]) <= 1), JSON.stringify(open));
       });
     }
   }

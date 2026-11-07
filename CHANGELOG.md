@@ -21,7 +21,14 @@ _2026-11-06_
 - **Thinking opened in the prompt was missed in some formats.** Some presets, and some local models' chat templates, put the opening thinking tag in the prompt, so the reply has only the closing one. This worked for tags like `</think>`, but not for the formats with tokens of their own, such as `<|END_THINKING|>`, `</seed:think>`, `<|end_of_thought|>` and Kimi's. Their thinking was sent to be refined as if it were the reply. It is now held back the same way, and so is thinking that ends on a connection's own **Suffix** when it has a letter in it.
 - **A refine that finished while you used Pick it for me.** Its card came up with a dim over the page, so the press meant for the box or button closed the card instead. The card now waits, and comes up once the picker is done.
 - **Special tokens around a reply were sent to be refined.** A local model's template can leave a token such as `<|assistant|>`, `<|im_sep|>`, `<|begin_of_solution|>` or `<|end_of_solution|>` around the reply. It was sent with the text, and the refining model could drop it or change it. It is now held back and put back after, like the other turn markers.
-- **The notice in the top card came and went in one step.** When the buttons in the top card cannot be pressed, such as with no chat open, a notice under them says why. Turning the main switch on or off added or took away that notice all at once, a moment after the switch moved, and everything under it jumped. It now opens and closes smoothly with the switch, and with Reduce motion on it appears and goes with no movement.
+- **Notices that come with a switch came and went in one step.** Three notices appeared or went all at once, a moment after their switch moved, and everything under them jumped:
+  - the notice under the buttons in the top card, which says why they cannot be pressed, such as with no chat open, when the main switch is turned on or off;
+  - the warning under **Hide markup from the model** when it is turned off;
+  - the warning shown when every check on what the answer says is turned off.
+
+  They now open and close smoothly with the switch. With Reduce motion on, they appear and go with no movement.
+- **Refine what I am typing came and went in one step.** Turning on **Refining the draft in your input box** showed the button at full size at once, and turning it off took it away all at once a moment later. It now opens and closes smoothly.
+- **The text box in a prompt block changed size as the block folded.** Closing a block made its text box shorter before the block was shut, and opening it made the box taller as it opened. The text box now keeps its height while the block opens and closes.
 
 ### Changed
 

@@ -5450,7 +5450,13 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-btngroup{display:flex;flex-direction:column;gap:6px}" +
     ".arf-btngroup-h{font-size:12px;font-weight:600;" +
     "color:var(--lumiverse-text-muted,rgba(255,255,255,.65))}" +
-    ".arf-btngrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}" +
+    // The rows are spaced by each button's top margin, not by a row gap. A
+    // grid keeps its row gap open even for a row with nothing in it, so a
+    // button opening in a row of its own arrived 8px at a time. A margin is
+    // the button's own, and it opens and closes with it. The grid's own top
+    // margin takes back the first row's.
+    ".arf-btngrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:8px;row-gap:0;margin-top:-8px}" +
+    ".arf-btngrid>*{margin-top:8px}" +
     ".arf-btngrid>.arf-btn{width:100%;min-width:0;white-space:normal;text-align:center;line-height:1.3}" +
     ".arf-btngrid>.arf-wide{grid-column:1/-1}" +
     ".arf-between{display:flex;align-items:center;gap:9px;justify-content:space-between}" +
@@ -5808,6 +5814,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     // own, so a block reads exactly the same open as it did before there was a
     // fold: this is a container the fold needs, not a change to the layout.
     ".arf-blockbody{display:flex;flex-direction:column;gap:7px}" +
+    // Nothing in a box that is opening or closing is squeezed. Its height is
+    // held while it moves, so a text box in it that gave way was squashed and
+    // stretched while it could still be seen. Marked by unfold and foldAway,
+    // and only for as long as they run.
+    "[data-arf-folding]>*{flex-shrink:0!important}" +
     ".arf-block{display:flex;flex-direction:column;gap:7px;padding:9px 10px;" +
     "border-radius:var(--lumiverse-radius-sm,5px);" +
     "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
@@ -7626,11 +7637,10 @@ export function setup(ctx: Ctx, overrides?: any) {
   // page loses whatever it was animating, so a rebuild landing on the same
   // gesture turns the slide into a jump.
   //
-  // So a switch does two things instead of one. The rows hanging off it are
-  // shown and hidden where they stand, which is instant and moves nothing else,
-  // and the rebuild that catches everything else up - the count on the card,
-  // the warning that appears when the last check goes off, the grayed-out
-  // button - waits until the knob has arrived. Flicking three switches in a row
+  // So a switch does two things instead of one. The rows and notices hanging
+  // off it open and close where they stand, with no rebuild. The rebuild that
+  // catches everything else up, such as the count on a card or a grayed-out
+  // button, waits until the knob has arrived. Flicking three switches in a row
   // is one rebuild rather than three.
   let settleTimer: any = null;
   function settle(ms: number = SETTLE_MS) {
@@ -8890,6 +8900,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // that value instead, which held the gap shut until the end and then
       // opened it in one step.
       const margin = cs.marginBottom;
+      const marginTop = cs.marginTop;
       let gap = 0;
       try {
         const owner = node.parentElement;
@@ -8903,12 +8914,18 @@ export function setup(ctx: Ctx, overrides?: any) {
       // height moved where it could not be seen, and the box opened in one
       // step at the end.
       node.style.flexShrink = "0";
+      // A button keeps a minimum height for a finger, and that minimum would
+      // hold it at full size while its height opened from nothing.
+      node.style.minHeight = "0px";
+      node.setAttribute("data-arf-folding", "1");
       node.style.height = fromH + "px";
       node.style.opacity = String(fromO);
       if (fromHidden) {
         // The gap its parent puts under it, and its own padding and edge,
         // open with it, or they arrive in one step at the start.
         node.style.marginBottom = gap > 0 ? -gap + "px" : "0px";
+        // A margin above it, such as a button's in a grid, opens with it too.
+        node.style.marginTop = "0px";
         for (const k of pads) node.style[k] = "0px";
         node.style.transform = "translateY(-4px)";
       }
@@ -8917,11 +8934,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       // softly.
       const ease = "240ms cubic-bezier(.2,.8,.28,1)";
       node.style.transition =
-        "height " + ease + ",margin-bottom " + ease + ",padding-top " + ease + ",padding-bottom " + ease +
+        "height " + ease + ",margin-bottom " + ease + ",margin-top " + ease + ",padding-top " + ease + ",padding-bottom " + ease +
         ",border-top-width " + ease + ",border-bottom-width " + ease + ",transform " + ease +
         ",opacity 200ms ease-out 60ms";
       node.style.height = goal + "px";
       node.style.marginBottom = margin;
+      node.style.marginTop = marginTop;
       for (const k of pads) node.style[k] = want[k];
       node.style.opacity = "1";
       node.style.transform = "none";
@@ -8970,12 +8988,15 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.overflow = "";
       node.style.transition = "";
       node.style.marginBottom = "";
+      node.style.marginTop = "";
       node.style.paddingTop = "";
       node.style.paddingBottom = "";
       node.style.borderTopWidth = "";
       node.style.borderBottomWidth = "";
       node.style.transform = "";
       node.style.flexShrink = "";
+      node.style.minHeight = "";
+      if (node.removeAttribute) node.removeAttribute("data-arf-folding");
     } catch (_) {}
   }
 
@@ -9027,6 +9048,10 @@ export function setup(ctx: Ctx, overrides?: any) {
               0,
             );
       node.style.height = Math.max(0, tall - edges) + "px";
+      // The same minimum would hold a button at full size while its height
+      // closed, and it would then go in one step at the end.
+      node.style.minHeight = "0px";
+      node.setAttribute("data-arf-folding", "1");
       node.style.overflow = "hidden";
       node.style.opacity = was;
       // Read the layout between the two, or the browser sees one value being set
@@ -9046,7 +9071,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // are gone before the row is squeezed, and nothing is seen cut in half.
       const ease = "220ms ease-out";
       node.style.transition =
-        "height " + ease + ",margin-bottom " + ease +
+        "height " + ease + ",margin-bottom " + ease + ",margin-top " + ease +
         ",padding-top " + ease + ",padding-bottom " + ease +
         ",border-top-width " + ease + ",border-bottom-width " + ease +
         ",opacity 140ms ease-out,transform 160ms ease-out";
@@ -9055,6 +9080,8 @@ export function setup(ctx: Ctx, overrides?: any) {
       node.style.transform = "translateY(-4px)";
       // The gap under it closes too, or the last few pixels go all at once.
       node.style.marginBottom = gap > 0 ? -gap + "px" : "0px";
+      // And a margin above it, such as a button's in a grid.
+      node.style.marginTop = "0px";
       // And its own padding and edge. A height of nothing still leaves those
       // standing, so a block let down to zero was thirty pixels tall and the
       // last thirty went in one frame at the end of the travel.
@@ -11434,10 +11461,15 @@ export function setup(ctx: Ctx, overrides?: any) {
           "These patterns could not be read and are doing nothing: " + shieldBad.join("; "),
         ),
       );
-    if (!cfg.protectOn)
-      wrap.appendChild(
+    // Built either way and hidden while protection is on, so the switch opens
+    // and closes it where it stands.
+    wrap.appendChild(
+      hangsOff(
         warn("With this off, a rewrite can change or drop any formatting in your replies, and nothing warns you."),
-      );
+        () => !cfg.protectOn,
+        "protection off warning",
+      ),
+    );
     return wrap;
   }
 
@@ -11543,12 +11575,17 @@ export function setup(ctx: Ctx, overrides?: any) {
           "softening tuning",
         ),
       );
-    if (!cfg.guardRefusal && !cfg.guardPreamble && !cfg.guardSoften)
-      wrap.appendChild(
+    // Built either way, so turning the last of the three off opens it where
+    // it stands.
+    wrap.appendChild(
+      hangsOff(
         warn(
           "Every check on what the answer says is off. A refusal written by the model can now be saved over your reply, and the length limits are all that is left.",
         ),
-      );
+        () => !cfg.guardRefusal && !cfg.guardPreamble && !cfg.guardSoften,
+        "answer checks off warning",
+      ),
+    );
     return wrap;
   }
 
