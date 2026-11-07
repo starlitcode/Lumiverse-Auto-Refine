@@ -4255,6 +4255,87 @@ console.log("\nrows that hang off a switch open and close smoothly");
   }
 }
 
+console.log("\nthe notice under the buttons comes and goes with the main switch");
+{
+  // With no chat known yet, the card at the top says why its buttons are
+  // grayed out. The main switch takes that notice with it: switched off, its
+  // words fade and its space closes over several frames, and switched on it
+  // opens the same way. The rebuild that follows the switch finds it already
+  // in place, so nothing jumps after the movement ends.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const [reduceMotion, zoom] of [[false, 1], [false, 1.25], [false, 0.85], [true, 1]]) {
+      await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true, reduceMotion } }, async (page) => {
+        await settle(page);
+        const watch = () =>
+          page.evaluate(async () => {
+            // Looked up again on every frame, since the card is built again
+            // once the switch has moved.
+            const head = () => document.querySelector("#drawer [data-arf-header]");
+            const box = head() && head().querySelector('input[aria-label="Turn Auto Refine on"]');
+            if (!box) return null;
+            const tall = () => head().getBoundingClientRect().height;
+            const start = tall();
+            const tops = [];
+            const times = [];
+            const looks = [];
+            box.click();
+            const t0 = performance.now();
+            while (performance.now() - t0 < 700) {
+              await new Promise((r) => requestAnimationFrame(r));
+              tops.push(tall() - start);
+              times.push(performance.now());
+              const n = head().querySelector(".arf-warn");
+              const cs = n ? getComputedStyle(n) : null;
+              looks.push(n ? { o: n.hidden ? 0 : parseFloat(cs.opacity), h: n.getBoundingClientRect().height, t: cs.transform } : null);
+            }
+            const paced = tops.map((t, i) => {
+              const was = i ? tops[i - 1] : 0;
+              const dt = times[i] - (i ? times[i - 1] : t0);
+              return (Math.abs(t - was) * 16.7) / Math.max(16.7, dt);
+            });
+            let biggest = 0;
+            let prev = 0;
+            for (const t of tops) {
+              biggest = Math.max(biggest, Math.abs(t - prev));
+              prev = t;
+            }
+            const last = head().querySelector(".arf-warn");
+            return { travel: Math.round(tops[tops.length - 1]), biggest: Math.round(biggest), steps: paced, tops, looks, hidden: !last || last.hidden };
+          });
+        const shut = await watch();
+        const opened = await watch();
+        const say = label + (zoom === 1 ? "" : ", zoom " + zoom) + (reduceMotion ? ", Reduce motion on" : "") + ": ";
+        ok(say + "switched off, the notice closes and the card gets shorter", !!shut && shut.travel < -20 && shut.hidden, JSON.stringify(shut && { travel: shut.travel, hidden: shut.hidden }));
+        ok(say + "switched on, the notice opens again", !!opened && opened.travel > 20 && !opened.hidden, JSON.stringify(opened && { travel: opened.travel, hidden: opened.hidden }));
+        if (!reduceMotion) {
+          // A step well past the two before it is a skip. Counted once the
+          // movement has started, since a slow first frame is the test machine.
+          const skips = (w) => {
+            let worst = 0;
+            const from = Math.max(2, w.steps.findIndex((x) => x > 0.5) + 2);
+            for (let i = from; i < w.tops.length; i++) worst = Math.max(worst, w.steps[i] - Math.max(w.steps[i - 1], w.steps[i - 2]));
+            return worst;
+          };
+          for (const [name, w] of [["closing", shut], ["opening", opened]]) {
+            ok(say + name + ", the card moves in small steps, never more than a third in one frame",
+              !!w && Math.max(...w.steps) < Math.abs(w.travel) / 3, JSON.stringify(w && { travel: w.travel, biggest: w.biggest }));
+            ok(say + name + ", it lands with no skip, and nothing jumps when the card is built again",
+              !!w && skips(w) <= 6, JSON.stringify(w && w.tops.map(Math.round)));
+          }
+          const faded = shut ? shut.looks.findIndex((l) => !l || l.o < 0.05) : -1;
+          const flat = shut ? shut.looks.findIndex((l) => !l || l.h < 1) : -1;
+          ok(say + "closing, the words are gone before the space is", !!shut && faded >= 0 && (flat === -1 || faded < flat), JSON.stringify({ faded, flat }));
+          ok(say + "opening, the words start faded and slide down into place",
+            !!opened && !!opened.looks[0] && opened.looks[0].o < 0.5 && /matrix\(1, 0, 0, 1, 0, -/.test(opened.looks[0].t), JSON.stringify(opened && opened.looks.slice(0, 2)));
+        } else {
+          ok(say + "it closes in one step", !!shut && Math.abs(shut.biggest - Math.abs(shut.travel)) <= 2, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
+          ok(say + "and opens in one step", !!opened && Math.abs(opened.biggest - opened.travel) <= 2, JSON.stringify(opened && { travel: opened.travel, biggest: opened.biggest }));
+        }
+      });
+    }
+  }
+}
+
 console.log("\nthe color editor in use");
 {
   // Used the way a person uses it. A theme change while it is open shows the

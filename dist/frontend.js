@@ -6214,9 +6214,10 @@ export function setup(ctx, overrides) {
     // in one place, so the button, its tooltip and the line under it agree.
     //
     // `mine` is for one of your own messages, which is refined with the prompt
-    // for your messages rather than the one for replies.
-    function whyNot(mine = false) {
-        if (!cfg.enabled)
+    // for your messages rather than the one for replies. `evenOff` gives the
+    // reason that would hold the button up with the master switch on.
+    function whyNot(mine = false, evenOff = false) {
+        if (!cfg.enabled && !evenOff)
             return "Auto Refine is switched off.";
         if (outsideAnyChat())
             return "No chat is open. Open one and this comes back.";
@@ -8084,9 +8085,12 @@ export function setup(ctx, overrides) {
         // Why the button is grayed out, said once rather than left to a tooltip
         // nobody sees on a phone. The master switch being off is not written out:
         // the switch is right there saying it.
-        const said = (refinesReplies() && stop) || (refinesMine() && stopMine) || "";
-        if (said && cfg.enabled)
-            wrap.appendChild(warn(said));
+        // So the reason is built with the switch off as well, hidden, and hangs
+        // off the switch. Turning it on or off opens or closes the notice where it
+        // stands, and the rebuild after the switch finds it already in place.
+        const said = (refinesReplies() && whyNot(false, true)) || (refinesMine() && whyNot(true, true)) || "";
+        if (said)
+            wrap.appendChild(hangsOff(warn(said), () => !!cfg.enabled, "headerWhy"));
         if (outsideAnyChat())
             wrap.appendChild(note("Refining runs inside a chat. On the home screen or a character page there is nothing to refine yet, so the panel waits here."));
         return wrap;
