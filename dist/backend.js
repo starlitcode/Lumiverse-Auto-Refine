@@ -4481,9 +4481,19 @@ model) {
             try {
                 const flow = await spindle.generate.quietStream(req);
                 for await (const bit of flow) {
+                    // Pieces of the answer, of the thinking, which is not counted, and one
+                    // at the end with the whole answer, which is the one kept.
+                    if (bit && typeof bit === 'object' && bit.type === 'done') {
+                        const all = String(bit.content == null ? '' : bit.content);
+                        if (all)
+                            text = all;
+                        break;
+                    }
                     const piece = typeof bit === 'string'
                         ? bit
-                        : String((bit && (bit.content || bit.delta || bit.text)) || '');
+                        : bit && bit.type === 'reasoning'
+                            ? ''
+                            : String((bit && (bit.token || bit.content || bit.delta || bit.text)) || '');
                     if (!piece)
                         continue;
                     text += piece;
@@ -6368,10 +6378,86 @@ const WORK = new Set([
 spindle.onFrontendMessage((payload, userId) => payload && WORK.has(String(payload.type))
     ? asAccount(userId, () => onPanel(payload, userId), sayQueued(userId))
     : onPanel(payload, userId));
+// On a server shared by several accounts, Lumiverse reads and writes any chat
+// by its id, whoever asks. So a chat named by the panel is first looked up
+// under the account that sent it, which finds only that account's own chats,
+// and a chat that is not there is not read, refined or written. A chat found
+// is remembered for a few minutes, so a run through a whole chat asks once.
+//
+// When the lookup cannot be made at all, because the chats permission is
+// refused or Lumiverse is too old to have it, the panel's chat is used as
+// before, since refining still works without that permission.
+const OWN_CHAT_MS = 5 * 60 * 1000;
+const ownChats = new Map();
+// Empty when the chat is the sender's, or cannot be checked, and otherwise
+// why it is not used, in words for the panel.
+async function chatIsTheirs(chatId, userId) {
+    if (!userId || !spindle.chats || typeof spindle.chats.get !== 'function')
+        return '';
+    const k = userKey(userId) + '\u0000' + chatId;
+    const seen = ownChats.get(k);
+    if (seen && Date.now() - seen < OWN_CHAT_MS)
+        return '';
+    try {
+        const chat = await spindle.chats.get(chatId, userId);
+        if (!chat)
+            return 'Auto Refine could not find that chat on your account';
+        ownChats.set(k, Date.now());
+        if (ownChats.size > 500)
+            ownChats.delete(ownChats.keys().next().value);
+        return '';
+    }
+    catch (e) {
+        if (/PERMISSION_DENIED/.test(String((e && e.message) || e)))
+            return '';
+        say('warn', 'could not check which account a chat belongs to, so it was not used: ' + ((e && e.message) || String(e)));
+        return 'Auto Refine could not check which account that chat belongs to, so it was not used. Lumiverse said: ' + ((e && e.message) || String(e));
+    }
+}
+// The panel messages that name a chat to read or write, and what each one is
+// answered with when the chat is not the sender's.
+const NAMES_A_CHAT = {
+    refine_now: 'refine_result',
+    refine_all: 'refine_all_done',
+    refine_selection: 'refine_result',
+    apply_refine: 'refine_result',
+    undo_refine: 'undo_result',
+    snip_selection: 'snip_result',
+    preview_prompt: 'prompt_preview',
+    message_roles: 'message_roles',
+    reroll_added: '',
+    retry_pending: '',
+    retry_off: '',
+    retry_judging: '',
+    retry_judged: '',
+};
 async function onPanel(payload, userId) {
     try {
         if (!payload)
             return;
+        const notTheirs = Object.prototype.hasOwnProperty.call(NAMES_A_CHAT, String(payload.type)) && payload.chatId != null && String(payload.chatId) !== ''
+            ? await chatIsTheirs(String(payload.chatId), userId)
+            : '';
+        if (notTheirs) {
+            say('warn', 'a ' + payload.type + ' was not used: ' + notTheirs);
+            const answer = NAMES_A_CHAT[String(payload.type)];
+            const why = notTheirs;
+            if (answer === 'refine_result' || answer === 'refine_all_done')
+                replyTo(userId, { type: 'refine_ack', requestId: payload.requestId });
+            if (answer === 'refine_all_done')
+                replyTo(userId, { type: answer, requestId: payload.requestId, chatId: payload.chatId, saved: 0, skipped: 0, stopped: false, why: why });
+            else if (answer)
+                replyTo(userId, {
+                    type: answer,
+                    requestId: payload.requestId,
+                    chatId: payload.chatId,
+                    messageId: payload.messageId == null ? null : payload.messageId,
+                    ok: false,
+                    roles: answer === 'message_roles' ? {} : undefined,
+                    why: why,
+                });
+            return;
+        }
         if (payload.type === 'notify') {
             notify(payload.kind, payload.text, userId);
             return;

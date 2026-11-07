@@ -285,6 +285,18 @@ function host(
             if (opts.fail) throw new Error(opts.fail);
             const answer = answers[Math.min(turn, answers.length - 1)];
             turn++;
+            // In the shape Lumiverse hands them over: a token at a time, then
+            // one at the end carrying the whole answer.
+            if (opts.stream === "host")
+              return (async function* () {
+                yield { type: "reasoning", token: "weighing it" };
+                const step = Math.ceil(answer.length / 4);
+                for (let i = 0; i < answer.length; i += step) {
+                  await new Promise((r) => setTimeout(r, 350));
+                  yield { type: "token", token: answer.slice(i, i + step) };
+                }
+                yield { type: "done", content: answer, finish_reason: "stop" };
+              })();
             return (async function* () {
               // Handed over in pieces, the way a provider does.
               for (let i = 0; i < answer.length; i += 12) yield answer.slice(i, i + 12);
@@ -791,6 +803,35 @@ describe("a reply Auto Retry is going to retry", () => {
 describe("several accounts on one install", () => {
   const A = { ...RULES, connectionId: "conn-a" };
   const B = { ...RULES, connectionId: "conn-b" };
+
+  test("a chat on another account is not read, refined or previewed", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."], { chatOwner: "a" });
+    await h.front({ type: "set_settings", settings: RULES }, "b");
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "b");
+    await h.front({ type: "preview_prompt", requestId: "p1", chatId: "c1", messageId: "m2" }, "b");
+    await wait(60);
+    expect(h.asked.length).toBe(0);
+    const result = h.sent.find((m) => m.type === "refine_result" && m.requestId === "r1");
+    expect(result && result.ok).toBe(false);
+    expect(result.why).toContain("could not find that chat on your account");
+    const preview = h.sent.find((m) => m.type === "prompt_preview" && m.requestId === "p1");
+    expect(preview && preview.ok).toBe(false);
+    await h.front({ type: "refine_all", requestId: "w1", chatId: "c1" }, "b");
+    await wait(30);
+    const whole = h.sent.find((m) => m.type === "refine_all_done" && m.requestId === "w1");
+    expect(whole && whole.saved).toBe(0);
+    expect(whole.why).toContain("could not find that chat on your account");
+    expect(h.asked.length).toBe(0);
+    expect(JSON.stringify(h.sent)).not.toContain("the cold hit her");
+  });
+
+  test("the account that owns the chat can refine it", async () => {
+    const h = host(chat(), ["She stepped through and the cold hit her."], { chatOwner: "a" });
+    await h.front({ type: "set_settings", settings: RULES }, "a");
+    await h.front({ type: "refine_now", requestId: "r1", chatId: "c1", messageId: "m2" }, "a");
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+  });
 
   test("a refine runs with the settings of the account that asked", async () => {
     const h = host(chat(), ["She stepped through and the cold hit her."]);
@@ -3373,6 +3414,18 @@ describe("watching it arrive", () => {
     const said = h.sent.filter((m) => m.type === "refine_progress");
     expect(said.some((m) => m.stage === "writing")).toBe(true);
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("the count goes up as Lumiverse streams the answer, and the answer is not counted twice", async () => {
+    const h = await armed(["<refined>She stepped through and the cold hit her, and she did not stop.</refined>"], {}, chat(), {
+      stream: "host",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(1900);
+    const counts = h.sent.filter((m) => m.type === "refine_progress" && m.stage === "writing").map((m) => m.chars);
+    expect(counts.length).toBeGreaterThan(1);
+    expect(counts[counts.length - 1]).toBeGreaterThan(counts[0]);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her, and she did not stop.");
   });
 
   test("a connection that cannot stream still refines", async () => {
