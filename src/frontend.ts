@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.55.1";
+const VERSION = "1.55.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -8089,18 +8089,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Two groups, each with a heading: what the model wrote, then what you
     // wrote. A button that only shows sometimes spans both columns, so it does
     // not leave a gap beside it when it is hidden.
-    const group = (title: string) => {
+    //
+    // Both are built either way and hidden for a side you do not refine, so
+    // they open and close when Refine on the Setup tab changes.
+    const group = (title: string, shows: () => boolean, name: string) => {
       const box = el("div", "arf-btngroup");
       box.appendChild(el("div", "arf-btngroup-h", title));
       const grid = el("div", "arf-btngrid");
       box.appendChild(grid);
-      wrap.appendChild(box);
+      wrap.appendChild(hangsOff(box, shows, name));
       return grid;
     };
-    // A group for a side you do not refine is built and left out, so the
-    // code below reads the same either way.
-    const spare = () => el("div", "arf-btngrid");
-    const replies = refinesReplies() ? group("Replies") : spare();
+    const replies = group("Replies", () => refinesReplies(), "reply buttons");
     const now = button("Refine the latest reply", true);
     now.setAttribute("data-arf-now", "1");
     now.disabled = !!stop;
@@ -8146,7 +8146,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // The same two for your own messages, in a group of their own under the
     // ones for replies, so each way of refining a reply has one for your
     // messages in the same place.
-    const mine = refinesMine() ? group("Your messages") : spare();
+    const mine = group("Your messages", () => refinesMine(), "your message buttons");
     const mineNow = button("Refine my latest message", false);
     mineNow.setAttribute("data-arf-mine", "1");
     mineNow.disabled = !!stopMine || lastChatId == null;
@@ -8218,7 +8218,8 @@ export function setup(ctx: Ctx, overrides?: any) {
     // had left, so it moved with the width of the panel. A switch that moves
     // while you are reaching for it is one you press by accident.
     // Only with replies: your own messages are never refined automatically.
-    if (refinesReplies()) (replies.parentElement || wrap).appendChild(auto);
+    // It is hidden with the Replies group.
+    (replies.parentElement || wrap).appendChild(auto);
     // Why the button is grayed out, said once rather than left to a tooltip
     // nobody sees on a phone. The master switch being off is not written out:
     // the switch is right there saying it.
@@ -8907,6 +8908,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         const how = owner ? getComputedStyle(owner) : null;
         if (how) gap = parseFloat(how.rowGap || how.gap || "0") || 0;
       } catch (_) {}
+      holdOwnStyle(node);
       node.style.transition = "none";
       node.style.overflow = "hidden";
       // Held at the height it is given. In a box that scrolls, a flex item
@@ -8974,32 +8976,38 @@ export function setup(ctx: Ctx, overrides?: any) {
     return r.height / (scale > 0.01 ? scale : 1);
   }
 
-  // A box let down to nothing and then handed over. done runs once, whether the
-  // travel finished, was cut short by a second one, or never started because the
-  // reader asked for no movement.
-  // Everything a fold sets, taken back off. Called at the end of one, and by
-  // anything that wants the fold dropped rather than waited out: a row switched
-  // back on mid-close would otherwise sit at no height until a travel it no
-  // longer needs finished.
+  // What a fold or an open writes to a box.
+  const FOLD_STYLES = ["height", "opacity", "overflow", "transition", "marginBottom", "marginTop", "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth", "transform", "flexShrink", "minHeight"];
+  // A box can set some of these itself, such as a margin above it. They are
+  // read before a fold or an open first writes over them, and put back when
+  // it ends. Without that, the box loses them at the end and moves in one step.
+  function holdOwnStyle(node: any) {
+    try {
+      if (node._ownStyle) return;
+      const own: Record<string, string> = {};
+      for (const k of FOLD_STYLES) own[k] = node.style[k] || "";
+      node._ownStyle = own;
+    } catch (_) {}
+  }
+
+  // Everything a fold or an open sets, taken back off, with the box's own
+  // styles put back. Called at the end of one, and by anything that wants the
+  // fold dropped rather than waited out: a row switched back on mid-close
+  // would otherwise sit at no height until a travel it no longer needs
+  // finished. With no fold running there is nothing of the fold's to take off,
+  // and the box's own styles are left as they are.
   function clearFold(node: any) {
     try {
-      node.style.height = "";
-      node.style.opacity = "";
-      node.style.overflow = "";
-      node.style.transition = "";
-      node.style.marginBottom = "";
-      node.style.marginTop = "";
-      node.style.paddingTop = "";
-      node.style.paddingBottom = "";
-      node.style.borderTopWidth = "";
-      node.style.borderBottomWidth = "";
-      node.style.transform = "";
-      node.style.flexShrink = "";
-      node.style.minHeight = "";
+      const own = node._ownStyle;
+      if (own) for (const k of FOLD_STYLES) node.style[k] = own[k] || "";
+      node._ownStyle = null;
       if (node.removeAttribute) node.removeAttribute("data-arf-folding");
     } catch (_) {}
   }
 
+  // A box let down to nothing and then handed over. done runs once, whether the
+  // travel finished, was cut short by a second one, or never started because the
+  // reader asked for no movement.
   function foldAway(node: any, done: () => void) {
     let ran = false;
     const token = {};
@@ -9034,6 +9042,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       // An open still running stops where it is, and this closes from there.
       node._arfUnfold = null;
       const was = getComputedStyle(node).opacity;
+      holdOwnStyle(node);
       node.style.transition = "none";
       node.style.flexShrink = "0";
       // Written as the box-sizing reads it. A content-box box counts its
@@ -10991,14 +11000,13 @@ export function setup(ctx: Ctx, overrides?: any) {
         );
     }
     // Where the findings go is a block on the Prompt tab, which is a long way
-    // from here. Said only while nothing is set up to take them.
-    if (cfg.judgeMode === "two" && noJevFoundBlock()) {
-      const found = note(
-        "What " + whoName() + " finds is not passed to the refine model. To pass it on, switch on Checks Found on the Prompt tab, or add a block with {{checks_found}} in it.",
-      );
-      found.setAttribute("data-arf-jevfound", "off");
-      wrap.appendChild(found);
-    }
+    // from here. Shown only while nothing is set up to take them. Built either
+    // way, so it opens and closes with How many models.
+    const found = note(
+      "What " + whoName() + " finds is not passed to the refine model. To pass it on, switch on Checks Found on the Prompt tab, or add a block with {{checks_found}} in it.",
+    );
+    found.setAttribute("data-arf-jevfound", "off");
+    wrap.appendChild(hangsOff(found, () => cfg.judgeMode === "two" && noJevFoundBlock(), "checks found note"));
     return wrap;
   }
 

@@ -2415,7 +2415,7 @@ console.log("\nwhat the second model found has somewhere to go");
     async (page) => {
       await goTab(page, "Model");
       await settle(page);
-      const note = await page.evaluate(() => !!document.querySelector("#drawer [data-arf-jevfound]"));
+      const note = await page.evaluate(() => { const n = document.querySelector("#drawer [data-arf-jevfound]"); return !!n && n.getClientRects().length > 0; });
       ok("with a block taking {{checks_found}}, the line is not shown", !note);
     },
   );
@@ -15105,12 +15105,16 @@ console.log("\nwhat to refine");
     page.evaluate(async () => {
       (window.__handlers.CHAT_CHANGED || []).forEach((f) => f({ chatId: "c1" }));
       await new Promise((r) => setTimeout(r, 200));
-      const heads = [...document.querySelectorAll("#drawer .arf-btngroup-h")].map((h) => h.textContent);
+      // Both groups are always built, and the one for a side you do not
+      // refine is hidden, so only what is drawn counts.
+      const shown = (n) => !!n && n.getClientRects().length > 0;
+      const heads = [...document.querySelectorAll("#drawer .arf-btngroup-h")].filter(shown).map((h) => h.textContent);
+      const inGroup = (sel) => { const n = document.querySelector(sel); return shown(n) && !!n.closest(".arf-btngroup"); };
       return {
         heads,
-        now: !!document.querySelector("#drawer [data-arf-now]") && !!document.querySelector("#drawer [data-arf-now]").closest(".arf-btngroup"),
-        mine: !!document.querySelector("#drawer [data-arf-mine]") && !!document.querySelector("#drawer [data-arf-mine]").closest(".arf-btngroup"),
-        auto: [...document.querySelectorAll("#drawer .arf-btngroup span")].some((n) => /every new reply automatically/.test(n.textContent || "")),
+        now: inGroup("#drawer [data-arf-now]"),
+        mine: inGroup("#drawer [data-arf-mine]"),
+        auto: [...document.querySelectorAll("#drawer .arf-btngroup span")].some((n) => shown(n) && /every new reply automatically/.test(n.textContent || "")),
       };
     });
   await inTab(browser, {}, async (page) => {
@@ -15585,6 +15589,68 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
       const why = how === "ready" ? "the backend says it is ready" : "the first ask goes unanswered";
       ok("when " + why + ", the panel asks again", out.first >= 1 && out.asked > out.first, JSON.stringify(out));
       ok("and the answer puts the buttons where they belong", out.reply && !out.mine, JSON.stringify(out));
+    });
+  }
+}
+
+// Rows that come and go with a setting, and that had their own spacing or
+// were built only when the card was built again. Each opens and closes over
+// several frames, and nothing moves once the movement ends, including when
+// the card is built again a moment later. Measured on the whole drawer, so a
+// step anywhere in it counts.
+console.log("\nrows with a setting of their own open and close with no step");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  for (const zoom of [1, 1.25, 0.85]) {
+    await inTab(browser, { viewport, touch, css: "#drawer{height:100vh;overflow-y:auto}" + (zoom === 1 ? "" : "html{zoom:" + zoom + "}"), saved: { enabled: true } }, async (page) => {
+      const say = label + (zoom === 1 ? "" : ", zoom " + zoom) + ": ";
+      // Presses or picks with the page's own code, then reads the drawer's
+      // height on every frame for longer than the card takes to be built again.
+      const watch = (tab, how) =>
+        page.evaluate(async ([tab, how]) => {
+          const tabs = [...document.querySelectorAll("#drawer [role=tab]")];
+          const t = tabs.find((b) => b.textContent.trim().startsWith(tab));
+          if (!t) return null;
+          t.click();
+          await new Promise((r) => setTimeout(r, 400));
+          const d = document.querySelector("#drawer");
+          const start = d.scrollHeight;
+          if (how.box) {
+            const row = document.querySelector('#drawer [data-arf-row="' + how.box + '"]');
+            const box = row && row.querySelector("input[type=checkbox]");
+            if (!box) return null;
+            box.click();
+          } else {
+            const sel = [...document.querySelectorAll("#drawer select")].find((x) => [...x.options].some((o) => o.value === how.value) && [...x.options].some((o) => o.value === how.other));
+            if (!sel) return null;
+            sel.value = how.value;
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          const tops = [];
+          const t0 = performance.now();
+          while (performance.now() - t0 < 700) {
+            await new Promise((r) => requestAnimationFrame(r));
+            tops.push(d.scrollHeight - start);
+          }
+          return tops;
+        }, [tab, how]);
+      const steps = [
+        ["Add the refine as a swipe, switched on", "Limits", { box: "asSwipe" }],
+        ["Add the refine as a swipe, switched off", "Limits", { box: "asSwipe" }],
+        ["two models picked", "Model", { value: "two", other: "one" }],
+        ["one model picked", "Model", { value: "one", other: "two" }],
+        ["Refine set to replies only", "Setup", { value: "replies", other: "mine" }],
+        ["Refine set to both", "Setup", { value: "both", other: "mine" }],
+      ];
+      for (const [name, tab, how] of steps) {
+        const tops = await watch(tab, how);
+        const travel = tops ? tops[tops.length - 1] : 0;
+        let biggest = 0;
+        if (tops) tops.forEach((t, i) => { biggest = Math.max(biggest, Math.abs(t - (i ? tops[i - 1] : 0))); });
+        ok(say + name + ": the space opens or closes over several frames",
+          !!tops && Math.abs(travel) > 20 && biggest < Math.abs(travel) * 0.6, JSON.stringify(tops && tops.map(Math.round)));
+        ok(say + name + ": nothing moves after the movement ends", !!tops && lateJump(tops) <= 2, JSON.stringify(tops && tops.map(Math.round)));
+        await closed(page);
+      }
     });
   }
 }

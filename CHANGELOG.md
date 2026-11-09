@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.55.2
+
+_2026-11-09_
+
+### Fixed
+
+- **The box under Add the refine as a swipe moved after it opened.** Turning on **Add the refine as a swipe instead of writing over the reply** opens a box under it. Once the box was open, it moved down a little in one step. It now opens smoothly and stays where it lands.
+- **Changing Refine on the Setup tab added or removed buttons in one step.** The **Replies** or **Your messages** buttons in the top card appeared or went all at once. They now open and close smoothly.
+- **A note on the Model tab came in late.** With two models picked, and nothing on the Prompt tab set up to pass on what the second model finds, a note says so. It appeared all at once, a moment after the other rows had opened. It now opens and closes with them.
+
+---
+
 ## 1.55.1
 
 _2026-11-09_
