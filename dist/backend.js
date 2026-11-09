@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.55.0';
+const VERSION = '1.55.1';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3530,10 +3530,11 @@ function leakVerdict(text) {
     const turn = LEAK_TURNS.exec(plain);
     return !!turn && plain.slice(0, turn.index).trim().length > 0;
 }
-// A word or phrase repeated over and over until the text ends, a short pattern
-// repeated hundreds of times, or words on one line with no punctuation running
-// on to the end. A chant, a stammer or a long laugh is short, or the scene
-// carries on after it, so it is left alone.
+// A word or phrase repeated over and over until the text ends, a few sentences
+// said again and again (see sentenceLoop), a short pattern repeated hundreds of
+// times, or words on one line with no punctuation running on to the end. A
+// chant, a stammer or a long laugh is short, or the scene carries on after it,
+// so it is left alone.
 //
 // Repetition set apart as written on purpose is also left alone, wherever it
 // is (see repeatOnPurpose). A model stuck in a loop runs until it is cut off,
@@ -3569,6 +3570,8 @@ function loopVerdict(visible) {
         run = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+(?:['\u2019-][\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+)*$/u.test(t) ? run + 1 : 0;
     }
     if (run >= LOOP_RUN_ON)
+        return true;
+    if (sentenceLoop(plain))
         return true;
     // Each word with where it starts and ends, so a loop can be placed in the
     // text. A mark on its own, such as a lone quotation mark, is not a word.
@@ -3631,6 +3634,66 @@ function loopVerdict(visible) {
         }
     }
     return false;
+}
+// A few sentences said again and again with little else between them, such
+// as one sentence six times and then another six times, or the same three
+// sentences in turn. It does not have to reach the end, since a model can
+// stop this kind of loop and go on. A sentence here is the words up to
+// a period, a question mark, an exclamation mark, an ellipsis, a colon or a
+// line break, compared without case or punctuation. The colon lets lines
+// written out after one start where the colon ends (see repeatOnPurpose).
+//
+// A sentence is a repeat when the same sentence came in the
+// LOOP_SENTENCE_BACK sentences before it. Its third time and after adds one,
+// its second time adds nothing, and any other sentence takes two away. It is
+// a loop once the count reaches LOOP_SENTENCE_REPEATS, with at least
+// LOOP_SENTENCE_WORDS words in the sentences said again. A plan written out
+// twice, a refrain, or a line said again here and there in a scene never
+// reaches it.
+const LOOP_SENTENCE_BACK = 10;
+const LOOP_SENTENCE_REPEATS = 6;
+const LOOP_SENTENCE_WORDS = 40;
+function sentenceLoop(plain) {
+    const seen = new Map();
+    const firsts = [];
+    let score = 0;
+    let peak = 0;
+    let words = 0;
+    let from = 0;
+    let to = 0;
+    const isLoop = () => peak >= LOOP_SENTENCE_REPEATS && words >= LOOP_SENTENCE_WORDS && !repeatOnPurpose(plain, from, to, true);
+    for (const m of plain.matchAll(/[^.!?:\u2026\n]+[.!?:\u2026]*/g)) {
+        const key = m[0].toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        if (!key)
+            continue;
+        const i = firsts.length;
+        const at = m.index || 0;
+        firsts.push(at + (m[0].match(/^[^\p{L}\p{N}]*/u) || [''])[0].length);
+        const was = seen.get(key);
+        const again = !!was && i - was.last <= LOOP_SENTENCE_BACK;
+        seen.set(key, { last: i, times: again && was ? was.times + 1 : 1 });
+        if (again && was) {
+            // The run starts at the first time of its first repeated sentence.
+            if (score === 0 && words === 0)
+                from = firsts[was.last];
+            if (was.times >= 2)
+                score++;
+            peak = Math.max(peak, score);
+            words += key.split(' ').length;
+            to = at + m[0].length - (m[0].match(/[^\p{L}\p{N}]*$/u) || [''])[0].length;
+            continue;
+        }
+        if (!words)
+            continue;
+        score = Math.max(0, score - 2);
+        if (score > 0)
+            continue;
+        if (isLoop())
+            return true;
+        peak = 0;
+        words = 0;
+    }
+    return words > 0 && isLoop();
 }
 // Whether repetition from `start` to `end` is set apart as written on
 // purpose:

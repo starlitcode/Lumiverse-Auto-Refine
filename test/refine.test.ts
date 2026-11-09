@@ -8059,6 +8059,36 @@ describe("a broken rewrite", () => {
     });
   }
 
+  // Sentences said again and again, which do not have to reach the end.
+  const sentenceLoops: Array<[string, string]> = [
+    ["one sentence six times, then another six times", scene + "The rope creaks on its pulley. ".repeat(6) + "Oriel counts the boats again. ".repeat(6) + "Then they landed."],
+    ["two sentences in turn, over and over", scene + "Wren watches the lamp. The river pulls at the hull. ".repeat(6) + "They reached the bank."],
+    ["three sentences in turn, with an odd one between", scene + "Wren steers for the light.\nShe says nothing.\nShe steers.\n".repeat(4) + "She the.\n" + "Wren steers for the light.\nShe says nothing.\nShe steers.\n".repeat(5) + "The ferry bumped the pier."],
+  ];
+  for (const [label, answer] of sentenceLoops) {
+    test("refused: " + label, async () => {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(scene);
+      expect(h.skipped().some((w: string) => /stuck repeating/.test(w))).toBe(true);
+    });
+  }
+
+  const sentencesOnPurpose: Array<[string, string]> = [
+    ["a sentence said three times for effect", scene + "She would not turn back now. She would not turn back now. She would not turn back now. The pier was close."],
+    ["a chant of sentences in quotation marks that close", scene + "The crowd on the bank roared, \"" + "Bring the ferry in. Bring the ferry in now. ".repeat(8).trim() + "\" Wren waved."],
+    ["sentences written out after a colon", scene + "In the ledger Oriel wrote:\n" + "One boat crossed. One boat did not pay.\n".repeat(8)],
+  ];
+  for (const [label, answer] of sentencesOnPurpose) {
+    test("saved: " + label, async () => {
+      const h = await armed(["<REFINED>" + answer + "</REFINED>"], loose, reply());
+      await h.ended({ chatId: "c1", messageId: "m2" });
+      await wait(50);
+      expect(h.body("m2")).toBe(answer.trim());
+    });
+  }
+
   test("refused: a loop inside dialogue that never closes", async () => {
     const h = await armed(["<REFINED>" + scene + "\"Bring her home, " + "bring her home, ".repeat(25) + "</REFINED>"], loose, reply());
     await h.ended({ chatId: "c1", messageId: "m2" });
