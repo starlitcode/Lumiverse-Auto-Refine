@@ -12,7 +12,7 @@ _2026-11-09_
 
 ### Fixed
 
-- **A rewrite that said a few sentences again and again was saved.** **Refuse a broken rewrite** only caught a loop of words that ran to the end. A model can also say one sentence six times and then another six times, or repeat the same two or three sentences in turn many times, and then stop repeating and go on. That rewrite is now refused. A line said a few times for effect, a chant in quotation marks, and lines written out after a colon are still kept. Auto Retry has the same check.
+- **A few sentences said again and again were not caught.** **Refuse a broken rewrite** only caught a loop of words that ran to the end. A rewrite can also say one sentence six times and then another six times, or repeat the same two or three sentences in turn many times, and then stop repeating and go on. A rewrite like that is now refused, and your reply is kept. A line said a few times for effect, a chant in quotation marks, and lines written out after a colon are still kept. Auto Retry has the same check, for replies and their thinking.
 
 ---
 
