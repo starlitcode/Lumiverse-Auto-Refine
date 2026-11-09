@@ -14978,7 +14978,7 @@ await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
   const got = await page.evaluate(async () => {
     window.__fromBackend({ type: "judge_said", chatId: "c1", messageId: "m2", refine: false, scores: [{ check: "reply repeats itself.", pct: 3 }], cost: 0, model: "jev-1.13.0", over: 30 });
     await new Promise((r) => setTimeout(r, 400));
-    const lines = () => [...document.querySelectorAll('#drawer [data-arf-logline="judge"]')].length;
+    const lines = () => [...document.querySelectorAll('#drawer [data-arf-logline="judge"]')].filter((n) => !n.hidden).length;
     const before = lines();
     const box = document.querySelector('#drawer [data-arf-part="logShow:judge"]');
     if (!box) return { before, missing: true };
@@ -15001,7 +15001,7 @@ await inTab(browser, {}, async (page) => {
     if (!ask) return { noAsk: true };
     window.__fromBackend({ type: "loaded_setups", requestId: ask.requestId, setups: [{ name: "Quick and cheap", at: 1, settings: {} }, { name: "Careful", at: 2, settings: {} }] });
     await new Promise((r) => setTimeout(r, 400));
-    const seen = () => [...document.querySelectorAll("#drawer [data-arf-logline]")].some((n) => /model setups down/.test(n.textContent));
+    const seen = () => [...document.querySelectorAll("#drawer [data-arf-logline]")].some((n) => !n.hidden && /model setups down/.test(n.textContent));
     const before = seen();
     const box = document.querySelector('#drawer [data-arf-part="logShow:setup"]');
     if (!box) return { before, missing: true };
@@ -15022,7 +15022,7 @@ await inTab(browser, { saved: { judgeMode: "two" } }, async (page) => {
   const got = await page.evaluate(async () => {
     window.__fromBackend({ type: "jev_found_sent", count: 2, after: false });
     await new Promise((r) => setTimeout(r, 400));
-    const lines = () => [...document.querySelectorAll('#drawer [data-arf-logline="found"]')].length;
+    const lines = () => [...document.querySelectorAll('#drawer [data-arf-logline="found"]')].filter((n) => !n.hidden).length;
     const boxes = document.querySelectorAll('#drawer [data-arf-picker="logShow"] [data-arf-part^="logShow:"]').length;
     const before = lines();
     const box = document.querySelector('#drawer [data-arf-part="logShow:found"]');
@@ -15649,6 +15649,41 @@ for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, t
         ok(say + name + ": the space opens or closes over several frames",
           !!tops && Math.abs(travel) > 20 && biggest < Math.abs(travel) * 0.6, JSON.stringify(tops && tops.map(Math.round)));
         ok(say + name + ": nothing moves after the movement ends", !!tops && lateJump(tops) <= 2, JSON.stringify(tops && tops.map(Math.round)));
+        await closed(page);
+      }
+      // A kind of Log line switched off. The Log starts with one line, of
+      // this kind, so its line closes while the note that every line is
+      // hidden opens in its place. Each is measured on its own.
+      for (const name of ["hidden", "shown again"]) {
+        const got = await page.evaluate(async () => {
+          const tabs = [...document.querySelectorAll("#drawer [role=tab]")];
+          tabs.find((b) => b.textContent.trim().startsWith("Log")).click();
+          await new Promise((r) => setTimeout(r, 400));
+          const box = document.querySelector('#drawer [data-arf-part="logShow:setup"]');
+          if (!box) return null;
+          const tall = (sel) => {
+            const n = document.querySelector(sel);
+            return n && !n.hidden ? n.getBoundingClientRect().height : 0;
+          };
+          box.click();
+          const line = [];
+          const words = [];
+          const t0 = performance.now();
+          while (performance.now() - t0 < 700) {
+            await new Promise((r) => requestAnimationFrame(r));
+            line.push(tall('#drawer [data-arf-logline="setup"]'));
+            words.push(tall('#drawer [data-arf-hangs="every log line hidden"]'));
+          }
+          return { line, words };
+        });
+        for (const [what, tops] of [["its line", got && got.line], ["the note that every line is hidden", got && got.words]]) {
+          const travel = tops ? tops[tops.length - 1] - tops[0] : 0;
+          let biggest = 0;
+          if (tops) tops.forEach((t, i) => { if (i) biggest = Math.max(biggest, Math.abs(t - tops[i - 1])); });
+          ok(say + "a kind of Log line " + name + ": " + what + " opens or closes over several frames",
+            !!tops && Math.abs(travel) > 8 && biggest < Math.abs(travel) * 0.6, JSON.stringify(tops && tops.map(Math.round)));
+          ok(say + "a kind of Log line " + name + ": " + what + " stays still once it lands", !!tops && lateJump(tops) <= 2, JSON.stringify(tops && tops.map(Math.round)));
+        }
         await closed(page);
       }
     });

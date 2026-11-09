@@ -7968,7 +7968,7 @@ export function setup(ctx, overrides) {
         // not leave a gap beside it when it is hidden.
         //
         // Both are built either way and hidden for a side you do not refine, so
-        // they open and close when Refine on the Setup tab changes.
+        // they open and close when What to refine on the Setup tab changes.
         const group = (title, shows, name) => {
             const box = el("div", "arf-btngroup");
             box.appendChild(el("div", "arf-btngroup-h", title));
@@ -11478,18 +11478,24 @@ export function setup(ctx, overrides) {
         return wrap;
     }
     function buildActivityCard() {
-        const shown = activity.filter((a) => !a.kind || partOn("logShow", a.kind));
+        const showsLine = (a) => !a.kind || partOn("logShow", a.kind);
+        const shown = activity.filter(showsLine);
         const hidden = activity.length - shown.length;
         const wrap = card("What it has been doing", undefined, activity.length ? String(shown.length) + (hidden ? " shown, " + hidden + " hidden" : "") : undefined);
-        if (!shown.length)
-            wrap.appendChild(note(hidden ? "Every line here is of a kind you hid." : "Nothing yet."));
-        for (const a of shown) {
+        if (!activity.length)
+            wrap.appendChild(note("Nothing yet."));
+        else
+            wrap.appendChild(hangsOff(note("Every line here is of a kind you hid."), () => !activity.some(showsLine), "every log line hidden"));
+        // Every line is built, and a line of a hidden kind is hidden, so a kind
+        // switched off below closes its lines and one switched on opens them.
+        // Each has a name of its own, so the card built again finds it as it was.
+        activity.forEach((a, i) => {
             const row = el("div", "arf-row arf-note arf-mono");
             row.setAttribute("data-arf-logline", a.kind || "other");
             row.appendChild(el("span", "arf-when", new Date(a.at).toTimeString().slice(0, 8)));
             row.appendChild(el("span", "arf-said arf-grow" + (a.good ? "" : " arf-dim"), a.text));
-            wrap.appendChild(row);
-        }
+            wrap.appendChild(hangsOff(row, () => showsLine(a), "log line " + a.at + " " + i));
+        });
         // What to show. Lines of a hidden kind are still kept, and a problem report
         // still carries them.
         wrap.appendChild(heading("Show in this list"));
@@ -13454,6 +13460,8 @@ export function setup(ctx, overrides) {
                     box.classList.remove("arf-nudge");
                 }
                 sayChosen();
+                // Anything that hangs off these parts opens or closes now.
+                reveal();
                 // Past the knob's whole slide, spring included, so the rebuild does
                 // not cut the spring short.
                 if (repaintOnChange !== false)
@@ -13488,6 +13496,7 @@ export function setup(ctx, overrides) {
             box.addEventListener("change", () => {
                 setPart(which, p.id, !!box.checked);
                 sayChosen();
+                reveal();
                 if (repaintOnChange !== false)
                     settle();
             });

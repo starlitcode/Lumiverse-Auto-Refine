@@ -13,8 +13,9 @@ _2026-11-09_
 ### Fixed
 
 - **The box under Add the refine as a swipe moved after it opened.** Turning on **Add the refine as a swipe instead of writing over the reply** opens a box under it. Once the box was open, it moved down a little in one step. It now opens smoothly and stays where it lands.
-- **Changing Refine on the Setup tab added or removed buttons in one step.** The **Replies** or **Your messages** buttons in the top card appeared or went all at once. They now open and close smoothly.
+- **Changing What to refine on the Setup tab added or removed buttons in one step.** The **Replies** or **Your messages** buttons in the top card appeared or went all at once. They now open and close smoothly.
 - **A note on the Model tab came in late.** With two models picked, and nothing on the Prompt tab set up to pass on what the second model finds, a note says so. It appeared all at once, a moment after the other rows had opened. It now opens and closes with them.
+- **Hiding a kind of line on the Log tab took it away in one step.** Turning off a kind under **Show in this list** took its lines out all at once, a moment after the switch moved. Turning it on again put them back the same way. They now close and open smoothly.
 
 ---
 
