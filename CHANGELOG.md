@@ -17,6 +17,7 @@ _2026-11-09_
 - **A note on the Model tab came in late.** With two models picked, and nothing on the Prompt tab set up to pass on what the second model finds, a note says so. It appeared all at once, a moment after the other rows had opened. It now opens and closes with them.
 - **Hiding a kind of line on the Log tab took it away in one step.** Turning off a kind under **Show in this list** took its lines out all at once, a moment after the switch moved. Turning it on again put them back the same way. They now close and open smoothly.
 - **A row that opens with a switch landed with a small step under UI Scale.** With **UI Scale** at some sizes, such as 115% or 135%, a row that opens or closes with a switch could be up to a pixel off when it stopped, and then moved into place in one step. It now stops where it belongs. Auto Retry has the same fix.
+- **Some errors were not waited out.** **Wait out a provider that will not take the call** only waited on a short list of errors. It now also waits on every status from 500 to 599, such as 507 and 530, on 409 and 425, on "Bad Gateway" and "Service Unavailable", and on a connection that closed or could not be made. An error such as `request failed (502): 404 page not found` was read as one that waiting cannot fix, because of the 404 in the gateway's own page. So was a rate limit that said "try again in 2.404 seconds". The status Lumiverse gives in parentheses is now read on its own. Auto Retry reads errors the same way.
 
 ---
 

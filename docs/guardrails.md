@@ -194,11 +194,17 @@ It waits on:
 - a key at its limit
 - a server saying it is overloaded or at capacity
 - a local server answering 503 while it loads a model
-- a call that timed out, or a connection that dropped
+- any status from 500 to 599, such as 502 Bad Gateway and 504 Gateway Timeout, and 408, 409 and 425
+- a call that timed out, a connection that dropped, or a server that could not be reached
+
+Lumiverse writes a failed call with the provider's status in parentheses, such as `request failed (504): Gateway Timeout`. That status is read on its own:
+
+- A number in the rest of the error is not a status. "Try again in 2.404 seconds" is not a 404.
+- With 408, 425, 502, 503, 504 or 520 to 530, the rest is the gateway's own page. It can say "404 page not found" or "permission" about itself, so the call is waited on all the same.
 
 It never waits on a wrong key, a model that does not exist, a missing permission, an account with no balance or quota left, a daily limit that only comes back the next day, or a prompt too long for the model. Waiting cannot fix those.
 
-Auto Retry reads errors with the same two lists, so the two extensions agree on which errors are worth trying again.
+Auto Retry reads errors the same way, so the two extensions agree on which errors are worth trying again.
 
 How long it waits:
 

@@ -5656,6 +5656,48 @@ describe("a provider that will not take the call", () => {
     expect(h.skipped().join(" ")).toMatch(/429/);
   });
 
+  // Errors as Lumiverse writes them, with the provider's status in
+  // parentheses. The status is read on its own: a gateway's page can say "404
+  // page not found" about itself, and a wait of "2.404 seconds" is not a 404.
+  const waitedOn = [
+    "Lantern request failed (504): Gateway Timeout, retry after 0.05 seconds",
+    "Lantern request failed (502): 404 page not found, retry after 0.05 seconds",
+    "Lantern request failed (529): Overloaded, retry after 0.05 seconds",
+    "Lantern request failed (530): Origin DNS error, retry after 0.05 seconds",
+    "Lantern request failed: The socket connection was closed unexpectedly, retry after 0.05 seconds",
+  ];
+  for (const why of waitedOn) {
+    test("waited out: " + why.replace(/, retry after.*/, ""), async () => {
+      const h = await armed(["She stepped through and the cold hit her."], { rateWaits: 2 }, chat(), { failFirst: { times: 1, why } });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(1400);
+      expect(h.asked.length).toBe(2);
+      expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    });
+  }
+  test("waited out: a rate limit whose wait has 404 in it", async () => {
+    const h = await armed(
+      ["She stepped through and the cold hit her."],
+      { rateWaits: 2 },
+      chat(),
+      { failFirst: { times: 1, why: "Lantern request failed (429): Rate limit reached. Please try again in 0.404 seconds" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(1800);
+    expect(h.asked.length).toBe(2);
+  });
+  test("not waited on: no balance left, whatever the gateway's status", async () => {
+    const h = await armed(
+      ["She stepped through and the cold hit her."],
+      { rateWaits: 3 },
+      chat(),
+      { failFirst: { times: 1, why: "Lantern request failed (502): insufficient balance on the upstream account" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(400);
+    expect(h.asked.length).toBe(1);
+  });
+
   // Waiting cannot fix a wrong key, and sitting on a timer for one is worse
   // than saying so.
   test("a wrong key is not waited on", async () => {

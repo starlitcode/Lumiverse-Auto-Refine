@@ -2974,22 +2974,60 @@ function noteFor(why) {
 // Free tiers and shared keys meter per minute, and a local server answers 503
 // while it is loading a model. Both are the common case for anybody not paying
 // per token, and both clear on their own.
-// The same list as Auto Retry's, so the two agree on which errors are worth
-// trying again.
-const RATE_LIMITED = /\b(?:408|429|500|502|503|504|520|521|522|523|524)\b|rate.?limit|too many requests|quota|overloaded|capacity|try again later|temporar(?:y|ily)|time(?:d ?| |-)?out|network|connection reset|socket hang up|econnrefused|econnreset|fetch failed/i;
-// Errors waiting cannot fix: a wrong key stays wrong, a model that does not
-// exist does not start existing, a balance does not refill, and a prompt over
-// the context length is the same prompt next time. Checked first, because a
-// message can carry both a number and a word from the list above. The same
-// list as Auto Retry's.
-const NOT_WORTH_WAITING = /\b(?:400|401|402|403|404|405|406|411|413|415|422|invalid[_ ]?api[_ ]?key|authentication|unauthorized|forbidden|permission|not allowed|not found|does not exist|model missing|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
+// ---- which errors are worth trying again ----
+// The same in Auto Retry and Auto Refine, so the two agree. errorKind reads an
+// error as "hard" (waiting cannot fix it), "wait" (it clears if you wait), or
+// "" (neither is known).
+//
+// Lumiverse writes a failed call as "Provider stream failed (504): detail".
+// The number in the parentheses is the status the provider answered with, so
+// it is read on its own, and a number in the detail is not a status: "try
+// again in 2.404 seconds" is not a 404.
+const STATED_STATUS = /\bfailed \((\d{3})\):/i;
+// A gateway that could not reach the model, or a server that is not ready.
+// The detail is then the gateway's own page, which can say "404 page not
+// found" or "permission" about itself, so only the account and the prompt
+// (HARD_SURE) still count against it.
+const GATEWAY_STATUS = /^(?:408|425|502|503|504|52\d|530)$/;
+// Every status that clears if you wait, as Lumiverse itself reads them.
+const WAIT_STATUS = /^(?:408|409|425|429|5\d\d)$/;
+// Statuses waiting cannot fix: a wrong key stays wrong, and a model that does
+// not exist does not start existing.
+const HARD_STATUS = /\b(?:400|401|402|403|404|405|406|411|413|415|422)\b/;
+// The key, the account and the prompt. A balance does not refill, a daily
+// limit only comes back the next day, and a prompt over the context length is
+// the same prompt next time. These are hard whatever status comes with them.
+const HARD_SURE = /\b(?:invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
+// Words that are hard from a provider, and that a gateway's page can also use
+// about itself.
+const HARD_LOOSE = /\b(?:forbidden|permission|not allowed|not found|does not exist|model missing)\b/i;
+// Errors that clear if you wait: a rate limit, a busy or loading server, a
+// gateway that could not get through, a dropped connection.
+const WAIT_ERROR = /\b(?:408|409|425|429|5\d\d)\b|rate.?limit|too many requests|quota|overloaded|capacity|try again|temporar(?:y|ily)|time(?:d ?| |-)?out|network|gateway|unavailable|server error|(?:no healthy|no available|bad) upstream|upstream (?:connect|error|request|server|service|time)|provider returned error|connection (?:was |is |has been )?(?:closed|reset|refused|lost|dropped|error|failed|failure|terminated)|closed unexpectedly|(?:unable|failed|could not) to connect|socket|terminated|econn\w+|etimedout|epipe|eai_again|enotfound|ehostunreach|enetunreach|und_err\w*|fetch failed|busy|loading/i;
+function errorKind(text) {
+    const stated = STATED_STATUS.exec(text);
+    const status = stated ? stated[1] : '';
+    const detail = stated ? text.slice(stated.index + stated[0].length) : text;
+    if (HARD_SURE.test(detail))
+        return 'hard';
+    if (status) {
+        if (GATEWAY_STATUS.test(status))
+            return 'wait';
+        if (HARD_STATUS.test(status) || HARD_LOOSE.test(detail))
+            return 'hard';
+        if (WAIT_STATUS.test(status) || WAIT_ERROR.test(detail))
+            return 'wait';
+        return '';
+    }
+    if (HARD_STATUS.test(text) || HARD_LOOSE.test(text))
+        return 'hard';
+    return WAIT_ERROR.test(text) ? 'wait' : '';
+}
 function rateLimited(err) {
     const s = String(err == null ? '' : err);
     if (!s)
         return false;
-    if (NOT_WORTH_WAITING.test(s))
-        return false;
-    return RATE_LIMITED.test(s);
+    return errorKind(s) === 'wait';
 }
 // How long the provider said to wait, in milliseconds, or 0 when it said
 // nothing. The header's own form first, which is a whole number of seconds
