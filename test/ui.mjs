@@ -15690,6 +15690,40 @@ for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, t
   }
 }
 
+// A box that opens is held at a height worked out in CSS pixels, and let go
+// when it lands. Under UI Scale that height has to be its real height to a
+// fraction of a pixel, or the box snaps to its real height as it is let go,
+// which shows as a small step at the end. Checked at every UI Scale step.
+console.log("\na box opens to its exact height at every UI Scale");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+    await settle(page);
+    const off = [];
+    for (let step = 50; step <= 150; step += 5) {
+      const got = await page.evaluate(async (z) => {
+        document.documentElement.style.zoom = String(z);
+        const tabs = [...document.querySelectorAll("#drawer [role=tab]")];
+        tabs.find((t) => t.textContent.trim().startsWith("Limits")).click();
+        await new Promise((r) => setTimeout(r, 400));
+        const box = document.querySelector('#drawer [data-arf-row="asSwipe"] input[type=checkbox]');
+        if (!box) return null;
+        box.click();
+        await new Promise((r) => setTimeout(r, 60));
+        const opening = document.querySelector('#drawer [data-arf-hangs="asSwipe"]');
+        const held = opening ? parseFloat(opening.style.height) : NaN;
+        await new Promise((r) => setTimeout(r, 400));
+        const open = document.querySelector('#drawer [data-arf-hangs="asSwipe"]');
+        const real = open ? parseFloat(getComputedStyle(open).height) : NaN;
+        box.isConnected ? box.click() : document.querySelector('#drawer [data-arf-row="asSwipe"] input[type=checkbox]').click();
+        await new Promise((r) => setTimeout(r, 400));
+        return { held, real };
+      }, step / 100);
+      if (!got || !(Math.abs(got.held - got.real) < 0.05)) off.push(step + "%: " + JSON.stringify(got));
+    }
+    ok(label + ": the box under Add the refine as a swipe opens to its real height at every UI Scale from 50% to 150%", off.length === 0, off.join(" "));
+  });
+}
+
 console.log("\nfolding a block with one side refined");
 {
   // What to refine is changed while the panel is open, and the Prompt tab is

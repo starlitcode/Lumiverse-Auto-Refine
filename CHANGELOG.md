@@ -16,6 +16,7 @@ _2026-11-09_
 - **Changing What to refine on the Setup tab added or removed buttons in one step.** The **Replies** or **Your messages** buttons in the top card appeared or went all at once. They now open and close smoothly.
 - **A note on the Model tab came in late.** With two models picked, and nothing on the Prompt tab set up to pass on what the second model finds, a note says so. It appeared all at once, a moment after the other rows had opened. It now opens and closes with them.
 - **Hiding a kind of line on the Log tab took it away in one step.** Turning off a kind under **Show in this list** took its lines out all at once, a moment after the switch moved. Turning it on again put them back the same way. They now close and open smoothly.
+- **A row that opens with a switch landed with a small step under UI Scale.** With **UI Scale** at some sizes, such as 115% or 135%, a row that opens or closes with a switch could be up to a pixel off when it stopped, and then moved into place in one step. It now stops where it belongs. Auto Retry has the same fix.
 
 ---
 

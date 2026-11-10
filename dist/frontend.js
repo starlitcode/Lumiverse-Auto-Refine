@@ -1924,6 +1924,37 @@ const BUILT_IN_SHAPES = BUILT_IN_PROMPTS.map((p) => ({
 // they have changed. FNV-1a over their shapes: it only has to differ when the
 // prompts differ, and it goes in storage, so short matters more than anything a
 // hash is usually chosen for.
+// How much the page is zoomed at an element. Lumiverse's UI Scale is a CSS
+// zoom, so a size read with getBoundingClientRect is in zoomed screen pixels,
+// and one written to a style is in CSS pixels. currentCSSZoom gives it
+// exactly, where the browser has it. Elsewhere it is the width on screen over
+// the width in CSS pixels from the computed style. offsetWidth is not used
+// for that: it is rounded to a whole pixel, and on a box 300 pixels wide that
+// put a height out by most of a pixel, which showed as a step at the end of a
+// fold.
+function zoomOf(el, rect) {
+    try {
+        const z = el && el.currentCSSZoom;
+        if (typeof z === "number" && z > 0.01)
+            return z;
+        const r = rect || el.getBoundingClientRect();
+        if (!(r.width > 0))
+            return 1;
+        const cs = getComputedStyle(el);
+        let w = parseFloat(cs.width);
+        if (w > 0 && cs.boxSizing !== "border-box")
+            for (const k of ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"])
+                w += parseFloat(cs[k]) || 0;
+        // An inline box has no width of its own in its style.
+        if (!(w > 0))
+            w = el.offsetWidth || 0;
+        const s = w > 0 ? r.width / w : 1;
+        return s > 0.01 ? s : 1;
+    }
+    catch (_) {
+        return 1;
+    }
+}
 function markText(text) {
     let h = 0x811c9dc5;
     for (let i = 0; i < text.length; i++) {
@@ -6678,7 +6709,7 @@ export function setup(ctx, overrides) {
         el2.style.left = Math.round(left) + "px";
         el2.style.top = Math.round(top) + "px";
         const got = el2.getBoundingClientRect();
-        const scale = el2.offsetWidth > 0 ? got.width / el2.offsetWidth : 1;
+        const scale = zoomOf(el2, got);
         const dx = left - got.left;
         const dy = top - got.top;
         if (scale > 0.01 && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
@@ -6770,7 +6801,7 @@ export function setup(ctx, overrides) {
         const want = Math.min(WIDEST, roomW);
         box.style.width = want + "px";
         const first = box.getBoundingClientRect();
-        const zoom = box.offsetWidth > 0 ? first.width / box.offsetWidth : 1;
+        const zoom = zoomOf(box, first);
         if (zoom > 0.01 && Math.abs(zoom - 1) > 0.01)
             box.style.width = Math.floor(want / zoom) + "px";
         // Measured as it lands on screen, in the same units as the row's rect.
@@ -8816,12 +8847,10 @@ export function setup(ctx, overrides) {
     // pixels, and Lumiverse applies its UI Scale as a zoom, so the two differ.
     // A height read in screen pixels and written back as CSS pixels opened a
     // row too tall or too short, and it jumped to its real height at the end.
-    // The scale is read off the width, which the browser also reports both
-    // ways.
+    // The scale comes from zoomOf.
     function cssHeight(node) {
         const r = node.getBoundingClientRect();
-        const scale = node.offsetWidth > 0 && r.width > 0 ? r.width / node.offsetWidth : 1;
-        return r.height / (scale > 0.01 ? scale : 1);
+        return r.height / zoomOf(node, r);
     }
     // What a fold or an open writes to a box.
     const FOLD_STYLES = ["height", "opacity", "overflow", "transition", "marginBottom", "marginTop", "paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth", "transform", "flexShrink", "minHeight"];
@@ -16776,8 +16805,7 @@ export function setup(ctx, overrides) {
                 selBar = makeSelBar();
             const bar = selBar;
             const box = bar.getBoundingClientRect();
-            const scale = bar.offsetWidth > 0 && box.width > 0 ? box.width / bar.offsetWidth : 1;
-            const z = scale > 0.01 ? scale : 1;
+            const z = zoomOf(bar, box);
             const first = rects[0];
             const last = rects[rects.length - 1];
             // On a touch screen the selection's drag handles hang below the text,
