@@ -8364,10 +8364,16 @@ console.log("\nreading the request at full size");
       const over = document.querySelector(".arf-over");
       const ta = over && over.querySelector("textarea");
       const labels = Array.from(over.querySelectorAll("button")).map((b) => b.textContent.trim());
-      return { text: ta ? ta.value : "", readOnly: ta ? ta.readOnly : false, labels: labels };
+      return {
+        text: ta ? ta.value : "",
+        readOnly: ta ? ta.readOnly : false,
+        noCaret: (() => { const c = ta ? getComputedStyle(ta).caretColor : ""; return c === "transparent" || /^rgba\(\d+, \d+, \d+, 0\)$/.test(c) ? true : c; })(),
+        labels: labels,
+      };
     });
     ok("the preview opens at full size", /the whole instruction, at length/.test(view.text));
     ok("as something to read rather than edit", view.readOnly, view.labels.join(","));
+    ok("and with no typing cursor in it", view.noCaret === true, JSON.stringify(view.noCaret));
     ok("with Copy and Close, and no Done", view.labels.indexOf("Done") < 0 && view.labels.indexOf("Close") >= 0);
 
     // It fades in and the card slides up a little. With less motion asked
@@ -10596,6 +10602,10 @@ console.log("\na built-in prompt cannot be typed into");
         said: !!document.querySelector("#drawer [data-arf-promptlocked]"),
         text: document.querySelector("#drawer [data-arf-promptlocked]")?.textContent || "",
         readOnly: ta ? !!ta.readOnly : null,
+        // Chromium draws no cursor in a read-only box, so a screenshot cannot
+        // show one, but Safari on a phone does. This reads the color it would
+        // be drawn in.
+        noCaret: (() => { const c = ta ? getComputedStyle(ta).caretColor : ""; return c === "transparent" || /^rgba\(\d+, \d+, \d+, 0\)$/.test(c) ? true : c; })(),
         switchOff: sw ? !!sw.disabled : null,
         addOff: add ? !!add.disabled : null,
       };
@@ -10854,6 +10864,7 @@ console.log("\na built-in prompt cannot be typed into");
       );
       ok("the lock is on before the panel is taken down", before.readOnly === true, JSON.stringify(before));
       ok("and still on when Lumiverse builds it again", after.readOnly === true, JSON.stringify(after));
+      ok("a locked block shows no typing cursor", after.noCaret === true, JSON.stringify(after));
       ok("with the note still saying why", after.said === true, JSON.stringify(after));
       ok("and the picker still naming the prompt", pick === "A judge", JSON.stringify(pick));
     }

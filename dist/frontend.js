@@ -10291,8 +10291,10 @@ export function setup(ctx, overrides) {
         ta.setAttribute("data-arf-field", "blocktext:" + b.id);
         // Readable rather than disabled, so the text can still be selected and
         // copied out of a prompt somebody wants to borrow a line from.
+        // No blinking cursor in it: it cannot be typed in, and a cursor says it can.
         if (locked) {
             ta.readOnly = true;
+            ta.style.caretColor = "transparent";
             ta.style.opacity = "0.75";
             ta.title = "Part of " + currentPick() + ", which cannot be changed. Save it as your own first.";
         }
@@ -13661,8 +13663,12 @@ export function setup(ctx, overrides) {
         ta.className = "arf-field arf-mono arf-bigta";
         ta.value = initial;
         ta.setAttribute("aria-label", label);
-        if (!done)
+        // A viewer, opened with no done, is read only. It has no cursor either,
+        // since a cursor says it can be typed in.
+        if (!done) {
             ta.readOnly = true;
+            ta.style.caretColor = "transparent";
+        }
         box.appendChild(ta);
         const row = el("div", "arf-row");
         row.style.justifyContent = "flex-end";
