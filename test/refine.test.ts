@@ -4726,6 +4726,27 @@ describe("the reply's thinking, for a block that asks for it", () => {
     expect(sent(h).length).toBeLessThan(13500);
   });
 
+  test("Most tokens of the reply's thinking sets the cut, and the Log is told", async () => {
+    const long = "early plan ".repeat(400) + "THE LAST DECISION.";
+    const h = await armed(answer, { blocks, maxThinkingTokens: 100 }, withThinking({ extra: { reasoning: long } }));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).toContain("THE LAST DECISION.");
+    const plan = /<plan>([\s\S]*?)<\/plan>/.exec(sent(h));
+    expect(plan && plan[1].length).toBeLessThan(600);
+    const told = h.sent.filter((m: any) => m.type === "reply_thinking_sent").pop();
+    expect(told.tokens).toBeLessThanOrEqual(100);
+    expect(told.of).toBeGreaterThan(told.tokens);
+  });
+
+  test("0 sends all of it", async () => {
+    const long = "early plan ".repeat(3000) + "THE LAST DECISION.";
+    const h = await armed(answer, { blocks, maxThinkingTokens: 0 }, withThinking({ extra: { reasoning: long } }));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).toContain(long);
+  });
+
   // A provider can decline a request that holds another model's thinking, so a
   // decline with the thinking sent names the block that sent it.
   test("a decline with the thinking sent names that block", async () => {

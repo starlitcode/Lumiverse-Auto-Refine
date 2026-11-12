@@ -530,7 +530,9 @@ const REPLY_THINKING_MACRO = '{{reply_thinking}}';
 // How much of that thinking goes in, from its end, which is where the model
 // settled what it was going to write. Thinking can run to tens of thousands of
 // characters, and every one of them is paid for on every refine.
-const REPLY_THINKING_MAX = 12000;
+// The most of the reply's thinking that goes in, in tokens, from Most tokens
+// of the reply's thinking. 0 sends all of it.
+let maxThinkingTokens = 3000;
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
 // rather than a stray heading in the prompt.
@@ -2123,10 +2125,29 @@ function replyThinkingOf(m, head) {
         // The tags around thinking written into the reply are not part of it.
         text = String(head || '').replace(/<\/?[a-z][\w:|-]{0,40}\|?>|<\|[\w:|-]{1,40}\|>/gi, ' ');
     }
-    text = text.replace(/\n{3,}/g, '\n\n').trim();
-    if (text.length > REPLY_THINKING_MAX)
-        text = '...' + text.slice(text.length - REPLY_THINKING_MAX).replace(/^\S*\s/, '');
-    return text;
+    return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+// The end of the thinking, cut to the token budget. The end is kept because
+// that is where the model settled what to write. Cut at a word, and counted
+// again after the cut, since a count from a share of the characters is only
+// a guess. tokens is what was sent, and of is what there was.
+async function fitThinking(text, budget, userId) {
+    const of = text ? await countTokens(text, userId) : 0;
+    if (!text || budget <= 0 || of <= budget)
+        return { text, tokens: of, of };
+    let keep = Math.floor((text.length * budget) / of);
+    let out = text;
+    let tokens = of;
+    for (let i = 0; i < 4 && keep > 0; i++) {
+        out = '...' + text.slice(text.length - keep).replace(/^\S*\s+/, '');
+        tokens = await countTokens(out, userId);
+        if (tokens <= budget)
+            break;
+        keep = Math.floor(keep * (budget / tokens) * 0.95);
+    }
+    if (tokens > budget)
+        return { text: '', tokens: 0, of };
+    return { text: out, tokens, of };
 }
 // A block that is nothing but empty tags once its macros came back empty. A
 // chat with no lorebook should not send <world></world>, which reads to a model
@@ -5123,8 +5144,14 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             why: 'that message is only the model working, so there is nothing to refine',
         };
     // Only where a block asks for it, and never for your own messages.
-    if (!isUser && promptWants(REPLY_THINKING_MACRO, isUser, willSend))
-        scene = { ...scene, replyThinking: replyThinkingOf(m, split.head) };
+    // Said in the Log, with its size and whether it was cut, since a real
+    // request is not shown anywhere.
+    if (!isUser && promptWants(REPLY_THINKING_MACRO, isUser, willSend)) {
+        const fit = await fitThinking(replyThinkingOf(m, split.head), maxThinkingTokens, userId);
+        scene = { ...scene, replyThinking: fit.text };
+        if (fit.text)
+            tell(userId, { type: 'reply_thinking_sent', chatId: chatId, messageId: m.id, tokens: fit.tokens, of: fit.of });
+    }
     // Where the selection sits in the body. Worked out against the body rather
     // than the whole message, because the model's own working is in front of it
     // and counting through that would put every offset out by its length.
@@ -6352,6 +6379,9 @@ function applyRules(s) {
     maxHistoryTokens = Number(s.maxHistoryTokens);
     maxHistoryTokens =
         Number.isFinite(maxHistoryTokens) && maxHistoryTokens >= 0 ? maxHistoryTokens : 4500;
+    maxThinkingTokens = Number(s.maxThinkingTokens);
+    maxThinkingTokens =
+        Number.isFinite(maxThinkingTokens) && maxThinkingTokens >= 0 ? maxThinkingTokens : 3000;
     samplers = s.samplers && typeof s.samplers === 'object' ? s.samplers : {};
     protectOn = s.protectOn !== false;
     protectThinking = s.protectThinking !== false;
@@ -7393,7 +7423,10 @@ async function onPanel(payload, userId) {
                     scene = { ...scene, shieldNote: protectNote == null ? SHIELD_NOTE : protectNote };
                 // The reply's thinking, as a refine of it would send it.
                 if (real && !isUser && previewMsg)
-                    scene = { ...scene, replyThinking: replyThinkingOf(previewMsg, split.head) };
+                    scene = {
+                        ...scene,
+                        replyThinking: (await fitThinking(replyThinkingOf(previewMsg, split.head), maxThinkingTokens, userId)).text,
+                    };
                 const blockParts = [];
                 // With several passes, a refine sends each pass's own prompt and never
                 // the one on the Prompt tab. The first pass is built here as it would

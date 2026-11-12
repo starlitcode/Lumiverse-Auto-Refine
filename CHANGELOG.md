@@ -13,7 +13,7 @@ _2026-11-11_
 ### Added
 
 - **Expand on a past refine.** Each refine on the Status tab has an **Expand** button. It opens the before, the after and what changed in a large window, so a long reply can be read without scrolling a small box. See [Settings](docs/settings.md).
-- **The reply's thinking can be sent with the refine.** A new macro, `{{reply_thinking}}`, holds the thinking the model wrote before the reply. Both built-in reply prompts have a new block for it, **Writers Plan**, switched off. With it on, the refine model knows what the reply was going for. See [The writer's plan](docs/prompt.md#the-writers-plan).
+- **The reply's thinking can be sent with the refine.** A new macro, `{{reply_thinking}}`, holds the thinking the model wrote before the reply. Both built-in reply prompts have a new block for it, **Writers Plan**, switched off. With it on, the refine model knows what the reply was going for. **Most tokens of the reply's thinking**, on the Context tab, sets how much is sent. It is 3,000 by default, longer thinking keeps its end, and 0 sends all of it. See [The writer's plan](docs/prompt.md#the-writers-plan).
 
 ### Fixed
 

@@ -91,6 +91,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "historyCut",
       "maxLoreTokens",
       "loreNames",
+      "maxThinkingTokens",
       "wornOn",
       "wornBack",
       "wornLeast",
@@ -784,6 +785,10 @@ const CONFIG = {
   // is worse than one fewer of them.
   maxLoreTokens: 2500,
   maxHistoryTokens: 4500,
+  // The most of the reply's thinking that {{reply_thinking}} sends. Its end is
+  // kept, since that is where the model settled what to write. 0 sends all of
+  // it.
+  maxThinkingTokens: 3000,
   // Each lorebook entry in {{lore}} starts with its name.
   loreNames: true,
   // Patterns, one per line, for what to take out of each earlier message
@@ -889,8 +894,8 @@ const MACROS: Array<{ tag: string; what: string; ours: boolean }> = [
     what:
       "Only for a reply. What the model thought before it wrote the reply: the " +
       "thinking Lumiverse shows with the reply, or the thinking written at the " +
-      "start of the reply itself. The last 12,000 characters of it when it is " +
-      "longer. A block holding this is left out when the reply has none. Some " +
+      "start of the reply itself. Cut to its end at Most tokens of the reply's " +
+      "thinking, on the Context tab. A block holding this is left out when the reply has none. Some " +
       "providers decline a request that carries another model's thinking.",
     ours: true,
   },
@@ -10682,6 +10687,17 @@ export function setup(ctx: Ctx, overrides?: any) {
       }),
     );
     wrap.appendChild(
+      fieldRow({
+        key: "maxThinkingTokens",
+        int: true,
+        label: "Most tokens of the reply's thinking",
+        type: "num",
+        min: 0,
+        max: 200000,
+        hint: "For {{reply_thinking}}, such as the Writers Plan block. Longer thinking keeps its end. 0 sends all of it.",
+      }),
+    );
+    wrap.appendChild(
       note(
         "Counted with Lumiverse's own tokenizer where it will answer, and estimated at four characters a token where it will not.",
       ),
@@ -12147,7 +12163,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         cfg.maxHistoryTokens +
         " tokens; lore " +
         cfg.maxLoreTokens +
-        " tokens",
+        " tokens; thinking " +
+        (cfg.maxThinkingTokens ? cfg.maxThinkingTokens + " tokens" : "all"),
     );
       const set = SAMPLER_FIELDS.filter(
         (f) => cfg.samplers && cfg.samplers[f.id] != null && cfg.samplers[f.id] !== "",
@@ -17770,6 +17787,17 @@ export function setup(ctx: Ctx, overrides?: any) {
           // What the second model found went into the request. A real request
           // is not shown anywhere, so this line is how somebody can tell it was
           // sent.
+          if (msg.type === "reply_thinking_sent") {
+            const tokens = Math.max(0, Number(msg.tokens) || 0);
+            const of = Math.max(0, Number(msg.of) || 0);
+            log("refine",
+              of > tokens
+                ? "the reply's thinking went to the refine model: the last " + tokens + " tokens of " + of
+                : "the reply's thinking went to the refine model: " + tokens + " tokens",
+              true,
+            );
+            return;
+          }
           if (msg.type === "jev_found_sent") {
             const n = Math.max(0, Number(msg.count) || 0);
             const checks = n + (n === 1 ? " check" : " checks");
