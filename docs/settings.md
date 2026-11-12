@@ -182,7 +182,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - On, the rewrite is added as a new swipe, and the original stays one swipe back.
   - The original stays in the chat, so this way back survives an update and a restart with no other setting.
   - **Put it back** then removes that swipe. It refuses if you have added another swipe since.
-  - **Your next / swipe button** is under it. You only need it if a Lumiverse update renames the swipe arrows. It works like **Where the input box is**, below. Its **Pick it for me** takes the next / swipe arrow you hold on a reply.
+  - **Your next / swipe button** is under it. You only need it if a Lumiverse update renames the swipe arrows. It works like **Where the input box is**, under **Refining the draft in your input box**. Its **Pick it for me** takes the next / swipe arrow you hold on a reply.
 - **Keep what a refine replaced** keeps the original, so you can put it back. It is on by default.
   - Your server holds it in memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
   - **Keep them through an update** is under it, and off by default. On, the list is also saved on your server for your account, so an update or a restart does not clear it.
@@ -339,9 +339,9 @@ Lumiverse shows curly quotes and apostrophes as straight ones. Your selection is
 
 While the floating button is on screen, its menu holds these extra actions. With the button off, they are in the chat input's Extras menu instead, which is how you reach them on a phone.
 
-**Where the input box is** is only needed if a Lumiverse update moves the input box.
+**Where the input box is** is under **Refining the draft in your input box**, and shows while that switch is on. It is only needed if a Lumiverse update moves the input box.
 
-- **The selectors it looks under** is the list it tries, in order, separated by commas.
+- The box is the list of selectors it tries, in order, separated by commas.
 - The built-in list is always tried after yours, so a selector of yours that stops working costs nothing. Emptying the box leaves only the built-in list.
 - The list below the box shows which selector found the box. A selector the browser cannot read is marked in red.
 - **Test** checks the page when you press it, and says whether the box was found and can be typed in.

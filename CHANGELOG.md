@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.56.1
+
+_2026-11-12_
+
+### Changed
+
+- **Where the input box is moved under the switch it belongs to.** It was a card of its own on the Setup tab, away from **Refining the draft in your input box**. It now sits straight under that switch and shows while the switch is on, the same as **Your next / swipe button** sits under **Add the refine as a swipe instead of writing over the reply**. See [Settings](docs/settings.md).
+
+---
+
 ## 1.56.0
 
 _2026-11-12_

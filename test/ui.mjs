@@ -5073,13 +5073,13 @@ console.log("\nUse the built-in list, when it is already the built-in list");
   // The drawer scrolls on its own, as Lumiverse's does, so the question comes
   // up as Lumiverse's pop-up rather than as press-again.
   const DRAWER = "#drawer{height:100vh;overflow-y:auto;box-sizing:border-box}";
-  await inTab(browser, { css: DRAWER }, async (page) => {
+  await inTab(browser, { css: DRAWER, saved: { inputRefine: true } }, async (page) => {
     await goTab(page, "Setup");
     const out = await tryBox(page, "inputSelector", "data-arf-resetinput");
     ok("input box: pressed on the built-in list, it says so", /already the built-in list\. Nothing changed\./.test(out.already.said), JSON.stringify(out.already).slice(0, 200));
     ok("and changes nothing", out.already.value === out.before.value, JSON.stringify(out).slice(0, 300));
     ok("without a pop-up", out.toasts === 0, String(out.toasts));
-    ok("pressed on a list of your own, a confirmation pop-up asks first", out.asked.length === 1 && /^Use the built-in list \| Replace what is in The selectors it looks under/.test(out.asked[0]), JSON.stringify(out.asked));
+    ok("pressed on a list of your own, a confirmation pop-up asks first", out.asked.length === 1 && /^Use the built-in list \| Replace what is in Where the input box is/.test(out.asked[0]), JSON.stringify(out.asked));
     ok("answered no, your list stays", out.declined.value === ".my-own-box", JSON.stringify(out.declined).slice(0, 200));
     ok("answered yes, the built-in one goes back", out.back.value === out.before.value && !/Nothing changed/.test(out.back.said), JSON.stringify(out.back).slice(0, 200));
   });
@@ -11185,7 +11185,7 @@ console.log("\npick it for me in the drawer");
     });
 
   // The input box on a phone, in Lumiverse's own markup.
-  await inTab(browser, { viewport: { width: 360, height: 760 }, touch: true }, async (page, errors) => {
+  await inTab(browser, { viewport: { width: 360, height: 760 }, touch: true, saved: { inputRefine: true } }, async (page, errors) => {
     await goTab(page, "Setup");
     await page.evaluate(() => {
       window.__makeComposer("");
@@ -11258,7 +11258,7 @@ console.log("\npick it for me in the drawer");
 
   // The bar does not move: there at once, and gone at once. Read from what
   // is drawn.
-  await inTab(browser, { viewport: { width: 1280, height: 800 } }, async (page) => {
+  await inTab(browser, { viewport: { width: 1280, height: 800 }, saved: { inputRefine: true } }, async (page) => {
     await goTab(page, "Setup");
     const moves = await page.evaluate(async () => {
       const drawn = () => {
@@ -11281,7 +11281,7 @@ console.log("\npick it for me in the drawer");
   });
 
   // What it will not take, and a Lumiverse that cannot close the drawer.
-  await inTab(browser, { viewport: { width: 1280, height: 800 } }, async (page, errors) => {
+  await inTab(browser, { viewport: { width: 1280, height: 800 }, saved: { inputRefine: true } }, async (page, errors) => {
     await goTab(page, "Setup");
     const before = (await state(page)).input;
     await page.evaluate(() => {
@@ -11336,13 +11336,42 @@ console.log("\nwhere the input box is");
   // The one card that reads Lumiverse's own layout. A release that moves the
   // box breaks refining a draft and nothing else, so the reader has to be able
   // to see what is being tried and put their own selector in front of it.
-  await inTab(browser, {}, async (page) => {
+  // It hangs under Refining the draft in your input box, the same as the
+  // next / swipe button hangs under Add the refine as a swipe, and only shows
+  // while that switch is on. Checked on a phone and a laptop.
+  for (const [where, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch }, async (page) => {
+      await goTab(page, "Setup");
+      const look = () =>
+        page.evaluate(() => {
+          const child = document.querySelector("#drawer [data-arf-inputchild]");
+          const above = child ? child.previousElementSibling : null;
+          return {
+            card: !!document.querySelector('#drawer [data-arf-card="Where the input box is"]'),
+            under: !!(above && above.querySelector('[data-arf-field="inputRefine"]')),
+            shown: !!child && child.getClientRects().length > 0 && getComputedStyle(child).display !== "none",
+            wide: child ? Math.round(child.scrollWidth - child.clientWidth) : -1,
+          };
+        });
+      const off = await look();
+      const sw = await page.$('#drawer [data-arf-field="inputRefine"]');
+      if (touch) await sw.tap();
+      else await sw.click();
+      await page.waitForTimeout(700);
+      const on = await look();
+      ok(where + ": it is no longer a card of its own", !off.card, JSON.stringify(off));
+      ok(where + ": it sits straight under Refining the draft in your input box", off.under, JSON.stringify(off));
+      ok(where + ": hidden while that switch is off", !off.shown, JSON.stringify(off));
+      ok(where + ": shown once it is switched on", on.shown, JSON.stringify(on));
+      ok(where + ": nothing in it runs off the side", on.wide <= 0, JSON.stringify(on));
+    });
+  }
+
+  await inTab(browser, { saved: { inputRefine: true } }, async (page) => {
     await goTab(page, "Setup");
     const seen = await page.evaluate(() => {
-      const card = document.querySelector('#drawer [data-arf-card="Where the input box is"]');
       const list = document.querySelector("#drawer [data-arf-inputlist]");
       return {
-        card: !!card,
         test: !!document.querySelector("#drawer [data-arf-testinput]"),
         reset: !!document.querySelector("#drawer [data-arf-resetinput]"),
         lines: list ? list.querySelectorAll("[data-arf-pick]").length : 0,
@@ -11350,7 +11379,6 @@ console.log("\nwhere the input box is");
         text: list ? list.textContent : "",
       };
     });
-    ok("the card is on Setup", seen.card, JSON.stringify(seen).slice(0, 200));
     ok("with a Test button", seen.test, JSON.stringify(seen).slice(0, 200));
     ok("with a way back to the built-in list", seen.reset, JSON.stringify(seen).slice(0, 200));
     // Every selector, not a count of them: the reader needs to compare what is

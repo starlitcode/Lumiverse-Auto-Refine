@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.56.0";
+const VERSION = "1.56.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -467,6 +467,7 @@ const SWIPE_PICKS = [
 
 // The label on the swipe selector's row, which the moved-default line names.
 const SWIPE_LABEL = "Your next / swipe button";
+const INPUT_LABEL = "Where the input box is";
 
 // Class and id names Lumiverse makes fresh for each build, such as
 // _card_19912_336. A selector built on one stops matching after an update, so
@@ -7498,7 +7499,6 @@ export function setup(ctx: Ctx, overrides?: any) {
       buildChatCard(),
       buildAlertCard(),
       buildReachCard(),
-      buildInputCard(),
       buildTransferCard(),
     ];
   }
@@ -13085,26 +13085,31 @@ export function setup(ctx: Ctx, overrides?: any) {
     return wrap;
   }
 
-  // Where the input box is.
+  // Where the input box is, under the switch for refining the draft.
   //
   // Refining a draft is the one part that reads Lumiverse's own layout, so a
   // release that moves the box stops that and nothing else. The selectors are
-  // listed in full rather than described, because anybody who needs this card
-  // is reading their own page's markup and has to see what is already tried
+  // listed in full rather than described, because anybody who needs this is
+  // reading their own page's markup and has to see what is already tried
   // before writing anything.
   //
+  // A child of that switch, the same as the next / swipe button is of Add the
+  // refine as a swipe: it answers for one setting and means nothing with that
+  // setting off. Built either way and hidden, so turning the switch on reveals
+  // something already standing there.
+  //
   // Pick it for me closes the drawer and takes the box that is held next.
-  function buildInputCard(): HTMLElement {
-    const wrap = card(
-      "Where the input box is",
-      "Only needed if Refine what I have typed stops finding your box after a Lumiverse update.",
-    );
+  function buildInputChild(): HTMLElement {
+    const wrap = el("div", "arf-col arf-under");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:6px;margin-top:6px";
+    wrap.setAttribute("data-arf-inputchild", "1");
+    hangsOff(wrap, "inputRefine");
     wrap.appendChild(
       fieldRow({
         key: "inputSelector",
-        label: "The selectors it looks under",
+        label: INPUT_LABEL,
         type: "text",
-        hint: "Separated by commas. Yours are tried first, then the built-in list.",
+        hint: "Only needed if a Lumiverse update moves the input box and Refine what I am typing stops finding it. Comma-separated. Yours are tried first, then the built-in list.",
       }),
     );
 
@@ -13153,7 +13158,7 @@ export function setup(ctx: Ctx, overrides?: any) {
         alreadyBuiltIn(said, "This is already the built-in list. Nothing changed.");
         return;
       }
-      askBuiltInList("resetinput", "The selectors it looks under", () => {
+      askBuiltInList("resetinput", INPUT_LABEL, () => {
         cfg.inputSelector = INPUT_PICKS.join(", ");
         persist(true);
         paint();
@@ -13504,6 +13509,8 @@ export function setup(ctx: Ctx, overrides?: any) {
         hint: "Off by default. Adds Refine what I am typing above the tabs and to the menus. It writes into your input box.",
       }),
     );
+    // Straight under the switch it belongs to, as the next / swipe button is.
+    wrap.appendChild(buildInputChild());
     wrap.appendChild(
       fieldRow({
         key: "barButton",
