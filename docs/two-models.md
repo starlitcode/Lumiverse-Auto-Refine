@@ -126,7 +126,7 @@ It goes from 1 to 99. The two ends are left out because each one makes the secon
 - At 100, a check would have to score exactly 100%. That almost never happens, so nearly every reply would be left alone, and each one would still cost a call. To stop refining, switch automatic refining off.
 - At 0, every check always reaches the line, so every reply is refined. That is the same as one model, with a call added. To refine every reply, pick one model.
 
-**Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it.
+**Also check for worn-out phrases** adds one more check: whether the reply uses a phrase this chat has worn out. The list is the one `{{overused}}` fills in, so it only has anything in it while **Find phrases this chat has worn out** is on, on the Prompt tab. The reply being judged is not counted in that list, only the ones before it. A reply you hid from the prompt is not counted either.
 
 The check it sends is in **How it asks**, under the switch. You can change it. Call the list `worn_phrases` and the reply `reply`, both in backticks. An empty box asks nothing about worn phrases. **Use the built-in checks** under it puts the built-in one back:
 
@@ -140,7 +140,7 @@ By default the second model only reads the reply. It does not see the reply befo
 
 **Also compare with the reply before it** changes that. It is off by default. On:
 
-- The last reply before this one is sent too, without its thinking. Your own messages are skipped.
+- The last reply before this one is sent too, without its thinking. Your own messages are skipped, and so is a reply you hid from the prompt.
 - The checks in **What it compares**, the box under the switch, are asked as well.
 - They use the same line as your other checks, under **Refine when a check reaches**.
 - They are not asked when there is no reply before this one, such as on the first reply of a chat.

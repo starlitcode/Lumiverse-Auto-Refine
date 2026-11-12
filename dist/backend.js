@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.55.2';
+const VERSION = '1.56.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -230,6 +230,24 @@ function dropKept(k, userId) {
     before.delete(k);
     if (keepPutBack)
         savePutBack(userId);
+}
+// The refines a deleted chat or message held, taken off the list and off the
+// account's saved copy. There is nothing left to put them back into, and the
+// text of a deleted chat is not kept. The saved copy is read in first, so an
+// entry from before a restart does not come back with the next save.
+async function forgetKept(userId, hit) {
+    const on = keepPutBack;
+    if (on)
+        await readPutBack(userId, true);
+    let n = 0;
+    for (const [k, v] of Array.from(before.entries())) {
+        if (v.user !== userKey(userId) || !hit(v))
+            continue;
+        before.delete(k);
+        n++;
+    }
+    if (n && on)
+        await savePutBack(userId, true);
 }
 // Read once per account after a start, with the switch on, so an update or a
 // restart does not lose the list. Entries already in memory are newer and win.
@@ -507,6 +525,12 @@ const MEMORY_MACRO = '{{memories}}';
 const OVERUSED_MACRO = '{{overused}}';
 // What the checks found, whichever second model scored them.
 const CHECKS_FOUND_MACRO = '{{checks_found}}';
+// What the model thought before it wrote the reply being refined.
+const REPLY_THINKING_MACRO = '{{reply_thinking}}';
+// How much of that thinking goes in, from its end, which is where the model
+// settled what it was going to write. Thinking can run to tens of thousands of
+// characters, and every one of them is paid for on every refine.
+const REPLY_THINKING_MAX = 12000;
 // Ours, and what each one says when there is nothing to put there. Empty means
 // the block holding it collapses, which is what makes an unused block harmless
 // rather than a stray heading in the prompt.
@@ -517,7 +541,7 @@ const CHECKS_FOUND_MACRO = '{{checks_found}}';
 // behind a macro meant it could not be reworded, moved, or asked to report what
 // it changed. It is written out in the default prompt instead, where it can be
 // edited like any other line.
-const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused', 'checks_found'];
+const OURS = ['message', 'history', 'lore', 'memories', 'protect_notes', 'whole_reply', 'overused', 'checks_found', 'reply_thinking'];
 const NO_SCENE = { character: '', context: '', lore: '', memory: '', name: '' };
 // The prompt a fresh install starts on, and the one people copy to write their
 // own. Second person throughout, because that is who the model is being spoken
@@ -1479,6 +1503,8 @@ function fillOurs(text, p) {
             return p.worn || '';
         if (id === 'checks_found')
             return p.jevFound || '';
+        if (id === 'reply_thinking')
+            return p.thinking || '';
         return '';
     });
 }
@@ -2077,10 +2103,30 @@ function snipSpan(raw, start, end) {
     // Nothing on one side means the span ran to an edge, so no space is owed.
     if (!lTrim || !rTrim)
         return lTrim + rTrim;
-    // A space before a comma or a full stop is not how the sentence read before.
+    // A space before a comma or a period is not how the sentence read before.
     if (/^[,.!?;:)\]]/.test(rTrim))
         return lTrim + rTrim;
     return lTrim + (hadSpace ? ' ' : '') + rTrim;
+}
+// What the model thought before it wrote a reply: the thinking Lumiverse keeps
+// beside the reply, or else the thinking written at the start of the reply
+// itself, which a refine holds back. The end of it when it is long, since that
+// is where the model settled what to write. Empty when there is none.
+function replyThinkingOf(m, head) {
+    let text = '';
+    const extra = m && m.extra && typeof m.extra === 'object' ? m.extra : null;
+    if (extra && typeof extra.reasoning === 'string')
+        text = extra.reasoning;
+    else if (m && typeof m.reasoning === 'string')
+        text = m.reasoning;
+    if (!text.trim()) {
+        // The tags around thinking written into the reply are not part of it.
+        text = String(head || '').replace(/<\/?[a-z][\w:|-]{0,40}\|?>|<\|[\w:|-]{1,40}\|>/gi, ' ');
+    }
+    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    if (text.length > REPLY_THINKING_MAX)
+        text = '...' + text.slice(text.length - REPLY_THINKING_MAX).replace(/^\S*\s/, '');
+    return text;
 }
 // A block that is nothing but empty tags once its macros came back empty. A
 // chat with no lorebook should not send <world></world>, which reads to a model
@@ -2108,10 +2154,16 @@ use) {
         wholeReply: scene.wholeReply,
         worn: scene.worn,
         jevFound: scene.jevFound,
+        thinking: scene.replyThinking,
     };
     const out = [];
     for (const b of use && use.length ? use : activeBlocks(isUser)) {
         if (!b || !b.on)
+            continue;
+        // A block that carries the reply's thinking is left out whole when there
+        // is none, words around the macro and all. Those words are about the
+        // thinking, and with nothing after them they would only mislead.
+        if (!piece.thinking && /\{\{\s*reply_thinking\s*\}\}/i.test(String(b.text || '')))
             continue;
         // Ours are masked, not filled, so the host pass runs over the block's own
         // wording and never over the reply. Filling first would hand the reply's
@@ -2518,6 +2570,12 @@ const REFUSAL_PHRASES = [
 // so a network error or a timeout never matches. The same pattern as Auto
 // Retry's, so the two extensions agree on what a refusal is.
 const REFUSAL_ERROR = /\b(?:prohibited[_ ]?content|content[_ ]?polic(?:y|ies)|safety[_ ]?(?:polic(?:y|ies)|filter|settings?)|response was blocked|blocked (?:by|for) (?:safety|content|moderation)|declined the response|blocked the prompt|reproduce protected material|content[_ ]?filter(?:ed|ing|s)?|moderation|flagged as|violat\w* (?:content|safety|polic)|finish[_ ]?reason["'\s:=]*(?:safety|prohibited|blocklist|recitation)|blocklist)\b/i;
+// A provider's own category for a request it declined because the prompt asks
+// the model to write out its reasoning or thinking in the answer. Newer Claude
+// models do this. The words the provider sends vary, and the category does not.
+const REASONING_BLOCK = /reasoning[_ -]?extraction/i;
+const WHY_REASONING_BLOCK = 'the provider declined the request as "reasoning_extraction". It does that when a prompt asks the model to write out its reasoning or thinking in its answer, and sometimes by mistake. Asking again would be declined the same way and still be paid for, so it was not asked again. Take that wording out of your prompt, such as "show your reasoning" or "think step by step in a tag", or load a built-in prompt';
+const WHY_REASONING_THINKING = '. The reply\'s thinking was in this request too, from a block with {{reply_thinking}} such as Writers Plan. Some providers decline that as well, so try with that block switched off';
 // Every phrase written out, so a check is one pass over three lists rather than
 // three passes and a concat on every answer.
 function looksLikeRefusal(text) {
@@ -3930,6 +3988,12 @@ function cutHistory(text) {
         .replace(/[ \t]+$/gm, '')
         .replace(/\n{3,}/g, '\n\n');
 }
+// A message hidden from the prompt in Lumiverse. Lumiverse leaves it out of
+// the chat's own prompt, so it is left out of what a refine reads as the story
+// too.
+function hiddenFromPrompt(m) {
+    return !!(m && m.extra && m.extra.hidden === true);
+}
 async function gatherHistory(msgs, at, charName, userId, youName) {
     const want = Math.max(0, Math.min(40, Number(contextMessages) || 0));
     if (!want || at <= 0)
@@ -3944,7 +4008,7 @@ async function gatherHistory(msgs, at, charName, userId, youName) {
     // far end rather than the near one.
     for (let i = at - 1; i >= 0 && out.length < want; i--) {
         const m = msgs[i];
-        if (!m || (m.role !== 'assistant' && m.role !== 'user'))
+        if (!m || (m.role !== 'assistant' && m.role !== 'user') || hiddenFromPrompt(m))
             continue;
         const body = cutHistory(String(m.content == null ? '' : m.content)).trim();
         // A message that was all markup is left out, rather than sent as a name
@@ -4089,7 +4153,7 @@ function fromTheStory(phrase, known) {
 function replyBefore(msgs, at) {
     for (let i = at - 1; i >= 0; i--) {
         const m = msgs[i];
-        if (!m || m.role !== 'assistant')
+        if (!m || m.role !== 'assistant' || hiddenFromPrompt(m))
             continue;
         const body = splitThinking(String(m.content == null ? '' : m.content)).body.trim();
         if (body)
@@ -4109,7 +4173,7 @@ function gatherWorn(msgs, upTo, name, canon) {
     const until = upTo >= 0 ? upTo : msgs.length;
     for (let i = until - 1; i >= 0 && replies.length < wornBack; i--) {
         const m = msgs[i];
-        if (!m || m.role === 'user')
+        if (!m || m.role === 'user' || hiddenFromPrompt(m))
             continue;
         // The reply's own working is left out. It is not writing anybody reads.
         const body = splitThinking(String(m.content == null ? '' : m.content)).body.trim();
@@ -4269,9 +4333,13 @@ function cleanSamplers(model) {
 // Keyed by reader rather than globally, or one person's stop would abort
 // somebody else's refine on a server with several accounts on it.
 const running = new Map();
-function holdRun(userId, controller) {
+function holdRun(userId, controller, run) {
     if (!controller)
         return;
+    // Which refine this call or wait belongs to, so that refine can be called
+    // off without ending anything else the account has running (see callOff).
+    if (run)
+        controller.__arfRun = run;
     const k = String(userId == null ? '' : userId);
     const set = running.get(k) || new Set();
     set.add(controller);
@@ -4325,7 +4393,7 @@ function stopRuns(userId) {
 // in forty seconds.
 //
 // Answers true when the wait ran its course and false when it was cut short.
-function pause(ms, userId) {
+function pause(ms, userId, run) {
     return new Promise((resolve) => {
         let done = false;
         let timer = null;
@@ -4342,7 +4410,7 @@ function pause(ms, userId) {
             resolve(ranOut);
         };
         handle = { abort: () => finish(false) };
-        holdRun(userId, handle);
+        holdRun(userId, handle, run);
         timer = setTimeout(() => finish(true), Math.max(0, ms));
     });
 }
@@ -4456,7 +4524,9 @@ group,
 // last thing the model reads.
 note, 
 // A pass's own model setup. Without one, the Model tab's settings are used.
-model) {
+model, 
+// The refine this call is part of, when it is refining a message.
+run) {
     const controller = typeof globalThis.AbortController === 'function'
         ? new globalThis.AbortController()
         : null;
@@ -4474,7 +4544,7 @@ model) {
         controller.__arfWhy = '';
         // Held whether or not there is a timer, because Stop uses this too, and
         // with the timeout off it is the only way to end a run.
-        holdRun(userId, controller);
+        holdRun(userId, controller, run);
         if (group)
             group.controllers.add(controller);
         if (ms)
@@ -4649,6 +4719,8 @@ model) {
             const why = controller && controller.__arfWhy;
             if (why === 'stopped')
                 return { content: '', error: 'you stopped it' };
+            if (why === 'called off')
+                return { content: '', error: 'the refine was called off' };
             if (why === 'not needed')
                 return { content: '', error: 'another rewrite written at the same time was used' };
             return { content: '', error: 'the model did not answer within ' + Math.round(ms / 1000) + 's' };
@@ -4664,7 +4736,7 @@ model) {
                 if (timer != null)
                     clearTimeout(timer);
                 dropRun(userId, controller);
-                return askModel(text, isUser, scene, userId, use, bad, group, note, model);
+                return askModel(text, isUser, scene, userId, use, bad, group, note, model, run);
             }
         }
         if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
@@ -4740,7 +4812,7 @@ async function latestReplyId(chatId, role = 'assistant') {
 // passing, the last check that failed is the answer, so the refusal says what
 // went wrong. With every call failing, the last error is, so a rate limit is
 // waited out the same way as for one rewrite.
-async function askAtOnce(count, input, isUser, scene, userId, use, note, model) {
+async function askAtOnce(count, input, isUser, scene, userId, use, note, model, run) {
     const group = { controllers: new Set() };
     say('info', 'writing ' + count + ' rewrites at once');
     return new Promise((resolve) => {
@@ -4770,7 +4842,7 @@ async function askAtOnce(count, input, isUser, scene, userId, use, note, model) 
                 failed = v;
         };
         for (let i = 0; i < count; i++) {
-            askModel(input, isUser, scene, userId, use, undefined, group, note, model)
+            askModel(input, isUser, scene, userId, use, undefined, group, note, model, run)
                 .then((a) => {
                 if (over)
                     return;
@@ -4818,14 +4890,64 @@ pick) {
         abort() {
             run.stopped = true;
         },
+        chatId: String(chatId),
+        messageId: messageId == null ? '' : String(messageId),
+        who: keyOf(userId),
+        mine: false,
+        calledOff: '',
     };
     holdRun(userId, run);
+    liveRuns.add(run);
     try {
-        return await refineRun(run, chatId, messageId, userId, byHand, pick);
+        const out = await refineRun(run, chatId, messageId, userId, byHand, pick);
+        // Called off while it ran. Whatever the call that was cut short said, the
+        // reason is the one the refine was called off for, and it is not a
+        // failure. A rewrite that was saved before then stays saved.
+        if (run.calledOff && !out.ok)
+            return { ok: false, stood: true, notes: out.notes, why: run.calledOff };
+        return out;
     }
     finally {
+        liveRuns.delete(run);
         dropRun(userId, run);
     }
+}
+const liveRuns = new Set();
+const WHY_STOPPED = 'a reply in this chat was stopped while the refine was running, so the refine was stopped too';
+const WHY_DELETED = 'that message was deleted while it was being refined, so the refine was stopped';
+const WHY_SWIPE_DELETED = 'a swipe of that message was deleted while it was being refined, so the refine was stopped';
+const WHY_CHAT_DELETED = 'the chat was deleted while a message in it was being refined, so the refine was stopped';
+// When a reply was last stopped in each chat, for a pass that was still
+// waiting its turn when it happened.
+const stoppedAt = new Map();
+const STOPPED_MAX = 50;
+function callOff(userId, hit, why) {
+    const who = keyOf(userId);
+    let n = 0;
+    for (const run of Array.from(liveRuns)) {
+        // On a server with several accounts, only the account the event is for.
+        if (run.who !== who && run.who !== '' && who !== '')
+            continue;
+        if (run.stopped || !hit(run))
+            continue;
+        run.calledOff = why;
+        run.stopped = true;
+        n++;
+        // Every call and wait this refine holds, and nothing else of the account's.
+        for (const set of running.values()) {
+            for (const c of Array.from(set)) {
+                if (!c || c.__arfRun !== run)
+                    continue;
+                try {
+                    c.__arfWhy = 'called off';
+                    c.abort();
+                }
+                catch (_) { }
+            }
+        }
+        say('info', why);
+    }
+    return n;
 }
 async function refineRun(run, chatId, messageId, userId, byHand, pick) {
     if (!masterOn)
@@ -4861,6 +4983,10 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                 ? 'there is no reply in this chat to refine yet'
                 : 'that message is not in this chat any more',
         };
+    // The message is known now, so the run can be called off by what happens
+    // to it (see callOff).
+    run.messageId = String(m.id);
+    run.mine = m.role === 'user';
     if (m.id === greetingId)
         return { ok: false, why: 'the greeting is written by a person, so it is not refined. To refine it, turn on Refine the greeting on the Limits tab' };
     if (m.role !== 'assistant' && m.role !== 'user')
@@ -4996,6 +5122,9 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             ok: false,
             why: 'that message is only the model working, so there is nothing to refine',
         };
+    // Only where a block asks for it, and never for your own messages.
+    if (!isUser && promptWants(REPLY_THINKING_MACRO, isUser, willSend))
+        scene = { ...scene, replyThinking: replyThinkingOf(m, split.head) };
     // Where the selection sits in the body. Worked out against the body rather
     // than the whole message, because the model's own working is in front of it
     // and counting through that would put every offset out by its length.
@@ -5021,7 +5150,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                     ask.abort();
             }
             catch (_) { } } };
-        holdRun(userId, handle);
+        holdRun(userId, handle, run);
         let verdict;
         try {
             verdict = await judgeReply(userId, split.body, worn, jevBefore, ask ? ask.signal : undefined);
@@ -5243,7 +5372,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                     ask.abort();
             }
             catch (_) { } } };
-        holdRun(userId, handle);
+        holdRun(userId, handle, run);
         try {
             const after = await judgeReply(userId, unshield(carried, armed.parts).text, jevWorn, jevBefore, ask ? ask.signal : undefined);
             if (stopped)
@@ -5317,12 +5446,12 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             let answer;
             let ready = null;
             if (refineAtOnce > 1) {
-                const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note, pass.model);
+                const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note, pass.model, run);
                 answer = { content: '', error: got.verdict ? '' : got.error };
                 ready = got.verdict;
             }
             else
-                answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, pass.model);
+                answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, pass.model, run);
             if (answer.error) {
                 // The provider would not take the call. Waiting is what fixes that, and
                 // nothing has been spent, so it is worth waiting for: a free tier meters
@@ -5340,13 +5469,28 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                         of: rateWaits,
                         why: String(answer.error),
                     });
-                    if (!(await pause(ms, userId)))
+                    if (!(await pause(ms, userId, run)))
                         return {
                             ok: false,
                             out: { ok: false, stood: true, notes: notes, why: 'stopped while waiting out a rate limit' },
                         };
                     continue;
                 }
+                // The provider declined the request itself, for asking the model to
+                // write out its reasoning. That is decided from the prompt, so the same
+                // prompt is declined again, and each decline is paid for. Not asked
+                // again, and said in words that point at the prompt.
+                // With the reply's own thinking in the prompt, that block can be the
+                // cause too, so the reason names it.
+                if (REASONING_BLOCK.test(String(answer.error)))
+                    return {
+                        ok: false,
+                        out: {
+                            ok: false,
+                            why: WHY_REASONING_BLOCK + (scene && scene.replyThinking ? WHY_REASONING_THINKING : ''),
+                            notes: notes,
+                        },
+                    };
                 // A provider's filter stopping the rewrite is a refusal sent as an error.
                 // Asking again can get past it, the same as a refusal written out, so it
                 // is judged as one and counts against the same tries.
@@ -6281,7 +6425,7 @@ function applyRules(s) {
     wornLeast = Number(s.wornLeast);
     wornLeast = Number.isFinite(wornLeast) && wornLeast >= 2 ? Math.floor(wornLeast) : 3;
     // Put through the same reading the phrases themselves go through, so a line
-    // typed with a full stop on the end still matches. Lowercasing alone left
+    // typed with a period on the end still matches. Lowercasing alone left
     // "a shiver ran down her spine." matching nothing and saying nothing about
     // why, which is the worst way for a setting to not work.
     wornFine = Array.isArray(s.wornFine)
@@ -6312,6 +6456,7 @@ function isImpersonation(p) {
 // reply that ends in the chat and for a reroll Auto Retry adds itself, which
 // raises no event of its own.
 async function autoPass(p, who) {
+    const startedAt = Date.now();
     // Every way out of this function says so, except an impersonation, which
     // the panel does not wait on. The panel turns its spinner on the moment a
     // reply lands, when the automatic pass is on, and waits for this answer to
@@ -6392,6 +6537,10 @@ async function autoPass(p, who) {
                 return stand('stopped while waiting for the gap between refines', messageId);
         }
     }
+    // A reply stopped in this chat while this pass was waiting its turn, such
+    // as in the gap between refines.
+    if ((stoppedAt.get(String(p.chatId)) || 0) >= startedAt)
+        return stand(WHY_STOPPED, messageId);
     let done;
     try {
         done = await refineMessage(p.chatId, messageId, who, false);
@@ -6441,12 +6590,54 @@ try {
         }
         catch (_) { }
     });
-    spindle.on('GENERATION_STOPPED', (p) => {
+    spindle.on('GENERATION_STOPPED', (p, userId) => {
         try {
             if (p && p.chatId) {
-                generating.delete(String(p.chatId));
+                const chatId = String(p.chatId);
+                generating.delete(chatId);
                 heardVerdict(p.chatId);
+                // A reply stopped by hand while a reply in the same chat is being
+                // refined: the refine is called off too.
+                stoppedAt.delete(chatId);
+                stoppedAt.set(chatId, Date.now());
+                while (stoppedAt.size > STOPPED_MAX)
+                    stoppedAt.delete(stoppedAt.keys().next().value);
+                callOff(userId, (run) => run.chatId === chatId && !run.mine, WHY_STOPPED);
             }
+        }
+        catch (_) { }
+    });
+    // The message being refined is gone, or the swipe of it that was showing.
+    spindle.on('MESSAGE_DELETED', (p, userId) => {
+        try {
+            if (!p || !p.chatId || p.messageId == null)
+                return;
+            const chatId = String(p.chatId);
+            const id = String(p.messageId);
+            callOff(userId, (run) => run.chatId === chatId && run.messageId === id, WHY_DELETED);
+            forgetKept(userId, (k) => String(k.chatId) === chatId && String(k.messageId) === id).catch(() => { });
+        }
+        catch (_) { }
+    });
+    spindle.on('MESSAGE_SWIPED', (p, userId) => {
+        try {
+            if (!p || p.action !== 'deleted' || !p.chatId || !p.message || p.message.id == null)
+                return;
+            const chatId = String(p.chatId);
+            const id = String(p.message.id);
+            callOff(userId, (run) => run.chatId === chatId && run.messageId === id, WHY_SWIPE_DELETED);
+        }
+        catch (_) { }
+    });
+    spindle.on('CHAT_DELETED', (p, userId) => {
+        try {
+            const chatId = p && (p.id != null ? String(p.id) : p.chatId != null ? String(p.chatId) : '');
+            if (!chatId)
+                return;
+            callOff(userId, (run) => run.chatId === chatId, WHY_CHAT_DELETED);
+            forgetKept(userId, (k) => String(k.chatId) === chatId).catch(() => { });
+            leftForRetry.delete(chatId);
+            stoppedAt.delete(chatId);
         }
         catch (_) { }
     });
@@ -7145,6 +7336,8 @@ async function onPanel(payload, userId) {
                 let scene = NO_SCENE;
                 let real = false;
                 let isUser = false;
+                // The message previewed, for the thinking that goes with it.
+                let previewMsg = null;
                 if (payload.chatId) {
                     let msgs = [];
                     try {
@@ -7164,6 +7357,7 @@ async function onPanel(payload, userId) {
                             text = String(m.content);
                             isUser = m.role === 'user';
                             real = true;
+                            previewMsg = m;
                         }
                         const card = await gatherCard(payload.chatId, userId, m && m.role !== 'user' ? speakerOf(m) : '');
                         const at = m ? msgs.findIndex((x) => x && x.id === m.id) : -1;
@@ -7197,6 +7391,9 @@ async function onPanel(payload, userId) {
                 const armed = shield(split.body);
                 if (armed.parts.length)
                     scene = { ...scene, shieldNote: protectNote == null ? SHIELD_NOTE : protectNote };
+                // The reply's thinking, as a refine of it would send it.
+                if (real && !isUser && previewMsg)
+                    scene = { ...scene, replyThinking: replyThinkingOf(previewMsg, split.head) };
                 const blockParts = [];
                 // With several passes, a refine sends each pass's own prompt and never
                 // the one on the Prompt tab. The first pass is built here as it would

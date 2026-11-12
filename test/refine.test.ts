@@ -533,6 +533,10 @@ function host(
     stopped: (p: any) => {
       for (const fn of handlers.GENERATION_STOPPED || []) fn(p);
     },
+    // Any other event Lumiverse sends, with the account it is for.
+    fire: (name: string, p: any, who?: string) => {
+      for (const fn of handlers[name] || []) fn(p, who);
+    },
     stood: () => sent.filter((m) => m.type === "refine_stood_down").map((m) => m.why),
     skipped: () => sent.filter((m) => m.type === "refine_skipped").map((m) => m.why),
     // Anything called that would have put something in the chat.
@@ -1530,6 +1534,16 @@ test("the line is the reader's own, not a fixed half", async () => {
     expect(h.jevCalls[0].body.questions.check_1.instructions).toBe(BEATS);
   });
 
+  test("a reply hidden from the prompt is not the reply before it", async () => {
+    const msgs: any[] = chat();
+    msgs.splice(1, 0, { id: "mh", role: "assistant", content: "A draft about the lighthouse keeper.", extra: { hidden: true } });
+    msgs[0].content = EARLIER;
+    const h = await two({ judgeBefore: true, judgeChecks: BEATS }, { jev: says([10]) }, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(50);
+    expect(h.jevCalls[0].body.state).toEqual({ reply: REPLY, previous_reply: EARLIER });
+  });
+
   // Nobody has to write a check for it: the switch brings the panel's list,
   // and the backend holds the same list for settings that do not carry it.
   const BEFORE_LIST = String((__testing as any).BEFORE_CHECKS).split("\n");
@@ -2124,6 +2138,37 @@ describe("refines you can put back, after a reload or an update", () => {
     expect(listed(h)).toEqual([]);
   });
 
+  // Nothing is left to put a refine back into, and the text of a deleted chat
+  // is not kept.
+  test("a deleted chat takes its refines with it, from memory and the saved copy", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { keepPutBack: true });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.perUser["u1:putback.json"].length).toBe(1);
+    h.fire("CHAT_DELETED", { id: "c1" }, "u1");
+    await wait(40);
+    await h.front({ type: "list_undoable", requestId: "l6" });
+    await wait(20);
+    expect(listed(h)).toEqual([]);
+    expect(h.perUser["u1:putback.json"]).toEqual([]);
+  });
+
+  test("so does a deleted message, and another account's delete leaves it alone", async () => {
+    const h = await armed(["She stepped through and the cold hit her."]);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    h.fire("CHAT_DELETED", { id: "c1" }, "u2");
+    await wait(20);
+    await h.front({ type: "list_undoable", requestId: "l7" });
+    await wait(20);
+    expect(listed(h).length).toBe(1);
+    h.fire("MESSAGE_DELETED", { chatId: "c1", messageId: "m2" }, "u1");
+    await wait(20);
+    await h.front({ type: "list_undoable", requestId: "l8" });
+    await wait(20);
+    expect(listed(h)).toEqual([]);
+  });
+
   test("with Keep them through an update off, nothing is written", async () => {
     const h = await armed(["She stepped through and the cold hit her."]);
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -2469,6 +2514,22 @@ describe("leaving things out of the run-up", () => {
     expect(said(h)).toContain("The gate stands open.\nThe road past it is dark.");
     expect(said(h)).not.toContain("HP 9/10");
     expect(said(h)).not.toContain("<b>");
+  });
+
+  // Lumiverse leaves a message hidden from the prompt out of the chat's own
+  // prompt, so the run-up leaves it out too.
+  test("a message hidden from the prompt is left out of {{history}}", async () => {
+    const msgs: Msg[] = [
+      { id: "m0", role: "assistant", content: "The gate stands open." },
+      { id: "mh", role: "assistant", content: "A draft about the lighthouse keeper.", extra: { hidden: true } } as any,
+      { id: "m1", role: "user", content: "i walk through it" },
+      { id: "m2", role: "assistant", content: "She stepped through and, suddenly, the cold hit her." },
+    ];
+    const h = await armed(["She stepped through and the cold hit her."], {}, msgs);
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(said(h)).toContain("The gate stands open.");
+    expect(said(h)).not.toContain("lighthouse keeper");
   });
 
   test("a message that was only what was cut is left out, with no name and nothing after it", async () => {
@@ -4612,6 +4673,188 @@ describe("a connection that refuses a field", () => {
   });
 });
 
+// What the model thought before it wrote the reply, sent only when a block
+// asks for it with {{reply_thinking}}.
+describe("the reply's thinking, for a block that asks for it", () => {
+  const blocks = [
+    { id: "plan", name: "Plan", on: true, role: "system", text: "<plan>\nWhat it meant.\n{{reply_thinking}}\n</plan>" },
+    { id: "turn", name: "Passage", on: true, role: "user", text: "<passage>\n{{message}}\n</passage>" },
+    { id: "out", name: "Out", on: true, role: "user", text: "Answer in <REFINED> tags." },
+  ];
+  const sent = (h: any) => (h.asked[0].messages || []).map((m: any) => m.content).join("\n\n");
+  const withThinking = (m2: any) => [chat()[0], chat()[1], { ...chat()[2], ...m2 }];
+  const answer = ["<REFINED>She stepped through and the cold hit her.</REFINED>"];
+
+  test("the thinking Lumiverse keeps beside the reply goes in", async () => {
+    const h = await armed(answer, { blocks }, withThinking({ extra: { reasoning: "Keep it short. The cold is the point." } }));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).toContain("Keep it short. The cold is the point.");
+    expect(sent(h)).toContain("What it meant.");
+  });
+
+  test("thinking written at the start of the reply goes in, without its tags", async () => {
+    const h = await armed(answer, { blocks }, withThinking({ content: "<think>Open on the door.</think>She stepped through and, suddenly, the cold just hit her." }));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).toContain("Open on the door.");
+    expect(sent(h)).not.toMatch(/<think>|<\/think>/);
+  });
+
+  test("with no thinking, the block is left out whole", async () => {
+    const h = await armed(answer, { blocks }, chat());
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).not.toContain("What it meant.");
+    expect(sent(h)).not.toContain("<plan>");
+  });
+
+  test("with the block switched off, none of it is sent", async () => {
+    const off = blocks.map((b) => (b.id === "plan" ? { ...b, on: false } : b));
+    const h = await armed(answer, { blocks: off }, withThinking({ extra: { reasoning: "Keep it short. The cold is the point." } }));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).not.toContain("The cold is the point.");
+  });
+
+  test("long thinking is cut to its end", async () => {
+    const long = "early plan ".repeat(3000) + "THE LAST DECISION.";
+    const h = await armed(answer, { blocks }, withThinking({ extra: { reasoning: long } }));
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(80);
+    expect(sent(h)).toContain("THE LAST DECISION.");
+    expect(sent(h).length).toBeLessThan(13500);
+  });
+
+  // A provider can decline a request that holds another model's thinking, so a
+  // decline with the thinking sent names the block that sent it.
+  test("a decline with the thinking sent names that block", async () => {
+    const h = await armed(answer, { blocks, retryRefine: 2 }, withThinking({ extra: { reasoning: "Keep it short." } }), {
+      fail: "Lantern generation failed: The provider declined the response (reasoning_extraction).",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(200);
+    expect(h.asked.length).toBe(1);
+    expect(h.skipped().join(" ")).toMatch(/reply_thinking.*switched off/);
+  });
+
+  test("and a decline without it does not", async () => {
+    const h = await armed(answer, { blocks, retryRefine: 2 }, chat(), {
+      fail: "Lantern generation failed: The provider declined the response (reasoning_extraction).",
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(200);
+    expect(h.skipped().join(" ")).toMatch(/reasoning_extraction/);
+    expect(h.skipped().join(" ")).not.toMatch(/reply_thinking/);
+  });
+});
+
+// A reply stopped or deleted while it, or a reply beside it, is being refined.
+// The model call is ended, nothing is saved, and it is reported as called off
+// with the reason, not as a failed refine.
+describe("a refine is called off by what happens to its reply", () => {
+  const slow = { delays: [400] };
+  const better = ["She stepped through and the cold hit her."];
+  const before = "She stepped through and, suddenly, the cold just hit her.";
+
+  const cases: Array<[string, (h: any) => void, RegExp]> = [
+    ["the reply is deleted", (h) => h.fire("MESSAGE_DELETED", { chatId: "c1", messageId: "m2" }, "u1"), /deleted while it was being refined/],
+    ["a swipe of the reply is deleted", (h) => h.fire("MESSAGE_SWIPED", { chatId: "c1", action: "deleted", message: { id: "m2" } }, "u1"), /swipe of that message was deleted/],
+    ["the chat is deleted", (h) => h.fire("CHAT_DELETED", { id: "c1" }, "u1"), /chat was deleted/],
+    ["a reply in the chat is stopped", (h) => h.fire("GENERATION_STOPPED", { chatId: "c1", generationId: "g2" }, "u1"), /reply in this chat was stopped/],
+  ];
+  for (const [name, happen, why] of cases) {
+    test(name + ": the call is ended, nothing is saved, and the panel is told why", async () => {
+      const h = await armed(better, {}, chat(), slow);
+      const going = h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(120);
+      expect(h.asked.length).toBe(1);
+      happen(h);
+      await going;
+      await wait(60);
+      // Ended well before the model would have answered.
+      expect(h.stoppedCalls).toEqual([0]);
+      expect(h.writes.length).toBe(0);
+      expect(h.body("m2")).toBe(before);
+      expect(h.stood().join(" ")).toMatch(why);
+      expect(h.skipped()).toEqual([]);
+    });
+  }
+
+  test("another reply deleted in the chat leaves the refine alone", async () => {
+    const h = await armed(better, {}, chat(), slow);
+    const going = h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(120);
+    h.fire("MESSAGE_DELETED", { chatId: "c1", messageId: "m0" }, "u1");
+    await going;
+    await wait(60);
+    expect(h.stoppedCalls).toEqual([]);
+    expect(h.body("m2")).toBe(better[0]);
+  });
+
+  test("a reply stopped in another chat leaves the refine alone", async () => {
+    const h = await armed(better, {}, chat(), slow);
+    const going = h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(120);
+    h.fire("GENERATION_STOPPED", { chatId: "c9", generationId: "g9" }, "u1");
+    await going;
+    await wait(60);
+    expect(h.body("m2")).toBe(better[0]);
+  });
+
+  test("another account's reply being deleted leaves the refine alone", async () => {
+    const h = await armed(better, {}, chat(), slow);
+    const going = h.ended({ chatId: "c1", messageId: "m2", generationId: "g1", userId: "u1" });
+    await wait(120);
+    h.fire("MESSAGE_DELETED", { chatId: "c1", messageId: "m2" }, "u2");
+    await going;
+    await wait(60);
+    expect(h.body("m2")).toBe(better[0]);
+  });
+
+  test("a stopped reply does not call off a refine of your own message", async () => {
+    const h = await armed(["I walk through it."], {}, chat(), slow);
+    const going = h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(120);
+    expect(h.asked.length).toBe(1);
+    h.fire("GENERATION_STOPPED", { chatId: "c1", generationId: "g2" }, "u1");
+    await going;
+    await wait(60);
+    expect(h.stoppedCalls).toEqual([]);
+    expect(h.body("m1")).toBe("I walk through it.");
+  });
+
+  test("a refine started with the button is called off the same way, and says why", async () => {
+    const h = await armed(better, {}, chat(), slow);
+    const going = h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(120);
+    h.fire("MESSAGE_DELETED", { chatId: "c1", messageId: "m2" }, "u1");
+    await going;
+    await wait(60);
+    expect(h.stoppedCalls).toEqual([0]);
+    expect(h.writes.length).toBe(0);
+    const result = h.sent.filter((m: any) => m.type === "refine_result").pop() || {};
+    expect(result.ok).toBe(false);
+    expect(String(result.why)).toMatch(/deleted while it was being refined/);
+  });
+
+  test("a reply stopped while the pass waits in the gap between refines is not refined", async () => {
+    const h = await armed(better, { refineGap: 1, refineAgain: true }, chat());
+    // The first pass sets the gap, and the second waits in it.
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(40);
+    const asks = h.asked.length;
+    h.edit("m2", before);
+    const going = h.ended({ chatId: "c1", messageId: "m2", generationId: "g2" });
+    await wait(150);
+    h.fire("GENERATION_STOPPED", { chatId: "c1", generationId: "g3" }, "u1");
+    await going;
+    await wait(60);
+    expect(h.asked.length).toBe(asks);
+    expect(h.stood().join(" ")).toMatch(/reply in this chat was stopped/);
+  });
+});
+
 describe("stopping a refine", () => {
   test("a stop reaches the run and the reply is left alone", async () => {
     const h = host(chat(), ["<REFINED>She stepped through and the cold hit her.</REFINED>"], {
@@ -5698,6 +5941,39 @@ describe("a provider that will not take the call", () => {
     expect(h.asked.length).toBe(1);
   });
 
+  // Newer Claude models decline a request whose prompt asks the model to write
+  // out its reasoning, with the category "reasoning_extraction". It is decided
+  // from the prompt, so asking again is declined again and paid for again.
+  test("a request declined as reasoning_extraction is not asked again, and says what to change", async () => {
+    const h = await armed(
+      ["She stepped through and the cold hit her."],
+      { retryRefine: 3, rateWaits: 2 },
+      chat(),
+      { fail: "Lantern generation failed: The provider declined the response (reasoning_extraction). No explanation was provided." },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(200);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+    const why = h.skipped().join(" ");
+    expect(why).toMatch(/reasoning_extraction/);
+    expect(why).toMatch(/write out its reasoning or thinking/);
+    expect(why).toMatch(/was not asked again/);
+  });
+
+  test("another refusal sent as an error is still asked again", async () => {
+    const h = await armed(
+      ["She stepped through and the cold hit her."],
+      { retryRefine: 2, rateWaits: 0 },
+      chat(),
+      { failFirst: { times: 1, why: "Lantern generation failed: The provider declined the response (violence). No explanation was provided." } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(200);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
   // Waiting cannot fix a wrong key, and sitting on a timer for one is worse
   // than saying so.
   test("a wrong key is not waited on", async () => {
@@ -6610,6 +6886,20 @@ describe("phrases this chat has worn out", () => {
     await wait(60);
     expect(h.asked.length).toBe(1);
     expect(wornSent(h)).toContain("shiver ran down her spine");
+  });
+
+  test("a reply hidden from the prompt is not counted", async () => {
+    const msgs: any[] = chatWith(habit);
+    msgs.find((m: any) => m.id === "a1").extra = { hidden: true };
+    const h = await armed(
+      ["<REFINED>She set the lamp down and waited for the wind to drop at last.</REFINED>"],
+      { blocks: PROMPT.concat([WORN_BLOCK]), wornOn: true, wornLeast: 3 },
+      msgs,
+    );
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "a3" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(wornSent(h)).not.toContain("shiver ran down her spine");
   });
 
   // Color tags are formatting. Their quote marks also read as a line of speech
@@ -7566,8 +7856,8 @@ describe("taking out what you selected", () => {
 
   // The space in front of the selection, not inside it, which is what a double
   // click hands over. Closing the gap with a space would put one before the
-  // full stop.
-  test("a space is not left sitting in front of a full stop", async () => {
+  // period.
+  test("a space is not left sitting in front of a period", async () => {
     const h = await armed([], {}, reply("She counted the coins twice over."));
     await cut(h, "twice over", "She counted the coins ");
     await wait(50);

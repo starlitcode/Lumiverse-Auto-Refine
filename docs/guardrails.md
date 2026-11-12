@@ -122,6 +122,7 @@ What it cannot catch:
 - A rewrite refused for its length is not retried, because the model meant it and would give the same answer.
 - A call that errored is not repeated. The exception is an error from the provider's filter, such as "content_filter". That is a refusal sent as an error, so it is asked again like a refusal.
 - A call you stopped is never repeated.
+- A call the provider declined as `reasoning_extraction` is not repeated. A provider does this when a prompt asks the model to write out its reasoning in the answer. It would be declined again, and each try is paid for. The Log says which wording to take out.
 - Every retry is another call on your bill, which is why it is off by default.
 
 ## A note when it asks again
@@ -237,6 +238,21 @@ A refine reads the reply, sends it to a model, and writes the answer back. That 
 - **Thinking moved out of the reply does not count as a change.** If only the thinking at the start or end of the reply was moved, for example into the Reasoning box, the refine is saved. It is saved without the thinking that was moved out.
 - **Another extension rewriting its own hidden block does not count either.** Some extensions rewrite their block in a reply right after the reply ends. If only that block changed, the refine is saved, with the block as the extension left it. See [Another extension's blocks](prompt.md#another-extensions-blocks).
 - If the reply cannot be read again at all, the refine goes ahead. A failed read does not mean anything changed.
+
+## A reply stopped or deleted while it is being refined
+
+A refine in progress is called off when what it is working on goes away. The model call is ended, nothing is saved, and the Log says why. It is not counted as a failed refine.
+
+A refine is called off when:
+
+- the message being refined is deleted
+- a swipe of that message is deleted
+- its chat is deleted
+- a reply in the same chat is stopped, with the stop button or Escape, while a reply is being refined
+
+A reply stopped while the automatic pass is still waiting, such as in the gap between refines, is not refined either.
+
+A refine of your own message is not called off by a stopped reply. It is not about the reply.
 
 ## Putting one back
 

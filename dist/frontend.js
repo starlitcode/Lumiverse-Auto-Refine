@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.55.2";
+const VERSION = "1.56.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -840,7 +840,7 @@ const CONFIG = {
 // Lumiverse, which already resolves them for every other prompt it builds.
 const MACROS = [
     { tag: "{{message}}", what: "The turn being refined. Every prompt needs this one.", ours: true },
-    { tag: "{{history}}", what: "The messages leading up to it, as many as Context says.", ours: true },
+    { tag: "{{history}}", what: "The messages leading up to it, as many as Context says. A message hidden from the prompt is left out.", ours: true },
     { tag: "{{lore}}", what: "The lorebook entries this chat has active.", ours: true },
     {
         tag: "{{memories}}",
@@ -866,6 +866,15 @@ const MACROS = [
             "They come after the lead-in in What the refine model is told about the checks, on the " +
             "Model tab, where you can read and change it. Only checks at or over your line are listed. Empty on " +
             "every other refine, which leaves the block carrying it out of the prompt.",
+        ours: true,
+    },
+    {
+        tag: "{{reply_thinking}}",
+        what: "Only for a reply. What the model thought before it wrote the reply: the " +
+            "thinking Lumiverse shows with the reply, or the thinking written at the " +
+            "start of the reply itself. The last 12,000 characters of it when it is " +
+            "longer. A block holding this is left out when the reply has none. Some " +
+            "providers decline a request that carries another model's thinking.",
         ours: true,
     },
     {
@@ -1076,6 +1085,27 @@ const AROUND_BLOCK = {
         "{{whole_reply}}\n" +
         "</reply_around_it>",
 };
+// What the model thought before it wrote the reply, so the refine knows what
+// the reply was going for. Off in both built-in prompts for replies, and not in
+// the ones for your own messages, which have none. Off because it can be long,
+// it is paid for on every refine, and some providers decline a request that
+// carries another model's thinking, as "reasoning_extraction". A block holding
+// it is left out whole when the reply has none.
+//
+// The words before it say what it is for, and that none of it goes in the
+// answer.
+const THOUGHT_BLOCK = {
+    id: "replythinking",
+    name: "Writers Plan",
+    on: false,
+    role: "system",
+    text: "<writers_plan>\n" +
+        "This is what the writer worked out before writing the passage. It's here " +
+        "so you know what they were going for. It isn't part of the passage, so " +
+        "none of it goes in your answer.\n\n" +
+        "{{reply_thinking}}\n" +
+        "</writers_plan>",
+};
 // The pages before this one. Redrawn every single turn, so it goes as late as it
 // can and still be read as setting.
 const RECENT_BLOCK = {
@@ -1127,17 +1157,21 @@ const HOW_TO_ANSWER = {
         "untouched, say it outside the tags. It reaches them and never the story." +
         "\n</hand_it_in>",
 };
-// The reasoning version. The working goes in a tag of its own, ahead of the
+// The reasoning version. A scorecard goes in a tag of its own, ahead of the
 // rewrite, and that tag sits outside <REFINED> so none of it can reach the
 // story. It comes back to the panel and is shown beside the refine, which is
-// what makes asking for it worth the tokens: working nobody reads is only a
-// bill.
+// what makes asking for it worth the tokens: a scorecard nobody reads is only
+// a bill.
 //
 // The scorecard goes first, in the notes, so the scores are written before the
 // rewrite is. A model that writes the rewrite first and scores it after is
-// grading its own work rather than deciding what to change. The rest of the
-// working goes in the same tag: a model that reasons will write some whatever
-// it is told, and this keeps it inside the one tag that never reaches the story.
+// grading its own work rather than deciding what to change.
+//
+// It asks for the scorecard and one line about what is changing, and for
+// nothing else. It never asks the model to write out its reasoning or its
+// thinking: some providers decline a request that does, as
+// "reasoning_extraction", and the call is still paid for. A short account of
+// what was changed is allowed, and that is all this is.
 const THINKS_ANSWER = {
     id: "answer",
     name: "Hand It In",
@@ -1149,11 +1183,9 @@ const THINKS_ANSWER = {
         "Area: score. \"the worst line, quoted\"\nThen one line saying which " +
         "areas scored under 85, and what you're changing in each.\n" +
         "</REFINE_NOTES>\n<REFINED>\nthe passage, rewritten\n</REFINED>\n\n" +
-        "All your working goes in <REFINE_NOTES>. If you'd normally reach for " +
-        "<think>, <thinking>, <reasoning> or some scratchpad of your own, put " +
-        "it in <REFINE_NOTES> instead and don't open any other tag.\n\n" +
-        "Write as much in there as you need. It never goes into the story, so " +
-        "it can't hurt the rewrite.\n\n" +
+        "<REFINE_NOTES> holds the scorecard and that last line. Keep it to " +
+        "those, and don't open any other tag.\n\n" +
+        "None of it goes into the story, so it can't hurt the rewrite.\n\n" +
         "Only what's between <REFINED> and </REFINED> gets saved. Inside them, " +
         "just the passage, the way a reader would see it. Your reasons are " +
         "already on the scorecard." +
@@ -1200,7 +1232,7 @@ const PHRASES =
     "- movement graded instead of shown: deliberate, measured, unhurried, fluid, with practiced ease\n" +
     "- pauses named instead of filled: a beat, a long moment, the silence stretched, time slowed, the world narrowed\n" +
     "- fancy stand-ins for plain words: orbs, ministrations, crimson beads, palpable, a testament to, a tapestry of\n" +
-    "- office and maths talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten, load-bearing\n" +
+    "- office and math talk in fiction: filed away, updated the ledger, calculated the odds, on a scale of one to ten, load-bearing\n" +
     "- borrowed strangers: with the calm of someone who'd done this before, the way people do when they've stopped hoping\n" +
     "- similes that'd fit any story: like a coiled spring, like a caged animal, like a moth to a flame\n" +
     "- negation tricks: it wasn't a request, it was a command; she didn't just leave, she ran; not unkind; less X than Y; more than cold, frozen\n" +
@@ -1246,7 +1278,7 @@ const JOB_BLOCK = {
         "The passage below was written for the user, and you get it before " +
         "they do. How it reads is your job. What happens in it is theirs. If " +
         "someone slams a door in the original, that door still gets slammed, and whoever said a line still says it and means it. " +
-        "Don't write past where it ends. Keep the person, the tense, and whose head we're in. Cutting " +
+        "Don't write past where it ends. Keep the language, the person, the tense, and whose head we're in. Cutting " +
         "an action or a line of dialogue counts as changing what happens.\n\n" +
         "Only mark lines that break a rule below, even when some other line " +
         "reads badly or makes no sense to you. The user put it there. Leave " +
@@ -1403,7 +1435,8 @@ const PLAIN_LONG = [
         text: "<dead_weight>\n" +
             "These words mostly just take up space: " +
             FILLER +
-            ". If the sentence still stands without one, cut it.\n\n" +
+            ". If the sentence still stands without one, cut it. Inside quote marks, " +
+            "leave them be. People say just and really all the time.\n\n" +
             "Adverbs that repeat their verb go too, like whispered quietly. So do " +
             "hedges on a feeling, like something like fear or a kind of sadness. " +
             "Name the feeling or show it.\n\n" +
@@ -1501,6 +1534,7 @@ const PLAIN_LONG = [
     JEV_FOUND_BLOCK,
     RECENT_BLOCK,
     AROUND_BLOCK,
+    THOUGHT_BLOCK,
     TURN_BLOCK,
     HOW_TO_ANSWER,
     PROTECT_BLOCK,
@@ -1514,10 +1548,10 @@ const THINKS_JOB = {
         "You're judging this story line by line, and you've got the red pen. " +
         "The passage below was written for the user, and you see it first.\n\n" +
         "Find what's weak in how it's written, fix that, then stop. What happens isn't yours to change. Events stay and speakers keep " +
-        "their lines, and you don't write past where it ends. Keep the person, the tense, and " +
+        "their lines, and you don't write past where it ends. Keep the language, the person, the tense, and " +
         "whose head we're in.\n\n" +
-        "Use your reasoning to fill in the scorecard below, then only change " +
-        "what the scores point at. Thinking about a sentence isn't a reason to " +
+        "Fill in the scorecard below first, then only change " +
+        "what the scores point at. Looking hard at a sentence isn't a reason to " +
         "touch it. Four good fixes outscore forty fussy ones.\n\n" +
         "The user sets the tone. Maybe it's a cozy café scene. Maybe it's " +
         "smut, or somebody's getting their throat cut. Doesn't matter, you " +
@@ -1580,7 +1614,7 @@ const YOURS_JOB = {
         "their own voice, and until something is obviously a slip, treat it as " +
         "a choice.\n\n" +
         "A misspelling gets fixed, but a weird word is probably on purpose. " +
-        "Missing full stop? Fix it. A fragment is usually style, so it stays. " +
+        "Missing period? Fix it. A fragment is usually style, so it stays. " +
         "The same word typed twice back to back is a slip, while the same word " +
         "repeated across three sentences is somebody going for emphasis. Can't " +
         "tell which one you're looking at? Then it's a choice, and you leave " +
@@ -1633,8 +1667,8 @@ const YOURS_MEND_LONG = {
         "breathe.\n\n" +
         "A missing word, when the line can't be read without it and one small " +
         "word fixes it.\n\n" +
-        "Punctuation that went wrong by accident, like a sentence with no full " +
-        "stop, a quote mark that opens and never closes, or a comma splice so " +
+        "Punctuation that went wrong by accident, like a sentence with no " +
+        "period, a quote mark that opens and never closes, or a comma splice so " +
         "long you get lost in it. If the punctuation is their style (lowercase " +
         "usually is), it stays.\n\n" +
         "A sentence so tangled a reader would have to go over it twice. Say " +
@@ -1665,7 +1699,8 @@ const YOURS_NOT_YOURS = {
         "Finishing a thought they left hanging, or answering a question they " +
         "left open.\n\n" +
         "Tidying fragments into full sentences when fragments are just how " +
-        "they write.\n\n" + "Taking out extra spaces that look placed. A double space wedged " +
+        "they write.\n\n" +
+        "Taking out extra spaces that look placed. A double space wedged " +
         "between two words mid-sentence is probably a slip, so fix that one. " +
         "Spacing that sets something apart, like a gap before a line or a " +
         "space left for a pause, stays.\n\n" +
@@ -1685,8 +1720,8 @@ const YOURS_THINKS_JOB = {
         "Three words in lowercase, first person, present tense? That's what comes " +
         "back. " +
         "Only flag what the rules below name.\n\n" +
-        "Use your reasoning to tell a mistake from a decision. When they look " +
-        "alike, it's a decision, and you leave it. Thinking hard about a line " +
+        "Tell a mistake from a decision before you flag anything. When they look " +
+        "alike, it's a decision, and you leave it. Looking hard at a line " +
         "isn't a reason to touch it.\n\n" +
         "Tone is theirs too. Soft, silly, filthy, brutal, whatever they went " +
         "for. It comes back at the strength it went in, and sex, gore, " +
@@ -1822,6 +1857,7 @@ const THINKS_LONG = [
     JEV_FOUND_BLOCK,
     RECENT_BLOCK,
     AROUND_BLOCK,
+    THOUGHT_BLOCK,
     TURN_BLOCK,
     THINKS_ANSWER,
     PROTECT_BLOCK,
@@ -5924,6 +5960,10 @@ export function setup(ctx, overrides) {
         "var(--lumiverse-bg-elevated,rgba(35,30,48,.9)));" +
         "box-shadow:var(--lumiverse-shadow-xl,0 20px 60px rgba(0,0,0,.5))}" +
         "textarea.arf-bigta{flex:1;min-height:0;resize:none}" +
+        // The before and after at full size. The marked text fills the box and
+        // scrolls as one, rather than in a few lines at a time.
+        ".arf-bigdiff{flex:1;min-height:0;overflow-y:auto}" +
+        ".arf-bigdiff .arf-scroll{max-height:none;overflow:visible}" +
         // Nothing on focus here, not even the border change the small boxes get.
         // The editor is one box filling the screen, opened on purpose, with
         // nothing to tab between: a mark saying which box has focus answers a
@@ -8621,8 +8661,17 @@ export function setup(ctx, overrides) {
                 setBadge(null);
             paint();
         });
+        // The before and after at the size of the screen.
+        const big = button("Expand", false);
+        big.setAttribute("aria-label", "Read this refine at full size");
+        big.setAttribute("data-arf-btn", "Expand");
+        big.setAttribute("data-arf-expand-refine", "1");
+        big.addEventListener("click", () => {
+            openDiffBig("The refine at " + new Date(one.at).toTimeString().slice(0, 5), one.before, one.after, one.held);
+        });
         row.appendChild(back);
         row.appendChild(seen);
+        row.appendChild(big);
         box.appendChild(row);
         return box;
     }
@@ -13616,6 +13665,19 @@ export function setup(ctx, overrides) {
         }
         box.appendChild(row);
         over.appendChild(box);
+        const shut = showOver(over, box);
+        cancel.addEventListener("click", shut);
+        if (save && done)
+            save.addEventListener("click", () => {
+                const text = ta.value;
+                shut();
+                done(text);
+            });
+    }
+    // Puts a full-size view on the page and answers the function that closes it.
+    // Escape and a tap on the dark part close it too, the way every sheet on a
+    // phone does. Only one is open at a time.
+    function showOver(over, box) {
         const onKey = (e) => {
             if (e && e.key === "Escape")
                 shut();
@@ -13635,14 +13697,6 @@ export function setup(ctx, overrides) {
         function shut() {
             shutAt(false);
         }
-        cancel.addEventListener("click", shut);
-        if (save && done)
-            save.addEventListener("click", () => {
-                const text = ta.value;
-                shut();
-                done(text);
-            });
-        // A tap on the dark part closes it, the way every sheet on a phone does.
         over.addEventListener("click", (e) => {
             if (e && e.target === over)
                 shut();
@@ -13658,6 +13712,38 @@ export function setup(ctx, overrides) {
             requestAnimationFrame(() => sweepReadable(box));
         }
         catch (_) { }
+        return shut;
+    }
+    // A refine's before and after at the size of the screen, marked the same way
+    // as in its card, with the switch between the two views. The box in the card
+    // shows a few lines at a time, which is not enough to read a long reply by.
+    function openDiffBig(label, before, after, held) {
+        if (typeof document === "undefined")
+            return;
+        if (closeBig) {
+            try {
+                closeBig();
+            }
+            catch (_) { }
+        }
+        const over = el("div", "arf-over");
+        const box = el("div", "arf-bigbox arf");
+        box.setAttribute("data-arf-bigdiff", "1");
+        const head = el("div", "arf-between");
+        head.appendChild(el("span", "arf-cardh arf-grow", label));
+        box.appendChild(head);
+        box.appendChild(changedHead("What changed"));
+        const body = el("div", "arf-bigdiff");
+        body.appendChild(diffWell(before, after, held));
+        box.appendChild(body);
+        const row = el("div", "arf-row");
+        row.style.justifyContent = "flex-end";
+        const close = button("Close", false);
+        row.appendChild(close);
+        box.appendChild(row);
+        over.appendChild(box);
+        const shut = showOver(over, box);
+        close.addEventListener("click", shut);
     }
     disposers.push(() => {
         if (closeBigNow) {

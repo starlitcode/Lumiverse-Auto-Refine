@@ -6,6 +6,36 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.56.0
+
+_2026-11-11_
+
+### Added
+
+- **Expand on a past refine.** Each refine on the Status tab has an **Expand** button. It opens the before, the after and what changed in a large window, so a long reply can be read without scrolling a small box. See [Settings](docs/settings.md).
+- **The reply's thinking can be sent with the refine.** A new macro, `{{reply_thinking}}`, holds the thinking the model wrote before the reply. Both built-in reply prompts have a new block for it, **Writers Plan**, switched off. With it on, the refine model knows what the reply was going for. See [The writer's plan](docs/prompt.md#the-writers-plan).
+
+### Fixed
+
+- **Refines with a built-in "that thinks" prompt could be declined as `reasoning_extraction`.** The two built-in prompts that think asked the model to keep all its working in the notes. Some providers read that as a request to write out its reasoning, and declined the whole refine. They now ask only for the scorecard. The Prompt tab says the built-in prompts have changed.
+- **Messages hidden from the prompt were sent with a refine.** Lumiverse leaves a message you hid from the prompt out of the chat's own prompt. Auto Refine still put it in `{{history}}`, counted it for **Find phrases this chat has worn out**, and could send it to the second model as the reply before. It now leaves it out of all three.
+- **Refines you can put back were kept after their chat was deleted.** Your server held the before and after of a deleted chat's refines until newer ones pushed them out. With **Keep them through an update** on, they stayed in the saved copy too. Deleting a chat, or the message that was refined, now removes them from both. Auto Retry has the same fix for the reply a retry replaced.
+- **A refine declined as `reasoning_extraction` was asked again.** It was declined again each time, and each try was paid for. It is now not asked again, and the Log says which wording in the prompt to take out. See [Asking again](docs/guardrails.md#asking-again).
+
+### Changed
+
+- **The built-in prompts.** The Prompt tab says they have changed, and **Got it** hides the message. What is different:
+  - **A judge** and **A judge that thinks** tell the model to keep the language the passage is written in, so a reply in another language is not handed back in English.
+  - **Dead Weight**, in **A judge**, leaves words such as "just" and "really" inside quote marks. People say them, and cutting them changed how a character talks.
+  - The line judges say "period" where they said "full stop", and **Instant Penalties** says "math" where it said "maths".
+- **A refine stops when its reply is stopped or deleted.** A refine that was running kept going after its reply was deleted, and the model call was paid for with nowhere to save the answer. It also kept going when you stopped a reply in the same chat. A refine is now called off, with its model call ended and nothing saved, when:
+  - the message being refined is deleted, or a swipe of it, or its chat;
+  - a reply in the same chat is stopped while a reply is being refined. A refine of your own message is not called off by this.
+
+  The Log says why. It is not counted as a failed refine. See [A reply stopped or deleted while it is being refined](docs/guardrails.md#a-reply-stopped-or-deleted-while-it-is-being-refined).
+
+---
+
 ## 1.55.2
 
 _2026-11-10_
@@ -1179,7 +1209,7 @@ _2026-09-25_
   - What each block asks for is the same, apart from the changes listed here.
 - **The built-in prompts say plainly that the tone is yours.** Gentle, sexual or violent, a passage comes back at the strength it went in. A gentle scene gets no heat added, and sex, gore, swearing and insults keep their plain words.
 - **The built-in prompts are written the way a person talks.** They use contractions, some swearing, and sentences of different shapes, so they do not read like the writing they exist to fix. What they ask for is the same. The lead-in before what Jev found now says to treat each check as a lead to check.
-- **Instant Penalties is shorter and catches more.** It lists kinds of stock writing with a few examples each, instead of every phrase. New kinds: fancy stand-ins for plain words, office and maths talk in fiction, the negation trick, do-then-undo, and saying the same thing twice. **Dead Weight** also catches hedges like "something like fear" and two adjectives stacked on one noun. **Body Language** also cuts filters like "she noticed". Truly and utterly join **Dead Weight**.
+- **Instant Penalties is shorter and catches more.** It lists kinds of stock writing with a few examples each, instead of every phrase. New kinds: fancy stand-ins for plain words, office and math talk in fiction, the negation trick, do-then-undo, and saying the same thing twice. **Dead Weight** also catches hedges like "something like fear" and two adjectives stacked on one noun. **Body Language** also cuts filters like "she noticed". Truly and utterly join **Dead Weight**.
 - **A plain speech tag that only says who is talking is kept** in a scene with two or more people. The line edit, now A judge, took out tags such as "she asked" before, which could leave nothing to say who spoke.
 
 ### Fixed
@@ -1425,7 +1455,7 @@ _2026-09-18_
 
   Neither needs a button in the chat switched on at all. Both are in the chat input's Extras menu as well, and in the floating button's menu while that button is on screen, and in both places only while something is selected.
 
-  Taking text out closes the gap the way a person would. One space between two halves rather than two, no space left in front of a full stop, and a paragraph taken out leaves one blank line rather than two. Nothing else in the message is touched.
+  Taking text out closes the gap the way a person would. One space between two halves rather than two, no space left in front of a period, and a paragraph taken out leaves one blank line rather than two. Nothing else in the message is touched.
 
   Selecting the whole message is refused rather than emptying it. **Put it back** works on a snip exactly as it works on a refine.
 

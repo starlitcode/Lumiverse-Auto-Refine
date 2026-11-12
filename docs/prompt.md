@@ -39,11 +39,12 @@ The **Macros you can use** card on the Prompt tab lists them. Tap one to copy it
 | Macro | What it becomes |
 | --- | --- |
 | `{{message}}` | The message being refined. |
-| `{{history}}` | The messages before it, as many as the **Context** tab says. |
+| `{{history}}` | The messages before it, as many as the **Context** tab says. A message you hid from the prompt in Lumiverse is left out. |
 | `{{lore}}` | The lorebook entries this chat has active. |
 | `{{memories}}` | What Lumiverse remembers of this chat, from further back than the history. Empty when memory is off for the chat, or when the `chats` permission is not granted. |
 | `{{overused}}` | Phrases the replies in this chat keep using, one per line with a count, like `shiver ran down (4 replies)`. Only when **Find phrases this chat has worn out** is on. |
 | `{{checks_found}}` | With two models, the checks the second model found in the reply, strongest first, each with its score. They come after a short lead-in that names the second model and says to treat each one as a lead to check. Only filled in when the second model read the reply and picked it out. A block saved with the older `{{jev_found}}` is switched to this one when it is loaded. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found). |
+| `{{reply_thinking}}` | The thinking the model wrote before the reply, when it kept any. Lumiverse's **Reasoning** box is read first, then thinking at the start of the reply. Long thinking is cut to its last 12,000 characters. A block with this macro is left out when the reply has no thinking. Only filled in for a reply, never for your own message. See [The writer's plan](#the-writers-plan). |
 | `{{whole_reply}}` | The reply with the part being rewritten marked. Only filled in when you refine part of a reply. |
 | `{{protect_notes}}` | The instruction to leave protection tokens alone. Only when there are some. You can change it on the Limits tab. |
 
@@ -195,6 +196,17 @@ Then give the rewrite between <REFINED> and </REFINED>.
 - The tag names are yours. The extension only looks for `<REFINED>`. You can ask for a paragraph instead of tags.
 - What the rewrite changed in your writing is shown on the card that appears when it is saved, marked word by word.
 
+## The writer's plan
+
+A model that thinks writes a plan before its reply. The **Writers Plan** block sends that plan with the reply, so the refine model knows what the reply was going for.
+
+- It is in both built-in reply prompts, switched off. Switch it on to use it.
+- It uses `{{reply_thinking}}`. You can put that macro in a block of your own.
+- The plan is sent for reading only. The rewrite is still made from the reply.
+- A reply with no thinking leaves the block out.
+- Long thinking costs more to send. Only the last 12,000 characters are sent.
+- Some providers decline a request that holds another model's thinking. If a refine is declined with it on, switch it off.
+
 ## The prompts built in
 
 There are four: a judge for replies and a line judge for your own messages, each in two versions. Pick the version by whether your model reasons.
@@ -210,6 +222,7 @@ There are four: a judge for replies and a line judge for your own messages, each
 - The version for a model that thinks is the smaller one. A reasoning model is given the bar and applies it. A model that does not reason is given the full list instead, because it follows a list better than a principle.
 - The rules name kinds of stock writing, with a few examples each, because "cut clichés" gives a model nothing to act on. A model reads a kind as a pattern and catches the versions that are not listed. The kinds include held breaths and hammering hearts, stock faces, voices given a texture, the air doing the mood's job, fancy stand-ins for plain words, office talk in fiction, and the negation trick: "it wasn't a request, it was a command".
 - **Roll Call** is for scenes with one character or several. It keeps each line with its speaker and each character's way of talking. It keeps a name or a plain speech tag where it is the only thing saying who is talking, and it uses a name where a pronoun could mean two people. It keeps every character in the scene. It does not say who plays which character, so it works whether you write your own character or let the model write it too.
+- Both have a block called **Writers Plan**, switched off. It sends the reply's thinking. See [The writer's plan](#the-writers-plan).
 - Both have a block called **Checks Found**, switched off. It is for two models. See [Passing on what the checks found](two-models.md#passing-on-what-the-checks-found).
 - All four work as they are. They cannot be changed. To change one, load it, put a name in the box under **Presets**, and press **Save as new**. The copy is yours and opens for editing.
 - **When these change in a later version, the Prompt tab tells you**, with a **Got it** to hide the message. It only appears if you have loaded one of the four before. It never changes your prompt or loads one for you.

@@ -57,6 +57,7 @@ The buttons are in two groups. **What to refine**, on the Setup tab, can hide on
 Below them:
 
 - **Refines you can put back** lists the last 5 refines in this chat, each with **Put it back** and **Dismiss**. The tab shows a badge with the count.
+  - Each refine also has **Expand**. It opens the before, the after and what changed in a large window. Press **Close**, press Escape, or tap outside it to close it.
   - Every before and after shows the words as they read in the chat. Markup tags, such as a color tag, are left out of it. **Read it in full** shows the text exactly as written.
   - The thinking at the start of a reply is left out of every before and after, and out of the short preview of an older refine, since it was not sent to the model and did not change. A line above the marked text says so. **Read it in full** shows it.
   - The list comes back after a reload, or when you leave the app and come back. Your server holds it in memory.

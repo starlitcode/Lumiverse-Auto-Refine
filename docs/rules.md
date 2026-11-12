@@ -38,7 +38,7 @@ These are not about quality. Without them, a refine does not work, or it saves t
 **5. Notes outside the tags, if you ask for notes.**
 
 - If you ask the model for scores or notes, ask for them outside `<REFINED>`. Anything inside the tags goes into your chat.
-- To see the notes while the model writes, put them in `<REFINE_NOTES>`.
+- To see the notes while the model writes, put them in `<REFINE_NOTES>`. Keep them to notes, such as scores. A request for the model's reasoning in its answer can be declined. See [Asking again](guardrails.md#asking-again).
 
 **The easy way to get all five:** start from a built-in prompt, as in Step 1. Keep the **Passage**, **Hand It In** and **Protected Formatting** blocks, and change the rest.
 
@@ -206,7 +206,8 @@ A model that reasons and a model that does not need different prompts.
 
 - Give it a standard, like "a sentence that could sit in any other story is the one to fix".
 - Tell it where to look.
-- You can ask it to write its working in `<REFINE_NOTES>`. You can read that on the **Log** tab, and it shows you why it changed each line.
+- You can ask it for short notes in `<REFINE_NOTES>`, such as a score for each area. You can read them on the **Log** tab, and they show you why it changed each line.
+- Do not ask it to write out its reasoning or its thinking in the answer. Some providers decline that request as `reasoning_extraction`. See [Asking again](guardrails.md#asking-again).
 - Put the steps it should work through at the end of the prompt, after the passage. See [More ways to make it work better](#more-ways-to-make-it-work-better).
 
 ## Step 7: Add your own taste

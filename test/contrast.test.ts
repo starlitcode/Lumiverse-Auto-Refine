@@ -2,11 +2,11 @@
 //
 // Every color on the tab comes from the reader's Lumiverse theme, and a theme
 // can set its accent to anything. The panel measures what it has been handed
-// and repaints only what fails, so this maths decides whether a label is legible
+// and repaints only what fails, so this math decides whether a label is legible
 // or a blank strip where a label should be.
 //
 // The browser checks measure the rendered result across a matrix of hostile
-// themes, which is the real guard. These cover the maths under it, where a
+// themes, which is the real guard. These cover the math under it, where a
 // wrong answer is a number rather than a screenshot.
 import { expect, test, describe } from "bun:test";
 import { __testing } from "../src/frontend";

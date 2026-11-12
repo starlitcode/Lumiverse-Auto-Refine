@@ -25,7 +25,7 @@ The panel shows what is sent:
 
 Two things are taken out of a message before it is sent:
 
-- **The model's own thinking.** It is never sent.
+- **The model's own thinking.** It is only sent when a block with `{{reply_thinking}}` is switched on, such as **Writers Plan**. Both are off by default.
 - **Your markup.** Tags, code and image links are replaced with tokens and put back afterwards, so a rewrite cannot change them.
 
 Your settings are never sent. Nothing from a chat you are not in is sent.
@@ -89,6 +89,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
   - It is held in your server's memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
   - With **Keep them through an update** on, it is also saved on your server, in Lumiverse's storage for your account. It is off by default. Turning it off empties the saved copy.
   - Only your account can read or put back your own refines.
+  - Deleting a chat removes its refines from your server's memory and from the saved copy. So does deleting the message that was refined.
 
 ## What it never does
 

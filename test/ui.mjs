@@ -6597,6 +6597,71 @@ console.log("\nthinking held back from a refine is left off the card");
   });
 }
 
+// A past refine opened at full size from its card. The before and after is
+// marked the same way, fills most of the screen, scrolls as one, and the view
+// switch works in it. Close, Escape and a tap outside each close it.
+console.log("\na past refine opened at full size");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 800 }, true], ["laptop", { width: 1280, height: 800 }, false]]) {
+  await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    const long = Array.from({ length: 120 }, (_, i) => "The ferry crossed the river for the " + (i + 1) + "th time that night, slowly.").join(" ");
+    await page.evaluate((long) => {
+      window.__fromBackend({
+        type: "undoable_list",
+        list: [{ chatId: "c1", messageId: "m2", at: Date.now() - 30000,
+          before: long, after: long.replace(/, slowly\./g, ".") }],
+      });
+    }, long);
+    await goTab(page, "Log");
+    await settle(page);
+    const opened = await page.evaluate(async () => {
+      const b = document.querySelector("[data-arf-last] [data-arf-expand-refine]");
+      if (!b) return null;
+      const r = b.getBoundingClientRect();
+      b.scrollIntoView({ block: "center" });
+      b.click();
+      await new Promise((res) => setTimeout(res, 300));
+      const box = document.querySelector("[data-arf-bigdiff]");
+      if (!box) return { button: Math.round(r.height), box: false };
+      const body = box.querySelector(".arf-bigdiff");
+      const marks = box.querySelectorAll(".arf-cut, .arf-add").length;
+      const br = box.getBoundingClientRect();
+      body.scrollTop = 1e6;
+      const scrolls = body.scrollTop > 0;
+      const wide = document.documentElement.scrollWidth <= window.innerWidth;
+      // The switch inside the full view redraws the marked text in it.
+      const sw = box.querySelector("[data-arf-diff-switch]");
+      const before = box.querySelector("[data-arf-diff]").getAttribute("data-arf-diff-mode");
+      sw.click();
+      await new Promise((res) => setTimeout(res, 100));
+      const after = box.querySelector("[data-arf-diff]").getAttribute("data-arf-diff-mode");
+      sw.click();
+      return { button: Math.round(r.height), box: true, marks, tall: Math.round(br.height), vh: window.innerHeight, scrolls, wide, before, after };
+    });
+    ok(label + ": each past refine has an Expand button, tall enough to tap", !!opened && opened.button >= 32, JSON.stringify(opened));
+    ok(label + ": it opens the before and after at full size, marked", !!opened && opened.box && opened.marks > 0 && opened.tall > opened.vh * 0.6, JSON.stringify(opened));
+    ok(label + ": the text scrolls as one, and nothing runs off the side", !!opened && opened.scrolls && opened.wide, JSON.stringify(opened));
+    ok(label + ": the view switch works inside it", !!opened && opened.before !== opened.after, JSON.stringify(opened));
+    for (const how of ["Close", "Escape", "outside"]) {
+      const shut = await page.evaluate(async (how) => {
+        if (!document.querySelector("[data-arf-bigdiff]")) document.querySelector("[data-arf-last] [data-arf-expand-refine]").click();
+        await new Promise((res) => setTimeout(res, 250));
+        const over = document.querySelector("[data-arf-bigdiff]").parentElement;
+        if (how === "Close") [...over.querySelectorAll("button")].find((b) => b.textContent === "Close").click();
+        if (how === "Escape") document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        if (how === "outside") over.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((res) => setTimeout(res, 400));
+        return !document.querySelector("[data-arf-bigdiff]");
+      }, how);
+      ok(label + ": " + how + " closes it", shut);
+    }
+  });
+}
+
 console.log("\nthe card that comes up on the page");
 {
   // A refine changes writing somebody was reading. The panel is behind a tab
