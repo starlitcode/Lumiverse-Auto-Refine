@@ -8164,6 +8164,38 @@ describe("several rewrites at once", () => {
     expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
   });
 
+  // A decline for asking the model to write out its thinking comes back the
+  // same on every try, so it is not asked again, at once or one at a time.
+  test("a decline as reasoning_extraction is not asked again", async () => {
+    const no = "Lantern generation failed: The provider declined the response (reasoning_extraction).";
+    const h = await armed(
+      ["unused", "unused", GOOD, GOOD],
+      { refineAtOnce: true, refineAtOnceCount: 2, retryRefine: 2 },
+      chat(),
+      { delays: [5, 10, 5, 10], errorsAt: { 0: no, 1: no } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(h.asked.length).toBe(2);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/reasoning_extraction/);
+  });
+
+  test("and one decline among them stops the others and is not asked again", async () => {
+    const no = "Lantern generation failed: The provider declined the response (reasoning_extraction).";
+    const h = await armed(
+      ["unused", "<REFINED>Short.</REFINED>", GOOD, GOOD],
+      { refineAtOnce: true, refineAtOnceCount: 2, retryRefine: 2 },
+      chat(),
+      { delays: [5, 200, 5, 10], errorsAt: { 0: no } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(300);
+    expect(h.asked.length).toBe(2);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/reasoning_extraction/);
+  });
+
   test("a hand-edited count cannot go past five", async () => {
     const h = await armed([GOOD], { refineAtOnce: true, refineAtOnceCount: 40 }, chat(), { delays: [5] });
     await h.ended({ chatId: "c1", messageId: "m2" });

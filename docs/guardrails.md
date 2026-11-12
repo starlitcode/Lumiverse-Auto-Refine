@@ -167,6 +167,7 @@ What to know:
 - The rewrites do not stream. The status line says how many are being written and how long it has been.
 - It works with **Ask again when a check fails**. Each new try is then several at once too.
 - Stop ends every rewrite still being written.
+- A rewrite declined as `reasoning_extraction` stops the others, and the refine is not asked again. Every rewrite has the same prompt, so they would all be declined. See [Asking again](#asking-again).
 
 ## The limit on one reply
 

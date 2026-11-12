@@ -3186,9 +3186,11 @@ const WAIT_STATUS = /^(?:408|409|425|429|5\d\d)$/;
 const HARD_STATUS = /\b(?:400|401|402|403|404|405|406|411|413|415|422)\b/;
 // The key, the account and the prompt. A balance does not refill, a daily
 // limit only comes back the next day, and a prompt over the context length is
-// the same prompt next time. These are hard whatever status comes with them.
+// the same prompt next time. A prompt declined as "reasoning_extraction",
+// for asking the model to write out its thinking, is declined again the same
+// way. These are hard whatever status comes with them.
 const HARD_SURE =
-  /\b(?:invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
+  /\b(?:reasoning[_ -]?extraction|invalid[_ ]?api[_ ]?key|authentication|unauthorized|insufficient[_ ](?:balance|credits?|funds|quota)|billing|context[_ ]length(?:[_ ]exceeded)?|maximum context|(?:prompt|input|context|messages?) (?:is |are )?too long|daily (?:request |token |usage )?(?:limit|quota|cap)|today['’]?s (?:free )?(?:requests|quota|limit|usage)|\w*(?:requests|tokens) ?per ?day\w*|resets? at (?:midnight|00:00))\b/i;
 // Words that are hard from a provider, and that a gateway's page can also use
 // about itself.
 const HARD_LOOSE = /\b(?:forbidden|permission|not allowed|not found|does not exist|model missing)\b/i;
@@ -4945,6 +4947,13 @@ async function askAtOnce(
         .then((a) => {
           if (over) return;
           if (a.error) {
+            // A decline as reasoning_extraction is decided from the prompt,
+            // which every copy shares, so the others are stopped and it is
+            // passed on as an error, which is not asked again.
+            if (REASONING_BLOCK.test(String(a.error))) {
+              finish({ error: a.error, verdict: null });
+              return;
+            }
             // A provider's filter stopping one of them is a refusal, judged
             // the same way as for a single rewrite.
             if (REFUSAL_ERROR.test(String(a.error)))

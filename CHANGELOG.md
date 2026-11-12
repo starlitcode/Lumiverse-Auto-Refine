@@ -8,7 +8,7 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ## 1.56.0
 
-_2026-11-11_
+_2026-11-12_
 
 ### Added
 
@@ -21,7 +21,7 @@ _2026-11-11_
 - **Messages hidden from the prompt were sent with a refine.** Lumiverse leaves a message you hid from the prompt out of the chat's own prompt. Auto Refine still put it in `{{history}}`, counted it for **Find phrases this chat has worn out**, and could send it to the second model as the reply before. It now leaves it out of all three.
 - **Refines you can put back were kept after their chat was deleted.** Your server held the before and after of a deleted chat's refines until newer ones pushed them out. With **Keep them through an update** on, they stayed in the saved copy too. Deleting a chat, or the message that was refined, now removes them from both. Auto Retry has the same fix for the reply a retry replaced.
 - **Boxes that cannot be typed in showed a typing cursor.** Tapping a block of a built-in prompt, or text opened at full size only to read, such as **Read it in full**, put a blinking cursor in it on some phones, as if it could be typed in. It no longer does. The text can still be selected and copied. Auto Retry has the same fix.
-- **A refine declined as `reasoning_extraction` was asked again.** It was declined again each time, and each try was paid for. It is now not asked again, and the Log says which wording in the prompt to take out. See [Asking again](docs/guardrails.md#asking-again).
+- **A refine declined as `reasoning_extraction` was asked again.** It was declined again each time, and each try was paid for. It is now not asked again, and the Log says which wording in the prompt to take out. With **Several rewrites at once** on, the other rewrites are stopped too. See [Asking again](docs/guardrails.md#asking-again).
 
 ### Changed
 
