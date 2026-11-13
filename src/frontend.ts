@@ -9208,7 +9208,7 @@ export function setup(ctx: Ctx, overrides?: any) {
   //
   // A host without that dialog is not a reason to delete on one tap, so the
   // button arms itself instead and says so. Keyed per button, because two
-  // Deletes on the same tab are two different questions and arming one must not
+  // Deletes on the same tab each delete their own thing and arming one must not
   // arm the other. The arming lapses, or a second press somewhere else would
   // land on a button that had been waiting since yesterday.
   // The host's own dialog, with the reader's place in the panel held across it.
