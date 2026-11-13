@@ -154,12 +154,21 @@ What to know:
 
 ## Several rewrites at once
 
-**Several rewrites at once** is off by default. When it is on, each try writes several rewrites at the same time instead of one.
+**Several rewrites at once** is off by default. When it is on, each try asks for several rewrites at the same time instead of one, and keeps the first good one. It is the same idea as Auto Retry's **Several tries at once**.
+
+Every rewrite uses the same prompt a single refine would send.
 
 1. The same request goes to the model **How many at once** times, 2 by default and 5 at most.
 2. Each rewrite is checked the moment it arrives, with the same checks as a single rewrite.
 3. The first one that passes is used. The others still being written are stopped.
 4. If none pass, nothing is saved and your reply is left as it was. The Log gives the last check that failed.
+
+An example, with **How many at once** at 3:
+
+- Three rewrites are asked for at the same time.
+- The first one back is a refusal. It is thrown away.
+- The second one back passes every check. It is saved over your reply.
+- The third is still being written, so it is stopped.
 
 What to know:
 

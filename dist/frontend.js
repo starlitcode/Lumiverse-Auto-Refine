@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.56.2";
+const VERSION = "1.56.3";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -2214,7 +2214,7 @@ const GUARD_FIELDS = [
         key: "refineAtOnce",
         label: "Several rewrites at once",
         type: "bool",
-        hint: "Off by default. Writes several rewrites at the same time and keeps the first that passes every check. Each one costs a whole call.",
+        hint: "Off by default. Asks for several rewrites at the same time and keeps the first good one. Each rewrite costs as much as a normal refine.",
     },
     {
         key: "refineAtOnceCount",
@@ -2377,7 +2377,7 @@ const JUDGE_FIELDS = [
         type: "lines",
         rows: 10,
         needs: { key: "judgeMode", is: "two" },
-        hint: "One check per line. Call the reply reply, in backticks, like the checks already here. The second model scores how likely each one is true.",
+        hint: "One check per line, each a statement about the reply, written like the ones already here. The second model says how likely each one is true.",
     },
     {
         key: "judgeOver",
@@ -2566,7 +2566,7 @@ const LIMIT_FIELDS = [
         type: "lines",
         needs: { key: "passMode", is: "many" },
         under: true,
-        hint: "Preset names, one per line, up to six, run top to bottom. Each pass is one model call. Empty runs replies once, with your prompt for replies.",
+        hint: "Preset names, one per line, up to six, used top to bottom. Each pass is one model call. Empty uses your usual prompt for replies, once.",
     },
     {
         key: "passNamesYours",
@@ -2574,7 +2574,7 @@ const LIMIT_FIELDS = [
         type: "lines",
         needs: { key: "passMode", is: "many" },
         under: true,
-        hint: "Optional. Preset names, one per line, up to six, run on your own messages with each preset's prompt for them. Empty runs your messages once, with your prompt for them.",
+        hint: "Optional. Preset names, one per line, up to six, used in order on your own messages. Empty uses your usual prompt for your messages, once.",
     },
     {
         key: "passOwnModel",
@@ -2610,7 +2610,7 @@ const LIMIT_FIELDS = [
         max: 20,
         needs: { key: "wornOn" },
         under: true,
-        hint: "Three means a phrase in three different replies counts. Five times in one reply is that reply's choice and is never counted, whatever this says.",
+        hint: "With 3, a phrase has to appear in 3 different replies to count. Repeats inside one reply never count.",
     },
     {
         key: "wornFine",

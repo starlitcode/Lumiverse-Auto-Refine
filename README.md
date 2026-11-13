@@ -103,14 +103,22 @@ All four change only a line the model could quote as breaking a rule. The two fo
 
 ## Documentation
 
+**Start here**
+
 - [What to use](docs/recommended.md): the prompt, model, thinking and sampler settings to start with
-- [How the prompt is built](docs/prompt.md): blocks, macros, roles, the built-in prompts, and the preview
-- [Making your own prompt](docs/rules.md): a step-by-step guide to a prompt that fits your story and your model
-- [What it refuses to save](docs/guardrails.md): the checks on what comes back
 - [Settings](docs/settings.md): every tab and setting
 - [Ways to reach it](docs/settings.md#setup): the floating button, the chat buttons, and refining a selection
+
+**Going further**
+
+- [How the prompt is built](docs/prompt.md): blocks, macros, roles, the built-in prompts, and the preview
+- [Making your own prompt](docs/rules.md): a step-by-step guide to a prompt that fits your story and your model
 - [Presets](docs/prompt.md#presets) and [Import and export](docs/prompt.md#import-and-export)
-- [Two models](docs/two-models.md): a beta where a second model, through a Decision connection, picks which replies to refine
+- [What it refuses to save](docs/guardrails.md): the checks on what comes back
+- [Two models](docs/two-models.md): a beta where a second model picks which replies to refine
+
+**About it**
+
 - [Privacy](docs/privacy.md): what it can reach, what it sends, and what it keeps
 - [Security policy](SECURITY.md): how to report a security problem
 - [Changelog](CHANGELOG.md): what changed in every version

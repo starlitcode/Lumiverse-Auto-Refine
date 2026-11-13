@@ -1,10 +1,28 @@
 # Two models
 
+## In short
+
+- It is off by default, and it is a beta.
+- With **one model**, every reply is refined.
+- With **two models**, a small second model reads each reply first and says whether it needs a refine. Only the replies it picks are refined.
+- Replies that were fine already are not refined, so they cost nothing more.
+- The second model only gives scores. It never writes anything into your chat.
+- You set it up as a **Decision connection** in Lumiverse. See [Setting it up](#setting-it-up).
+
+## How it works
+
 A beta. With one model, which is the default, every reply the automatic pass reaches is refined. With two, a second model reads each finished reply first and says whether it needs a refine, and the refine model runs only on the replies it picks out. Replies that were fine already stop costing a refine.
 
 The second model is a small scoring model, called a decision model. It does not write text. It is handed the reply and a list of statements about it, and it answers each with the chance, from 0 to 100 percent, that the statement is true. That is the whole of what it can do, so it has nothing of its own to save over a reply.
 
 Auto Refine asks it through one of your **Decision connections** in Lumiverse. Lumiverse keeps the connection's address and key, so Auto Refine never sees either.
+
+### An example
+
+Your line, **Refine when a check reaches**, is 30%. Two replies come in.
+
+- **Reply A:** "Pell set the kettle on the stove and counted the cups. Four. Someone was missing." The second model gives every check a low score, such as 4% or 9%. None reaches 30%, so the reply is left as it is, and no refine is paid for.
+- **Reply B:** "Pell's heart hammered. It wasn't fear, it was something worse. She reached for the door, then pulled back." The second model scores the stock phrase check at 88% and the "it wasn't X, it was Y" check at 92%. Both reach 30%, so the reply is refined.
 
 ## Setting it up
 
@@ -32,17 +50,6 @@ The card says what is wrong, if anything, under **Which Decision connection**:
 - This Lumiverse is too old to have Decision connections for extensions.
 
 In each of these, every reply is refined, the same as with one model.
-
-## Coming from an older version
-
-Older versions reached the second model themselves, with a host, a model name and a key saved in Auto Refine. That is gone:
-
-- The keys you saved for the second model are deleted from Lumiverse's secure store the first time this version loads your settings.
-- Your host, model and address settings are dropped.
-- Your checks, and every other setting on the card, are kept.
-- **Refine when a check reaches** was kept per model. The line of the model you had picked is kept as the one line.
-
-To go on using two models, add a Decision connection in Lumiverse for the model you used, as above.
 
 ## What the second model checks
 
@@ -298,6 +305,17 @@ A test is very small, so its cost can be a tiny part of a cent. A provider's own
 ## Privacy
 
 What goes to the second model is on the [Privacy](privacy.md#the-second-model) page.
+
+## Coming from an older version
+
+Older versions reached the second model themselves, with a host, a model name and a key saved in Auto Refine. That is gone:
+
+- The keys you saved for the second model are deleted from Lumiverse's secure store the first time this version loads your settings.
+- Your host, model and address settings are dropped.
+- Your checks, and every other setting on the card, are kept.
+- **Refine when a check reaches** was kept per model. The line of the model you had picked is kept as the one line.
+
+To go on using two models, add a Decision connection in Lumiverse for the model you used, as above.
 
 ---
 

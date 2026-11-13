@@ -434,6 +434,30 @@ A model asked to improve a paragraph may drop a `<font color>` tag, reflow a cod
 3. Afterwards, the real markup goes back in.
 4. **If a token did not come back, the rewrite is dropped.** This check is what makes the protection a guarantee.
 
+An example. Your reply has a colored line:
+
+```
+Orrin slowly turned. <font color="#7a5cff">"You came back."</font> His voice was very quiet.
+```
+
+The model is sent this, with the color tags swapped for tokens:
+
+```
+Orrin slowly turned. [[AR1]]"You came back."[[AR2]] His voice was very quiet.
+```
+
+It hands back:
+
+```
+Orrin turned. [[AR1]]"You came back."[[AR2]] His voice was quiet.
+```
+
+And the color goes back in where the tokens are:
+
+```
+Orrin turned. <font color="#7a5cff">"You came back."</font> His voice was quiet.
+```
+
 What is hidden: fenced code, inline code, images, links, bare URLs, comments, HTML entities, wiki brackets, spoiler bars, table rows, tracker brackets, divider lines such as `---` or `* * *`, and any tag with an attribute (such as a color or a link).
 
 Color markup that another extension draws as color is hidden as well: `[color=#hex]` and `[/color]`, and an escaped `&lt;font color&gt;` or `&lt;span style="color"&gt;` with its closing tag.

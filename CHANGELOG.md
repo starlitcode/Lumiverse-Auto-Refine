@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.56.3
+
+_2026-11-13_
+
+### Changed
+
+- **Clearer explanations.** The hardest features are easier to follow:
+  - [Two models](docs/two-models.md) starts with a short summary and has a worked example. The part for people coming from an older version moved to the end.
+  - [Several rewrites at once](docs/guardrails.md#several-rewrites-at-once) says it uses the same prompt as a single refine, and has an example.
+  - [Protecting what is not prose](docs/prompt.md#protecting-what-is-not-prose) shows a colored line going through a refine.
+  - The documentation list in the README is in three groups: **Start here**, **Going further** and **About it**.
+  - Simpler hints under **Several rewrites at once**, **What the second model checks**, the two lists of passes, and **How many replies a phrase has to be in**.
+
+---
+
 ## 1.56.2
 
 _2026-11-13_
