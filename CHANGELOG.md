@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.56.2
+
+_2026-11-13_
+
+### Fixed
+
+- **A rename could look like it saved your changes.** **Rename selected** changes only the name of a preset or a model setup, and keeps what it holds. Changes made since it was loaded stay on the panel and are not in it, but the message only said **Renamed.**, so the preset could look updated. When there are such changes, it now says **Only the name changed, so your changes are not saved in it yet.** Auto Retry has the same fix.
+
+---
+
 ## 1.56.1
 
 _2026-11-12_

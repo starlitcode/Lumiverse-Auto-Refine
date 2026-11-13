@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.56.1";
+const VERSION = "1.56.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -11267,7 +11267,11 @@ export function setup(ctx: Ctx, overrides?: any) {
       one.name = name;
       saveSetups();
       setupPick = name;
-      setupSaid = "Renamed.";
+      // The same as a preset: only the name changes, and the Model tab may
+      // hold more than the setup does.
+      setupSaid = sameSettings(one.settings, setupFromNow())
+        ? "Renamed."
+        : "Renamed. Only the name changed, so your changes are not saved in it yet.";
       paint();
     });
 
@@ -15055,7 +15059,12 @@ export function setup(ctx: Ctx, overrides?: any) {
       repick(p.name, name);
       p.name = name;
       savePresets();
-      presetSaid = "Renamed.";
+      // A rename keeps what the preset holds. Changes made since it was loaded
+      // stay on the panel and are not in it, which a rename alone could hide,
+      // so it says so.
+      presetSaid = driftedFromPick()
+        ? "Renamed. Only the name changed, so your changes are not saved in it yet."
+        : "Renamed.";
       paint();
     });
 

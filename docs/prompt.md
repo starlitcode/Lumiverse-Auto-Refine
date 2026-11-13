@@ -619,7 +619,7 @@ The buttons:
 - **Load it again** reloads the picked preset, throwing away your edits.
 - **Save as new** saves what is on screen under the name in the box.
 - **Update selected** saves over the picked preset.
-- **Rename selected** renames it. A name already in use is refused.
+- **Rename selected** renames it. A name already in use is refused. Only the name changes: edits you have not saved with **Update selected** are not put in it, and the message under the buttons says so.
 - **Delete** removes it, after asking.
 
 The **Model setups** card on the Model tab works the same way.

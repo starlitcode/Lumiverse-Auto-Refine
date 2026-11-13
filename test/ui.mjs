@@ -1712,6 +1712,7 @@ console.log("\nrenaming a preset");
     await renameTo("Third");
     await settle(page);
     ok("a new name goes through", (await names()).join() === "First,Third", await names());
+    ok("with nothing changed, it just says Renamed", /Renamed\./.test(await said()) && !/Only the name changed/.test(await said()));
 
     // Update and Put it back that would change nothing say so, the same as a
     // rename to its own name.
@@ -1728,6 +1729,26 @@ console.log("\nrenaming a preset");
     await press("undo");
     await settle(page);
     ok("putting back a load that changed nothing says so", /already what was here before/i.test(await said()));
+
+    // A rename keeps what the preset holds. Changes made since it was loaded
+    // are not in it, and the rename says so rather than leaving it to look
+    // saved.
+    await page.evaluate(() => {
+      const ta = document.querySelector('#drawer [data-arf-field^="blocktext:"]');
+      ta.focus();
+      ta.value = "Changed by hand. " + ta.value;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.blur();
+    });
+    await settle(page);
+    await renameTo("Fourth");
+    await settle(page);
+    ok("renamed with changes on the panel, it says they are not saved in it", /Only the name changed, so your changes are not saved in it yet/.test(await said()));
+    const kept = await page.evaluate(() => {
+      const p = JSON.parse(localStorage.getItem("lv-auto-refine:presets:v1") || "[]").find((x) => x.name === "Fourth");
+      return p ? JSON.stringify(p.settings) : "";
+    });
+    ok("and the preset still holds what it held", kept && !/Changed by hand/.test(kept), kept.slice(0, 120));
   });
   ok("no errors renaming a preset", errors.length === 0, errors.join("\n         "));
 }
@@ -13591,6 +13612,28 @@ console.log("\npicking a model setup loads it, the same as a preset");
       () => document.querySelector('#drawer [data-arf-field="setupPick"]').value,
     );
     ok("and takes the picker back with it", pickNow === "Fast", pickNow);
+
+    // A rename keeps what the setup holds, and says so when the Model tab
+    // holds more than it does.
+    const renameTo = (name) =>
+      page.evaluate((n) => {
+        const box = document.querySelector('#drawer [data-arf-field="setupName"]');
+        box.value = n;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        document.querySelector('#drawer [data-arf-setup="rename"]').click();
+      }, name);
+    const said = () => page.evaluate(() => document.getElementById("drawer").textContent || "");
+    await forceLoad("Slow");
+    await renameTo("Slower");
+    await settle(page);
+    ok("a setup renamed with nothing changed just says Renamed", /Renamed\./.test(await said()) && !/Only the name changed/.test(await said()));
+    await setWait(444);
+    await settle(page);
+    await renameTo("Slowest");
+    await settle(page);
+    ok("renamed with changes on the Model tab, it says they are not saved in it", /Only the name changed, so your changes are not saved in it yet/.test(await said()));
+    await forceLoad("Slowest");
+    ok("and the setup still holds what it held", (await wait()) === "111", await wait());
   });
   for (const e of errors) ok("no console errors", false, e);
   if (!errors.length) ok("no console errors", true);
