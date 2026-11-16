@@ -1670,6 +1670,54 @@ console.log("\na preset loads into the list you are on");
 // ---- renaming a preset ----
 // Two presets under one name cannot be told apart in the picker, and a rename
 // to the name it already has is not a rename. Both are refused out loud.
+// On a phone Lumiverse makes the drawer the screen's width divided by UI
+// Scale, so a higher scale gives the panel less room. A row of buttons that
+// wrapped where the room ran out left Delete alone on the last line. Each
+// Delete shares its line with another control at every scale, and nothing
+// runs off the side.
+console.log("\nDelete never sits on a line of its own");
+for (const scale of [0.9, 1, 1.25, 1.5]) {
+  const w = Math.round(390 / scale);
+  await inTab(
+    browser,
+    {
+      viewport: { width: 390, height: 900 },
+      touch: true,
+      css: "body{zoom:" + scale + "} #drawer{width:" + w + "px !important;max-width:none !important;box-sizing:border-box}",
+      presets: [{ name: "Mine", at: 1, settings: {} }],
+      setups: [{ name: "Fast", at: 1, settings: {} }],
+    },
+    async (page) => {
+      const look = () =>
+        page.evaluate(() => {
+          const out = [];
+          for (const d of document.querySelectorAll("#drawer button")) {
+            if ((d.textContent || "").trim() !== "Delete" || !d.getClientRects().length) continue;
+            const r = d.getBoundingClientRect();
+            const row = d.closest(".arf-row");
+            const same = [...row.querySelectorAll("button, select, .arf-blockrole")].filter((x) => {
+              if (x === d || !x.getClientRects().length) return false;
+              const q = x.getBoundingClientRect();
+              return q.bottom > r.top + 2 && q.top < r.bottom - 2;
+            }).length;
+            const box = row.getBoundingClientRect();
+            out.push({ what: d.getAttribute("aria-label") || d.getAttribute("data-arf-preset") || d.getAttribute("data-arf-setup") || "Delete", same, over: Math.round(r.right - box.right) });
+          }
+          return out;
+        });
+      await goTab(page, "Prompt");
+      await settle(page);
+      const prompt = await look();
+      await goTab(page, "Model");
+      await settle(page);
+      const model = await look();
+      const all = prompt.concat(model);
+      ok("UI Scale " + scale + ": every Delete shares its line", all.length >= 3 && all.every((x) => x.same >= 1), JSON.stringify(all));
+      ok("UI Scale " + scale + ": no Delete runs off the side", all.every((x) => x.over <= 1), JSON.stringify(all));
+    },
+  );
+}
+
 console.log("\nrenaming a preset");
 {
   const errors = await inTab(browser, {}, async (page) => {

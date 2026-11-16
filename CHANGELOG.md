@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.56.4
+
+_2026-11-15_
+
+### Fixed
+
+- **Delete could sit on a line of its own.** On a phone with **UI Scale** at 1.00 or higher, the preset buttons and the model setup buttons ran out of room, and Delete dropped to a line by itself. The Delete under a block did the same at 1.25. The buttons are now in two rows: **Load it again**, **Update selected** and **Delete** for the picked one, and **Save as new** and **Rename selected** for the name box. Delete always stays beside **Update selected**. A block's Delete stays on the line with its role picker.
+
+### Changed
+
+- **A softer look for Delete.** Delete has a light red wash and red text in place of a hard red outline. It still stands apart from the other buttons. Auto Retry's Delete looks the same.
+
+---
+
 ## 1.56.3
 
 _2026-11-13_

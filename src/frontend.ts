@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.56.3";
+const VERSION = "1.56.4";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -5505,6 +5505,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     // once, rather than at each of the places that hide something.
     ".arf [hidden]{display:none!important}" +
     ".arf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}" +
+    ".arf-pair{display:inline-flex;gap:8px;flex-wrap:wrap;align-items:center;max-width:100%}" +
     ".arf-colorbad{font-size:12px;line-height:1.45;color:var(--lumiverse-text,rgba(255,255,255,.9))}" +
     // The status line keeps its dot beside the first line of words. Left to
     // wrap like any row, long words moved to a line of their own and the dot
@@ -6339,13 +6340,18 @@ export function setup(ctx: Ctx, overrides?: any) {
     ".arf-warn .arf-sign{color:var(--lumiverse-warning,#f59e0b)}" +
     ".arf-bad .arf-sign{color:var(--lumiverse-danger,#ef4444)}" +
     ".arf-good .arf-sign{color:var(--lumiverse-success,#22c55e)}" +
-    // A button that throws something away. Edged in the danger color rather
-    // than filled with it: filled, it draws the eye to the one control on the
-    // panel that should not be pressed by accident.
-    ".arf-btn.arf-danger{border-color:var(--lumiverse-danger,#ef4444);" +
-    "color:var(--lumiverse-danger,#ef4444);background:transparent}" +
+    // A button that throws something away. A light wash of the danger color
+    // with a softer edge, so it reads as the careful one without a hard red
+    // outline, and is still far from a solid red fill that would draw the eye
+    // to the one control that should not be pressed by accident. The label
+    // mixes the danger color with the theme's text color, lighter on a dark
+    // theme and deeper on a light one, so it stays red and still reads
+    // against the wash. Auto Retry's Delete is drawn the same way.
+    ".arf-btn.arf-danger{border-color:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 45%,transparent);" +
+    "color:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 70%,var(--lumiverse-text,#eee));" +
+    "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 12%,transparent)}" +
     ".arf-btn.arf-danger:hover:not(:disabled){" +
-    "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 14%,transparent)}" +
+    "background:color-mix(in srgb,var(--lumiverse-danger,#ef4444) 22%,transparent)}" +
     // ---- anything that is a log, a count or a piece of a prompt ----
     // The host's own monospace, so a timestamp column lines up, a character
     // count reads as a number, and the text of a prompt looks like the thing
@@ -6430,6 +6436,16 @@ export function setup(ctx: Ctx, overrides?: any) {
   };
   const heading = (text: string) => el("div", "arf-h", text);
   const note = (text: string) => el("div", "arf-note", text);
+  // Two buttons that wrap as one, so the second never sits alone on a line.
+  // They still wrap apart when even the two of them are wider than the row,
+  // so nothing runs off the side.
+  function heldTogether(a: HTMLElement, b: HTMLElement): HTMLElement {
+    const pair = el("span", "arf-pair");
+    pair.appendChild(a);
+    pair.appendChild(b);
+    return pair;
+  }
+
   function button(label: string, primary: boolean): HTMLButtonElement {
     const b = document.createElement("button");
     b.type = "button";
@@ -10500,11 +10516,16 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
     rest.appendChild(ta);
 
+    // One line at every UI Scale. A narrow drawer shrinks the role picker
+    // rather than wrapping, which put Delete on a line of its own.
     const foot = el("div", "arf-row");
-    foot.appendChild(el("span", "arf-note", "Sent as"));
+    foot.style.flexWrap = "nowrap";
+    const sentAs = el("span", "arf-note", "Sent as");
+    sentAs.style.cssText = "flex:none;white-space:nowrap";
+    foot.appendChild(sentAs);
     const sel = document.createElement("select");
     sel.className = "arf-field";
-    sel.style.maxWidth = "140px";
+    sel.style.cssText += ";flex:0 1 140px;min-width:0;max-width:140px";
     sel.setAttribute("aria-label", "Role for " + blockLabel(b));
     for (const o of ROLE_OPTIONS) {
       const op = document.createElement("option");
@@ -10530,6 +10551,7 @@ export function setup(ctx: Ctx, overrides?: any) {
     foot.appendChild(el("span", "arf-grow"));
     const drop = button("Delete", false);
     drop.className += " arf-danger";
+    drop.style.flex = "none";
     drop.setAttribute("aria-label", "Delete " + blockLabel(b));
     if (locked) lockForBuiltIn(drop);
     drop.addEventListener("click", () => {
@@ -11303,12 +11325,14 @@ export function setup(ctx: Ctx, overrides?: any) {
     });
 
     if (setupUndo) row.appendChild(putBack);
+    // Split the same way as the preset card's buttons, for the same reason.
     row.appendChild(load);
-    row.appendChild(asNew);
-    row.appendChild(update);
-    row.appendChild(rename);
-    row.appendChild(drop);
+    row.appendChild(heldTogether(update, drop));
     wrap.appendChild(row);
+    const named = el("div", "arf-row");
+    named.appendChild(asNew);
+    named.appendChild(rename);
+    wrap.appendChild(named);
 
     // What the chosen one would actually do, since the fields below are what
     // is loaded now and not what is about to be.
@@ -15101,12 +15125,17 @@ export function setup(ctx: Ctx, overrides?: any) {
     // Only on the list the load changed. The picker it puts back belongs to
     // that list, and from the other one it would name the wrong prompt.
     if (presetUndo && presetUndo.list === editing) row.appendChild(putBack);
+    // The picked preset's own buttons on this row, and the two that use the
+    // name box on the next, the same split Auto Retry's preset bar uses.
+    // Update selected and Delete are held together, so a drawer narrowed by
+    // UI Scale never leaves Delete on a line of its own.
     row.appendChild(load);
-    row.appendChild(asNew);
-    row.appendChild(update);
-    row.appendChild(rename);
-    row.appendChild(drop);
+    row.appendChild(heldTogether(update, drop));
     wrap.appendChild(row);
+    const named = el("div", "arf-row");
+    named.appendChild(asNew);
+    named.appendChild(rename);
+    wrap.appendChild(named);
     if (currentPick() && isBuiltIn(currentPick())) {
       const which = BUILT_IN_PROMPTS.find((p) => p.name === currentPick());
       if (which) wrap.appendChild(note(which.what));
