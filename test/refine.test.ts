@@ -8372,6 +8372,15 @@ describe("a broken rewrite", () => {
     ["a phrase repeated to the end", scene + "the river and the river and ".repeat(16), /stuck repeating/],
     ["one word and a comma repeated to the end", scene + "The cold, wet, tired, " + "and, ".repeat(40) + "and,", /stuck repeating/],
     [
+      "a list of terms with dotted names in it, ending with a full stop",
+      scene +
+        Array.from({ length: 150 }, (_, i) =>
+          ["tide", "Ferry.io", "rope", "pulley/winch", "chart", "Lamp.app", "buoy", "hull", "keel", "dock", "oar", "sail", "mast"][(i * 7) % 13] + " " +
+          ["log", "kit", "guide", "index", "gauge", "table", "scale", "notes", "list", "map", "plan"][(i * 3) % 11]).join(" ") +
+        ".",
+      /stuck repeating/,
+    ],
+    [
       "a tokenizer's marks for a space and a line break",
       scene + "She\u0120cut\u0120the\u0120engine.\u010A\"Quiet.\"\u0120Oriel\u0120closed\u0120the\u0120ledger\u0120and\u0120waited.",
       /came back garbled/,

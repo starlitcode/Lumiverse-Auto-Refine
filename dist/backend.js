@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.56.4';
+const VERSION = '1.56.5';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -3682,11 +3682,15 @@ function loopVerdict(visible) {
             continue;
         return true;
     }
+    // A dot or a slash inside a word, as in a name like Mill.io or in and/or,
+    // is not punctuation, so it does not break the run. A mark at the end of a
+    // word does. The reply's last word may end on a mark and still close the
+    // run, so a list of words that ends with a full stop is caught as well.
     let run = 0;
-    for (const t of plain.split(/[ \t]+|(\n)/)) {
-        if (!t)
-            continue;
-        run = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+(?:['\u2019-][\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+)*$/u.test(t) ? run + 1 : 0;
+    const tokens = plain.trimEnd().split(/[ \t]+|(\n)/).filter((t) => !!t);
+    for (let i = 0; i < tokens.length; i++) {
+        const t = i === tokens.length - 1 ? tokens[i].replace(/\p{P}+$/u, "") : tokens[i];
+        run = /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+(?:['\u2019\-./][\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}]+)*$/u.test(t) ? run + 1 : 0;
     }
     if (run >= LOOP_RUN_ON)
         return true;

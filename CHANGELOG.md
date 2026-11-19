@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.56.5
+
+_2026-11-19_
+
+### Fixed
+
+- **A rewrite that fell apart into a list of terms could be saved.** The check **got stuck repeating or rambling** looks for 150 words in a row with no punctuation, but a name with a dot inside it, such as `Ferry.io`, counted as punctuation and started the count again. A list that ended with a full stop was missed too. A dot or a slash inside a word no longer counts, and the last word can end with a full stop, so such a rewrite is now dropped. Auto Retry has the same fix. See [A broken rewrite](docs/guardrails.md#a-broken-rewrite).
+
+---
+
 ## 1.56.4
 
 _2026-11-15_
