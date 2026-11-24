@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.56.5";
+const VERSION = "1.56.6";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -9179,14 +9179,16 @@ export function setup(ctx: Ctx, overrides?: any) {
       // movements because this one carries the page with it, and the same
       // distance over more frames is a smaller step in each.
       //
-      // The words fade and slide 4px up faster than the space closes, so they
-      // are gone before the row is squeezed, and nothing is seen cut in half.
+      // The words fade and slide 4px up over the same time as the space
+      // closes, so they are seen until the end. A fade that ends first leaves
+      // a tall fold as an empty gap that is still closing, which reads as the
+      // fold being cut off partway.
       const ease = "220ms ease-out";
       node.style.transition =
         "height " + ease + ",margin-bottom " + ease + ",margin-top " + ease +
         ",padding-top " + ease + ",padding-bottom " + ease +
         ",border-top-width " + ease + ",border-bottom-width " + ease +
-        ",opacity 140ms ease-out,transform 160ms ease-out";
+        ",opacity " + ease + ",transform " + ease;
       node.style.height = "0px";
       node.style.opacity = "0";
       node.style.transform = "translateY(-4px)";

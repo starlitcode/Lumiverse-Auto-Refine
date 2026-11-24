@@ -4742,6 +4742,38 @@ console.log("\nfolds and the color editor open and close smoothly");
   }
 }
 
+console.log("\na fold stays in sight until it has closed");
+{
+  // The words fade over the same time as the space closes. A fade that ends
+  // first leaves a tall fold as an empty gap still closing, which reads as
+  // the fold being cut off partway. Read on each frame of the close: once
+  // the space is down to under a third, the words must still be showing.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      await goTab(page, "Model");
+      await settle(page);
+      const out = await page.evaluate(async () => {
+        const head = [...document.querySelectorAll("#drawer button.arf-fold")].find((b) => b.textContent.includes("Sampler values"));
+        const body = head.nextElementSibling;
+        head.click();
+        await new Promise((r) => setTimeout(r, 700));
+        const start = body.getBoundingClientRect().height;
+        const frames = [];
+        head.click();
+        const t0 = performance.now();
+        while (performance.now() - t0 < 400) {
+          await new Promise((r) => requestAnimationFrame(r));
+          frames.push({ h: body.getBoundingClientRect().height / start, o: parseFloat(getComputedStyle(body).opacity) });
+        }
+        return { start, frames };
+      });
+      const low = out.frames.find((f) => f.h > 0 && f.h < 1 / 3);
+      ok(label + ": the fold was tall enough to see it", out.start > 200, String(out.start));
+      ok(label + ": with under a third of its space left, its words still show", !!low && low.o >= 0.1, JSON.stringify(out.frames.map((f) => [f.h.toFixed(2), f.o.toFixed(2)])));
+    });
+  }
+}
+
 console.log("\nthe status dot stays beside a long status line");
 {
   // A long line of status wraps under itself. The dot stays at the start of
