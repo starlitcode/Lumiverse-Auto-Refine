@@ -6909,6 +6909,34 @@ describe("phrases this chat has worn out", () => {
     expect(wornSent(h)).toContain("shiver ran down her spine");
   });
 
+  // The preview leaves out a block that comes out empty, so it says why Worn
+  // Out is not there.
+  const wornWhy = async (over: any, msgs: Msg[], messageId: string) => {
+    const h = await armed([], { blocks: PROMPT.concat([WORN_BLOCK]), ...over }, msgs);
+    await h.front({ type: "preview_prompt", requestId: "p", chatId: "c1", messageId });
+    await wait(60);
+    return h.sent.find((m: any) => m.type === "prompt_preview" && m.requestId === "p");
+  };
+
+  test("the preview says Worn Out is left out while the setting is off", async () => {
+    expect((await wornWhy({ wornOn: false }, chatWith(habit), "a3")).wornLeftOut).toBe("off");
+  });
+
+  test("the preview says when there are too few replies before this one", async () => {
+    expect((await wornWhy({ wornOn: true, wornLeast: 3 }, chatWith(habit), "a0")).wornLeftOut).toBe("few");
+  });
+
+  test("the preview says when nothing has repeated yet", async () => {
+    const plain = ["The tide came in over the flats.", "Gulls argued on the harbor wall.", "A cart rattled past the inn.", "Rain started before noon."];
+    expect((await wornWhy({ wornOn: true, wornLeast: 3 }, chatWith(plain), "a3")).wornLeftOut).toBe("none");
+  });
+
+  test("and says nothing when Worn Out has phrases in it", async () => {
+    const got = await wornWhy({ wornOn: true, wornLeast: 3 }, chatWith(habit), "a3");
+    expect(got.wornLeftOut).toBe("");
+    expect(JSON.stringify(got.messages)).toContain("shiver ran down her spine");
+  });
+
   test("a reply hidden from the prompt is not counted", async () => {
     const msgs: any[] = chatWith(habit);
     msgs.find((m: any) => m.id === "a1").extra = { hidden: true };

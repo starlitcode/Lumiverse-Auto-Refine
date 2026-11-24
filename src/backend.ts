@@ -4306,6 +4306,22 @@ function replyBefore(msgs: any[], at: number): string {
 //
 // Your own messages are left out. This is about the model's habits, and your
 // writing is not the thing being rewritten here.
+// Why {{overused}} comes out empty for this reply, for the preview, which
+// leaves out a block that comes out empty: off when the setting is off, few
+// when there are not yet enough replies before this one, and none when
+// nothing has repeated in enough of them.
+function wornEmptyWhy(msgs: any[], upTo: number): 'off' | 'few' | 'none' {
+  if (!wornOn) return 'off';
+  let n = 0;
+  const until = upTo >= 0 ? upTo : msgs.length;
+  for (let i = until - 1; i >= 0 && n < wornBack; i--) {
+    const m = msgs[i];
+    if (!m || m.role === 'user' || hiddenFromPrompt(m)) continue;
+    if (splitThinking(String(m.content == null ? '' : m.content)).body.trim()) n++;
+  }
+  return n < wornLeast ? 'few' : 'none';
+}
+
 function gatherWorn(msgs: any[], upTo: number, name?: string, canon?: string): string {
   if (!wornOn) return '';
   const replies: string[] = [];
@@ -7469,6 +7485,8 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         let isUser = false;
         // The message previewed, for the thinking that goes with it.
         let previewMsg: any = null;
+        // Why {{overused}} came out empty, when it did.
+        let wornWhy = '';
         if (payload.chatId) {
           let msgs: any[] = [];
           try {
@@ -7508,6 +7526,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
               chatId: payload.chatId,
               characterId: card.id,
             };
+            if (!scene.worn) wornWhy = wornEmptyWhy(msgs, at);
           }
         }
         // The same two steps a real refine takes before it builds anything, in
@@ -7582,6 +7601,9 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           // refine it read would
           // send it. Flagged so the panel can say so.
           jevFoundLeftOut: !isUser && judgeMode === 'two' && wantsFound(false, chain ? allBlocks : undefined),
+          // A block holding {{overused}} that came out empty is left out too,
+          // and the panel says why, so a missing Worn Out block is explained.
+          wornLeftOut: wornWhy && promptWants(OVERUSED_MACRO, isUser, chain ? allBlocks : undefined) ? wornWhy : '',
           passes: chain ? chain.map((one) => one.name) : [],
         });
       } catch (e: any) {

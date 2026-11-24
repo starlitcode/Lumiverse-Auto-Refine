@@ -7287,6 +7287,34 @@ console.log("\nthe raw view");
   });
 }
 
+console.log("\nthe preview says why the worn-out phrases are left out");
+{
+  // A block that comes out empty is left out of the request, so a missing
+  // Worn Out block is explained, with the reason the backend gives.
+  const SAID = { off: /is off\. It is on the Context tab/, few: /fewer than 3 replies before this one/, none: /no phrase is in 3 or more of the replies/ };
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    for (const why of ["off", "few", "none", ""]) {
+      await inTab(browser, { viewport, touch }, async (page) => {
+        await goTab(page, "Context");
+        await page.evaluate(() => document.querySelector('#drawer [data-arf-preview="build"]').click());
+        await page.evaluate((why) => {
+          const id = window.__sent.filter((m) => m.type === "preview_prompt").pop().requestId;
+          window.__fromBackend({ type: "prompt_preview", requestId: id, ok: true, real: true, messages: [{ role: "system", content: "the instruction" }], wornLeftOut: why });
+        }, why);
+        await settle(page);
+        const line = await page.evaluate(() => {
+          const n = document.querySelector('#drawer [data-arf-preview="worn"]');
+          return n ? n.textContent : null;
+        });
+        const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+        if (why) ok(label + ", " + why + ": the card says why the worn-out phrases are left out", !!line && SAID[why].test(line), String(line));
+        else ok(label + ": with phrases to send, there is no such line", line === null, String(line));
+        ok(label + ", " + (why || "phrases") + ": nothing runs off the side", !sideways);
+      });
+    }
+  }
+}
+
 console.log("\non a desktop");
 {
   // The drawer is wider on a computer, and a panel that only ever gets checked

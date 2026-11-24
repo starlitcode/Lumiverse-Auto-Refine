@@ -602,6 +602,10 @@ On the **Model** tab, **Let it think first** has three choices:
 - Below the messages, it also shows the connection, thinking and samplers the call would use.
 - If no reply can be found, it still builds, with a stand-in for the message, and says so.
 - The worn-out phrases are worked out the same way a refine works them out, so **Worn Out** shows what a refine would send.
+- A block that comes out empty is not sent, so it is not shown either. When **Worn Out** is left out, the card says why:
+  - **Find phrases this chat has worn out** is off. It is on the **Context** tab.
+  - There are not yet enough replies before this one to compare.
+  - No phrase is in enough of the replies before this one yet.
 - With **Several passes** on, it shows the first pass as it would go out, and names every pass in order. The passes after the first are sent the rewrite the one before wrote, so they cannot be shown until a refine runs.
 - **Checks Found** is left out, because a preview never asks the second model. The card says so when a switched-on block uses `{{checks_found}}`. The Log says when a real refine sent it.
 - **Copy it** copies the whole thing, useful when asking why a refine did something odd.

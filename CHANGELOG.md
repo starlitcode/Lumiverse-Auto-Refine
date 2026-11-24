@@ -13,6 +13,7 @@ _2026-11-24_
 ### Fixed
 
 - **A section closing could look cut off partway.** Its words faded out before its space finished closing, so a tall section left an empty gap that was still closing. The words now fade over the same time as the space closes, so they stay in sight until it is shut. Auto Retry has the same fix.
+- **The request preview did not say why Worn Out was missing.** A block that comes out empty is not sent, so the preview left Worn Out out with no reason given. The card now says why: **Find phrases this chat has worn out** is off, there are not yet enough replies before this one, or no phrase has repeated in enough of them yet.
 
 ---
 

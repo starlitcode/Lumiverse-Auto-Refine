@@ -83,7 +83,7 @@ Read five or ten recent replies from your chat. Write down every phrase or habit
 
 Two things help:
 
-- **Find phrases this chat has worn out**, on the **Limits** tab, counts the phrases your replies keep using. Switch it on and read the list in the **Worn Out** block.
+- **Find phrases this chat has worn out**, on the **Context** tab, counts the phrases your replies keep using. Switch it on and read the list in the **Worn Out** block.
 - Your own feeling counts. If you have noticed a phrase three times this week, it belongs in a rule.
 
 ## Step 3: Group by kind

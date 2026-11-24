@@ -10618,6 +10618,19 @@ export function setup(ctx, overrides) {
             left.setAttribute("data-arf-preview", "jevfound");
             wrap.appendChild(left);
         }
+        // A block holding {{overused}} that came out empty is left out too, so the
+        // card says why it is not there.
+        const wornWhy = String(preview.wornLeftOut || "");
+        if (wornWhy) {
+            const said = wornWhy === "off"
+                ? "The worn-out phrases are left out, because Find phrases this chat has worn out is off. It is on the Context tab."
+                : wornWhy === "few"
+                    ? "The worn-out phrases are left out, because there are fewer than " + (cfg.wornLeast || 3) + " replies before this one to compare."
+                    : "The worn-out phrases are left out, because no phrase is in " + (cfg.wornLeast || 3) + " or more of the replies before this one yet.";
+            const left = note(said);
+            left.setAttribute("data-arf-preview", "worn");
+            wrap.appendChild(left);
+        }
         const msgs = Array.isArray(preview.messages) ? preview.messages : [];
         let chars = 0;
         for (const m of msgs)
