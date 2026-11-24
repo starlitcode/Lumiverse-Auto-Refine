@@ -451,6 +451,11 @@ async function writeUserJson(file, value, userId) {
 // install ignores the argument.
 function replyTo(userId, msg) {
     try {
+        if (msg && RUN_ENDS.has(String(msg.type)))
+            keepEnded(userId, msg);
+    }
+    catch (_) { }
+    try {
         if (userId)
             spindle.sendToFrontend(msg, userId);
         else
@@ -458,6 +463,25 @@ function replyTo(userId, msg) {
     }
     catch (_) { }
 }
+// The messages that end a run in the panel. A phone pauses a tab in the
+// background, and a message sent to it then can be lost, which left the panel
+// showing a refine as running after it had finished. The last few of these
+// are kept for each account, so a panel that comes back to the front can ask
+// for any it missed, with run_check.
+const RUN_ENDS = new Set(['refine_result', 'refined', 'refine_stopped', 'snip_result', 'try_result', 'confirm_refine', 'refine_all_done']);
+const ENDED_KEPT = 10;
+const ENDED_MS = 60 * 60 * 1000;
+const endedBy = new Map();
+function keepEnded(userId, msg) {
+    const k = String(userId == null ? '' : userId);
+    const list = (endedBy.get(k) || []).filter((e) => Date.now() - e.at < ENDED_MS);
+    list.push({ at: Date.now(), msg: msg });
+    while (list.length > ENDED_KEPT)
+        list.shift();
+    endedBy.set(k, list);
+}
+// How many runs each account has waiting or working, for run_check.
+const runningBy = new Map();
 // Progress, which is never worth failing a refine over.
 function tell(userId, msg) {
     try {
@@ -6285,6 +6309,19 @@ async function loadBoundPairs(userId) {
 }
 async function asAccount(userId, work, onWait) {
     const k = keyOf(userId);
+    runningBy.set(k, (runningBy.get(k) || 0) + 1);
+    try {
+        return await asAccountTurn(k, userId, work, onWait);
+    }
+    finally {
+        const left = (runningBy.get(k) || 1) - 1;
+        if (left > 0)
+            runningBy.set(k, left);
+        else
+            runningBy.delete(k);
+    }
+}
+async function asAccountTurn(k, userId, work, onWait) {
     await loadBoundPairs(userId);
     while (turnCount > 0 && turnKey !== k) {
         try {
@@ -7561,6 +7598,21 @@ async function onPanel(payload, userId) {
                 pct: scored ? Math.round(v * 100) : null,
                 over: judgeOver,
                 cost: got.cost || 0,
+            });
+            return;
+        }
+        // A panel back from the background, still showing a run. It is told
+        // whether anything is still running for this account, and sent the
+        // messages that ended a run lately, with when each was sent, so it can
+        // take any it missed while the tab was asleep.
+        if (payload.type === 'run_check') {
+            const k = String(userId == null ? '' : userId);
+            replyTo(userId, {
+                type: 'run_check',
+                requestId: payload.requestId,
+                running: (runningBy.get(k) || 0) > 0,
+                now: Date.now(),
+                ended: (endedBy.get(k) || []).map((e) => ({ at: e.at, msg: e.msg })),
             });
             return;
         }

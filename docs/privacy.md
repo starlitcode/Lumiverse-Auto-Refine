@@ -90,6 +90,10 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
   - With **Keep them through an update** on, it is also saved on your server, in Lumiverse's storage for your account. It is off by default. Turning it off empties the saved copy.
   - Only your account can read or put back your own refines.
   - Deleting a chat removes its refines from your server's memory and from the saved copy. So does deleting the message that was refined.
+- **The last 10 results sent to your panel**, for up to an hour, in your server's memory. A phone can pause a tab in the background, and a result sent then can be lost. When you come back to the tab, the panel asks for any it missed.
+  - A result can hold the text from before and after a refine.
+  - Only your account can read your own results.
+  - An update or a restart of Lumiverse clears them.
 
 ## What it never does
 

@@ -3672,6 +3672,8 @@ export function setup(ctx, overrides) {
             }
             if (pastDeadline())
                 giveUpWaiting();
+            else if (busy && awayInRun)
+                checkRun();
             if (!hiddenAt || Date.now() - hiddenAt < STALE_AFTER_MS || saveTimer)
                 return;
             hiddenAt = 0;
@@ -17406,12 +17408,57 @@ export function setup(ctx, overrides) {
         log("problem", "could not listen for replies. Check that the generation permission is granted.");
     }
     // ---- backend messages ----
+    // The function that takes a message from the backend, kept so a message
+    // missed while the tab was in the background can be taken late.
+    let takeMessage = null;
+    let runCheck = "";
+    // Back from the background with a run still showing. A phone pauses a tab
+    // there, and the message that ended the run can be lost on the way, which
+    // left the status at thinking until the wait ran out. The backend is asked
+    // whether anything is still running, and for the messages that ended a run
+    // lately.
+    function checkRun() {
+        if (!busy || runCheck)
+            return;
+        runCheck = newId();
+        send({ type: "run_check", requestId: runCheck });
+    }
+    function caughtUp(msg) {
+        if (msg.requestId !== runCheck)
+            return;
+        runCheck = "";
+        if (!busy)
+            return;
+        // Only messages sent since this run started. The two clocks can differ,
+        // so the age is worked out on the backend's clock.
+        const since = Date.now() - runStartedAt + 2000;
+        const ended = Array.isArray(msg.ended) ? msg.ended : [];
+        for (const e of ended) {
+            if (!busy)
+                break;
+            if (!e || !e.msg || Number(msg.now) - Number(e.at) > since)
+                continue;
+            log("refine", "took a message that came while this tab was in the background");
+            try {
+                if (takeMessage)
+                    takeMessage(e.msg);
+            }
+            catch (_) { }
+        }
+        // Nothing is running and nothing ended it: it is not coming back.
+        if (busy && !msg.running)
+            giveUpWaiting();
+    }
     try {
         if (ctx && typeof ctx.onBackendMessage === "function") {
-            const off = ctx.onBackendMessage((msg) => {
+            const off = ctx.onBackendMessage((takeMessage = (msg) => {
                 try {
                     if (!msg)
                         return;
+                    if (msg.type === "run_check") {
+                        caughtUp(msg);
+                        return;
+                    }
                     if (msg.type === "close_drawer") {
                         closeAnswered(msg);
                         return;
@@ -18303,7 +18350,7 @@ export function setup(ctx, overrides) {
                     }
                 }
                 catch (_) { }
-            });
+            }));
             if (typeof off === "function")
                 disposers.push(off);
         }

@@ -128,7 +128,8 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - Four minutes is long on purpose. A fast model answers in seconds. A reasoning model on a high setting, or a local model loading, can take minutes, and stopping it early throws that work away.
   - The wait is for each call to the model. A refine that asks again, after a failed check or after the provider turned the call away, has the whole wait again. The status line then shows the time left as "left on this try". The clock beside it is the whole refine.
   - You can end a refine yourself at any time: **Stop this refine** is always there.
-  - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab. A reply that finished while the tab was asleep can miss the panel, so check the reply itself.
+  - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab.
+  - A result sent while the tab was asleep can be lost on the way. When you come back to the tab, the panel asks your server whether the refine is still running, and takes any result it missed. If nothing is running and nothing came back, the refine ends at once, and a notice asks you to check the reply.
 - **Input price, per million tokens** and **Output price, per million tokens** are your provider's prices.
   - Input is what you send. Output is what the model writes back.
   - Both start at 0, which hides all costs.

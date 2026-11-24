@@ -4244,13 +4244,88 @@ console.log("\nwhen the tab sleeps past the time to give up");
   });
 }
 
+console.log("\nback from the background, a refine that finished there is caught up");
+{
+  // A phone pauses a tab in the background, and the message that ends a run
+  // can be lost. Coming back, the panel asks the backend whether anything is
+  // still running, and takes any message it missed.
+  const run = async (page) => {
+    await goTab(page, "Log");
+    await page.evaluate(() => {
+      const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+      window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+    });
+    await settle(page);
+    return page.evaluate(() => {
+      Array.from(document.querySelectorAll("#drawer button"))
+        .find((b) => /Refine the latest reply/.test(b.textContent))
+        .click();
+      const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+      window.__fromBackend({ type: "refine_ack", requestId: id });
+      window.__fromBackend({ type: "refine_progress", stage: "thinking" });
+      let state = "hidden";
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.__show = () => {
+        state = "visible";
+        document.dispatchEvent(new Event("visibilitychange"));
+      };
+      return id;
+    });
+  };
+
+  // The result was sent while the tab slept, and lost.
+  await inTab(browser, {}, async (page) => {
+    const id = await run(page);
+    const got = await page.evaluate(async (id) => {
+      window.__show();
+      const ask = window.__sent.filter((m) => m.type === "run_check").pop();
+      if (!ask) return { asked: false, spinning: true, toasts: "", body: "no run_check was sent" };
+      window.__fromBackend({ type: "run_check", requestId: ask.requestId, running: false, now: Date.now(), ended: [{ at: Date.now() - 500, msg: { type: "refine_result", requestId: id, ok: false, why: "the model said no" } }] });
+      await new Promise((r) => setTimeout(r, 300));
+      return { asked: !!ask, spinning: /Thinking|Refining/.test(document.querySelector("#drawer").textContent), body: document.querySelector("#drawer .arf-body").textContent };
+    }, id);
+    ok("coming back, the panel asks whether the refine is still running", got.asked);
+    ok("a result sent while the tab slept is taken, and the run ends", !got.spinning, got.body.slice(0, 200));
+  });
+
+  // Nothing ended it, and nothing is running: it is not coming back.
+  await inTab(browser, {}, async (page) => {
+    await run(page);
+    const got = await page.evaluate(async () => {
+      window.__show();
+      const ask = window.__sent.filter((m) => m.type === "run_check").pop();
+      if (!ask) return { asked: false, spinning: true, toasts: "", body: "no run_check was sent" };
+      window.__fromBackend({ type: "run_check", requestId: ask.requestId, running: false, now: Date.now(), ended: [] });
+      await new Promise((r) => setTimeout(r, 300));
+      return { spinning: /Thinking|Refining/.test(document.querySelector("#drawer").textContent), toasts: (window.__toasts || []).join(" | ") };
+    });
+    ok("with nothing running and nothing missed, the run ends at once", !got.spinning);
+    ok("and a notice says to check the reply", /in the background/.test(got.toasts), got.toasts);
+  });
+
+  // Still running: it keeps waiting.
+  await inTab(browser, {}, async (page) => {
+    await run(page);
+    const got = await page.evaluate(async () => {
+      window.__show();
+      const ask = window.__sent.filter((m) => m.type === "run_check").pop();
+      if (!ask) return { asked: false, spinning: true, toasts: "", body: "no run_check was sent" };
+      window.__fromBackend({ type: "run_check", requestId: ask.requestId, running: true, now: Date.now(), ended: [] });
+      await new Promise((r) => setTimeout(r, 300));
+      return { spinning: /Thinking|Refining/.test(document.querySelector("#drawer").textContent) };
+    });
+    ok("a refine still running keeps showing as running", got.spinning);
+  });
+}
+
 console.log("\nrows that hang off a switch open and close smoothly");
 {
   // Switching the floating button on brings out its own rows. Their space
   // opens over several frames, so the row under them moves down in small
   // steps rather than in one jump, and they fade in and slide down 4px.
-  // Switched off, the words fade before the space closes. With Reduce motion
-  // on, both happen at once.
+  // Switched off, the words fade as the space closes. With Reduce motion on,
+  // both happen at once.
   for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
     // Lumiverse applies its UI Scale as a zoom on the page, which is where a
     // row opened to the wrong height and jumped at the end. So the motion is

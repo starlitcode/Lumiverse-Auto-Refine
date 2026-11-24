@@ -7161,6 +7161,19 @@ describe("a chain of passes", () => {
   const two = [pass("Cut the filler", "PASS ONE"), pass("Fix the rhythm", "PASS TWO")];
   const body = "She stepped through the gate and, suddenly, the cold just hit her hard.";
 
+  // A panel back from the background asks what it missed.
+  test("run_check says nothing is running, and holds the result it may have missed", async () => {
+    const h = await armed(["<REFINED>She stepped through and the cold hit her at once.</REFINED>"], {}, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    await h.front({ type: "run_check", requestId: "k" });
+    await wait(20);
+    const got = h.sent.find((m: any) => m.type === "run_check" && m.requestId === "k");
+    expect(got.running).toBe(false);
+    expect(typeof got.now).toBe("number");
+    expect(got.ended.some((e: any) => e.msg.type === "refine_result" && e.msg.requestId === "r")).toBe(true);
+  });
+
   test("one pass is still one call, with the setting off", async () => {
     const h = await armed(["<REFINED>She stepped through and the cold hit her at once.</REFINED>"], { passMode: "one", passes: two }, reply(body));
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
