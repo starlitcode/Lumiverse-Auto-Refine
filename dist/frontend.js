@@ -5625,6 +5625,14 @@ export function setup(ctx, overrides) {
         "border:1px solid var(--lumiverse-border,rgba(147,112,219,.12));" +
         "background:var(--lumiverse-fill-subtle,rgba(0,0,0,.1))}" +
         ".arf-tabs::-webkit-scrollbar{display:none}" +
+        // The drawer's own scroll bar is hidden while it holds this tab, the same
+        // as Auto Foley and Auto Retry. Lumiverse draws scroll bars that do not
+        // fade, so it took up room at the side of the whole panel. The drawer
+        // still scrolls. Lumiverse takes the tab out of the drawer when another
+        // tab is picked, so every other tab keeps its scroll bar. Boxes inside
+        // the panel keep theirs.
+        ":has(>div>[data-arf-drawer]){scrollbar-width:none}" +
+        ":has(>div>[data-arf-drawer])::-webkit-scrollbar{display:none;width:0;height:0}" +
         // Lumiverse styles every scroll bar on the page, with no least size for the
         // thumb, so a box holding a very long text gets a thumb a few pixels tall.
         // Inside our boxes it is never shorter than this, and keeps the theme's
@@ -18500,6 +18508,12 @@ export function setup(ctx, overrides) {
                 keywords: ["refine", "rewrite", "polish", "edit", "prose", "style", "rules"],
                 iconSvg: refineIcon(),
             });
+            // Marks the tab, so the drawer's scroll bar is hidden while it shows.
+            try {
+                if (tab && tab.root)
+                    tab.root.setAttribute("data-arf-drawer", "");
+            }
+            catch (_) { }
             disposers.push(() => {
                 try {
                     tab && tab.destroy && tab.destroy();

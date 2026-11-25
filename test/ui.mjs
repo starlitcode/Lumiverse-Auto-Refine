@@ -4834,6 +4834,36 @@ console.log("\nfolds and the color editor open and close smoothly");
   }
 }
 
+console.log("\nno scroll bar at the side of the drawer");
+{
+  // As Lumiverse lays the drawer out: a box that scrolls, a holder, and the
+  // tab's own root. While it holds this tab, the box shows no scroll bar.
+  // Another tab in it keeps the bar. The test browser draws no scroll bars,
+  // so the style the bar is given is read.
+  await inTab(browser, { viewport: { width: 390, height: 900 }, touch: true }, async (page) => {
+    const got = await page.evaluate(() => {
+      const content = document.createElement("div");
+      content.style.cssText = "height:300px;overflow-y:auto";
+      const holder = document.createElement("div");
+      const tabRoot = document.createElement("div");
+      tabRoot.setAttribute("data-arf-drawer", "");
+      tabRoot.style.height = "900px";
+      holder.appendChild(tabRoot);
+      content.appendChild(holder);
+      document.body.appendChild(content);
+      const ours = getComputedStyle(content).scrollbarWidth;
+      const other = document.createElement("div");
+      other.style.height = "900px";
+      holder.replaceChildren(other);
+      const theirs = getComputedStyle(content).scrollbarWidth;
+      return { ours, theirs, marked: !!document.querySelector("#drawer[data-arf-drawer]") };
+    });
+    ok("the panel marks its tab", got.marked, JSON.stringify(got));
+    ok("with this tab in the drawer, the drawer shows no scroll bar", got.ours === "none", JSON.stringify(got));
+    ok("another tab in the drawer keeps its scroll bar", got.theirs !== "none", JSON.stringify(got));
+  });
+}
+
 console.log("\na fold stays in sight until it has closed");
 {
   // The words fade over the same time as the space closes. A fade that ends
