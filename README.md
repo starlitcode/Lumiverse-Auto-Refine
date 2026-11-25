@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/refine-banner.png" width="100%" alt="Auto Refine: a woman writes at a desk on a balcony at night, by the light of a lantern. Crossed-out pages lie beside her, and clean pages float up into the starry sky.">
+  <img src="docs/refine-banner.png" width="100%" alt="Auto Refine: a woman writes at a desk on a balcony at night, by the light of a lantern. Crumpled pages lie beside her, and clean pages float up into the starry sky.">
 </p>
 
 # Auto Refine
@@ -8,8 +8,6 @@ A Lumiverse extension. It sends a finished reply to a model with the rules you w
 
 - **It leaves the greeting alone.** A person wrote that message. **Refine the greeting**, off by default, is the only way to change this.
 - **Nothing is written that you cannot undo.** **Put it back** restores the wording a refine replaced.
-
-It works alongside [Auto Retry](https://github.com/starlitcode/Lumiverse-Auto-Retry). Auto Retry decides whether a reply is worth keeping. Auto Refine improves the ones that are.
 
 ## What it does
 

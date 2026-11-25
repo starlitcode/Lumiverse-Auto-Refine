@@ -15,7 +15,7 @@
  * None of the refining happens on this side. This collects what the reader
  * wants, hands it to the backend, and shows what came back.
  */
-const VERSION = "1.57.0";
+const VERSION = "1.57.1";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -337,8 +337,18 @@ const ASK_NOTE_EMPTY = "Your last answer was empty. Please answer with the rewri
     "the format the instructions ask for.";
 const ASK_NOTE_BROKEN = "Your last rewrite came back broken. Please answer with the rewritten " +
     "passage as clean, readable prose, in the format the instructions ask for.";
-const CARET_OPEN = "\u25be";
-const CARET_SHUT = "\u25b8";
+const CARET_OPEN = "\u25bc";
+const CARET_SHUT = "\u25b6";
+// A dropdown in the box that draws its arrow. sizing is the flex size the
+// dropdown would have had in its row, which the box takes instead.
+function selectBox(sel, sizing = "") {
+    const box = document.createElement("span");
+    box.className = "arf-selwrap";
+    if (sizing)
+        box.style.cssText = sizing;
+    box.appendChild(sel);
+    return box;
+}
 const CHATS_OFF_KEY = "lv-auto-refine:chats-off:v1";
 // Where the floating button was left. Kept in the browser rather than in the
 // settings, for the same reason the list of switched-off chats is: a position is
@@ -5520,6 +5530,13 @@ export function setup(ctx, overrides) {
         "{-webkit-appearance:none;appearance:none;margin:0}" +
         ".arf-field[type=number]{-moz-appearance:textfield;appearance:textfield}" +
         "textarea.arf-field{resize:vertical;min-height:64px}" +
+        // A drawn arrow on every dropdown, the same as Auto Foley's, in place of
+        // the browser's own, which differs on every device and ignores the theme.
+        ".arf-selwrap{position:relative;display:block;min-width:0}" +
+        ".arf-selwrap>select.arf-field{-webkit-appearance:none;appearance:none;padding-right:32px;text-overflow:ellipsis}" +
+        ".arf-selwrap::after{content:\"\";position:absolute;right:13px;top:50%;width:7px;height:7px;" +
+        "border-right:1.5px solid var(--lumiverse-text-muted,rgba(255,255,255,.65));border-bottom:1.5px solid var(--lumiverse-text-muted,rgba(255,255,255,.65));" +
+        "transform:translateY(-70%) rotate(45deg);pointer-events:none}" +
         // One transparent pixel of border always present, so giving a button an
         // edge when its fill is too quiet costs no layout.
         ".arf-btn{min-height:32px;padding:7px 12px;border-radius:var(--lumiverse-radius,8px);cursor:pointer;" +
@@ -9790,7 +9807,7 @@ export function setup(ctx, overrides) {
                 reveal();
                 settle();
             });
-            wrap.appendChild(sel);
+            wrap.appendChild(selectBox(sel));
         }
         else {
             wrap.appendChild(labelRow(f));
@@ -10468,7 +10485,6 @@ export function setup(ctx, overrides) {
         foot.appendChild(sentAs);
         const sel = document.createElement("select");
         sel.className = "arf-field";
-        sel.style.cssText += ";flex:0 1 140px;min-width:0;max-width:140px";
         sel.setAttribute("aria-label", "Role for " + blockLabel(b));
         for (const o of ROLE_OPTIONS) {
             const op = document.createElement("option");
@@ -10490,7 +10506,7 @@ export function setup(ctx, overrides) {
             foot.appendChild(said);
         }
         else
-            foot.appendChild(sel);
+            foot.appendChild(selectBox(sel, "flex:0 1 140px;min-width:0;max-width:140px"));
         // A gap that takes whatever is left, so Delete sits at the far edge of the
         // row rather than up against the picker.
         foot.appendChild(el("span", "arf-grow"));
@@ -11029,7 +11045,7 @@ export function setup(ctx, overrides) {
                 loadSetup(now, was);
             paint();
         });
-        wrap.appendChild(sel);
+        wrap.appendChild(selectBox(sel));
         const nameIn = document.createElement("input");
         nameIn.type = "text";
         nameIn.className = "arf-field";
@@ -14476,7 +14492,7 @@ export function setup(ctx, overrides) {
                 loadPreset(now, was);
             paint();
         });
-        wrap.appendChild(sel);
+        wrap.appendChild(selectBox(sel));
         const nameIn = document.createElement("input");
         nameIn.type = "text";
         nameIn.className = "arf-field";
@@ -14537,7 +14553,7 @@ export function setup(ctx, overrides) {
             presetSetup = setupSel.value;
             sayBuiltIn();
         });
-        withSetup.appendChild(setupSel);
+        withSetup.appendChild(selectBox(setupSel));
         sayBuiltIn();
         withSetup.appendChild(builtInSaid);
         wrap.appendChild(withSetup);
