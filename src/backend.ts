@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.56.6';
+const VERSION = '1.57.0';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -2981,6 +2981,11 @@ let guardPreamble = true;
 // another call, and somebody who never opened this setting has not agreed to
 // pay for three refines where they asked for one.
 let retryRefine = 0;
+// A second connection, asked when the rewrite is refused, empty or cut off.
+// Off by default, since it is one more call to pay for. Empty is the
+// connection the chat's replies use.
+let backupOn = false;
+let backupConnection = '';
 // How many rewrites one ask writes at the same time, and 1 when Several
 // rewrites at once is off. The first that passes every check is used and the
 // rest are stopped. Each one is a whole call to pay for, so it is off by default.
@@ -3114,6 +3119,15 @@ function worthRetrying(why: string): boolean {
   return /declined to rewrite|wrote about the edit|softened the reply|sent nothing back|cut off before it finished|own format|stuck repeating|came back garbled/i.test(
     String(why || ''),
   );
+}
+
+// Whether the other connection is asked after a pass failed this way: a
+// refusal, a provider's filter, an empty answer or one cut off. These are
+// the failures another model can answer differently. A rewrite turned down
+// by a limit, such as one that came back too long, is the prompt's doing,
+// and another model would be turned down the same way.
+function backupFits(why: string): boolean {
+  return /declined to rewrite|sent nothing back|cut off before it finished/i.test(String(why || ''));
 }
 
 // ---- the note that goes with an ask made again ----
@@ -5639,11 +5653,67 @@ async function refineRun(
   }
   verdict = { ok: true, text: carried, why: '' };
 
-  // One pass, asked and judged, with the retries it is allowed. Returns the text
-  // for the next pass, or the refusal to hand back as the whole refine's answer.
+  // One pass on its own connection, then on the other connection when that
+  // is switched on and the first failed in a way another model can answer
+  // differently. The other connection gets the same request with a fresh
+  // count of asks. When it fails too, the reply is left as it was, with both
+  // reasons.
   async function walkPass(
     pass: Pass,
     input: string,
+  ): Promise<{ ok: true; text: string } | { ok: false; out: RefineOutcome }> {
+    const got = await walkWith(pass, input, pass.model);
+    if (got.ok || got.out.stood || run.stopped || !backupOn || !backupFits(got.out.why)) return got;
+    // The same connection is not asked twice. Empty on either side is the
+    // connection the chat's replies use, worked out the way askModel does.
+    const chatsOwn = async () => seenConnection.get(String(chatId)) || (await chatConnection(String(chatId), userId)).id || '';
+    const firstId = (pass.model ? pass.model.connectionId : connectionId) || (await chatsOwn());
+    const otherId = backupConnection || (await chatsOwn());
+    if (firstId === otherId) {
+      say('info', 'the other connection is the one that refines, so it was not asked');
+      return got;
+    }
+    say('info', 'asking the other connection after: ' + got.out.why);
+    tell(userId, { type: 'refine_backup', chatId: chatId, messageId: m.id, why: String(got.out.why || '') });
+    // The pass's own thinking, wait and samplers go with it. The prices are
+    // left at 0, since they are for the refine connection's model.
+    const from = pass.model || {
+      setup: '',
+      connectionId: connectionId,
+      thinkingMode: thinkingMode,
+      thinkingEffort: thinkingEffort,
+      timeoutSecs: timeoutSecs,
+      samplers: samplers && typeof samplers === 'object' ? samplers : {},
+      costIn: 0,
+      costOut: 0,
+    };
+    // Named as it was set, so an empty one still goes where the chat's
+    // replies go, with the model set on that connection.
+    const other: PassModel = Object.assign({}, from, { connectionId: backupConnection, costIn: 0, costOut: 0 });
+    asks = 0;
+    waits = 0;
+    verdict = { ok: false, text: '', why: 'nothing was tried' };
+    const again = await walkWith(pass, input, other);
+    if (again.ok) {
+      say('info', 'the other connection wrote the rewrite');
+      return again;
+    }
+    if (again.out.stood) return again;
+    return {
+      ok: false,
+      out: Object.assign({}, again.out, {
+        why: got.out.why + '. The other connection was asked too, and ' + again.out.why,
+      }),
+    };
+  }
+
+  // One pass, asked and judged on one model setup, with the retries it is
+  // allowed. Returns the text for the next pass, or the refusal to hand back
+  // as the whole refine's answer.
+  async function walkWith(
+    pass: Pass,
+    input: string,
+    model: PassModel | null | undefined,
   ): Promise<{ ok: true; text: string } | { ok: false; out: RefineOutcome }> {
   while (true) {
     if (run.stopped) return { ok: false, out: { ok: false, stood: true, notes: notes, why: 'stopped before the refine model was asked' } };
@@ -5659,21 +5729,21 @@ async function refineRun(
     }
     tell(userId, {
       type: 'refine_progress',
-      stage: (pass.model ? pass.model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
+      stage: (model ? model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
       atOnce: refineAtOnce > 1 ? refineAtOnce : 0,
       // This call's wait, so the panel's countdown and its give-up timer match
       // a pass whose model setup waits longer or shorter than the Model tab.
-      waitSecs: pass.model ? pass.model.timeoutSecs : timeoutSecs,
+      waitSecs: model ? model.timeoutSecs : timeoutSecs,
     });
     // With Several rewrites at once on, the ask is several at the same time,
     // already judged. A verdict from there goes straight to the checks below.
     let answer: { content: string; error: string };
     let ready: Verdict | null = null;
     if (refineAtOnce > 1) {
-      const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note, pass.model, run);
+      const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note, model, run);
       answer = { content: '', error: got.verdict ? '' : got.error };
       ready = got.verdict;
-    } else answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, pass.model, run);
+    } else answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, model, run);
     if (answer.error) {
       // The provider would not take the call. Waiting is what fixes that, and
       // nothing has been spent, so it is worth waiting for: a free tier meters
@@ -6623,6 +6693,8 @@ function applyRules(s: any): void {
   setPairs(s.softenSwaps);
   retryRefine = Number(s.retryRefine);
   retryRefine = Number.isFinite(retryRefine) ? Math.min(3, Math.max(0, retryRefine)) : 0;
+  backupOn = s.backupOn === true;
+  backupConnection = String(s.backupConnection == null ? '' : s.backupConnection).trim().slice(0, 200);
   askNote = s.askNote === true;
   askNoteRole = s.askNoteRole === 'system' || s.askNoteRole === 'assistant' ? s.askNoteRole : 'user';
   askNoteRefused = typeof s.askNoteRefused === 'string' ? s.askNoteRefused.trim().slice(0, 2000) : null;

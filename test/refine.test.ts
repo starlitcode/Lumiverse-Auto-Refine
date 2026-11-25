@@ -5277,6 +5277,80 @@ describe("a rewrite that sanitized the reply", () => {
   });
 });
 
+// A second connection, asked when the rewrite is refused, empty or cut off.
+describe("trying another connection after a refusal", () => {
+  const refusal = "I'm sorry, but I can't help with that.";
+  const clean = "<REFINED>She stepped through and the cold hit her.</REFINED>";
+
+  test("off by default, so a refusal is one call", async () => {
+    const h = await armed([refusal, clean], { backupConnection: "conn-other" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("switched on, a refusal is asked again on the other connection, and its rewrite is saved", async () => {
+    const h = await armed([refusal, clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-other" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.map((a: any) => a.connection_id)).toEqual(["conn-first", "conn-other"]);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+    expect(h.sent.some((m: any) => m.type === "refine_backup" && /declined to rewrite/.test(m.why))).toBe(true);
+  });
+
+  test("an empty answer and a content filter error are asked again there too", async () => {
+    const empty = await armed(["", clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-other" });
+    await empty.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(empty.asked.length).toBe(2);
+    expect(empty.body("m2")).toBe("She stepped through and the cold hit her.");
+    const filtered = await armed([clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-other" }, chat(), {
+      failFirst: { times: 1, why: "content_filtered" },
+    });
+    await filtered.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(filtered.asked.map((a: any) => a.connection_id)).toEqual(["conn-first", "conn-other"]);
+    expect(filtered.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
+
+  test("a call that fails for another reason does not go to the other connection", async () => {
+    const h = await armed([clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-other" }, chat(), {
+      failFirst: { times: 1, why: "OpenRouter generation failed: The provider did not complete the response (incomplete)." },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+  });
+
+  test("the same connection is not asked twice", async () => {
+    const h = await armed([refusal, clean], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-first" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(1);
+    expect(h.writes.length).toBe(0);
+  });
+
+  test("when both refuse, the reply is left as it was and both reasons are said", async () => {
+    const h = await armed([refusal, refusal], { connectionId: "conn-first", backupOn: true, backupConnection: "conn-other" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.length).toBe(2);
+    expect(h.writes.length).toBe(0);
+    expect(h.skipped().join(" ")).toMatch(/declined to rewrite it\. The other connection was asked too, and the model declined to rewrite it/);
+  });
+
+  test("left empty, it is the connection the chat's replies use", async () => {
+    const h = await armed([refusal, clean], { connectionId: "conn-first", backupOn: true }, chat(), {
+      chatMeta: { connection_profile_id: "conn-chat", connection_model: "lamplight-small" },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.asked.map((a: any) => a.connection_id)).toEqual(["conn-first", "conn-chat"]);
+    expect(h.asked[1].parameters).toMatchObject({ model: "lamplight-small" });
+  });
+});
+
 describe("asking again when a check fails", () => {
   test("off by default, so one bad answer is one call", async () => {
     const h = await armed([

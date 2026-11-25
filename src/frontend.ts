@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.56.6";
+const VERSION = "1.57.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -146,6 +146,8 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
       "askNoteSoftened",
       "askNoteEmpty",
       "askNoteBroken",
+      "backupOn",
+      "backupConnection",
       "refineAtOnce",
       "refineAtOnceCount",
       "rateWaits",
@@ -701,6 +703,11 @@ const CONFIG = {
   askNoteSoftened: ASK_NOTE_SOFTENED,
   askNoteEmpty: ASK_NOTE_EMPTY,
   askNoteBroken: ASK_NOTE_BROKEN,
+  // A second connection, asked when the rewrite is refused, empty or cut off.
+  // Off by default: it is one more call to pay for. Empty is the connection
+  // the chat's replies use, the same as for Refine using.
+  backupOn: false,
+  backupConnection: "",
   // Write several rewrites at the same time and use the first that passes every
   // check. Off by default: each one is a whole call to pay for.
   refineAtOnce: false,
@@ -2340,6 +2347,21 @@ const GUARD_FIELDS: Field[] = [
     needs: { key: "askNote" },
     under: true,
     hint: "Sent when the rewrite came back garbled, repeated itself, or ran into the prompt's own format. Empty sends no note.",
+  },
+  {
+    key: "backupOn",
+    label: "If it refuses, try another connection",
+    type: "bool",
+    hint: "Off by default. When the rewrite is refused, empty or cut off, a second connection is asked. If it fails too, the reply is left as it was.",
+  },
+  {
+    key: "backupConnection",
+    label: "Which other connection",
+    type: "pick",
+    options: [{ value: "", label: "The model I am chatting with" }],
+    needs: { key: "backupOn" },
+    under: true,
+    hint: "Pick a different connection from the one that refines, such as another provider. The same one is not asked twice.",
   },
   {
     key: "refineAtOnce",
@@ -4751,6 +4773,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // started.
   let stage: "" | "asking" | "thinking" | "writing" | "checking" | "retrying" | "waiting" | "judging" | "rechecking" | "again" | "queued" = "";
   let streamed = 0;
+  // Set once the refine connection refused, sent nothing or was cut off, and
+  // the other connection is being asked. The status line says so.
+  let onBackup = false;
   // How many rewrites are being written at the same time, or 0 when it is one.
   let manyAtOnce = 0;
 
@@ -4770,6 +4795,13 @@ export function setup(ctx: Ctx, overrides?: any) {
   }
 
   function stageWords(): string {
+    const words = stageWordsOf();
+    if (onBackup && stage !== "waiting" && stage !== "queued" && stage !== "judging" && stage !== "rechecking" && stage !== "again")
+      return "Other connection: " + words;
+    return words;
+  }
+
+  function stageWordsOf(): string {
     const secs = runStartedAt ? (Date.now() - runStartedAt) / 1000 : 0;
     const clockPart = secs >= 1 ? ", " + secs.toFixed(0) + "s" : "";
     // Several at once do not stream, so the count is what says something is
@@ -5012,6 +5044,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       callWait = null;
       awayInRun = typeof document !== "undefined" && document.visibilityState === "hidden";
       streamed = 0;
+      onBackup = false;
       // What is on screen belongs to the refine that is running. What the Log
       // is holding belongs to the last one that finished, and stays until
       // another one does.
@@ -9790,7 +9823,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       sel.setAttribute("aria-label", f.label);
       sel.className = "arf-field";
       const opts =
-        f.key === "connectionId"
+        f.key === "connectionId" || f.key === "backupConnection"
           ? [
               {
                 value: "",
@@ -9806,7 +9839,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             ]
               .concat(
                 connections
-                  .filter((c) => !(connections.length === 1 && String(cfg.connectionId) !== c.id))
+                  .filter((c) => !(connections.length === 1 && String(cfg[f.key]) !== c.id))
                   .map((c) => ({
                   value: c.id,
                   label:
@@ -9827,10 +9860,10 @@ export function setup(ctx: Ctx, overrides?: any) {
               // backend went on being handed the missing id, so every refine
               // went somewhere that was not there and the panel looked right.
               .concat(
-                lostConnection()
+                lostConnection(f.key)
                   ? [
                       {
-                        value: String(cfg.connectionId),
+                        value: String(cfg[f.key]),
                         label: "A connection that is gone",
                         group: "Not on this account",
                       },
@@ -12278,6 +12311,10 @@ export function setup(ctx: Ctx, overrides?: any) {
           connections.length,
       );
       lines.push(
+        "other connection after a refusal: " +
+          (cfg.backupOn ? "on, " + (cfg.backupConnection ? "picked" : "the one the chat's replies use") : "off"),
+      );
+      lines.push(
         "thinking: " +
           cfg.thinkingMode +
           (cfg.thinkingMode === "custom" ? " (" + cfg.thinkingEffort + ")" : "") +
@@ -14655,11 +14692,11 @@ export function setup(ctx: Ctx, overrides?: any) {
     return took;
   }
 
-  // Whether the connection the settings are pointed at is one the account still
-  // has. Not asked before the list has arrived, since not knowing yet and
+  // Whether the connection a setting is pointed at, Refine using or the other
+  // connection asked after a refusal, is one the account still has. Not asked before the list has arrived, since not knowing yet and
   // knowing it is gone are different things to say.
-  function lostConnection(): boolean {
-    const id = String(cfg.connectionId || "");
+  function lostConnection(key = "connectionId"): boolean {
+    const id = String(cfg[key] || "");
     if (!id || !connections.length) return false;
     return !connections.some((c) => c.id === id);
   }
@@ -17985,6 +18022,14 @@ export function setup(ctx: Ctx, overrides?: any) {
           // A second refine after the second model read the rewrite, turned
           // down by a check. The first rewrite is what gets saved, and the Log
           // says why.
+          // The refine connection refused, sent nothing or was cut off, and
+          // the other connection is being asked.
+          if (msg.type === "refine_backup") {
+            onBackup = true;
+            log("refine", "the answer failed (" + String(msg.why || "no reason given") + "), so the other connection was asked");
+            tickLive();
+            return;
+          }
           if (msg.type === "refine_again_dropped") {
             log("recheck", "the second refine was not used (" + String(msg.why || "no reason given") + "), so the first rewrite is kept", true);
             return;

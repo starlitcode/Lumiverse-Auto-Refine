@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.57.0
+
+_2026-11-25_
+
+### Added
+
+- **If it refuses, try another connection**, on the Limits tab. Off by default. When the rewrite is refused, empty or cut off, the connection you pick under **Which other connection** is asked. If it fails too, the reply is left as it was, and the Log gives both reasons. See [Trying another connection](docs/guardrails.md#trying-another-connection).
+
+---
+
 ## 1.56.6
 
 _2026-11-25_

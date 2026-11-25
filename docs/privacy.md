@@ -4,6 +4,8 @@
 
 With one model, which is the default, only one thing: the model call that does the refining. It goes through Lumiverse to the provider you set up, on the connection you picked.
 
+With **If it refuses, try another connection** on, a refine that is refused, empty or cut off is sent once more, on the connection under **Which other connection**. It is the same request. See [Trying another connection](guardrails.md#trying-another-connection).
+
 With two models there is a second call, to the second model you picked. See [The second model](#the-second-model) below.
 
 The refine call carries the blocks you see under **How the prompt is built**, and nothing else:

@@ -58,6 +58,7 @@ With thinking on, **Low** is enough for a refine. A higher level takes longer an
 Most of the time is the model, not the extension. A refine is one model call. It only becomes more than one when:
 
 - an answer fails a check and **Ask again when a check fails** asks again
+- the rewrite is refused, empty or cut off, and **If it refuses, try another connection** asks the other connection
 - **Two models** is on, and the second model reads the reply first
 - the provider is busy, and **Wait out a provider that will not take the call** waits
 

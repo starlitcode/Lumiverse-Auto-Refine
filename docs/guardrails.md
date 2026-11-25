@@ -152,6 +152,42 @@ What to know:
 - The Log says when a note went with an ask, and which one.
 - With **Several rewrites at once** on, every rewrite in the new try gets the note.
 
+## Trying another connection
+
+**If it refuses, try another connection** is off by default. It is on the Limits tab, under the notes.
+
+In short:
+
+- When the rewrite is refused, empty or cut off, a second connection is asked.
+- If that one fails too, the reply is left as it was.
+- It is one more call on your bill, which is why it is off by default.
+
+The steps:
+
+1. The refine connection is asked, with the tries **Ask again when a check fails** allows.
+2. Its last answer fails in one of these ways: the model declined, a provider's filter stopped it, it answered with nothing, or it was cut off before it finished.
+3. The connection under **Which other connection** gets the same request, with a fresh count of tries.
+4. Its rewrite goes through every check, the same as any rewrite.
+5. If it fails too, the reply stays as it was. The Log gives both reasons.
+
+What it sends: the same request the refine connection was sent, with the same blocks, thinking setting, wait and samplers. Nothing else goes to it.
+
+An example. The refine connection is "Quill" and the other connection is "Ember". **Ask again when a check fails** is 0.
+
+1. A reply arrives, and Quill answers "I'm sorry, but I can't help with that."
+2. That is a refusal, so the Log says the other connection was asked. The status line starts with **Other connection:**.
+3. Ember sends back a rewrite that passes every check.
+4. Ember's rewrite is saved.
+
+What to know:
+
+- **Which other connection** shows under the switch while it is on. **The model I am chatting with** is the connection the chat's replies use.
+- The same connection is not asked twice. If the other connection is the one that refines, it is not asked.
+- A rewrite turned down for its length, a softened rewrite or a broken rewrite does not go to the other connection. These come from the prompt, and another model is likely to be turned down the same way.
+- A call that failed for another reason, such as a wrong key or a connection that is down, does not go to it either.
+- With several passes, each pass can go to the other connection on its own.
+- Its tokens are counted. Its price is not, since the prices you set are for the refine connection's model.
+
 ## Several rewrites at once
 
 **Several rewrites at once** is off by default. When it is on, each try asks for several rewrites at the same time instead of one, and keeps the first good one. It is the same idea as Auto Retry's **Several tries at once**.

@@ -2168,6 +2168,85 @@ console.log("\na note when it asks again");
   }
 }
 
+console.log("\ntrying another connection after a refusal");
+{
+  // A switch on the Limits tab, off by default. On, its connection picker
+  // shows straight under it, with the same connections as Refine using.
+  const vis = (page, sel) =>
+    page.evaluate((sel) => {
+      const n = document.querySelector(sel);
+      return !!n && !n.closest("[hidden]") && n.getClientRects().length > 0;
+    }, sel);
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true } }, async (page) => {
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
+      await page.evaluate(() => {
+        window.__fromBackend({ type: "connections", list: [
+          { id: "conn-quill", name: "Quill", provider: "openrouter", model: "quill-mini" },
+          { id: "conn-ember", name: "Ember", provider: "anthropic", model: "ember-large" },
+        ] });
+      });
+      await settle(page);
+      await goTab(page, "Limits");
+      ok(label + ": the switch is shown, and off", await vis(page, '#drawer [data-arf-row="backupOn"]') &&
+        !(await page.evaluate(() => document.querySelector('#drawer [data-arf-row="backupOn"] input[type="checkbox"]').checked)));
+      ok(label + ": its connection picker is not shown while it is off", !(await vis(page, '#drawer [data-arf-row="backupConnection"]')));
+      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="backupOn"] input[type="checkbox"]').click());
+      await settle(page);
+      await settle(page);
+      await new Promise((r) => setTimeout(r, 500));
+      ok(label + ": switched on, Which other connection is shown", await vis(page, '#drawer [data-arf-row="backupConnection"]'));
+      const order = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll("#drawer [data-arf-row]")].map((n) => n.getAttribute("data-arf-row"));
+        return rows.indexOf("backupConnection") === rows.indexOf("backupOn") + 1;
+      });
+      ok(label + ": straight under the switch", order);
+      const opts = await page.evaluate(() => [...document.querySelectorAll('#drawer [data-arf-field="backupConnection"] option')].map((o) => o.textContent));
+      ok(label + ": it lists the chat's model and every connection",
+        /The model I am chatting with/.test(opts[0] || "") && opts.some((o) => /^Quill \(quill-mini\)/.test(o)) && opts.some((o) => /^Ember \(ember-large\)/.test(o)), JSON.stringify(opts));
+      await page.evaluate(() => {
+        const sel = document.querySelector('#drawer [data-arf-field="backupConnection"]');
+        sel.value = "conn-ember";
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await new Promise((r) => setTimeout(r, 600));
+      const saved = await page.evaluate(() => {
+        const raw = localStorage.getItem("lv-auto-refine:settings:v1");
+        const s = raw ? JSON.parse(raw) : {};
+        return [s.backupOn, s.backupConnection];
+      });
+      ok(label + ": the switch and the pick are saved", saved[0] === true && saved[1] === "conn-ember", JSON.stringify(saved));
+      const look = await page.evaluate((touch) => {
+        const out = { sideways: document.documentElement.scrollWidth > window.innerWidth + 1, small: [] };
+        if (touch)
+          for (const n of document.querySelectorAll('#drawer [data-arf-row^="backup"] select')) {
+            if (n.closest("[hidden]") || !n.getClientRects().length) continue;
+            if (n.offsetHeight < 32) out.small.push(n.getAttribute("data-arf-field") + ":" + n.offsetHeight);
+          }
+        return out;
+      }, touch);
+      ok(label + ": nothing runs off the side", !look.sideways, "");
+      if (touch) ok(label + ": the picker is at least 32 pixels high", look.small.length === 0, JSON.stringify(look.small));
+
+      // While the other connection is asked, the status line and the Log say so.
+      await page.evaluate(() => {
+        window.__fromBackend({ type: "refine_progress", stage: "asking" });
+        window.__fromBackend({ type: "refine_backup", chatId: "c1", messageId: "m2", why: "the model declined to rewrite it" });
+        window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      });
+      await settle(page);
+      const line = await page.evaluate(() => document.querySelector("#drawer").textContent);
+      ok(label + ": the status line says the other connection is asked", /Other connection: Refining/.test(line), (line.match(/Other connection[^.]{0,40}/) || [""])[0]);
+      await goTab(page, "Log");
+      await settle(page);
+      const said = await page.evaluate(() => [...document.querySelectorAll("#drawer [data-arf-logline]")].map((n) => n.textContent).join(" | "));
+      ok(label + ": the Log says why the other connection was asked", /declined to rewrite it\), so the other connection was asked/.test(said), said.slice(0, 200));
+      ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+    });
+  }
+}
+
 console.log("\nevery fixed text is a box of its own");
 {
   // Nothing sent to a model is hidden: the worn-phrase check, the lead-in to
