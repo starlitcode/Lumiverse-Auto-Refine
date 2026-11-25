@@ -16,6 +16,7 @@ _2026-11-24_
 - **A refine could keep showing as running after you came back to the tab.** On a phone, a tab in the background is paused, and the result of a refine that finished then could be lost. The status stayed at thinking, with no notice, until the wait ran out. Now, when you come back to the tab, the panel asks your server whether the refine is still running, and takes any result it missed. If nothing is running and nothing came back, the refine ends at once, and a notice asks you to check the reply.
 - **The request preview did not say why Worn Out was missing.** A block that comes out empty is not sent, so the preview left Worn Out out with no reason given. The card now says why: **Find phrases this chat has worn out** is off, there are not yet enough replies before this one, or no phrase has repeated in enough of them yet.
 - **Copying could raise a phone's keyboard.** When the browser did not allow the usual way to copy, the text was copied through a hidden box, and selecting it could raise the keyboard. The hidden box is now read-only, so it cannot be typed in and the keyboard stays down. Auto Retry has the same fix.
+- **On a server with several accounts, another account got Lumiverse's own error and nothing on what to do.** Lumiverse lets an extension installed as Personal work only for the account that installed it. Auto Refine now says so, and that it has to be installed as Operator, under Extensions, for every account to use it. Auto Retry and Auto Foley say the same.
 
 ---
 

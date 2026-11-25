@@ -2282,6 +2282,16 @@ describe("when the model will not answer", () => {
     expect(h.writes.length).toBe(0);
   });
 
+  // Lumiverse refuses an extension installed as Personal for every account
+  // but the one that installed it, and says so in its own words.
+  test("an install as Personal is named, with what to do", async () => {
+    const h = await armed(["x"], {}, chat(), { fail: "Extension is user-scoped and cannot access this user context" });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(50);
+    expect(h.skipped()[0]).toMatch(/installed as Personal/);
+    expect(h.skipped()[0]).toMatch(/install it as Operator, under Extensions/);
+  });
+
   test("and the reply is left exactly as it was", async () => {
     const h = await armed(["x"], {}, chat(), { fail: "the provider is down" });
     await h.ended({ chatId: "c1", messageId: "m2" });

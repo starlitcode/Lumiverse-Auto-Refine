@@ -4889,6 +4889,7 @@ async function askModel(
         error:
           'Lumiverse could not tell which account this refine was for. Reload the page, and if it keeps happening it is worth reporting.',
       };
+    if (typeof msg === 'string' && PERSONAL_INSTALL.test(msg)) return { content: '', error: PERSONAL_WORDS };
     return { content: '', error: msg };
   } finally {
     if (timer != null) clearTimeout(timer);
@@ -6113,8 +6114,17 @@ function hasDecisions(): boolean {
 // What went wrong with a Decision call, in words for the Log and the panel.
 // Lumiverse's own message is kept after it, so a problem with the provider
 // can still be read.
+// Lumiverse installs an extension as Personal, for the account that
+// installed it, or as Operator, for every account. A Personal one is refused
+// for every other account, with one of these messages. Auto Retry and Auto
+// Foley say the same.
+const PERSONAL_INSTALL = /user-scoped|cannot access this user context|Extension owner is not set/i;
+const PERSONAL_WORDS =
+  'Auto Refine is installed as Personal, so Lumiverse lets only the account that installed it use it. Ask whoever runs Lumiverse to install it as Operator, under Extensions, so every account can use it';
+
 function decisionTrouble(e: any): string {
   const raw = String((e && e.message) || e || '').slice(0, 300);
+  if (PERSONAL_INSTALL.test(raw)) return PERSONAL_WORDS;
   if (/permission/i.test(raw) && /decision/i.test(raw))
     return 'the Decision models permission is refused. Grant it to Auto Refine in Lumiverse, under Extensions';
   if (/No default Decision connection/i.test(raw))
