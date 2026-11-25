@@ -4373,11 +4373,6 @@ console.log("\nrows that hang off a switch open and close smoothly");
             // Measured from the switch's own row, so a scroll of the panel
             // is not counted as the row moving.
             const gapNow = () => q("inputRefine").getBoundingClientRect().top - q("widgetOn").getBoundingClientRect().bottom;
-            // Near the top of the screen, so the rows that open can all be
-            // seen. A row that opens past the bottom edge moves only the part
-            // that can be seen, which a later check covers.
-            q("widgetOn").scrollIntoView({ block: "start" });
-            await new Promise((r) => requestAnimationFrame(r));
             const start = gapNow();
             const times = [];
             const tops = [];
@@ -4791,15 +4786,7 @@ console.log("\nfolds and the color editor open and close smoothly");
       const q = (sel) => document.querySelector(sel);
       const findPress = () => (press.startsWith("text:") ? [...document.querySelectorAll("#drawer button.arf-fold")].find((b) => b.textContent.includes(press.slice(5))) : q(press));
       const holder = () => (box === "parent" ? findPress().parentElement : q(box));
-      // The part of the box that can be seen. A box taller than the screen
-      // opens and closes only that part, and the rest out of sight.
-      const h = () => {
-        const r = holder().getBoundingClientRect();
-        return Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0));
-      };
-      // Near the top of the screen, so the box can open where it is seen.
-      findPress().scrollIntoView({ block: "start" });
-      await new Promise((r) => requestAnimationFrame(r));
+      const h = () => holder().getBoundingClientRect().height;
       const run = async (turn) => {
         const start = h();
         const tops = [];
@@ -4965,21 +4952,15 @@ console.log("\na fold stays in sight until it has closed");
       const out = await page.evaluate(async () => {
         const head = [...document.querySelectorAll("#drawer button.arf-fold")].find((b) => b.textContent.includes("Sampler values"));
         const body = head.nextElementSibling;
-        // In sight, and measured only as far as can be seen.
-        head.scrollIntoView({ block: "start" });
         head.click();
         await new Promise((r) => setTimeout(r, 700));
-        const seen = () => {
-          const r = body.getBoundingClientRect();
-          return Math.max(0, Math.min(r.bottom, window.innerHeight) - r.top);
-        };
-        const start = seen();
+        const start = body.getBoundingClientRect().height;
         const frames = [];
         head.click();
         const t0 = performance.now();
         while (performance.now() - t0 < 400) {
           await new Promise((r) => requestAnimationFrame(r));
-          frames.push({ h: seen() / start, o: parseFloat(getComputedStyle(body).opacity) });
+          frames.push({ h: body.getBoundingClientRect().height / start, o: parseFloat(getComputedStyle(body).opacity) });
         }
         return { start, frames };
       });
