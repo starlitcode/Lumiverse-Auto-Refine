@@ -4196,6 +4196,42 @@ let maxHistoryTokens = 4500;
 // sent to the model is cut. The chat is never changed.
 let historyCut: RegExp[] = [];
 
+// Lumiverse picks its tokenizer from a model. With none named it counts for
+// the model of the main connection, so a refine on another connection names
+// its own model. Set for each account while a refine's prompt is built.
+const countModel = new Map<string, string>();
+// The model a count is for: the one set while a refine's prompt is built, or
+// else the model of the connection picked for refining. With neither, the
+// main connection's model, which is the one a refine follows then.
+async function countingFor(userId?: string): Promise<string> {
+  return countModel.get(String(userId || '')) || (await modelOf(connectionId, userId));
+}
+function countOptions(userId?: string, model?: string): any {
+  return model ? { model: model, modelSource: 'explicit', userId: userId } : { userId: userId };
+}
+
+// The model behind each connection, for the tokenizer. Read once a minute
+// for each account. Empty when it cannot be read, and the main connection's
+// model is counted for then.
+const connModels = new Map<string, { at: number; map: Record<string, string> }>();
+async function modelOf(connId: string, userId?: string): Promise<string> {
+  if (!connId) return '';
+  const key = String(userId || '');
+  let got = connModels.get(key);
+  if (!got || Date.now() - got.at > 60000) {
+    const map: Record<string, string> = {};
+    try {
+      if (spindle.connections && typeof spindle.connections.list === 'function') {
+        const list = await spindle.connections.list(userId);
+        for (const c of Array.isArray(list) ? list : []) if (c && c.id) map[String(c.id)] = String(c.model || '');
+      }
+    } catch (_) {}
+    got = { at: Date.now(), map: map };
+    connModels.set(key, got);
+  }
+  return got.map[connId] || '';
+}
+
 // The host's own tokenizer when it will answer, and the usual estimate when it
 // will not. Roughly four characters a token is close enough for a budget, and
 // being approximate here costs a few tokens either way rather than anything
@@ -4204,7 +4240,7 @@ async function countTokens(text: string, userId?: string): Promise<number> {
   const guess = Math.ceil(String(text || '').length / 4);
   try {
     if (!spindle.tokens || typeof spindle.tokens.countText !== 'function') return guess;
-    const got = await spindle.tokens.countText(text, { userId: userId });
+    const got = await spindle.tokens.countText(text, countOptions(userId, await countingFor(userId)));
     const n = got && Number(got.total_tokens);
     return Number.isFinite(n) && n > 0 ? n : guess;
   } catch (_) {
@@ -4230,12 +4266,13 @@ function startUsed(userId?: string) {
 async function countSaying(
   text: string,
   userId?: string,
+  model?: string,
 ): Promise<{ n: number; counted: boolean }> {
   const guess = Math.ceil(String(text || '').length / 4);
   try {
     if (!spindle.tokens || typeof spindle.tokens.countText !== 'function')
       return { n: guess, counted: false };
-    const got = await spindle.tokens.countText(text, { userId: userId });
+    const got = await spindle.tokens.countText(text, countOptions(userId, model || (await countingFor(userId))));
     // Lumiverse says when it had no tokenizer for the model and fell back to
     // characters over four, which is the same guess made here. Taken at its
     // word: a guess reported as a count is a figure that looks exact and is
@@ -4712,40 +4749,6 @@ async function askModel(
       }, ms);
   }
   try {
-    const req: any = { messages: await buildPrompt(text, isUser, scene, userId, undefined, use) };
-    if (note && note.text) req.messages.push({ role: note.role, content: note.text });
-    // What this one refine put through the model, sent on once the answer is
-    // in. Not awaited: counting is worth a line in the panel and is not worth
-    // holding the rewrite behind, and a count that never arrives leaves the
-    // panel showing the last one rather than showing nothing.
-    const reportUsed = (answer: string) => {
-      const asked = req.messages.map((m: any) => String((m && m.content) || '')).join('\n');
-      // The run this answer belongs to, taken before the counting starts. A
-      // count that comes back after the next refine has begun belongs to a
-      // refine that is over, and adding it to the new one would report somebody
-      // the previous reply's tokens on top of this one's.
-      const key = String(userId || '');
-      const run = usedRun.get(key);
-      if (!run) return;
-      Promise.all([countSaying(asked, userId), countSaying(answer, userId)])
-        .then(([sent, back]) => {
-          if (usedRun.get(key) !== run) return;
-          run.sent += sent.n;
-          run.back += back.n;
-          run.cost +=
-            (sent.n / 1e6) * (model ? model.costIn : costIn) + (back.n / 1e6) * (model ? model.costOut : costOut);
-          if (!sent.counted || !back.counted) run.counted = false;
-          tell(userId, {
-            type: 'refine_used',
-            at: Date.now(),
-            sent: run.sent,
-            back: run.back,
-            counted: run.counted,
-            cost: run.cost,
-          });
-        })
-        .catch(() => {});
-    };
     // Only the values the reader actually changed. An empty object is left out
     // so the connection's own preset stays in charge, which is what somebody
     // who never opened the sampler section expects.
@@ -4768,6 +4771,50 @@ async function askModel(
       if (useConnection && useConnection === bound.id && bound.model && !(params && (params as any).model))
         params = Object.assign({}, params || {}, { model: bound.model });
     }
+    // Counted with the tokenizer of the model that answers, which is often
+    // not the model of the main connection.
+    const countWith = (params && typeof (params as any).model === 'string' && (params as any).model) || (await modelOf(useConnection, userId));
+    countModel.set(String(userId || ''), countWith);
+    let built: any[];
+    try {
+      built = await buildPrompt(text, isUser, scene, userId, undefined, use);
+    } finally {
+      countModel.delete(String(userId || ''));
+    }
+    const req: any = { messages: built };
+    if (note && note.text) req.messages.push({ role: note.role, content: note.text });
+    // What this one refine put through the model, sent on once the answer is
+    // in. Not awaited: counting is worth a line in the panel and is not worth
+    // holding the rewrite behind, and a count that never arrives leaves the
+    // panel showing the last one rather than showing nothing.
+    const reportUsed = (answer: string) => {
+      const asked = req.messages.map((m: any) => String((m && m.content) || '')).join('\n');
+      // The run this answer belongs to, taken before the counting starts. A
+      // count that comes back after the next refine has begun belongs to a
+      // refine that is over, and adding it to the new one would report somebody
+      // the previous reply's tokens on top of this one's.
+      const key = String(userId || '');
+      const run = usedRun.get(key);
+      if (!run) return;
+      Promise.all([countSaying(asked, userId, countWith), countSaying(answer, userId, countWith)])
+        .then(([sent, back]) => {
+          if (usedRun.get(key) !== run) return;
+          run.sent += sent.n;
+          run.back += back.n;
+          run.cost +=
+            (sent.n / 1e6) * (model ? model.costIn : costIn) + (back.n / 1e6) * (model ? model.costOut : costOut);
+          if (!sent.counted || !back.counted) run.counted = false;
+          tell(userId, {
+            type: 'refine_used',
+            at: Date.now(),
+            sent: run.sent,
+            back: run.back,
+            counted: run.counted,
+            cost: run.cost,
+          });
+        })
+        .catch(() => {});
+    };
     if (params) req.parameters = params;
     if (useConnection) req.connection_id = useConnection;
     // Who the call is for. Without it an operator-scoped install refuses the

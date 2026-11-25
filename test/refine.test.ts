@@ -308,10 +308,13 @@ function host(
     // them do not care and the fallback is the same guess either way.
     tokens: opts.tokens
       ? {
-          countText: async (text: string) => ({
-            total_tokens: Math.ceil(String(text || "").length / 3),
-            approximate: !!opts.tokens.approximate,
-          }),
+          countText: async (text: string, o: any) => {
+            ((globalThis as any).__countedWith = (globalThis as any).__countedWith || []).push(o && o.model);
+            return {
+              total_tokens: Math.ceil(String(text || "").length / 3),
+              approximate: !!opts.tokens.approximate,
+            };
+          },
         }
       : undefined,
     connections: {
@@ -2052,6 +2055,16 @@ describe("what the pass costs", () => {
   test("and one Lumiverse calls approximate is not", async () => {
     const got = await used({ tokens: { approximate: true } });
     expect(got.counted).toBe(false);
+  });
+
+  test("the count uses the tokenizer of the refine model, not the main one", async () => {
+    (globalThis as any).__countedWith = [];
+    const h = await armed(["<REFINED>She stepped through and the cold hit her.</REFINED>"], { connectionId: "c-fast" }, chat(), { tokens: { approximate: false } });
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(80);
+    const seen = (globalThis as any).__countedWith as any[];
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen).toEqual(seen.map(() => "mini"));
   });
 
   test("a build with no counter at all is not counted either", async () => {

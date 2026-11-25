@@ -17,6 +17,7 @@ _2026-11-24_
 
 ### Fixed
 
+- **Token counts used the tokenizer of your main connection.** With another connection picked for refining, the counts, the limits for the chat history and lore, and the cost were worked out for the wrong model. Lumiverse is now told which model refines, so it counts with that model's tokenizer. Auto Foley does the same for the Director.
 - **Reduce motion could stop another extension's motion.** It matched any part of the page whose name held arf- inside a word. It now matches only Auto Refine's own parts.
 - **A section closing could look cut off partway.** Its words faded out before its space finished closing. On a section taller than the settings box, most of the close also happened below the edge, where it could not be seen, so the space stood empty and then snapped shut. Now the words fade over the same time as the space closes, and only the part you can see moves: the rest is added or taken away out of sight. Opening works the same way. Auto Retry and Auto Foley have the same fix.
 - **A refine could keep showing as running after you came back to the tab.** On a phone, a tab in the background is paused, and the result of a refine that finished then could be lost. The status stayed at thinking, with no notice, until the wait ran out. Now, when you come back to the tab, the panel asks your server whether the refine is still running, and takes any result it missed. If nothing is running and nothing came back, the refine ends at once, and a notice asks you to check the reply.

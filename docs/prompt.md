@@ -302,7 +302,7 @@ The three pattern boxes, **Leave out of the run-up**, **Patterns of your own to 
 - A pattern that matches nothing at all, such as `^\s*$`, is refused, because it would match everywhere.
 - A group that repeats something inside it and is then repeated itself, such as `(a+)+`, is refused. On text that almost matches, it can stop Auto Refine for about a second on each message, for everyone on the server, and then match nothing. A set count, such as `(\d{2})+`, is fine.
 
-Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokenizer where it can, and estimated at four characters a token where it cannot.
+Sizes are in tokens, because tokens are what a model's context is measured in. They are counted with Lumiverse's own tokenizer for the model that refines, where it can, and estimated at four characters a token where it cannot.
 
 ## Phrases this chat has worn out
 
