@@ -511,8 +511,8 @@ Six more are recognized as formats of their own, because their closing token has
 
 | Form | Example |
 | --- | --- |
-| Harmony, used by gpt-oss | `<\|channel\|>analysis<\|message\|>` … `<\|end\|>` |
-| Gemma 4 | `<\|channel>thought` … `<channel\|>` |
+| Harmony channels | `<\|channel\|>analysis<\|message\|>` … `<\|end\|>` |
+| Gemma 4 channels | `<\|channel>thought` … `<channel\|>` |
 | Cohere | `<\|START_THINKING\|>` … `<\|END_THINKING\|>` |
 | Seed-OSS | `<seed:think>` … `</seed:think>` |
 | Begin and end of thought | `<\|begin_of_thought\|>` … `<\|end_of_thought\|>` |
