@@ -3569,6 +3569,93 @@ export function setup(ctx, overrides) {
             return false;
         }
     }
+    // Lumiverse draws a pop-up's frame and shade with no motion. This fades
+    // them in with a 4 pixel slide. Closed with the function this returns, they
+    // fade out before they go. Closed by Lumiverse, with its X, a tap outside or
+    // Escape, they are already gone, so a copy that cannot be pressed fades out
+    // in their place.
+    const modalGhosts = new Set();
+    function easeModal(modal) {
+        const MS = 180;
+        let frame = null;
+        let shade = null;
+        try {
+            const body = modal.root.parentElement;
+            frame = body ? body.parentElement : null;
+            shade = frame ? frame.parentElement : null;
+            // Only Lumiverse's own shade, laid over the whole page, is moved.
+            if (!shade || shade.parentElement !== document.body || getComputedStyle(shade).position !== "fixed")
+                frame = shade = null;
+        }
+        catch (_) {
+            frame = shade = null;
+        }
+        let leaving = false;
+        const play = (box, keys) => {
+            try {
+                return box ? box.animate(keys, { duration: MS, easing: "ease-out", fill: "both" }) : null;
+            }
+            catch (_) {
+                return null;
+            }
+        };
+        const IN = [{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }];
+        const OUT = [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(4px)" }];
+        if (shade && frame && !noMotion()) {
+            play(shade, [{ opacity: 0 }, { opacity: 1 }]);
+            play(frame, IN);
+        }
+        const ghostOut = () => {
+            if (!shade || tornDown || noMotion())
+                return;
+            try {
+                const copy = shade.cloneNode(true);
+                for (const n of Array.from(copy.querySelectorAll("[data-spindle-modal],[data-spindle-extension-root]")))
+                    ["data-spindle-modal", "data-spindle-extension-root"].forEach((a) => n.removeAttribute(a));
+                copy.setAttribute("aria-hidden", "true");
+                copy.setAttribute("inert", "");
+                copy.style.pointerEvents = "none";
+                document.body.appendChild(copy);
+                modalGhosts.add(copy);
+                const gone = () => {
+                    modalGhosts.delete(copy);
+                    copy.remove();
+                };
+                const a = play(copy, [{ opacity: 1 }, { opacity: 0 }]);
+                play(copy.firstElementChild, [{ transform: "none" }, { transform: "translateY(4px)" }]);
+                if (a)
+                    a.onfinish = gone;
+                setTimeout(gone, MS + 200);
+            }
+            catch (_) { }
+        };
+        try {
+            modal.onDismiss(() => {
+                if (!leaving)
+                    ghostOut();
+            });
+        }
+        catch (_) { }
+        return () => {
+            if (leaving)
+                return;
+            leaving = true;
+            const done = () => {
+                try {
+                    modal.dismiss();
+                }
+                catch (_) { }
+            };
+            if (!shade || !frame || noMotion())
+                return done();
+            shade.style.pointerEvents = "none";
+            const a = play(shade, [{ opacity: 1 }, { opacity: 0 }]);
+            play(frame, OUT);
+            if (a)
+                a.onfinish = done;
+            setTimeout(done, MS + 200);
+        };
+    }
     function persist(now) {
         stillEyes();
         const write = () => {
@@ -5206,12 +5293,10 @@ export function setup(ctx, overrides) {
     // Put before a rule that changes a part's size or place while it is
     // pressed. With Reduce motion on, the part keeps its size and place.
     const PRESS = "html:not([data-arf-still]) ";
-    const STILL_RULES = (root) => [
-        '[class*="arf-"]',
-        '[class*="arf-"]::before',
-        '[class*="arf-"]::after',
-        '[class*="arf-"] *',
-    ]
+    // Only class names that start with arf- match, so another extension's
+    // class that holds arf- inside a word keeps its motion.
+    const STILL_RULES = (root) => ['[class^="arf-"]', '[class*=" arf-"]']
+        .flatMap((one) => [one, one + "::before", one + "::after", one + " *"])
         .map((one) => root + one)
         .join(",") + "{animation:none!important;transition:none!important}";
     const CSS = PATTERN_CSS +
@@ -18431,12 +18516,7 @@ export function setup(ctx, overrides) {
                 const yes = button("Go through the chat", true);
                 yes.setAttribute("data-arf-sweep-yes", "1");
                 const no = button("Not now", false);
-                const shut = () => {
-                    try {
-                        modal.dismiss && modal.dismiss();
-                    }
-                    catch (_) { }
-                };
+                const shut = easeModal(modal);
                 yes.addEventListener("click", () => {
                     shut();
                     startSweep(mine);
@@ -18554,6 +18634,9 @@ export function setup(ctx, overrides) {
     paint();
     return () => {
         tornDown = true;
+        for (const g of Array.from(modalGhosts))
+            g.remove();
+        modalGhosts.clear();
         if (saveTimer) {
             clearTimeout(saveTimer);
             saveTimer = null;

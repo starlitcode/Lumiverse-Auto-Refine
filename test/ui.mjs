@@ -291,6 +291,35 @@ async function inTab(browser, { css = "", viewport, touch = false, saved = null,
             }),
         showModal: (spec) => {
           window.__modalSpec = spec || null;
+          // Laid out as Lumiverse lays its pop-up out: a shade over the page,
+          // a frame, a body, and the extension's root.
+          if (window.__lvModal) {
+            const root = document.createElement("div");
+            root.setAttribute("data-spindle-modal", "m1");
+            const shade = document.createElement("div");
+            shade.style.cssText = "position:fixed;inset:0;z-index:10003;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)";
+            const frame = document.createElement("div");
+            frame.style.cssText = "width:340px;background:#222;border-radius:12px";
+            const body = document.createElement("div");
+            body.appendChild(root);
+            frame.appendChild(body);
+            shade.appendChild(frame);
+            document.body.appendChild(shade);
+            const fns = [];
+            let gone = false;
+            const handle = {
+              root,
+              onDismiss: (f) => fns.push(f),
+              dismiss: () => {
+                if (gone) return;
+                gone = true;
+                shade.remove();
+                fns.forEach((f) => f());
+              },
+            };
+            window.__lv = { handle, shade, frame };
+            return handle;
+          }
           const host = document.createElement("div");
           host.id = "hostmodal";
           document.body.appendChild(host);
@@ -4862,6 +4891,65 @@ console.log("\nno scroll bar at the side of the drawer");
     ok("with this tab in the drawer, the drawer shows no scroll bar", got.ours === "none", JSON.stringify(got));
     ok("another tab in the drawer keeps its scroll bar", got.theirs !== "none", JSON.stringify(got));
   });
+}
+
+console.log("\na pop-up fades in and out");
+{
+  // Lumiverse draws the frame of a pop-up with no motion. The panel fades it
+  // in and out, and slides it 4 pixels. Closed by Lumiverse itself, a copy
+  // that cannot be pressed fades out in its place, and nothing is left.
+  for (const still of [false, true]) {
+    await inTab(browser, { viewport: { width: 390, height: 800 }, touch: true, saved: { enabled: true, reduceMotion: still } }, async (page) => {
+      const got = await page.evaluate(async (still) => {
+        window.__lvModal = true;
+        for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+        await new Promise((r) => setTimeout(r, 100));
+        const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+        const openIt = async () => {
+          const b = [...document.querySelectorAll("#drawer button")].find((x) => x.textContent.trim() === "Refine every reply here");
+          b.click();
+          await frame();
+          return parseFloat(getComputedStyle(window.__lv.shade).opacity);
+        };
+        const out = {};
+        out.first = await openIt();
+        await new Promise((r) => setTimeout(r, 400));
+        out.settled = parseFloat(getComputedStyle(window.__lv.shade).opacity);
+        out.slid = getComputedStyle(window.__lv.frame).transform;
+        // Not now, from inside: it fades before it goes.
+        const shade = window.__lv.shade;
+        [...shade.querySelectorAll("button")].find((x) => x.textContent.trim() === "Not now").click();
+        await frame();
+        await frame();
+        out.leavingThere = shade.isConnected;
+        out.leaving = parseFloat(getComputedStyle(shade).opacity);
+        await new Promise((r) => setTimeout(r, 500));
+        out.leftGone = !shade.isConnected;
+        // Closed by Lumiverse: a copy fades out, then nothing is left.
+        await openIt();
+        await new Promise((r) => setTimeout(r, 300));
+        window.__lv.handle.dismiss();
+        await frame();
+        const ghost = [...document.body.children].find((n) => n.getAttribute("aria-hidden") === "true" && n.hasAttribute("inert"));
+        out.ghost = !!ghost;
+        out.ghostMarked = ghost ? !!ghost.querySelector("[data-spindle-modal]") : false;
+        await new Promise((r) => setTimeout(r, 500));
+        out.after = [...document.body.children].filter((n) => getComputedStyle(n).position === "fixed" && n.style.zIndex === "10003").length;
+        return out;
+      }, still);
+      const s = JSON.stringify(got);
+      if (!still) {
+        ok("it starts see-through", got.first < 0.9, s);
+        ok("and is fully shown once it has faded in, with its slide done", got.settled === 1 && (got.slid === "none" || got.slid === "matrix(1, 0, 0, 1, 0, 0)"), s);
+        ok("Not now fades it out before it goes", got.leavingThere && got.leaving < 1 && got.leftGone, s);
+        ok("closed by Lumiverse, a copy that cannot be pressed fades out", got.ghost && !got.ghostMarked, s);
+      } else {
+        ok("with reduce motion on, it shows at once", got.first === 1, s);
+        ok("with reduce motion on, Not now closes it at once", !got.leavingThere && !got.ghost, s);
+      }
+      ok((still ? "reduce motion: " : "") + "nothing is left on the page", got.after === 0, s);
+    });
+  }
 }
 
 console.log("\na fold stays in sight until it has closed");
