@@ -4344,6 +4344,11 @@ console.log("\nrows that hang off a switch open and close smoothly");
             // Measured from the switch's own row, so a scroll of the panel
             // is not counted as the row moving.
             const gapNow = () => q("inputRefine").getBoundingClientRect().top - q("widgetOn").getBoundingClientRect().bottom;
+            // Near the top of the screen, so the rows that open can all be
+            // seen. A row that opens past the bottom edge moves only the part
+            // that can be seen, which a later check covers.
+            q("widgetOn").scrollIntoView({ block: "start" });
+            await new Promise((r) => requestAnimationFrame(r));
             const start = gapNow();
             const times = [];
             const tops = [];
@@ -4406,7 +4411,9 @@ console.log("\nrows that hang off a switch open and close smoothly");
             !!shut && Math.max(...shut.steps) < Math.abs(shut.travel) / 3, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
           const faded = shut ? shut.looks.findIndex((l) => l.o < 0.05) : -1;
           const flat = shut ? shut.looks.findIndex((l) => l.h < 1) : -1;
-          ok(say + "closing, the words are gone before the space is", !!shut && faded >= 0 && (flat === -1 || faded < flat), JSON.stringify({ faded, flat }));
+          // The words fade over the same time as the space closes, so they are
+          // still there until it is nearly shut, and gone when it is.
+          ok(say + "closing, the words stay in sight until the space is nearly shut", !!shut && faded >= 0 && (shut.looks[faded] ? shut.looks[faded].h : 0) <= 0.15 * Math.max(...shut.looks.map((l) => (l ? l.h : 0))), JSON.stringify({ faded, flat }));
         } else {
           ok(say + "the rows open in one step", !!opened && Math.abs(opened.biggest - opened.travel) <= 2, JSON.stringify(opened && { travel: opened.travel, biggest: opened.biggest }));
           ok(say + "and close in one step", !!shut && Math.abs(shut.biggest - Math.abs(shut.travel)) <= 2, JSON.stringify(shut && { travel: shut.travel, biggest: shut.biggest }));
@@ -4478,7 +4485,9 @@ console.log("\nthe notice under the buttons comes and goes with the main switch"
           }
           const faded = shut ? shut.looks.findIndex((l) => !l || l.o < 0.05) : -1;
           const flat = shut ? shut.looks.findIndex((l) => !l || l.h < 1) : -1;
-          ok(say + "closing, the words are gone before the space is", !!shut && faded >= 0 && (flat === -1 || faded < flat), JSON.stringify({ faded, flat }));
+          // The words fade over the same time as the space closes, so they are
+          // still there until it is nearly shut, and gone when it is.
+          ok(say + "closing, the words stay in sight until the space is nearly shut", !!shut && faded >= 0 && (shut.looks[faded] ? shut.looks[faded].h : 0) <= 0.15 * Math.max(...shut.looks.map((l) => (l ? l.h : 0))), JSON.stringify({ faded, flat }));
           ok(say + "opening, the words start faded and slide down into place",
             !!opened && !!opened.looks[0] && opened.looks[0].o < 0.5 && /matrix\(1, 0, 0, 1, 0, -/.test(opened.looks[0].t), JSON.stringify(opened && opened.looks.slice(0, 2)));
         } else {
@@ -4753,7 +4762,15 @@ console.log("\nfolds and the color editor open and close smoothly");
       const q = (sel) => document.querySelector(sel);
       const findPress = () => (press.startsWith("text:") ? [...document.querySelectorAll("#drawer button.arf-fold")].find((b) => b.textContent.includes(press.slice(5))) : q(press));
       const holder = () => (box === "parent" ? findPress().parentElement : q(box));
-      const h = () => holder().getBoundingClientRect().height;
+      // The part of the box that can be seen. A box taller than the screen
+      // opens and closes only that part, and the rest out of sight.
+      const h = () => {
+        const r = holder().getBoundingClientRect();
+        return Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0));
+      };
+      // Near the top of the screen, so the box can open where it is seen.
+      findPress().scrollIntoView({ block: "start" });
+      await new Promise((r) => requestAnimationFrame(r));
       const run = async (turn) => {
         const start = h();
         const tops = [];
@@ -4830,15 +4847,21 @@ console.log("\na fold stays in sight until it has closed");
       const out = await page.evaluate(async () => {
         const head = [...document.querySelectorAll("#drawer button.arf-fold")].find((b) => b.textContent.includes("Sampler values"));
         const body = head.nextElementSibling;
+        // In sight, and measured only as far as can be seen.
+        head.scrollIntoView({ block: "start" });
         head.click();
         await new Promise((r) => setTimeout(r, 700));
-        const start = body.getBoundingClientRect().height;
+        const seen = () => {
+          const r = body.getBoundingClientRect();
+          return Math.max(0, Math.min(r.bottom, window.innerHeight) - r.top);
+        };
+        const start = seen();
         const frames = [];
         head.click();
         const t0 = performance.now();
         while (performance.now() - t0 < 400) {
           await new Promise((r) => requestAnimationFrame(r));
-          frames.push({ h: body.getBoundingClientRect().height / start, o: parseFloat(getComputedStyle(body).opacity) });
+          frames.push({ h: seen() / start, o: parseFloat(getComputedStyle(body).opacity) });
         }
         return { start, frames };
       });
