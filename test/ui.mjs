@@ -4919,8 +4919,8 @@ console.log("\na pop-up fades in and out");
         // Not now, from inside: it fades before it goes.
         const shade = window.__lv.shade;
         [...shade.querySelectorAll("button")].find((x) => x.textContent.trim() === "Not now").click();
-        await frame();
-        await frame();
+        // Part way through the fade, which is 180 ms.
+        await new Promise((r) => setTimeout(r, 80));
         out.leavingThere = shade.isConnected;
         out.leaving = parseFloat(getComputedStyle(shade).opacity);
         await new Promise((r) => setTimeout(r, 500));
