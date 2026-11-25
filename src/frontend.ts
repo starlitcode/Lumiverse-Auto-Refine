@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.57.1";
+const VERSION = "1.57.2";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -18040,6 +18040,13 @@ export function setup(ctx: Ctx, overrides?: any) {
           // says why.
           // The refine connection refused, sent nothing or was cut off, and
           // the other connection is being asked.
+          // The backend is still waiting or working on a refine. The panel's
+          // give-up timer starts again, so it only gives up on a backend that
+          // has gone quiet.
+          if (msg.type === "refine_working") {
+            if (busy) armDeadman(0, true);
+            return;
+          }
           if (msg.type === "refine_backup") {
             onBackup = true;
             log("refine", "the answer failed (" + String(msg.why || "no reason given") + "), so the other connection was asked");

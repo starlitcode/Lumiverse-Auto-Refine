@@ -5289,6 +5289,59 @@ console.log("\nthe Stop button stays put through a run through the chat");
   }
 }
 
+console.log("\na refine the backend says is still working is not given up on");
+{
+  // The backend says a refine is still waiting or working every 10 seconds.
+  // While that keeps coming, the panel waits however long the refine takes.
+  // When it stops, the panel gives up as before.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, timeoutSecs: 30 } }, async (page) => {
+      await goTab(page, "Log");
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+      });
+      await settle(page);
+      const ahead = (secs) =>
+        page.evaluate((secs) => {
+          window.__ahead = (window.__ahead || 0) + secs * 1000;
+          if (!window.__realNow) {
+            window.__realNow = Date.now.bind(Date);
+            Date.now = () => window.__realNow() + window.__ahead;
+          }
+        }, secs);
+      const state = () =>
+        page.evaluate(() => ({
+          busy: /Refining|Thinking|Writing|Checking/.test(document.querySelector("#drawer").textContent),
+          toasts: (window.__toasts || []).join(" | "),
+        }));
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll("#drawer button"))
+          .find((b) => /Refine the latest reply/.test(b.textContent))
+          .click();
+        const id = window.__sent.filter((m) => m.type === "refine_now").pop().requestId;
+        window.__fromBackend({ type: "refine_ack", requestId: id });
+        window.__fromBackend({ type: "refine_progress", stage: "asking" });
+      });
+      // Three minutes, far past the 30-second wait, with the backend saying
+      // it is still working every 10 seconds.
+      for (let k = 0; k < 18; k++) {
+        await ahead(10);
+        await page.evaluate(() => window.__fromBackend({ type: "refine_working" }));
+        await page.waitForTimeout(80);
+      }
+      await page.waitForTimeout(600);
+      const kept = await state();
+      ok(label + ": three minutes in, with the backend still working, the panel still waits", kept.busy && !/never came back/.test(kept.toasts), JSON.stringify(kept));
+      // Then the backend goes quiet.
+      await ahead(120);
+      await page.waitForTimeout(1200);
+      const gone = await state();
+      ok(label + ": once the backend goes quiet, the panel gives up as before", !gone.busy && /never came back/.test(gone.toasts), JSON.stringify(gone));
+    });
+  }
+}
+
 console.log("\nthe time left is for the call that is running");
 {
   // The backend gives each call to the model the whole wait. A refine that

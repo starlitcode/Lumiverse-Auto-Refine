@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.57.2
+
+_2026-11-25_
+
+### Changed
+
+- **The panel waits for as long as a refine is still working.** The backend tells the panel every 10 seconds that a refine is still waiting or working, and the panel waits while it does. Before, the panel worked out its own time limit from **Give up waiting after**, which a long refine with several passes, tries and waits could run past. If the backend goes quiet, the panel gives up as before.
+
+---
+
 ## 1.57.1
 
 _2026-11-25_

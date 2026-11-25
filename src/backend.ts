@@ -29,7 +29,7 @@ declare function clearTimeout(handle: any): void;
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.57.1';
+const VERSION = '1.57.2';
 
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
@@ -6533,12 +6533,29 @@ async function loadBoundPairs(userId: string | undefined): Promise<void> {
   boundBy.set(k, { at: Date.now(), pairs: pairs });
 }
 
+// How often the panel is told a refine is still waiting or working. The
+// panel waits for as long as this keeps coming, so a long refine with
+// several passes, retries and waits is never given up on while it runs.
+const WORKING_EVERY_MS = 10000;
+
 async function asAccount<T>(userId: string | undefined, work: () => Promise<T>, onWait?: () => void): Promise<T> {
   const k = keyOf(userId);
   runningBy.set(k, (runningBy.get(k) || 0) + 1);
+  // A timer set again each time, rather than an interval, so it needs only
+  // setTimeout.
+  let beat: any = null;
+  const tick = () => {
+    beat = setTimeout(() => {
+      tell(userId, { type: 'refine_working' });
+      tick();
+    }, WORKING_EVERY_MS);
+  };
+  tick();
   try {
     return await asAccountTurn(k, userId, work, onWait);
   } finally {
+    clearTimeout(beat);
+    beat = null;
     const left = (runningBy.get(k) || 1) - 1;
     if (left > 0) runningBy.set(k, left);
     else runningBy.delete(k);
