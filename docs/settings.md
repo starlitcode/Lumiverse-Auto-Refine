@@ -302,7 +302,6 @@ Both chat buttons copy the look of the Lumiverse button next to them, so your th
 - Tap the swatch beside each one to open the color editor under it. It works the same on a phone and a laptop:
   - a box for a color code, such as `#ff0040`, with or without the `#`, or the short form such as `#f04`
   - sliders for **Hue**, **Saturation** and **Lightness**. Each track shows the colors its slider can reach, and each knob shows the color in use.
-  - your theme's **Danger** and **Success** colors, one tap each
   - a line showing the words in the color
 - A color you set is used instead of the theme's. **Use the theme's color** puts the theme's color back.
 - With a dark theme, Lumiverse makes custom danger and success colors lighter before any extension sees them. To use the exact color you picked in Lumiverse's theme editor, copy its code from there into the code box here.

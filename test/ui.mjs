@@ -14740,7 +14740,7 @@ console.log("\nyour own colors for cut and added words");
               swatch: tall(swatch),
               code: tall(code),
               slider: Math.min(...Array.from(row.querySelectorAll("[data-arf-colorpart]")).map(tall)),
-              pick: tall(row.querySelector("[data-arf-colorpick]")),
+              picks: row.querySelectorAll("[data-arf-colorpick]").length,
             },
             sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
           };
@@ -14768,7 +14768,7 @@ console.log("\nyour own colors for cut and added words");
       ok(label + ": the sliders start on the theme's color", opened.sliders.join() === "356,74,45", JSON.stringify(opened.sliders));
       if (touch)
         ok(label + ": the swatch, the code box, the sliders and the picks are tall enough to tap",
-          opened.heights.swatch >= 32 && opened.heights.code >= 32 && opened.heights.slider >= 32 && opened.heights.pick >= 32, JSON.stringify(opened.heights));
+          opened.heights.swatch >= 32 && opened.heights.code >= 32 && opened.heights.slider >= 32, JSON.stringify(opened.heights));
       ok(label + ": nothing runs off the side", !opened.sideways, "");
 
       await typeCode("cutColor", "ff0040");
@@ -14793,12 +14793,10 @@ console.log("\nyour own colors for cut and added words");
       const darker = await read("cutColor");
       ok(label + ": the Lightness slider changes the color", darker.cut === "rgb(0, 153, 82)" && darker.code === "#009952", JSON.stringify(darker));
 
-      const picks = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('#drawer [data-arf-row="cutColor"] [data-arf-colorpick]')).map((b) => b.getAttribute("data-arf-colorpick")).join());
-      ok(label + ": the theme's danger and success colors are the two picks", picks === "danger,success", picks);
-      await page.evaluate(() => document.querySelector('#drawer [data-arf-row="cutColor"] [data-arf-colorpick="success"]').click());
+      ok(label + ": the editor has no buttons for the theme's colors", opened.heights.picks === 0, String(opened.heights.picks));
+      await typeCode("cutColor", "#14a03c");
       await settle(page);
-      ok(label + ": a pick from the theme is used", (await read("cutColor")).cut === "rgb(20, 160, 60)", "");
+      ok(label + ": a typed code is used", (await read("cutColor")).cut === "rgb(20, 160, 60)", "");
       const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("lv-auto-refine:settings:v1") || "{}").cutColor);
       ok(label + ": it is saved", saved === "#14a03c", String(saved));
       // Each track shows what its slider reaches, and each knob is filled with

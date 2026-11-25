@@ -12,6 +12,7 @@ _2026-11-24_
 
 ### Changed
 
+- **The color editor has no Danger and Success buttons.** Type a color code or move the sliders. **Use the theme's color** goes back to your theme's color.
 - **Refine every reply here? fades in and out.** Lumiverse shows the question with no motion. It now fades in and slides a little, and fades out when it closes. With reduce motion on, it shows and closes at once. Auto Retry does the same for its settings.
 - **No scroll bar at the side of the drawer.** Lumiverse's scroll bar took up room at the side of the panel. It is hidden while the Auto Refine tab is open, and the drawer still scrolls. Boxes inside the panel keep their scroll bars. Auto Retry and Auto Foley do the same.
 

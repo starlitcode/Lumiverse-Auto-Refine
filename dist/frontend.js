@@ -5602,7 +5602,6 @@ export function setup(ctx, overrides) {
         "html[data-arf-still] input.arf-colorrange[type=range]::-moz-range-thumb{transition:none}" +
         "@media (prefers-reduced-motion: reduce){input.arf-colorrange[type=range]::-webkit-slider-thumb{transition:none}" +
         "input.arf-colorrange[type=range]::-moz-range-thumb{transition:none}}" +
-        ".arf-colordot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}" +
         "@media (pointer: coarse){.arf-swatch{width:52px;height:36px}input.arf-colorrange[type=range]{height:36px;min-height:0}" +
         ".arf-colorcode{height:36px}}" +
         // Drawn at full strength, so it is the theme's color exactly. The line
@@ -12886,8 +12885,7 @@ export function setup(ctx, overrides) {
     // rather than the browser's color input, which on a phone often has no
     // way to type a color code. The swatch opens the editor under the row: a
     // box for a code such as #ff0040, sliders for hue, saturation and
-    // lightness, the theme's own colors to pick from, and a preview. Use the
-    // theme's color clears it. A color picked here is shown exactly as it was
+    // lightness, and a preview. Use the theme's color clears it. A color picked here is shown exactly as it was
     // picked, everywhere, so the preview matches what the card shows.
     function colorRow(key, label, themeVar, fallback, cut) {
         const wrap = el("div", "arf-col");
@@ -12974,21 +12972,6 @@ export function setup(ctx, overrides) {
             sliders[part] = range;
             shown[part] = value;
         }
-        const picks = el("div", "arf-row");
-        for (const [name, v, b] of [
-            ["Danger", "--lumiverse-danger", "#ef4444"],
-            ["Success", "--lumiverse-success", "#22c55e"],
-        ]) {
-            const one = button(name, false);
-            one.classList.add("arf-mini2");
-            one.setAttribute("data-arf-colorpick", name.toLowerCase());
-            const dot = el("span", "arf-colordot", "");
-            dot.style.background = "var(" + v + "," + b + ")";
-            one.insertBefore(dot, one.firstChild);
-            one.addEventListener("click", () => take(read(v, b), true));
-            picks.appendChild(one);
-        }
-        editor.appendChild(picks);
         const sample = el("div", "arf-well", "");
         const sampleWord = el("span", cut ? "arf-cut" : "arf-add", cut ? "words that were cut" : "words that were added");
         sample.appendChild(document.createTextNode("A line with "));
