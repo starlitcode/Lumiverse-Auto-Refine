@@ -1558,6 +1558,36 @@ console.log("\na run through the chat is not called stopped while the backend wo
       const gone = await page.evaluate(() => (window.__toasts || []).join(" | "));
       ok(label + ": once the backend goes quiet, the warning comes", /stopped answering/.test(gone), gone);
     });
+    // A run stuck on one reply for over an hour is warned about, even while
+    // the backend still says it is working.
+    await inTab(browser, { viewport, touch, saved: { enabled: true, timeoutSecs: 5 } }, async (page) => {
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+        const real = window.setTimeout.bind(window);
+        window.setTimeout = (fn, ms, ...rest) => real(fn, ms === 35000 ? 400 : ms, ...rest);
+      });
+      await settle(page);
+      await page.evaluate(() => document.querySelector("#drawer [data-arf-sweep]").click());
+      await settle(page);
+      await page.evaluate(() => document.querySelector("[data-arf-sweep-yes]").click());
+      await settle(page);
+      await page.evaluate(() => {
+        window.__toasts = [];
+        const m = window.__sent.filter((x) => x.type === "refine_all").pop();
+        window.__fromBackend({ type: "refine_ack", requestId: m ? m.requestId : "x" });
+        window.__fromBackend({ type: "refine_all_progress", requestId: m ? m.requestId : "x", chatId: "c1", at: 1, of: 5, saved: 0, skipped: 0 });
+        // An hour and a little more on the page's clock, with no new reply.
+        const realNow = Date.now.bind(Date);
+        Date.now = () => realNow() + 3710 * 1000;
+      });
+      for (let k = 0; k < 16; k++) {
+        await page.evaluate(() => window.__fromBackend({ type: "refine_working" }));
+        await page.waitForTimeout(100);
+      }
+      const told = await page.evaluate(() => (window.__toasts || []).join(" | "));
+      ok(label + ": an hour on one reply, the warning comes even while the backend says it is working", /stopped answering/.test(told), told);
+    });
   }
 }
 

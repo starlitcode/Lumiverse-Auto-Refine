@@ -4739,8 +4739,18 @@ export function setup(ctx, overrides) {
     // backend that has gone quiet does. With the wait switched off there is no
     // "longer than one message could take", so there is nothing to watch for and
     // this stays out of the way.
+    //
+    // `fresh` is a new message of the run. Anything else sets the watch again
+    // only up to BACKSTOP_S after that message, the same limit the give-up timer
+    // has, so a run stuck on one message while the backend still says it is
+    // working is warned about after an hour.
     let sweepWatch = null;
-    function armSweepWatch() {
+    let sweepStepAt = 0;
+    function armSweepWatch(fresh) {
+        if (fresh || !sweepStepAt)
+            sweepStepAt = Date.now();
+        else if (Date.now() - sweepStepAt > BACKSTOP_S * 1000)
+            return;
         if (sweepWatch)
             clearTimeout(sweepWatch);
         sweepWatch = null;
@@ -4763,6 +4773,7 @@ export function setup(ctx, overrides) {
         if (sweepWatch)
             clearTimeout(sweepWatch);
         sweepWatch = null;
+        sweepStepAt = 0;
     }
     disposers.push(clearSweepWatch);
     let deadman = null;
@@ -10928,7 +10939,7 @@ export function setup(ctx, overrides) {
                 ? "whatever your connection is set to"
                 : preview.reasoning.source === "off"
                     ? "off"
-                    : "on, " + String(preview.reasoning.effort || "medium") + " effort"));
+                    : "on, " + String(preview.reasoning.effort || "low") + " effort"));
         extras.push("Samplers: " +
             (preview.parameters
                 ? Object.keys(preview.parameters)
@@ -18492,7 +18503,7 @@ export function setup(ctx, overrides) {
                         // again from here. One that never fires is one message going
                         // missing rather than the whole run, which is the case the panel
                         // could not otherwise tell from a very slow model.
-                        armSweepWatch();
+                        armSweepWatch(true);
                         // No stage passed, so whatever the refine in flight last reported
                         // stands. Naming one here would write "Refining" over "Thinking"
                         // on every message and read as the run starting again.

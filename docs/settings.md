@@ -160,7 +160,12 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
 
 - A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40`, a name with no dot, or a name ending in `.local`.
 - The thinking level is the one under **How much thinking**, or the connection's when **Let it think first** is set to **Whatever my connection is set to**. With thinking off, only the address counts.
-- The connection is the one each call goes to: the one under **Refine using**, a pass's own model setup, or the other connection.
+- The connection's thinking level is its **Reasoning Effort**, in Lumiverse's Reasoning settings. It counts only while **API Reasoning** is on for that connection.
+- The connection is the one each call goes to:
+  - the one under **Refine using**;
+  - with **Refine using** on its default, the connection you chat with, which can be the chat's own connection or your default one;
+  - a pass's own model setup;
+  - the one under **Which other connection**, when **If it refuses, try another connection** asks it.
 - Both can apply. A local model with high thinking gets 2 × 5 = 10 times as long: 40 minutes. The wait is never more than an hour.
 - The Log says when a call is given longer, and why. The time left on the status line counts down from the longer wait.
 - At 0, it still waits the full hour. With the switch off, the wait is used as it is.

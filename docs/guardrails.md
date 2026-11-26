@@ -237,7 +237,7 @@ Pressing the refine button on a reply always works, whatever the count. The Log 
 
 A call is only sent again when nothing of the answer came back. See [A call that had started](#a-call-that-had-started).
 
-It waits on:
+Before any of the answer came back, it waits on:
 
 - "too many requests"
 - a key at its limit
@@ -245,6 +245,8 @@ It waits on:
 - a local server answering 503 while it loads a model
 - any status from 500 to 599, such as 502 Bad Gateway and 504 Gateway Timeout, and 408, 409 and 425
 - a call that timed out, a connection that dropped, or a server that could not be reached
+
+Some of these are only waited on when the answer streams. See [A call that had started](#a-call-that-had-started).
 
 Lumiverse writes a failed call with the provider's status in parentheses, such as `request failed (504): Gateway Timeout`. That status is read on its own:
 
@@ -267,10 +269,11 @@ The status line counts down while it waits. **Stop** ends the wait and the call.
 
 A provider charges for an answer from the moment the model starts writing it. A call that failed after that point was already paid for, and sending it again would be paid for a second time. So:
 
-- When the answer streams, an error before its first piece is waited out. An error after any of the answer arrived, its thinking included, is not.
-- A stream that fails before its first piece, in a way waiting cannot fix, is asked once more without streaming. One that fails after any of the answer arrived is not.
+- A stream that fails before its first piece with a rate limit (429), a busy server (503 or 529), or a connection that could not be made is waited out, and streamed again. With no wait left, it is asked once more without streaming.
+- A stream that fails before its first piece with any other error, such as a 504 or a dropped connection, is asked once more without streaming.
+- A stream that fails after any of the answer arrived, its thinking included, is not sent again.
 - A call that does not stream hands back nothing until the whole answer is written, so there is no way to see whether the model had started. It is only waited out for a rate limit (429), a busy server (503 or 529), or a connection that could not be made.
-- A rate limit (429) or a busy server (503) always counts as nothing came back.
+- A rate limit (429), a busy server (503 or 529), or a connection that could not be made always counts as nothing came back.
 - A call that is not sent again leaves the reply as it was. The Log says it was not sent again, and why.
 
 A call streams while **Say how much has come back** is on. It does not stream while **Several rewrites at once** is on.

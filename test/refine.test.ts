@@ -6067,18 +6067,30 @@ describe("a provider that will not take the call", () => {
     "Lantern request failed (530): Origin DNS error, retry after 0.05 seconds",
     "Lantern request failed: The socket connection was closed unexpectedly, retry after 0.05 seconds",
   ];
-  // Before the first piece of a streamed answer, nothing has been written,
-  // so each of these is waited out.
+  // Before the first piece of a streamed answer, nothing has been written.
+  // One the provider turned away is waited out and streamed again. The rest
+  // are asked once more as a plain call.
   for (const why of waitedOn) {
-    test("waited out: " + why.replace(/, retry after.*/, ""), async () => {
+    const away = /\((?:429|503|529)\)/.test(why);
+    test((away ? "waited out: " : "asked again as a plain call: ") + why.replace(/, retry after.*/, ""), async () => {
       const h = await armed(["She stepped through and the cold hit her."], { rateWaits: 2 }, chat(), { stream: true, streamFailFirst: { times: 1, why, after: 0 } });
       await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(1400);
       expect(h.asked.length).toBe(2);
-      expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "waiting")).toBe(true);
+      expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "waiting")).toBe(away);
       expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
     });
   }
+  test("a stream turned away before its first piece, with no wait left, falls back to a plain call", async () => {
+    const h = await armed(["She stepped through and the cold hit her."], { rateWaits: 0 }, chat(), {
+      stream: true,
+      streamFailFirst: { times: 1, why: "Lantern request failed (529): Overloaded", after: 0 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(400);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
+  });
   test("waited out: a rate limit whose wait has 404 in it", async () => {
     const h = await armed(
       ["She stepped through and the cold hit her."],
@@ -8387,6 +8399,25 @@ describe("several rewrites at once", () => {
     expect(h.skipped().join(" ")).toMatch(/reasoning_extraction/);
   });
 
+  // One of them failed in a way that may have been charged, and another was
+  // turned away. The one that may have been charged decides: nothing is sent
+  // again, whichever of them failed last.
+  test("a call that may have been charged is not sent again, even when another was turned away after it", async () => {
+    const h = await armed(
+      [GOOD, GOOD, GOOD, GOOD],
+      { refineAtOnce: true, refineAtOnceCount: 2, rateWaits: 2 },
+      chat(),
+      { delays: [5, 40, 5, 10], errorsAt: { 0: "Lantern request failed (504): Gateway Timeout, retry after 0.05 seconds", 1: "Lantern request failed (429): Rate limit reached, retry after 0.05 seconds" } },
+    );
+    await h.ended({ chatId: "c1", messageId: "m2" });
+    await wait(1400);
+    expect(h.asked.length).toBe(2);
+    expect(h.writes.length).toBe(0);
+    const why = h.skipped().join(" ");
+    expect(why).toMatch(/504/);
+    expect(why).toContain("It was not sent again");
+  });
+
   test("a hand-edited count cannot go past five", async () => {
     const h = await armed([GOOD], { refineAtOnce: true, refineAtOnceCount: 40 }, chat(), { delays: [5] });
     await h.ended({ chatId: "c1", messageId: "m2" });
@@ -9023,7 +9054,7 @@ describe("fitting the wait to the model", () => {
     const said = waits(h);
     expect(said.length).toBeGreaterThan(0);
     expect(said[0].waitSecs).toBe(1200);
-    expect(said[0].waitWhy).toBe("the refine model is given up to 20 minutes, since thinking is set to high and the model runs on your own computer or network");
+    expect(said[0].waitWhy).toBe("this call is given up to 20 minutes, since thinking is set to high and the model runs on your own computer or network");
   });
 
   test("Refine's own thinking level is used when it says how much", async () => {
@@ -9031,7 +9062,7 @@ describe("fitting the wait to the model", () => {
     await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
     await wait(150);
     expect(waits(h)[0].waitSecs).toBe(300);
-    expect(waits(h)[0].waitWhy).toBe("the refine model is given up to 5 minutes, since thinking is set to max");
+    expect(waits(h)[0].waitWhy).toBe("this call is given up to 5 minutes, since thinking is set to max");
   });
 
   test("with thinking off, only the address counts", async () => {

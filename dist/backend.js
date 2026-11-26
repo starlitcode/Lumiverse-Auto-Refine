@@ -4262,7 +4262,7 @@ async function waitOfCall(model, chatId, userId) {
     const fit = fitWait(base, c ? c.url : '', effort);
     return {
         secs: fit.secs,
-        why: fit.why.length ? 'the refine model is given up to ' + minutesText(fit.secs) + ', since ' + fit.why.join(' and ') : '',
+        why: fit.why.length ? 'this call is given up to ' + minutesText(fit.secs) + ', since ' + fit.why.join(' and ') : '',
     };
 }
 // Whether the account still has a connection. Null when the list could not be
@@ -4778,7 +4778,11 @@ note,
 // A pass's own model setup. Without one, the Model tab's settings are used.
 model, 
 // The refine this call is part of, when it is refining a message.
-run) {
+run, 
+// Whether the caller has a wait left for a busy provider. A stream turned
+// away before its first piece is then handed back to be waited out, and
+// otherwise falls back to the plain call.
+canWait) {
     const controller = typeof globalThis.AbortController === 'function'
         ? new globalThis.AbortController()
         : null;
@@ -4967,11 +4971,13 @@ run) {
                     say('warn', 'the stream broke after the model started writing: ' + why);
                     return { content: '', error: 'the connection broke after the model had started writing: ' + why, late: true };
                 }
-                // Nothing arrived. A busy provider is waited out, counted as a wait.
-                if (rateLimited(why))
+                // Turned away before the model read it, with a wait left: waited out,
+                // and counted as a wait.
+                if (canWait && turnedAway(why))
                     return { content: '', error: why };
-                // A host that has the method but cannot stream this connection. Fall
-                // through to the plain call rather than failing the refine.
+                // Anything else that came before any of the answer, such as a host
+                // that cannot stream this connection, a 504 or a dropped connection,
+                // falls through to the plain call rather than failing the refine.
                 say('warn', 'streaming failed, falling back: ' + why);
             }
         }
@@ -5018,7 +5024,7 @@ run) {
                 if (timer != null)
                     clearTimeout(timer);
                 dropRun(userId, controller);
-                return askModel(text, isUser, scene, userId, use, bad, group, note, model, run);
+                return askModel(text, isUser, scene, userId, use, bad, group, note, model, run, canWait);
             }
         }
         if (typeof msg === 'string' && msg.indexOf('PERMISSION_DENIED:') === 0)
@@ -5149,8 +5155,11 @@ async function askAtOnce(count, input, isUser, scene, userId, use, note, model, 
                     if (REFUSAL_ERROR.test(String(a.error)))
                         keep({ ok: false, text: '', why: 'the model declined to rewrite it, through the provider\'s filter: ' + a.error });
                     else {
-                        error = a.error;
-                        late = !!a.late;
+                        // A call that may already have been charged decides it: the
+                        // ask is not sent again, so its error is the one kept.
+                        if (a.late || !late)
+                            error = a.error;
+                        late = late || !!a.late;
                     }
                     return;
                 }
@@ -5830,7 +5839,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                 ready = got.verdict;
             }
             else
-                answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, model, run);
+                answer = await askModel(input, m.role === 'user', scene, userId, pass.blocks, undefined, undefined, note, model, run, waits < rateWaits);
             if (answer.error) {
                 // The provider would not take the call. Waiting is what fixes that, and
                 // nothing has been spent, so it is worth waiting for: a free tier meters
