@@ -223,6 +223,11 @@ The same rules are used in Auto Retry and Auto Foley.
   - The floating button's menu can answer it too. A tap on the button only opens the tab.
 - **Your own messages** are only refined when you press a button on one. They use their own prompt, under **For your messages** on the Prompt tab.
 
+**Word swaps.** See [Word swaps](swaps.md).
+
+- **Swap words in each reply** is off by default. On, each new reply and each refine gets the swaps under it. No model is asked, so it costs nothing.
+- **Add a swap** adds one. Each swap has **Find**, **Put instead** and **Keep the same pick in a chat**. **Delete** asks first.
+
 ## Log
 
 - **Right now** shows what is happening: asking, thinking, writing (with a character count), checking, or waiting.
@@ -396,6 +401,7 @@ While the floating button is on screen, its menu holds these extra actions. With
   - Buttons and the widget
   - Where the input box is
   - One model or two
+  - Word swaps
   - The on and off switches
   - Saved presets
   - Saved model setups

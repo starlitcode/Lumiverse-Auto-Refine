@@ -9127,3 +9127,208 @@ describe("the thinking level starts at low", () => {
     expect(row && row.needs).toEqual({ key: "thinkingMode", is: "custom" });
   });
 });
+
+// Word swaps: words and phrases replaced with no model call. They run on a new
+// reply whether or not the automatic pass is on, and on every refine.
+describe("word swaps", () => {
+  const swapChat = (reply: string): Msg[] => [
+    { id: "m0", role: "assistant", content: "The gate stands open, and the road past it is dark." },
+    { id: "m1", role: "user", content: "i walk through it" },
+    { id: "m2", role: "assistant", content: reply },
+  ];
+  const swapsOn = (swaps: any[], over: any = {}) => ({ refineOn: false, swapOn: true, swaps, ...over });
+  const run = async (reply: string, swaps: any[], over: any = {}, opts: any = {}) => {
+    const h = await armed([], swapsOn(swaps, over), swapChat(reply), opts);
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-" + Math.random() });
+    await wait(60);
+    return h;
+  };
+
+  test("whole words only: jolt is swapped and jolted is left alone", async () => {
+    const h = await run("A jolt ran through her, and she jolted awake.", [{ find: "jolt", put: "shiver", same: true }]);
+    expect(h.body("m2")).toBe("A shiver ran through her, and she jolted awake.");
+    expect(h.asked.length).toBe(0);
+  });
+
+  test("capitals are kept: a capital first letter, and all capitals", async () => {
+    const h = await run("Jolt. Then another JOLT, and a jolt.", [{ find: "jolt", put: "shiver", same: true }]);
+    expect(h.body("m2")).toBe("Shiver. Then another SHIVER, and a shiver.");
+  });
+
+  test("a name keeps its capital where the found word had none", async () => {
+    const h = await run("the guard called her elara.", [{ find: "Elara", put: "Brindle", same: true }]);
+    expect(h.body("m2")).toBe("the guard called her Brindle.");
+  });
+
+  test("with several choices, one of them is used", async () => {
+    const h = await run("Elara waved.", [{ find: "Elara", put: "Brindle\nMaeve\nTolly", same: false }]);
+    expect(["Brindle waved.", "Maeve waved.", "Tolly waved."]).toContain(h.body("m2"));
+  });
+
+  test("the same pick is kept in a chat, and a second name gets a different one", async () => {
+    const swaps = [{ find: "Elara\nLyra", put: "Brindle\nMaeve", same: true }];
+    const h = await run("Elara waved at Lyra.", swaps);
+    const first = String(h.body("m2"));
+    const m = /^(\w+) waved at (\w+)\.$/.exec(first);
+    expect(m).not.toBeNull();
+    expect(["Brindle", "Maeve"]).toContain(m![1]);
+    expect(["Brindle", "Maeve"]).toContain(m![2]);
+    expect(m![1]).not.toBe(m![2]);
+    // The next reply in the chat, with the same two names.
+    h.edit("m2", "Lyra laughed, and Elara did not.");
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-next" });
+    await wait(60);
+    expect(h.body("m2")).toBe(m![2] + " laughed, and " + m![1] + " did not.");
+    // Kept on the account, under the chat.
+    const saved = h.perUser["u1:swap-picks.json"];
+    expect(saved && saved.chats && saved.chats.c1 && saved.chats.c1.picks.elara).toBe(m![1]);
+  });
+
+  test("a deleted chat takes its picks with it", async () => {
+    const h = await run("Elara waved.", [{ find: "Elara", put: "Brindle", same: true }]);
+    expect(h.perUser["u1:swap-picks.json"].chats.c1).toBeTruthy();
+    h.fire("CHAT_DELETED", { id: "c1" }, "u1");
+    await wait(60);
+    expect(h.perUser["u1:swap-picks.json"].chats.c1).toBeUndefined();
+  });
+
+  test("an empty replacement takes the words out with clean spacing", async () => {
+    const swaps = [{ find: "barely above a whisper", put: "", same: true }];
+    let h = await run("She said, barely above a whisper, that it was late.", swaps);
+    expect(h.body("m2")).toBe("She said, that it was late.");
+    h = await run("Barely above a whisper, she spoke.", swaps);
+    expect(h.body("m2")).toBe("She spoke.");
+    h = await run("He spoke barely above a whisper.", swaps);
+    expect(h.body("m2")).toBe("He spoke.");
+    h = await run("It was quiet, and very much barely above a whisper (almost).", swaps);
+    expect(h.body("m2")).toBe("It was quiet, and very much (almost).");
+  });
+
+  test("a phrase is found across a line break", async () => {
+    const h = await run("Her voice was barely above\na whisper.", [{ find: "barely above a whisper", put: "soft", same: true }]);
+    expect(h.body("m2")).toBe("Her voice was soft.");
+  });
+
+  test("punctuation next to the word does not stop it", async () => {
+    const h = await run('"Jolt," she said. (jolt) jolt! “jolt”', [{ find: "jolt", put: "start", same: true }]);
+    expect(h.body("m2")).toBe('"Start," she said. (start) start! “start”');
+  });
+
+  test("curly and straight quotes match each other", async () => {
+    const swaps = [{ find: "couldn't help but", put: "had to", same: true }];
+    let h = await run("She couldn’t help but laugh.", swaps);
+    expect(h.body("m2")).toBe("She had to laugh.");
+    h = await run("She couldn't help but laugh.", [{ find: "couldn’t help but", put: "had to", same: true }]);
+    expect(h.body("m2")).toBe("She had to laugh.");
+  });
+
+  test("a longer phrase wins over a word inside it, and nothing swapped is swapped again", async () => {
+    const swaps = [
+      { find: "whisper", put: "murmur", same: true },
+      { find: "barely above a whisper", put: "softly", same: true },
+      { find: "softly", put: "loudly", same: true },
+    ];
+    const h = await run("She spoke barely above a whisper, then in a whisper.", swaps);
+    expect(h.body("m2")).toBe("She spoke softly, then in a murmur.");
+  });
+
+  test("the reply's thinking, code and tags are left alone", async () => {
+    const h = await run(
+      "<think>a jolt of an idea</think>A jolt hit. <span class=\"jolt\">jolt</span> `jolt`",
+      [{ find: "jolt", put: "shiver", same: true }],
+    );
+    expect(h.body("m2")).toBe("<think>a jolt of an idea</think>A shiver hit. <span class=\"jolt\">shiver</span> `jolt`");
+  });
+
+  test("off, nothing is swapped", async () => {
+    const h = await run("A jolt ran through her.", [{ find: "jolt", put: "shiver", same: true }], { swapOn: false });
+    expect(h.body("m2")).toBe("A jolt ran through her.");
+  });
+
+  test("your own messages are left alone when only replies are refined", async () => {
+    const h = await armed([], swapsOn([{ find: "walk", put: "stroll", same: true }], { refineSide: "replies" }));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m1" });
+    await wait(60);
+    expect(h.body("m1")).toBe("i walk through it");
+  });
+
+  test("a refine gets the swaps in the same write, and one Put it back undoes both", async () => {
+    const h = await armed(["<REFINED>She stepped through, and a jolt of cold hit her.</REFINED>"], {
+      swapOn: true,
+      swaps: [{ find: "jolt", put: "shiver", same: true }],
+    });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(80);
+    expect(h.body("m2")).toBe("She stepped through, and a shiver of cold hit her.");
+    expect(h.writes.filter((w) => w.id === "m2").length).toBe(1);
+    const said = h.sent.filter((m) => m.type === "refined").pop();
+    expect(said.kind).toBe("refine");
+    expect(said.swapped).toEqual(['"jolt" for "shiver"']);
+    await h.front({ type: "undo_refine", requestId: "u", chatId: "c1", messageId: "m2" });
+    await wait(40);
+    expect(h.body("m2")).toBe("She stepped through and, suddenly, the cold just hit her.");
+  });
+
+  test("a swap on its own can be put back, and is not a swipe", async () => {
+    const h = await run("A jolt ran through her.", [{ find: "jolt", put: "shiver", same: true }], { asSwipe: true });
+    expect(h.body("m2")).toBe("A shiver ran through her.");
+    const said = h.sent.filter((m) => m.type === "refined").pop();
+    expect(said.kind).toBe("swap");
+    expect(said.canUndo).toBe(true);
+    expect(h.lastPatch("m2").swipes).toBeUndefined();
+    await h.front({ type: "undo_refine", requestId: "u", chatId: "c1", messageId: "m2" });
+    await wait(40);
+    expect(h.body("m2")).toBe("A jolt ran through her.");
+  });
+
+  test("a swap does not stop a refine asked for after it", async () => {
+    const h = await run("A jolt ran through her.", [{ find: "jolt", put: "shiver", same: true }]);
+    expect(h.body("m2")).toBe("A shiver ran through her.");
+    await h.front({ type: "set_settings", settings: { ...RULES, swapOn: true, swaps: [{ find: "jolt", put: "shiver", same: true }] } });
+    const before = h.asked.length;
+    await h.front({ type: "refine_now", requestId: "r2", chatId: "c1", messageId: "m2" });
+    await wait(60);
+    expect(h.asked.length).toBe(before + 1);
+  });
+
+  test("a reply Auto Retry is about to retry is not swapped", async () => {
+    const h = await armed([], swapsOn([{ find: "jolt", put: "shiver", same: true }]), swapChat("A jolt ran through her."));
+    await h.front({ type: "retry_pending", chatId: "c1" });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-retry" });
+    await wait(60);
+    expect(h.body("m2")).toBe("A jolt ran through her.");
+  });
+
+  test("a reroll Auto Retry adds gets its swaps", async () => {
+    const h = await armed([], swapsOn([{ find: "jolt", put: "shiver", same: true }]), swapChat("A jolt ran through her."));
+    await h.front({ type: "reroll_added", chatId: "c1", messageId: "m2", swipe: 1 });
+    await wait(60);
+    expect(h.body("m2")).toBe("A shiver ran through her.");
+  });
+});
+
+// The example in docs/swaps.md, run through the real code.
+test("the word swaps example in the docs comes out as the docs say", async () => {
+  const swaps = [
+    { find: "Elara\nLyra", put: "Brindle\nMaeve\nTolly", same: true },
+    { find: "barely above a whisper", put: "", same: true },
+    { find: "jolt", put: "shiver", same: true },
+  ];
+  const reply = 'Elara leaned closer. "Lyra is gone," she said, barely above a whisper. A jolt ran through the room.';
+  const h = await armed([], { refineOn: false, swapOn: true, swaps }, [
+    { id: "m0", role: "assistant", content: "The gate stands open." },
+    { id: "m1", role: "user", content: "i wait" },
+    { id: "m2", role: "assistant", content: reply },
+  ]);
+  await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-doc1" });
+  await wait(60);
+  const m = /^(\w+) leaned closer\. "(\w+) is gone," she said\. A shiver ran through the room\.$/.exec(String(h.body("m2")));
+  expect(m).not.toBeNull();
+  expect(["Brindle", "Maeve", "Tolly"]).toContain(m![1]);
+  expect(["Brindle", "Maeve", "Tolly"]).toContain(m![2]);
+  expect(m![1]).not.toBe(m![2]);
+  h.edit("m2", "Lyra laughed. Elara did not.");
+  await h.ended({ chatId: "c1", messageId: "m2", generationId: "g-doc2" });
+  await wait(60);
+  expect(h.body("m2")).toBe(m![2] + " laughed. " + m![1] + " did not.");
+});

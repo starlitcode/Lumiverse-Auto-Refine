@@ -56,6 +56,19 @@ function blockText(raw) {
     return String(raw == null ? "" : raw).split("{{jev_found}}").join("{{checks_found}}");
 }
 const STORE_KEY = "lv-auto-refine:settings:v1";
+// The most word swaps kept, the same number the backend reads.
+const SWAPS_MAX = 100;
+// Word swaps from storage or a file, made into the shape the panel edits.
+function cleanSwaps(got) {
+    return got
+        .filter((r) => r && typeof r === "object")
+        .slice(0, SWAPS_MAX)
+        .map((r) => ({
+        find: String(r.find == null ? "" : r.find).slice(0, 4000),
+        put: String(r.put == null ? "" : r.put).slice(0, 4000),
+        same: r.same !== false,
+    }));
+}
 // The settings, grouped the way somebody thinks about them. Import, export,
 // reset and the bug report all work in these, so a part means the same thing
 // wherever you meet it and the four cannot drift apart.
@@ -169,6 +182,12 @@ const PARTS = [
         label: "One model or two",
         what: "Whether a second model reads a reply first, which Decision connection it uses, and what it checks.",
         keys: ["judgeMode", "judgeConnection", "judgeChecks", "judgeOver", "judgeWorn", "judgeWornCheck", "judgeBefore", "judgeBeforeChecks", "judgeByHand", "judgeAfter", "judgeFoundLead"],
+    },
+    {
+        id: "swaps",
+        label: "Word swaps",
+        what: "The words and phrases swapped in each reply. The names already picked in each chat stay on your account and are not in a file.",
+        keys: ["swapOn", "swaps"],
     },
     {
         id: "switches",
@@ -603,6 +622,12 @@ const CONFIG = {
     // renames them, the refine goes in as a swipe nobody is shown, and without a
     // box to correct it the only way out is a release of this.
     swipeSelector: SWIPE_PICKS.join(", "),
+    // Word swaps: words and phrases replaced in each reply with no model call.
+    // Off by default, with an empty list. Each swap is what to find, one per
+    // line, what to put instead, one choice per line, and whether a chat keeps
+    // the same pick.
+    swapOn: false,
+    swaps: [],
     // Phrases this chat has worn out. Off by default, since it reads the chat's
     // replies. The list goes wherever a block holds {{overused}}.
     wornOn: false,
@@ -3234,6 +3259,11 @@ export function setup(ctx, overrides) {
                 out.blocksShut = got
                     .slice(-400)
                     .map((v) => String(v).replace(/^(blocks|userBlocks):/, "$1\n"));
+            }
+            else if (key === "swaps") {
+                if (!Array.isArray(got))
+                    continue;
+                out.swaps = cleanSwaps(got);
             }
             else if (key === "soundUrl") {
                 if (typeof got !== "string")
@@ -7557,7 +7587,7 @@ export function setup(ctx, overrides) {
         if (id === "model")
             return [buildConnectionCard(), buildSamplerCard(), buildSetupCard(), buildJudgeCard()];
         if (id === "limits")
-            return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard()];
+            return [buildProtectCard(), buildReadCard(), buildGuardCard(), buildSafetyCard(), buildSwapCard()];
         if (id === "log") {
             const jev = cfg.judgeMode === "two" ? [buildJevCard()] : [];
             return [buildLiveCard(), buildNotesCard(), ...jev, buildActivityCard(), buildDebugCard()];
@@ -11568,6 +11598,135 @@ export function setup(ctx, overrides) {
         }
         return wrap;
     }
+    // Word swaps: each one a box with what to find, what to put instead, and
+    // whether a chat keeps the same pick, under the switch for all of them.
+    function buildSwapCard() {
+        const wrap = card("Word swaps", "Words and phrases replaced in each reply with no model call, so they cost nothing.");
+        wrap.appendChild(fieldRow({
+            key: "swapOn",
+            label: "Swap words in each reply",
+            type: "bool",
+            hint: "Off by default. On, each new reply and each refine gets the swaps below. The Log says what was swapped.",
+        }));
+        const under = hangsOff(el("div", "arf-col arf-under"), "swapOn", "word swaps");
+        under.setAttribute("data-arf-swaps", "1");
+        const list = el("div", "arf-col");
+        under.appendChild(list);
+        const swaps = () => (Array.isArray(cfg.swaps) ? cfg.swaps : []);
+        const add = button("Add a swap", false);
+        add.setAttribute("data-arf-swap-add", "1");
+        const sayFull = () => {
+            add.disabled = swaps().length >= SWAPS_MAX;
+        };
+        const rowFor = (one) => {
+            const box = el("div", "arf-block");
+            box.setAttribute("data-arf-swap", "1");
+            const save = (now) => {
+                persist(now);
+            };
+            const area = (label, hint, part, mark) => {
+                const col = el("div", "arf-col");
+                col.appendChild(labelRow({ label: label, hint: hint }));
+                const ta = document.createElement("textarea");
+                ta.className = "arf-field";
+                ta.rows = 2;
+                ta.setAttribute("aria-label", label);
+                ta.setAttribute(mark, "1");
+                ta.value = String(one[part] || "");
+                ta.addEventListener("input", () => {
+                    one[part] = ta.value;
+                    save(false);
+                });
+                ta.addEventListener("blur", () => {
+                    one[part] = ta.value;
+                    save(true);
+                });
+                col.appendChild(ta);
+                return col;
+            };
+            box.appendChild(area("Find", "One word or phrase per line. Each is matched as whole words, with capitals ignored.", "find", "data-arf-swap-find"));
+            box.appendChild(area("Put instead", "One choice per line, picked at random. Leave it empty to take the words out.", "put", "data-arf-swap-put"));
+            const foot = el("div", "arf-between");
+            const left = el("div", "arf-labrow arf-grow");
+            const id = nextId();
+            const lab = document.createElement("span");
+            lab.className = "arf-lab";
+            lab.id = id + "-name";
+            lab.textContent = "Keep the same pick in a chat";
+            left.appendChild(lab);
+            const q = hintButton("On by default. A word swapped in a chat gets the same choice in every later reply, so a name stays the same.", "Keep the same pick in a chat");
+            if (q)
+                left.appendChild(q);
+            foot.appendChild(left);
+            const same = document.createElement("input");
+            same.type = "checkbox";
+            same.id = id;
+            same.className = "arf-box";
+            same.setAttribute("aria-labelledby", lab.id);
+            same.setAttribute("data-arf-swap-same", "1");
+            same.checked = one.same !== false;
+            same.addEventListener("change", () => {
+                one.same = !!same.checked;
+                save(true);
+            });
+            foot.appendChild(same);
+            box.appendChild(foot);
+            const end = el("div", "arf-row");
+            end.appendChild(el("span", "arf-grow"));
+            const drop = button("Delete", false);
+            drop.className += " arf-danger";
+            drop.setAttribute("data-arf-swap-delete", "1");
+            const named = () => {
+                const first = String(one.find || "").split("\n").map((l) => l.trim()).filter(Boolean)[0];
+                return first ? "the swap for " + first : "this swap";
+            };
+            drop.setAttribute("aria-label", "Delete " + named());
+            drop.addEventListener("click", () => {
+                askFirst("swap:" + swaps().indexOf(one), {
+                    title: "Delete swap",
+                    message: "Delete " + named() + "? There is no undo.",
+                    confirmLabel: "Delete",
+                }, "Press Delete again to remove this swap.", () => {
+                    foldAway(box, () => {
+                        cfg.swaps = swaps().filter((x) => x !== one);
+                        box.remove();
+                        persist(true);
+                        sayFull();
+                    });
+                });
+            });
+            end.appendChild(drop);
+            box.appendChild(end);
+            return box;
+        };
+        for (const one of swaps())
+            list.appendChild(rowFor(one));
+        add.addEventListener("click", () => {
+            if (swaps().length >= SWAPS_MAX)
+                return;
+            const one = { find: "", put: "", same: true };
+            cfg.swaps = swaps().concat([one]);
+            const box = rowFor(one);
+            box.hidden = true;
+            list.appendChild(box);
+            box.hidden = false;
+            unfold(box, true);
+            persist(true);
+            sayFull();
+            const first = box.querySelector("textarea");
+            if (first)
+                try {
+                    first.focus({ preventScroll: true });
+                }
+                catch (_) { }
+        });
+        sayFull();
+        const foot = el("div", "arf-row");
+        foot.appendChild(add);
+        under.appendChild(foot);
+        wrap.appendChild(under);
+        return wrap;
+    }
     // Patterns the backend could not compile, named so a typo is visible instead
     // of being a region somebody believes is shielded and is not.
     let shieldBad = [];
@@ -13512,6 +13671,12 @@ export function setup(ctx, overrides) {
                     clean[f.id] = Math.min(f.max, Math.max(f.min, v));
                 }
                 cfg.samplers = clean;
+                took++;
+            }
+            else if (key === "swaps") {
+                if (!Array.isArray(got))
+                    continue;
+                cfg.swaps = cleanSwaps(got);
                 took++;
             }
             else if (key === "soundUrl") {
@@ -18066,7 +18231,11 @@ export function setup(ctx, overrides) {
                         return;
                     }
                     if (msg.type === "refined") {
-                        const wasSnip = msg.kind === "snip";
+                        // A snip and a swap call no model, so they are not a refine for
+                        // the counts or the running state.
+                        const wasSwap = msg.kind === "swap";
+                        const wasSnip = msg.kind === "snip" || wasSwap;
+                        const swapSaid = Array.isArray(msg.swapped) ? msg.swapped.map((x) => String(x)).join("; ") : "";
                         if (!wasSnip) {
                             announced = { key: String(msg.chatId) + ":" + String(msg.messageId), at: Date.now() };
                             markBusy(false);
@@ -18103,12 +18272,19 @@ export function setup(ctx, overrides) {
                             });
                             for (let i = 0; i < here.length - UNDO_PER_CHAT; i++)
                                 undoable.delete(here[i]);
-                            showPop(undoable.get(k));
+                            // Word swaps on their own come with every reply that has one,
+                            // so they are not brought up on a card. Put it back and what
+                            // changed are on the tab.
+                            if (!wasSwap)
+                                showPop(undoable.get(k));
                         }
                         // The badge is the point of the tab being closable: something
                         // happened to your writing and you can see that without opening it.
                         setBadge(String(undoHere().length || 1));
-                        if (wasSnip) {
+                        if (wasSwap) {
+                            log("refine", "swapped words in a reply, with no model call: " + (swapSaid || "nothing"), true);
+                        }
+                        else if (wasSnip) {
                             const gone = String(msg.before || "").length - String(msg.after || "").length;
                             // Said each time, because a snip sits among buttons that do call
                             // the model, and nothing else on screen says this one does not.
@@ -18119,7 +18295,7 @@ export function setup(ctx, overrides) {
                             // The Log line would paint the panel at once. The paint after
                             // the frame, below, covers it, so the card is drawn first.
                             logPaintedAt = Date.now();
-                            log("refine", "refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s", true);
+                            log("refine", "refined a reply in " + (lastRunMs / 1000).toFixed(1) + "s" + (swapSaid ? ", and swapped " + swapSaid : ""), true);
                             // Not for each reply of a run through the chat, which says how it
                             // went once when it ends. One per reply would be a notification
                             // for every reply, and Lumiverse drops all but five in ten seconds.
@@ -18148,6 +18324,14 @@ export function setup(ctx, overrides) {
                     }
                     if (msg.type === "loaded_state") {
                         tookAccountState(msg);
+                        return;
+                    }
+                    // Word swaps that could not be made or kept. Nothing else on screen
+                    // says so.
+                    if (msg.type === "swap_trouble") {
+                        const why = String(msg.why || "your word swaps ran into a problem");
+                        log("problem", why);
+                        toast(why.charAt(0).toUpperCase() + why.slice(1) + ".", true, "warning");
                         return;
                     }
                     if (msg.type === "account_save_failed") {

@@ -30,7 +30,7 @@ Two things are taken out of a message before it is sent:
 - **The model's own thinking.** It is only sent when a block with `{{reply_thinking}}` is switched on, such as **Writers Plan**. Both are off by default.
 - **Your markup.** Tags, code and image links are replaced with tokens and put back afterwards, so a rewrite cannot change them.
 
-Your settings are never sent. Nothing from a chat you are not in is sent.
+Your settings are never sent. Nothing from a chat you are not in is sent. [Word swaps](swaps.md) send nothing: they are made on your server with no model call.
 
 The extension has no networking of its own. It never contacts a server of mine. You can check by searching the two source files for `fetch(`, `XMLHttpRequest`, `WebSocket`, `sendBeacon` or `EventSource`. None of them appear. With two models on, the call to the second model goes through Lumiverse, with `spindle.decisions`, to the Decision connection in use.
 
@@ -87,6 +87,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 - **The chats you switched it off in**, in your browser and your account, so every browser and device you use has the same chats switched off. Only the chat ids are kept. Chat titles and text are not.
 - **Your presets and model setups**, in your browser and your account, stored apart from your settings.
 - **Your own sound**, if you chose one, with your settings. It never leaves your machine.
+- **The picks your word swaps made in each chat**, in your account, so a name swapped in a chat is the same on every device. Only the chat id, the word found and the word picked are kept. Up to 300 chats, and deleting a chat deletes its picks. See [Word swaps](swaps.md).
 - **The text from before and after each refine**, so you can put a refine back. Your server keeps the last 30 at most.
   - It is held in your server's memory, so a reload keeps it. An update or a restart of Lumiverse clears it.
   - With **Keep them through an update** on, it is also saved on your server, in Lumiverse's storage for your account. It is off by default. Turning it off empties the saved copy.
@@ -102,7 +103,7 @@ The Auto Refine tab itself needs no permission. Every extension can add a drawer
 - It never refines the greeting, unless you turn on **Refine the greeting**.
 - It never sends anything the block list does not show.
 - It never keeps a copy of a reply after the refine finishes, apart from what **Put it back** needs.
-- It never writes to any message except the one it refined.
+- It never writes to any message except the one it refined, or the one it swapped words in.
 - It never runs text as code. There is no `eval` and no `new Function`, so nothing in a reply, a rule or a model's answer can run.
 
 ## Checking any of this yourself

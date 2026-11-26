@@ -13,6 +13,7 @@ _2026-11-26_
 ### Added
 
 - **Fit the wait to the model.** A new switch under **Give up waiting after (seconds)**, on by default. It gives each call more time for a slow model: five times as long for a model on your own computer or network, and up to three times as long for more thinking. The wait is never more than an hour. The Log says when a call is given longer, and why. The panel's own timers use the same longer wait. See [How long it waits](docs/settings.md#how-long-it-waits).
+- **Word swaps.** A new card on the Limits tab, off by default. Each swap finds words or phrases in a reply and puts one of your choices in their place, with no model call, so it costs nothing. With several choices, one is picked at random. **Keep the same pick in a chat** gives a name the same choice in every later reply of that chat. An empty choice takes the words out. Swaps are made on each new reply and on every refine, and **Put it back** undoes them. See [Word swaps](docs/swaps.md).
 
 ### Changed
 

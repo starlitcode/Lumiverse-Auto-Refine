@@ -201,6 +201,8 @@ type Kept = {
   chatId: any;
   messageId: any;
   after: string;
+  // Set when the write was only the reader's word swaps.
+  kind?: 'swap';
 };
 const before = new Map<string, Kept>();
 const BEFORE_MAX = 30;
@@ -295,6 +297,7 @@ async function readPutBack(userId: string | undefined, on: boolean = keepPutBack
         chatId: one.chatId,
         messageId: one.messageId,
         after: String(one.after == null ? '' : one.after),
+        kind: one.kind === 'swap' ? 'swap' : undefined,
       },
       BEFORE_MAX,
     );
@@ -5307,6 +5310,7 @@ interface LiveRun {
   calledOff: string;
 }
 const liveRuns = new Set<LiveRun>();
+const WHY_WAITING_YES = 'waiting for you to say yes';
 const WHY_STOPPED = 'a reply in this chat was stopped while the refine was running, so the refine was stopped too';
 const WHY_DELETED = 'that message was deleted while it was being refined, so the refine was stopped';
 const WHY_SWIPE_DELETED = 'a swipe of that message was deleted while it was being refined, so the refine was stopped';
@@ -6049,10 +6053,13 @@ async function refineRun(
   // markers that close the turn go back behind it. A selection puts the rewrite
   // back where it came from, with the rest of the reply either side of it
   // untouched.
+  // The reader's word swaps, on the rewrite only. For a selection, only the
+  // part that was rewritten.
+  const sw = await swapIn(back.text, chatId, userId);
   const whole =
     (pickAt
-      ? split.head + split.body.slice(0, pickAt.start) + back.text + split.body.slice(pickAt.end)
-      : split.head + back.text) + split.tail;
+      ? split.head + split.body.slice(0, pickAt.start) + sw.text + split.body.slice(pickAt.end)
+      : split.head + sw.text) + split.tail;
 
   if (confirmBeforeSave) {
     // The id of the reply that was refined, which is the one the yes has to
@@ -6068,10 +6075,10 @@ async function refineRun(
       held: splitThinking(original).head,
       notes: notes,
     });
-    return { ok: false, why: 'waiting for you to say yes', notes: notes };
+    return { ok: false, why: WHY_WAITING_YES, notes: notes };
   }
 
-  const saved = await saveRefined(chatId, m, original, whole, userId);
+  const saved = await saveRefined(chatId, m, original, whole, userId, 'refine', undefined, sw.swapped);
   if (notes) saved.notes = notes;
   return saved;
 }
@@ -6202,6 +6209,359 @@ async function snipMessage(
   return saveRefined(chatId, m, original, next, userId, 'snip', onSwipe);
 }
 
+// ---- word swaps ----
+// A list of words and phrases put out of a reply and replaced, with no model
+// call. Each rule finds one or more words or phrases, one per line, as whole
+// words with capitals ignored, and puts one of its choices in their place.
+// With several choices one is picked at random. With none, the words are
+// taken out.
+interface SwapRule {
+  finds: string[];
+  puts: string[];
+  // The same pick for the same found word, for the rest of the chat.
+  same: boolean;
+}
+let swapOn = false;
+let swapList: SwapRule[] = [];
+const SWAP_RULES_MAX = 100;
+const SWAP_FINDS_MAX = 30;
+const SWAP_PUTS_MAX = 40;
+
+function swapRulesFrom(raw: any): SwapRule[] {
+  if (!Array.isArray(raw)) return [];
+  const lines = (v: any, cap: number) =>
+    String(v == null ? '' : v)
+      .split('\n')
+      .map((l) => l.replace(/\s+/g, ' ').trim().slice(0, 200))
+      .filter(Boolean)
+      .slice(0, cap);
+  const out: SwapRule[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const finds = lines(r.find, SWAP_FINDS_MAX);
+    if (!finds.length) continue;
+    out.push({ finds: finds, puts: lines(r.put, SWAP_PUTS_MAX), same: r.same !== false });
+    if (out.length >= SWAP_RULES_MAX) break;
+  }
+  return out;
+}
+
+// What the matching compares: capitals ignored, curly quotes read as
+// straight ones, and any run of spaces or line breaks as one space.
+function swapKey(t: string): string {
+  return String(t)
+    .replace(/[‘’ʼ]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const SWAP_WORDISH = /[\p{L}\p{M}\p{N}_]/u;
+
+// A pattern for one word or phrase. A space matches any run of spaces or a
+// line break, and a quote or an apostrophe matches its curly forms. Each end
+// that is a letter or a number must sit at the edge of a word, so swapping
+// jolt leaves jolted alone.
+function swapPattern(find: string): RegExp | null {
+  let src = '';
+  for (const ch of Array.from(find)) {
+    if (/\s/.test(ch)) src += '\\s+';
+    else if (ch === "'" || ch === '‘' || ch === '’') src += "['‘’ʼ]";
+    else if (ch === '"' || ch === '“' || ch === '”') src += '["“”]';
+    else src += ch.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+  }
+  const chars = Array.from(find);
+  const head = SWAP_WORDISH.test(chars[0]) ? '(^|[^\\p{L}\\p{M}\\p{N}_])' : '()';
+  const tail = SWAP_WORDISH.test(chars[chars.length - 1]) ? '(?![\\p{L}\\p{M}\\p{N}_])' : '';
+  try {
+    return new RegExp(head + '(' + src + ')' + tail, 'giu');
+  } catch (_) {
+    return null;
+  }
+}
+
+// The choice written with the capitals of what it replaces: all capitals
+// stay all capitals, and a capital first letter gives the choice one. A
+// found word in small letters leaves the choice as it was typed, so a name
+// keeps its capital.
+function keepCase(found: string, put: string): string {
+  const letters = found.replace(/[^\p{L}]/gu, '');
+  if (letters.length > 1 && letters === letters.toUpperCase() && letters !== letters.toLowerCase())
+    return put.toUpperCase();
+  const first = Array.from(found).find((c) => /\p{L}/u.test(c)) || '';
+  if (first && first === first.toUpperCase() && first !== first.toLowerCase()) {
+    const chars = Array.from(put);
+    const at = chars.findIndex((c) => /\p{L}/u.test(c));
+    if (at >= 0) chars[at] = chars[at].toUpperCase();
+    return chars.join('');
+  }
+  return put;
+}
+
+// Markers for the swap, all in Unicode's private area so no letter, number
+// or space in a reply can be one. A stand-in is the open mark, its number in
+// private characters, and the close mark.
+const SW_OPEN = '';
+const SW_CLOSE = '';
+const SW_GONE = '';
+const SW_GONE_CAP = '';
+const swToken = (n: number) => SW_OPEN + String.fromCharCode(0xe100 + n) + SW_CLOSE;
+const SW_TOKEN_ANY = /([-])/g;
+
+// Words taken out leave clean spacing: one space between words, none in
+// front of punctuation, none at the start or end of a line. Two commas left
+// side by side become one, and a comma left in front of a period goes. Words
+// taken out at the start of a sentence take a comma after them too, and give
+// the next word a capital.
+function tidyGone(text: string): string {
+  let out = text;
+  for (let guard = 0; guard < 500; guard++) {
+    const m = /[ \t]*([\uE002\uE003])[ \t]*/.exec(out);
+    if (!m) break;
+    const startsCap = m[1] === SW_GONE_CAP;
+    const hadSpace = /[ \t]/.test(m[0]);
+    let left = out.slice(0, m.index);
+    let right = out.slice(m.index + m[0].length);
+    const lineStart = !left || /\n$/.test(left);
+    const sentenceStart = lineStart || /[.!?\u2026]["'\u201d\u2019)*_]*$/.test(left);
+    if (sentenceStart && /^[,;:]/.test(right)) right = right.replace(/^[,;:][ \t]*/, '');
+    else if (/[,;:]$/.test(left) && /^[.!?\u2026]/.test(right)) left = left.slice(0, -1);
+    else if (/[,;:]$/.test(left) && /^[,;:]/.test(right)) right = right.replace(/^[,;:][ \t]*/, '');
+    let join = '';
+    if (lineStart || !right || /^[\n\uE002\uE003]/.test(right)) join = '';
+    else if (/^[,.;:!?\u2026)\]}]/.test(right)) join = '';
+    else if (/[(\[{]$/.test(left)) join = '';
+    else if (hadSpace || /[,;:]$/.test(left)) join = ' ';
+    if (startsCap && sentenceStart) {
+      const chars = Array.from(right);
+      const at = chars.findIndex((c) => /\p{L}/u.test(c));
+      if (at >= 0 && at < 4) chars[at] = chars[at].toUpperCase();
+      right = chars.join('');
+    }
+    out = left + join + right;
+  }
+  return out;
+}
+
+// Parts of a reply no swap reaches: another extension's blocks, code, links,
+// tags, entities, tables and dividers. The words between two tags are still
+// swapped; the tags themselves are not.
+function swapMask(text: string): { text: string; parts: string[] } {
+  const parts: string[] = [];
+  let out = text;
+  for (const rule of OTHERS_BLOCKS.concat(GUARDED)) {
+    out = out.replace(rule, (hit) => {
+      if (parts.length >= 6000) return hit;
+      parts.push(hit);
+      return swToken(parts.length - 1);
+    });
+  }
+  return { text: out, parts: parts };
+}
+// Round after round, since a part can hold a stand-in put there first.
+function swapUnmask(text: string, parts: string[]): string {
+  let out = text;
+  for (let round = 0; round <= parts.length; round++) {
+    let moved = false;
+    out = out.replace(SW_TOKEN_ANY, (whole, c) => {
+      const at = c.charCodeAt(0) - 0xe100;
+      if (!(at >= 0 && at < parts.length)) return whole;
+      moved = true;
+      return parts[at];
+    });
+    if (!moved) break;
+  }
+  return out;
+}
+
+// The swaps on one piece of text. pick chooses among a rule's choices for a
+// found word. Longer finds go first, so a phrase wins over a word inside it,
+// and nothing a swap put in is swapped again.
+function swapWords(
+  text: string,
+  rules: SwapRule[],
+  pick: (rule: SwapRule, found: string) => string,
+): { text: string; swapped: string[] } {
+  const swapped: string[] = [];
+  if (!rules.length || !String(text).trim()) return { text: text, swapped: swapped };
+  const masked = swapMask(String(text));
+  const parts = masked.parts;
+  let out = masked.text;
+  const finds: Array<{ rule: SwapRule; find: string }> = [];
+  for (const rule of rules) for (const find of rule.finds) finds.push({ rule: rule, find: find });
+  finds.sort((a, b) => b.find.length - a.find.length);
+  let any = false;
+  for (const { rule, find } of finds) {
+    const re = swapPattern(find);
+    if (!re) continue;
+    out = out.replace(re, (whole: string, before: string, found: string) => {
+      any = true;
+      const put = keepCase(found, pick(rule, found));
+      if (swapped.length < 40) swapped.push('"' + found.replace(/\s+/g, ' ') + '" for ' + (put ? '"' + put + '"' : 'nothing'));
+      if (!put) {
+        const first = Array.from(found).find((c) => /\p{L}/u.test(c)) || '';
+        const cap = !!first && first === first.toUpperCase() && first !== first.toLowerCase();
+        return before + (cap ? SW_GONE_CAP : SW_GONE);
+      }
+      parts.push(put);
+      return before + swToken(parts.length - 1);
+    });
+  }
+  if (!any) return { text: text, swapped: swapped };
+  out = tidyGone(out);
+  return { text: swapUnmask(out, parts), swapped: swapped };
+}
+
+// The picks made in each chat, kept on the account, so a name swapped in a
+// chat is swapped for the same name in every later reply of it.
+const SWAP_PICKS_FILE = 'swap-picks.json';
+const SWAP_PICK_CHATS_MAX = 300;
+const SWAP_PICKS_PER_CHAT = 300;
+type SwapPicks = Record<string, { at: number; picks: Record<string, string> }>;
+const swapPicks = new Map<string, SwapPicks>();
+const swapPickWrites = new Map<string, Promise<void>>();
+
+async function readSwapPicks(userId: string | undefined): Promise<SwapPicks> {
+  const who = userKey(userId);
+  const had = swapPicks.get(who);
+  if (had) return had;
+  let got: any = null;
+  if (hasUserStorage()) {
+    try {
+      got = await spindle.userStorage.getJson(SWAP_PICKS_FILE, { fallback: null, userId: userId });
+    } catch (e: any) {
+      const why = 'the names already picked for your word swaps could not be read, so new ones may be picked: ' + ((e && e.message) || 'no reason given');
+      say('warn', why);
+      replyTo(userId, { type: 'swap_trouble', why: why });
+    }
+  }
+  const clean: SwapPicks = {};
+  if (got && typeof got === 'object' && got.chats && typeof got.chats === 'object')
+    for (const chat of Object.keys(got.chats).slice(-SWAP_PICK_CHATS_MAX)) {
+      const one = got.chats[chat];
+      if (!one || typeof one !== 'object' || !one.picks || typeof one.picks !== 'object') continue;
+      const picks: Record<string, string> = {};
+      for (const k of Object.keys(one.picks).slice(0, SWAP_PICKS_PER_CHAT))
+        if (typeof one.picks[k] === 'string') picks[k] = one.picks[k];
+      clean[chat] = { at: Number(one.at) || 0, picks: picks };
+    }
+  // Read again if this one came in while another read was out.
+  const now = swapPicks.get(who);
+  if (now) return now;
+  swapPicks.set(who, clean);
+  return clean;
+}
+
+function saveSwapPicks(userId: string | undefined): Promise<void> {
+  if (!hasUserStorage()) return Promise.resolve();
+  return inTurn(swapPickWrites, userId, async () => {
+    const all = swapPicks.get(userKey(userId)) || {};
+    try {
+      await spindle.userStorage.setJson(SWAP_PICKS_FILE, { v: 1, chats: all }, { userId: userId });
+    } catch (e: any) {
+      const why = 'the names picked for your word swaps could not be saved to your account, so a later reply may get a different one: ' + ((e && e.message) || 'no reason given');
+      say('warn', why);
+      replyTo(userId, { type: 'swap_trouble', why: why });
+    }
+  });
+}
+
+// The picks of a chat that is gone, taken off the account.
+async function forgetSwapPicks(userId: string | undefined, chatId: string): Promise<void> {
+  const all = await readSwapPicks(userId);
+  if (!all[chatId]) return;
+  delete all[chatId];
+  await saveSwapPicks(userId);
+}
+
+// The swaps on the body of a message in one chat. The picks are read from
+// the account and saved back when a new one was made.
+async function swapIn(text: string, chatId: string, userId: string | undefined): Promise<{ text: string; swapped: string[] }> {
+  if (!swapOn || !swapList.length) return { text: text, swapped: [] };
+  const all = await readSwapPicks(userId);
+  const chat = String(chatId);
+  let changed = false;
+  const pick = (rule: SwapRule, found: string): string => {
+    if (!rule.puts.length) return '';
+    if (rule.puts.length === 1 && !rule.same) return rule.puts[0];
+    const random = (list: string[]) => list[Math.floor(Math.random() * list.length)];
+    if (!rule.same) return random(rule.puts);
+    const k = swapKey(found);
+    const here = all[chat] || { at: 0, picks: {} };
+    const had = here.picks[k];
+    const kept = had && rule.puts.find((p) => p.toLowerCase() === had.toLowerCase());
+    if (kept) return kept;
+    // A choice no other found word in this chat has already, while there is one.
+    const used = new Set(Object.keys(here.picks).filter((o) => o !== k).map((o) => here.picks[o].toLowerCase()));
+    const free = rule.puts.filter((p) => !used.has(p.toLowerCase()));
+    const got = random(free.length ? free : rule.puts);
+    here.picks[k] = got;
+    here.at = Date.now();
+    if (!all[chat]) all[chat] = here;
+    const keys = Object.keys(here.picks);
+    if (keys.length > SWAP_PICKS_PER_CHAT) delete here.picks[keys[0]];
+    changed = true;
+    return got;
+  };
+  const done = swapWords(text, swapList, pick);
+  if (changed) {
+    const chats = Object.keys(all);
+    if (chats.length > SWAP_PICK_CHATS_MAX) {
+      chats.sort((a, b) => all[a].at - all[b].at);
+      for (const c of chats.slice(0, chats.length - SWAP_PICK_CHATS_MAX)) delete all[c];
+    }
+    saveSwapPicks(userId);
+  }
+  return done;
+}
+
+// The swaps on a whole message, saved as their own write, for a reply no
+// refine wrote. Only the body: the thinking at either end is left as it is.
+async function swapMessage(chatId: string, messageId: any, userId?: string): Promise<RefineOutcome> {
+  if (!swapOn || !swapList.length) return { ok: false, why: '' };
+  if (!masterOn || chatsOff.has(String(chatId))) return { ok: false, why: '' };
+  let msgs: any[] = [];
+  try {
+    msgs = await spindle.chat.getMessages(chatId);
+  } catch (e: any) {
+    const why = 'the chat could not be read for your word swaps: ' + ((e && e.message) || 'no reason given');
+    say('warn', why);
+    replyTo(userId, { type: 'swap_trouble', why: why });
+    return { ok: false, why: 'the chat could not be read' };
+  }
+  if (!Array.isArray(msgs) || !msgs.length) return { ok: false, why: '' };
+  const greetingId = greetingIdOf(msgs);
+  const m = msgs.find((x: any) => x && x.id === messageId) || null;
+  if (!m) return { ok: false, why: '' };
+  if (m.id === greetingId && !refineGreeting) return { ok: false, why: '' };
+  if (m.role === 'assistant' ? !repliesOn : m.role === 'user' ? !mineOn : true) return { ok: false, why: '' };
+  const original = String(m.content == null ? '' : m.content);
+  const split = splitThinking(original);
+  if (!split.body.trim()) return { ok: false, why: '' };
+  const sw = await swapIn(split.body, chatId, userId);
+  if (!sw.swapped.length) return { ok: false, why: '' };
+  const next = split.head + sw.text + split.tail;
+  if (next === original) return { ok: false, why: '' };
+  return saveRefined(chatId, m, original, next, userId, 'swap', undefined, sw.swapped);
+}
+
+// A refine that wrote nothing still leaves the reply's swaps to do, since
+// they cost nothing. Not when it is waiting for a yes, or when it stood down
+// because the reply is being replaced, stopped or already holds its refine.
+async function swapAfter(done: RefineOutcome, chatId: string, messageId: any, userId?: string): Promise<void> {
+  if (done.ok || done.stood || done.why === WHY_WAITING_YES) return;
+  if (!swapOn || !swapList.length || messageId == null) return;
+  if (generating.has(String(chatId)) || retryPending(chatId)) return;
+  try {
+    await swapMessage(chatId, messageId, userId);
+  } catch (e: any) {
+    const why = 'your word swaps could not be made: ' + ((e && e.message) || String(e));
+    say('warn', why);
+    replyTo(userId, { type: 'swap_trouble', why: why });
+  }
+}
+
 // The rewrite, moved onto a message whose thinking has changed since it was
 // read, or null when more than the thinking changed.
 //
@@ -6246,6 +6606,34 @@ function onFreshHidden(original: string, next: string, fresh: string): string | 
   return out;
 }
 
+// What Put it back returns a message to, written down before a write. A swap
+// on a message whose last write was ours, and that still holds it, keeps the
+// text from before that write, so one Put it back undoes both.
+function keepBefore(
+  k: string,
+  chatId: string,
+  messageId: any,
+  original: string,
+  next: string,
+  userId: string | undefined,
+  kind: string | undefined,
+  addedAt: number,
+): { from: string; stacks: boolean } {
+  const earlier = before.get(k);
+  const stacks = kind === 'swap' && !!earlier && earlier.after === original && earlier.user === userKey(userId);
+  const from = stacks && earlier ? earlier.text : original;
+  if (keepOriginal) {
+    const kept: Kept = { text: from, at: Date.now(), user: userKey(userId), chatId: chatId, messageId: messageId, after: next };
+    if (stacks && earlier && typeof earlier.swipeAt === 'number') kept.swipeAt = earlier.swipeAt;
+    if (addedAt >= 0) kept.swipeAt = addedAt;
+    // Swaps on their own. Stacked on a refine, it is undone as the refine.
+    if (kind === 'swap' && !(stacks && earlier && earlier.kind !== 'swap')) kept.kind = 'swap';
+    remember(before, k, kept, BEFORE_MAX);
+    if (keepPutBack) savePutBack(userId);
+  }
+  return { from: from, stacks: stacks };
+}
+
 async function saveRefined(
   chatId: string,
   m: any,
@@ -6254,11 +6642,14 @@ async function saveRefined(
   userId?: string,
   // What the write was. A snip takes text out with no model call, so the panel
   // words it and counts it differently, but the way back is the same one.
-  kind?: 'refine' | 'snip',
+  // A swap is the reader's word swaps on their own, also with no model call.
+  kind?: 'refine' | 'snip' | 'swap',
   // The swipe the write is for, when it is not the one the message says is
   // showing. Only a snip passes this: it works on what is on screen, and the
   // screen can be on a different swipe from the one the message records.
   onSwipe?: number,
+  // The word swaps made in this write, for the Log.
+  swapped?: string[],
 ): Promise<RefineOutcome> {
   const k = key(chatId, m.id);
   const aimed = typeof onSwipe === 'number' && onSwipe >= 0;
@@ -6285,7 +6676,9 @@ async function saveRefined(
       next = moved;
     }
     remember(ourWrites, k, next, OURS_MAX);
-    remember(passes, String(m.id), (passes.get(String(m.id)) || 0) + 1, PASSES_MAX);
+    // A swap is not a refine, so it neither counts as a pass nor marks the
+    // reply as refined. A refine asked for after it still runs.
+    if (kind !== 'swap') remember(passes, String(m.id), (passes.get(String(m.id)) || 0) + 1, PASSES_MAX);
     const patch: any = { content: next };
     // A message can hold several swipes, and the one on screen is the one to
     // write. Writing content alone leaves the active swipe holding the old text
@@ -6306,7 +6699,7 @@ async function saveRefined(
     // there is nothing to add to, and writing content alone is the old
     // behavior, which is what this falls back to.
     let addedAt = -1;
-    if (asSwipe && swipes && kind !== 'snip') {
+    if (asSwipe && swipes && kind !== 'snip' && kind !== 'swap') {
       swipes.push(next);
       addedAt = swipes.length - 1;
       patch[listOn] = swipes;
@@ -6318,24 +6711,23 @@ async function saveRefined(
     }
     // Written down after the shape of the write is settled, so the way back
     // knows which kind it is undoing.
-    if (keepOriginal) {
-      const kept: Kept = { text: original, at: Date.now(), user: userKey(userId), chatId: chatId, messageId: m.id, after: next };
-      if (addedAt >= 0) kept.swipeAt = addedAt;
-      remember(before, k, kept, BEFORE_MAX);
-      if (keepPutBack) savePutBack(userId);
-    }
+    const { from, stacks } = keepBefore(k, chatId, m.id, original, next, userId, kind, addedAt);
     await spindle.chat.updateMessage(chatId, m.id, patch);
-    remember(refined, String(m.id), markOf(next), REFINED_MAX);
+    // The mark follows the write when the reply was refined before it, so
+    // the reply still reads as holding its refine.
+    if (kind !== 'swap') remember(refined, String(m.id), markOf(next), REFINED_MAX);
+    else if (refined.has(String(m.id)) && stacks) remember(refined, String(m.id), markOf(next), REFINED_MAX);
     replyTo(userId, {
       type: 'refined',
       chatId: chatId,
       messageId: m.id,
-      before: original,
+      before: from,
       after: next,
       // The thinking held back from the refine, so the card can leave it out.
-      held: splitThinking(original).head,
+      held: splitThinking(from).head,
       canUndo: keepOriginal,
-      kind: kind === 'snip' ? 'snip' : 'refine',
+      kind: kind === 'snip' || kind === 'swap' ? kind : 'refine',
+      swapped: swapped && swapped.length ? swapped.slice(0, 40) : [],
       // Whether this went in beside the reply rather than over it. The panel
       // cannot work that out for itself: it depends on the setting and on
       // whether this build gives the message a swipe list at all, and only the
@@ -6948,6 +7340,8 @@ function applyRules(s: any): void {
   judgeByHand = s.judgeByHand === true;
   judgeAfter = s.judgeAfter === true;
   asSwipe = !!s.asSwipe;
+  swapOn = s.swapOn === true;
+  swapList = swapRulesFrom(s.swaps);
   wornOn = !!s.wornOn;
   wornBack = Number(s.wornBack);
   wornBack = Number.isFinite(wornBack) && wornBack > 0 ? Math.min(200, Math.floor(wornBack)) : 60;
@@ -7011,7 +7405,10 @@ async function autoPass(p: any, who: any): Promise<void> {
   if (isImpersonation(p)) return;
   if (p.error) return stand('the reply itself failed, so there was nothing to refine');
   if (!masterOn) return stand('Auto Refine is switched off');
-  if (!refineOn) return stand('the automatic pass is switched off');
+  // With the automatic pass off, the word swaps still run on the reply, since
+  // they cost nothing. They go through the same checks below first.
+  const swapsOnly = !refineOn && swapOn && swapList.length > 0;
+  if (!refineOn && !swapsOnly) return stand('the automatic pass is switched off');
   if (!repliesOn) return stand('only your own messages are refined, as set in What to refine');
   if (chatsOff.has(String(p.chatId))) return stand('Auto Refine is switched off in this chat');
 
@@ -7038,10 +7435,15 @@ async function autoPass(p: any, who: any): Promise<void> {
     while (leftForRetry.size > LEFT_MAX) leftForRetry.delete(leftForRetry.keys().next().value as string);
   };
   if (await verdictFor(p.chatId))
-    say('info', 'Auto Retry said it was judging this reply and gave no verdict in time, so the refine goes ahead');
+    say('info', 'Auto Retry said it was judging this reply and gave no verdict in time, so the ' + (swapsOnly ? 'word swaps go' : 'refine goes') + ' ahead');
   if (retryPending(p.chatId)) {
     leave();
     return stand('Auto Retry is going to retry this reply, so it was left', messageId);
+  }
+  if (swapsOnly) {
+    if ((stoppedAt.get(String(p.chatId)) || 0) >= startedAt) return stand(WHY_STOPPED, messageId);
+    await swapAfter({ ok: false, why: '' }, p.chatId, messageId, who);
+    return stand('the automatic pass is switched off', messageId);
   }
 
   // The gap between automatic refines. Waited out rather than skipped: the
@@ -7072,6 +7474,7 @@ async function autoPass(p: any, who: any): Promise<void> {
     say('warn', 'the automatic refine threw: ' + ((e && e.message) || String(e)));
   }
   if (done.stood && retryPending(p.chatId)) leave();
+  await swapAfter(done, p.chatId, messageId, who);
   // Nothing reached a model, so nothing is reported as refused. The reply
   // may well come back round: Auto Retry swipes a refusal and the next one
   // arrives as its own generation, with its own text, which this pass has
@@ -7147,6 +7550,7 @@ try {
       if (!chatId) return;
       callOff(userId, (run) => run.chatId === chatId, WHY_CHAT_DELETED);
       forgetKept(userId, (k) => String(k.chatId) === chatId).catch(() => {});
+      forgetSwapPicks(userId, chatId).catch(() => {});
       leftForRetry.delete(chatId);
       stoppedAt.delete(chatId);
     } catch (_) {}
@@ -7536,6 +7940,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
           skipped: skipped,
         });
         const done = await refineMessage(payload.chatId, todo[i].id, userId, true);
+        await swapAfter(done, payload.chatId, todo[i].id, userId);
         if (done.ok) saved++;
         else {
           skipped++;
@@ -7601,6 +8006,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         return;
       }
       const done = await refineMessage(payload.chatId, id, userId, true);
+      await swapAfter(done, payload.chatId, id, userId);
       replyTo(userId, {
         type: 'refine_result',
         requestId: payload.requestId,
@@ -7794,7 +8200,7 @@ async function onPanel(payload: any, userId?: string): Promise<void> {
         // back from that: the text this was holding is the only copy.
         const mark = refined.get(String(payload.messageId));
         const holds = String(m.content == null ? '' : m.content);
-        if (mark != null && markOf(holds) !== mark) {
+        if (mark != null ? markOf(holds) !== mark : kept.kind === 'swap' && holds !== kept.after) {
           dropKept(k, userId);
           refined.delete(String(payload.messageId));
           replyTo(userId, {

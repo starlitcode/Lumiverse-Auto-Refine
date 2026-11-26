@@ -16674,6 +16674,141 @@ console.log("\nfolds in a preset of yours after Lumiverse is opened again");
   }
 }
 
+// Word swaps: the switch on the Limits tab, the swaps under it, and what the
+// panel says when a reply had its words swapped.
+console.log("\nword swaps on the Limits tab");
+for (const [label, viewport, touch, zoom] of [
+  ["phone", { width: 390, height: 860 }, true, 1],
+  ["laptop", { width: 1280, height: 900 }, false, 1],
+  ["phone, zoom 1.25", { width: 390, height: 860 }, true, 1.25],
+  ["laptop, zoom 0.85", { width: 1280, height: 900 }, false, 0.85],
+]) {
+  await inTab(browser, { viewport, touch, css: zoom === 1 ? "" : "html{zoom:" + zoom + "}", saved: { enabled: true } }, async (page, errors) => {
+    await goTab(page, "Limits");
+    await settle(page);
+    const shows = () =>
+      page.evaluate(() => {
+        const under = document.querySelector("#drawer [data-arf-swaps]");
+        return { has: !!under, open: !!under && !under.hidden && !!under.getClientRects().length };
+      });
+    const before = await shows();
+    ok(label + ": the Word swaps card is on the Limits tab", before.has && (await onScreen(page, "swapOn")), JSON.stringify(before));
+    ok(label + ": the swaps are hidden while the switch is off", !before.open, JSON.stringify(before));
+    // The switch, then its space opening over several frames.
+    const heights = await page.evaluate(async () => {
+      const box = document.querySelector('#drawer [data-arf-field="swapOn"]');
+      box.click();
+      const out = [];
+      // Looked up each frame, since the card is built again once the switch
+      // has settled.
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const under = document.querySelector("#drawer [data-arf-swaps]");
+        out.push(under ? Math.round(under.getBoundingClientRect().height) : -1);
+      }
+      return out;
+    });
+    const steps = new Set(heights.filter((h) => h > 0)).size;
+    // Never shorter once it has started to open, rebuild or not.
+    let shrank = false;
+    for (let i = 1; i < heights.length; i++) if (heights[i - 1] > 0 && heights[i] < heights[i - 1] - 1) shrank = true;
+    ok(label + ": turned on, the swaps open over several frames", steps >= 3 && heights[heights.length - 1] > 0 && !shrank, heights.join(","));
+    // Add a swap and fill it in.
+    await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-add]").click());
+    await settle(page);
+    await page.evaluate(() => {
+      const set = (sel, v) => {
+        const ta = document.querySelector("#drawer " + sel);
+        ta.value = v;
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+        ta.dispatchEvent(new Event("blur"));
+      };
+      set("[data-arf-swap-find]", "Elara\nLyra");
+      set("[data-arf-swap-put]", "Brindle\nMaeve");
+    });
+    await settle(page);
+    const saved = await page.evaluate(() => {
+      const last = window.__sent.filter((m) => m.type === "set_settings").pop().settings;
+      return { on: last.swapOn, swaps: last.swaps };
+    });
+    ok(label + ": the swap is saved with the settings", saved.on === true && saved.swaps.length === 1 && saved.swaps[0].find === "Elara\nLyra" && saved.swaps[0].put === "Brindle\nMaeve" && saved.swaps[0].same === true, JSON.stringify(saved));
+    await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-same]").click());
+    await settle(page);
+    const same = await page.evaluate(() => window.__sent.filter((m) => m.type === "set_settings").pop().settings.swaps[0].same);
+    ok(label + ": Keep the same pick in a chat can be turned off", same === false, String(same));
+    // Fits, with tap targets big enough on a phone.
+    const look = await page.evaluate((touch) => {
+      const out = { sideways: document.documentElement.scrollWidth > innerWidth + 1, small: [], over: [] };
+      const card = document.querySelector("#drawer [data-arf-swaps]");
+      const right = document.querySelector("#drawer").getBoundingClientRect().right;
+      for (const n of card.querySelectorAll("textarea, button, input")) {
+        const r = n.getBoundingClientRect();
+        if (r.right > right + 1) out.over.push(n.tagName);
+        if (touch && n.type !== "checkbox" && n.offsetHeight < 32) out.small.push((n.textContent || n.tagName).slice(0, 20) + ":" + n.offsetHeight);
+      }
+      return out;
+    }, touch);
+    ok(label + ": nothing runs off the side", !look.sideways && !look.over.length, JSON.stringify(look));
+    if (touch) ok(label + ": every control is at least 32 pixels high", look.small.length === 0, JSON.stringify(look.small));
+    // Delete asks first. No keeps it; yes takes it away.
+    // Asked in Lumiverse's dialog, or in the panel by pressing again when
+    // the page scrolls. Either way one press alone deletes nothing.
+    await page.evaluate(() => {
+      window.__confirms = [];
+      window.__toasts = [];
+      window.__confirmSay = false;
+    });
+    await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-delete]").click());
+    await settle(page);
+    const kept = await page.evaluate(() => ({
+      asked: window.__confirms.length,
+      again: (window.__toasts || []).some((t) => /Press Delete again/.test(t)),
+      rows: document.querySelectorAll("#drawer [data-arf-swap]").length,
+    }));
+    ok(label + ": Delete asks first, and one press keeps the swap", (kept.asked === 1 || kept.again) && kept.rows === 1, JSON.stringify(kept));
+    await page.evaluate(() => {
+      window.__confirmSay = true;
+    });
+    await page.evaluate(() => document.querySelector("#drawer [data-arf-swap-delete]").click());
+    if (!kept.again) await page.waitForTimeout(50);
+    await page.waitForTimeout(700);
+    const gone = await page.evaluate(() => ({
+      rows: document.querySelectorAll("#drawer [data-arf-swap]").length,
+      saved: window.__sent.filter((m) => m.type === "set_settings").pop().settings.swaps.length,
+    }));
+    ok(label + ": Yes takes the swap away and saves the list", gone.rows === 0 && gone.saved === 0, JSON.stringify(gone));
+    // A reply with only its words swapped: a Log line, no card, no notification.
+    await page.evaluate(() => {
+      window.__toasts = [];
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      window.__fromBackend({
+        type: "refined",
+        chatId: "c1",
+        messageId: "m9",
+        before: "A jolt ran through her.",
+        after: "A shiver ran through her.",
+        held: "",
+        canUndo: true,
+        kind: "swap",
+        swapped: ['"jolt" for "shiver"'],
+        swiped: false,
+      });
+    });
+    await settle(page);
+    await page.waitForTimeout(300);
+    const told = await page.evaluate(() => ({
+      card: !!document.querySelector(".arf-pop:not(.arf-leaving)"),
+      toasts: (window.__toasts || []).slice(),
+    }));
+    ok(label + ": a swap on its own brings up no card and no notification", !told.card && told.toasts.length === 0, JSON.stringify(told));
+    await goTab(page, "Log");
+    await settle(page);
+    const said = await page.evaluate(() => [...document.querySelectorAll("#drawer [data-arf-logline]")].map((n) => n.textContent).join(" | "));
+    ok(label + ": the Log says what was swapped", /swapped words in a reply, with no model call: "jolt" for "shiver"/.test(said), said.slice(0, 200));
+    ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
