@@ -25,7 +25,7 @@
 // with while this side comes back on the new build. A problem report naming
 // only the panel's version would be speaking for a file it cannot see, so the
 // panel asks for this one and prints both.
-const VERSION = '1.57.3';
+const VERSION = '1.58.0';
 // ---- what the reader set ----
 // Mirrors the panel. Everything here arrives over the bridge; nothing is read
 // from storage on this side, because the read that would do it runs before any
@@ -40,7 +40,7 @@ let refineAgain = false; // whether the pass returns to a reply it refined
 let refineGreeting = false; // whether the greeting can be refined like a reply
 let connectionId = ''; // empty means the reader's active connection
 let thinkingMode = 'off'; // off | inherit | custom
-let thinkingEffort = 'medium'; // only read when thinkingMode is custom
+let thinkingEffort = 'low'; // only read when thinkingMode is custom
 let timeoutSecs = 240;
 // What the refine model charges, per million tokens in and out. Used to price
 // a refine whose passes run on different models, where one price for all of
@@ -2995,7 +2995,7 @@ function passModelOf(raw) {
         setup: String(raw.setup == null ? '' : raw.setup),
         connectionId: String(raw.connectionId == null ? '' : raw.connectionId),
         thinkingMode: raw.thinkingMode === 'inherit' || raw.thinkingMode === 'custom' ? raw.thinkingMode : 'off',
-        thinkingEffort: EFFORTS.indexOf(String(raw.thinkingEffort)) >= 0 ? String(raw.thinkingEffort) : 'medium',
+        thinkingEffort: EFFORTS.indexOf(String(raw.thinkingEffort)) >= 0 ? String(raw.thinkingEffort) : 'low',
         timeoutSecs: Number.isFinite(secs) ? secs : 240,
         samplers: raw.samplers && typeof raw.samplers === 'object' && !Array.isArray(raw.samplers) ? raw.samplers : {},
         costIn: price(raw.costIn),
@@ -3146,6 +3146,23 @@ function rateLimited(err) {
     if (!s)
         return false;
     return errorKind(s) === 'wait';
+}
+// A call the provider turned away before the model read anything, so nothing
+// was charged: a rate limit (429), a server that is busy or loading a model
+// (503 and 529), or a connection that could not be made. Other errors that
+// clear if you wait, such as 504 or a dropped connection, can come after the
+// model started writing. Those are only waited out and sent again when
+// nothing of the answer had arrived.
+const TURNED_AWAY = /\b(?:429|503|529)\b|rate.?limit|too many requests|overloaded|connection (?:was |is )?refused|econnrefused|enotfound|eai_again|ehostunreach|enetunreach|(?:unable|failed|could not) to connect/i;
+function turnedAway(err) {
+    const s = String(err == null ? '' : err);
+    if (!rateLimited(s))
+        return false;
+    // The status Lumiverse names is read on its own, as errorKind reads it.
+    const stated = STATED_STATUS.exec(s);
+    if (stated)
+        return /^(?:429|503|529)$/.test(stated[1]);
+    return TURNED_AWAY.test(s);
 }
 // How long the provider said to wait, in milliseconds, or 0 when it said
 // nothing. The header's own form first, which is a whole number of seconds
@@ -4125,30 +4142,128 @@ async function countingFor(userId) {
 function countOptions(userId, model) {
     return model ? { model: model, modelSource: 'explicit', userId: userId } : { userId: userId };
 }
-// The model behind each connection, for the tokenizer. Read once a minute
-// for each account. Empty when it cannot be read, and the main connection's
-// model is counted for then.
+// The model behind each connection, for the tokenizer, and each connection's
+// address and thinking level, for Fit the wait to the model. Read once a
+// minute for each account. Empty when it cannot be read: the main
+// connection's model is counted for then, and the wait is used as it is.
+// In info, '' is the default connection. map holds real ids only, since
+// connectionKnown reads its keys.
 const connModels = new Map();
-async function modelOf(connId, userId) {
-    if (!connId)
-        return '';
+async function readConnections(userId) {
     const key = String(userId || '');
     let got = connModels.get(key);
     if (!got || Date.now() - got.at > 60000) {
         const map = {};
+        const info = {};
         try {
             if (spindle.connections && typeof spindle.connections.list === 'function') {
                 const list = await spindle.connections.list(userId);
-                for (const c of Array.isArray(list) ? list : [])
-                    if (c && c.id)
-                        map[String(c.id)] = String(c.model || '');
+                for (const c of Array.isArray(list) ? list : []) {
+                    if (!c || !c.id)
+                        continue;
+                    map[String(c.id)] = String(c.model || '');
+                    const r = c.reasoning_bindings && c.reasoning_bindings.settings;
+                    const one = { url: String(c.api_url || ''), effort: r && r.apiReasoning ? String(r.reasoningEffort || '') : '' };
+                    info[String(c.id)] = one;
+                    if (c.is_default)
+                        info[''] = one;
+                }
             }
         }
         catch (_) { }
-        got = { at: Date.now(), map: map };
+        got = { at: Date.now(), map: map, info: info };
         connModels.set(key, got);
     }
-    return got.map[connId] || '';
+    return got;
+}
+async function modelOf(connId, userId) {
+    if (!connId)
+        return '';
+    return (await readConnections(userId)).map[connId] || '';
+}
+// ---- Fit the wait to the model ----
+// A model on your own computer or network is slower than a cloud one, and
+// thinking takes longer the higher it is set. The same rules are used in
+// Auto Retry and Auto Foley.
+// An address on this computer or this network: localhost, a private
+// address, or a name with no dot, such as a computer on a home network.
+function isLocalUrl(u) {
+    // The host: after the scheme and any user name, before a port or path.
+    const m0 = String(u || '').trim().match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@\/?#]*@)?(\[[^\]]+\]|[^\/:?#]+)/i);
+    const host = m0 ? m0[1].toLowerCase().replace(/^\[|\]$/g, '') : '';
+    if (!host)
+        return false;
+    if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || /\.(local|lan|home|internal|localhost)$/.test(host) || host.endsWith('.home.arpa'))
+        return true;
+    if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host))
+        return true;
+    const m = host.match(/^(\d+)\.(\d+)\./);
+    if (m && Number(m[1]) === 172 && Number(m[2]) >= 16 && Number(m[2]) <= 31)
+        return true;
+    // The range VPNs such as Tailscale give out, for a computer of your own.
+    if (m && Number(m[1]) === 100 && Number(m[2]) >= 64 && Number(m[2]) <= 127)
+        return true;
+    if (/^(fc|fd)[0-9a-f]{2}:/.test(host) || /^fe80:/.test(host))
+        return true;
+    return !host.includes('.') && !host.includes(':');
+}
+// A wait in words, such as "10 minutes" or "90 seconds".
+function minutesText(secs) {
+    if (secs < 120)
+        return secs + ' seconds';
+    const m = Math.round(secs / 60);
+    return m + ' minutes';
+}
+// How many times longer each thinking level is given.
+const EFFORT_TIMES = { none: 1, minimal: 1, low: 1, medium: 1.5, high: 2, xhigh: 3, max: 3 };
+// A model on your own computer or network is given five times as long.
+const LOCAL_TIMES = 5;
+const WAIT_MAX_SECS = 3600;
+// The wait for a call: base seconds, times the thinking level, times five
+// for a local model, at most an hour. why says what made it longer.
+function fitWait(base, url, effort) {
+    const why = [];
+    let secs = base;
+    const e = String(effort || '').toLowerCase();
+    const times = EFFORT_TIMES[e] || 1;
+    if (times > 1) {
+        secs *= times;
+        why.push('thinking is set to ' + (e === 'xhigh' ? 'extra high' : e));
+    }
+    if (isLocalUrl(url)) {
+        secs *= LOCAL_TIMES;
+        why.push('the model runs on your own computer or network');
+    }
+    return { secs: Math.min(WAIT_MAX_SECS, Math.round(secs)), why };
+}
+// Fit the wait to the model, which is on by default. Off, every call waits
+// timeoutSecs as it is.
+let waitFit = true;
+// The connection a call goes to, worked out the way askModel works it out:
+// the one the model setup or the Model tab names, or else the one the chat's
+// replies use. '' is the default connection.
+async function connectionOfCall(model, chatId, userId) {
+    const named = model ? model.connectionId : connectionId;
+    if (named || !chatId)
+        return named || '';
+    return seenConnection.get(chatId) || (await chatConnection(chatId, userId)).id || '';
+}
+// How long one call waits, in seconds, and the sentence for the Log when it
+// is given longer. 0 is the full hour, and stays that way.
+async function waitOfCall(model, chatId, userId) {
+    const raw = Number(model ? model.timeoutSecs : timeoutSecs);
+    const base = !Number.isFinite(raw) ? 240 : raw <= 0 ? 0 : Math.min(WAIT_MAX_SECS, Math.max(5, raw));
+    if (!waitFit || base <= 0)
+        return { secs: base, why: '' };
+    const id = await connectionOfCall(model, chatId, userId);
+    const c = (await readConnections(userId)).info[id];
+    const mode = model ? model.thinkingMode : thinkingMode;
+    const effort = mode === 'off' ? 'none' : mode === 'custom' ? (model ? model.thinkingEffort : thinkingEffort) : c ? c.effort : '';
+    const fit = fitWait(base, c ? c.url : '', effort);
+    return {
+        secs: fit.secs,
+        why: fit.why.length ? 'the refine model is given up to ' + minutesText(fit.secs) + ', since ' + fit.why.join(' and ') : '',
+    };
 }
 // Whether the account still has a connection. Null when the list could not be
 // read, since not knowing is not the same as knowing it is gone.
@@ -4415,7 +4530,7 @@ function reasoningFor(model) {
     if (mode === 'custom')
         return {
             source: 'custom',
-            effort: EFFORTS.indexOf(effort) >= 0 ? effort : 'medium',
+            effort: EFFORTS.indexOf(effort) >= 0 ? effort : 'low',
         };
     return null;
 }
@@ -4667,16 +4782,15 @@ run) {
     const controller = typeof globalThis.AbortController === 'function'
         ? new globalThis.AbortController()
         : null;
-    const secs = Number(model ? model.timeoutSecs : timeoutSecs);
     // Zero is off, and waits for as long as the model takes. A reasoning model on
     // a high effort level can think for minutes before it writes a character, and
     // a cap that fires mid-thought throws away work that was about to arrive.
-    const ms = !Number.isFinite(secs)
-        ? 240000
-        : secs <= 0
-            ? 0
-            : Math.min(3600, Math.max(5, secs)) * 1000;
+    // Fitted to the connection this call goes to, unless the reader turned that
+    // off.
+    let ms = 0;
     let timer = null;
+    // Set when the plain call itself failed, rather than something before it.
+    let plainFailed = false;
     if (controller) {
         controller.__arfWhy = '';
         // Held whether or not there is a timer, because Stop uses this too, and
@@ -4684,7 +4798,11 @@ run) {
         holdRun(userId, controller, run);
         if (group)
             group.controllers.add(controller);
-        if (ms)
+    }
+    try {
+        const fitted = await waitOfCall(model, scene && scene.chatId ? String(scene.chatId) : '', userId);
+        ms = fitted.secs * 1000;
+        if (controller && ms)
             timer = setTimeout(() => {
                 try {
                     controller.__arfWhy = 'timeout';
@@ -4692,8 +4810,6 @@ run) {
                 }
                 catch (_) { }
             }, ms);
-    }
-    try {
         // Only the values the reader actually changed. An empty object is left out
         // so the connection's own preset stays in charge, which is what somebody
         // who never opened the sampler section expects.
@@ -4797,6 +4913,9 @@ run) {
         if (canStream) {
             let text = '';
             let said = 0;
+            // Whether any of the answer has arrived, its thinking included. From
+            // then on the provider is writing it, and charging for it.
+            let got = false;
             try {
                 const flow = await spindle.generate.quietStream(req);
                 for await (const bit of flow) {
@@ -4808,11 +4927,10 @@ run) {
                             text = all;
                         break;
                     }
-                    const piece = typeof bit === 'string'
-                        ? bit
-                        : bit && bit.type === 'reasoning'
-                            ? ''
-                            : String((bit && (bit.token || bit.content || bit.delta || bit.text)) || '');
+                    const any = typeof bit === 'string' ? bit : String((bit && (bit.token || bit.content || bit.delta || bit.text)) || '');
+                    if (any)
+                        got = true;
+                    const piece = bit && typeof bit === 'object' && bit.type === 'reasoning' ? '' : any;
                     if (!piece)
                         continue;
                     text += piece;
@@ -4841,19 +4959,35 @@ run) {
                 return { content: text, error: '' };
             }
             catch (e) {
-                // A host that has the method but cannot stream this connection. Fall
-                // through to the plain call rather than failing the refine.
                 if (e && e.name === 'AbortError')
                     throw e;
-                say('warn', 'streaming failed, falling back: ' + ((e && e.message) || 'no reason given'));
+                const why = String((e && e.message) || e || 'no reason given');
+                // Part of the answer arrived, so it is not sent again and paid twice.
+                if (got && !turnedAway(why)) {
+                    say('warn', 'the stream broke after the model started writing: ' + why);
+                    return { content: '', error: 'the connection broke after the model had started writing: ' + why, late: true };
+                }
+                // Nothing arrived. A busy provider is waited out, counted as a wait.
+                if (rateLimited(why))
+                    return { content: '', error: why };
+                // A host that has the method but cannot stream this connection. Fall
+                // through to the plain call rather than failing the refine.
+                say('warn', 'streaming failed, falling back: ' + why);
             }
         }
         tell(userId, {
             type: 'refine_progress',
             stage: (model ? model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
-            waitSecs: model ? model.timeoutSecs : timeoutSecs,
+            waitSecs: fitted.secs,
         });
-        const result = await spindle.generate.quiet(req);
+        let result;
+        try {
+            result = await spindle.generate.quiet(req);
+        }
+        catch (e) {
+            plainFailed = true;
+            throw e;
+        }
         const answer = String((result && result.content) || '');
         reportUsed(answer);
         return { content: answer, error: '' };
@@ -4897,7 +5031,11 @@ run) {
             };
         if (typeof msg === 'string' && PERSONAL_INSTALL.test(msg))
             return { content: '', error: PERSONAL_WORDS };
-        return { content: '', error: msg };
+        // A plain call hands nothing back until the whole answer is written, so
+        // an error from it may have come after the model started writing. Only a
+        // call the provider turned away before the model read it is known to cost
+        // nothing.
+        return { content: '', error: msg, late: plainFailed && !turnedAway(String(msg)) };
     }
     finally {
         if (timer != null)
@@ -4970,6 +5108,8 @@ async function askAtOnce(count, input, isUser, scene, userId, use, note, model, 
         let over = false;
         let failed = null;
         let error = '';
+        // Whether the error kept may have come after the model started writing.
+        let late = false;
         const finish = (out) => {
             if (over)
                 return;
@@ -5008,8 +5148,10 @@ async function askAtOnce(count, input, isUser, scene, userId, use, note, model, 
                     // the same way as for a single rewrite.
                     if (REFUSAL_ERROR.test(String(a.error)))
                         keep({ ok: false, text: '', why: 'the model declined to rewrite it, through the provider\'s filter: ' + a.error });
-                    else
+                    else {
                         error = a.error;
+                        late = !!a.late;
+                    }
                     return;
                 }
                 const v = judge(a.content, input);
@@ -5020,12 +5162,13 @@ async function askAtOnce(count, input, isUser, scene, userId, use, note, model, 
             })
                 .catch((e) => {
                 error = (e && e.message) || String(e);
+                late = true;
             })
                 .then(() => {
                 left -= 1;
                 if (left > 0 || over)
                     return;
-                finish(failed ? { error: '', verdict: failed } : { error: error || 'no rewrite came back', verdict: null });
+                finish(failed ? { error: '', verdict: failed } : { error: error || 'no rewrite came back', verdict: null, late: late });
             });
         }
     });
@@ -5663,13 +5806,19 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                 if (note)
                     say('info', 'the note ' + note.about + ' went with this ask');
             }
+            // This call's wait, fitted to the model the way askModel fits it, so the
+            // panel's countdown and its give-up timer match the backend's. A pass
+            // whose model setup waits longer or shorter than the Model tab is
+            // matched too. waitWhy is the line for the Log when it is given longer.
+            const fitted = await waitOfCall(model, String(chatId), userId);
+            if (fitted.why)
+                say('info', fitted.why);
             tell(userId, {
                 type: 'refine_progress',
                 stage: (model ? model.thinkingMode : thinkingMode) === 'off' ? 'asking' : 'thinking',
                 atOnce: refineAtOnce > 1 ? refineAtOnce : 0,
-                // This call's wait, so the panel's countdown and its give-up timer match
-                // a pass whose model setup waits longer or shorter than the Model tab.
-                waitSecs: model ? model.timeoutSecs : timeoutSecs,
+                waitSecs: fitted.secs,
+                waitWhy: fitted.why,
             });
             // With Several rewrites at once on, the ask is several at the same time,
             // already judged. A verdict from there goes straight to the checks below.
@@ -5677,7 +5826,7 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
             let ready = null;
             if (refineAtOnce > 1) {
                 const got = await askAtOnce(refineAtOnce, input, m.role === 'user', scene, userId, pass.blocks, note, model, run);
-                answer = { content: '', error: got.verdict ? '' : got.error };
+                answer = { content: '', error: got.verdict ? '' : got.error, late: !!got.late };
                 ready = got.verdict;
             }
             else
@@ -5687,6 +5836,18 @@ async function refineRun(run, chatId, messageId, userId, byHand, pick) {
                 // nothing has been spent, so it is worth waiting for: a free tier meters
                 // per minute and a local server answers 503 while it loads a model, and
                 // both clear on their own. A wrong key does not, and is not waited on.
+                // An error that may have come after the model started writing is not
+                // sent again either, since the provider may have charged for it, and a
+                // second call would be charged as well.
+                if (waits < rateWaits && rateLimited(answer.error) && answer.late)
+                    return {
+                        ok: false,
+                        out: {
+                            ok: false,
+                            why: answer.error + '. It was not sent again, since the model may already have started writing and the provider may have charged for it',
+                            notes: notes,
+                        },
+                    };
                 if (waits < rateWaits && rateLimited(answer.error)) {
                     waits++;
                     const ms = rateWait(waits, answer.error);
@@ -6568,7 +6729,8 @@ function applyRules(s) {
     connectionId = String(s.connectionId == null ? '' : s.connectionId);
     thinkingMode =
         s.thinkingMode === 'inherit' || s.thinkingMode === 'custom' ? s.thinkingMode : 'off';
-    thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'medium';
+    thinkingEffort = EFFORTS.indexOf(String(s.thinkingEffort)) >= 0 ? String(s.thinkingEffort) : 'low';
+    waitFit = s.waitFit !== false;
     // Not `|| 90`. Zero is a setting here, meaning never give up, and the
     // short form would have turned it back into a minute and a half.
     timeoutSecs = Number.isFinite(Number(s.timeoutSecs)) ? Number(s.timeoutSecs) : 240;

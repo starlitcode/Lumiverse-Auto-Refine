@@ -127,6 +127,7 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - The default is four minutes. The most is an hour. At 0, it waits the full hour.
   - Four minutes is long on purpose. A fast model answers in seconds. A reasoning model on a high setting, or a local model loading, can take minutes, and stopping it early throws that work away.
   - The wait is for each call to the model. A refine that asks again, after a failed check or after the provider turned the call away, has the whole wait again. The status line then shows the time left as "left on this try". The clock beside it is the whole refine.
+  - **Fit the wait to the model**, under it, is on by default. It gives a model on your own computer or network, or one that thinks more, longer to answer. See [How long it waits](#how-long-it-waits).
   - You can end a refine yourself at any time: **Stop this refine** is always there.
   - The time counts while the tab is in the background too. On a phone, a refine that ran out while you were away ends as soon as you come back to the tab.
   - A result sent while the tab was asleep can be lost on the way. When you come back to the tab, the panel asks your server whether the refine is still running, and takes any result it missed. If nothing is running and nothing came back, the refine ends at once, and a notice asks you to check the reply.
@@ -136,13 +137,35 @@ Not sure what to pick? [What to use](recommended.md) has settings that work well
   - There is no currency. The number you type is the number you see.
   - See [What a refine costs](prompt.md#what-a-refine-costs).
 - **Samplers** start blank. A blank sampler is not sent, so Lumiverse uses the value from the preset linked to the connection. See [Sampler settings](prompt.md#sampler-settings).
-- **Saved model setups** keep everything on this tab under a name: the connection, thinking, timeout, samplers and prices.
+- **Saved model setups** keep everything on this tab under a name: the connection, thinking, timeout, samplers and prices. **Fit the wait to the model** is not kept in a setup. It is one switch for every setup.
   - Save one for a cheap model and one for a careful one, and switch between them.
   - A setup never contains your prompt, so loading one only changes what runs the refine.
   - Setups are kept in this browser and your account.
   - A preset can name a setup, so the two load together.
   - If a setup's connection has been deleted, the card says so.
 - **One model or two** is a beta. With two, a small second model checks each new reply first, and only the replies that need it are refined. It is asked through one of your Decision connections in Lumiverse. It has its own checks and line, and every text it sends is in a box you can change. See [Two models](two-models.md).
+
+## How long it waits
+
+**Give up waiting after (seconds)** is 4 minutes by default. A refine that has not come back by then is canceled, and the reply is left as it was.
+
+**Fit the wait to the model**, under it, is on by default. It stretches that wait for a slow model:
+
+| What | How much longer |
+| --- | --- |
+| A model on your own computer or network | 5 times |
+| Thinking set to medium | 1.5 times |
+| Thinking set to high | 2 times |
+| Thinking set to extra high or max | 3 times |
+
+- A model counts as on your own computer or network when its connection's address is `localhost`, a private address such as `192.168.1.40`, a name with no dot, or a name ending in `.local`.
+- The thinking level is the one under **How much thinking**, or the connection's when **Let it think first** is set to **Whatever my connection is set to**. With thinking off, only the address counts.
+- The connection is the one each call goes to: the one under **Refine using**, a pass's own model setup, or the other connection.
+- Both can apply. A local model with high thinking gets 2 × 5 = 10 times as long: 40 minutes. The wait is never more than an hour.
+- The Log says when a call is given longer, and why. The time left on the status line counts down from the longer wait.
+- At 0, it still waits the full hour. With the switch off, the wait is used as it is.
+
+The same rules are used in Auto Retry and Auto Foley.
 
 ## Limits
 

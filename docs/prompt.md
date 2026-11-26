@@ -590,7 +590,7 @@ On the **Model** tab, **Let it think first** has three choices:
 
 - **No, keep it quick.** The default. Rewriting a paragraph does not need reasoning, and reasoning on every reply adds up.
 - **Whatever my connection is set to.** Sends nothing about reasoning. Lumiverse uses the thinking setting saved on the connection, or your own thinking settings if the connection has none.
-- **Yes, and I will say how much.** Adds an effort level: auto, none, minimal, low, medium, high, extra high or max. Each provider decides what these mean. A rewrite rarely needs more than low.
+- **Yes, and I will say how much.** Adds an effort level: auto, none, minimal, low, medium, high, extra high or max. Each provider decides what these mean. Low is the default. A rewrite rarely needs more than low.
 
 ## Seeing what gets sent
 

@@ -23,7 +23,7 @@ interface Ctx {
   onBackendMessage?: (fn: (msg: any) => void) => () => void;
 }
 
-const VERSION = "1.57.3";
+const VERSION = "1.58.0";
 // The page event Auto Retry raises when it adds a reroll itself. Both
 // extensions spell it the same way.
 const REROLL_EVENT = "auto-retry:reroll-added";
@@ -102,7 +102,7 @@ const PARTS: Array<{ id: string; label: string; what: string; keys: string[] }> 
     id: "model",
     label: "Model and thinking",
     what: "Which connection refines, how much it thinks, how long to wait, and what it charges.",
-    keys: ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "costIn", "costOut"],
+    keys: ["connectionId", "thinkingMode", "thinkingEffort", "timeoutSecs", "waitFit", "costIn", "costOut"],
   },
   {
     id: "samplers",
@@ -582,7 +582,9 @@ const CONFIG = {
   refineGreeting: false,
   connectionId: "",
   thinkingMode: "off",
-  thinkingEffort: "medium",
+  // Low, which is enough for a rewrite. A higher level takes longer and
+  // rarely changes the result.
+  thinkingEffort: "low",
   // Four minutes, which is the slow end rather than the usual one. A fast model
   // answers in seconds and never reaches this, so the only thing the number
   // decides is how long somebody waits before being told a refine that was
@@ -593,6 +595,10 @@ const CONFIG = {
   // it writes a character, and a local model can spend that long loading before
   // it starts. Both were cut off mid-thought by their own default.
   timeoutSecs: 240,
+  // Fit the wait to the model: the wait above is stretched for a model on
+  // your own computer or network, and for more thinking. Off, it is used as
+  // it is.
+  waitFit: true,
   // What a million tokens costs, in and out. Nobody's prices are known here, so
   // 0 means the reader has not said and no cost is worked out.
   costIn: 0,
@@ -2179,6 +2185,14 @@ const MOVED_DEFAULTS: Array<{ key: string; was: any; label: string; why: string;
     why: "the built-in list now finds the arrow by the box Lumiverse puts the swipe arrows in, which works in every language. Marks no Lumiverse button has were taken out.",
     needs: { key: "asSwipe", is: true },
   },
+  {
+    key: "thinkingEffort",
+    // 1.57.3 started at Medium.
+    was: "medium",
+    label: "How much thinking",
+    why: "the default is now Low instead of Medium. Low is enough for a rewrite, and a higher level takes longer and costs more.",
+    needs: { key: "thinkingMode", is: "custom" },
+  },
 ];
 
 // What a reader is marked with once told about a row: its setting and a mark
@@ -2396,7 +2410,7 @@ const GUARD_FIELDS: Field[] = [
     type: "num",
     min: 0,
     max: 5,
-    hint: "How many times to wait and ask again when the provider is busy or loading a model. 2 by default. A refused call costs nothing.",
+    hint: "How many times to wait and ask again when the provider is busy or loading a model. 2 by default. A call is only sent again when nothing of the answer came back.",
   },
   {
     key: "refineGap",
@@ -2702,6 +2716,12 @@ const COST_FIELDS: Field[] = [
     min: 0,
     max: 3600,
     hint: "A refine that takes longer is canceled, and the reply is left as it was. Up to an hour. At 0, it waits the full hour.",
+  },
+  {
+    key: "waitFit",
+    label: "Fit the wait to the model",
+    type: "bool",
+    hint: "On by default. A model on your own computer or network gets five times as long, and high thinking two or three times. Off: the wait above is used as it is.",
   },
   // Prices, so a token count can be shown as the number people actually want.
   // Nothing here knows what a model costs and no two providers agree, so the
@@ -4575,6 +4595,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   // The wait for the call running now, in seconds, from the backend. A pass on
   // a model setup of its own has that setup's wait. Null uses the Model tab's.
   let callWait: number | null = null;
+  // The last reason the backend gave for a longer wait, so the Log says it
+  // once in a run rather than on every call.
+  let waitWhySaid = "";
   let lastRun: { ms: number; ok: boolean; why: string } | null = null;
   // Counts for the Log tab. Session only: this answers "is it doing anything",
   // not "what did it do last week".
@@ -4788,13 +4811,15 @@ export function setup(ctx: Ctx, overrides?: any) {
   // How many rewrites are being written at the same time, or 0 when it is one.
   let manyAtOnce = 0;
 
-  // How long a refine is given, in seconds, or 0 for as long as it takes. One
-  // reading of the setting, because the countdown on screen and the watchdog
-  // behind it disagreeing about it is how a panel says "12s left" and then
-  // waits another two minutes.
+  // How long a refine is given, in seconds, or 0 for as long as it takes. While
+  // a call runs, this is the wait the backend fitted to its model, sent with
+  // each new call as waitSecs. One reading of the setting, because the
+  // countdown on screen and the watchdog behind it disagreeing about it is how
+  // a panel says "12s left" and then waits another two minutes.
   function waitCap(): number {
     const n = busy && callWait != null ? callWait : Number(cfg.timeoutSecs);
-    if (!Number.isFinite(n)) return 90;
+    // The backend's own fallback, so the two agree.
+    if (!Number.isFinite(n)) return 240;
     return n <= 0 ? 0 : Math.min(3600, Math.max(5, n));
   }
 
@@ -4907,9 +4932,13 @@ export function setup(ctx: Ctx, overrides?: any) {
 
   // A sweep says which message it is on before starting it, so silence for
   // longer than one message could take means the run itself went missing rather
-  // than the model being slow. Set again on every message. With the wait
-  // switched off there is no "longer than one message could take", so there is
-  // nothing to watch for and this stays out of the way.
+  // than the model being slow. Set again on every message, on every new call to
+  // the model, since that call's wait is the one fitted to its model, and every
+  // time the backend says it is still working. A provider wait, the second
+  // model or a long refine then never reads as the run going missing: only a
+  // backend that has gone quiet does. With the wait switched off there is no
+  // "longer than one message could take", so there is nothing to watch for and
+  // this stays out of the way.
   let sweepWatch: any = null;
   function armSweepWatch() {
     if (sweepWatch) clearTimeout(sweepWatch);
@@ -4939,9 +4968,9 @@ export function setup(ctx: Ctx, overrides?: any) {
   disposers.push(clearSweepWatch);
 
   let deadman: any = null;
-  // The second model is given 20 seconds by the backend. This is that and a
-  // little over, so the panel never gives up on a reading still in time.
-  const JUDGE_ROOM_MS = 25000;
+  // Lumiverse gives the second model 30 seconds. This is that and a little
+  // over, so the panel never gives up on a reading still in time.
+  const JUDGE_ROOM_MS = 35000;
   // The longest this waits for anything, whatever the setting says. Every other
   // value is already held under it, since a wait longer than an hour is capped
   // to this on the way in.
@@ -5066,6 +5095,7 @@ export function setup(ctx: Ctx, overrides?: any) {
       runStartedAt = Date.now();
       callFrom = runStartedAt;
       callWait = null;
+      waitWhySaid = "";
       awayInRun = typeof document !== "undefined" && document.visibilityState === "hidden";
       streamed = 0;
       onBackup = false;
@@ -11517,7 +11547,7 @@ export function setup(ctx: Ctx, overrides?: any) {
             (one.settings.thinkingMode === "off"
               ? "No thinking."
               : one.settings.thinkingMode === "custom"
-                ? "Thinking on " + String(one.settings.thinkingEffort || "medium") + "."
+                ? "Thinking on " + String(one.settings.thinkingEffort || "low") + "."
                 : "Thinking left to the connection.") +
             (set ? " " + set + (set === 1 ? " sampler" : " samplers") + " set." : " Samplers left alone."),
       );
@@ -18060,6 +18090,7 @@ export function setup(ctx: Ctx, overrides?: any) {
           // has gone quiet.
           if (msg.type === "refine_working") {
             if (busy) armDeadman(0, false, true);
+            if (sweep) armSweepWatch();
             return;
           }
           // The refine connection refused, sent nothing or was cut off, and
@@ -18229,6 +18260,15 @@ export function setup(ctx: Ctx, overrides?: any) {
               callFrom = Date.now();
               callWait = Number.isFinite(Number(msg.waitSecs)) && msg.waitSecs !== null && msg.waitSecs !== "" ? Number(msg.waitSecs) : null;
               armDeadman(0, true);
+              if (sweep) armSweepWatch();
+              // The backend gave this call longer than the wait, and says why.
+              // Said once for each reason in a run, since every new call to
+              // the same model would say it again.
+              const why = typeof msg.waitWhy === "string" ? msg.waitWhy.trim() : "";
+              if (why && why !== waitWhySaid) {
+                waitWhySaid = why;
+                log("refine", why);
+              }
             }
             if (msg.stage === "judging" || msg.stage === "rechecking") armDeadman(JUDGE_ROOM_MS, true);
             // The working, as it is written. Empty on a prompt that does not

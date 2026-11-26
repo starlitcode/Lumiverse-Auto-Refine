@@ -235,6 +235,8 @@ Pressing the refine button on a reply always works, whatever the count. The Log 
 - A failed check was paid for. The model read the prompt and wrote something.
 - A refused call was never read, so nothing was spent. Waiting and asking again gets the refine you already asked for.
 
+A call is only sent again when nothing of the answer came back. See [A call that had started](#a-call-that-had-started).
+
 It waits on:
 
 - "too many requests"
@@ -260,6 +262,18 @@ How long it waits:
 - If the provider does not say, it waits fifteen seconds, then doubles each time.
 
 The status line counts down while it waits. **Stop** ends the wait and the call.
+
+### A call that had started
+
+A provider charges for an answer from the moment the model starts writing it. A call that failed after that point was already paid for, and sending it again would be paid for a second time. So:
+
+- When the answer streams, an error before its first piece is waited out. An error after any of the answer arrived, its thinking included, is not.
+- A stream that fails before its first piece, in a way waiting cannot fix, is asked once more without streaming. One that fails after any of the answer arrived is not.
+- A call that does not stream hands back nothing until the whole answer is written, so there is no way to see whether the model had started. It is only waited out for a rate limit (429), a busy server (503 or 529), or a connection that could not be made.
+- A rate limit (429) or a busy server (503) always counts as nothing came back.
+- A call that is not sent again leaves the reply as it was. The Log says it was not sent again, and why.
+
+A call streams while **Say how much has come back** is on. It does not stream while **Several rewrites at once** is on.
 
 ## The rewrite is the wrong size
 

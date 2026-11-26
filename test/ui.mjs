@@ -1470,6 +1470,97 @@ console.log("\nhow much thinking");
   });
 }
 
+console.log("\nthe switch that fits the wait to the model");
+{
+  // Fit the wait to the model sits straight under the wait it changes, is on
+  // by default, and what you set reaches the backend and is kept.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch }, async (page) => {
+      await goTab(page, "Model");
+      const where = await page.evaluate(() => {
+        const fields = [...document.querySelectorAll("#drawer [data-arf-field]")].filter((x) => x.offsetParent);
+        const keys = fields.map((x) => x.getAttribute("data-arf-field"));
+        const box = document.querySelector('#drawer [data-arf-field="waitFit"]');
+        const wait = document.querySelector('#drawer [data-arf-field="timeoutSecs"]');
+        const b = box ? box.getBoundingClientRect() : null;
+        const w = wait ? wait.getBoundingClientRect() : null;
+        const row = box ? box.closest(".arf-between") : null;
+        return {
+          next: keys[keys.indexOf("timeoutSecs") + 1] || "",
+          below: !!(b && w && b.top >= w.bottom),
+          on: !!(box && box.checked),
+          inside: !!(b && b.left >= 0 && b.right <= window.innerWidth),
+          rowTall: row ? Math.round(row.getBoundingClientRect().height) : 0,
+          words: row ? row.textContent : "",
+          sideways: document.documentElement.scrollWidth > window.innerWidth,
+        };
+      });
+      ok(label + ": the switch is straight under Give up waiting after", where.next === "waitFit" && where.below, JSON.stringify(where));
+      ok(label + ": it is on by default, and named", where.on && /Fit the wait to the model/.test(where.words), JSON.stringify(where));
+      ok(label + ": it fits on the screen with no sideways scroll", where.inside && !where.sideways, JSON.stringify(where));
+      if (touch) ok(label + ": its row is at least 32 pixels high", where.rowTall >= 32, String(where.rowTall));
+      if (touch) await page.tap('#drawer [data-arf-field="waitFit"]');
+      else await page.click('#drawer [data-arf-field="waitFit"]');
+      await settle(page);
+      const after = await page.evaluate(() => {
+        const last = window.__sent.filter((m) => m.type === "set_settings").pop();
+        let kept = null;
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const v = JSON.parse(localStorage.getItem(localStorage.key(i)) || "null");
+            if (v && typeof v === "object" && "waitFit" in v) kept = v.waitFit;
+          }
+        } catch (_) {}
+        return { sent: last ? last.settings.waitFit : null, kept, on: document.querySelector('#drawer [data-arf-field="waitFit"]').checked };
+      });
+      ok(label + ": switched off, it reaches the backend and is saved", after.sent === false && after.kept === false && after.on === false, JSON.stringify(after));
+    });
+  }
+}
+
+console.log("\na run through the chat is not called stopped while the backend works");
+{
+  // The watch on a run through the chat is set again each time the backend
+  // says it is still working, so a provider wait, the second model or a long
+  // refine never reads as the run going missing. Only a backend that goes
+  // quiet does. The watch's own timer, the wait and 30 seconds, is made short
+  // here so the check does not sit for real minutes.
+  for (const [label, viewport, touch] of [["phone", { width: 390, height: 900 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+    await inTab(browser, { viewport, touch, saved: { enabled: true, timeoutSecs: 5 } }, async (page) => {
+      await page.evaluate(() => {
+        const id = window.__sent.filter((m) => m.type === "active_chat").pop().requestId;
+        window.__fromBackend({ type: "active_chat", requestId: id, chatId: "c1", character: "Wren", hasCharacter: true, resolved: true });
+        // 5 seconds of wait and 30 more is the watch, and nothing else here
+        // asks for exactly that.
+        const real = window.setTimeout.bind(window);
+        window.setTimeout = (fn, ms, ...rest) => real(fn, ms === 35000 ? 400 : ms, ...rest);
+      });
+      await settle(page);
+      await page.evaluate(() => document.querySelector("#drawer [data-arf-sweep]").click());
+      await settle(page);
+      await page.evaluate(() => document.querySelector("[data-arf-sweep-yes]").click());
+      await settle(page);
+      await page.evaluate(() => {
+        window.__toasts = [];
+        const m = window.__sent.filter((x) => x.type === "refine_all").pop();
+        window.__fromBackend({ type: "refine_ack", requestId: m ? m.requestId : "x" });
+        window.__fromBackend({ type: "refine_all_progress", requestId: m ? m.requestId : "x", chatId: "c1", at: 1, of: 5, saved: 0, skipped: 0 });
+        window.__fromBackend({ type: "refine_progress", stage: "waiting", waitMs: 2000, attempt: 1, of: 2, why: "429" });
+      });
+      // Four times the watch, with the backend saying it is still working.
+      for (let k = 0; k < 16; k++) {
+        await page.evaluate(() => window.__fromBackend({ type: "refine_working" }));
+        await page.waitForTimeout(100);
+      }
+      const kept = await page.evaluate(() => (window.__toasts || []).join(" | "));
+      ok(label + ": while the backend says it is still working, there is no warning", !/stopped answering/.test(kept), kept);
+      await page.waitForTimeout(900);
+      const gone = await page.evaluate(() => (window.__toasts || []).join(" | "));
+      ok(label + ": once the backend goes quiet, the warning comes", /stopped answering/.test(gone), gone);
+    });
+  }
+}
+
 console.log("\npresets");
 {
   const errors = await inTab(browser, {}, async (page) => {

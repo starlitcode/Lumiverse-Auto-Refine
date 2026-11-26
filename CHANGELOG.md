@@ -6,6 +6,25 @@ Versions follow [Semantic Versioning](https://semver.org). A new major version m
 
 ---
 
+## 1.58.0
+
+_2026-11-26_
+
+### Added
+
+- **Fit the wait to the model.** A new switch under **Give up waiting after (seconds)**, on by default. It gives each call more time for a slow model: five times as long for a model on your own computer or network, and up to three times as long for more thinking. The wait is never more than an hour. The Log says when a call is given longer, and why. The panel's own timers use the same longer wait. See [How long it waits](docs/settings.md#how-long-it-waits).
+
+### Changed
+
+- **Thinking starts at Low.** **How much thinking** now starts at Low instead of Medium. Low is enough for a rewrite, and a higher level takes longer and costs more. If you are on Medium, the panel offers you the new default.
+- **A call is no longer sent again after it started answering.** **Wait out a provider that will not take the call** waited and asked again after errors that can come after the model started writing, such as 504 or a dropped connection, when the provider may already have charged for the call. A stream that broke partway was also sent again as a plain call. Now a call is only sent again when nothing of the answer came back. A rate limit (429) or a busy server (503) always counts as nothing came back. When a call fails after part of the answer arrived, the reply is left as it was, and the Log says why. See [A call that had started](docs/guardrails.md#a-call-that-had-started).
+
+### Fixed
+
+- **A false warning that the run through the chat stopped answering.** During **Refine every reply here**, the panel warned that the run had stopped answering when one reply took longer than the wait and 30 seconds, such as during a wait for a busy provider, with two models, or on a long refine. The backend was still working. The panel now waits while the backend says it is still working, and only warns when the backend goes quiet.
+
+---
+
 ## 1.57.3
 
 _2026-11-25_

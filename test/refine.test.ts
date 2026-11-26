@@ -83,6 +83,11 @@ function host(
     // Fails the first n calls with this message and then answers normally,
     // which is what a rate limit looks like from here.
     failFirst?: { times: number; why: string };
+    // Breaks the first n streams with this message, after this many pieces
+    // of the answer. after 0 is a stream that fails before its first piece.
+    streamFailFirst?: { times: number; why: string; after: number };
+    // More connections on the account, such as one with a local address.
+    conns?: any[];
     // With delays, the calls by their place in order that end in an error.
     errorsAt?: Record<number, string>;
     chatFail?: string;
@@ -283,6 +288,15 @@ function host(
             asked.push(req);
             needsUser(req);
             if (opts.fail) throw new Error(opts.fail);
+            const sf = opts.streamFailFirst;
+            if (sf && sf.times > 0) {
+              sf.times--;
+              const part = answers[Math.min(turn, answers.length - 1)];
+              return (async function* () {
+                for (let i = 0; i < sf.after; i++) yield part.slice(i * 12, i * 12 + 12) || ".";
+                throw new Error(sf.why);
+              })();
+            }
             const answer = answers[Math.min(turn, answers.length - 1)];
             turn++;
             // In the shape Lumiverse hands them over: a token at a time, then
@@ -332,6 +346,7 @@ function host(
           is_default: false,
           reasoning_bindings: { settings: { prefix: b[0], suffix: b[1], autoParse: true } },
         })),
+        ...(opts.conns || []),
       ],
     },
     macros: {
@@ -2811,7 +2826,7 @@ describe("how much thinking it asks for", () => {
     });
     await h.ended({ chatId: "c1", messageId: "m2" });
     await wait(50);
-    expect(h.asked[0].reasoning).toEqual({ source: "custom", effort: "medium" });
+    expect(h.asked[0].reasoning).toEqual({ source: "custom", effort: "low" });
   });
 });
 
@@ -6052,12 +6067,15 @@ describe("a provider that will not take the call", () => {
     "Lantern request failed (530): Origin DNS error, retry after 0.05 seconds",
     "Lantern request failed: The socket connection was closed unexpectedly, retry after 0.05 seconds",
   ];
+  // Before the first piece of a streamed answer, nothing has been written,
+  // so each of these is waited out.
   for (const why of waitedOn) {
     test("waited out: " + why.replace(/, retry after.*/, ""), async () => {
-      const h = await armed(["She stepped through and the cold hit her."], { rateWaits: 2 }, chat(), { failFirst: { times: 1, why } });
+      const h = await armed(["She stepped through and the cold hit her."], { rateWaits: 2 }, chat(), { stream: true, streamFailFirst: { times: 1, why, after: 0 } });
       await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
       await wait(1400);
       expect(h.asked.length).toBe(2);
+      expect(h.sent.some((m: any) => m.type === "refine_progress" && m.stage === "waiting")).toBe(true);
       expect(h.body("m2")).toBe("She stepped through and the cold hit her.");
     });
   }
@@ -7569,8 +7587,18 @@ describe("a pass on its own model setup", () => {
     const asks = h.sent.filter((m: any) => m.type === "refine_progress" && (m.stage === "asking" || m.stage === "thinking"));
     // Each call says its wait, both where the pass starts and where the call
     // is made, and the pass with thinking off is never said to be thinking.
-    expect(asks.map((m: any) => m.waitSecs)).toEqual([240, 240, 60, 60]);
+    // The first pass thinks on high, so Fit the wait to the model gives it
+    // twice the wait.
+    expect(asks.map((m: any) => m.waitSecs)).toEqual([480, 480, 60, 60]);
     expect(asks.map((m: any) => m.stage)).toEqual(["thinking", "thinking", "asking", "asking"]);
+  });
+
+  test("with Fit the wait to the model off, each call says the wait as it is set", async () => {
+    const h = await armed(answers, { ...main, timeoutSecs: 240, waitFit: false, passes: [pass("Prose", "PASS ONE"), pass("Fixes", "PASS TWO", quick)] }, reply(body));
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    const asks = h.sent.filter((m: any) => m.type === "refine_progress" && (m.stage === "asking" || m.stage === "thinking"));
+    expect(asks.map((m: any) => m.waitSecs)).toEqual([240, 240, 60, 60]);
   });
 
   test("a pass with no model setup runs on the Model tab", async () => {
@@ -8895,5 +8923,176 @@ describe("an impersonation says nothing to the panel", () => {
     await h.ended({ chatId: "c1", messageId: "", generationId: "g9", generationType: "impersonate", impersonateDraft: true });
     await wait(60);
     expect((h.sent || []).slice(before).filter((m: any) => m.type === "refine_stood_down").length).toBe(0);
+  });
+});
+
+// A call that may have been charged for is not sent again. A provider charges
+// from the moment the model starts writing, so an error after that point is
+// paid for once already, and a second call would be paid for again.
+describe("a call is only sent again when nothing of the answer came back", () => {
+  const reply = "She stepped through and the cold hit her.";
+  const before = () => chat().find((m: any) => m.id === "m2")!.content;
+
+  test("a stream that breaks after text arrived is not sent again, and the reply is left as it was", async () => {
+    const h = await armed([reply], { rateWaits: 2 }, chat(), {
+      stream: true,
+      streamFailFirst: { times: 1, why: "Lantern request failed (504): Gateway Timeout, retry after 0.05 seconds", after: 2 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(1400);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe(before());
+    const why = h.skipped().join(" ");
+    expect(why).toContain("the connection broke after the model had started writing");
+    expect(why).toContain("It was not sent again, since the model may already have started writing and the provider may have charged for it");
+  });
+
+  test("and it does not fall back to a plain call either", async () => {
+    const h = await armed([reply], { rateWaits: 0 }, chat(), {
+      stream: true,
+      streamFailFirst: { times: 1, why: "terminated", after: 3 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(400);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe(before());
+  });
+
+  test("a stream that fails before its first piece, in a way waiting cannot fix, falls back to a plain call", async () => {
+    const h = await armed([reply], { rateWaits: 2 }, chat(), {
+      stream: true,
+      streamFailFirst: { times: 1, why: "this connection cannot stream", after: 0 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(400);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe(reply);
+  });
+
+  test("a 429 counts as before, even after text arrived, so it is waited out", async () => {
+    const h = await armed([reply], { rateWaits: 2 }, chat(), {
+      stream: true,
+      streamFailFirst: { times: 1, why: "429 too many requests, retry after 0.05 seconds", after: 2 },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(1400);
+    expect(h.asked.length).toBe(2);
+    expect(h.body("m2")).toBe(reply);
+  });
+
+  // A plain call hands back nothing until the whole answer is written, so
+  // there is no way to see whether the model had started.
+  test("a plain call that failed with a 504 is not sent again, and the Log says why", async () => {
+    const h = await armed([reply], { rateWaits: 2 }, chat(), {
+      failFirst: { times: 1, why: "Lantern request failed (504): Gateway Timeout, retry after 0.05 seconds" },
+    });
+    await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+    await wait(1400);
+    expect(h.asked.length).toBe(1);
+    expect(h.body("m2")).toBe(before());
+    expect(h.skipped().join(" ")).toContain("It was not sent again, since the model may already have started writing");
+  });
+
+  for (const why of [
+    "Lantern request failed (429): Rate limit reached, retry after 0.05 seconds",
+    "Lantern request failed (503): Service Unavailable, retry after 0.05 seconds",
+    "connect ECONNREFUSED 127.0.0.1:5001, retry after 0.05 seconds",
+  ]) {
+    test("a plain call turned away before the model read it is waited out: " + why.replace(/, retry after.*/, ""), async () => {
+      const h = await armed([reply], { rateWaits: 2 }, chat(), { failFirst: { times: 1, why } });
+      await h.ended({ chatId: "c1", messageId: "m2", generationId: "g1" });
+      await wait(1400);
+      expect(h.asked.length).toBe(2);
+      expect(h.body("m2")).toBe(reply);
+    });
+  }
+});
+
+// Fit the wait to the model. The rules and the numbers are the same in Auto
+// Retry and Auto Foley.
+describe("fitting the wait to the model", () => {
+  const reply = ["She stepped through and the cold hit her."];
+  const home = { id: "c-home", name: "Home", provider: "custom", api_url: "http://192.168.1.40:5001/v1", model: "local-model", is_default: false, reasoning_bindings: { settings: { apiReasoning: true, reasoningEffort: "high" } } };
+  const waits = (h: any) =>
+    h.sent.filter((m: any) => m.type === "refine_progress" && (m.stage === "asking" || m.stage === "thinking"));
+
+  test("a local connection with high thinking is given ten times as long, and the panel is told why", async () => {
+    const h = await armed(reply, { connectionId: "c-home", thinkingMode: "inherit", timeoutSecs: 120 }, chat(), { conns: [home] });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    const said = waits(h);
+    expect(said.length).toBeGreaterThan(0);
+    expect(said[0].waitSecs).toBe(1200);
+    expect(said[0].waitWhy).toBe("the refine model is given up to 20 minutes, since thinking is set to high and the model runs on your own computer or network");
+  });
+
+  test("Refine's own thinking level is used when it says how much", async () => {
+    const h = await armed(reply, { connectionId: "c-fast", thinkingMode: "custom", thinkingEffort: "max", timeoutSecs: 100 });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(300);
+    expect(waits(h)[0].waitWhy).toBe("the refine model is given up to 5 minutes, since thinking is set to max");
+  });
+
+  test("with thinking off, only the address counts", async () => {
+    const h = await armed(reply, { connectionId: "c-home", thinkingMode: "off", timeoutSecs: 60 }, chat(), { conns: [home] });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(300);
+  });
+
+  test("the default connection is the one read when none is picked", async () => {
+    const h = await armed(reply, { thinkingMode: "off", timeoutSecs: 60 }, chat(), { conns: [Object.assign({}, home, { id: "c-home-default", is_default: true })] });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(300);
+  });
+
+  test("a cloud connection with low thinking keeps the wait as it is, with nothing to say", async () => {
+    const h = await armed(reply, { connectionId: "c-fast", thinkingMode: "custom", thinkingEffort: "low", timeoutSecs: 100 });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(100);
+    expect(waits(h)[0].waitWhy).toBe("");
+  });
+
+  test("it is at most an hour, and 0 stays the full hour", async () => {
+    let h = await armed(reply, { connectionId: "c-home", thinkingMode: "custom", thinkingEffort: "max", timeoutSecs: 600 }, chat(), { conns: [home] });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(3600);
+    h = await armed(reply, { connectionId: "c-home", thinkingMode: "inherit", timeoutSecs: 0 }, chat(), { conns: [home] });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(0);
+  });
+
+  test("with Fit the wait to the model off, the wait is used as it is", async () => {
+    const h = await armed(reply, { connectionId: "c-home", thinkingMode: "inherit", timeoutSecs: 120, waitFit: false }, chat(), { conns: [home] });
+    await h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(150);
+    expect(waits(h)[0].waitSecs).toBe(120);
+    expect(waits(h)[0].waitWhy).toBe("");
+  });
+
+  test("the backend gives up at the fitted wait, not the one typed in", async () => {
+    const h = await armed(reply, { connectionId: "c-home", thinkingMode: "off", timeoutSecs: 5 }, chat(), { conns: [home], delays: [8000] });
+    // Not awaited, since the call takes 8 seconds. The typed wait of 5 would
+    // have stopped it by 6; the fitted wait of 25 does not.
+    const done = h.front({ type: "refine_now", requestId: "r", chatId: "c1", messageId: "m2" });
+    await wait(6000);
+    expect(h.stoppedCalls.length).toBe(0);
+    await done;
+    expect(h.stoppedCalls.length).toBe(0);
+  }, 15000);
+});
+
+describe("the thinking level starts at low", () => {
+  test("the panel's default is low, and a reader still on medium is told", () => {
+    const { CONFIG, MOVED_DEFAULTS } = __testing as any;
+    expect(CONFIG.thinkingEffort).toBe("low");
+    const row = MOVED_DEFAULTS.find((m: any) => m.key === "thinkingEffort");
+    expect(row && row.was).toBe("medium");
+    expect(row && row.needs).toEqual({ key: "thinkingMode", is: "custom" });
   });
 });
