@@ -16928,6 +16928,38 @@ for (const [label, viewport, touch, zoom] of [
   });
 }
 
+// A description sits next to the row its "?" belongs to, found as the
+// nearest [data-arf-row]. A row built inside another row's element would
+// make the "?" find the outer row, and the description would open above that
+// whole block, far from the button. So every "?" on every tab finds a row
+// that holds no other "?".
+console.log("\nevery description belongs to its own row");
+for (const [label, viewport, touch] of [["phone", { width: 390, height: 860 }, true], ["laptop", { width: 1280, height: 900 }, false]]) {
+  await inTab(browser, { viewport, touch, saved: { enabled: true, swapOn: true, swaps: [{ find: "lantern", put: "candle", same: true }] } }, async (page, errors) => {
+    const tabs = await page.evaluate(() => Array.from(document.querySelectorAll("#drawer .arf-tab")).map((b) => b.textContent.trim()));
+    const bad = [];
+    let seen = 0;
+    for (const t of tabs) {
+      await goTab(page, t);
+      const out = await page.evaluate(() => {
+        const list = [];
+        const qs = Array.from(document.querySelectorAll("#drawer [data-arf-hint]"));
+        for (const q of qs) {
+          const row = q.closest("[data-arf-row]");
+          if (!row) continue;
+          const n = row.querySelectorAll("[data-arf-hint]").length;
+          if (n > 1) list.push((q.getAttribute("aria-label") || "?") + " finds the row " + row.getAttribute("data-arf-row") + ", which holds " + n);
+        }
+        return { n: qs.length, list };
+      });
+      seen += out.n;
+      for (const x of out.list) bad.push(t + ": " + x);
+    }
+    ok(label + ": every ? on every tab finds a row of its own (" + seen + " looked at)", seen > 20 && bad.length === 0, bad.slice(0, 6).join(" | "));
+    ok(label + ": no errors", errors.length === 0, errors.join(" | "));
+  });
+}
+
 await browser.close();
 
 console.log("\n" + (ran - failures) + " of " + ran + " checks passed");
