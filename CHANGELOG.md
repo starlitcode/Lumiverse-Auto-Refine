@@ -21,6 +21,7 @@ _2026-11-26_
 
 ### Fixed
 
+- **Selecting text in a new reply works without a reload.** With **What to refine** set to one side, a reply that arrived while Auto Refine was asking whose each message is could be left out of the answer. That reply then had no button, and selecting its text brought up no bar, until Lumiverse was reloaded. It is now asked about again.
 - **A false warning that the run through the chat stopped answering.** During **Refine every reply here**, the panel warned that the run had stopped answering when one reply took longer than the wait and 30 seconds, such as during a wait for a busy provider, with two models, or on a long refine. The backend was still working. The panel now waits while the backend says it is still working. It warns when the backend goes quiet, or when one reply has run for over an hour.
 
 ---

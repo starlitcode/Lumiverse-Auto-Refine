@@ -16353,6 +16353,64 @@ console.log("\nwhat to refine reaches the message buttons and the floating menu"
       ok("and the answer puts the buttons where they belong", out.reply && !out.mine, JSON.stringify(out));
     });
   }
+  // A reply that comes in while a later question is out, and that the chat
+  // had not saved when the backend read it, is asked about again, so it
+  // gets its button and the bar by a selection without a reload.
+  await inTab(browser, { saved: { enabled: true, messageButton: true, freeSelect: true, refineSide: "replies" } }, async (page) => {
+    const out = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const asks = () => window.__sent.filter((m) => m && m.type === "message_roles");
+      const nextAsk = async (n) => {
+        for (let i = 0; i < 60 && asks().length <= n; i++) await wait(50);
+        return asks()[n];
+      };
+      const msg = (id, text) => {
+        const d = document.createElement("div");
+        d.setAttribute("data-message-id", id);
+        d.innerHTML = '<p data-component="MessageContent">' + text + '</p>' +
+          '<span data-spindle-mount="message_footer" data-spindle-scope="message:' + id + ':minimal:footer" style="display:contents"></span>';
+        return d;
+      };
+      const answer = (ask, roles) => window.__fromBackend({ type: "message_roles", requestId: ask.requestId, chatId: "c1", ok: true, roles });
+      for (const f of window.__handlers.CHAT_CHANGED || []) f({ chatId: "c1" });
+      const wrap = document.createElement("div");
+      document.body.appendChild(wrap);
+      wrap.appendChild(msg("msg-old", "The kettle had gone cold an hour ago."));
+      const one = await nextAsk(0);
+      if (one) answer(one, { "msg-old": "assistant" });
+      await wait(300);
+      // Your next message, then the reply to it while that question is out.
+      wrap.appendChild(msg("msg-mine", "i pour it anyway"));
+      const two = await nextAsk(1);
+      const reply = msg("msg-reply", "Pell watched the cup fill and said nothing about it.");
+      wrap.appendChild(reply);
+      await wait(700);
+      const before = asks().length;
+      if (two) answer(two, { "msg-old": "assistant", "msg-mine": "user" });
+      const three = await nextAsk(before);
+      if (three) answer(three, { "msg-old": "assistant", "msg-mine": "user", "msg-reply": "assistant" });
+      await wait(400);
+      reply.scrollIntoView({ block: "center" });
+      await wait(100);
+      const text = reply.querySelector("p").firstChild;
+      const r = document.createRange();
+      r.setStart(text, 0);
+      r.setEnd(text, 10);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      await wait(300);
+      return {
+        setUp: !!one && !!two,
+        askedAgain: !!three,
+        button: !!reply.querySelector('[data-arf-slot="message"]'),
+        bar: !!document.querySelector(".arf-selbar[data-arf-on]"),
+      };
+    });
+    ok("a reply a later answer left out is asked about again", out.setUp && out.askedAgain, JSON.stringify(out));
+    ok("and it gets its button without a reload", out.button, JSON.stringify(out));
+    ok("and selecting its text brings up the bar", out.bar, JSON.stringify(out));
+  });
 }
 
 // Rows that come and go with a setting, and that had their own spacing or
